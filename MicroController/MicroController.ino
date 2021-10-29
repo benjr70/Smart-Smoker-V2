@@ -1,6 +1,6 @@
 
 #define TC_PIN0 A0          // set to ADC pin used 0
-#define TC_PIN0 A1          // set to ADC pin used 0
+#define TC_PIN1 A1          // set to ADC pin used 0
 #define AREF 5.0           // set to AREF, typically board voltage like 3.3 or 5.0
 #define ADC_RESOLUTION 10  // set to ADC bit resolution, 10 is default
 
@@ -28,7 +28,7 @@ void loop() {
   
   reading1 = analogRead(TC_PIN1);
   voltage1 = get_voltage(reading1);
-  temperature = get_temperature(voltage1);
+  temperature1 = get_temperature(voltage1);
   Serial.print("Temperature1 = ");
   Serial.print(temperature1);
   Serial.println(" C");
