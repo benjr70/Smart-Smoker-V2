@@ -22,15 +22,15 @@ void loop() {
   reading0 = analogRead(TC_PIN0);
   voltage0 = get_voltage(reading0);
   temperature0 = get_temperature(voltage0);
-  Serial.print("Temperature0 = ");
+  Serial.print("{\"Meat\": \"");
   Serial.print(temperature0);
-  Serial.println(" C");
+  Serial.print("\",");
   
   reading1 = analogRead(TC_PIN1);
   voltage1 = get_voltage(reading1);
   temperature1 = get_temperature(voltage1);
-  Serial.print("Temperature1 = ");
+  Serial.print("\"Chamber\": \"");
   Serial.print(temperature1);
-  Serial.println(" C");
+  Serial.println("\"}");
   delay(500);
 }
