@@ -1,0 +1,27 @@
+.button {
+    background-color: rgba(148, 148, 148, 0.6);
+    border: none;
+    color: white;
+    padding: 15px 32px;
+    text-align: center;
+    text-decoration: none;
+    font-size: 14px;
+    font: 'Roboto';
+    font-weight: 500;
+    width: 33%;
+  }
+
+  .button:active {
+    background-color: grey;
+  }
+
+
+  .bottomBar {
+    display: inline;
+    position: fixed;
+    bottom: 0;
+    width: 102%;
+  }
+
+
+ 
