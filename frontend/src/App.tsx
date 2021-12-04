@@ -3,7 +3,7 @@ import './App.css';
 import { BottomBar } from '../src/components/bottomBar/bottombar'
 import { Screens } from './components/common/interfaces/enums';
 import { history } from './components/history/history';
-import { home } from './components/home/home';
+import { Home } from './components/home/home';
 import { settings } from './components/settings/settings';
 
 class App extends React.Component<{},{currentScreen: Screens}>{
@@ -30,7 +30,7 @@ class App extends React.Component<{},{currentScreen: Screens}>{
     let screen;
     switch(this.state.currentScreen){
       case Screens.HOME:
-        screen = home();
+        screen =  <Home></Home>;
         break;
       case Screens.HISTORY:
         screen = history();
