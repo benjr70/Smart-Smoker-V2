@@ -1,4 +1,4 @@
-.button {
+/* .button {
     background-color: rgba(148, 148, 148, 0.6);
     border: none;
     color: white;
@@ -13,10 +13,12 @@
 
   .button:active {
     background-color: grey;
-  }
+  } */
 
 
   .bottomBar {
+    background-color: white;
+    font-size: large;
     display: inline;
     position: fixed;
     bottom: 0;

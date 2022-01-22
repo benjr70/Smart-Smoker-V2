@@ -3,22 +3,22 @@ import './App.css';
 import { BottomBar } from '../src/components/bottomBar/bottombar'
 import { Screens } from './components/common/interfaces/enums';
 import { history } from './components/history/history';
-import { home } from './components/home/home';
+import { Smoke } from './components/smoke/smoke';
 import { settings } from './components/settings/settings';
 
 class App extends React.Component<{},{currentScreen: Screens}>{
   constructor(props: any) {
     super(props);
-    this.homeOnClick = this.homeOnClick.bind(this);
-    this.historyOnClick = this.historyOnClick.bind(this);
+    this.smokeOnClick = this.smokeOnClick.bind(this);
+    this.reviewOnClick = this.reviewOnClick.bind(this);
     this.settingsOnClick = this.settingsOnClick.bind(this);
     this.state = {currentScreen: Screens.HOME};
   }
 
-   homeOnClick() {
+   smokeOnClick() {
     this.setState({currentScreen: Screens.HOME})
   }
-   historyOnClick() {
+   reviewOnClick() {
     this.setState({currentScreen: Screens.HISTORY})
   }
    settingsOnClick() {
@@ -30,7 +30,7 @@ class App extends React.Component<{},{currentScreen: Screens}>{
     let screen;
     switch(this.state.currentScreen){
       case Screens.HOME:
-        screen = home();
+        screen = <Smoke/>;
         break;
       case Screens.HISTORY:
         screen = history();
@@ -45,8 +45,8 @@ class App extends React.Component<{},{currentScreen: Screens}>{
         <header className="App-header">
         {screen}
         <BottomBar
-        homeOnClick={this.homeOnClick}
-        historyOnClick={this.historyOnClick}
+        smokeOnClick={this.smokeOnClick}
+        reviewOnClick={this.reviewOnClick}
         settingsOnClick={this.settingsOnClick}></BottomBar>
         </header>
       </div>
