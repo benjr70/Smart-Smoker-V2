@@ -1,39 +1,50 @@
 import React from 'react';
 import './bottomBar.style.css'
-
-interface bottomBarButtonProps {
+import BottomNavigation from '@mui/material/BottomNavigation';
+import BottomNavigationAction from '@mui/material/BottomNavigationAction';
+import SettingsIcon from '@mui/icons-material/Settings';
+import ReviewsIcon from '@mui/icons-material/Reviews';
+import OutdoorGrillIcon from '@mui/icons-material/OutdoorGrill';interface bottomBarButtonProps {
     title: string;
     OnClick: any;
 }
 
 interface buttonBarProps {
-    homeOnClick: any;
-    historyOnClick: any;
+    smokeOnClick: any;
+    reviewOnClick: any;
     settingsOnClick: any;
 }
 
-function BottomBarButton(props: bottomBarButtonProps) {
-    return (<>
-    <button className='button' onClick={props.OnClick}>
-        {props.title}
-    </button>
-    </>
-    );
-}
 
+export function BottomBar (props: buttonBarProps) {
+    
 
-export function BottomBar(props: buttonBarProps) {
-    return (<>
-    <div className='bottomBar'>
-        <BottomBarButton
-        title='Home'
-        OnClick={props.homeOnClick}></BottomBarButton>
-        <BottomBarButton
-        title='History'
-        OnClick={props.historyOnClick}></BottomBarButton>
-        <BottomBarButton
-        title='Settings'
-        OnClick={props.settingsOnClick}></BottomBarButton>
-    </div>
-    </>);
-}
+        const [value, setValue] = React.useState(0);
+
+        return (
+            <div className='bottomBar'>
+            <BottomNavigation 
+                showLabels
+                value={value}
+                onChange={(event, newValue) => {
+                switch(newValue){
+                    case 0:
+                        props.smokeOnClick();
+                        break;
+                    case 1 :
+                        props.reviewOnClick();
+                        break;
+                    case 2:
+                        props.settingsOnClick();
+                        break;
+                }
+                setValue(newValue);
+            }}>
+                <BottomNavigationAction label="Smoke" icon={<OutdoorGrillIcon/>} />
+                <BottomNavigationAction label="Review" icon={<ReviewsIcon />} />
+                <BottomNavigationAction label="Settings" icon={<SettingsIcon />} />
+            </BottomNavigation>
+            </div>
+        )
+    
+ }
