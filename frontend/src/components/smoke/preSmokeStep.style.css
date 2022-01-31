@@ -1,4 +1,18 @@
 .input {
-    width: 85%;
+ margin: 4%;
+}
+
+.presmoke {
+    width: 75%;
     padding: 5%;
+}
+
+.weight {
+    height: fit-content;
+    display: inline-flex;
+}
+
+.notes {
+    width: 350px;
+    margin: 4%;
 }

@@ -1,5 +1,6 @@
-import { Autocomplete, InputLabel, MenuItem, Select, SelectChangeEvent, TextField } from "@mui/material";
+import { Autocomplete, MenuItem, Select, SelectChangeEvent, TextField } from "@mui/material";
 import React from "react";
+import { DynamicList } from "../common/components/DynamicList";
 import { WeightUnits } from "../common/interfaces/enums";
 import './preSmokeStep.style.css'
 
@@ -30,7 +31,7 @@ export class PreSmokeStep extends React.Component<{},{weightUnit: WeightUnits}> 
 
 
     render(): React.ReactNode {
-        return (<div>
+        return (<div className="presmoke">
             <TextField className="input" id="standard-basic" label="Name" variant="standard" />
             <Autocomplete
             className="input"
@@ -38,20 +39,22 @@ export class PreSmokeStep extends React.Component<{},{weightUnit: WeightUnits}> 
             options={meats.map((option) => option)}
             renderInput={(params) => <TextField {...params} label="Meat Type" />}
             />
-            <TextField className="input" id="standard-basic" label="Weight" variant="standard" />
-            <InputLabel  id="demo-simple-select-label">Unit</InputLabel>
-            <Select
-                labelId="demo-simple-select-label"
-                id="demo-simple-select"
-                value={this.state.weightUnit}
-                label="Age"
-                onChange={this.handleUnitChange}
-            >
-                <MenuItem value={WeightUnits.LB}>LB</MenuItem>
-                <MenuItem value={WeightUnits.KG}>KG</MenuItem>
-            </Select>
+            <div className="weight">
+                <TextField className="input" id="standard-basic" label="Weight" variant="standard" />
+                <Select
+                    labelId="demo-simple-select-label"
+                    id="demo-simple-select"
+                    value={this.state.weightUnit}
+                    label="Age"
+                    onChange={this.handleUnitChange}
+                >
+                    <MenuItem value={WeightUnits.LB}>LB</MenuItem>
+                    <MenuItem value={WeightUnits.KG}>KG</MenuItem>
+                </Select>
+            </div>
+            <DynamicList/>
             <TextField
-                className="input"
+                className="notes"
                 id="outlined-multiline-static"
                 label="Notes"
                 multiline
@@ -60,3 +63,4 @@ export class PreSmokeStep extends React.Component<{},{weightUnit: WeightUnits}> 
         </div>)
     }
 }
+
