@@ -17,13 +17,13 @@ export class DynamicList extends React.Component<{},{steps: string[]}> {
 
     removeLine(index: number) {
         this.state.steps.splice(index, 1);
-        console.log(index, this.state.steps);
         this.setState({steps: this.state.steps});
     }
     
     updateSteps(event: any, index: number){
-        this.state.steps[index] = event.target.value;
-        this.setState({steps: this.state.steps})
+        let temp = this.state.steps
+        temp[index] = event.target.value;
+        this.setState({steps: temp})
     }
 
     render(): React.ReactNode {
