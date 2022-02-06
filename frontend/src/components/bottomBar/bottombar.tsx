@@ -4,10 +4,7 @@ import BottomNavigation from '@mui/material/BottomNavigation';
 import BottomNavigationAction from '@mui/material/BottomNavigationAction';
 import SettingsIcon from '@mui/icons-material/Settings';
 import ReviewsIcon from '@mui/icons-material/Reviews';
-import OutdoorGrillIcon from '@mui/icons-material/OutdoorGrill';interface bottomBarButtonProps {
-    title: string;
-    OnClick: any;
-}
+import OutdoorGrillIcon from '@mui/icons-material/OutdoorGrill';
 
 interface buttonBarProps {
     smokeOnClick: any;

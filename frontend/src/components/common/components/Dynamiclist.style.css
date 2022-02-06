@@ -1,0 +1,14 @@
+
+.dynamicList {
+    display: inline-flex;
+    margin-bottom: 10px;
+}
+
+.stepNumber {
+    font-size: x-large;
+    margin: auto;
+    padding-right: 5px;
+}
+.addButton {
+    height: 55px;
+}

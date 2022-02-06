@@ -3,3 +3,8 @@ export enum Screens{
     HISTORY = 'HISTORY',
     SETTINGS = 'SETTINGS',
 }
+
+export enum WeightUnits {
+    LB = 'LB',
+    OZ = 'OZ',
+}

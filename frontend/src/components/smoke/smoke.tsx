@@ -4,6 +4,9 @@ import Step from '@mui/material/Step';
 import StepButton from '@mui/material/StepButton';
 import React from 'react';
 import './smoke.style.css'
+import { PreSmokeStep } from './preSmokeStep';
+import { SmokeStep } from './smokeStep';
+import { PostSmokeStep } from './PostSmokeStep';
 
 const steps = [
     'Pre-Smoke',
@@ -19,11 +22,22 @@ export class Smoke extends React.Component<{},{activeStep: number}>{
     }
     
      handleStep( step: any) {
-        console.log('step', steps)
         this.setState({activeStep: step})
       };
 
       render(): React.ReactNode { 
+          let step;
+          switch(this.state.activeStep){
+                case 0:
+                    step = <PreSmokeStep/>;
+                    break;
+                case 1:
+                    step = <SmokeStep/>;
+                    break;
+                case 2:
+                    step = <PostSmokeStep/>;
+                    break;
+          }
           return(
             <div className='smoke'>
             <Box className='stepper'>
@@ -37,7 +51,8 @@ export class Smoke extends React.Component<{},{activeStep: number}>{
                     ))}
                 </Stepper>
             </Box>
+            {step}
             </div>
-    )
+            )
     }
 }
