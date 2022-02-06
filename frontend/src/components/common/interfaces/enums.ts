@@ -6,5 +6,5 @@ export enum Screens{
 
 export enum WeightUnits {
     LB = 'LB',
-    KG = 'KG',
+    OZ = 'OZ',
 }

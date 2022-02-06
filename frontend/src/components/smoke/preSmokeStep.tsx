@@ -23,8 +23,8 @@ export class PreSmokeStep extends React.Component<{},{weightUnit: WeightUnits}> 
             case 'LB':
                 this.setState({weightUnit: WeightUnits.LB})
                 break;
-            case 'KG':
-                this.setState({weightUnit: WeightUnits.KG})
+            case 'OZ':
+                this.setState({weightUnit: WeightUnits.OZ})
                 break;
         }
       };
@@ -55,7 +55,7 @@ export class PreSmokeStep extends React.Component<{},{weightUnit: WeightUnits}> 
                     onChange={this.handleUnitChange}
                 >
                     <MenuItem value={WeightUnits.LB}>LB</MenuItem>
-                    <MenuItem value={WeightUnits.KG}>KG</MenuItem>
+                    <MenuItem value={WeightUnits.LB}>OZ</MenuItem>
                 </Select>
             </div>
             <DynamicList/>
