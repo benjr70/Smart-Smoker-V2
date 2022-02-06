@@ -32,16 +32,22 @@ export class PreSmokeStep extends React.Component<{},{weightUnit: WeightUnits}> 
 
     render(): React.ReactNode {
         return (<div className="presmoke">
-            <TextField className="input" id="standard-basic" label="Name" variant="standard" />
+            <TextField
+                sx={{marginBottom: '10px'}}
+                id="standard-basic" 
+                label="Name" 
+                variant="standard" 
+            />
             <Autocomplete
-            className="input"
+            sx={{marginBottom: '10px'}}
             freeSolo
             options={meats.map((option) => option)}
             renderInput={(params) => <TextField {...params} label="Meat Type" />}
             />
             <div className="weight">
-                <TextField className="input" id="standard-basic" label="Weight" variant="standard" />
+                <TextField sx={{marginBottom: '10px', marginRight: '10px'}} id="standard-basic" label="Weight" variant="standard" />
                 <Select
+                    sx={{marginBottom: '10px'}}
                     labelId="demo-simple-select-label"
                     id="demo-simple-select"
                     value={this.state.weightUnit}
@@ -54,7 +60,10 @@ export class PreSmokeStep extends React.Component<{},{weightUnit: WeightUnits}> 
             </div>
             <DynamicList/>
             <TextField
-                className="notes"
+               sx={{
+                    marginTop: '10px',
+                    width: '350px'
+                }}
                 id="outlined-multiline-static"
                 label="Notes"
                 multiline
