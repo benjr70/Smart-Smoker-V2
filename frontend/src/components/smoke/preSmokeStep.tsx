@@ -1,4 +1,4 @@
-import { Autocomplete, MenuItem, Select, SelectChangeEvent, TextField } from "@mui/material";
+import { Autocomplete, Button, MenuItem, Select, SelectChangeEvent, TextField } from "@mui/material";
 import React from "react";
 import { DynamicList } from "../common/components/DynamicList";
 import { WeightUnits } from "../common/interfaces/enums";
@@ -62,6 +62,7 @@ export class PreSmokeStep extends React.Component<{},{weightUnit: WeightUnits}> 
             <TextField
                sx={{
                     marginTop: '10px',
+                    marginBottom: '10px',
                     width: '350px'
                 }}
                 id="outlined-multiline-static"
@@ -69,6 +70,12 @@ export class PreSmokeStep extends React.Component<{},{weightUnit: WeightUnits}> 
                 multiline
                 rows={4}
             />
+            <Button
+                className="nextButton"
+                variant="contained"
+                size="small"
+                >Next
+            </Button>
         </div>)
     }
 }

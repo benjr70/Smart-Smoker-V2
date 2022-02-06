@@ -9,3 +9,9 @@
     height: fit-content;
     display: inline-flex;
 }
+
+.nextButton {
+    float:right;
+    height: 50px;
+    width: 125px;
+}
