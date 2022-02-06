@@ -45,7 +45,7 @@ export class PreSmokeStep extends React.Component<{},{weightUnit: WeightUnits}> 
             renderInput={(params) => <TextField {...params} label="Meat Type" />}
             />
             <div className="weight">
-                <TextField sx={{marginBottom: '10px', marginRight: '10px'}} id="standard-basic" label="Weight" variant="standard" />
+                <TextField sx={{marginBottom: '10px', marginRight: '10px'}} type='number' id="standard-basic" label="Weight" variant="standard" />
                 <Select
                     sx={{marginBottom: '10px'}}
                     labelId="demo-simple-select-label"
