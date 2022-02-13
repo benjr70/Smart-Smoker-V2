@@ -29,6 +29,9 @@ export class PreSmokeStep extends React.Component<{},{preSmokeState: preSmoke}> 
        this.onNextClick = this.onNextClick.bind(this);
        this.updateWeight = this.updateWeight.bind(this);
        this.updateNotes = this.updateNotes.bind(this);
+       this.newLine = this.newLine.bind(this);
+       this.removeLine = this.removeLine.bind(this);
+       this.updateSteps = this.updateSteps.bind(this);
     }
 
     handleUnitChange( event: any) {
@@ -72,6 +75,24 @@ export class PreSmokeStep extends React.Component<{},{preSmokeState: preSmoke}> 
         temp.notes = event.target.value;
         this.setState({preSmokeState: temp});
     }
+    
+     newLine() {
+        let temp = this.state.preSmokeState;
+        temp.Steps = [...temp.Steps, ''];
+        this.setState({preSmokeState: temp});
+    }
+
+     removeLine(index: number){
+        let temp = this.state.preSmokeState;
+        temp.Steps.splice(index, 1);
+        this.setState({preSmokeState: temp});
+    }
+    
+     updateSteps(value: string, index: number){
+        let temp = this.state.preSmokeState;
+        temp.Steps[index] = value;
+        this.setState({preSmokeState: temp});
+    }
 
     render(): React.ReactNode {
         return (<div className="presmoke">
@@ -112,7 +133,11 @@ export class PreSmokeStep extends React.Component<{},{preSmokeState: preSmoke}> 
                     <MenuItem value={WeightUnits.OZ}>OZ</MenuItem>
                 </Select>
             </div>
-            <DynamicList/>
+            <DynamicList
+                newline ={() => {this.newLine()}}
+                removeLine={(index) => {this.removeLine(index)}}
+                steps={this.state.preSmokeState.Steps}
+                onListChange={(step, index) => this.updateSteps(step, index)} />
             <TextField
                sx={{
                     marginTop: '10px',
