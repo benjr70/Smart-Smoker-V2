@@ -17,9 +17,6 @@ export type PreSmokeDocument = PreSmoke & Document;
 @Schema()
 export class PreSmoke {
     @Prop()
-    id: string;
-
-    @Prop()
     name: string
 
     @Prop()

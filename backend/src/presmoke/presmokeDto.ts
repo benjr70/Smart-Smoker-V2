@@ -10,8 +10,6 @@ export class Weight {
 
 export class PreSmokeDto {
     @ApiProperty()
-    id: string;
-    @ApiProperty()
     name: string
     @ApiProperty()
     meatType: string;
