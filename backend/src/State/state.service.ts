@@ -14,13 +14,14 @@ export class StateService {
         return createdState.save();
     }
 
-    async GetState(id: string): Promise<State> {
-        return this.stateModel.findById(id);
+    async GetState(): Promise<State> {
+        return await (await this.stateModel.find().exec())[0];
     }
 
-    async update(id: string, stateDto: StateDto): Promise<State> {
-        return this.stateModel.findOneAndUpdate({_id: id}, stateDto).then(() => {
-            return this.GetState(id);
+    async update( stateDto: State): Promise<State> {
+        const state = await this.GetState()
+        return this.stateModel.findOneAndUpdate({_id: state["_id"]}, stateDto).then(() => {
+            return this.GetState();
         })
     }
     

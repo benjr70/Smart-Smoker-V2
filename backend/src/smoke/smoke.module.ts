@@ -10,6 +10,7 @@ import { SmokeService } from "./smoke.service";
     imports:[MongooseModule.forFeature([{name: 'Smoke', schema: SmokeSchema}])],
     controllers: [SmokeController],
     providers: [SmokeService],
+    exports: [SmokeService],
 })
 
 export class SmokeModule {}

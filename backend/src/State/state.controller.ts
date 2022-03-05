@@ -10,14 +10,14 @@ import { StateDto } from "./stateDto";
 export class StateController {
     constructor(private readonly stateService: StateService){}
 
-    @Get('/:id')
-    getState(@Param('id') id: string): Promise<State> {
-        return this.stateService.GetState(id)
+    @Get()
+    getState(): Promise<State> {
+        return this.stateService.GetState()
     } 
 
-    @Put('/:id')
-    updateState(@Param('id') id: string, @Body() dto: StateDto): Promise<State> {
-        return this.stateService.update(id, dto);
+    @Put()
+    updateState(@Body() dto: StateDto): Promise<State> {
+        return this.stateService.update(dto);
     }
     
     @Post()

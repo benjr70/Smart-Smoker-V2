@@ -61,7 +61,8 @@ export class PreSmokeStep extends React.Component<{},{preSmokeState: preSmoke}> 
     }
 
     onNextClick() {
-        console.log(this.state.preSmokeState)
+        console.log(this.state.preSmokeState);
+        
     }
 
     updateWeight(event: any){

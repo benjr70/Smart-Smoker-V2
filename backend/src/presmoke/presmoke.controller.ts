@@ -7,16 +7,17 @@ import { PreSmokeDto } from './presmokeDto';
 @ApiTags('PreSmoke')
 @Controller('api/presmoke')
 export class PreSmokeController {
-    constructor(private readonly preSmokeService: PreSmokeService){}
-    
+    constructor(private readonly preSmokeService: PreSmokeService){
+    }
+
     @Get()
     getPreSmoke(): Promise<PreSmoke[]> {
         return this.preSmokeService.findAll()
     }
 
     @Post()
-    CreatNewPreSmoke(@Body() dto: PreSmokeDto): Promise<PreSmoke> {
-        return this.preSmokeService.create(dto);
+    SavePreSmoke(@Body() dto: PreSmokeDto): Promise<PreSmoke> {
+        return this.preSmokeService.save(dto);
     }
 
     @Put('/update/:id')
@@ -24,9 +25,9 @@ export class PreSmokeController {
         return this.preSmokeService.Update(id, dto);
     }
 
-    @Get("/:id")
-    getById(@Param('id') id: string): Promise<PreSmoke>{
-        return this.preSmokeService.GetByID(id);
+    @Get("/current")
+    getById(): Promise<PreSmoke>{
+        return this.preSmokeService.GetByCurrent();
     }
 
     @Delete('/:id')

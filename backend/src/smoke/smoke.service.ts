@@ -12,10 +12,10 @@ export class SmokeService {
 
     async create(smokeDto: SmokeDto): Promise<Smoke> {
         const createdSmoke = new this.smokeModule(smokeDto);
-        return createdSmoke.save();
+        return await createdSmoke.save();
     }
 
     async GetById(id: string): Promise<Smoke> {
-        return this.smokeModule.findById(id);
+        return await this.smokeModule.findById(id);
     }
 }
