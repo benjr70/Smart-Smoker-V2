@@ -11,6 +11,7 @@ interface dynamicListProps {
 }
 
 export function DynamicList(props: dynamicListProps ): JSX.Element{
+    if(props.steps){
     return (<>
         {props.steps.map((step, index) => (
             <div className="dynamicList">
@@ -43,4 +44,7 @@ export function DynamicList(props: dynamicListProps ): JSX.Element{
             </div>
         ))}
     </> );  
+    } else {
+        return <></>
+    }
 }

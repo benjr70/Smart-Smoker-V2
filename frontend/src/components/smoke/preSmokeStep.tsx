@@ -1,5 +1,6 @@
 import { Autocomplete, Button, MenuItem, Select, TextField } from "@mui/material";
 import React from "react";
+import { getCurrentPreSmoke, setCurrentPreSmoke } from "../../Services/preSmokeService";
 import { DynamicList } from "../common/components/DynamicList";
 import { WeightUnits } from "../common/interfaces/enums";
 import { preSmoke } from "../common/interfaces/preSmoke";
@@ -23,6 +24,9 @@ export class PreSmokeStep extends React.Component<{},{preSmokeState: preSmoke}> 
             Steps: [''],
             notes: ''
         }};
+        getCurrentPreSmoke().then(result => {
+           this.setState({preSmokeState: result});
+        })
        this.handleUnitChange = this.handleUnitChange.bind(this);
        this.updateName = this.updateName.bind(this);
        this.updateMeatType = this.updateMeatType.bind(this);
@@ -61,8 +65,7 @@ export class PreSmokeStep extends React.Component<{},{preSmokeState: preSmoke}> 
     }
 
     onNextClick() {
-        console.log(this.state.preSmokeState);
-        
+        setCurrentPreSmoke(this.state.preSmokeState);
     }
 
     updateWeight(event: any){
@@ -120,6 +123,7 @@ export class PreSmokeStep extends React.Component<{},{preSmokeState: preSmoke}> 
                     id="standard-basic" 
                     label="Weight"
                     variant="standard"
+                    value={this.state.preSmokeState.weight.weight}
                     onChange={this.updateWeight}
                 />
                 <Select
@@ -148,6 +152,7 @@ export class PreSmokeStep extends React.Component<{},{preSmokeState: preSmoke}> 
                 id="outlined-multiline-static"
                 label="Notes"
                 multiline
+                value={this.state.preSmokeState.notes}
                 onChange={this.updateNotes}
                 rows={4}
             />
