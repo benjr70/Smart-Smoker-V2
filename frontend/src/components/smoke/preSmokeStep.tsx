@@ -68,6 +68,10 @@ export class PreSmokeStep extends React.Component<{},{preSmokeState: preSmoke}> 
         setCurrentPreSmoke(this.state.preSmokeState);
     }
 
+    componentWillUnmount() {
+        setCurrentPreSmoke(this.state.preSmokeState);
+    }
+
     updateWeight(event: any){
         let temp = this.state.preSmokeState;
         temp.weight.weight = event.target.value;
@@ -156,13 +160,6 @@ export class PreSmokeStep extends React.Component<{},{preSmokeState: preSmoke}> 
                 onChange={this.updateNotes}
                 rows={4}
             />
-            <Button
-                className="nextButton"
-                variant="contained"
-                size="small"
-                onClick={this.onNextClick}
-                >Next
-            </Button>
         </div>)
     }
 }
