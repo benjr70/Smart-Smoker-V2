@@ -21,7 +21,7 @@ export class PreSmokeStep extends React.Component<{},{preSmokeState: preSmoke}> 
             weight: {
                 unit: WeightUnits.LB
             },
-            Steps: [''],
+            steps: [''],
             notes: ''
         }};
         getCurrentPreSmoke().then(result => {
@@ -82,19 +82,19 @@ export class PreSmokeStep extends React.Component<{},{preSmokeState: preSmoke}> 
     
      newLine() {
         let temp = this.state.preSmokeState;
-        temp.Steps = [...temp.Steps, ''];
+        temp.steps = [...temp.steps, ''];
         this.setState({preSmokeState: temp});
     }
 
      removeLine(index: number){
         let temp = this.state.preSmokeState;
-        temp.Steps.splice(index, 1);
+        temp.steps.splice(index, 1);
         this.setState({preSmokeState: temp});
     }
     
      updateSteps(value: string, index: number){
         let temp = this.state.preSmokeState;
-        temp.Steps[index] = value;
+        temp.steps[index] = value;
         this.setState({preSmokeState: temp});
     }
 
@@ -123,7 +123,7 @@ export class PreSmokeStep extends React.Component<{},{preSmokeState: preSmoke}> 
                     id="standard-basic" 
                     label="Weight"
                     variant="standard"
-                    value={this.state.preSmokeState.weight.weight}
+                    value={this.state.preSmokeState.weight.weight ? this.state.preSmokeState.weight.weight: ''}
                     onChange={this.updateWeight}
                 />
                 <Select
@@ -141,7 +141,7 @@ export class PreSmokeStep extends React.Component<{},{preSmokeState: preSmoke}> 
             <DynamicList
                 newline ={() => {this.newLine()}}
                 removeLine={(index) => {this.removeLine(index)}}
-                steps={this.state.preSmokeState.Steps}
+                steps={this.state.preSmokeState.steps}
                 onListChange={(step, index) => this.updateSteps(step, index)} />
             <TextField
                sx={{

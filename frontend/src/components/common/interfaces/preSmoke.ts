@@ -7,6 +7,6 @@ export interface preSmoke {
         weight?: number
         unit?: WeightUnits
     }
-    Steps: string[]
+    steps: string[]
     notes?: string
 }
