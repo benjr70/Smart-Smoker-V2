@@ -1,34 +1,18 @@
 import { Button, TextField } from "@mui/material";
-import React from "react"
 import './Dynamiclist.style.css'
 
-export class DynamicList extends React.Component<{},{steps: string[]}> {
 
-    constructor(props: any){
-        super(props);
-        this.state = {steps: ['']};
-        this.newLine = this.newLine.bind(this);
-        this.removeLine = this.removeLine.bind(this);
-    }
-    
-    newLine() {
-       this.setState({steps: [...this.state.steps, '']})
-    }
+interface dynamicListProps {
+    onListChange: (step: string, index: number) => void;
+    newline: () => void;
+    removeLine: (index: number) => void;
+    steps: string[];
+}
 
-    removeLine(index: number) {
-        this.state.steps.splice(index, 1);
-        console.log(index, this.state.steps);
-        this.setState({steps: this.state.steps});
-    }
-    
-    updateSteps(event: any, index: number){
-        this.state.steps[index] = event.target.value;
-        this.setState({steps: this.state.steps})
-    }
-
-    render(): React.ReactNode {
-        return (
-        this.state.steps.map((step, index) => (
+export function DynamicList(props: dynamicListProps ): JSX.Element{
+    if(props.steps){
+    return (<>
+        {props.steps.map((step, index) => (
             <div className="dynamicList">
                 <p className="stepNumber">{index + 1}.</p>
                 <TextField
@@ -37,27 +21,29 @@ export class DynamicList extends React.Component<{},{steps: string[]}> {
                     label="Step"
                     placeholder="Placeholder"
                     defaultValue={step}
-                    value = {step}
-                    onChange={(event) => {this.updateSteps(event, index)}}
+                    value={step}
+                    onChange={(event) => {props.onListChange(event.target.value, index)}}
                     multiline
                 />
-                { this.state.steps.length === index + 1 ?
+                { props.steps.length === index + 1 ?
                 <Button
                     className="addButton"
                     variant="outlined"
                     size="small"
-                    onClick={this.newLine}
+                    onClick={props.newline}
                     >+
                 </Button> : 
                 <Button
                     className="addButton"
                     variant="outlined"
                     size="small"
-                    onClick={() => this.removeLine(index)}
+                    onClick={() => props.removeLine(index)}
                     >-
                 </Button>}
             </div>
-        ))
-        )
+        ))}
+    </> );  
+    } else {
+        return <></>
     }
 }
