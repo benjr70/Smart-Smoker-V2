@@ -25,13 +25,13 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
 
-      # navagate
-      - name: navagte
-        run: cd frontend
-        
+
+      #install
       - name: install
+        working-directory: ./frontend
         run: npm install
 
       # run
       - name: run
+        working-directory: ./frontend
         run: npm run start
