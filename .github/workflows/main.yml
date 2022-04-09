@@ -26,17 +26,19 @@ jobs:
       - uses: actions/checkout@v3
 
 
-      #install
-      - name: install
+      #install frontend
+      - name: install frontend
         working-directory: ./frontend
         run: npm install
 
-      # build
-      - name: build
+      # build frontend
+      - name: build frontend
         working-directory: ./frontend
         run: npm run build
 
-      #serve
-      - name: serve
+      #serve frontend
+      - name: serve frontend
         working-directory: ./frontend
-        run: serve -s build
+        run: serve -s build -l 3000
+
+      
