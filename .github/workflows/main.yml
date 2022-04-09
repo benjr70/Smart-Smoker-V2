@@ -31,7 +31,12 @@ jobs:
         working-directory: ./frontend
         run: npm install
 
-      # run
-      - name: run
+      # build
+      - name: build
         working-directory: ./frontend
-        run: npm run start
+        run: npm run build
+
+      #serve
+      - name: serve
+        working-directory: ./frontend
+        run: serve -s build
