@@ -36,9 +36,13 @@ jobs:
         working-directory: ./frontend
         run: npm run build
 
+      # kill old port
+      - name: kill old port
+        run: npx kill-port 3000
+
       #serve frontend
       - name: serve frontend
         working-directory: ./frontend
-        run: serve -s build -l 3000
+        run: RUNNER_TRACKING_ID="" && serve -s build -l 3000 &
 
       
