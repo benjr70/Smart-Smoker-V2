@@ -43,6 +43,24 @@ jobs:
       #serve frontend
       - name: serve frontend
         working-directory: ./frontend
-        run: RUNNER_TRACKING_ID="" && serve -s build -l 3000 &
+        run: RUNNER_TRACKING_ID="frontend" && serve -s build -l 3000 &
+      
+      # install backend
+      - name: install backend
+        working-directory: ./backend
+        run: npm install
 
+      # build backend
+      - name: build backend
+        working-directory: ./backend
+        run: npm run build
+
+      # kill old port
+      - name: kill old port
+        run: npx kill-port 3001
+
+      #run backend
+      - name: run backend
+        working-directory: ./backend
+        run: RUNNER_TRACKING_ID="backend" && npm start:prod &
       
