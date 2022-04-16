@@ -4,7 +4,8 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
-    logger: ['error', 'debug', 'log', 'verbose', 'warn']
+    logger: ['error', 'debug', 'log', 'verbose', 'warn'],
+    cors: true,
   });
 
   const config = new DocumentBuilder()
