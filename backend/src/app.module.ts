@@ -13,7 +13,7 @@ import { StateModule } from './State/state.module';
     PreSmokeModule,
     StateModule,
     SmokeModule,
-  MongooseModule.forRoot('mongodb://127.0.0.1:27017/SmokerDB')],
+  MongooseModule.forRoot('mongodb://mongo:27017')],
   controllers: [AppController],
   providers: [AppService],
 })

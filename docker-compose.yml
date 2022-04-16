@@ -1,0 +1,43 @@
+version: '3.1'
+
+services:  
+  backend:
+    container_name: backend_cloud
+    restart: always
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # image: smart-smoker-cloud-prod:1.0.0
+    build:
+      context: ./backend
+      dockerfile: ./Dockerfile
+
+    ports:
+      - 3001:3001
+
+    depends_on:
+      - mongo
+
+    links:
+      - mongo
+
+  mongo:
+      container_name: mongo
+      image: mongo:4.4.14-rc0-focal
+      restart: always
+      volumes:
+        - ./../../../../database:/data/db:z
+      ports:
+        - 27017:27017
+   
+  
+  frontend:
+    container_name: frontend_cloud
+    restart: always
+
+    # image: smart-smoker-cloud-prod:1.0.0s
+    build:
+      context: ./frontend
+      dockerfile: ./Dockerfile
+
+    ports:
+      - 3000:3000

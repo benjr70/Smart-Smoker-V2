@@ -18,49 +18,59 @@ jobs:
   # This workflow contains a single job called "build"
   build:
     # The type of runner that the job will run on
-    runs-on: self-hosted
+    runs-on: self-hosted-cloud
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - run: sudo chmod -R 777 ./
       - uses: actions/checkout@v3
 
+      - name: docker compose down
+        run: sudo docker-compose down
 
-      #install frontend
-      - name: install frontend
-        working-directory: ./frontend
-        run: npm install
+      - name: docker build
+        run: docker-compose build
 
-      # build frontend
-      - name: build frontend
-        working-directory: ./frontend
-        run: npm run build
+      - name: docker compose up
+        run: sudo docker-compose up -d --force-recreate 
+        # --add-host=host.docker.internal:host-gateway
 
-      # kill old port
-      - name: kill old port
-        run: npx kill-port 3000
+      # #install frontend
+      # - name: install frontend
+      #   working-directory: ./frontend
+      #   run: npm install
 
-      #serve frontend
-      - name: serve frontend
-        working-directory: ./frontend
-        run: RUNNER_TRACKING_ID="frontend" && serve -s build -l 3000 &
+      # # build frontend
+      # - name: build frontend
+      #   working-directory: ./frontend
+      #   run: npm run build
+
+      # # kill old port
+      # - name: kill old port
+      #   run: npx kill-port 3000
+
+      # #serve frontend
+      # - name: serve frontend
+      #   working-directory: ./frontend
+      #   run: RUNNER_TRACKING_ID="frontend" && serve -s build -l 3000 &
       
-      # install backend
-      - name: install backend
-        working-directory: ./backend
-        run: npm install
+      # # install backend
+      # - name: install backend
+      #   working-directory: ./backend
+      #   run: npm install
 
-      # build backend
-      - name: build backend
-        working-directory: ./backend
-        run: npm run build
+      # # build backend
+      # - name: build backend
+      #   working-directory: ./backend
+      #   run: npm run build
 
-      # kill old port
-      - name: kill old port
-        run: npx kill-port 3001
+      # # kill old port
+      # - name: kill old port
+      #   run: npx kill-port 3001
 
-      #run backend
-      - name: run backend
-        working-directory: ./backend
-        run: RUNNER_TRACKING_ID="backend" && npm start:prod &
+      # #run backend
+      # - name: run backend
+      #   working-directory: ./backend
+      #   run: RUNNER_TRACKING_ID="backend" && npm start:prod &
       
