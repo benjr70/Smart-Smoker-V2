@@ -7,8 +7,6 @@ on:
   # Triggers the workflow on push or pull request events but only for the master branch
   push:
     branches: [ master ]
-  pull_request:
-    branches: [ master ]
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -34,43 +32,5 @@ jobs:
 
       - name: docker compose up
         run: sudo docker-compose up -d --force-recreate 
-        # --add-host=host.docker.internal:host-gateway
 
-      # #install frontend
-      # - name: install frontend
-      #   working-directory: ./frontend
-      #   run: npm install
-
-      # # build frontend
-      # - name: build frontend
-      #   working-directory: ./frontend
-      #   run: npm run build
-
-      # # kill old port
-      # - name: kill old port
-      #   run: npx kill-port 3000
-
-      # #serve frontend
-      # - name: serve frontend
-      #   working-directory: ./frontend
-      #   run: RUNNER_TRACKING_ID="frontend" && serve -s build -l 3000 &
-      
-      # # install backend
-      # - name: install backend
-      #   working-directory: ./backend
-      #   run: npm install
-
-      # # build backend
-      # - name: build backend
-      #   working-directory: ./backend
-      #   run: npm run build
-
-      # # kill old port
-      # - name: kill old port
-      #   run: npx kill-port 3001
-
-      # #run backend
-      # - name: run backend
-      #   working-directory: ./backend
-      #   run: RUNNER_TRACKING_ID="backend" && npm start:prod &
       

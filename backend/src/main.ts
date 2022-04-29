@@ -4,8 +4,7 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
-    logger: ['error', 'debug', 'log', 'verbose', 'warn'],
-    cors: true,
+    logger: ['error', 'debug', 'log', 'verbose', 'warn']
   });
 
   const config = new DocumentBuilder()
@@ -15,7 +14,12 @@ async function bootstrap() {
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
-  app.enableCors();
+  app.enableCors({
+    origin: true, //['http://localhost:3000', 'http://136.55.162.130', 'http://192.168.1.144:3000'],
+    methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
+    preflightContinue: false,
+    optionsSuccessStatus: 200
+  });
   await app.listen(3001);
 }
 bootstrap();
