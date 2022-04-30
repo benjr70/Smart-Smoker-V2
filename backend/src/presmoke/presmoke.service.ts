@@ -59,7 +59,10 @@ export class PreSmokeService {
 
     
     async GetByCurrent(): Promise<PreSmoke> {
-        return this.stateService.GetState().then(state => {
+        return this.stateService.GetState().then(async state => {
+            if(!state){
+               await this.stateService.create({smokeId: '', smoking: false});
+            }
             return this.smokeService.GetById(state.smokeId).then(smoke => {
                  return this.preSmokeModel.findById(smoke.preSmokeId)
              })
