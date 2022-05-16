@@ -16,7 +16,7 @@ import { StateModule } from './State/state.module';
     StateModule,
     SmokeModule,
   MongooseModule.forRoot('mongodb://mongo:27017')],
- // MongooseModule.forRoot('mongodb://127.0.0.1:27017/SmokerDB')],
+  //MongooseModule.forRoot('mongodb://127.0.0.1:27017/SmokerDB')],
   controllers: [AppController],
   providers: [AppService],
 })
