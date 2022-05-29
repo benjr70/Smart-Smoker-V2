@@ -13,13 +13,22 @@ ser =  serial.Serial( port = '/dev/ttyUSB0',
                       timeout = 1
                       )
 
-counter = 0
+# line = ser.readline().decode('utf-8')
 
-async def main():
-	async with websockets.connect("ws://localhost:5765") as websocket:
-		while 1:
-			line = ser.readline().decode('utf-8')
-			await websocket.send(line);
-			print(line);
-
-asyncio.run(main())
+async def handler(websocket, path):
+ 
+    # data = await websocket.recv()
+ 
+    # reply = f"Data recieved as:  {data}!"
+ 
+    await websocket.send(ser.readline().decode('utf-8'))
+ 
+ 
+ 
+start_server = websockets.serve(handler, "localhost", 8000)
+ 
+ 
+ 
+asyncio.get_event_loop().run_until_complete(start_server)
+ 
+asyncio.get_event_loop().run_forever()
