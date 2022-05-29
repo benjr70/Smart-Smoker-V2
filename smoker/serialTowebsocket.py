@@ -3,6 +3,8 @@ import time
 import serial
 import re
 import os
+import asyncio
+import websockets
 
 os.system("sudo systemctl start nodered.service")
 
@@ -16,7 +18,9 @@ ser =  serial.Serial( port = '/dev/ttyUSB0',
 
 counter = 0
 
-while 1:
-	line = ser.readline().decode('utf-8')
-	print(line);
+async with websockets.connect("ws://localhost:5765") as websocket:
+	while 1:
+		line = ser.readline().decode('utf-8')
+		await websocket.send(line);
+		print(line);
         
