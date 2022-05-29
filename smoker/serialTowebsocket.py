@@ -13,15 +13,16 @@ ser =  serial.Serial( port = '/dev/ttyUSB0',
                       timeout = 1
                       )
 
-# line = ser.readline().decode('utf-8')
 
 async def handler(websocket, path):
  
     # data = await websocket.recv()
  
     # reply = f"Data recieved as:  {data}!"
- 
-    await websocket.send(ser.readline().decode('utf-8'))
+	
+	await websocket.send(ser.readline().decode('utf-8'))
+	line = ser.readline().decode('utf-8')
+	print(line)
  
  
  
