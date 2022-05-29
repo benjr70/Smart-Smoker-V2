@@ -20,9 +20,9 @@ export class Home extends React.Component<{}, {tempState: State}> {
 
 
     componentDidMount(){
-        readTemp().on('data', (data) => {
-            console.log(data);
-        })
+        // readTemp().on('data', (data: any) => {
+        //     console.log(data);
+        // })
     }
 
     render(): React.ReactNode { 

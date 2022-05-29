@@ -1,13 +1,14 @@
-import {  SerialPort } from 'serialport'
+import { SerialPort } from 'serialport';
+import { ReadlineParser } from '@serialport/parser-readline'
 
-export const readTemp = (): SerialPort<any> => {
+export const readTemp = (): any => {
 
-    const ReadLine = require('@serialport/parser-readline');
-    const port = new SerialPort({
+
+    const port = new SerialPort( {
         path: '/dev/ttyUSB0',
         baudRate: 9600,
     });
 
-    const parser = new ReadLine();
+    const parser = new ReadlineParser();
     return port.pipe(parser);
 }
