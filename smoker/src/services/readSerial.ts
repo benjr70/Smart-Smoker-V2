@@ -1,14 +1,8 @@
-import { SerialPort } from 'serialport';
-import { ReadlineParser } from '@serialport/parser-readline'
+
 
 export const readTemp = (): any => {
 
+// const ws = new WebSocket('ws://127.0.0.1:5678');
 
-    const port = new SerialPort( {
-        path: '/dev/ttyUSB0',
-        baudRate: 9600,
-    });
 
-    const parser = new ReadlineParser();
-    return port.pipe(parser);
 }

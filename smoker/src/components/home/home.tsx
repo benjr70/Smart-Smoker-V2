@@ -1,7 +1,8 @@
 import React from 'react';
 import './home.style.css'
 import Grid from '@mui/material/Grid';
-import { readTemp } from '../../services/readSerial';
+import { w3cwebsocket as W3CWebSocket } from "websocket";
+
 
 interface State {
     meatTemp: number;
@@ -20,9 +21,13 @@ export class Home extends React.Component<{}, {tempState: State}> {
 
 
     componentDidMount(){
-        // readTemp().on('data', (data: any) => {
-        //     console.log(data);
-        // })
+        const client = new W3CWebSocket('ws://127.0.0.1:5678');
+        client.onopen = () => {
+            console.log('websocket connected')
+        };
+        client.onmessage = (message) => {
+            console.log(message);
+        }
     }
 
     render(): React.ReactNode { 
