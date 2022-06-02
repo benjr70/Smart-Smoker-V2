@@ -25,8 +25,13 @@ export class Home extends React.Component<{}, {tempState: State}> {
         client.onopen = () => {
             console.log('websocket connected')
         };
-        client.onmessage = (message) => {
+        client.onmessage = (message: any) => {
             console.log(message);
+            let tempObj = JSON.parse(message.data);
+            let temp = this.state.tempState;
+            temp.chamberTemp = tempObj.Chamber;
+            temp.meatTemp = tempObj.Meat;
+            this.setState({tempState: temp})
         }
     }
 
