@@ -32,7 +32,7 @@ export class Home extends React.Component<{}, {tempState: State}> {
             let temp = this.state.tempState;
             meatAvg.push(((tempObj.Meat * 9/5) + 32) - 278)
             console.log(meatAvg);
-            if(meatAvg.length === 20) {
+            if(meatAvg.length === 40) {
                 temp.meatTemp = (meatAvg.reduce((a,b) => a + b, 0) / meatAvg.length).toFixed(0)
                 meatAvg.shift();
             }
