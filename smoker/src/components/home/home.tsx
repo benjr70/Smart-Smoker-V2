@@ -29,8 +29,8 @@ export class Home extends React.Component<{}, {tempState: State}> {
             console.log(message);
             let tempObj = JSON.parse(message.data);
             let temp = this.state.tempState;
-            temp.chamberTemp = ((tempObj.Chamber * 9/5) + 32) - 40;
-            temp.meatTemp = ((tempObj.Meat * 9/5) + 32) - 40;
+            temp.chamberTemp = ((tempObj.Chamber * 9/5) + 32) - 200;
+            temp.meatTemp = ((tempObj.Meat * 9/5) + 32) - 200;
             this.setState({tempState: temp})
         }
     }
