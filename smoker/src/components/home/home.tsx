@@ -5,7 +5,7 @@ import { w3cwebsocket as W3CWebSocket } from "websocket";
 
 
 interface State {
-    meatTemp: number;
+    meatTemp: string;
     chamberTemp: number;
 }
 export class Home extends React.Component<{}, {tempState: State}> {
@@ -13,7 +13,7 @@ export class Home extends React.Component<{}, {tempState: State}> {
     constructor(props: any) {
         super(props);
         this.state = { tempState: {
-            meatTemp: 0,
+            meatTemp: '0',
             chamberTemp: 0
             }
         };
@@ -31,8 +31,9 @@ export class Home extends React.Component<{}, {tempState: State}> {
             let tempObj = JSON.parse(message.data);
             let temp = this.state.tempState;
             meatAvg.push(((tempObj.Meat * 9/5) + 32) - 200)
+            console.log(meatAvg);
             if(meatAvg.length === 10) {
-                temp.meatTemp = meatAvg.reduce((a,b) => a + b / meatAvg.length)
+                temp.meatTemp = (meatAvg.reduce((a,b) => a + b, 0) / meatAvg.length).toFixed(0)
                 meatAvg.shift();
             }
             temp.chamberTemp = ((tempObj.Chamber * 9/5) + 32) - 200;
