@@ -1,0 +1,12 @@
+
+
+.background {
+    background-color: #e0dfdf;
+    min-height: 100vh;
+}
+
+.text {
+    font-family: "Roboto","Helvetica","Arial",sans-serif;
+    font-size: 1.5rem;
+    font-weight: 700;
+}
