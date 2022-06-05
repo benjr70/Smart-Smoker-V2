@@ -6,7 +6,7 @@ import { w3cwebsocket as W3CWebSocket } from "websocket";
 
 interface State {
     meatTemp: string;
-    chamberTemp: number;
+    chamberTemp: string;
 }
 export class Home extends React.Component<{}, {tempState: State}> {
 
@@ -14,14 +14,15 @@ export class Home extends React.Component<{}, {tempState: State}> {
         super(props);
         this.state = { tempState: {
             meatTemp: '0',
-            chamberTemp: 0
+            chamberTemp: '0'
             }
         };
     }
 
 
     componentDidMount(){
-        let meatAvg = [ 0];
+        let meatAvg = [0];
+        let chamberAvg = [0];
         const client = new W3CWebSocket('ws://127.0.0.1:5678');
         client.onopen = () => {
             console.log('websocket connected')
@@ -30,13 +31,15 @@ export class Home extends React.Component<{}, {tempState: State}> {
             console.log(message);
             let tempObj = JSON.parse(message.data);
             let temp = this.state.tempState;
-            meatAvg.push(((tempObj.Meat * 9/5) + 32) - 40)
+            meatAvg.push(((tempObj.Meat * 9/5) + 32) - 60)
+            chamberAvg.push(((tempObj.Chamber * 9/5) + 32) - 60)
             console.log(meatAvg);
             if(meatAvg.length === 10) {
                 temp.meatTemp = (meatAvg.reduce((a,b) => a + b, 0) / meatAvg.length).toFixed(0)
+                temp.chamberTemp = (chamberAvg.reduce((a,b) => a + b, 0) / chamberAvg.length).toFixed(0)
                 meatAvg.shift();
+                chamberAvg.shift();
             }
-            temp.chamberTemp = ((tempObj.Chamber * 9/5) + 32) - 40 ;
             this.setState({tempState: temp})
         }
     }
