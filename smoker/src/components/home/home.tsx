@@ -36,7 +36,6 @@ export class Home extends React.Component<{}, {tempState: State}> {
                 meatAvg.shift();
             }
             temp.chamberTemp = ((tempObj.Chamber * 9/5) + 32) - 200;
-            temp.meatTemp = ((tempObj.Meat * 9/5) + 32) - 200;
             this.setState({tempState: temp})
         }
     }
