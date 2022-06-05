@@ -31,8 +31,8 @@ export class Home extends React.Component<{}, {tempState: State}> {
             console.log(message);
             let tempObj = JSON.parse(message.data);
             let temp = this.state.tempState;
-            meatAvg.push((((tempObj.Meat - 40) * 9/5) + 32) - 60)
-            chamberAvg.push((((tempObj.Chamber - 40) * 9/5) + 32) - 60)
+            meatAvg.push((((tempObj.Meat - 40) * 9/5) + 32))
+            chamberAvg.push((((tempObj.Chamber - 40) * 9/5) + 32))
             if(meatAvg.length === 10) {
                 temp.meatTemp = (meatAvg.reduce((a,b) => a + b, 0) / meatAvg.length).toFixed(0)
                 temp.chamberTemp = (chamberAvg.reduce((a,b) => a + b, 0) / chamberAvg.length).toFixed(0)
