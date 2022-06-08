@@ -4,8 +4,8 @@ import Step from '@mui/material/Step';
 import StepButton from '@mui/material/StepButton';
 import React from 'react';
 import './smoke.style.css'
-import { PreSmokeStep } from './preSmokeStep';
-import { SmokeStep } from './smokeStep';
+import { PreSmokeStep } from './preSmokeStep/preSmokeStep';
+import { SmokeStep } from './smokeStep/smokeStep';
 import { PostSmokeStep } from './PostSmokeStep';
 import { Button } from '@mui/material';
 
