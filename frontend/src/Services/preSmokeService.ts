@@ -13,7 +13,7 @@ export const getCurrentPreSmoke = async ():Promise<preSmoke> => {
     });
 }
 
-export const setCurrentPreSmoke = async(presmoke: preSmoke) => {
+export const setCurrentPreSmoke = async(presmoke: preSmoke): Promise<any> => {
     const axios = require('axios');
     axios.defaults.baseURL = envUrl;
     return axios.post('presmoke', presmoke);
