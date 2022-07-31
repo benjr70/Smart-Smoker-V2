@@ -27,6 +27,8 @@ export class PreSmokeStep extends React.Component<{},{preSmokeState: preSmoke}> 
         getCurrentPreSmoke().then(result => {
            this.setState({preSmokeState: result});
         })
+
+        // there is a better way to handle the stat this is trash
        this.handleUnitChange = this.handleUnitChange.bind(this);
        this.updateName = this.updateName.bind(this);
        this.updateMeatType = this.updateMeatType.bind(this);
@@ -103,6 +105,7 @@ export class PreSmokeStep extends React.Component<{},{preSmokeState: preSmoke}> 
     }
 
     render(): React.ReactNode {
+        // this is the worst fucking way to structure this shit
         return (<div className="presmoke">
             <TextField
                 sx={{marginBottom: '10px'}}
