@@ -20,6 +20,7 @@
     "react-scripts": "^4.0.3",
     "rxjs": "^7.5.5",
     "serialport": "^10.4.0",
+    "socket.io-client": "^4.5.1",
     "typescript": "^4.6.4",
     "web-vitals": "^2.1.4",
     "webpack": "4.44.2",
@@ -52,10 +53,10 @@
     ]
   },
   "devDependencies": {
-    "@types/websocket": "^1.0.5",
     "@babel/core": "^7.18.6",
     "@babel/preset-env": "^7.18.6",
     "@babel/preset-react": "^7.18.6",
+    "@types/websocket": "^1.0.5",
     "babel-loader": "^8.2.5",
     "css-loader": "^6.7.1",
     "html-webpack-plugin": "^5.5.0",

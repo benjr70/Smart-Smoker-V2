@@ -1,7 +1,8 @@
 import React from "react";
 import Grid from '@mui/material/Grid';
 import './smokeStep.style.css'
-
+// import { w3cwebsocket as W3CWebSocket } from "websocket";
+import { io } from 'socket.io-client';
 
 interface State {
     meatTemp: string;
@@ -16,6 +17,28 @@ export class SmokeStep extends React.Component<{}, {tempState: State}> {
             chamberTemp: '0'
             }
         };
+    }
+
+    componentDidMount(): void {
+        const socket = io('http://loaclhost:3001');
+        socket.on('event', (message => {
+            let tempObj = JSON.parse(message.data);
+            let temp = this.state.tempState;
+            temp.chamberTemp = tempObj.Chamber;
+            temp.meatTemp = tempObj.Meat;
+            this.setState({tempState: temp})
+        }))
+        // const client = new W3CWebSocket('http://localhost:3001');
+        // client.onopen = () => {
+        //     console.log('websocket connected')
+        // };
+        // client.onmessage = (message: any) => {
+        //     let tempObj = JSON.parse(message.data);
+        //     let temp = this.state.tempState;
+        //     temp.chamberTemp = tempObj.Chamber;
+        //     temp.meatTemp = tempObj.Meat;
+        //     this.setState({tempState: temp})
+        // }
     }
 
 
