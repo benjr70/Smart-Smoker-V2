@@ -44,7 +44,7 @@ export class Home extends React.Component<{}, {tempState: State}> {
             }
             this.setState({tempState: temp})
             try{
-            socket.emit('events',message.data);
+            socket.emit('events', JSON.stringify(temp));
             }catch(e){
                 console.log(e);
             }
