@@ -1,7 +1,9 @@
 import React from 'react';
 import './home.style.css'
 import Grid from '@mui/material/Grid';
-import { w3cwebsocket as W3CWebSocket } from "websocket";
+ import { w3cwebsocket as W3CWebSocket } from "websocket";
+import { io } from 'socket.io-client';
+import { SocketAddress } from 'net';
 
 
 interface State {
@@ -24,11 +26,11 @@ export class Home extends React.Component<{}, {tempState: State}> {
         let meatAvg = [0];
         let chamberAvg = [0];
         const client = new W3CWebSocket('ws://127.0.0.1:5678');
+        const socket = io('http://136.60.164.223:3001');
         client.onopen = () => {
             console.log('websocket connected')
         };
         client.onmessage = (message: any) => {
-            console.log(message);
             let tempObj = JSON.parse(message.data);
             let temp = this.state.tempState;
             meatAvg.push((((tempObj.Meat - 40) * 9/5) + 32))
@@ -40,6 +42,7 @@ export class Home extends React.Component<{}, {tempState: State}> {
                 chamberAvg.shift();
             }
             this.setState({tempState: temp})
+            socket.emit('events', JSON.stringify(temp));
         }
     }
 
