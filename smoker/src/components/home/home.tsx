@@ -25,16 +25,13 @@ export class Home extends React.Component<{}, {tempState: State}> {
     componentDidMount(){
         let meatAvg = [0];
         let chamberAvg = [0];
-        const client = io('ws://127.0.0.1:5678', {
-            extraHeaders: {
-                'Access-Control-Allow-Origin':  'ws://127.0.0.1:5678'
-            }
-        });
-        //const socket = io('http://192.168.1.229:3001');
+        const client = new W3CWebSocket('ws://127.0.0.1:5678');
+        const socket = io('http://192.168.1.229:3001');
+        console.log('here', socket)
         // client.onopen = () => {
         //     console.log('websocket connected')
         // };
-        client.on('message', (message: any) => {
+        client.onmessage = (message: any) => {
             console.log(message);
             let tempObj = JSON.parse(message.data);
             let temp = this.state.tempState;
@@ -47,8 +44,8 @@ export class Home extends React.Component<{}, {tempState: State}> {
                 chamberAvg.shift();
             }
             this.setState({tempState: temp})
-            // socket.emit('event',temp);
-        })
+            socket.emit('event',temp);
+        }
     }
 
     render(): React.ReactNode { 
