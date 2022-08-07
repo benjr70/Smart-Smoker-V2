@@ -27,10 +27,9 @@ export class Home extends React.Component<{}, {tempState: State}> {
         let chamberAvg = [0];
         const client = new W3CWebSocket('ws://127.0.0.1:5678');
         const socket = io('http://192.168.1.229:3001');
-        console.log('here', socket)
-        // client.onopen = () => {
-        //     console.log('websocket connected')
-        // };
+        client.onopen = () => {
+            console.log('websocket connected')
+        };
         client.onmessage = (message: any) => {
             let tempObj = JSON.parse(message.data);
             let temp = this.state.tempState;
@@ -43,11 +42,7 @@ export class Home extends React.Component<{}, {tempState: State}> {
                 chamberAvg.shift();
             }
             this.setState({tempState: temp})
-            try{
             socket.emit('events', JSON.stringify(temp));
-            }catch(e){
-                console.log(e);
-            }
         }
     }
 

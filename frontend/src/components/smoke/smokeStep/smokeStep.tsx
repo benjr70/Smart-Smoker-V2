@@ -20,25 +20,15 @@ export class SmokeStep extends React.Component<{}, {tempState: State}> {
     }
 
     componentDidMount(): void {
-        const socket = io('http://loaclhost:3001');
-        socket.on('event', (message => {
-            let tempObj = JSON.parse(message.data);
+        const socket = io('http://localhost:3001');
+        console.log(socket);
+        socket.on('events', ((message) => {
+            let tempObj = JSON.parse(message);
             let temp = this.state.tempState;
-            temp.chamberTemp = tempObj.Chamber;
-            temp.meatTemp = tempObj.Meat;
+            temp.chamberTemp = tempObj.chamberTemp;
+            temp.meatTemp = tempObj.meatTemp;
             this.setState({tempState: temp})
         }))
-        // const client = new W3CWebSocket('http://localhost:3001');
-        // client.onopen = () => {
-        //     console.log('websocket connected')
-        // };
-        // client.onmessage = (message: any) => {
-        //     let tempObj = JSON.parse(message.data);
-        //     let temp = this.state.tempState;
-        //     temp.chamberTemp = tempObj.Chamber;
-        //     temp.meatTemp = tempObj.Meat;
-        //     this.setState({tempState: temp})
-        // }
     }
 
 
