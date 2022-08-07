@@ -32,7 +32,6 @@ export class Home extends React.Component<{}, {tempState: State}> {
         //     console.log('websocket connected')
         // };
         client.onmessage = (message: any) => {
-            console.log(message);
             let tempObj = JSON.parse(message.data);
             let temp = this.state.tempState;
             meatAvg.push((((tempObj.Meat - 40) * 9/5) + 32))
