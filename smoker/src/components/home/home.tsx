@@ -43,7 +43,11 @@ export class Home extends React.Component<{}, {tempState: State}> {
                 chamberAvg.shift();
             }
             this.setState({tempState: temp})
-            socket.emit('event',temp);
+            try{
+            socket.emit('events',temp);
+            }catch(e){
+                console.log(e);
+            }
         }
     }
 
