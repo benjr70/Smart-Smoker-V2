@@ -27,7 +27,7 @@ export class Home extends React.Component<{}, {tempState: State}> {
         let chamberAvg = [0];
         const client = io('ws://127.0.0.1:5678', {
             extraHeaders: {
-                'Access-Control-Allow-Origin': 'false'
+                'Access-Control-Allow-Origin':  'ws://127.0.0.1:5678'
             }
         });
         //const socket = io('http://192.168.1.229:3001');
