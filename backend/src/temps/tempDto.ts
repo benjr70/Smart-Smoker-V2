@@ -9,6 +9,9 @@ export class TempDto {
     ChamberTemp: string;
 
     @ApiProperty()
-    TempsId?: string;
+    tempsId?: string;
+
+    @ApiProperty()
+    date?: Date;
 
 }

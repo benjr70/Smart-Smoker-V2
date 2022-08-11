@@ -1,6 +1,5 @@
 import { Injectable } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
-import { stat } from "fs";
 import { Model } from "mongoose";
 import { SmokeService } from "src/smoke/smoke.service";
 import { SmokeDto } from "src/smoke/smokeDto";
@@ -19,15 +18,16 @@ export class TempsService {
         return this.stateService.GetState().then(state => {
             this.smokeService.GetById(state.smokeId).then(smoke => {
                 if(smoke.tempsId){
-                    tempDto.TempsId = smoke.tempsId
+                    tempDto.date = new Date();
+                    tempDto.tempsId = smoke.tempsId
                     return this.create(tempDto);
                 }else{
-                    this.create(tempDto).then(temp => {
+                    this.create(tempDto).then(async temp => {
                         let smokeDto: SmokeDto = {
                             preSmokeId: smoke.preSmokeId,
-                            TempsId: temp["_id"]
+                            tempsId: temp["_id"]
                         }
-                        this.smokeService.Update(smoke["_id"], smokeDto);
+                        await this.smokeService.Update(state.smokeId, smokeDto);
                     })
                 }
 

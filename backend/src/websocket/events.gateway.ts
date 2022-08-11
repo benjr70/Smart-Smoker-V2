@@ -1,30 +1,55 @@
+import { Injectable } from '@nestjs/common';
 import {
     MessageBody,
     SubscribeMessage,
     WebSocketGateway,
     WebSocketServer,
-    WsResponse,
   } from '@nestjs/websockets';
-  import { from, Observable } from 'rxjs';
-  import { map } from 'rxjs/operators';
-  import { Server } from 'socket.io';
-  
-  @WebSocketGateway({
-    cors: {
-      origin: '*',
-    },
-  })
-  export class EventsGateway {
-    @WebSocketServer()
-    server: Server;
-  
-    @SubscribeMessage('identity')
-    async identity(@MessageBody() data: number): Promise<number> {
-      return data;
-    }
+import { Server } from 'socket.io';
+import { StateService } from 'src/State/state.service';
+import { TempDto } from 'src/temps/tempDto';
+import { TempsService } from 'src/temps/temps.service';
 
-    @SubscribeMessage('events')
-    handleEvent(@MessageBody() data: string) {
-      this.server.emit('events', data)
+let count = 0;
+@WebSocketGateway({
+  cors: {
+    origin: '*',
+  },
+})
+
+@Injectable()
+export class EventsGateway {
+
+  constructor(
+    private tempsService: TempsService,
+    private stateService: StateService,
+    ){}
+
+
+  @WebSocketServer()
+  server: Server;
+
+  @SubscribeMessage('identity')
+  async identity(@MessageBody() data: number): Promise<number> {
+    return data;
+  }
+
+  @SubscribeMessage('events')
+  handleEvent(@MessageBody() data: string) {
+    this.server.emit('events', data)
+    count++;
+    if(count > 10){
+      this.stateService.GetState().then(state => {
+        if(state.smoking){
+          const tempObj = JSON.parse(data);
+          const tempDto: TempDto ={
+            MeatTemp: tempObj.meatTemp,
+            ChamberTemp: tempObj.chamberTemp
+          }
+          this.tempsService.saveNewTemp(tempDto);
+        }
+      })
+      count = 0
     }
   }
+}

@@ -6,7 +6,7 @@ export class SmokeDto {
     preSmokeId: string;
 
     @ApiProperty()
-    TempsId?: string;
+    tempsId?: string;
 
     @ApiProperty()
     postSmokeId?: string;

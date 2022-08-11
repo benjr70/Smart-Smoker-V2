@@ -13,6 +13,7 @@ import { TempsService } from "./temps.service";
     imports: [MongooseModule.forFeature([{name: 'Temp', schema: TempSchema}]), StateModule, SmokeModule],
     controllers: [TempsController],
     providers: [TempsService],
+    exports: [TempsService]
 })
 
 export class TempModule {}
