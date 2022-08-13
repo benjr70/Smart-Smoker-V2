@@ -12,3 +12,11 @@ export const toggleSmoking = async ():Promise<State> => {
         return result.data;
     });
 }
+
+export const getState =async ():Promise<State>  => {
+    const axios = require('axios');
+    axios.defaults.baseURL = envUrl;
+    return axios.get('state').then((result:any) => {
+        return result.data;
+    });
+}

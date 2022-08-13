@@ -3,7 +3,7 @@ import Grid from '@mui/material/Grid';
 import './smokeStep.style.css'
 import { io } from 'socket.io-client';
 import { Button } from "@mui/material";
-import { toggleSmoking } from "../../../Services/smokerService";
+import { getState, toggleSmoking } from "../../../Services/smokerService";
 
 interface State {
     meatTemp: string;
@@ -33,6 +33,12 @@ export class SmokeStep extends React.Component<{}, {tempState: State}> {
             temp.meatTemp = tempObj.meatTemp;
             this.setState({tempState: temp})
         }))
+
+        getState().then(state => {
+            let temp = this.state.tempState;
+            temp.smoking = state.smoking
+            this.setState({tempState: temp});
+        })
     }
 
     startSmoke(): void {
