@@ -1,14 +1,17 @@
 import { ApiProperty } from "@nestjs/swagger";
 
 
-export class SmokeDto {
+export class TempDto {
     @ApiProperty()
-    preSmokeId: string;
+    MeatTemp: string;
+
+    @ApiProperty()
+    ChamberTemp: string;
 
     @ApiProperty()
     tempsId?: string;
 
     @ApiProperty()
-    postSmokeId?: string;
+    date?: Date;
 
 }

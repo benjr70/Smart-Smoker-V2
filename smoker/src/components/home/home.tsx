@@ -27,6 +27,7 @@ export class Home extends React.Component<{}, {tempState: State}> {
         let chamberAvg = [0];
         const client = new W3CWebSocket('ws://127.0.0.1:5678');
         const socket = io('http://136.60.164.223:3001');
+        //const socket = io('http://192.168.1.229:3001');
         client.onopen = () => {
             console.log('websocket connected')
         };

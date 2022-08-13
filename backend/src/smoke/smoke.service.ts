@@ -18,4 +18,10 @@ export class SmokeService {
     async GetById(id: string): Promise<Smoke> {
         return await this.smokeModule.findById(id);
     }
+
+    async Update(id: string, smokeDto: SmokeDto): Promise<Smoke> {
+        return this.smokeModule.findOneAndUpdate({_id: id}, smokeDto).then(() => {
+            return this.GetById(id);
+        });
+    }
 }
