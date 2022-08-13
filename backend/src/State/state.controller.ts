@@ -24,4 +24,9 @@ export class StateController {
     CreateState(@Body() dto: StateDto): Promise<State> {
         return this.stateService.create(dto);
     }
+
+    @Put('/toggleSmoking')
+    toggleSmoking(): Promise<State>{
+        return this.stateService.toggleSmoking();
+    }
 }

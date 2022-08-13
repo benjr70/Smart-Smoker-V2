@@ -24,5 +24,15 @@ export class StateService {
             return this.GetState();
         })
     }
+
+    async toggleSmoking(): Promise<State> {
+        const state = await this.GetState()
+        if(state.smoking){
+            state.smoking = false;
+        } else {
+            state.smoking = true;
+        }
+        return this.update(state);
+    }
     
 }
