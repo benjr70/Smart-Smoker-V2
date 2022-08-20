@@ -5,11 +5,13 @@ import Grid from '@mui/material/Grid';
 import { io } from 'socket.io-client';
 import { SocketAddress } from 'net';
 import { Button } from '@mui/material';
+import { getState, toggleSmoking } from '../../services/stateService';
 
 
 interface State {
     meatTemp: string;
     chamberTemp: string;
+    smoking: boolean;
 }
 export class Home extends React.Component<{}, {tempState: State}> {
 
@@ -17,13 +19,19 @@ export class Home extends React.Component<{}, {tempState: State}> {
         super(props);
         this.state = { tempState: {
             meatTemp: '0',
-            chamberTemp: '0'
+            chamberTemp: '0',
+            smoking: false,
             }
         };
     }
 
 
     componentDidMount(){
+        getState().then(state => {
+            let temp = this.state.tempState;
+            temp.smoking = state.smoking
+            this.setState({tempState: temp});
+        })
         let meatAvg = [0];
         let chamberAvg = [0];
         const client = new W3CWebSocket('ws://127.0.0.1:5678');
@@ -48,8 +56,12 @@ export class Home extends React.Component<{}, {tempState: State}> {
         }
     }
 
-    startSmoke(){
-
+    startSmoke(): void {
+        toggleSmoking().then(state => {
+            let temp = this.state.tempState;
+            temp.smoking = state.smoking
+            this.setState({tempState: temp});
+        })
     }
 
     render(): React.ReactNode { 
@@ -80,7 +92,7 @@ export class Home extends React.Component<{}, {tempState: State}> {
                         variant="contained"
                         size="small"
                         onClick={() => this.startSmoke()}
-                        >Smoke
+                        >{this.state.tempState.smoking ? 'Stop Smoking' : 'Start Smoking'}
                         </Button>
                 </Grid>
             </Grid>
