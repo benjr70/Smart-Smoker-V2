@@ -10,3 +10,12 @@
     font-size: 1.5rem;
     font-weight: 700;
 }
+
+.buttonContainer {
+    padding: 2%;
+}
+
+.button {
+    height: 50px;
+    width: 125px;
+}
