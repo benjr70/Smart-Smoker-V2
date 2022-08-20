@@ -4,6 +4,7 @@ import Grid from '@mui/material/Grid';
  import { w3cwebsocket as W3CWebSocket } from "websocket";
 import { io } from 'socket.io-client';
 import { SocketAddress } from 'net';
+import { Button } from '@mui/material';
 
 
 interface State {
@@ -47,10 +48,14 @@ export class Home extends React.Component<{}, {tempState: State}> {
         }
     }
 
+    startSmoke(){
+
+    }
+
     render(): React.ReactNode { 
         return (
         <Grid container direction='row' className='background'>
-            <Grid container xs={9} direction="column" style={{backgroundColor: 'red'}}>
+            <Grid container xs={9} direction="column">
                 <Grid container direction="row"  spacing={2}>
                     <Grid item  className='text' >
                         Meat Temp
@@ -68,8 +73,16 @@ export class Home extends React.Component<{}, {tempState: State}> {
                     </Grid>
                 </Grid>
             </Grid>
-            <Grid container  xs={3}  style={{backgroundColor: 'blue'}}>
-
+            <Grid container  xs={3}>
+                <Grid container className="buttonContainer" flexDirection='row-reverse'>
+                        <Button
+                        className="button"
+                        variant="contained"
+                        size="small"
+                        onClick={() => this.startSmoke()}
+                        >Smoke
+                        </Button>
+                </Grid>
             </Grid>
         </Grid>)
     }
