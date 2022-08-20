@@ -49,10 +49,10 @@ export class Home extends React.Component<{}, {tempState: State}> {
 
     render(): React.ReactNode { 
         return (
-        <Grid container className='background'>
-            <Grid container direction="column">
+        <Grid container direction='row' className='background'>
+            <Grid container xs={9} direction="column" style={{backgroundColor: 'red'}}>
                 <Grid container direction="row"  spacing={2}>
-                    <Grid item xs={3} className='text' >
+                    <Grid item  className='text' >
                         Meat Temp
                     </Grid>
                     <Grid item className='text' >
@@ -60,13 +60,16 @@ export class Home extends React.Component<{}, {tempState: State}> {
                     </Grid>
                 </Grid>
                 <Grid container direction="row" spacing={2}>
-                    <Grid item xs={3} className='text' >
+                    <Grid item  className='text' >
                         Chamber Temp
                     </Grid>
                     <Grid item className='text' >
                         {this.state.tempState.chamberTemp}
                     </Grid>
                 </Grid>
+            </Grid>
+            <Grid container  xs={3}  style={{backgroundColor: 'blue'}}>
+
             </Grid>
         </Grid>)
     }
