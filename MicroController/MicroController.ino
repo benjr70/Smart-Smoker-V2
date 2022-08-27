@@ -1,36 +1,63 @@
 
-#define TC_PIN0 A0          // set to ADC pin used 0
-#define TC_PIN1 A1          // set to ADC pin used 0
-#define AREF 5.0           // set to AREF, typically board voltage like 3.3 or 5.0
-#define ADC_RESOLUTION 10  // set to ADC bit resolution, 10 is default
+#define     THERMISTOR_PIN0     0      // Pin between the thermistor and 
+                                      // series resistor.
 
-float reading0, reading1, voltage0, voltage1, temperature0, temperature1;
+#define     THERMISTOR_PIN1     1      // Pin between the thermistor and 
+                                      // series resistor.
 
-float get_voltage(int raw_adc) {
-  return raw_adc * (AREF / (pow(2, ADC_RESOLUTION)-1));  
-}
+#define     SERIES_RESISTOR    10000  // Series resistor value in ohms.
 
-float get_temperature(float voltage) {
-  return (voltage - 1.25) / 0.005;
-}
+#define     USE_FAHRENHEIT     true   // True to use Fahrenheit, false to
+                                      // use celsius.
 
+#define     ADC_SAMPLES        5      // Number of ADC samples to average
+                                      // when taking a reading.
+
+// Temperature unit conversion functions and state.
+typedef float (*TempConversion)(float);
+TempConversion ToKelvin; 
+TempConversion FromKelvin;
+char* TempUnit;
+
+// manual set Coefficiets
+float A = 0.000436148595;
+float B = 0.000254388761;
+float C = -0.000000018135;
+  
 void setup() {
   Serial.begin(9600);
+  analogReference(DEFAULT);
 }
 
 void loop() {
-  reading0 = analogRead(TC_PIN0);
-  voltage0 = get_voltage(reading0);
-  temperature0 = get_temperature(voltage0);
+   
   Serial.print("{\"Meat\": \"");
-  Serial.print(temperature0);
+  Serial.print(kelvinToFahrenheit(readTemp(THERMISTOR_PIN0)));
   Serial.print("\",");
-  
-  reading1 = analogRead(TC_PIN1);
-  voltage1 = get_voltage(reading1);
-  temperature1 = get_temperature(voltage1);
-  Serial.print("\"Chamber\": \"");
-  Serial.print(temperature1);
+   Serial.print("\"Chamber\": \"");
+  Serial.print(kelvinToFahrenheit(readTemp(THERMISTOR_PIN1)));
   Serial.println("\"}");
   delay(500);
+
+}
+
+float kelvinToFahrenheit(float kelvin) {
+  return kelvin*(9.0/5.0) - 459.67;
+}
+
+
+double readResistance(int pin) {
+  float reading = 0;
+  for (int i = 0; i < ADC_SAMPLES; ++i) {
+    reading += analogRead(pin);
+  }
+  reading /= (float)ADC_SAMPLES;
+  reading = (1023 / reading) - 1;
+  return SERIES_RESISTOR / reading;
+}
+
+float readTemp(int pin) {
+  float R = readResistance(pin);
+  float kelvin = 1.0/(A + B*log(R) + C*pow(log(R), 3.0));
+  return kelvin;
 }
