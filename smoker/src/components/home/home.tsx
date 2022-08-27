@@ -41,8 +41,8 @@ export class Home extends React.Component<{}, {tempState: State}> {
         client.onmessage = (message: any) => {
             let tempObj = JSON.parse(message.data);
             let temp = this.state.tempState;
-            temp.meatTemp = tempObj.Meat.toFixed(1);
-            temp.chamberTemp = tempObj.Chamber.toFixed(1);
+            temp.meatTemp = tempObj.Meat.toFixed(0);
+            temp.chamberTemp = tempObj.Chamber.toFixed(0);
             this.setState({tempState: temp})
             socket.emit('events', JSON.stringify(temp));
         }
