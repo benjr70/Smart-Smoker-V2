@@ -54,6 +54,9 @@ export class Home extends React.Component<{}, {tempState: State}> {
                 temp.chamberTemp = (chamberAvg.reduce((a,b) => a + b, 0) / chamberAvg.length).toFixed(1)
                 meatAvg.shift();
                 chamberAvg.shift();
+            } else {
+                meatAvg.push(parseFloat(tempObj.Meat));
+                chamberAvg.push(parseFloat(tempObj.Chamber));
             }
             this.setState({tempState: temp})
             socket.emit('events', JSON.stringify(temp));
