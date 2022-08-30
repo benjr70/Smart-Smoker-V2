@@ -43,13 +43,13 @@ export class Home extends React.Component<{}, {tempState: State}> {
         client.onmessage = (message: any) => {
             let tempObj = JSON.parse(message.data);
             let temp = this.state.tempState;
-            if(!(parseFloat(tempObj.Meat) > parseFloat(temp.meatTemp) + 10) && !(parseFloat(tempObj.Meat) < parseFloat(temp.meatTemp) - 10)){
+            if(!(parseFloat(tempObj.Meat) > parseFloat(temp.meatTemp) + 5) && !(parseFloat(tempObj.Meat) < parseFloat(temp.meatTemp) - 5)){
                 meatAvg.push(parseFloat(tempObj.Meat));
             }
-            if(!(parseFloat(tempObj.Chamber) > parseFloat(temp.chamberTemp) + 10) && !(parseFloat(tempObj.Chamber) < parseFloat(temp.chamberTemp) - 10)){
+            if(!(parseFloat(tempObj.Chamber) > parseFloat(temp.chamberTemp) + 5) && !(parseFloat(tempObj.Chamber) < parseFloat(temp.chamberTemp) - 5)){
                 chamberAvg.push(parseFloat(tempObj.Chamber));
             }
-            if(meatAvg.length === 5) {
+            if(meatAvg.length === 3) {
                 temp.meatTemp = (meatAvg.reduce((a,b) => a + b, 0) / meatAvg.length).toFixed(1)
                 temp.chamberTemp = (chamberAvg.reduce((a,b) => a + b, 0) / chamberAvg.length).toFixed(1)
                 meatAvg.shift();
