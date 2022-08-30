@@ -20,9 +20,13 @@ TempConversion FromKelvin;
 char* TempUnit;
 
 // manual set Coefficiets
-float A = 0.000436148595;
-float B = 0.000254388761;
-float C = -0.000000018135;
+float A = 0.000363993930;
+float B = 0.000262156391;
+float C = -0.000000024874;
+
+
+
+
   
 void setup() {
   Serial.begin(9600);

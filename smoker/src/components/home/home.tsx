@@ -32,6 +32,8 @@ export class Home extends React.Component<{}, {tempState: State}> {
             temp.smoking = state.smoking
             this.setState({tempState: temp});
         })
+        let meatAvg = [0];
+        let chamberAvg = [0];
         const client = new W3CWebSocket('ws://127.0.0.1:5678');
         const socket = io('http://136.60.164.223:3001');
         //const socket = io('http://192.168.1.229:3001');
@@ -41,8 +43,14 @@ export class Home extends React.Component<{}, {tempState: State}> {
         client.onmessage = (message: any) => {
             let tempObj = JSON.parse(message.data);
             let temp = this.state.tempState;
-            temp.meatTemp = tempObj.Meat;
-            temp.chamberTemp = tempObj.Chamber;
+            meatAvg.push(tempObj.Meat);
+            chamberAvg.push(temp.chamberTemp = tempObj.Chamber);
+            if(meatAvg.length === 10) {
+                temp.meatTemp = (meatAvg.reduce((a,b) => a + b, 0) / meatAvg.length).toFixed(0)
+                temp.chamberTemp = (chamberAvg.reduce((a,b) => a + b, 0) / chamberAvg.length).toFixed(0)
+                meatAvg.shift();
+                chamberAvg.shift();
+            }
             this.setState({tempState: temp})
             socket.emit('events', JSON.stringify(temp));
         }
