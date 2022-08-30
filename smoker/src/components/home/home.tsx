@@ -43,14 +43,10 @@ export class Home extends React.Component<{}, {tempState: State}> {
         client.onmessage = (message: any) => {
             let tempObj = JSON.parse(message.data);
             let temp = this.state.tempState;
-            meatAvg.push(tempObj.Meat);
-            chamberAvg.push(tempObj.Chamber);
+            meatAvg.push(parseFloat(tempObj.Meat));
+            chamberAvg.push(parseFloat(tempObj.Chamber));
             if(meatAvg.length === 10) {
-                console.log(meatAvg, chamberAvg);
-                let total = meatAvg.reduce((a,b) => a + b, 0);
-                console.log(total);
-                temp.meatTemp = (total / meatAvg.length).toFixed(0)
-                console.log(temp);
+                temp.meatTemp = (meatAvg.reduce((a,b) => a + b, 0) / meatAvg.length).toFixed(0)
                 temp.chamberTemp = (chamberAvg.reduce((a,b) => a + b, 0) / chamberAvg.length).toFixed(0)
                 meatAvg.shift();
                 chamberAvg.shift();
