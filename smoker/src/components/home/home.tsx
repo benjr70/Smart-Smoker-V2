@@ -49,7 +49,7 @@ export class Home extends React.Component<{}, {tempState: State}> {
             if(!(parseFloat(tempObj.Chamber) > parseFloat(temp.chamberTemp) + 5) && !(parseFloat(tempObj.Chamber) < parseFloat(temp.chamberTemp) - 5)){
                 chamberAvg.push(parseFloat(tempObj.Chamber));
             }
-            if(meatAvg.length === 3) {
+            if(meatAvg.length === 5) {
                 temp.meatTemp = (meatAvg.reduce((a,b) => a + b, 0) / meatAvg.length).toFixed(1)
                 temp.chamberTemp = (chamberAvg.reduce((a,b) => a + b, 0) / chamberAvg.length).toFixed(1)
                 meatAvg.shift();
