@@ -2,14 +2,25 @@ import React from "react";
 import Grid from '@mui/material/Grid';
 import './smokeStep.style.css'
 import { io } from 'socket.io-client';
-import { Button } from "@mui/material";
+import { Autocomplete, Button, TextField } from "@mui/material";
 import { getState, toggleSmoking } from "../../../Services/smokerService";
 
 interface State {
     meatTemp: string;
     chamberTemp: string;
     smoking: boolean;
+    notes: string;
+    woodType: string;
 }
+
+const woodType = [
+    'Hickory',
+    'Post Oak',
+    'Pecan',
+    'Cheery',
+    'Apple',
+];
+
 export class SmokeStep extends React.Component<{}, {tempState: State}> {
 
     constructor(props: any) {
@@ -18,8 +29,12 @@ export class SmokeStep extends React.Component<{}, {tempState: State}> {
             meatTemp: '0',
             chamberTemp: '0',
             smoking: false,
+            notes: '',
+            woodType: ''
             }
         };
+        this.updateNotes = this.updateNotes.bind(this);
+        this.updateWoodType = this.updateWoodType.bind(this);
     }
 
     componentDidMount(): void {
@@ -49,6 +64,18 @@ export class SmokeStep extends React.Component<{}, {tempState: State}> {
         })
     }
 
+    updateNotes(event: any){
+        let temp = this.state.tempState;
+        temp.notes = event.target.value;
+        this.setState({tempState: temp});
+    }
+
+    updateWoodType(newInputValue: string){
+        let temp = this.state.tempState;
+        temp.woodType = newInputValue;
+        this.setState({tempState: temp});
+    }
+
 
     render(): React.ReactNode {
         return (
@@ -69,6 +96,40 @@ export class SmokeStep extends React.Component<{}, {tempState: State}> {
                         <Grid item className='text' >
                             {this.state.tempState.chamberTemp}
                         </Grid>
+                    </Grid>
+                </Grid>
+                <Grid container  direction="column">
+                    <Autocomplete
+                        sx={{marginBottom: '10px'}}
+                        freeSolo
+                        options={woodType.map((option) => option)}
+                        inputValue={this.state.tempState.woodType}
+                        onInputChange={(event, newInputValue) => {this.updateWoodType(newInputValue)}}
+                        renderInput={(params) => 
+                        <Grid container direction="row" justifyContent='space-around' >
+                            <TextField 
+                                sx={{
+                                    marginTop: '10px',
+                                    marginBottom: '10px',
+                                    width: '350px'
+                                    }}
+                                {...params}label="Wood Type"  />
+                            </Grid>}
+                    />
+                    <Grid container direction="row" justifyContent='space-around'>
+                        <TextField
+                            sx={{
+                                marginTop: '10px',
+                                marginBottom: '10px',
+                                width: '350px'
+                            }}
+                            id="outlined-multiline-static"
+                            label="Notes"
+                            multiline
+                            value={this.state.tempState.notes}
+                            onChange={this.updateNotes}
+                            rows={4}
+                        />
                     </Grid>
                 </Grid>
                 <Grid container className="buttonContainer" flexDirection='row-reverse'>

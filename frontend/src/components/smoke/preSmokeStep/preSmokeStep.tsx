@@ -113,12 +113,12 @@ export class PreSmokeStep extends React.Component<{},{preSmokeState: preSmoke}> 
                 onChange={this.updateName}
             />
             <Autocomplete
-            sx={{marginBottom: '10px'}}
-            freeSolo
-             options={meats.map((option) => option)}
-            inputValue={this.state.preSmokeState.meatType}
-            onInputChange={(event, newInputValue) => {this.updateMeatType(newInputValue)}}
-            renderInput={(params) => <TextField  {...params}label="Meat Type"  />}
+                sx={{marginBottom: '10px'}}
+                freeSolo
+                options={meats.map((option) => option)}
+                inputValue={this.state.preSmokeState.meatType}
+                onInputChange={(event, newInputValue) => {this.updateMeatType(newInputValue)}}
+                renderInput={(params) => <TextField  {...params}label="Meat Type"  />}
             />
             <div className="weight">
                 <TextField
