@@ -11,7 +11,10 @@ export class Smoke {
     tempsId: string
 
     @Prop()
-    postSmoke: string
+    postSmokeId: string
+
+    @Prop()
+    smokeProfileId: string;
 
     @Prop()
     date: Date

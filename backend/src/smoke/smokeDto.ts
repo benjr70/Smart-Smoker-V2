@@ -11,4 +11,7 @@ export class SmokeDto {
     @ApiProperty()
     postSmokeId?: string;
 
+    @ApiProperty()
+    smokeProfileId?: string;
+
 }
