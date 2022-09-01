@@ -2,8 +2,8 @@ import { State } from "../components/common/interfaces/state";
 
 
 // switch which line is commented for environment 
-//const envUrl = 'http://136.60.164.223:3001/api/';
-const envUrl = 'http://localhost:3001/api/';
+const envUrl = 'http://136.60.164.223:3001/api/';
+//const envUrl = 'http://localhost:3001/api/';
 
 export interface smokeProfile {
     notes: string;
@@ -29,7 +29,7 @@ export const getState =async ():Promise<State>  => {
 export const setSmokeProfile=async (smokeProfileDTO: smokeProfile) => {
     const axios = require('axios');
     axios.defaults.baseURL = envUrl;
-    return axios.post('smokeProfile', smokeProfileDTO);
+    return axios.post('smokeProfile/current', smokeProfileDTO);
 }
 
 
