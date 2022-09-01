@@ -37,6 +37,12 @@ export const getCurrentSmokeProfile = async ():Promise<smokeProfile> => {
     const axios = require('axios');
     axios.defaults.baseURL = envUrl;
     return axios.get('smokeProfile/current').then((result:any) => {
+        if(!result.data.notes){
+            result.data.notes = ''
+        }
+        if (!result.data.woodType){
+            result.data.woodType = ''
+        }
         return result.data;
     });
 }
