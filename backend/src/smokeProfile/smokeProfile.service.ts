@@ -20,7 +20,11 @@ export class SmokeProfileService {
                await this.stateService.create({smokeId: '', smoking: false});
             }
             return this.smokeService.GetById(state.smokeId).then(smoke => {
-                 return this.smokeProfileModel.findById(smoke.smokeProfileId)
+                if(smoke.smokeProfileId){
+                    return this.smokeProfileModel.findById(smoke.smokeProfileId)
+                } else {
+                    return {notes: '', woodType: ''}
+                }
              })
          })
     }
