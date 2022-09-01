@@ -3,7 +3,7 @@ import Grid from '@mui/material/Grid';
 import './smokeStep.style.css'
 import { io } from 'socket.io-client';
 import { Autocomplete, Button, TextField } from "@mui/material";
-import { getState, toggleSmoking } from "../../../Services/smokerService";
+import { getCurrentSmokeProfile, getState, setSmokeProfile, smokeProfile, toggleSmoking } from "../../../Services/smokerService";
 
 interface State {
     meatTemp: string;
@@ -33,6 +33,13 @@ export class SmokeStep extends React.Component<{}, {tempState: State}> {
             woodType: ''
             }
         };
+
+        getCurrentSmokeProfile().then((smokeProfile: smokeProfile) => {
+            let temp = this.state.tempState;
+            temp.notes = smokeProfile.notes;
+            temp.woodType = smokeProfile.woodType;
+            this.setState({tempState: temp});
+        })
         this.updateNotes = this.updateNotes.bind(this);
         this.updateWoodType = this.updateWoodType.bind(this);
     }
@@ -74,6 +81,14 @@ export class SmokeStep extends React.Component<{}, {tempState: State}> {
         let temp = this.state.tempState;
         temp.woodType = newInputValue;
         this.setState({tempState: temp});
+    }
+
+    componentWillUnmount(){
+        const smokeProfileDto: smokeProfile = {
+            notes: this.state.tempState.notes,
+            woodType: this.state.tempState.woodType,
+        }
+        setSmokeProfile(smokeProfileDto);
     }
 
 
