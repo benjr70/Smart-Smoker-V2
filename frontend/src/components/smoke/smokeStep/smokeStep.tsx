@@ -45,8 +45,8 @@ export class SmokeStep extends React.Component<{}, {tempState: State}> {
     }
 
     componentDidMount(): void {
-        // const socket = io('http://136.60.164.223:3001');
-        const socket = io('http://localhost:3001');
+        const socket = io('http://136.60.164.223:3001');
+        //const socket = io('http://localhost:3001');
         console.log(socket);
         socket.on('events', ((message) => {
             let tempObj = JSON.parse(message);
