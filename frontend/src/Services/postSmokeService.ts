@@ -9,14 +9,12 @@ export const getCurrentPostSmoke = async ():Promise<PostSmoke> => {
     const axios = require('axios');
     axios.defaults.baseURL = envUrl;
     return axios.get('postSmoke/current').then((result:any) => {
-        if(result.data){
-            return result.data;
-        }
+        return result.data;
     });
 }
 
 export const setCurrentPostSmoke = async(postSmoke: PostSmoke): Promise<any> => {
     const axios = require('axios');
     axios.defaults.baseURL = envUrl;
-    return axios.post('postSmoke', postSmoke);
+    return axios.post('postSmoke/current', postSmoke);
 }

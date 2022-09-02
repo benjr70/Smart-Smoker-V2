@@ -26,6 +26,7 @@ export class PostSmokeStep extends React.Component<{},{postSmokeState: PostSmoke
             temp.notes = postSmoke.notes;
             temp.restTime = postSmoke.restTime;
             temp.steps = postSmoke.steps;
+            this.setState({postSmokeState: temp});
         })
         this.updateName = this.updateName.bind(this);
         this.updateNotes = this.updateNotes.bind(this);
@@ -65,9 +66,6 @@ export class PostSmokeStep extends React.Component<{},{postSmokeState: PostSmoke
     componentWillUnmount(){
         setCurrentPostSmoke(this.state.postSmokeState);
     }
-
-
-
 
     render(): React.ReactNode {
         return (
