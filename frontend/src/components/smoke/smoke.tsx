@@ -6,7 +6,7 @@ import React from 'react';
 import './smoke.style.css'
 import { PreSmokeStep } from './preSmokeStep/preSmokeStep';
 import { SmokeStep } from './smokeStep/smokeStep';
-import { PostSmokeStep } from './PostSmokeStep';
+import { PostSmokeStep } from './postSmokeStep/PostSmokeStep';
 import { Button } from '@mui/material';
 
 const steps = [
