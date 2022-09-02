@@ -8,6 +8,7 @@ import { PreSmokeStep } from './preSmokeStep/preSmokeStep';
 import { SmokeStep } from './smokeStep/smokeStep';
 import { PostSmokeStep } from './postSmokeStep/PostSmokeStep';
 import { Button } from '@mui/material';
+import { clearSmoke } from '../../Services/smokerService';
 
 const steps = [
     'Pre-Smoke',
@@ -27,7 +28,14 @@ export class Smoke extends React.Component<{},{activeStep: number}>{
       };
 
       nextStep(){
-         let nextStep = this.state.activeStep + 1
+        let nextStep = this.state.activeStep
+        if(this.state.activeStep === 2){
+            clearSmoke();
+            nextStep = 0;
+            this.setState({activeStep: nextStep});
+            return;
+        }
+        nextStep++;
          if(nextStep < 3){
             this.setState({activeStep: nextStep});
          }
@@ -65,7 +73,7 @@ export class Smoke extends React.Component<{},{activeStep: number}>{
                 variant="contained"
                 size="small"
                 onClick={() => this.nextStep()}
-                >Next
+                >{this.state.activeStep === 2 ? 'Finish' : "Next"}
             </Button>
             </div>
             )

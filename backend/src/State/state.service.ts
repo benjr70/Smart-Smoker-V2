@@ -35,4 +35,12 @@ export class StateService {
         return this.update(state);
     }
     
+
+    clearSmoke(){
+        let stateDto: StateDto ={
+            smokeId: '',
+            smoking: false,
+        }
+        return this.update(stateDto);
+    }
 }

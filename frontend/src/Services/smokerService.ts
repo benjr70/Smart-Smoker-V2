@@ -18,6 +18,14 @@ export const toggleSmoking = async ():Promise<State> => {
     });
 }
 
+export const clearSmoke = async ():Promise<State> => {
+    const axios = require('axios');
+    axios.defaults.baseURL = envUrl;
+    return axios.put('state/clearSmoke').then((result:any) => {
+        return result.data;
+    });
+}
+
 export const getState =async ():Promise<State>  => {
     const axios = require('axios');
     axios.defaults.baseURL = envUrl;

@@ -29,4 +29,9 @@ export class StateController {
     toggleSmoking(): Promise<State>{
         return this.stateService.toggleSmoking();
     }
+
+    @Put('/clearSmoke')
+    clearSmoke(): Promise<State>{
+        return this.stateService.clearSmoke();
+    }
 }
