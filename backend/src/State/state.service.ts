@@ -36,11 +36,11 @@ export class StateService {
     }
     
 
-    clearSmoke(){
-        let stateDto: StateDto ={
+    async clearSmoke(){
+        let stateDto: StateDto = {
             smokeId: '',
             smoking: false,
         }
-        return this.update(stateDto);
+        return await this.update(stateDto);
     }
 }

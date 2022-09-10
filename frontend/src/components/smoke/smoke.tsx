@@ -15,7 +15,9 @@ const steps = [
     'Smoke',
     'Post-Smoke',
   ];
-
+  function delay(ms: number) {
+    return new Promise( resolve => setTimeout(resolve, ms) );
+}
 export class Smoke extends React.Component<{},{activeStep: number}>{
 
     constructor(props: any){
@@ -27,11 +29,14 @@ export class Smoke extends React.Component<{},{activeStep: number}>{
         this.setState({activeStep: step})
       };
 
-      nextStep(){
+      async nextStep(){
         let nextStep = this.state.activeStep
         if(this.state.activeStep === 2){
-            clearSmoke();
             nextStep = 0;
+            this.setState({activeStep: nextStep});
+            await delay(1);
+            this.setState({activeStep: 4});
+            await delay(1);
             this.setState({activeStep: nextStep});
             return;
         }
