@@ -3,6 +3,7 @@ import React from "react";
 import { getCurrentPostSmoke, setCurrentPostSmoke } from "../../../Services/postSmokeService";
 import { DynamicList } from "../../common/components/DynamicList";
 import { IMaskInput } from 'react-imask';
+import { clearSmoke } from "../../../Services/smokerService";
 
 
 export interface PostSmoke {
@@ -63,8 +64,9 @@ export class PostSmokeStep extends React.Component<{},{postSmokeState: PostSmoke
         this.setState({postSmokeState: temp});
     }
 
-    componentWillUnmount(){
-        setCurrentPostSmoke(this.state.postSmokeState);
+    async componentWillUnmount(){
+        await setCurrentPostSmoke(this.state.postSmokeState);
+        await clearSmoke();
     }
 
     render(): React.ReactNode {
