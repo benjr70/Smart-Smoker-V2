@@ -1,9 +1,7 @@
 import { PostSmoke } from "../components/smoke/postSmokeStep/PostSmokeStep";
 
 
-// switch which line is commented for environment 
-const envUrl = 'http://136.60.164.223:3001/api/';
-//const envUrl = 'http://localhost:3001/api/';
+const envUrl = process.env.REACT_APP_CLOUD_URL;
 
 export const getCurrentPostSmoke = async ():Promise<PostSmoke> => {
     const axios = require('axios');
