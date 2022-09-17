@@ -66,7 +66,6 @@ export class PostSmokeStep extends React.Component<{},{postSmokeState: PostSmoke
 
     async componentWillUnmount(){
         await setCurrentPostSmoke(this.state.postSmokeState);
-        await clearSmoke();
     }
 
     render(): React.ReactNode {
