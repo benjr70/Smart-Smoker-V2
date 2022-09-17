@@ -4,8 +4,6 @@ import './smokeStep.style.css'
 import { io } from 'socket.io-client';
 import { Autocomplete, Button, TextField } from "@mui/material";
 import { getCurrentSmokeProfile, getState, setSmokeProfile, smokeProfile, toggleSmoking } from "../../../Services/smokerService";
-import { Button } from "@mui/material";
-import { getState, toggleSmoking } from "../../../Services/smokerService";
 import TempChart from "../../common/components/tempChart";
 
 interface State {
