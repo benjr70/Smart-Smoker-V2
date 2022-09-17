@@ -114,6 +114,9 @@ export class SmokeStep extends React.Component<{}, {tempState: State}> {
                         </Grid>
                     </Grid>
                 </Grid>
+                <Grid container>
+                    <TempChart></TempChart>
+                </Grid>
                 <Grid container  direction="column">
                     <Autocomplete
                         sx={{marginBottom: '10px'}}
@@ -147,9 +150,6 @@ export class SmokeStep extends React.Component<{}, {tempState: State}> {
                             rows={4}
                         />
                     </Grid>
-                </Grid>
-                <Grid container>
-                    <TempChart></TempChart>
                 </Grid>
                 <Grid container className="buttonContainer" flexDirection='row-reverse'>
                     <Button
