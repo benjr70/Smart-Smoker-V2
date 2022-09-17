@@ -4,9 +4,7 @@ export interface State {
 }
 
 
-// switch which line is commented for environment 
-const envUrl = 'http://136.60.164.223:3001/api/';
-//const envUrl = 'http://localhost:3001/api/';
+const envUrl = process.env.REACT_APP_CLOUD_URL;
 
 export const toggleSmoking = async ():Promise<State> => {
     const axios = require('axios');
