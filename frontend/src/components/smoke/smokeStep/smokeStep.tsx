@@ -45,7 +45,7 @@ export class SmokeStep extends React.Component<{}, {tempState: State}> {
     }
 
     componentDidMount(): void {
-        let url = process.env.REACT_APP_CLOUD_URL ?? '';
+        let url = process.env.WS_URL ?? '';
         const socket = io(url);
         console.log(socket);
         socket.on('events', ((message) => {
