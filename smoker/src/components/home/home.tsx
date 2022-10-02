@@ -33,7 +33,11 @@ export class Home extends React.Component<{}, {tempState: State}> {
 
 
     async componentDidMount(){
-        initTemps = await getCurrentTemps();
+        try{
+            initTemps = await getCurrentTemps();
+        } catch(e) {
+            console.log(e);
+        }
         getState().then(state => {
             let temp = this.state.tempState;
             temp.smoking = state.smoking
