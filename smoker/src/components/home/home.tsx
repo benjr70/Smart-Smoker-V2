@@ -12,6 +12,7 @@ interface State {
     meatTemp: string;
     chamberTemp: string;
     smoking: boolean;
+    date: Date;
 }
 export class Home extends React.Component<{}, {tempState: State}> {
 
@@ -21,6 +22,7 @@ export class Home extends React.Component<{}, {tempState: State}> {
             meatTemp: '0',
             chamberTemp: '0',
             smoking: false,
+            date: new Date(),
             }
         };
     }
@@ -58,6 +60,7 @@ export class Home extends React.Component<{}, {tempState: State}> {
                 meatAvg.push(parseFloat(tempObj.Meat));
                 chamberAvg.push(parseFloat(tempObj.Chamber));
             }
+            temp.date = new Date();
             this.setState({tempState: temp})
             socket.emit('events', JSON.stringify(temp));
         }

@@ -18,7 +18,6 @@ export class TempsService {
         return this.stateService.GetState().then(state => {
             this.smokeService.GetById(state.smokeId).then(smoke => {
                 if(smoke.tempsId){
-                    tempDto.date = new Date();
                     tempDto.tempsId = smoke.tempsId
                     return this.create(tempDto);
                 }else{

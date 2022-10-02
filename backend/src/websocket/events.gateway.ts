@@ -44,7 +44,8 @@ export class EventsGateway {
           const tempObj = JSON.parse(data);
           const tempDto: TempDto ={
             MeatTemp: tempObj.meatTemp,
-            ChamberTemp: tempObj.chamberTemp
+            ChamberTemp: tempObj.chamberTemp,
+            date: tempObj.date,
           }
           this.tempsService.saveNewTemp(tempDto);
         }

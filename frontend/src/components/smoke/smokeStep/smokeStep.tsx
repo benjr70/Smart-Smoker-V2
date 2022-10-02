@@ -12,6 +12,7 @@ interface State {
     smoking: boolean;
     notes: string;
     woodType: string;
+    date: Date;
 }
 
 const woodType = [
@@ -31,7 +32,8 @@ export class SmokeStep extends React.Component<{}, {tempState: State}> {
             chamberTemp: '0',
             smoking: false,
             notes: '',
-            woodType: ''
+            woodType: '',
+            date: new Date()
             }
         };
 
@@ -54,6 +56,7 @@ export class SmokeStep extends React.Component<{}, {tempState: State}> {
             let temp = this.state.tempState;
             temp.chamberTemp = tempObj.chamberTemp;
             temp.meatTemp = tempObj.meatTemp;
+            temp.date = tempObj.date;
             this.setState({tempState: temp})
         }))
 
