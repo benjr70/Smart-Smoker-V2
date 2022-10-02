@@ -4,13 +4,14 @@ import * as d3 from 'd3';
  interface data {
   temp1: number;
   temp2: number;
+  date: Date;
  }
 
 function TempChart(props: data) {
     
 
   const svgRef = useRef() as React.RefObject<SVGSVGElement>;
-  const [data] = useState([{temp1: props.temp1, temp2: props.temp2}]);
+  const [data] = useState([{temp1: props.temp1, temp2: props.temp2, date: props.date}]);
 
   const createGraph =async (data: data[]) => {
     
@@ -26,9 +27,9 @@ function TempChart(props: data) {
       .style('background', '#d3d3d3')
 
     //setting the scaling
-    const xScale = d3.scaleLinear()
+    const xScale = d3.scaleTime()
     // @ts-ignore
-      .domain([0, data.length - 1])
+      .domain(d3.extent(data, d => new Date(d.date).getTime()))
       .range([20, width]);
 
     const yScale = d3.scaleLinear()
@@ -38,16 +39,16 @@ function TempChart(props: data) {
 
     const generateScaledLine1 = d3.line()
       // @ts-ignore
-      .x((d, i) => {return xScale(i);})
+      .x((d) => {return xScale(new Date(d.date).getTime())})
       // @ts-ignore
-      .y((d, i) => {return yScale(d.temp1);})
+      .y((d) => {return yScale(d.temp1);})
       .curve(d3.curveCardinal)
 
       const generateScaledLine2 = d3.line()
       // @ts-ignore
-      .x((d, i) => {return xScale(i);})
+      .x((d) => {return xScale(new Date(d.date).getTime())})
       // @ts-ignore
-      .y((d, i) => {return yScale(d.temp2);})
+      .y((d) => {return yScale(d.temp2);})
       .curve(d3.curveCardinal)
 
 
@@ -91,7 +92,7 @@ function TempChart(props: data) {
 
   useEffect(() => {
     if(!isNaN(props.temp1) && props.temp1 != 0 && !isNaN(props.temp2) && props.temp2 != 0){
-      data.push({temp1: props.temp1, temp2: props.temp2});
+      data.push({temp1: props.temp1, temp2: props.temp2, date: props.date});
     }
     createGraph(data);
   },[props.temp1]);
