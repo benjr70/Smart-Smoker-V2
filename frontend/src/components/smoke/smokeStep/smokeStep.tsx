@@ -115,7 +115,9 @@ export class SmokeStep extends React.Component<{}, {tempState: State}> {
                     </Grid>
                 </Grid>
                 <Grid container>
-                    <TempChart></TempChart>
+                    <TempChart
+                        temp1={parseFloat(this.state.tempState.chamberTemp)}
+                        temp2={parseFloat(this.state.tempState.meatTemp)}></TempChart>
                 </Grid>
                 <Grid container  direction="column">
                     <Autocomplete

@@ -1,56 +1,105 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
-import { Grid } from '@mui/material';
 
+ interface data {
+  temp1: number;
+  temp2: number;
+ }
 
-
-
-function TempChart() {
+function TempChart(props: data) {
     
 
   const svgRef = useRef() as React.RefObject<SVGSVGElement>;
-  const [data] = useState([25, 30, 35, 40, 45, 50]);
+  const [data] = useState([{temp1: props.temp1, temp2: props.temp2}]);
 
-  useEffect(() => {
-    //setting up svg
-    const width = 400;
-    const hight = 400;
+  const createGraph =async (data: data[]) => {
+    
+    // set the dimensions and margins of the graph
+    const margin = {top: 10, right: 0, bottom: 10, left: 0};
+    const width = 400 - margin.left - margin.right;
+    const height = 150 - margin.top - margin.bottom;
+
+
     const svg = d3.select(svgRef.current)
-      .attr('width', width)
-      .attr('hight', hight)
+      .attr('width', width + margin.left + margin.right)
+      .attr('hight', height  + margin.top + margin.bottom)
       .style('background', '#d3d3d3')
-      .style('margin-top', '20');
 
     //setting the scaling
     const xScale = d3.scaleLinear()
-      .domain([0, data.length -1])
-      .range([0, width]);
+    // @ts-ignore
+      .domain([0, data.length - 1])
+      .range([20, width]);
 
     const yScale = d3.scaleLinear()
-      .domain([0, hight])
-      .range([hight, 0]);
+    // @ts-ignore
+      .domain([0,( d3.max(data, d => {return d.temp1 > d.temp2 ? d.temp1 : d.temp2}) * 1.15)])
+      .range([height, 0]);
 
-      
-    // const generateScaledLine = d3.line()
-    //   .x((d, i) => xScale(i))
-    //   .y(yScale)
-    //   .curve(d3.curveCardinal);
+    const generateScaledLine1 = d3.line()
+      // @ts-ignore
+      .x((d, i) => {return xScale(i);})
+      // @ts-ignore
+      .y((d, i) => {return yScale(d.temp1);})
+      .curve(d3.curveCardinal)
+
+      const generateScaledLine2 = d3.line()
+      // @ts-ignore
+      .x((d, i) => {return xScale(i);})
+      // @ts-ignore
+      .y((d, i) => {return yScale(d.temp2);})
+      .curve(d3.curveCardinal)
 
 
-    //   svg.selectAll('line')
-    //   .data([data])
-    //   .join('path')
-    //     .attr('d', generateScaledLine)
-    //     .attr('fill', 'none')
-    //     .attr('stroke', 'black')
+      svg.selectAll('.line')
+      .data([data])
+      .join('path')
+      .attr('class', 'line')
+      .attr('fill', 'none')
+      .attr('stroke', 'black')
+      // @ts-ignore
+      .attr('d', generateScaledLine1)
 
-  }, [data]);
 
+      svg.append('path')
+      .data([data])
+      // .join('path')
+      .attr('class', 'line')
+      .attr('fill', 'none')
+      .attr('stroke', 'blue')
+      // @ts-ignore
+      .attr('d', generateScaledLine2)
+
+
+    svg.selectAll(".xAxis").remove();
+    // Add the X Axis
+    svg.append("g")
+        .attr('class', 'xAxis')
+        .attr("transform", "translate(0," + height + ")")
+        .call(d3.axisBottom(xScale));
+
+    svg.selectAll(".yAxis").remove();
+    // Add the Y Axis
+    svg.append("g")
+      .attr('class', 'yAxis')
+      .attr("transform", "translate(20, 0)")
+      .call(d3.axisLeft(yScale));
+
+  }
+
+
+
+  useEffect(() => {
+    if(!isNaN(props.temp1) && props.temp1 != 0 && !isNaN(props.temp2) && props.temp2 != 0){
+      data.push({temp1: props.temp1, temp2: props.temp2});
+    }
+    createGraph(data);
+  },[props.temp1]);
 
   return (
-    <Grid>
+    <div>
       <svg ref={svgRef}></svg>
-    </Grid>
+    </div>
   );
 
 
