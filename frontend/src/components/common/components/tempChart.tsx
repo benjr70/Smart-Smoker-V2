@@ -1,24 +1,34 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 
- interface data {
-  temp1: number;
-  temp2: number;
+ export interface TempData {
+  ChamberTemp: number;
+  MeatTemp: number;
   date: Date;
  }
 
-function TempChart(props: data) {
+ interface props {
+  ChamberTemp: number;
+  MeatTemp: number;
+  date: Date;
+  height: number;
+  width: number;
+  smoking: boolean;
+  initData: TempData[];
+ }
+
+ function TempChart(props: props) {
     
-
   const svgRef = useRef() as React.RefObject<SVGSVGElement>;
-  const [data] = useState([{temp1: props.temp1, temp2: props.temp2, date: props.date}]);
+  const [data, setData] = useState([{ChamberTemp: props.ChamberTemp, MeatTemp: props.MeatTemp, date: props.date}]);
 
-  const createGraph =async (data: data[]) => {
+
+  const createGraph =async (data: TempData[]) => {
     
     // set the dimensions and margins of the graph
     const margin = {top: 10, right: 0, bottom: 10, left: 0};
-    const width = 400 - margin.left - margin.right;
-    const height = 150 - margin.top - margin.bottom;
+    const width = props.width - margin.left - margin.right;
+    const height = props.height - margin.top - margin.bottom;
 
 
     const svg = d3.select(svgRef.current)
@@ -34,21 +44,21 @@ function TempChart(props: data) {
 
     const yScale = d3.scaleLinear()
     // @ts-ignore
-      .domain([0,( d3.max(data, d => {return d.temp1 > d.temp2 ? d.temp1 : d.temp2}) * 1.15)])
+      .domain([0,( d3.max(data, d => {return d.ChamberTemp > d.MeatTemp ? d.ChamberTemp : d.MeatTemp}) * 1.15)])
       .range([height, 0]);
 
     const generateScaledLine1 = d3.line()
       // @ts-ignore
       .x((d) => {return xScale(new Date(d.date).getTime())})
       // @ts-ignore
-      .y((d) => {return yScale(d.temp1);})
+      .y((d) => {return yScale(d.ChamberTemp);})
       .curve(d3.curveCardinal)
 
       const generateScaledLine2 = d3.line()
       // @ts-ignore
       .x((d) => {return xScale(new Date(d.date).getTime())})
       // @ts-ignore
-      .y((d) => {return yScale(d.temp2);})
+      .y((d) => {return yScale(d.MeatTemp);})
       .curve(d3.curveCardinal)
 
 
@@ -91,11 +101,14 @@ function TempChart(props: data) {
 
 
   useEffect(() => {
-    if(!isNaN(props.temp1) && props.temp1 != 0 && !isNaN(props.temp2) && props.temp2 != 0){
-      data.push({temp1: props.temp1, temp2: props.temp2, date: props.date});
+    setData(props.initData);
+    if(props.smoking){
+      if(!isNaN(props.ChamberTemp) && props.ChamberTemp != 0 && !isNaN(props.MeatTemp) && props.MeatTemp != 0){
+        data.push({ChamberTemp: props.ChamberTemp, MeatTemp: props.MeatTemp, date: props.date});
+      }
     }
     createGraph(data);
-  },[props.temp1]);
+  },[props.ChamberTemp]);
 
   return (
     <div>

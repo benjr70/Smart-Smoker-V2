@@ -4,7 +4,8 @@ import './smokeStep.style.css'
 import { io } from 'socket.io-client';
 import { Autocomplete, Button, TextField } from "@mui/material";
 import { getCurrentSmokeProfile, getState, setSmokeProfile, smokeProfile, toggleSmoking } from "../../../Services/smokerService";
-import TempChart from "../../common/components/tempChart";
+import TempChart, { TempData } from "../../common/components/tempChart";
+import { getCurrentTemps } from "../../../Services/tempsService";
 
 interface State {
     meatTemp: string;
@@ -22,6 +23,8 @@ const woodType = [
     'Cheery',
     'Apple',
 ];
+
+let initTemps: TempData[] = [];
 
 export class SmokeStep extends React.Component<{}, {tempState: State}> {
 
@@ -47,7 +50,8 @@ export class SmokeStep extends React.Component<{}, {tempState: State}> {
         this.updateWoodType = this.updateWoodType.bind(this);
     }
 
-    componentDidMount(): void {
+    async componentDidMount(): Promise<void> {
+        initTemps = await getCurrentTemps();
         let url = process.env.WS_URL ?? '';
         const socket = io(url);
         console.log(socket);
@@ -119,9 +123,13 @@ export class SmokeStep extends React.Component<{}, {tempState: State}> {
                 </Grid>
                 <Grid container>
                     <TempChart
-                        temp1={parseFloat(this.state.tempState.chamberTemp)}
-                        temp2={parseFloat(this.state.tempState.meatTemp)}
-                        date={this.state.tempState.date}></TempChart>
+                        ChamberTemp={parseFloat(this.state.tempState.chamberTemp)}
+                        MeatTemp={parseFloat(this.state.tempState.meatTemp)}
+                        date={this.state.tempState.date}
+                        width={400}
+                        height={150}
+                        smoking={this.state.tempState.smoking}
+                        initData={initTemps}></TempChart>
                 </Grid>
                 <Grid container  direction="column">
                     <Autocomplete

@@ -15,9 +15,9 @@ export class TempsController {
         return this.tempsService.saveNewTemp(dto);
     }
 
-    // @Get()
-    // getAllTempsById(@Param('id') id: string): Promise<Temp[]>{
-    //     return this.tempsService.getAllTempsById(id);
-    // }
+    @Get()
+    getAllTempsCurrent(): Promise<Temp[]>{
+        return this.tempsService.getAllTempsCurrent();
+    }
 
 }
