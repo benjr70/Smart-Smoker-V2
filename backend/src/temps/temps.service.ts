@@ -18,7 +18,6 @@ export class TempsService {
         return this.stateService.GetState().then(state => {
             this.smokeService.GetById(state.smokeId).then(smoke => {
                 if(smoke.tempsId){
-                    tempDto.date = new Date();
                     tempDto.tempsId = smoke.tempsId
                     return this.create(tempDto);
                 }else{
@@ -36,9 +35,13 @@ export class TempsService {
         })
     }
 
-    // async getAllTempsById(id: string): Promise<Temp[]> {
-        
-    // }
+    async getAllTempsCurrent(): Promise<Temp[]> {
+        return this.stateService.GetState().then(state => {
+            return this.smokeService.GetById(state.smokeId).then(smoke => {
+                return this.tempModel.find({tempsId: smoke.tempsId});
+            })
+        })
+    }
 
     async create(tempDto: TempDto): Promise<Temp>{
         const Temp = new this.tempModel(tempDto);
