@@ -55,6 +55,8 @@ export class Home extends React.Component<{}, {tempState: State}> {
             try{
                 let tempObj = JSON.parse(message.data);
                 let temp = this.state.tempState;
+                temp.chamberTemp = tempObj.Chamber;
+                temp.meatTemp = tempObj.Meat;
                 // if(!(parseFloat(tempObj.Meat) > parseFloat(temp.meatTemp) + 5) && !(parseFloat(tempObj.Meat) < parseFloat(temp.meatTemp) - 5)){
                 //     meatAvg.push(parseFloat(tempObj.Meat));
                 // }
