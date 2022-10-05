@@ -16,6 +16,9 @@ export class TempsService {
 
     async saveNewTemp(tempDto: TempDto) {
         return this.stateService.GetState().then(state => {
+            if(state.smokeId.length < 0){
+                return;
+            }
             this.smokeService.GetById(state.smokeId).then(smoke => {
                 if(smoke.tempsId){
                     tempDto.tempsId = smoke.tempsId
@@ -24,7 +27,7 @@ export class TempsService {
                     this.create(tempDto).then(async temp => {
                         let smokeDto: SmokeDto = {
                             preSmokeId: smoke.preSmokeId,
-                            tempsId: temp["_id"]
+                            tempsId: temp["_id"].toString()
                         }
                         await this.smokeService.Update(state.smokeId, smokeDto);
                     })
@@ -37,9 +40,17 @@ export class TempsService {
 
     async getAllTempsCurrent(): Promise<Temp[]> {
         return this.stateService.GetState().then(state => {
-            return this.smokeService.GetById(state.smokeId).then(smoke => {
-                return this.tempModel.find({tempsId: smoke.tempsId});
-            })
+            if(state.smokeId.length < 0){
+                return this.smokeService.GetById(state.smokeId).then(smoke => {
+                    if(smoke.tempsId && smoke.tempsId.length > 0){
+                        return this.tempModel.find({tempsId: smoke.tempsId});
+                    } else {
+                        return [];
+                    }
+                })
+            } else {
+                return [];
+            }
         })
     }
 

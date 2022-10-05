@@ -22,7 +22,7 @@ export class PreSmokeService {
                     } else {
                         return this.create(preSmokeDto).then(preSmoke =>{
                             let smokeDto: SmokeDto = {
-                                preSmokeId: preSmoke["_id"]
+                                preSmokeId: preSmoke["_id"].toString()
                             }
                              this.smokeService.create(smokeDto);
                              return preSmoke
@@ -32,10 +32,10 @@ export class PreSmokeService {
             } else {
                return this.create(preSmokeDto).then(preSmoke => {
                     let smokeDto:SmokeDto = {
-                        preSmokeId: preSmoke["_id"]
+                        preSmokeId: preSmoke["_id"].toString()
                       }
                     this.smokeService.create(smokeDto).then(smoke => {
-                        state.smokeId = smoke["_id"];
+                        state.smokeId = smoke["_id"].toString();
                         this.stateService.update(state);
                     })
                     return preSmoke;

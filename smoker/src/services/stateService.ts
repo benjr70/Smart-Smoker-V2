@@ -4,7 +4,7 @@ export interface State {
 }
 
 
-const envUrl = process.env.REACT_APP_CLOUD_URL;
+const envUrl = process.env.REACT_APP_CLOUD_URL_API;
 
 export const toggleSmoking = async ():Promise<State> => {
     const axios = require('axios');

@@ -3,9 +3,10 @@ import './home.style.css'
 import Grid from '@mui/material/Grid';
  import { w3cwebsocket as W3CWebSocket } from "websocket";
 import { io } from 'socket.io-client';
-import { SocketAddress } from 'net';
 import { Button } from '@mui/material';
 import { getState, toggleSmoking } from '../../services/stateService';
+import TempChart, { TempData } from '../common/tempChart';
+import { getCurrentTemps } from '../../services/tempsService';
 
 
 interface State {
@@ -14,6 +15,9 @@ interface State {
     smoking: boolean;
     date: Date;
 }
+
+let initTemps: TempData[] = [];
+
 export class Home extends React.Component<{}, {tempState: State}> {
 
     constructor(props: any) {
@@ -28,7 +32,12 @@ export class Home extends React.Component<{}, {tempState: State}> {
     }
 
 
-    componentDidMount(){
+    async componentDidMount(){
+        try{
+            initTemps = await getCurrentTemps();
+        } catch(e) {
+            console.log(e);
+        }
         getState().then(state => {
             let temp = this.state.tempState;
             temp.smoking = state.smoking
@@ -105,6 +114,17 @@ export class Home extends React.Component<{}, {tempState: State}> {
                         >{this.state.tempState.smoking ? 'Stop Smoking' : 'Start Smoking'}
                         </Button>
                 </Grid>
+            </Grid>
+            <Grid>
+                <TempChart
+                    ChamberTemp={parseFloat(this.state.tempState.chamberTemp)}
+                    MeatTemp={parseFloat(this.state.tempState.meatTemp)}
+                    date={this.state.tempState.date}
+                    smoking={this.state.tempState.smoking}
+                    height={300}
+                    width={800}
+                    initData={initTemps}
+                    ></TempChart>
             </Grid>
         </Grid>)
     }

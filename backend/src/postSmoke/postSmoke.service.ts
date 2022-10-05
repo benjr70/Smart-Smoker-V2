@@ -40,10 +40,10 @@ export class PostSmokeService {
                 let smokeDto: SmokeDto = {
                     smokeProfileId: smoke.smokeProfileId,
                     preSmokeId: smoke.preSmokeId,
-                    postSmokeId: postSmoke["_id"],
+                    postSmokeId: postSmoke["_id"].toString(),
                     tempsId: smoke.tempsId,
                 }
-                await this.smokeService.Update(smoke['_id'], smokeDto);
+                await this.smokeService.Update(smoke['_id'].toString(), smokeDto);
                 return postSmoke;
             }
         } else {
