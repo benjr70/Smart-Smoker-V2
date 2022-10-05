@@ -20,19 +20,22 @@ export class StateService {
 
     async update( stateDto: State): Promise<State> {
         const state = await this.GetState()
-        return this.stateModel.findOneAndUpdate({_id: state["_id"]}, stateDto).then(() => {
+        return this.stateModel.findOneAndUpdate({_id: state["_id"].toString()}, stateDto).then(() => {
             return this.GetState();
         })
     }
 
     async toggleSmoking(): Promise<State> {
         const state = await this.GetState()
-        if(state.smoking){
-            state.smoking = false;
-        } else {
-            state.smoking = true;
+        if(state.smokeId.length > 0){
+            if(state.smoking){
+                state.smoking = false;
+            } else {
+                state.smoking = true;
+            }
         }
         return this.update(state);
+
     }
     
 

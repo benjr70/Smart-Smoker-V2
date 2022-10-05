@@ -38,12 +38,12 @@ export class SmokeProfileService {
             }else {
                 let smokeProfile = await this.create(dto);
                 let smokeDto: SmokeDto = {
-                    smokeProfileId: smokeProfile["_id"],
+                    smokeProfileId: smokeProfile["_id"].toString(),
                     preSmokeId: smoke.preSmokeId,
                     postSmokeId: smoke.postSmokeId,
                     tempsId: smoke.tempsId,
                 }
-                await this.smokeService.Update(smoke['_id'], smokeDto);
+                await this.smokeService.Update(smoke['_id'].toString(), smokeDto);
                 return smokeProfile;
             }
         } else {
