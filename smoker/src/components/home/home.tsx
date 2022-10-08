@@ -57,21 +57,6 @@ export class Home extends React.Component<{}, {tempState: State}> {
                 let temp = this.state.tempState;
                 temp.chamberTemp = tempObj.Chamber;
                 temp.meatTemp = tempObj.Meat;
-                // if(!(parseFloat(tempObj.Meat) > parseFloat(temp.meatTemp) + 5) && !(parseFloat(tempObj.Meat) < parseFloat(temp.meatTemp) - 5)){
-                //     meatAvg.push(parseFloat(tempObj.Meat));
-                // }
-                // if(!(parseFloat(tempObj.Chamber) > parseFloat(temp.chamberTemp) + 5) && !(parseFloat(tempObj.Chamber) < parseFloat(temp.chamberTemp) - 5)){
-                //     chamberAvg.push(parseFloat(tempObj.Chamber));
-                // }
-                // if(meatAvg.length === 5) {
-                //     temp.meatTemp = (meatAvg.reduce((a,b) => a + b, 0) / meatAvg.length).toFixed(1)
-                //     temp.chamberTemp = (chamberAvg.reduce((a,b) => a + b, 0) / chamberAvg.length).toFixed(1)
-                //     meatAvg.shift();
-                //     chamberAvg.shift();
-                // } else {
-                //     meatAvg.push(parseFloat(tempObj.Meat));
-                //     chamberAvg.push(parseFloat(tempObj.Chamber));
-                // }
                 temp.date = new Date();
                 this.setState({tempState: temp})
                 socket.emit('events', JSON.stringify(temp));
