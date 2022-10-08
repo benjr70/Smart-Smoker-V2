@@ -55,7 +55,6 @@ import * as d3 from 'd3';
       .x((d) => {return xScale(new Date(d.date).getTime())})
       // @ts-ignore
       .y((d) => {return yScale(d.MeatTemp);})
-      .curve(d3.curveCardinal)
 
   const reDrawGraph =async (data: TempData[]) => {
   
