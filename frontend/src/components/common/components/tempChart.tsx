@@ -29,7 +29,7 @@ import * as d3 from 'd3';
 
     const svg = d3.select(svgRef.current)
       .attr('width', width + margin.left + margin.right)
-      .attr('hight', height  + margin.top + margin.bottom)
+      .attr('height', height  + margin.top + margin.bottom)
       .style('background', '#d3d3d3')
 
     //setting the scaling
