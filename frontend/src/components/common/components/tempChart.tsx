@@ -22,14 +22,10 @@ import * as d3 from 'd3';
   const svgRef = useRef() as React.RefObject<SVGSVGElement>;
   const [data, setData] = useState([{ChamberTemp: props.ChamberTemp, MeatTemp: props.MeatTemp, date: props.date}]);
 
-
-  const createGraph =async (data: TempData[]) => {
-    
     // set the dimensions and margins of the graph
     const margin = {top: 10, right: 0, bottom: 10, left: 0};
     const width = props.width - margin.left - margin.right;
     const height = props.height - margin.top - margin.bottom;
-
 
     const svg = d3.select(svgRef.current)
       .attr('width', width + margin.left + margin.right)
@@ -61,7 +57,8 @@ import * as d3 from 'd3';
       .y((d) => {return yScale(d.MeatTemp);})
       .curve(d3.curveCardinal)
 
-
+  const reDrawGraph =async (data: TempData[]) => {
+  
       svg.selectAll('.line')
       .data([data])
       .join('path')
@@ -95,10 +92,7 @@ import * as d3 from 'd3';
       .attr('class', 'yAxis')
       .attr("transform", "translate(20, 0)")
       .call(d3.axisLeft(yScale));
-
   }
-
-
 
   useEffect(() => {
     setData(props.initData);
@@ -107,7 +101,7 @@ import * as d3 from 'd3';
         data.push({ChamberTemp: props.ChamberTemp, MeatTemp: props.MeatTemp, date: props.date});
       }
     }
-    createGraph(data);
+    reDrawGraph(data);
   },[props.ChamberTemp]);
 
   return (
