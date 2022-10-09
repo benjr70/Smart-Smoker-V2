@@ -65,6 +65,12 @@ export class Home extends React.Component<{}, {tempState: State}> {
                 console.log(e);
             }
         }
+        
+        socket.on('smokeUpdate', ((message :any) => {
+            let temp = this.state.tempState;
+            temp.smoking = message;
+            this.setState({tempState: temp});
+        }))
     }
 
     startSmoke(): void {
