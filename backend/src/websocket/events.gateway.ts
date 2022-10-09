@@ -56,7 +56,6 @@ export class EventsGateway {
 
   @SubscribeMessage('smokeUpdate')
   handleSmokeUpdate(@MessageBody() data: string) {
-    console.log(data);
     this.server.emit('smokeUpdate', data)
   }
 }
