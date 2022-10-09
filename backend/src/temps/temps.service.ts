@@ -40,7 +40,7 @@ export class TempsService {
 
     async getAllTempsCurrent(): Promise<Temp[]> {
         return this.stateService.GetState().then(state => {
-            if(state.smokeId.length < 0){
+            if(state.smokeId.length > 0){
                 return this.smokeService.GetById(state.smokeId).then(smoke => {
                     if(smoke.tempsId && smoke.tempsId.length > 0){
                         return this.tempModel.find({tempsId: smoke.tempsId});
