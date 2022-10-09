@@ -17,6 +17,7 @@ interface State {
 }
 
 let initTemps: TempData[] = [];
+let socket: any;
 
 export class Home extends React.Component<{}, {tempState: State}> {
 
@@ -47,7 +48,7 @@ export class Home extends React.Component<{}, {tempState: State}> {
         let chamberAvg = [0];
         const client = new W3CWebSocket('ws://127.0.0.1:5678');
         let url = process.env.REACT_APP_CLOUD_URL ?? '';
-        const socket = io(url);
+        socket = io(url);
         client.onopen = () => {
             console.log('websocket connected')
         };
@@ -64,12 +65,19 @@ export class Home extends React.Component<{}, {tempState: State}> {
                 console.log(e);
             }
         }
+        
+        socket.on('smokeUpdate', ((message :any) => {
+            let temp = this.state.tempState;
+            temp.smoking = message;
+            this.setState({tempState: temp});
+        }))
     }
 
     startSmoke(): void {
         toggleSmoking().then(state => {
             let temp = this.state.tempState;
             temp.smoking = state.smoking
+            socket.emit('smokeUpdate', state.smoking);
             this.setState({tempState: temp});
         })
     }

@@ -25,7 +25,7 @@ const woodType = [
 ];
 
 let initTemps: TempData[] = [];
-
+let socket: any;
 export class SmokeStep extends React.Component<{}, {tempState: State}> {
 
     constructor(props: any) {
@@ -53,7 +53,7 @@ export class SmokeStep extends React.Component<{}, {tempState: State}> {
     async componentDidMount(): Promise<void> {
         initTemps = await getCurrentTemps();
         let url = process.env.WS_URL ?? '';
-        const socket = io(url);
+        socket = io(url);
         console.log(socket);
         socket.on('events', ((message) => {
             let tempObj = JSON.parse(message);
@@ -62,6 +62,11 @@ export class SmokeStep extends React.Component<{}, {tempState: State}> {
             temp.meatTemp = tempObj.meatTemp;
             temp.date = tempObj.date;
             this.setState({tempState: temp})
+        }))
+        socket.on('smokeUpdate', ((message) => {
+            let temp = this.state.tempState;
+            temp.smoking = message;
+            this.setState({tempState: temp});
         }))
 
         getState().then(state => {
@@ -75,6 +80,7 @@ export class SmokeStep extends React.Component<{}, {tempState: State}> {
         toggleSmoking().then(state => {
             let temp = this.state.tempState;
             temp.smoking = state.smoking
+            socket.emit('smokeUpdate', state.smoking);
             this.setState({tempState: temp});
         })
     }
