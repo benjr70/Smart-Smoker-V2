@@ -71,6 +71,10 @@ export class Home extends React.Component<{}, {tempState: State}> {
             temp.smoking = message;
             this.setState({tempState: temp});
         }))
+
+        socket.on('clear', ((message: any) => {
+            initTemps = [];
+        }))
     }
 
     startSmoke(): void {

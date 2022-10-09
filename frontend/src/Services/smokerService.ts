@@ -1,3 +1,4 @@
+import { io } from "socket.io-client";
 import { State } from "../components/common/interfaces/state";
 
 
@@ -17,6 +18,9 @@ export const toggleSmoking = async ():Promise<State> => {
 }
 
 export const clearSmoke = async ():Promise<State> => {
+    let url = process.env.WS_URL ?? '';
+    const socket = io(url);
+    socket.emit('clear', true);
     const axios = require('axios');
     axios.defaults.baseURL = envUrl;
     return axios.put('state/clearSmoke').then((result:any) => {
