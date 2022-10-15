@@ -63,13 +63,14 @@ export class Home extends React.Component<{}, {tempState: State}> {
                 //push to Q
                 buffer.unshift(temp);
                 // Q lenght is > 1 loop
-                console.log('try',buffer.length ,buffer);
                 while(buffer.length >= 1){
-                    socket.emit('events', JSON.stringify(buffer[buffer.length - 1]));
+                    socket.emit('events', JSON.stringify(buffer[buffer.length - 1]), ((response: any) => {
+                        console.log(response);
+                    }) );
                     buffer.pop();
                 }
             } catch(e) {
-                console.log('catch',buffer.length ,buffer);
+                console.log(e);
             }
         }
         
