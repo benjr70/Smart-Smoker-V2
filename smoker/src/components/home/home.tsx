@@ -18,7 +18,7 @@ interface State {
 
 let initTemps: TempData[] = [];
 let socket: any;
-
+let buffer: State[];
 export class Home extends React.Component<{}, {tempState: State}> {
 
     constructor(props: any) {
@@ -60,7 +60,13 @@ export class Home extends React.Component<{}, {tempState: State}> {
                 temp.meatTemp = tempObj.Meat;
                 temp.date = new Date();
                 this.setState({tempState: temp})
-                socket.emit('events', JSON.stringify(temp));
+                //push to Q
+                buffer.unshift(temp);
+                // Q lenght is > 1 loop
+                while(buffer.length >= 1){
+                    socket.emit('events', JSON.stringify(buffer[buffer.length - 1]));
+                    buffer.pop();
+                }
             } catch(e) {
                 console.log(e);
             }
