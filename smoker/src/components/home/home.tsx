@@ -63,7 +63,7 @@ export class Home extends React.Component<{}, {tempState: State}> {
                 //push to Q
                 buffer.unshift(temp);
                 // Q lenght is > 1 loop
-                console.log('before check', buffer);
+                console.log('before check', socket.connected, buffer.length);
                 if(socket.connected){
                     while(buffer.length >= 1){
                         socket.emit('events', buffer[buffer.length - 1] );
