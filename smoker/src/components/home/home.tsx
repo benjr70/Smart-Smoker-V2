@@ -44,15 +44,13 @@ export class Home extends React.Component<{}, {tempState: State}> {
             temp.smoking = state.smoking
             this.setState({tempState: temp});
         })
-        let meatAvg = [0];
-        let chamberAvg = [0];
         const client = new W3CWebSocket('ws://127.0.0.1:5678');
         let url = process.env.REACT_APP_CLOUD_URL ?? '';
         socket = io(url);
         client.onopen = () => {
             console.log('websocket connected')
         };
-        client.onmessage = (message: any) => {
+        client.onmessage = async (message: any) => {
             try{
                 let tempObj = JSON.parse(message.data);
                 let temp = this.state.tempState;
@@ -69,6 +67,7 @@ export class Home extends React.Component<{}, {tempState: State}> {
                         console.log('emit');
                         socket.emit('events', JSON.stringify(buffer[buffer.length - 1]));
                         buffer.pop();
+                        await this.timeout(200);
                     }
                 }
             } catch(e) {
@@ -85,6 +84,10 @@ export class Home extends React.Component<{}, {tempState: State}> {
         socket.on('clear', ((message: any) => {
             initTemps = [];
         }))
+    }
+
+    timeout(delay: number) {
+        return new Promise( res => setTimeout(res, delay) );
     }
 
     startSmoke(): void {
