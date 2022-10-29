@@ -59,12 +59,12 @@ export class Home extends React.Component<{}, {tempState: State}> {
                 temp.date = new Date();
                 this.setState({tempState: temp})
                 //push to Q
-                buffer.unshift(temp);
+                buffer.push(temp);
                 // Q lenght is > 1 loop
                 console.log('before check', socket.connected, buffer.length);
                 if(socket.connected){
                     while(buffer.length >= 1){
-                        let temp = buffer.pop();
+                        let temp = buffer.shift();
                         socket.emit('events', JSON.stringify( temp));
                         console.log('emit', temp);
                         await this.timeout(300);
