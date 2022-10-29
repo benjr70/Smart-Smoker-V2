@@ -63,12 +63,23 @@ export class Home extends React.Component<{}, {tempState: State}> {
                 // Q lenght is > 1 loop
                 console.log('before check', socket.connected, buffer.length);
                 if(socket.connected){
-                    while(buffer.length >= 1){
-                        let temp = buffer.shift();
-                        socket.emit('events', JSON.stringify( temp));
-                        console.log('emit', temp);
-                        await this.timeout(300);
-                    }
+                    // while(buffer.length >= 1){
+                        if(buffer.length === 1) {
+                            let temp = buffer.shift();
+                            socket.emit('events', JSON.stringify( temp));
+                            console.log('emit', temp);
+                        } else if (buffer.length > 1){
+                            let temp = buffer.shift();
+                            socket.emit('events', JSON.stringify( temp));
+                            console.log('emit', temp);
+                            await this.timeout(100);
+                            temp = buffer.shift();
+                            socket.emit('events', JSON.stringify( temp));
+                            console.log('emit', temp); 
+                        }
+         
+                        // await this.timeout(300);
+                    // }
                 }
             } catch(e) {
                 console.log(e);
