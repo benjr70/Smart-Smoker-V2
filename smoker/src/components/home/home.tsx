@@ -62,6 +62,7 @@ export class Home extends React.Component<{}, {tempState: State}> {
                 buffer.push(temp);
                 // Q lenght is > 1 loop
                 console.log('before check', socket.connected, buffer.length);
+                console.log('what', buffer[0], buffer[buffer.length - 1])
                 if(socket.connected){
                     // while(buffer.length >= 1){
                     if(buffer.length === 1) {
