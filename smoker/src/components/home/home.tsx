@@ -65,17 +65,17 @@ export class Home extends React.Component<{}, {tempState: State}> {
                 if(socket.connected){
                     // while(buffer.length >= 1){
                         if(buffer.length === 1) {
-                            let temp = buffer.shift();
-                            socket.emit('events', JSON.stringify( temp));
-                            console.log('emit', temp);
+                            let temp2 = buffer.shift();
+                            socket.emit('events', JSON.stringify( temp2));
+                            console.log('emit', temp2);
                         } else if (buffer.length > 1){
-                            let temp = buffer.shift();
-                            socket.emit('events', JSON.stringify( temp));
-                            console.log('emit', temp);
+                            let temp3 = buffer.shift();
+                            socket.emit('events', JSON.stringify( temp3));
+                            console.log('emit', temp3);
                             await this.timeout(100);
-                            temp = buffer.shift();
-                            socket.emit('events', JSON.stringify( temp));
-                            console.log('emit', temp); 
+                            temp3 = buffer.shift();
+                            socket.emit('events', JSON.stringify( temp3));
+                            console.log('emit', temp3); 
                         }
          
                         // await this.timeout(300);
