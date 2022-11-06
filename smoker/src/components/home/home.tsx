@@ -59,9 +59,9 @@ export class Home extends React.Component<{}, {tempState: State}> {
                 temp.date = new Date();
                 this.setState({tempState: temp})
                 //push to Q
-                buffer.push(temp);
+                buffer.push(this.state.tempState);
                 // Q lenght is > 1 loop
-                console.log('before check', socket.connected, buffer.length);
+                console.log('before check', socket.connected, buffer.length, buffer);
                 console.log('what', buffer[0], buffer[buffer.length - 1])
                 if(socket.connected){
                     // while(buffer.length >= 1){
