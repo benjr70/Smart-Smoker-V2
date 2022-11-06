@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import './home.style.css'
 import Grid from '@mui/material/Grid';
  import { w3cwebsocket as W3CWebSocket } from "websocket";
@@ -18,7 +18,8 @@ interface State {
 
 let initTemps: TempData[] = [];
 let socket: any;
-let buffer: State[] = [];
+//let buffer: State[] = [];
+const [buffer, setBuffer] = useState([{}])
 export class Home extends React.Component<{}, {tempState: State}> {
 
     constructor(props: any) {
@@ -31,6 +32,8 @@ export class Home extends React.Component<{}, {tempState: State}> {
             }
         };
     }
+
+   
 
 
     async componentDidMount(){
@@ -60,6 +63,7 @@ export class Home extends React.Component<{}, {tempState: State}> {
                 this.setState({tempState: temp})
                 //push to Q
                 buffer.push(this.state.tempState);
+                setBuffer(buffer.concat(this.state.tempState))
                 // Q lenght is > 1 loop
                 console.log('before check', socket.connected, buffer.length, buffer);
                 console.log('what', buffer[0], buffer[buffer.length - 1])
