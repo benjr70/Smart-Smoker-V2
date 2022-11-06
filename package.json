@@ -1,0 +1,27 @@
+{
+  "name": "smart-smoker-v2",
+  "version": "0.0.1",
+  "description": "smart smoker v2",
+  "main": "index.js",
+  "dependencies": {
+    "swagger-ui-express": "^4.1.6",
+    "usb": "^2.4.2"
+  },
+  "devDependencies": {},
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "bootstrap": "npm install --legacy-peer-deps"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/benjr70/Smart-Smoker-V2.git"
+  },
+  "author": "Ben Rolf",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/benjr70/Smart-Smoker-V2/issues"
+  },
+  "homepage": "https://github.com/benjr70/Smart-Smoker-V2#readme"
+}
