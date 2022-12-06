@@ -23,8 +23,9 @@
     "web-vitals": "^1.1.2"
   },
   "scripts": {
-    "start": "webpack-dev-server --open --mode development --hot  --port 3000",
-    "build": "webpack --mode production",
+    "start": "webpack-dev-server --open --mode development --hot  --port 3000 --config webpack.dev.js",
+    "build": "webpack --config webpack.prod.js",
+    "serve:prod": "serve -s dist -l 3000",
     "startCRA": "react-scripts start",
     "buildCRA": "react-scripts build",
     "test": "react-scripts test",

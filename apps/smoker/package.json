@@ -29,8 +29,10 @@
     "websocket": "^1.0.34"
   },
   "scripts": {
-    "start": "webpack-dev-server --open --mode development --hot",
-    "build": "webpack --mode production",
+    "start": "webpack-dev-server --open --mode development --hot --config webpack.dev.js",
+    "start:prod": "webpack-dev-server --open --mode development --hot --config webpack.prod.js",
+    "build": "webpack --config webpack.prod.js",
+    "serve:prod": "serve -s dist -l 8080",
     "startCRA": "react-scripts start",
     "buildCRA": "react-scripts build",
     "test": "react-scripts test",

@@ -12,7 +12,7 @@ import { TempModule } from './temps/temps.module';
 import { EventsModule } from './websocket/events.module';
 import { ConfigModule } from '@nestjs/config'
 
-
+const ENV = process.env.NODE_ENV.trim();
 @Module({
   imports: [SettingsModule,
     PreSmokeModule,
@@ -22,7 +22,9 @@ import { ConfigModule } from '@nestjs/config'
     TempModule,
     SmokeProfileModule,
     PostSmokeModule,
-    ConfigModule.forRoot(),
+    ConfigModule.forRoot({
+      envFilePath: !ENV ? '.env' : `.env.${ENV}`,
+    }),
     MongooseModule.forRoot(process.env.DB_URL)],
   controllers: [AppController],
   providers: [AppService],
