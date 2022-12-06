@@ -3,7 +3,8 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 const Dotenv = require('dotenv-webpack');
 
 module.exports = {
-  mode: 'development',
+  mode: 'production',
+  devtool: 'source-map',
   entry: './src/index.tsx',
   devtool: 'inline-source-map',
   target: 'web',
@@ -35,6 +36,8 @@ module.exports = {
     new HtmlWebpackPlugin({
       template: './public/index.html'
     }),
-    new Dotenv(),
+    new Dotenv({
+      path: '.env.prod'
+    }),
   ]
 }
