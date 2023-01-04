@@ -22,15 +22,40 @@ jobs:
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - run: sudo chmod -R 777 ./
-      - uses: actions/checkout@v3
 
-      - name: docker compose down
-        run: sudo docker-compose down
+      - name: Git Checkout
+          uses: actions/checkout@v3
 
-      - name: docker build
-        run: docker-compose build
+      - name: Setup Node
+        uses: actions/setup-node@v2
+        with:
+          node-version: '16.15'
 
-      - name: docker compose up
-        run: sudo docker-compose up -d --force-recreate 
+      - name: Use npm 8
+        run: npm i -g npm@8
 
+      - name: NPM Bootstrap
+        if: steps.is-affected.conclusion == 'success'
+        run: npm run bootstrap
+      
+      - name: frontend build
+        run: npm run build --prefix apps/frontend
+
+      - name: Docker Build Frontend Code Container
+        run: |
+          docker build \
+          -f apps/frontend/Dockerfile \
+          -t frontend \
+          .
+
+
+      # - name: docker compose down
+      #   run: sudo docker-compose down
+
+      # - name: docker build
+      #   run: docker-compose build
+
+      # - name: docker compose up
+      #   run: sudo docker-compose up -d --force-recreate 
+ 
       

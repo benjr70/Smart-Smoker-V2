@@ -10,4 +10,4 @@
 
   COPY . /code
 
-  CMD ["npm", "start"]
+  CMD ["npm", "run", "start:production"]
