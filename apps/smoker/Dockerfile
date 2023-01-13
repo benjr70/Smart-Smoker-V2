@@ -1,13 +1,10 @@
-  FROM node:14.16.1 
-
-  WORKDIR /code
+  FROM node:16.15.1 
 
   ENV PORT 3000
 
-  COPY package.json /code/package.json
+  COPY apps/smoker/dist /dist
+  COPY apps/smoker/package.json package.json
 
-  RUN npm install
-
-  COPY . /code
-
-  CMD ["npm", "start"]
+  RUN npm install --global serve
+  CMD ["npm", "run", "serve:prod"]
+  EXPOSE 8080

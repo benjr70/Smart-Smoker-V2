@@ -1,6 +1,6 @@
 # This is a basic workflow to help you get started with Actions
 
-name: deploy cloud app
+name: Build and Publish
 
 # Controls when the workflow will run
 on:
@@ -16,7 +16,7 @@ jobs:
   # This workflow contains a single job called "build"
   build:
     # The type of runner that the job will run on
-    runs-on: self-hosted-cloud
+    runs-on: ubuntu-latest
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
@@ -24,7 +24,7 @@ jobs:
       - run: sudo chmod -R 777 ./
 
       - name: Git Checkout
-          uses: actions/checkout@v3
+        uses: actions/checkout@v3
 
       - name: Setup Node
         uses: actions/setup-node@v2
@@ -35,27 +35,48 @@ jobs:
         run: npm i -g npm@8
 
       - name: NPM Bootstrap
-        if: steps.is-affected.conclusion == 'success'
         run: npm run bootstrap
-      
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
       - name: frontend build
         run: npm run build --prefix apps/frontend
 
-      - name: Docker Build Frontend Code Container
-        run: |
-          docker build \
-          -f apps/frontend/Dockerfile \
-          -t frontend \
-          .
+      - name: Build and push frontend
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          file: apps/frontend/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:frontend
+      
+      - name: Backend build
+        run: npm run build --prefix apps/backend
 
+      - name: Build and push Backend
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          file: apps/backend/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:backend
 
-      # - name: docker compose down
-      #   run: sudo docker-compose down
-
-      # - name: docker build
-      #   run: docker-compose build
-
-      # - name: docker compose up
-      #   run: sudo docker-compose up -d --force-recreate 
+      - name: Smoker build
+        run: npm run build --prefix apps/smoker
+    
+      - name: Build and push Smoker
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          file: apps/smoker/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:smoker
  
       
