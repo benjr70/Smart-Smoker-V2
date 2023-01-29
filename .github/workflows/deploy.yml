@@ -1,0 +1,26 @@
+# This is a basic workflow to help you get started with Actions
+name: Deploy
+
+on:
+  workflow_call:
+
+jobs:
+  deploy: 
+    runs-on: self-hosted
+        # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - run: sudo chmod -R 777 ./
+      - uses: actions/checkout@v3
+
+      - name: docker compose down
+        run: sudo docker-compose down
+
+      - name: docker pull
+        run: docker-compose pull
+
+      - name: docker build
+        run: docker-compose build
+
+      - name: docker compose up
+        run: sudo docker-compose up -d --force-recreate 

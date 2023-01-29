@@ -1,10 +1,20 @@
   FROM node:16.15.1 
 
+  WORKDIR /code
+
   ENV PORT 3001
+  COPY . /code
+  COPY package.json /code/package.json
 
-  COPY apps/backend/dist /dist
-  COPY apps/backend/package.json package.json
+  RUN npm install --legacy-peer-deps
 
-  RUN npm i --save @nestjs/config
+  WORKDIR /code/apps/backend
+
+  ENV NODE_ENV=prod
+
+  RUN npm install --legacy-peer-deps
+ 
+
+  RUN npm run build
+
   CMD ["npm", "run", "start:production"]
-  EXPOSE 3001

@@ -52,21 +52,12 @@ jobs:
       - name: Build and push frontend
         uses: docker/build-push-action@v3
         with:
+          platforms: linux/arm64
           context: .
           file: apps/frontend/Dockerfile
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:frontend
       
-      - name: Backend build
-        run: npm run build --prefix apps/backend
-
-      - name: Build and push Backend
-        uses: docker/build-push-action@v3
-        with:
-          context: .
-          file: apps/backend/Dockerfile
-          push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:backend
 
       - name: Smoker build
         run: npm run build --prefix apps/smoker
@@ -74,9 +65,20 @@ jobs:
       - name: Build and push Smoker
         uses: docker/build-push-action@v3
         with:
+          platforms: linux/arm64
           context: .
           file: apps/smoker/Dockerfile
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:smoker
- 
-      
+
+      - name: Build and push Backend
+        uses: docker/build-push-action@v3
+        with:
+          platforms: linux/arm64
+          context: .
+          file: apps/backend/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:backend 
+  Deploy:
+      needs: build
+      uses: benjr70/Smart-Smoker-V2/.github/workflows/deploy.yml@master 
