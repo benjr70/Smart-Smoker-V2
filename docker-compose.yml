@@ -6,10 +6,12 @@ services:
     restart: always
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    # image: smart-smoker-cloud-prod:1.0.0
-    build:
-      context: ./apps/backend
-      dockerfile: ./Dockerfile
+    image: benjr70/smart_smoker:backend
+    volumes:
+      - /node_modules
+    # build:
+    #   context: ./apps/backend
+    #   dockerfile: ./Dockerfile
 
     ports:
       - 3001:3001
@@ -33,11 +35,10 @@ services:
   frontend:
     container_name: frontend_cloud
     restart: always
-
-    # image: smart-smoker-cloud-prod:1.0.0s
-    build:
-      context: ./apps/frontend
-      dockerfile: ./Dockerfile
+    image: benjr70/smart_smoker:frontend
+    # build:
+    #   context: ./apps/frontend
+    #   dockerfile: ./Dockerfile
 
     ports:
       - 3000:3000

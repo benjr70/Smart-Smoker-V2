@@ -3,11 +3,18 @@
   WORKDIR /code
 
   ENV PORT 3001
-
+  COPY . /code
   COPY package.json /code/package.json
 
   RUN npm install --legacy-peer-deps
 
-  COPY . /code
+  WORKDIR /code/apps/backend
 
-  CMD ["npm", "start"]
+  ENV NODE_ENV=prod
+
+  RUN npm install --legacy-peer-deps
+ 
+
+  RUN npm run build
+
+  CMD ["npm", "run", "start:production"]
