@@ -60,12 +60,12 @@ jobs:
       
 
       - name: Smoker build
-        run: npm run build --prefix apps/smoker
+        run: npm run build:prod --prefix apps/smoker
     
       - name: Build and push Smoker
         uses: docker/build-push-action@v3
         with:
-          platforms: linux/arm64
+          platforms: linux/arm/v7
           context: .
           file: apps/smoker/Dockerfile
           push: true
