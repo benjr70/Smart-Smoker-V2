@@ -10,3 +10,11 @@ export const getCurrentTemps = async ():Promise<TempData[]> => {
         return result.data;
     });
 }
+
+export const postTempsBatch = async (batch: TempData[]): Promise<void> => {
+    const axios = require('axios');
+    axios.defaults.baseURL = envUrl;
+    return axios.post('temps/batch', batch).then((result:any) => {
+        return result.data;
+    });
+}
