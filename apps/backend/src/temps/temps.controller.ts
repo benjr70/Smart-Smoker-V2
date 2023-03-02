@@ -22,7 +22,7 @@ export class TempsController {
 
     @Post('/batch')
     saveTempBatch(@Body() dto: TempDto[]){
-        console.log(dto);
+        return this.tempsService.saveTempBatch(dto);
     }
 
 }

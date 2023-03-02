@@ -61,8 +61,8 @@ export class Home extends React.Component<{}, {tempState: State}> {
                 this.setState({tempState: temp})
                 if(socket.connected){
                     if(batch.length > 0){
-                        console.log(batch);
                         this.sendTempBatch();
+                        socket.emit('refresh');
                         batch = [];
                     }
                     socket.emit('events', JSON.stringify(temp));
@@ -70,7 +70,6 @@ export class Home extends React.Component<{}, {tempState: State}> {
                     batchCount++;
                     if(batchCount > 10){
                         batch.push(JSON.parse(JSON.stringify(temp)));
-                        console.log('pushing to batch');
                         batchCount = 0;
                     }
                 }

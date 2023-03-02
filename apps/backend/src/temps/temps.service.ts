@@ -38,6 +38,18 @@ export class TempsService {
         })
     }
 
+    async saveTempBatch(tempDto: TempDto[]){
+        this.GetTempID().then(tempsId => {
+            if(tempsId != undefined){
+                tempDto = tempDto.map(tempDto => {
+                     tempDto.tempsId = tempsId 
+                     return tempDto;
+                    });
+                return this.tempModel.insertMany(tempDto);
+            }
+        })
+    }
+
     async getAllTempsCurrent(): Promise<Temp[]> {
         return this.stateService.GetState().then(state => {
             if(state.smokeId.length > 0){
@@ -57,5 +69,17 @@ export class TempsService {
     async create(tempDto: TempDto): Promise<Temp>{
         const Temp = new this.tempModel(tempDto);
         return Temp.save();
+    }
+
+    async GetTempID(): Promise<string>{
+        return this.stateService.GetState().then(state => {
+            if(state.smokeId.length < 0) {
+                return undefined;
+            }
+            return this.smokeService.GetById(state.smokeId).then(smoke =>{
+                console.log(smoke);
+                return smoke.tempsId;
+            })
+        })
     }
 }
