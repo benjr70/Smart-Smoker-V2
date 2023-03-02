@@ -19,6 +19,7 @@ interface State {
 let initTemps: TempData[] = [];
 let socket: any;
 let batch: State[] = [];
+let batchCount = 0;
 export class Home extends React.Component<{}, {tempState: State}> {
 
     constructor(props: any) {
@@ -66,8 +67,12 @@ export class Home extends React.Component<{}, {tempState: State}> {
                     }
                     socket.emit('events', JSON.stringify(temp));
                 } else {
-                    batch.push(temp);
-                    console.log('pushing to batch');
+                    batchCount++;
+                    if(batchCount > 10){
+                        batch.push(JSON.parse(JSON.stringify(temp)));
+                        console.log('pushing to batch');
+                        batchCount = 0;
+                    }
                 }
             } catch(e) {
                 console.log(e);
