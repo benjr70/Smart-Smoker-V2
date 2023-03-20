@@ -56,11 +56,16 @@ export class EventsGateway {
 
   @SubscribeMessage('smokeUpdate')
   handleSmokeUpdate(@MessageBody() data: string) {
-    this.server.emit('smokeUpdate', data)
+    this.server.emit('smokeUpdate', data);
   }
 
   @SubscribeMessage('clear')
   handleClear(@MessageBody() data: string) {
-    this.server.emit('clear', data)
+    this.server.emit('clear', data);
+  }
+
+  @SubscribeMessage('refresh')
+  handleRefresh(){
+    this.server.emit('refresh');
   }
 }

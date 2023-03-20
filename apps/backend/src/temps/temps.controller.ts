@@ -20,4 +20,9 @@ export class TempsController {
         return this.tempsService.getAllTempsCurrent();
     }
 
+    @Post('/batch')
+    saveTempBatch(@Body() dto: TempDto[]){
+        return this.tempsService.saveTempBatch(dto);
+    }
+
 }

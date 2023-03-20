@@ -6,7 +6,7 @@ import { io } from 'socket.io-client';
 import { Button } from '@mui/material';
 import { getState, toggleSmoking } from '../../services/stateService';
 import TempChart, { TempData } from '../common/tempChart';
-import { getCurrentTemps } from '../../services/tempsService';
+import { getCurrentTemps, postTempsBatch } from '../../services/tempsService';
 
 
 interface State {
@@ -18,7 +18,8 @@ interface State {
 
 let initTemps: TempData[] = [];
 let socket: any;
-
+let batch: State[] = [];
+let batchCount = 0;
 export class Home extends React.Component<{}, {tempState: State}> {
 
     constructor(props: any) {
@@ -44,8 +45,6 @@ export class Home extends React.Component<{}, {tempState: State}> {
             temp.smoking = state.smoking
             this.setState({tempState: temp});
         })
-        let meatAvg = [0];
-        let chamberAvg = [0];
         const client = new W3CWebSocket('ws://127.0.0.1:5678');
         let url = process.env.REACT_APP_CLOUD_URL ?? '';
         socket = io(url);
@@ -60,7 +59,20 @@ export class Home extends React.Component<{}, {tempState: State}> {
                 temp.meatTemp = tempObj.Meat;
                 temp.date = new Date();
                 this.setState({tempState: temp})
-                socket.emit('events', JSON.stringify(temp));
+                if(socket.connected){
+                    if(batch.length > 0){
+                        this.sendTempBatch();
+                        socket.emit('refresh');
+                        batch = [];
+                    }
+                    socket.emit('events', JSON.stringify(temp));
+                } else {
+                    batchCount++;
+                    if(batchCount > 10){
+                        batch.push(JSON.parse(JSON.stringify(temp)));
+                        batchCount = 0;
+                    }
+                }
             } catch(e) {
                 console.log(e);
             }
@@ -75,6 +87,18 @@ export class Home extends React.Component<{}, {tempState: State}> {
         socket.on('clear', ((message: any) => {
             initTemps = [];
         }))
+    }
+
+
+    sendTempBatch(): Promise<void> {
+        const tempBatch: TempData[] = batch.map(temp => {
+            return {
+                ChamberTemp: parseFloat(temp.chamberTemp),
+                MeatTemp: parseFloat(temp.meatTemp),
+                date: temp.date,
+            }
+        });
+       return postTempsBatch(tempBatch);
     }
 
     startSmoke(): void {

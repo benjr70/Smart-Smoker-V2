@@ -69,6 +69,10 @@ export class SmokeStep extends React.Component<{}, {tempState: State}> {
             this.setState({tempState: temp});
         }))
 
+        socket.on('refresh', async () => {
+            initTemps = await getCurrentTemps();
+        })
+
         getState().then(state => {
             let temp = this.state.tempState;
             temp.smoking = state.smoking

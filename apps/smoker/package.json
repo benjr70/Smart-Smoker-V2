@@ -31,9 +31,9 @@
   "scripts": {
     "start": "webpack-dev-server --open --mode development --hot --config webpack.dev.js",
     "start:prod": "webpack-dev-server --open --mode development --hot --config webpack.prod.js",
-    "build:prod": "webpack --config webpack.prod.js",
     "build:dev": "webpack --config webpack.dev.js",
-    "serve": "serve -s dist -l 8080",
+    "build:prod": "webpack --config webpack.prod.js",
+    "serve:prod": "serve -s dist -l 8080",
     "startCRA": "react-scripts start",
     "buildCRA": "react-scripts build",
     "test": "react-scripts test",
