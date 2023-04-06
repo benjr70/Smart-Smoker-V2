@@ -4,6 +4,11 @@ import { Grid, TextField } from '@mui/material';
 import './history.style.css';
 
 export const history = () => {
+
+    
+
+
+
     return (
     <Grid>
         {/* <Grid container spacing={2} sx={{display: 'flex', justifyContent: 'center'}}>
@@ -21,6 +26,8 @@ export const history = () => {
                     date='03/20/2023'
                     weight='4'
                     weightUnit='LB'
+                    woodType='Apple Wood'
+                    smokeId='123456789'
                 />
             </Grid>
             <Grid item xs={11}>
@@ -30,6 +37,8 @@ export const history = () => {
                     date='03/20/2023'
                     weight='4'
                     weightUnit='LB'
+                    woodType='Hickory Wood'
+                    smokeId='123456789'
                 />
             </Grid>
         </Grid>

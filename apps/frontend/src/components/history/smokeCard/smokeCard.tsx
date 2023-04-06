@@ -8,6 +8,8 @@ interface SmokeCardProps {
     date: string
     weight: string
     weightUnit: string
+    smokeId: string
+    woodType: string
 }
 
 const theme = createTheme({
@@ -35,7 +37,7 @@ export function SmokeCard(props: SmokeCardProps): JSX.Element {
                     {props.name}
                 </Typography>
                 <Typography sx={{ fontSize: 14 }} color="text.secondary">
-                    {props.weight}{props.weightUnit} {props.meatType}
+                    {props.weight}{props.weightUnit} {props.meatType} {props.woodType}
                 </Typography>
                 <Typography sx={{ fontSize: 14 }} color="text.secondary">
                     {props.date}

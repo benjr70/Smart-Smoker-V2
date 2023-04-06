@@ -15,3 +15,21 @@ export class SmokeDto {
     smokeProfileId?: string;
 
 }
+
+export class SmokeHistory {
+    @ApiProperty()
+    name: string;
+    @ApiProperty()
+    meatType: string;
+    @ApiProperty()
+    weight: string;
+    @ApiProperty() 
+    weightUnit: string;
+    @ApiProperty()
+    woodType: string;
+    @ApiProperty()
+    date: string;
+    @ApiProperty()
+    smokeId: string;
+
+}

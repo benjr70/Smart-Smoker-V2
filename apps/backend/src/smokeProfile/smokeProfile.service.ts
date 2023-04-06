@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { forwardRef, Injectable, Inject } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import { SmokeService } from "src/smoke/smoke.service";
@@ -12,6 +12,7 @@ import { SmokeProFileDto } from "./smokeProfileDto";
 export class SmokeProfileService {
     constructor(@InjectModel('SmokeProfile')private smokeProfileModel: Model<SmokeProFileDocument>,
     private stateService: StateService,
+    @Inject(forwardRef(() => SmokeService))
     private smokeService: SmokeService){}
 
     async getCurrentSmokeProfile(): Promise<SmokeProfile>{
@@ -57,7 +58,7 @@ export class SmokeProfileService {
     }
 
     async getById(id: string): Promise<SmokeProfile> {
-        return this.smokeProfileModel.findById(id);
+        return await this.smokeProfileModel.findById(id);
     }
 
     async update(id: string, smokeProfileDto: SmokeProFileDto): Promise<SmokeProfile>{
