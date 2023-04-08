@@ -2,6 +2,7 @@ import { Controller, Get, Param, Post } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import { Smoke } from "./smoke.schema";
 import { SmokeService } from "./smoke.service";
+import { SmokeHistory } from "./smokeDto";
 
 @ApiTags('Smoke')
 @Controller('api/smoke')
@@ -16,5 +17,10 @@ export class SmokeController {
     @Get("/:id")
     getById(@Param('id') id: string): Promise<Smoke>{
         return this.smokeService.GetById(id);
+    }
+
+    @Get()
+    getSmokeHistory(): Promise<SmokeHistory[]>{
+        return this.smokeService.getSmokeHistory();
     }
 }

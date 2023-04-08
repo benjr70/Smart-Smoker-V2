@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { SmokeService } from 'src/smoke/smoke.service';
@@ -11,6 +11,7 @@ import { PreSmokeDto } from './presmokeDto';
 export class PreSmokeService {
     constructor(@InjectModel(PreSmoke.name)private preSmokeModel: Model<PreSmokeDocument>,
                 private stateService: StateService,
+                @Inject(forwardRef(() => SmokeService))
                 private smokeService: SmokeService){}
 
     async save(preSmokeDto: PreSmokeDto): Promise<PreSmoke>{
@@ -54,7 +55,7 @@ export class PreSmokeService {
     }
 
     async GetByID(id: string): Promise<PreSmoke> {
-        return this.preSmokeModel.findById(id);   
+        return await this.preSmokeModel.findById(id);   
     }
 
     
