@@ -2,7 +2,7 @@ import React from 'react';
 import './App.css';
 import { BottomBar } from '../src/components/bottomBar/bottombar'
 import { Screens } from './components/common/interfaces/enums';
-import { history } from './components/history/history';
+import { History } from './components/history/history';
 import { Smoke } from './components/smoke/smoke';
 import { settings } from './components/settings/settings';
 
@@ -33,7 +33,7 @@ class App extends React.Component<{},{currentScreen: Screens}>{
         screen = <Smoke/>;
         break;
       case Screens.HISTORY:
-        screen = history();
+        screen = <History/>;
         break;
       case Screens.SETTINGS:
         screen = settings();

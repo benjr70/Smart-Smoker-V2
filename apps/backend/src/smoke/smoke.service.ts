@@ -18,6 +18,7 @@ export class SmokeService {
     ){}
 
     async create(smokeDto: SmokeDto): Promise<Smoke> {
+        smokeDto.date = new Date();
         const createdSmoke = new this.smokeModule(smokeDto);
         return await createdSmoke.save();
     }

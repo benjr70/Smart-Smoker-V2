@@ -56,3 +56,11 @@ export const getCurrentSmokeProfile = async ():Promise<smokeProfile> => {
         return result.data;
     });
 }
+
+export const getSmokeHistory = async (): Promise<any> => {
+    const axios = require('axios');
+    axios.defaults.baseURL = envUrl;
+    return axios.get('smoke').then(result => {
+        return result.data;
+    });
+}

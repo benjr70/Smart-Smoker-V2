@@ -37,7 +37,7 @@ export function SmokeCard(props: SmokeCardProps): JSX.Element {
                     {props.name}
                 </Typography>
                 <Typography sx={{ fontSize: 14 }} color="text.secondary">
-                    {props.weight}{props.weightUnit} {props.meatType} {props.woodType}
+                    {props.weight}{props.weightUnit} {props.meatType} {props.woodType} wood
                 </Typography>
                 <Typography sx={{ fontSize: 14 }} color="text.secondary">
                     {props.date}

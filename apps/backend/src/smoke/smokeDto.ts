@@ -14,6 +14,9 @@ export class SmokeDto {
     @ApiProperty()
     smokeProfileId?: string;
 
+    @ApiProperty()
+    date?: Date
+
 }
 
 export class SmokeHistory {
