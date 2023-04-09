@@ -11,9 +11,10 @@ export class History extends React.Component<{},{smokeHistoryList: smokeHistory[
     constructor(props: any){
         super(props);
         this.state = { smokeHistoryList: []}
-        getSmokeHistory().then( result =>
-            this.setState({smokeHistoryList: result})
-        )
+        getSmokeHistory().then( (result:smokeHistory[]) => {
+            result.pop()
+            this.setState({smokeHistoryList: result.reverse()})
+        });
     }
 
     render(): React.ReactNode{

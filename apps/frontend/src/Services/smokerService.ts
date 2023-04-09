@@ -1,5 +1,6 @@
 import { io } from "socket.io-client";
 import { State } from "../components/common/interfaces/state";
+import { smokeHistory } from "../components/common/interfaces/history";
 
 
 const envUrl =  process.env.REACT_APP_CLOUD_URL;
@@ -57,7 +58,7 @@ export const getCurrentSmokeProfile = async ():Promise<smokeProfile> => {
     });
 }
 
-export const getSmokeHistory = async (): Promise<any> => {
+export const getSmokeHistory = async (): Promise<smokeHistory[]> => {
     const axios = require('axios');
     axios.defaults.baseURL = envUrl;
     return axios.get('smoke').then(result => {
