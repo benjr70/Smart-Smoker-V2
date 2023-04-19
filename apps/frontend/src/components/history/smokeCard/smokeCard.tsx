@@ -10,6 +10,7 @@ interface SmokeCardProps {
     weightUnit: string
     smokeId: string
     woodType: string
+    onViewClick: (smokeId: string) => void
 }
 
 const theme = createTheme({
@@ -43,7 +44,9 @@ export function SmokeCard(props: SmokeCardProps): JSX.Element {
                     {props.date}
                 </Typography>
                 <CardActions>
-                    <Button size="small">View</Button>
+                    <Button
+                     size="small"
+                     onClick={() => props.onViewClick(props.smokeId)}>View</Button>
                 </CardActions>
             </CardContent>
         </Card>
