@@ -65,3 +65,11 @@ export const getSmokeHistory = async (): Promise<smokeHistory[]> => {
         return result.data;
     });
 }
+
+export const getSmokeById = async(id: string): Promise<any> => {
+    const axios = require('axios');
+    axios.defaults.baseURL = envUrl;
+    return axios.get('smoke/' + id).then((result:any) => {
+        return result.data;
+    });
+}

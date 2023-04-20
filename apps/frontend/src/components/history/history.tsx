@@ -4,6 +4,7 @@ import { Grid, TextField } from '@mui/material';
 import './history.style.css';
 import { getSmokeHistory } from '../../Services/smokerService';
 import { smokeHistory } from '../common/interfaces/history';
+import { SmokeReview } from './smokeReview/smokeReview';
 
 
 interface historyInterface {
@@ -33,7 +34,6 @@ export class History extends React.Component<{},{history: historyInterface}> {
     }
 
      onViewClick(smokeId: string) {
-        console.log('clickies', smokeId)
         const test: historyInterface = {
             smokeHistoryList: [],
             smokeId: smokeId
@@ -62,10 +62,11 @@ export class History extends React.Component<{},{history: historyInterface}> {
                     </Grid>)
                 }) :
                 <Grid>
-                {this.state.history.smokeId}
+                    <SmokeReview
+                        smokeId={this.state.history.smokeId}
+                    />
                 </Grid>
             }
-        
             </Grid>
         </Grid>);
     }

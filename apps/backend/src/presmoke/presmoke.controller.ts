@@ -15,6 +15,11 @@ export class PreSmokeController {
         return this.preSmokeService.findAll()
     }
 
+    @Get('/:id')
+    getPreSmokeById(@Param('id') id: string): Promise<PreSmoke> {
+        return this.preSmokeService.GetByID(id);
+    }
+
     @Post()
     SavePreSmoke(@Body() dto: PreSmokeDto): Promise<PreSmoke> {
         return this.preSmokeService.save(dto);
