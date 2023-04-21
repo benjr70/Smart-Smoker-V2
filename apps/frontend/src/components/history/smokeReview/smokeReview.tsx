@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import { getPreSmokeById } from "../../../Services/preSmokeService";
 import { preSmoke } from "../../common/interfaces/preSmoke";
 import { getSmokeById } from "../../../Services/smokerService";
+import { PreSmokeCard } from "./preSmokeCard";
 
 interface smokeReviewProps {
     smokeId: string
@@ -28,8 +29,10 @@ export function SmokeReview(props: smokeReviewProps): JSX.Element {
     }, [props.smokeId])
 
     return(
-        <Grid>
-            {preSmoke.name}
+        <Grid item xs={11}>
+            <PreSmokeCard
+                preSmoke={preSmoke}
+            />
         </Grid>
     )
 }

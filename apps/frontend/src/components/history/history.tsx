@@ -61,11 +61,9 @@ export class History extends React.Component<{},{history: historyInterface}> {
                         />
                     </Grid>)
                 }) :
-                <Grid>
-                    <SmokeReview
-                        smokeId={this.state.history.smokeId}
-                    />
-                </Grid>
+                <SmokeReview
+                    smokeId={this.state.history.smokeId}
+                />
             }
             </Grid>
         </Grid>);
