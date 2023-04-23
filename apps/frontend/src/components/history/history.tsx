@@ -43,7 +43,7 @@ export class History extends React.Component<{},{history: historyInterface}> {
 
     render(): React.ReactNode{
         return (
-        <Grid>
+        <Grid paddingTop={1}>
             <Grid container spacing={2} sx={{display: 'flex', justifyContent: 'center'}}>
 
             {!this.state.history.smokeId ?
