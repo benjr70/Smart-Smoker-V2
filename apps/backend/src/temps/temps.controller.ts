@@ -20,6 +20,12 @@ export class TempsController {
         return this.tempsService.getAllTempsCurrent();
     }
 
+    @Get('/:id')
+    getAllTempsById(@Param('id') id: string): Promise<Temp[]>{
+        return this.tempsService.getAllTempsById(id);
+    }
+
+
     @Post('/batch')
     saveTempBatch(@Body() dto: TempDto[]){
         return this.tempsService.saveTempBatch(dto);

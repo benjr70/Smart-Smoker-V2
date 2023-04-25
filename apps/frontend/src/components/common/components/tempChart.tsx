@@ -20,8 +20,7 @@ import * as d3 from 'd3';
  function TempChart(props: props) {
     
   const svgRef = useRef() as React.RefObject<SVGSVGElement>;
-  const [data, setData] = useState([{ChamberTemp: props.ChamberTemp, MeatTemp: props.MeatTemp, date: props.date}]);
-
+  const [data, setData] = useState(props.initData);
     // set the dimensions and margins of the graph
     const margin = {top: 10, right: 0, bottom: 10, left: 0};
     const width = props.width - margin.left - margin.right;
@@ -57,7 +56,6 @@ import * as d3 from 'd3';
       .y((d) => {return yScale(d.MeatTemp);})
 
   const reDrawGraph =async (data: TempData[]) => {
-  
       svg.selectAll('.line')
       .data([data])
       .join('path')
@@ -100,8 +98,12 @@ import * as d3 from 'd3';
         data.push({ChamberTemp: props.ChamberTemp, MeatTemp: props.MeatTemp, date: props.date});
       }
     }
+
     reDrawGraph(data);
-  },[props.ChamberTemp]);
+    
+  },[props]);
+
+  reDrawGraph(data);
 
   return (
     <div>

@@ -15,7 +15,8 @@ const steps = [
     'Smoke',
     'Post-Smoke',
   ];
-  function delay(ms: number) {
+  
+export function delay(ms: number) {
     return new Promise( resolve => setTimeout(resolve, ms) );
 }
 export class Smoke extends React.Component<{},{activeStep: number}>{

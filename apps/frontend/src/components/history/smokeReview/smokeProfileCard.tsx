@@ -1,10 +1,12 @@
 import { Card, CardContent, Grid, ThemeProvider, Typography, createTheme } from "@mui/material";
 import React from "react";
 import { smokeProfile } from "../../../Services/smokerService";
+import TempChart, { TempData } from "../../common/components/tempChart";
 
 
 interface SmokeProfileCardProps {
     smokeProfile: smokeProfile;
+    temps: TempData[];
 }
 
 const theme = createTheme({
@@ -31,6 +33,15 @@ export function SmokeProfileCard(props: SmokeProfileCardProps): JSX.Element {
                 <Typography variant="h5" component="div" align={'center'}>
                     Smoke
                 </Typography>
+                <TempChart
+                    ChamberTemp={props.temps[0].ChamberTemp}
+                    MeatTemp={props.temps[0].MeatTemp}
+                    date={props.temps[0].date}
+                    width={345}
+                    height={200}
+                    smoking={false}
+                    initData={props.temps}
+                />
                 <Typography sx={{ fontSize: 18 }}>
                         {props.smokeProfile.woodType} Wood
                 </Typography>
