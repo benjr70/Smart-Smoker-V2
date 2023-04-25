@@ -51,9 +51,11 @@ export function SmokeReview(props: smokeReviewProps): JSX.Element {
             getSmokeProfileById(result.smokeProfileId).then(smokeProfileResult => {
                 setSmokeProfile(smokeProfileResult);
             })
-            getTempsById(result.tempsId).then(tempResult => {
-                setTemps(tempResult);
-            })
+            if(result.tempsId){
+                getTempsById(result.tempsId).then(tempResult => {
+                    setTemps(tempResult);
+                })
+            }
             getPostSmokeById(result.postSmokeId).then(postSmokeResult => {
                 setPostSmoke(postSmokeResult);
             })

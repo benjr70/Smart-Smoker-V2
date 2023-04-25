@@ -5,7 +5,8 @@ import './history.style.css';
 import { getSmokeHistory } from '../../Services/smokerService';
 import { smokeHistory } from '../common/interfaces/history';
 import { SmokeReview } from './smokeReview/smokeReview';
-
+import ArrowBackIosIcon from '@mui/icons-material/ArrowBackIos';
+import { IconButton } from '@mui/material';
 
 interface historyInterface {
     smokeHistoryList: smokeHistory[],
@@ -31,21 +32,32 @@ export class History extends React.Component<{},{history: historyInterface}> {
         }
         );
         this.onViewClick = this.onViewClick.bind(this);
+        this.onBackClick = this.onBackClick.bind(this);
     }
 
      onViewClick(smokeId: string) {
-        const test: historyInterface = {
-            smokeHistoryList: [],
-            smokeId: smokeId
-        }
-        this.setState({history: test});
+        const tempState = this.state.history;
+        tempState.smokeId = smokeId;
+        this.setState({history: tempState});
+    }
+
+    onBackClick(){
+        const tempState = this.state.history;
+        tempState.smokeId = undefined;
+        this.setState({history: tempState});
     }
 
     render(): React.ReactNode{
         return (
         <Grid paddingTop={1}>
+            {this.state.history.smokeId ?
+            <Grid paddingLeft={2}>
+                <IconButton color="primary"  component="label" onClick={this.onBackClick}>
+                    <ArrowBackIosIcon/>
+                </IconButton>
+            </Grid>
+            : <></>}
             <Grid container spacing={2} sx={{display: 'flex', justifyContent: 'center'}} paddingBottom={8}>
-
             {!this.state.history.smokeId ?
                 this.state.history.smokeHistoryList.map(smokeHistory => {
                     return (<Grid item xs={11}>
