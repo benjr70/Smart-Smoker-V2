@@ -3,11 +3,14 @@ import React, { useEffect, useState } from "react";
 import { getPreSmokeById } from "../../../Services/preSmokeService";
 import { preSmoke } from "../../common/interfaces/preSmoke";
 import { getSmokeById, getSmokeProfileById, smokeProfile } from "../../../Services/smokerService";
-import { PreSmokeCard } from "./preSmokeCard";
-import { SmokeProfileCard } from "./smokeProfileCard";
+import { PreSmokeCard } from "../smokeCards/preSmokeCard";
+import { SmokeProfileCard } from "../smokeCards/smokeProfileCard";
 import { getTempsById } from "../../../Services/tempsService";
 import { TempData } from "../../common/components/tempChart";
 import { delay } from "../../smoke/smoke";
+import { PostSmokeCard } from "../smokeCards/postSmokeCard";
+import { PostSmoke } from "../../smoke/postSmokeStep/PostSmokeStep";
+import { getPostSmokeById } from "../../../Services/postSmokeService";
 
 interface smokeReviewProps {
     smokeId: string
@@ -31,9 +34,14 @@ export function SmokeReview(props: smokeReviewProps): JSX.Element {
         MeatTemp: 0,
         date: new Date(),
     }];
+    let postSmokeInit: PostSmoke = {
+        restTime: '',
+        steps: [],
+    }
     const [preSmoke, setPreSmoke] = useState(preSmokeInit);
     const [smokeProfile, setSmokeProfile] = useState(smokeProfileInit);
     const [temps, setTemps] = useState(tempInit);
+    const [postSmoke, setPostSmoke] = useState(postSmokeInit);
 
     useEffect( () => {
         getSmokeById(props.smokeId).then((result) => {
@@ -46,6 +54,9 @@ export function SmokeReview(props: smokeReviewProps): JSX.Element {
             getTempsById(result.tempsId).then(tempResult => {
                 setTemps(tempResult);
             })
+            getPostSmokeById(result.postSmokeId).then(postSmokeResult => {
+                setPostSmoke(postSmokeResult);
+            })
          })
     }, [props.smokeId])
 
@@ -57,6 +68,9 @@ export function SmokeReview(props: smokeReviewProps): JSX.Element {
             <SmokeProfileCard
                 smokeProfile={smokeProfile}
                 temps={temps}
+            />
+            <PostSmokeCard
+                postSmoke={postSmoke}
             />
         </Grid>
     )

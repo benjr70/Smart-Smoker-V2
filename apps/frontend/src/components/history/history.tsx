@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { SmokeCard } from './smokeCard/smokeCard';
+import { SmokeCard } from './smokeCards/smokeCard';
 import { Grid, TextField } from '@mui/material';
 import './history.style.css';
 import { getSmokeHistory } from '../../Services/smokerService';
@@ -44,7 +44,7 @@ export class History extends React.Component<{},{history: historyInterface}> {
     render(): React.ReactNode{
         return (
         <Grid paddingTop={1}>
-            <Grid container spacing={2} sx={{display: 'flex', justifyContent: 'center'}}>
+            <Grid container spacing={2} sx={{display: 'flex', justifyContent: 'center'}} paddingBottom={8}>
 
             {!this.state.history.smokeId ?
                 this.state.history.smokeHistoryList.map(smokeHistory => {

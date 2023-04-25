@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import { PostSmoke } from "./postSmoke.schema";
 import { PostSmokeService } from "./postSmoke.service";
@@ -21,6 +21,11 @@ export class PostSmokeController {
     @Post('/current')
     saveCurrentPostSmoke(@Body() dto: PostSmokeDto): Promise<PostSmoke>{
         return this.postSmokeService.saveCurrentPostSmoke(dto);
+    }
+
+    @Get('/:id')
+    getSmokeProfileById(@Param('id') id: string): Promise<PostSmoke> {
+        return this.postSmokeService.getById(id);
     }
     
 }
