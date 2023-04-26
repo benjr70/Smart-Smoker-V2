@@ -10,6 +10,8 @@ interface SmokeCardProps {
     weightUnit: string
     smokeId: string
     woodType: string
+    onViewClick: (smokeId: string) => void
+    onDeleteClick: (smokeId: string) => void
 }
 
 const theme = createTheme({
@@ -42,8 +44,14 @@ export function SmokeCard(props: SmokeCardProps): JSX.Element {
                 <Typography sx={{ fontSize: 14 }} color="text.secondary">
                     {props.date}
                 </Typography>
-                <CardActions>
-                    <Button size="small">View</Button>
+                <CardActions sx={{display: 'flex', justifyContent: 'space-between'}}>
+                    <Button 
+                    size="small"
+                    onClick={() => props.onViewClick(props.smokeId)}>View</Button>
+                    <Button 
+                    size="small"
+                    color="error"
+                    onClick={() => props.onDeleteClick(props.smokeId)}>delete</Button>
                 </CardActions>
             </CardContent>
         </Card>

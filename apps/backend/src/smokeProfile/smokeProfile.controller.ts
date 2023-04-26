@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from "@nestjs/common/decorators";
+import { Body, Controller, Delete, Get, Param, Post } from "@nestjs/common/decorators";
 import { ApiTags } from "@nestjs/swagger";
 import { SmokeProfile } from "./smokeProfile.schema";
 import { SmokeProfileService } from "./smokeProfile.service";
@@ -19,9 +19,19 @@ export class SmokeProfileController {
         return this.smokeProfileService.getCurrentSmokeProfile();
     }
 
+    @Get('/:id')
+    getSmokeProfileById(@Param('id') id: string): Promise<SmokeProfile> {
+        return this.smokeProfileService.getById(id);
+    }
+
     @Post('/current')
     saveCurrentSmokeProfile(@Body() dto: SmokeProFileDto): Promise<SmokeProfile> {
        return this.smokeProfileService.saveCurrentSmokeProfile(dto);
+    }
+
+    @Delete('/:id')
+    DeleteById(@Param('id') id: string){
+        return this.smokeProfileService.Delete(id);
     }
 
 }

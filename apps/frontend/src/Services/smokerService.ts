@@ -1,6 +1,7 @@
 import { io } from "socket.io-client";
 import { State } from "../components/common/interfaces/state";
 import { smokeHistory } from "../components/common/interfaces/history";
+import { Smoke } from "../components/smoke/smoke";
 
 
 const envUrl =  process.env.REACT_APP_CLOUD_URL;
@@ -43,6 +44,20 @@ export const setSmokeProfile=async (smokeProfileDTO: smokeProfile) => {
     return axios.post('smokeProfile/current', smokeProfileDTO);
 }
 
+export const getSmokeProfileById = async (id: string):Promise<smokeProfile> => {
+    const axios = require('axios');
+    axios.defaults.baseURL = envUrl;
+    return axios.get('smokeProfile/' + id ).then((result:any) => {
+        if(!result.data.notes){
+            result.data.notes = ''
+        }
+        if (!result.data.woodType){
+            result.data.woodType = ''
+        }
+        return result.data;
+    });
+}
+
 
 export const getCurrentSmokeProfile = async ():Promise<smokeProfile> => {
     const axios = require('axios');
@@ -64,4 +79,24 @@ export const getSmokeHistory = async (): Promise<smokeHistory[]> => {
     return axios.get('smoke').then(result => {
         return result.data;
     });
+}
+
+export const getSmokeById = async(id: string): Promise<any> => {
+    const axios = require('axios');
+    axios.defaults.baseURL = envUrl;
+    return axios.get('smoke/' + id).then((result:any) => {
+        return result.data;
+    });
+}
+
+export const deleteSmokeProfileById = async(id: string) => {
+    const axios = require('axios');
+    axios.defaults.baseURL = envUrl;
+    return axios.delete('smokeProfile/' + id);
+}
+
+export const deleteSmokeById = async(id: string) => {
+    const axios = require('axios');
+    axios.defaults.baseURL = envUrl;
+    return axios.delete('smoke/' + id);
 }

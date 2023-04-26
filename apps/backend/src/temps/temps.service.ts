@@ -66,6 +66,10 @@ export class TempsService {
         })
     }
 
+    async getAllTempsById(id: string): Promise<Temp[]> {
+        return this.tempModel.find({tempsId: id});
+    }
+
     async create(tempDto: TempDto): Promise<Temp>{
         const Temp = new this.tempModel(tempDto);
         return Temp.save();
@@ -81,5 +85,9 @@ export class TempsService {
                 return smoke.tempsId;
             })
         })
+    }
+
+    async delete(id: string) {
+        return this.tempModel.deleteMany({tempsId: id});
     }
 }

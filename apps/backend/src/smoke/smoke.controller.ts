@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Post } from "@nestjs/common";
+import { Controller, Delete, Get, Param, Post } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import { Smoke } from "./smoke.schema";
 import { SmokeService } from "./smoke.service";
@@ -22,5 +22,10 @@ export class SmokeController {
     @Get()
     getSmokeHistory(): Promise<SmokeHistory[]>{
         return this.smokeService.getSmokeHistory();
+    }
+
+    @Delete('/:id')
+    DeleteById(@Param('id') id: string){
+        return this.smokeService.Delete(id);
     }
 }

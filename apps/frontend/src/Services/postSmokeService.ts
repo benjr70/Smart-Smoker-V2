@@ -16,3 +16,18 @@ export const setCurrentPostSmoke = async(postSmoke: PostSmoke): Promise<any> => 
     axios.defaults.baseURL = envUrl;
     return axios.post('postSmoke/current', postSmoke);
 }
+
+
+export const getPostSmokeById = async(id: string): Promise<PostSmoke> => {
+    const axios = require('axios');
+    axios.defaults.baseURL = envUrl;
+    return axios.get('postSmoke/' + id).then((result:any) => {
+        return result.data;
+    });
+}
+
+export const deletePostSmokeById = async(id: string) => {
+    const axios = require('axios');
+    axios.defaults.baseURL = envUrl;
+    return axios.delete('postSmoke/' + id);
+}
