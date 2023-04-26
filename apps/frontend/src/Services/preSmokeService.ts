@@ -24,3 +24,10 @@ export const getPreSmokeById = async(id: string): Promise<preSmoke> => {
         return result.data;
     });
 }
+
+export const deletePreSmokeById = async(id: string) => {
+    const axios = require('axios');
+    axios.defaults.baseURL = envUrl;
+    return axios.delete('presmoke/' + id);
+}
+

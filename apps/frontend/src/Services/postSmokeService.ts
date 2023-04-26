@@ -25,3 +25,9 @@ export const getPostSmokeById = async(id: string): Promise<PostSmoke> => {
         return result.data;
     });
 }
+
+export const deletePostSmokeById = async(id: string) => {
+    const axios = require('axios');
+    axios.defaults.baseURL = envUrl;
+    return axios.delete('postSmoke/' + id);
+}

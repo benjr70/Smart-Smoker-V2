@@ -7,6 +7,7 @@ import { smokeHistory } from '../common/interfaces/history';
 import { SmokeReview } from './smokeReview/smokeReview';
 import ArrowBackIosIcon from '@mui/icons-material/ArrowBackIos';
 import { IconButton } from '@mui/material';
+import { deleteSmoke } from '../../Services/deleteSmokeService';
 
 interface historyInterface {
     smokeHistoryList: smokeHistory[],
@@ -33,6 +34,7 @@ export class History extends React.Component<{},{history: historyInterface}> {
         );
         this.onViewClick = this.onViewClick.bind(this);
         this.onBackClick = this.onBackClick.bind(this);
+        this.onDeleteClick = this.onDeleteClick.bind(this);
     }
 
      onViewClick(smokeId: string) {
@@ -45,6 +47,18 @@ export class History extends React.Component<{},{history: historyInterface}> {
         const tempState = this.state.history;
         tempState.smokeId = undefined;
         this.setState({history: tempState});
+    }
+
+    async onDeleteClick(smokeId: string){
+        await deleteSmoke(smokeId);
+        await getSmokeHistory().then( (result:smokeHistory[]) => {
+            result.pop()
+            const temp: historyInterface = {
+                smokeHistoryList: result.reverse(),
+                smokeId: undefined
+            }
+            this.setState({history: temp});
+        });
     }
 
     render(): React.ReactNode{
@@ -70,6 +84,7 @@ export class History extends React.Component<{},{history: historyInterface}> {
                             woodType={smokeHistory.woodType}
                             smokeId={smokeHistory.smokeId}
                             onViewClick={this.onViewClick}
+                            onDeleteClick={this.onDeleteClick}
                         />
                     </Grid>)
                 }) :

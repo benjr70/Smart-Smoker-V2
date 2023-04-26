@@ -6,6 +6,7 @@ import { SmokeDto, SmokeHistory } from "./smokeDto";
 import { PreSmokeService } from "src/presmoke/presmoke.service";
 import { SmokeProfileService } from "src/smokeProfile/smokeProfile.service";
 import { PreSmokeDto } from "src/presmoke/presmokeDto";
+import { PreSmoke } from "src/presmoke/presmoke.schema";
 
 
 
@@ -39,11 +40,11 @@ export class SmokeService {
                 const preSmoke =  await this.preSmokeService.GetByID(smoke.preSmokeId);
                 const smokeProfile = await this.smokeProfileService.getById(smoke.smokeProfileId);
                 let smokeHistory: SmokeHistory = {
-                    name: preSmoke.name,
-                    meatType: preSmoke.meatType,
+                    name: preSmoke ? preSmoke.name : '',
+                    meatType: preSmoke ? preSmoke.meatType: '',
                     date: smoke.date ? smoke.date.toDateString() : '',
-                    weight: preSmoke.weight.weight ? preSmoke.weight.weight.toString() : '',
-                    weightUnit: preSmoke.weight.unit,
+                    weight: (preSmoke && preSmoke.weight.weight) ? preSmoke.weight.weight.toString() : '',
+                    weightUnit: preSmoke ? preSmoke.weight.unit : '',
                     woodType: smokeProfile != null ? smokeProfile.woodType : '' ,
                     smokeId: smoke["_id"]
                 }
@@ -55,6 +56,10 @@ export class SmokeService {
 
     async getAll(): Promise<Smoke[]>{
         return this.smokeModule.find().exec();
+    }
+
+    async Delete(id: string) {
+        return this.smokeModule.deleteOne({_id: id});
     }
 
 }

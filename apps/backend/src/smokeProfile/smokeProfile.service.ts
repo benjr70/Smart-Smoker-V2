@@ -66,4 +66,8 @@ export class SmokeProfileService {
             return this.getById(id);
         })
     }
+
+    async Delete(id: string) {
+        return this.smokeProfileModel.deleteOne({_id: id});
+    }
 }

@@ -65,4 +65,8 @@ export class PostSmokeService {
             return this.getById(id);
         })
     }
+
+    async Delete(id: string) {
+        return this.postSmokeModel.deleteOne({_id: id});
+    }
 }

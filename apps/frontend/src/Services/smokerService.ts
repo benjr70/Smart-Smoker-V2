@@ -88,3 +88,15 @@ export const getSmokeById = async(id: string): Promise<any> => {
         return result.data;
     });
 }
+
+export const deleteSmokeProfileById = async(id: string) => {
+    const axios = require('axios');
+    axios.defaults.baseURL = envUrl;
+    return axios.delete('smokeProfile/' + id);
+}
+
+export const deleteSmokeById = async(id: string) => {
+    const axios = require('axios');
+    axios.defaults.baseURL = envUrl;
+    return axios.delete('smoke/' + id);
+}

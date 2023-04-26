@@ -86,4 +86,8 @@ export class TempsService {
             })
         })
     }
+
+    async delete(id: string) {
+        return this.tempModel.deleteMany({tempsId: id});
+    }
 }
