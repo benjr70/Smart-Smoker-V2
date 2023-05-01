@@ -6,7 +6,7 @@ const envUrl = process.env.REACT_APP_CLOUD_URL;
 export const getCurrentPreSmoke = async ():Promise<preSmoke> => {
     const axios = require('axios');
     axios.defaults.baseURL = envUrl;
-    return axios.get('presmoke/current').then((result:any) => {
+    return axios.get('presmoke/').then((result:any) => {
         return result.data;
     });
 }

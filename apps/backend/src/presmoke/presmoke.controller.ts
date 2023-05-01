@@ -10,7 +10,7 @@ export class PreSmokeController {
     constructor(private readonly preSmokeService: PreSmokeService){
     }
 
-    @Get()
+    @Get('/all')
     getPreSmoke(): Promise<PreSmoke[]> {
         return this.preSmokeService.findAll()
     }
@@ -20,7 +20,7 @@ export class PreSmokeController {
         return this.preSmokeService.GetByID(id);
     }
 
-    @Post()
+    @Post("")
     SavePreSmoke(@Body() dto: PreSmokeDto): Promise<PreSmoke> {
         return this.preSmokeService.save(dto);
     }
@@ -30,7 +30,7 @@ export class PreSmokeController {
         return this.preSmokeService.Update(id, dto);
     }
 
-    @Get("/current")
+    @Get("")
     getById(): Promise<PreSmoke>{
         return this.preSmokeService.GetByCurrent();
     }
