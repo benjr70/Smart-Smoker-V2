@@ -11,6 +11,7 @@ import { StateModule } from './State/state.module';
 import { TempModule } from './temps/temps.module';
 import { EventsModule } from './websocket/events.module';
 import { ConfigModule } from '@nestjs/config'
+import { RatingsModel } from './ratings/ratings.module';
 
 const ENV = process.env.NODE_ENV.trim();
 @Module({
@@ -22,6 +23,7 @@ const ENV = process.env.NODE_ENV.trim();
     TempModule,
     SmokeProfileModule,
     PostSmokeModule,
+    RatingsModel,
     ConfigModule.forRoot({
       envFilePath: !ENV ? '.env' : `.env.${ENV}`,
     }),

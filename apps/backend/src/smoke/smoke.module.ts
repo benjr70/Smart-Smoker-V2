@@ -5,6 +5,7 @@ import { SmokeSchema } from "./smoke.schema";
 import { SmokeService } from "./smoke.service";
 import { PreSmokeModule } from "src/presmoke/presmoke.module";
 import { SmokeProfileModule } from "src/smokeProfile/smokeProfile.module";
+import { StateModule } from "src/State/state.module";
 
 
 
@@ -12,6 +13,7 @@ import { SmokeProfileModule } from "src/smokeProfile/smokeProfile.module";
     imports:[MongooseModule.forFeature([{name: 'Smoke', schema: SmokeSchema}]),
         forwardRef(() => PreSmokeModule),
         forwardRef(()=> SmokeProfileModule),
+        StateModule,
     ],
     controllers: [SmokeController],
     providers: [SmokeService],
