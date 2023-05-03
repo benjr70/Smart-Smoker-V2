@@ -7,6 +7,7 @@ import { PreSmokeService } from "src/presmoke/presmoke.service";
 import { SmokeProfileService } from "src/smokeProfile/smokeProfile.service";
 import { PreSmokeDto } from "src/presmoke/presmokeDto";
 import { PreSmoke } from "src/presmoke/presmoke.schema";
+import { StateService } from "src/State/state.service";
 
 
 
@@ -15,6 +16,7 @@ export class SmokeService {
     constructor(@InjectModel('Smoke')private smokeModule: Model<SmokeDocument>,
         @Inject(forwardRef(() => PreSmokeService))
         private preSmokeService: PreSmokeService,
+        private stateService: StateService,
         private smokeProfileService: SmokeProfileService,
     ){}
 
@@ -60,6 +62,12 @@ export class SmokeService {
 
     async Delete(id: string) {
         return this.smokeModule.deleteOne({_id: id});
+    }
+
+    async getCurrentSmoke(): Promise<Smoke> {
+        return this.stateService.GetState().then(state => {
+            return this.GetById(state.smokeId);
+        })
     }
 
 }

@@ -9,11 +9,13 @@ import { SmokeStep } from './smokeStep/smokeStep';
 import { PostSmokeStep } from './postSmokeStep/PostSmokeStep';
 import { Button } from '@mui/material';
 import { clearSmoke } from '../../Services/smokerService';
+import { RateSmokeStep } from './RateSmokeStep/rateSmokeStep';
 
 const steps = [
     'Pre-Smoke',
     'Smoke',
     'Post-Smoke',
+    'Rate',
   ];
   
 export function delay(ms: number) {
@@ -32,16 +34,16 @@ export class Smoke extends React.Component<{},{activeStep: number}>{
 
       async nextStep(){
         let nextStep = this.state.activeStep
-        if(this.state.activeStep === 2){
+        if(this.state.activeStep === 3){
             nextStep = 0;
-            this.setState({activeStep: 4});
+            this.setState({activeStep: 5});
             await delay(2);
             await clearSmoke();
             this.setState({activeStep: nextStep});
             return;
         }
         nextStep++;
-         if(nextStep < 3){
+         if(nextStep < 4){
             this.setState({activeStep: nextStep});
          }
       }
@@ -57,6 +59,9 @@ export class Smoke extends React.Component<{},{activeStep: number}>{
                     break;
                 case 2:
                     step = <PostSmokeStep/>;
+                    break;
+                case 3:
+                    step = <RateSmokeStep/>;
                     break;
           }
           return(
@@ -78,7 +83,7 @@ export class Smoke extends React.Component<{},{activeStep: number}>{
                 variant="contained"
                 size="small"
                 onClick={() => this.nextStep()}
-                >{this.state.activeStep === 2 ? 'Finish' : "Next"}
+                >{this.state.activeStep === 3 ? 'Finish' : "Next"}
             </Button>
             </div>
             )

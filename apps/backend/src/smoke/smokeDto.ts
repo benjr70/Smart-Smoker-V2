@@ -15,6 +15,9 @@ export class SmokeDto {
     smokeProfileId?: string;
 
     @ApiProperty()
+    ratingId?: string;
+
+    @ApiProperty()
     date?: Date
 
 }

@@ -17,6 +17,9 @@ export class Smoke {
     smokeProfileId: string;
 
     @Prop()
+    ratingId: string;
+
+    @Prop()
     date: Date
 }
 
