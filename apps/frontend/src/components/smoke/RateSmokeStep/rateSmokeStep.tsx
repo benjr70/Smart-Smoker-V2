@@ -1,6 +1,7 @@
 import { Grid, Rating, TextField, Typography } from "@mui/material";
 import React from "react";
 import { rating } from "../../common/interfaces/rating";
+import { getCurrentRatings, setCurrentRatings } from "../../../Services/ratingsService";
 
 export class RateSmokeStep extends React.Component<{},{ratingState: rating}> {
 
@@ -13,6 +14,11 @@ export class RateSmokeStep extends React.Component<{},{ratingState: rating}> {
             overallTaste: 8,
             notes: '',
         }}
+
+        getCurrentRatings().then(currentRating => {
+            console.log(currentRating);
+            this.setState({ratingState: currentRating});
+        })
 
         this.updateValues = this.updateValues.bind(this);
     }
@@ -43,6 +49,11 @@ export class RateSmokeStep extends React.Component<{},{ratingState: rating}> {
         }
         
         this.setState({ratingState: temp});
+    }
+
+
+    async componentWillUnmount(){
+        await setCurrentRatings(this.state.ratingState);
     }
     
 
