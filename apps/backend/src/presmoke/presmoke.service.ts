@@ -11,7 +11,6 @@ import { PreSmokeDto } from './presmokeDto';
 export class PreSmokeService {
     constructor(@InjectModel(PreSmoke.name)private preSmokeModel: Model<PreSmokeDocument>,
                 private stateService: StateService,
-                @Inject(forwardRef(() => SmokeService))
                 private smokeService: SmokeService){}
 
     async save(preSmokeDto: PreSmokeDto): Promise<PreSmoke>{

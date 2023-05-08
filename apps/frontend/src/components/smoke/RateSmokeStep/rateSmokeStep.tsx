@@ -60,7 +60,7 @@ export class RateSmokeStep extends React.Component<{},{ratingState: rating}> {
     render(): React.ReactNode {
         return(
         <Grid padding={3}>
-            <Typography component="legend">Smoke Flavor</Typography>
+            <Typography component="legend">Smoke Flavor: {this.state.ratingState.smokeFlavor}</Typography>
             <Rating 
                 name="size-large" 
                 defaultValue={5} 
@@ -68,8 +68,8 @@ export class RateSmokeStep extends React.Component<{},{ratingState: rating}> {
                 max={(10)}
                 value={this.state.ratingState.smokeFlavor}
                 onChange={(event) => {this.updateValues(event, 'smokeFlavor')}} 
-            />{this.state.ratingState.smokeFlavor}
-            <Typography component="legend">Seasoning</Typography>
+            />
+            <Typography component="legend">Seasoning: {this.state.ratingState.seasoning}</Typography>
             <Rating 
                 name="size-large" 
                 defaultValue={5} 
@@ -77,8 +77,8 @@ export class RateSmokeStep extends React.Component<{},{ratingState: rating}> {
                 max={(10)}
                 value={this.state.ratingState.seasoning}
                 onChange={(event) => {this.updateValues(event, 'seasoning')}} 
-            />{this.state.ratingState.seasoning}
-            <Typography component="legend">tenderness</Typography>
+            />
+            <Typography component="legend">Tenderness: {this.state.ratingState.tenderness}</Typography>
             <Rating 
                 name="size-large" 
                 defaultValue={5} 
@@ -86,8 +86,8 @@ export class RateSmokeStep extends React.Component<{},{ratingState: rating}> {
                 max={(10)}
                 value={this.state.ratingState.tenderness}
                 onChange={(event) => {this.updateValues(event, 'tenderness')}}
-            />{this.state.ratingState.tenderness}
-            <Typography component="legend">Overall Taste</Typography>
+            />
+            <Typography component="legend">Overall Taste: {this.state.ratingState.overallTaste}</Typography>
             <Rating
                 name="size-large" 
                 defaultValue={5} 
@@ -95,7 +95,7 @@ export class RateSmokeStep extends React.Component<{},{ratingState: rating}> {
                 max={(10)} 
                 value={this.state.ratingState.overallTaste}
                 onChange={(event) => {this.updateValues(event, 'overallTaste')}}
-                />{this.state.ratingState.overallTaste}
+                />
             <TextField
                sx={{
                     marginTop: '10px',

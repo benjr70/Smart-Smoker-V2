@@ -13,5 +13,6 @@ import { RatingsService } from "./ratings.service";
     imports: [MongooseModule.forFeature([{name: 'Ratings', schema: RatingsSchema}]), SmokeModule],
     controllers: [RatingsController],
     providers: [RatingsService],
+    exports: [RatingsService],
 })
 export class RatingsModel {}

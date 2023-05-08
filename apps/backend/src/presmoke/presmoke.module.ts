@@ -10,7 +10,7 @@ import { SmokeModule } from 'src/smoke/smoke.module';
 @Module({
   imports: [MongooseModule.forFeature([{name: PreSmoke.name, schema: PreSmokeSchema}]),
     StateModule,
-    forwardRef(() => SmokeModule)
+    SmokeModule
   ],
   controllers: [PreSmokeController],
   providers: [PreSmokeService],

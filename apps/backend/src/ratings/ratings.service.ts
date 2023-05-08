@@ -47,6 +47,10 @@ export class RatingsService {
         return this.ratingsModel.findById(id);
     }
 
+    async Delete(id: string) {
+        return this.ratingsModel.deleteOne({_id: id});
+    }
+
     async update(id: string, ratingsDto: RatingsDto): Promise<Ratings> {
         return this.ratingsModel.findByIdAndUpdate({_id: id}, ratingsDto).then(() => {
             return this.getById(id);
