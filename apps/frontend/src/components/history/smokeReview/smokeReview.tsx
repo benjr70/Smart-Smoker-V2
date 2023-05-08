@@ -11,6 +11,9 @@ import { delay } from "../../smoke/smoke";
 import { PostSmokeCard } from "../smokeCards/postSmokeCard";
 import { PostSmoke } from "../../smoke/postSmokeStep/PostSmokeStep";
 import { getPostSmokeById } from "../../../Services/postSmokeService";
+import { getRatingById } from "../../../Services/ratingsService";
+import { rating } from "../../common/interfaces/rating";
+import { RatingsCard } from "../smokeCards/ratingsCard";
 
 interface smokeReviewProps {
     smokeId: string
@@ -38,10 +41,18 @@ export function SmokeReview(props: smokeReviewProps): JSX.Element {
         restTime: '',
         steps: [],
     }
+    let ratingsInit: rating = {
+        smokeFlavor: 0,
+        seasoning: 0,
+        tenderness: 0,
+        overallTaste: 0,
+        notes: ''
+    }
     const [preSmoke, setPreSmoke] = useState(preSmokeInit);
     const [smokeProfile, setSmokeProfile] = useState(smokeProfileInit);
     const [temps, setTemps] = useState(tempInit);
     const [postSmoke, setPostSmoke] = useState(postSmokeInit);
+    const [rating, setRatings] = useState(ratingsInit);
 
     useEffect( () => {
         getSmokeById(props.smokeId).then((result) => {
@@ -59,6 +70,9 @@ export function SmokeReview(props: smokeReviewProps): JSX.Element {
             getPostSmokeById(result.postSmokeId).then(postSmokeResult => {
                 setPostSmoke(postSmokeResult);
             })
+            getRatingById(result.ratingId).then(ratings => {
+                setRatings(ratings);
+            })
          })
     }, [props.smokeId])
 
@@ -73,6 +87,9 @@ export function SmokeReview(props: smokeReviewProps): JSX.Element {
             />
             <PostSmokeCard
                 postSmoke={postSmoke}
+            />
+            <RatingsCard
+                ratings={rating}
             />
         </Grid>
     )

@@ -25,7 +25,7 @@ const theme = createTheme({
 
 export function PostSmokeCard(props: preSmokeCardProps): JSX.Element {
     return (
-    <Grid>
+    <Grid paddingBottom={1}>
         <ThemeProvider theme={theme}>
         <Card>
             <CardContent >
