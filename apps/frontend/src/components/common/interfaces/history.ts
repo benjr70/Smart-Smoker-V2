@@ -6,5 +6,5 @@ export interface smokeHistory {
     woodType: string;
     date: string;
     smokeId: string;
-    overallRating: string;
+    overAllRating: string;
 }

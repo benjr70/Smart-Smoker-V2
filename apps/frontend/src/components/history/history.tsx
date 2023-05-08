@@ -80,7 +80,7 @@ export class History extends React.Component<{},{history: historyInterface}> {
                             meatType={smokeHistory.meatType}
                             date={smokeHistory.date}
                             weight={smokeHistory.weight}
-                            overAllRatings={smokeHistory.overallRating}
+                            overAllRatings={smokeHistory.overAllRating}
                             weightUnit={smokeHistory.weightUnit}
                             woodType={smokeHistory.woodType}
                             smokeId={smokeHistory.smokeId}
