@@ -23,3 +23,9 @@ export const getRatingById =async (id: string): Promise<rating> => {
         return result.data;
     });
 }
+
+export const deleteRatingsById = async(id: string) => {
+    const axios = require('axios');
+    axios.defaults.baseURL = envUrl;
+    return axios.delete('ratings/' + id);
+}
