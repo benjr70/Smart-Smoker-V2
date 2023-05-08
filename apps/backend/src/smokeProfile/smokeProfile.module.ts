@@ -10,7 +10,7 @@ import { SmokeProfileService } from './smokeProfile.service';
 @Module({
   imports: [MongooseModule.forFeature([{name: 'SmokeProfile', schema: SmokeProFileSchema}]),
     StateModule,
-    forwardRef(() => SmokeModule)
+    SmokeModule
   ],
   controllers: [SmokeProfileController],
   providers: [SmokeProfileService],

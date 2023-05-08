@@ -11,8 +11,6 @@ import { StateModule } from "src/State/state.module";
 
 @Module({
     imports:[MongooseModule.forFeature([{name: 'Smoke', schema: SmokeSchema}]),
-        forwardRef(() => PreSmokeModule),
-        forwardRef(()=> SmokeProfileModule),
         StateModule,
     ],
     controllers: [SmokeController],

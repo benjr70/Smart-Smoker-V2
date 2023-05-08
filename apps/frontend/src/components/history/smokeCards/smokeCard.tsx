@@ -1,4 +1,4 @@
-import { Button, Card, CardActions, CardContent, Grid, ThemeProvider, Typography, createTheme } from "@mui/material";
+import { Button, Card, CardActions, CardContent, Grid, Rating, ThemeProvider, Typography, createTheme } from "@mui/material";
 import React from "react";
 
 
@@ -10,6 +10,7 @@ interface SmokeCardProps {
     weightUnit: string
     smokeId: string
     woodType: string
+    overAllRatings: string
     onViewClick: (smokeId: string) => void
     onDeleteClick: (smokeId: string) => void
 }
@@ -44,6 +45,13 @@ export function SmokeCard(props: SmokeCardProps): JSX.Element {
                 <Typography sx={{ fontSize: 14 }} color="text.secondary">
                     {props.date}
                 </Typography>
+                <Rating 
+                    name="size-large" 
+                    defaultValue={parseFloat(props.overAllRatings)} 
+                    size="large" 
+                    max={(10)}
+                    value={parseFloat(props.overAllRatings)}
+                />
                 <CardActions sx={{display: 'flex', justifyContent: 'space-between'}}>
                     <Button 
                     size="small"

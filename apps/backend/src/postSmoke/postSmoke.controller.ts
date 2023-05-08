@@ -24,7 +24,7 @@ export class PostSmokeController {
     }
 
     @Get('/:id')
-    getSmokeProfileById(@Param('id') id: string): Promise<PostSmoke> {
+    getById(@Param('id') id: string): Promise<PostSmoke> {
         return this.postSmokeService.getById(id);
     }
 

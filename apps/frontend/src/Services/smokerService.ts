@@ -2,6 +2,8 @@ import { io } from "socket.io-client";
 import { State } from "../components/common/interfaces/state";
 import { smokeHistory } from "../components/common/interfaces/history";
 import { Smoke } from "../components/smoke/smoke";
+import { getPreSmokeById } from "./preSmokeService";
+import { getRatingById } from "./ratingsService";
 
 
 const envUrl =  process.env.REACT_APP_CLOUD_URL;
@@ -76,7 +78,15 @@ export const getCurrentSmokeProfile = async ():Promise<smokeProfile> => {
 export const getSmokeHistory = async (): Promise<smokeHistory[]> => {
     const axios = require('axios');
     axios.defaults.baseURL = envUrl;
-    return axios.get('smoke').then(result => {
+    return axios.get('history').then((result:any) => {
+        return result.data;
+    });
+}
+
+export const getAllSmoke = async(): Promise<any> => {
+    const axios = require('axios');
+    axios.defaults.baseURL = envUrl;
+    return axios.get('smoke/all').then((result:any) => {
         return result.data;
     });
 }

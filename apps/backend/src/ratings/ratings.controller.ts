@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Post } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import { RatingsService } from "./ratings.service";
 import { Ratings } from "./ratings.schema";
@@ -20,5 +20,15 @@ export class RatingsController {
     @Post('')
     saveCurrentRatings(@Body() dto: RatingsDto): Promise<Ratings> {
         return this.ratingsService.saveCurrentRatings(dto);
+    }
+
+    @Get('/:id')
+    getRatingById(@Param('id') id: string): Promise<Ratings> {
+        return this.ratingsService.getById(id);
+    }
+
+    @Delete('/:id')
+    DeleteById(@Param('id') id: string){
+        return this.ratingsService.Delete(id);
     }
 }

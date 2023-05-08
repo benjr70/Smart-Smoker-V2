@@ -12,7 +12,6 @@ import { SmokeProFileDto } from "./smokeProfileDto";
 export class SmokeProfileService {
     constructor(@InjectModel('SmokeProfile')private smokeProfileModel: Model<SmokeProFileDocument>,
     private stateService: StateService,
-    @Inject(forwardRef(() => SmokeService))
     private smokeService: SmokeService){}
 
     async getCurrentSmokeProfile(): Promise<SmokeProfile>{
