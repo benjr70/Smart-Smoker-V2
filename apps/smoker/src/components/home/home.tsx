@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import './home.style.css'
 import Grid from '@mui/material/Grid';
  import { w3cwebsocket as W3CWebSocket } from "websocket";
@@ -7,20 +7,21 @@ import { Button } from '@mui/material';
 import { getState, toggleSmoking } from '../../services/stateService';
 import TempChart, { TempData } from '../common/tempChart';
 import { getCurrentTemps, postTempsBatch } from '../../services/tempsService';
-
+import WifiIcon from '@mui/icons-material/Wifi';
+import { Wifi } from './wifi/wifi';
 
 interface State {
     meatTemp: string;
     chamberTemp: string;
     smoking: boolean;
     date: Date;
-}
+} 
 
 let initTemps: TempData[] = [];
 let socket: any;
 let batch: State[] = [];
 let batchCount = 0;
-export class Home extends React.Component<{}, {tempState: State}> {
+export class Home extends React.Component<{}, {tempState: State, activeScreen: number}> {
 
     constructor(props: any) {
         super(props);
@@ -29,10 +30,11 @@ export class Home extends React.Component<{}, {tempState: State}> {
             chamberTemp: '0',
             smoking: false,
             date: new Date(),
-            }
+            },
+            activeScreen: 0
         };
+        this.setActiveScreen = this.setActiveScreen.bind(this);
     }
-
 
     async componentDidMount(){
         try{
@@ -110,49 +112,68 @@ export class Home extends React.Component<{}, {tempState: State}> {
         })
     }
 
+    setActiveScreen(screen: number): void {
+        this.setState({activeScreen: screen});
+    }
+
     render(): React.ReactNode { 
         return (
         <Grid container direction='row' className='background'>
-            <Grid container xs={9} direction="column">
-                <Grid container direction="row"  spacing={2}>
-                    <Grid item  className='text' >
-                        Meat Temp
+            {this.state.activeScreen === 0 ? 
+            <>
+                <Grid container xs={7} direction="column" justifyContent='space-evenly'>
+                    <Grid container direction="row"  spacing={2}>
+                        <Grid item  className='text' >
+                            Meat Temp
+                        </Grid>
+                        <Grid item className='text' >
+                            {this.state.tempState.meatTemp}
+                        </Grid>
                     </Grid>
-                    <Grid item className='text' >
-                        {this.state.tempState.meatTemp}
+                    <Grid container direction="row" spacing={2}>
+                        <Grid item  className='text' >
+                            Chamber Temp
+                        </Grid>
+                        <Grid item className='text' >
+                            {this.state.tempState.chamberTemp}
+                        </Grid>
                     </Grid>
                 </Grid>
-                <Grid container direction="row" spacing={2}>
-                    <Grid item  className='text' >
-                        Chamber Temp
-                    </Grid>
-                    <Grid item className='text' >
-                        {this.state.tempState.chamberTemp}
+                <Grid container  xs={5}>
+                    <Grid container className="buttonContainer" flexDirection='row-reverse'>
+                            <Grid item padding={1}>
+                                <Button
+                                className="wifiButton"
+                                variant="contained"
+                                size="small"
+                                onClick={() => this.setActiveScreen(1)}>
+                                    <WifiIcon/>
+                                </Button>
+                            </Grid>
+                            <Grid item padding={1}>
+                                <Button
+                                className="button"
+                                variant="contained"
+                                size="small"
+                                onClick={() => this.startSmoke()}
+                                >{this.state.tempState.smoking ? 'Stop Smoking' : 'Start Smoking'}
+                                </Button>
+                            </Grid>
                     </Grid>
                 </Grid>
-            </Grid>
-            <Grid container  xs={3}>
-                <Grid container className="buttonContainer" flexDirection='row-reverse'>
-                        <Button
-                        className="button"
-                        variant="contained"
-                        size="small"
-                        onClick={() => this.startSmoke()}
-                        >{this.state.tempState.smoking ? 'Stop Smoking' : 'Start Smoking'}
-                        </Button>
+                <Grid>
+                    <TempChart
+                        ChamberTemp={parseFloat(this.state.tempState.chamberTemp)}
+                        MeatTemp={parseFloat(this.state.tempState.meatTemp)}
+                        date={this.state.tempState.date}
+                        smoking={this.state.tempState.smoking}
+                        height={300}
+                        width={800}
+                        initData={initTemps}
+                        ></TempChart>
                 </Grid>
-            </Grid>
-            <Grid>
-                <TempChart
-                    ChamberTemp={parseFloat(this.state.tempState.chamberTemp)}
-                    MeatTemp={parseFloat(this.state.tempState.meatTemp)}
-                    date={this.state.tempState.date}
-                    smoking={this.state.tempState.smoking}
-                    height={300}
-                    width={800}
-                    initData={initTemps}
-                    ></TempChart>
-            </Grid>
+            </>  :
+            <Wifi onBack={this.setActiveScreen}></Wifi>}
         </Grid>)
     }
 
