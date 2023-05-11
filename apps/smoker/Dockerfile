@@ -6,5 +6,5 @@
   COPY apps/smoker/package.json package.json
 
   RUN npm install --global serve
-  CMD ["npm", "run", "serve"]
+  CMD ["npm", "run", "serve:prod"]
   EXPOSE 8080
