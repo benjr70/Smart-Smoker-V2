@@ -58,7 +58,6 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:frontend
       
-
       - name: Smoker build
         run: npm run build:prod --prefix apps/smoker
     
@@ -83,7 +82,7 @@ jobs:
       - name: Build and push Device Service
         uses: docker/build-push-action@v3
         with:
-          platforms: linux/arm64
+          platforms: linux/arm/v7
           context: .
           file: apps/device-service/Dockerfile
           push: true
