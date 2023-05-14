@@ -8,7 +8,7 @@
 
   RUN npm install --legacy-peer-deps
 
-  WORKDIR /code/apps/backend
+  WORKDIR /code/apps/device-service
 
   RUN npm install --legacy-peer-deps
  
