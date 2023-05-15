@@ -47,13 +47,14 @@ export class Home extends React.Component<{}, {tempState: State, activeScreen: n
             temp.smoking = state.smoking
             this.setState({tempState: temp});
         })
-        const client = new W3CWebSocket('ws://127.0.0.1:5678');
+        // const client = new W3CWebSocket('ws://127.0.0.1:3000');
+        let deviceClient = io('http://127.0.0.1:3000');
         let url = process.env.REACT_APP_CLOUD_URL ?? '';
         socket = io(url);
-        client.onopen = () => {
-            console.log('websocket connected')
-        };
-        client.onmessage = (message: any) => {
+        // client.onopen = () => {
+        //     console.log('websocket connected')
+        // };
+        deviceClient.on('temp', (message: any) => {
             try{
                 let tempObj = JSON.parse(message.data);
                 let temp = this.state.tempState;
@@ -78,7 +79,7 @@ export class Home extends React.Component<{}, {tempState: State, activeScreen: n
             } catch(e) {
                 console.log(e);
             }
-        }
+        });
         
         socket.on('smokeUpdate', ((message :any) => {
             let temp = this.state.tempState;
