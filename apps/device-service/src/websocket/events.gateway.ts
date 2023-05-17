@@ -1,11 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import {
-    MessageBody,
-    SubscribeMessage,
     WebSocketGateway,
     WebSocketServer,
   } from '@nestjs/websockets';
   import { Server } from 'socket.io';
+import { SerialService } from 'src/serial/serial.serivce';
 
 
 
@@ -21,10 +20,13 @@ import {
     @WebSocketServer()
     server: Server;
 
+    constructor(private readonly serialService: SerialService){}
 
-    @SubscribeMessage('temp')
-    handleSmokeUpdate(@MessageBody() data: string) {
-      this.server.emit('temp', data);
+    afterInit(){
+      this.serialService.onData().subscribe((data) => {
+        this.server.emit('temp', data)
+      })
     }
+
   }
 
