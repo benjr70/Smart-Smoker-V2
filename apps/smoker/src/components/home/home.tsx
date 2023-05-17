@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 import './home.style.css'
 import Grid from '@mui/material/Grid';
- import { w3cwebsocket as W3CWebSocket } from "websocket";
 import { io } from 'socket.io-client';
 import { Button } from '@mui/material';
 import { getState, toggleSmoking } from '../../services/stateService';
@@ -47,15 +46,12 @@ export class Home extends React.Component<{}, {tempState: State, activeScreen: n
             temp.smoking = state.smoking
             this.setState({tempState: temp});
         })
-        const client = new W3CWebSocket('ws://127.0.0.1:5678');
+        let deviceClient = io('http://127.0.0.1:3000');
         let url = process.env.REACT_APP_CLOUD_URL ?? '';
         socket = io(url);
-        client.onopen = () => {
-            console.log('websocket connected')
-        };
-        client.onmessage = (message: any) => {
+        deviceClient.on('temp', (message: any) => {
             try{
-                let tempObj = JSON.parse(message.data);
+                let tempObj = JSON.parse(message);
                 let temp = this.state.tempState;
                 temp.chamberTemp = tempObj.Chamber;
                 temp.meatTemp = tempObj.Meat;
@@ -78,7 +74,7 @@ export class Home extends React.Component<{}, {tempState: State, activeScreen: n
             } catch(e) {
                 console.log(e);
             }
-        }
+        });
         
         socket.on('smokeUpdate', ((message :any) => {
             let temp = this.state.tempState;
