@@ -4,6 +4,7 @@ import React, { useRef, useState } from "react";
 import './wifi.style.css'
 import Keyboard from "react-simple-keyboard";
 import "react-simple-keyboard/build/css/index.css"
+import { connectToWiFi } from "../../../services/deviceService";
 
 interface WifiProps {
     onBack: (screen: number) => void
@@ -51,6 +52,10 @@ export function Wifi(props: WifiProps): JSX.Element {
         }
     }
 
+    const connectWifi = () => {
+        connectToWiFi({ssid, password});
+    }
+
 
     return (
     <>
@@ -87,7 +92,8 @@ export function Wifi(props: WifiProps): JSX.Element {
                 <Button
                 className="button"
                 variant="contained"
-                size="small">
+                size="small"
+                onClick={() => connectWifi()}>
                     Connect
                 </Button>
             </Grid>

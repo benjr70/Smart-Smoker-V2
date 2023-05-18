@@ -10,7 +10,7 @@
 
   WORKDIR /code/apps/device-service
 
-  RUN npm install --legacy-peer-deps
+  # RUN npm install --legacy-peer-deps
  
 
   RUN npm run build
