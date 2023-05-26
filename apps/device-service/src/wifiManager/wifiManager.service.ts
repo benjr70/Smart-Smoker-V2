@@ -10,7 +10,7 @@ export class WifiManagerService {
     connectToWiFi(dto: wifiDto) {
         return new Promise((resolve, reject) => {
             exec(
-            `nmcli device wifi connect "${dto.ssid}" password "${dto.password}"`,
+            `network_id=$( wpa_cli -i wlan0 add_network | tail -n 1);  wpa_cli -i wlan0 set_network $network_id ssid '"${dto.ssid}"';  wpa_cli -i wlan0 set_network $network_id psk '"${dto.password}"';  wpa_cli -i wlan0 enable_network $network_id;  wpa_cli -i wlan0 save_config;  wpa_cli select_network $network_id -i wlan0`,
             (error, stdout, stderr) => {
                 if (error) {
                 reject(stderr);
