@@ -1,10 +1,13 @@
-import { Button, Grid, IconButton, TextField } from "@mui/material";
+import { Button, Grid, IconButton, TextField, Typography } from "@mui/material";
 import ArrowBackIosIcon from '@mui/icons-material/ArrowBackIos';
 import React, { useRef, useState } from "react";
 import './wifi.style.css'
 import Keyboard from "react-simple-keyboard";
 import "react-simple-keyboard/build/css/index.css"
 import { connectToWiFi } from "../../../services/deviceService";
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import PendingIcon from '@mui/icons-material/Pending';
 
 interface WifiProps {
     onBack: (screen: number) => void
@@ -21,6 +24,9 @@ export function Wifi(props: WifiProps): JSX.Element {
     const [password, setPassword] = useState('');
     const [textInput, setInput] = useState(0);
     const [layout, setLayout] = useState("default");
+    const [connection, setConnection] = useState(true);
+    const [loading, setLoading] = useState(false);
+    const [connectionMessage, setConnectionMessage] = useState('')
 
 
     const onChange = (input: any) =>{
@@ -52,14 +58,26 @@ export function Wifi(props: WifiProps): JSX.Element {
         }
     }
 
-    const connectWifi = () => {
-        connectToWiFi({ssid, password});
+    const connectWifi = async () => {
+        setLoading(true);
+        await connectToWiFi({ssid, password}).then(result => {
+            setConnection(true);
+            // set connection message to ssid here 
+        })
+        .catch(e => {
+            console.log(e);
+            setConnection(false);
+            setConnectionMessage(e.message);
+        }).finally(() => {
+            setLoading(false);
+        });
+        
     }
 
 
     return (
     <>
-        <Grid container spacing={3} justifyContent='space-around' alignItems='flex-start' direction='row' padding={2}>
+        <Grid container spacing={3} justifyContent='space-around' alignItems='flex-start' direction='row' paddingTop={2}>
             <Grid item>
                 <IconButton color="primary"  component="label" onClick={() => props.onBack(0)}>
                     <ArrowBackIosIcon/>
@@ -98,12 +116,59 @@ export function Wifi(props: WifiProps): JSX.Element {
                 </Button>
             </Grid>
         </Grid>
-        <Keyboard
-            keyboardRef={r => (keyboard.current = r)}
-            onChange={onChange}
-            onKeyPress={onKeyPress}
-            layoutName={layout}
-        />
+        <Grid container spacing={3} justifyContent='center' alignItems='flex-start' padding={0}>
+            {loading ? 
+            <>
+                <Grid item>
+                    <IconButton color="info"  component="label">
+                        <PendingIcon/>
+                    </IconButton>
+                </Grid>
+                <Grid item justifyContent={'flex-start'}>
+                    <Typography variant="h6" component="div">
+                        Connecting
+                    </Typography>
+                </Grid>
+            </>: 
+            <> 
+                {connection ? 
+                <>
+                <Grid item>
+                    <IconButton color="success"  component="label">
+                        <CheckCircleOutlineIcon/>
+                    </IconButton>
+                </Grid>
+                <Grid item justifyContent={'flex-start'}>
+                    <Typography variant="h6" component="div">
+                        Connected: {connectionMessage}
+                    </Typography>
+                </Grid>
+                </>
+                :
+                <>
+                <Grid item>
+                    <IconButton color="error"  component="label">
+                        <ErrorOutlineIcon/>
+                    </IconButton>
+                </Grid>
+                <Grid item justifyContent={'flex-start'}>
+                    <Typography variant="h6" component="div">
+                        Disconnected: {connectionMessage}
+                    </Typography>
+                </Grid>
+                </>}
+            </>}
+        </Grid>
+  
+
+        <Grid container spacing={3} alignItems={'flex-end'}>
+            <Keyboard
+                keyboardRef={r => (keyboard.current = r)}
+                onChange={onChange}
+                onKeyPress={onKeyPress}
+                layoutName={layout}
+            />
+        </Grid>
     </>
     );
 }
