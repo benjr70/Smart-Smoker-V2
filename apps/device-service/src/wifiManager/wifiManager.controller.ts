@@ -1,4 +1,4 @@
-import { Body, Controller, Post } from "@nestjs/common";
+import { Body, Controller, Post, Get } from "@nestjs/common";
 import { WifiManagerService } from "./wifiManager.service";
 import { wifiDto } from "./wifiDto";
 
@@ -9,13 +9,18 @@ export class WifiManagerController {
 
     constructor(private readonly wifiManagerServicer: WifiManagerService){}
 
-    @Post()
+    @Post('/connect')
     connectWifi(@Body() dto: wifiDto): Promise<any> {
         return this.wifiManagerServicer.connectToWiFi(dto);
     }
 
-    @Post()
+    @Post('/disconnect')
     disconnectWifi(): Promise<any> {
         return this.wifiManagerServicer.disconnectFromWiFi();
+    }
+
+    @Get('/connection')
+    getConnection(): Promise<any> {
+        return this.wifiManagerServicer.getConnection();
     }
 }

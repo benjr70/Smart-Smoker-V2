@@ -4,7 +4,7 @@ import React, { useRef, useState } from "react";
 import './wifi.style.css'
 import Keyboard from "react-simple-keyboard";
 import "react-simple-keyboard/build/css/index.css"
-import { connectToWiFi } from "../../../services/deviceService";
+import { connectToWiFi, getConnection } from "../../../services/deviceService";
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import PendingIcon from '@mui/icons-material/Pending';
@@ -61,8 +61,9 @@ export function Wifi(props: WifiProps): JSX.Element {
     const connectWifi = async () => {
         setLoading(true);
         await connectToWiFi({ssid, password}).then(result => {
+            console.log('from connect to',result);
             setConnection(true);
-            // set connection message to ssid here 
+            getConnection().then(result => console.log('from get connection',result));
         })
         .catch(e => {
             console.log(e);

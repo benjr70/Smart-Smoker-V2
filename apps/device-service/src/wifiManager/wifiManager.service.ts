@@ -13,8 +13,21 @@ export class WifiManagerService {
         })
     }
 
+    getConnection(){
+        return wifi.getCurrentConnections((error, currentConnections) => {
+            if (error) {
+              console.log(error);
+              return error
+            } else {
+              console.log(currentConnections);
+                return currentConnections;
+            }
+          });
+    }
 
-    connectToWiFi(dto: wifiDto) {
+
+    async connectToWiFi(dto: wifiDto) {
+        await wifi.scan();
         return wifi.connect({ssid: dto.ssid, password: dto.password});
     }
 
