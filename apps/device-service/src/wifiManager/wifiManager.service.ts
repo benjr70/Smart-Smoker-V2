@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { HttpException, HttpStatus, Injectable } from "@nestjs/common";
 import { exec } from "child_process";
 import { wifiDto } from "./wifiDto";
 const wifi = require('node-wifi');
@@ -20,10 +20,13 @@ export class WifiManagerService {
 
     async connectToWiFi(dto: wifiDto) {
         await wifi.scan();
-         return wifi.connect({ssid: dto.ssid, password: dto.password}, (err) => {
+         return await wifi.connect({ssid: dto.ssid, password: dto.password}, (err) => {
             if(err){
                 console.log(err.message);
-                return err;
+                throw new HttpException({
+                    status: HttpStatus.BAD_REQUEST,
+                    error: err.message,
+                }, HttpStatus.BAD_REQUEST);
             } else {
                 return;
             }
