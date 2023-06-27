@@ -20,9 +20,9 @@ export class WifiManagerService {
 
     async connectToWiFi(dto: wifiDto) {
         await wifi.scan();
-         wifi.connect({ssid: dto.ssid, password: dto.password}, (err) => {
+         return wifi.connect({ssid: dto.ssid, password: dto.password}, (err) => {
             if(err){
-                console.log(err);
+                console.log(err.message);
                 return err;
             } else {
                 return;
