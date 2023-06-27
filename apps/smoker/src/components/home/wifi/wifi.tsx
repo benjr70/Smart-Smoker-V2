@@ -60,10 +60,13 @@ export function Wifi(props: WifiProps): JSX.Element {
 
     const connectWifi = async () => {
         setLoading(true);
-        await connectToWiFi({ssid, password}).then(result => {
-            console.log('from connect to',result);
+        await connectToWiFi({ssid, password}).then(async result => {
+            console.log('from connect to', result);
+            await getConnection().then(result => {
+                console.log('from get connection',result)
+                setConnectionMessage(result[0].ssid);
+            });
             setConnection(true);
-            getConnection().then(result => console.log('from get connection',result));
         })
         .catch(e => {
             console.log(e);
