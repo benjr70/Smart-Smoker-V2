@@ -14,15 +14,7 @@ export class WifiManagerService {
     }
 
     getConnection(){
-        return wifi.getCurrentConnections((error, currentConnections) => {
-            if (error) {
-              console.log(error);
-              return error
-            } else {
-              console.log(currentConnections);
-                return currentConnections;
-            }
-          });
+        return wifi.getCurrentConnections();
     }
 
 
