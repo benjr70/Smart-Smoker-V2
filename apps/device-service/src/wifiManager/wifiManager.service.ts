@@ -21,6 +21,8 @@ export class WifiManagerService {
     async connectToWiFi(dto: wifiDto) {
         await wifi.scan();
          return await wifi.connect({ssid: dto.ssid, password: dto.password}).catch(err => {
+            const newString = err.message.split('\n');
+            console.log('here', newString);
             throw new HttpException({
                 status: HttpStatus.BAD_REQUEST,
                 error: err.message,
@@ -42,3 +44,7 @@ export class WifiManagerService {
 }
 
 // network_id=$( wpa_cli -i wlan0 add_network | tail -n 1);  wpa_cli -i wlan0 set_network $network_id ssid '"Benshotspot"';  wpa_cli -i wlan0 set_network $network_id psk '"test1234"';  wpa_cli -i wlan0 enable_network $network_id;  wpa_cli -i wlan0 save_config;  wpa_cli select_network $network_id -i wlan0
+
+
+Command failed: nmcli -w 10 device wifi connect hhhhhhh password  ifname wlan0\nError: No network with SSID 'hhhhhhh' found.\n"
+status: 4
