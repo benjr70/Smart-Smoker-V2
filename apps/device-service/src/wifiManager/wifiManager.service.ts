@@ -20,18 +20,12 @@ export class WifiManagerService {
 
     async connectToWiFi(dto: wifiDto) {
         await wifi.scan();
-         return await wifi.connect({ssid: dto.ssid, password: dto.password}, (err) => {
-            if(err){
-                console.log(err.message);
-                throw new HttpException({
-                    status: HttpStatus.BAD_REQUEST,
-                    error: err.message,
-                }, HttpStatus.BAD_REQUEST);
-            } else {
-                return;
-            }
-
-        });
+         return await wifi.connect({ssid: dto.ssid, password: dto.password}).catch(err => {
+            throw new HttpException({
+                status: HttpStatus.BAD_REQUEST,
+                error: err.message,
+            }, HttpStatus.BAD_REQUEST);
+         });
     }
 
     disconnectFromWiFi() {
