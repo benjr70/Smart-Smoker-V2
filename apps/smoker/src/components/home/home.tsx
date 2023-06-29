@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import './home.style.css'
 import Grid from '@mui/material/Grid';
 import { io } from 'socket.io-client';
@@ -7,7 +7,9 @@ import { getState, toggleSmoking } from '../../services/stateService';
 import TempChart, { TempData } from '../common/tempChart';
 import { getCurrentTemps, postTempsBatch } from '../../services/tempsService';
 import WifiIcon from '@mui/icons-material/Wifi';
+import WifiOffIcon from '@mui/icons-material/WifiOff';
 import { Wifi } from './wifi/wifi';
+import { getConnection } from '../../services/deviceService';
 
 interface State {
     meatTemp: string;
@@ -16,11 +18,12 @@ interface State {
     date: Date;
 } 
 
+
 let initTemps: TempData[] = [];
 let socket: any;
 let batch: State[] = [];
 let batchCount = 0;
-export class Home extends React.Component<{}, {tempState: State, activeScreen: number}> {
+export class Home extends React.Component<{}, {tempState: State, activeScreen: number, connection: boolean}> {
 
     constructor(props: any) {
         super(props);
@@ -30,7 +33,8 @@ export class Home extends React.Component<{}, {tempState: State, activeScreen: n
             smoking: false,
             date: new Date(),
             },
-            activeScreen: 0
+            activeScreen: 0,
+            connection: true
         };
         this.setActiveScreen = this.setActiveScreen.bind(this);
     }
@@ -51,6 +55,13 @@ export class Home extends React.Component<{}, {tempState: State, activeScreen: n
         socket = io(url);
         deviceClient.on('temp', (message: any) => {
             try{
+                getConnection().then(result => {
+                    if(result.length > 0){
+                        this.setState({connection: true});
+                    } else {
+                        this.setState({connection: false});
+                    }
+                })
                 let tempObj = JSON.parse(message);
                 let temp = this.state.tempState;
                 temp.chamberTemp = tempObj.Chamber;
@@ -143,7 +154,7 @@ export class Home extends React.Component<{}, {tempState: State, activeScreen: n
                                 variant="contained"
                                 size="small"
                                 onClick={() => this.setActiveScreen(1)}>
-                                    <WifiIcon/>
+                                   {this.state.connection ? <WifiIcon/> : <WifiOffIcon/>}
                                 </Button>
                             </Grid>
                             <Grid item padding={1}>
@@ -166,7 +177,7 @@ export class Home extends React.Component<{}, {tempState: State, activeScreen: n
                         height={300}
                         width={800}
                         initData={initTemps}
-                        ></TempChart>
+                    ></TempChart>
                 </Grid>
             </>  :
             <Wifi onBack={this.setActiveScreen}></Wifi>}

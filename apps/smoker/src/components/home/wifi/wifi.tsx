@@ -1,6 +1,6 @@
 import { Button, Grid, IconButton, TextField, Typography } from "@mui/material";
 import ArrowBackIosIcon from '@mui/icons-material/ArrowBackIos';
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import './wifi.style.css'
 import Keyboard from "react-simple-keyboard";
 import "react-simple-keyboard/build/css/index.css"
@@ -27,6 +27,24 @@ export function Wifi(props: WifiProps): JSX.Element {
     const [connection, setConnection] = useState(true);
     const [loading, setLoading] = useState(false);
     const [connectionMessage, setConnectionMessage] = useState('')
+
+    useEffect(() => {
+        if(!loading){
+            getConnection().then(result => {
+                console.log(result);
+                if(result.length > 0){
+                    setConnection(true);
+                    setConnectionMessage(result[0].ssid)
+                } else {
+                    setConnection(false);
+                    setConnectionMessage('')
+                }
+            }).catch(err => {
+                console.log(err);
+            })
+        }
+    },[])
+
 
 
     const onChange = (input: any) =>{
@@ -71,7 +89,7 @@ export function Wifi(props: WifiProps): JSX.Element {
         .catch(e => {
             console.log(e);
             setConnection(false);
-            setConnectionMessage(e.message);
+            setConnectionMessage(e.response.data.error);
         }).finally(() => {
             setLoading(false);
         });
