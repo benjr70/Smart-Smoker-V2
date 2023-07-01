@@ -64,7 +64,9 @@ export function SmokeReview(props: smokeReviewProps): JSX.Element {
             })
             if(result.tempsId){
                 getTempsById(result.tempsId).then(tempResult => {
-                    setTemps(tempResult);
+                    if(tempResult.length > 0){
+                        setTemps(tempResult);
+                    }
                 })
             }
             getPostSmokeById(result.postSmokeId).then(postSmokeResult => {
