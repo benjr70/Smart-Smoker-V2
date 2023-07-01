@@ -30,7 +30,7 @@ export class HistoryService {
                     weightUnit: preSmoke ? preSmoke.weight.unit : '',
                     woodType: smokeProfile != null ? smokeProfile.woodType : '' ,
                     smokeId: smoke["_id"],
-                    overAllRating: ratings ? ratings.overallTaste.toString() : '',
+                    overAllRating: (ratings && ratings.overallTaste) ? ratings.overallTaste.toString() : '',
                 }
                 return smokeHistory;
             }))
