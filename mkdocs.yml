@@ -1,3 +1,7 @@
 site_name: Smart Smoker Docs
 theme:
   name: material
+  features:
+    - navigation.instant
+repo_url: https://github.com/benjr70/Smart-Smoker-V2
+repo_name: benjr70/Smart-Smoker-V2
