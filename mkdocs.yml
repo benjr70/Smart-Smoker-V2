@@ -48,3 +48,5 @@ nav:
     - Smoker Frontend\index.md
   - Device Service:
     - Device Service\index.md
+  - Hardware:
+    - Hardware\index.md

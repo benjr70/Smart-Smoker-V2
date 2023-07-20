@@ -1,1 +1,1 @@
-# Smoker Frontend
+# Getting Started
