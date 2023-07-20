@@ -3,5 +3,48 @@ theme:
   name: material
   features:
     - navigation.instant
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.footer
+    - navigation.sections
+    - navigation.indexes
+    - toc.follow
+  palette:
+
+    # Palette toggle for light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
 repo_url: https://github.com/benjr70/Smart-Smoker-V2
 repo_name: benjr70/Smart-Smoker-V2
+plugins:
+  - search
+extra:
+  social:
+    - icon: fontawesome/brands/linkedin
+      link: https://www.linkedin.com/in/ben-rolf-275368a4/
+    - icon: fontawesome/brands/github
+      link: https://github.com/benjr70
+  generator: false
+
+nav:
+  - Welcome:
+    - index.md
+    - Documentation: Documentation.md
+  - Frontend:
+    - Frontend\index.md
+  - BackEnd:
+    - Backend\index.md
+  - Smoker Frontend:
+    - Smoker Frontend\index.md
+  - Device Service:
+    - Device Service\index.md
