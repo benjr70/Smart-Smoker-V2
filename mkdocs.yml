@@ -9,6 +9,7 @@ theme:
     - navigation.sections
     - navigation.indexes
     - toc.follow
+    - toc.integrate
   palette:
 
     # Palette toggle for light mode
@@ -40,13 +41,14 @@ nav:
   - Welcome:
     - index.md
     - Documentation: Documentation.md
-  - Frontend:
-    - Frontend/index.md
-  - BackEnd:
-    - Backend/index.md
-  - Smoker Frontend:
-    - Smoker Frontend/index.md
-  - Device Service:
-    - Device Service/index.md
-  - Hardware:
-    - Hardware/index.md
+    - CIDI: cidi.md
+    - Hardware: Hardware/index.md
+  - Apps:
+    - Frontend:
+      - Frontend/index.md
+    - BackEnd:
+      - Backend/index.md
+    - Smoker Frontend:
+      - Smoker Frontend/index.md
+    - Device Service:
+      - Device Service/index.md
