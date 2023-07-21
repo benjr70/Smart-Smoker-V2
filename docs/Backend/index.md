@@ -11,3 +11,14 @@ if not just update the .env.local in the backend folder
 once that is set up just run <br>
 `npm run start` <br>
 and you should be good to go
+
+
+## API
+
+once you get this running you can go to `http://localhost:3001/api/` to see the swagger of all api endpoint and test them to your live local env
+
+
+## Websocket
+
+This is used for live temps from the pi and to the cloud frontend<br>
+It is also use for live updates like start and stop smoking button
