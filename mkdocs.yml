@@ -2,11 +2,12 @@ site_name: Smart Smoker Docs
 theme:
   name: material
   features:
+    - navigation.instant
     - navigation.tabs
     - navigation.tabs.sticky
     - navigation.footer
     - navigation.sections
-    # - navigation.indexes
+    - navigation.indexes
     - toc.follow
   palette:
 
@@ -40,12 +41,12 @@ nav:
     - index.md
     - Documentation: Documentation.md
   - Frontend:
-    - Frontend\index.md
+    - Frontend/index.md
   - BackEnd:
-    - Backend\index.md
+    - Backend/index.md
   - Smoker Frontend:
-    - Smoker Frontend\index.md
+    - Smoker Frontend/index.md
   - Device Service:
-    - Device Service\index.md
+    - Device Service/index.md
   - Hardware:
-    - Hardware\index.md
+    - Hardware/index.md
