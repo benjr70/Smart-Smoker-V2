@@ -20,3 +20,9 @@
 * pull and run device service on pi
 * `docker pull benjr70/smart_smoker:device-serviceTest`
 * `docker run --privileged  --device=/dev/ttyUSB0 -p 3000:3000 benjr70/smart_smoker:device-serviceTest`
+
+
+### Network
+
+Using tailscale to manage my network, this provides a private internal network for all devices. 
+
