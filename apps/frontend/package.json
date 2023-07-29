@@ -24,6 +24,7 @@
   },
   "scripts": {
     "start": "webpack-dev-server --open --mode development --hot  --port 3000 --config webpack.dev.js",
+    "start:prod": "webpack-dev-server --open --mode development --hot  --port 3000 --config webpack.prod.js",
     "build": "webpack --config webpack.prod.js",
     "serve:prod": "serve -s dist -l 3000",
     "startCRA": "react-scripts start",
