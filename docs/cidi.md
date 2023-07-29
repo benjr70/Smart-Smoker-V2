@@ -24,5 +24,32 @@
 
 ### Network
 
-Using tailscale to manage my network, this provides a private internal network for all devices. 
+Using Tailscale to manage my network, this provides a private internal network for all devices. 
+
+Tailscale creates the ssl cert and key and also serves the sites
+I used the tailscale funnel feature to expose the frontend and backend to the broad web for the cloud app
+that url is https://smokecloud.tail74646.ts.net for the frontend and https://smokecloud.tail74646.ts.net:8443 for the backend
+
+use command tailscale funnel status should result in this output if correctly set up
+
+    ubuntu@ubuntu:/etc/nginx/sites-available$ sudo tailscale funnel status
+
+    # Funnel on:
+    #     - https://smokecloud.tail74646.ts.net
+    #     - https://smokecloud.tail74646.ts.net:8443
+
+    https://smokecloud.tail74646.ts.net (Funnel on)
+    |-- / proxy http://127.0.0.1:80
+
+    https://smokecloud.tail74646.ts.net:8443 (Funnel on)
+    |-- / proxy http://127.0.0.1:3001
+
+To get there you must to a `tailscale serve http:<port> / <local"port>` then a `tailscale funnel <port> on`
+for each service you want outside the network
+
+#### Tailscale docs links<br>
+* [General](https://tailscale.com/kb/start/)
+* [Serve](https://tailscale.com/kb/1242/tailscale-serve/)
+* [Https](https://tailscale.com/kb/1153/enabling-https/)
+
 
