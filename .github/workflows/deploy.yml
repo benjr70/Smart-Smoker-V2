@@ -13,14 +13,20 @@ jobs:
       - run: sudo chmod -R 777 ./
       - uses: actions/checkout@v3
 
-      - name: docker compose down
-        run: sudo docker compose down
-
       - name: docker pull
         run: docker compose pull
 
       - name: docker build
         run: docker compose build
 
+      - name: clear tailScale port
+        run: tailscale serve https:8443 / http://127.0.0.1:3001 off
+
+      - name: docker compose down
+        run: sudo docker compose down
+
       - name: docker compose up
         run: sudo docker compose up -d --force-recreate 
+
+      - name: Serve tailScale port
+        run: tailscale serve https:8443 / http://127.0.0.1:3001

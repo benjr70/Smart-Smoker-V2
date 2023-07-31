@@ -15,10 +15,10 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
   app.enableCors({
-    origin: true,
+    origin: ['https://smokecloud.tail74646.ts.net', 'https://smokecloud.tail74646.ts.net:8443/api'],
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
     preflightContinue: false,
-    optionsSuccessStatus: 200
+    optionsSuccessStatus: 200,
   });
   await app.listen(3001);
 }
