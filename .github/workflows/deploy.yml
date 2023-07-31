@@ -20,7 +20,7 @@ jobs:
         run: docker compose build
 
       - name: clear tailScale port
-        run: tailscale serve https:8443 / http://127.0.0.1:3001 off
+        run: sudo tailscale serve https:8443 / http://127.0.0.1:3001 off
 
       - name: docker compose down
         run: sudo docker compose down
