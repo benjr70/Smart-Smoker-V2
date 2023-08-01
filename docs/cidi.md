@@ -47,6 +47,9 @@ use command tailscale funnel status should result in this output if correctly se
 To get there you must to a `tailscale serve http:<port> / <local"port>` then a `tailscale funnel <port> on`
 for each service you want outside the network
 
+For the deploy workflow i had to stop the tailscale service then do docker compose up then start it again.<BR>
+This is because tailscale would not let go of the ports I need so i had to kill it first get the containers running then start it back up. A proper would would be great but couldn't find that at the time
+
 #### Tailscale docs links<br>
 * [General](https://tailscale.com/kb/start/)
 * [Serve](https://tailscale.com/kb/1242/tailscale-serve/)
