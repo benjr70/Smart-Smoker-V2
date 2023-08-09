@@ -8,9 +8,17 @@
     "swagger-ui-express": "^4.1.6",
     "usb": "^2.4.2"
   },
-  "workspaces": [
-    "apps/*"
-  ],
+  "workspaces": {
+    "packages": [
+      "apps/frontend",
+      "apps/backend",
+      "apps/smoker",
+      "apps/device-service"
+    ],
+    "nohoist": [
+      "apps/electron-shell"
+    ]
+  },
   "scripts": {
     "bootstrap": "npm install --legacy-peer-deps"
   },
