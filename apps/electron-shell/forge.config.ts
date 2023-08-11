@@ -16,9 +16,9 @@ const config: ForgeConfig = {
   rebuildConfig: {},
   makers: [
     new MakerSquirrel({}),
-    new MakerZIP({},['darwin']),
-    new MakerRpm({}),
-    new MakerDeb({})
+    {
+      name: '@electron-forge/maker-deb',
+    }
   ],
   plugins: [
     new AutoUnpackNativesPlugin({}),
