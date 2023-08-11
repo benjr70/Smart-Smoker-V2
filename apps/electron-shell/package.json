@@ -8,7 +8,7 @@
     "start": "electron-forge start",
     "package": "electron-forge package",
     "make": "electron-forge make",
-    "make:Linux": "cross-env electron-forge make -- --arch=armv7l --targets=@electron-forge/maker-deb",
+    "make:Linux": "electron-forge make -- --arch=armv7l --targets=@electron-forge/maker-deb",
     "publish": "electron-forge publish",
     "lint": "eslint --ext .ts,.tsx ."
   },
