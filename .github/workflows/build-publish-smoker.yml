@@ -1,6 +1,6 @@
 # This is a basic workflow to help you get started with Actions
 
-name: Build and Publish Cloud
+name: Build and Publish Smoker
 
 # Controls when the workflow will run
 on:
@@ -45,28 +45,44 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
-
-      - name: frontend build
-        run: npm run build --prefix apps/frontend
-
-      - name: Build and push frontend
+      
+      - name: Smoker build
+        run: npm run build:prod --prefix apps/smoker
+    
+      - name: Build and push Smoker
         uses: docker/build-push-action@v3
         with:
-          platforms: linux/arm64
+          platforms: linux/arm/v7
           context: .
-          file: apps/frontend/Dockerfile
+          file: apps/smoker/Dockerfile
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:frontend
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:smoker
 
-      - name: Build and push Backend
+      - name: Build and push Device Service
         uses: docker/build-push-action@v3
         with:
-          platforms: linux/arm64
+          platforms: linux/arm/v7
           context: .
-          file: apps/backend/Dockerfile
+          file: apps/device-service/Dockerfile
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:backend 
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:device-service
 
-  Deploy:
-      needs: build
-      uses: benjr70/Smart-Smoker-V2/.github/workflows/deploy.yml@master 
+      - name: electron-shell install
+        run: npm run install --prefix apps/electron-shell
+
+      - name: electron-shell make
+        run: npm run make:Linux --prefix apps/electron-shell
+
+
+      - name: Build and push Electron Shell
+        uses: docker/build-push-action@v3
+        with:
+          platforms: linux/arm/v7
+          context: .
+          file: apps/electron-shell/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:electron-shell
+
+  # Deploy:
+  #     needs: build
+  #     uses: benjr70/Smart-Smoker-V2/.github/workflows/deploy.yml@master 
