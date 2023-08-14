@@ -10,7 +10,8 @@
     "make": "electron-forge make",
     "make:Linux": "electron-forge make -- --arch=armv7l --targets=@electron-forge/maker-deb",
     "publish": "electron-forge publish",
-    "lint": "eslint --ext .ts,.tsx ."
+    "lint": "eslint --ext .ts,.tsx .",
+    "electron:build": "electron-builder build --linux --armv7l"
   },
   "keywords": [],
   "author": {
@@ -29,6 +30,8 @@
     "@typescript-eslint/eslint-plugin": "^5.62.0",
     "@typescript-eslint/parser": "^5.62.0",
     "@vercel/webpack-asset-relocator-loader": "^1.7.3",
+    "electron-installer-debian": "^3.0.0",
+    "electron-installer-redhat": "^3.2.0",
     "css-loader": "^6.8.1",
     "electron": "25.5.0",
     "eslint": "^8.46.0",
@@ -38,7 +41,8 @@
     "style-loader": "^3.3.3",
     "ts-loader": "^9.4.4",
     "ts-node": "^10.9.1",
-    "typescript": "~4.5.4"
+    "typescript": "~4.5.4",
+    "electron-builder": "^24.6.3"
   },
   "dependencies": {
     "cross-env": "^7.0.3",
