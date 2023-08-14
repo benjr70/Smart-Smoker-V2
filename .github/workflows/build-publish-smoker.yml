@@ -6,7 +6,12 @@ name: Build and Publish Smoker
 on:
   # Triggers the workflow on push or pull request events but only for the master branch
   push:
-    branches: [ master ]
+    branches: [ master, feature/SS2-106-electron-shell ]
+  pull_request:
+    branches:
+      - "main" 
+    paths:
+      - ".github/workflows/build-publish-smoker.yaml"
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
