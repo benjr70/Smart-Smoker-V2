@@ -39,38 +39,41 @@ jobs:
       - name: Use npm 8
         run: npm i -g npm@8
 
-      - name: NPM Bootstrap
-        run: npm run bootstrap
+      # - name: NPM Bootstrap
+      #   run: npm run bootstrap
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      # - name: Login to Docker Hub
+      #   uses: docker/login-action@v2
+      #   with:
+      #     username: ${{ secrets.DOCKERHUB_USERNAME }}
+      #     password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+      # - name: Set up Docker Buildx
+      #   uses: docker/setup-buildx-action@v2
       
-      - name: Smoker build
-        run: npm run build:prod --prefix apps/smoker
+      # - name: Smoker build
+      #   run: npm run build:prod --prefix apps/smoker
     
-      - name: Build and push Smoker
-        uses: docker/build-push-action@v3
-        with:
-          platforms: linux/arm/v7
-          context: .
-          file: apps/smoker/Dockerfile
-          push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:smoker
+      # - name: Build and push Smoker
+      #   uses: docker/build-push-action@v3
+      #   with:
+      #     platforms: linux/arm/v7
+      #     context: .
+      #     file: apps/smoker/Dockerfile
+      #     push: true
+      #     tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:smoker
 
-      - name: Build and push Device Service
-        uses: docker/build-push-action@v3
-        with:
-          platforms: linux/arm/v7
-          context: .
-          file: apps/device-service/Dockerfile
-          push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:device-service
+      # - name: Build and push Device Service
+      #   uses: docker/build-push-action@v3
+      #   with:
+      #     platforms: linux/arm/v7
+      #     context: .
+      #     file: apps/device-service/Dockerfile
+      #     push: true
+      #     tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:device-service
+
+      - name: NPM Bootstrap
+        run: npm run bootstrap --prefix apps/electron-shell
 
       - name: electron-shell install
         run: npm install --prefix apps/electron-shell
