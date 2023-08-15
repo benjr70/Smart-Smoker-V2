@@ -72,8 +72,6 @@ jobs:
       #     push: true
       #     tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:device-service
 
-      - name: NPM Bootstrap
-        run: npm run bootstrap --prefix apps/electron-shell
 
       - name: electron-shell install
         run: npm install --prefix apps/electron-shell
