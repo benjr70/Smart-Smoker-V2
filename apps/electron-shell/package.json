@@ -6,9 +6,9 @@
   "main": ".webpack/main",
   "scripts": {
     "start": "electron-forge start",
-    "package": "electron-forge package",
+    "package": "cross-env electron-forge package -- --arch=armv7l",
     "make": "electron-forge make",
-    "make:Linux": "electron-forge make -- --arch=armv7l --targets=@electron-forge/maker-deb",
+    "make:Linux": "cross-env electron-forge make -- --arch=armv7l --targets=@electron-forge/maker-deb",
     "publish": "electron-forge publish",
     "lint": "eslint --ext .ts,.tsx .",
     "electron:build": "electron-builder build --linux --armv7l"
