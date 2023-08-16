@@ -4,6 +4,16 @@
   "version": "1.0.0",
   "description": "My Electron application description",
   "main": ".webpack/main",
+  "build": {
+    "appId": "electron-shell",
+    "icon": "icons/",
+    "mac": {
+      "category": "public.app-category.developer-tools"
+    },
+    "linux": {
+      "target": "deb"
+    }
+  },
   "scripts": {
     "start": "electron-forge start",
     "package": "cross-env electron-forge package -- --arch=armv7l",
@@ -18,6 +28,7 @@
     "name": "Ben Rolf",
     "email": "benrolf70@gmail.com"
   },
+  "homepage": "https://github.com/benjr70/Smart-Smoker-V2",
   "license": "MIT",
   "devDependencies": {
     "@electron-forge/cli": "^6.3.0",
