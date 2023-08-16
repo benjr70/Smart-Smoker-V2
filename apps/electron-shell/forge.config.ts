@@ -17,7 +17,14 @@ const config: ForgeConfig = {
   makers: [
     new MakerZIP({},['darwin']),
     new MakerRpm({}),
-    new MakerDeb({})
+    {
+      name: '@electron-forge/maker-deb',
+      config: {
+        options: {
+          arch: 'armv7l'
+        }
+      }
+    }
   ],
   plugins: [
     new AutoUnpackNativesPlugin({}),
