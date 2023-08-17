@@ -58,6 +58,7 @@
   },
   "dependencies": {
     "cross-env": "^7.0.3",
-    "electron-squirrel-startup": "^1.0.0"
+    "electron-squirrel-startup": "^1.0.0",
+    "electron-webpack": "^2.8.2"
   }
 }

@@ -14,6 +14,6 @@ export const mainConfig: Configuration = {
   },
   resolve: {
     extensions: ['.js', '.ts', '.jsx', '.tsx', '.css', '.json'],
-    modules: ['node_modules', '../../node_modules']
+    modules: ['node_modules', '../../node_modules'],
   },
 };
