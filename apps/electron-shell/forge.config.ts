@@ -12,20 +12,25 @@ import { rendererConfig } from './webpack.renderer.config';
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
-    all: true,
   },
   rebuildConfig: {},
   makers: [
-    new MakerZIP({},['darwin']),
-    new MakerRpm({}),
-    {
-      name: '@electron-forge/maker-deb',
-      config: {
-        options: {
-          arch: 'armv7l'
-        }
-      }
-    }
+    new MakerZIP({}),
+    // new MakerRpm({}),
+    // {
+    //   name: '@electron-forge/maker-deb',
+    //   config: {
+    //     options: {
+    //       arch: 'armv7l'
+    //     }
+    //   }
+    // },
+    // {
+    //   name: '@electron-forge/maker-zip',
+    //   config: {
+        
+    //   }
+    // }
   ],
   plugins: [
     new AutoUnpackNativesPlugin({}),
