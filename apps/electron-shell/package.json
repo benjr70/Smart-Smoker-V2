@@ -19,6 +19,7 @@
   },
   "scripts": {
     "start": "electron-forge start",
+    "start:prod": "npx electron .",
     "package": "cross-env electron-forge package -- --arch=armv7l",
     "make": "electron-forge make",
     "make:Linux": "cross-env electron-forge make -- --platform=linux --arch=armv7l ",
