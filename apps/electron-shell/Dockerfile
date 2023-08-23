@@ -7,6 +7,6 @@ COPY apps/electron-shell/dist app/electron-shell-linux-armv7l/dist
 COPY . /app
 COPY apps/electron-shell/package.json app/package.json
 # RUN chmod +x ./electron-shell-linux-armv7l
-RUN npm install
+# RUN npm install
 
 CMD ["npm", "run", "start:prod"]
