@@ -85,7 +85,7 @@ jobs:
       - name: Build and push Electron Shell
         uses: docker/build-push-action@v3
         with:
-          platforms: linux/arm/v7
+          # platforms: linux/arm/v7
           context: .
           file: apps/electron-shell/Dockerfile
           push: true
