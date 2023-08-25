@@ -5,4 +5,4 @@ RUN mkdir -p /usr/local/smoker/emerald-shell-linux-armv7l
 
 COPY apps/smoker/out/smoker-electron-build/smoker-shell-linux-armv7l /usr/local/smoker/smoker-shell-linux-armv7l
 WORKDIR /usr/local/smoker/smoker-shell-linux-armv7l
-CMD [ "./smoker-shell" ] 
+CMD [ "./smoker-shell --no-sandbox" ] 
