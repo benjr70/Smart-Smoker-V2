@@ -84,6 +84,7 @@ jobs:
         with:
           platforms: linux/arm/v7
           context: .
+          no-cache: true
           file: apps/smoker/shell.dockerfile
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:electron-shell
