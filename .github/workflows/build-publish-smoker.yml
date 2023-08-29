@@ -22,6 +22,11 @@ jobs:
   build:
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - linux/arm/v7
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
@@ -80,7 +85,7 @@ jobs:
         run: npm run forgeLinux64:thin --prefix apps/smoker
 
       - name: Build and push Electron Shell
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v4
         with:
           platforms: linux/arm/v7
           context: .
