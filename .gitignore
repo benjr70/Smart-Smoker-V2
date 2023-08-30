@@ -80,6 +80,7 @@ typings/
 # Nuxt.js build / generate output
 .nuxt
 dist
+out
 
 # Gatsby files
 .cache/
@@ -103,3 +104,5 @@ dist
 .tern-port
 
 .vscode
+
+.webpack
