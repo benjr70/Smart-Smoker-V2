@@ -15,6 +15,8 @@ const createWindow = (): void => {
   const mainWindow = new BrowserWindow({
     height: 400,
     width: 800,
+    frame: false,
+    fullscreen: true,
     webPreferences: {
       sandbox: false,
       preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
