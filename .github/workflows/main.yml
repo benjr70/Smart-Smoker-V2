@@ -1,6 +1,6 @@
 # This is a basic workflow to help you get started with Actions
 
-name: Build and Publish
+name: Build and Publish Cloud
 
 # Controls when the workflow will run
 on:
@@ -58,17 +58,6 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:frontend
       
-      - name: Smoker build
-        run: npm run build:prod --prefix apps/smoker
-    
-      - name: Build and push Smoker
-        uses: docker/build-push-action@v3
-        with:
-          platforms: linux/arm/v7
-          context: .
-          file: apps/smoker/Dockerfile
-          push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:smoker
 
       - name: Build and push Backend
         uses: docker/build-push-action@v3
@@ -79,14 +68,7 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:backend 
 
-      - name: Build and push Device Service
-        uses: docker/build-push-action@v3
-        with:
-          platforms: linux/arm/v7
-          context: .
-          file: apps/device-service/Dockerfile
-          push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:device-service
+
 
   Deploy:
       needs: build
