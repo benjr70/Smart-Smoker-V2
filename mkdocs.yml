@@ -43,6 +43,7 @@ nav:
     - Documentation: Documentation.md
     - CIDI: cidi.md
     - Hardware: Hardware/index.md
+    - Pi Software: piSoftware.md
   - Apps:
     - Frontend:
       - Frontend/index.md
