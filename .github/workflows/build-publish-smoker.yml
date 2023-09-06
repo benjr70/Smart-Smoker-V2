@@ -63,6 +63,8 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:smoker
 
+      - name: Device Service Build
+        run: npm run build --prefix apps/device-service
 
       - name: Build and push Device Service
         uses: docker/build-push-action@v3
