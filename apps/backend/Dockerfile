@@ -20,7 +20,7 @@
  
   COPY apps/backend/dist apps/backend/dist
   COPY apps/backend/package.json apps/backend/package.json
-  COPY apps/backend/node_modules apps/backend/node_modules
+  # COPY apps/backend/node_modules apps/backend/node_modules
 
   WORKDIR /apps/backend
   ENV NODE_ENV=prod

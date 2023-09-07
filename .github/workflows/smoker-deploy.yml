@@ -14,10 +14,10 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: docker pull
-        run: docker compose -f smoker.docker-compose.yml pull
+        run: sudo docker compose -f smoker.docker-compose.yml pull
 
       - name: docker build
-        run: docker compose -f smoker.docker-compose.yml --pull build
+        run: sudo docker compose -f smoker.docker-compose.yml --pull build
 
       - name: docker compose down
         run: sudo docker compose -f smoker.docker-compose.yml down
