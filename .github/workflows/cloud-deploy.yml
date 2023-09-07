@@ -26,7 +26,7 @@ jobs:
         run: sudo systemctl stop tailscaled
 
       - name: docker compose up
-        run: sudo docker compose up -f cloud.docker-compose.yml -d --force-recreate 
+        run: sudo docker compose -f cloud.docker-compose.yml -d --force-recreate up
 
       - name: start tailscale
         run: sudo systemctl start tailscaled

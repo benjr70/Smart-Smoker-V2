@@ -28,7 +28,7 @@ services:
     devices:
     - /dev/snd
     environment:
-      DISPLAY: unix$DISPLAY
+      DISPLAY: "unix$DISPLAY"
     image: /dev/snd
     stdin_open: true
     tty: true
