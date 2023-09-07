@@ -23,12 +23,23 @@ services:
 
   electronShell:
     container_name: electron_shell
-    network_mode: host
-    volumes:
-        - '/tmp/.X11-unix:/tmp/.X11-unix'
-        - '`pwd`/src:/app/src'
-    environment:
-        - DISPLAY=unix$DISPLAY
+    command:
+    - benjr70/smart_smoker:electron-shell
     devices:
-        - /dev/snd
-    image: 'benjr70/smart_smoker:electron-shell'
+    - /dev/snd
+    environment:
+      DISPLAY: unix$DISPLAY
+    image: /dev/snd
+    stdin_open: true
+    tty: true
+    volumes:
+    - /tmp/.X11-unix:/tmp/.X11-unix
+    # network_mode: host
+    # volumes:
+    #     - '/tmp/.X11-unix:/tmp/.X11-unix'
+    #     - '`pwd`/src:/app/src'
+    # environment:
+    #     - DISPLAY=unix$DISPLAY
+    # devices:
+    #     - /dev/snd
+    # image: 'benjr70/smart_smoker:electron-shell'
