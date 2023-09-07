@@ -9,7 +9,4 @@ RUN chmod +x smoker-shell
 CMD [ "./smoker-shell", "--no-sandbox" ]
 
 
-
-# sudo xhost local:root && sudo docker run --net=host -v /tmp/.X11-unix:/tmp/.X11-unix -e DISPLAY=unix$DISPLAY -v`pwd`/src:/app/src --rm -it --device /dev/snd benjr70/smart_smoker:electron-shell /bin/bash
-
-# xhost local:root && docker run -it -v /tmp/.X11-unix:/tmp/.X11-unix -e DISPLAY=unix$DISPLAY --device /dev/snd shebson/rpi-electron
+# sudo xhost local:root && sudo docker run --net=host -v /tmp/.X11-unix:/tmp/.X11-unix -e DISPLAY=unix$DISPLAY -v`pwd`/src:/app/src --rm -it --device /dev/snd benjr70/smart_smoker:electron-shell

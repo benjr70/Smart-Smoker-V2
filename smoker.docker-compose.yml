@@ -1,0 +1,34 @@
+version: '3.1'
+
+services:  
+  deviceService:
+    container_name: device_service
+    privileged: true
+    devices:
+        - /dev/ttyUSB0
+    ports:
+        - '3000:3000'
+    network_mode: host
+    volumes:
+        - '/:/host'
+        - '/var/run/dbus:/var/run/dbus'
+    image: 'benjr70/smart_smoker:device-serviceTest'
+
+  frontend:
+    container_name: frontend_smoker
+    restart: always
+    image: benjr70/smart_smoker:smoker
+    ports:
+      - 8080:8080
+
+  electronShell:
+    container_name: electron_shell
+    network_mode: host
+    volumes:
+        - '/tmp/.X11-unix:/tmp/.X11-unix'
+        - '`pwd`/src:/app/src'
+    environment:
+        - DISPLAY=unix$DISPLAY
+    devices:
+        - /dev/snd
+    image: 'benjr70/smart_smoker:electron-shell'

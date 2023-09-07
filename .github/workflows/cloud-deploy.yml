@@ -1,0 +1,32 @@
+# This is a basic workflow to help you get started with Actions
+name: Cloud Deploy
+
+on:
+  workflow_call:
+
+jobs:
+  deploy: 
+    runs-on: SmokeCloud
+        # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - run: sudo chmod -R 777 ./
+      - uses: actions/checkout@v3
+
+      - name: docker pull
+        run: docker compose -f cloud.docker-compose.yml pull
+
+      - name: docker build
+        run: docker compose -f cloud.docker-compose.yml build
+
+      - name: docker compose down
+        run: sudo docker compose -f cloud.docker-compose.yml down
+
+      - name: kill tailscale
+        run: sudo systemctl stop tailscaled
+
+      - name: docker compose up
+        run: sudo docker compose up -f cloud.docker-compose.yml -d --force-recreate 
+
+      - name: start tailscale
+        run: sudo systemctl start tailscaled

@@ -6,7 +6,12 @@ name: Build and Publish Smoker
 on:
   # Triggers the workflow on push or pull request events but only for the master branch
   push:
-    branches: [ master ]
+    branches: [ master, feature/SS2-107-smoker-deployment ]
+  pull_request:
+    branches:
+      - "main" 
+    paths:
+      - ".github/workflows/build-publish-smoker.yaml"
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -88,6 +93,6 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:electron-shell
 
-  # Deploy:
-  #     needs: build
-  #     uses: benjr70/Smart-Smoker-V2/.github/workflows/deploy.yml@master 
+  Deploy:
+      needs: build
+      uses: benjr70/Smart-Smoker-V2/.github/workflows/smoker-deploy.yml@master 
