@@ -75,4 +75,4 @@ jobs:
 
   Deploy:
       needs: build
-      uses: benjr70/Smart-Smoker-V2/.github/workflows/cloud-deploy.yml@master 
+      uses: benjr70/Smart-Smoker-V2/.github/workflows/cloud-deploy.yml@feature/SS2-107-smoker-deployment 
