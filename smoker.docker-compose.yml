@@ -21,14 +21,14 @@ services:
     ports:
       - 8080:8080
 
-  electronShell:
-    container_name: electron_shell
-    network_mode: host
-    volumes:
-        - '/tmp/.X11-unix:/tmp/.X11-unix'
-        - '$(pwd)/src:/app/src'
-    environment:
-        - DISPLAY=unix$DISPLAY
-    devices:
-        - /dev/snd
-    image: 'benjr70/smart_smoker:electron-shell'
+#   electronShell:
+#     container_name: electron_shell
+#     network_mode: host
+#     volumes:
+#         - '/tmp/.X11-unix:/tmp/.X11-unix'
+#         - '$(pwd)/src:/app/src'
+#     environment:
+#         - DISPLAY=unix$DISPLAY
+#     devices:
+#         - /dev/snd
+#     image: 'benjr70/smart_smoker:electron-shell'
