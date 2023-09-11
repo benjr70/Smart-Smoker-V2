@@ -3,6 +3,7 @@ version: '3.1'
 services:  
   deviceService:
     container_name: device_service
+    restart: always
     privileged: true
     devices:
         - /dev/ttyUSB0
@@ -23,6 +24,7 @@ services:
 
   electronShell:
     container_name: electron_shell
+    restart: always
     network_mode: host
     volumes:
         - '/tmp/.X11-unix:/tmp/.X11-unix'
