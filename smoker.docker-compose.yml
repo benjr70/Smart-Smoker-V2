@@ -12,7 +12,7 @@ services:
     volumes:
         - '/:/host'
         - '/var/run/dbus:/var/run/dbus'
-    image: 'benjr70/smart_smoker:device-serviceTest'
+    image: 'benjr70/smart_smoker:device-service'
 
   frontend:
     container_name: frontend_smoker
@@ -21,14 +21,14 @@ services:
     ports:
       - 8080:8080
 
-#   electronShell:
-#     container_name: electron_shell
-#     network_mode: host
-#     volumes:
-#         - '/tmp/.X11-unix:/tmp/.X11-unix'
-#         - '$(pwd)/src:/app/src'
-#     environment:
-#         - DISPLAY=unix$DISPLAY
-#     devices:
-#         - /dev/snd
-#     image: 'benjr70/smart_smoker:electron-shell'
+  electronShell:
+    container_name: electron_shell
+    network_mode: host
+    volumes:
+        - '/tmp/.X11-unix:/tmp/.X11-unix'
+        - './src:/app/src'
+    environment:
+        - DISPLAY=unix:0
+    devices:
+        - /dev/snd
+    image: 'benjr70/smart_smoker:electron-shell'
