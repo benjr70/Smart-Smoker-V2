@@ -24,7 +24,6 @@ services:
 
   electronShell:
     container_name: electron_shell
-    command: sudo xhost local:root
     restart: always
     network_mode: host
     volumes:
