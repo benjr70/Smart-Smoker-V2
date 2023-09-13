@@ -6,7 +6,7 @@ name: Build and Publish Cloud
 on:
   # Triggers the workflow on push or pull request events but only for the master branch
   push:
-    branches: [ master, feature/SS2-107-smoker-deployment ]
+    branches: [ master ]
   pull_request:
     branches:
       - "main" 
