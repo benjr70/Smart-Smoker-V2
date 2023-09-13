@@ -25,7 +25,9 @@ const createWindow = (): void => {
 
   // and load the index.html of the app.
   mainWindow.loadURL('http://localhost:8080');
-
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+  })
   // Open the DevTools.
   // mainWindow.webContents.openDevTools();
 };
