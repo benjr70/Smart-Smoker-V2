@@ -19,7 +19,7 @@ on:
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
   # This workflow contains a single job called "build"
-  build:
+  SetUp:
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
     strategy:
@@ -55,7 +55,18 @@ jobs:
 
       - name: NPM Bootstrap
         run: npm run bootstrap
+        
+  buildSmoker:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - linux/arm/v7
 
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
       - name: Smoker build
         run: npm run build:prod --prefix apps/smoker
 
@@ -67,6 +78,18 @@ jobs:
           file: apps/smoker/Dockerfile
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:smoker
+
+  buildDeviceService:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - linux/arm/v7
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
 
       - name: Device Service Build
         run: npm run build --prefix apps/device-service
@@ -80,6 +103,18 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:device-service
 
+
+  buildElectronShell:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - linux/arm/v7
+          
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
 
       - name: electron-shell make
         run: npm run forgeLinux64:thin --prefix apps/smoker
