@@ -4,66 +4,18 @@ name: Build and Publish Smoker
 
 # Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the master branch
-  push:
-    branches: [ master, feature/SS2-107-smoker-deployment ]
-  pull_request:
-    branches:
-      - "main" 
-    paths:
-      - ".github/workflows/build-publish-smoker.yml"
-
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
+  workflow_call:
+    secrets:
+      DOCKERHUB_USERNAME:
+        required: true
+      DOCKERHUB_TOKEN:
+        required: true
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
   # This workflow contains a single job called "build"
-  SetUp:
-    # The type of runner that the job will run on
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        platform:
-          - linux/arm/v7
-
-    # Steps represent a sequence of tasks that will be executed as part of the job
-    steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - run: sudo chmod -R 777 ./
-
-      - name: Git Checkout
-        uses: actions/checkout@v3
-
-      - name: Setup Node
-        uses: actions/setup-node@v2
-        with:
-          node-version: '16.15'
-
-      - name: Use npm 8
-        run: npm i -g npm@8
-
-      - name: Cache Node Modules
-        uses: actions/cache@v2
-        env:
-          cache-name: cache-node-modules
-        with:
-          path: |
-            node_modules
-            */*/node_modules
-          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-build-${{ env.cache-name }}-
-            ${{ runner.os }}-build-
-            ${{ runner.os }}-
-
-      - name: NPM Bootstrap
-        run: npm run bootstrap
-        
   buildSmoker:
     # The type of runner that the job will run on
-    needs: SetUp
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -73,7 +25,6 @@ jobs:
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-
       - name: Git Checkout
         uses: actions/checkout@v3
 
@@ -121,7 +72,6 @@ jobs:
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:smoker
 
   buildDeviceService:
-    needs: SetUp
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
     strategy:
@@ -182,7 +132,6 @@ jobs:
 
 
   buildElectronShell:
-    needs: SetUp
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
     strategy:
@@ -241,5 +190,5 @@ jobs:
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:electron-shell
 
   Deploy:
-      needs: [SetUp, buildSmoker, buildDeviceService, buildElectronShell]
+      needs: [buildSmoker, buildDeviceService, buildElectronShell]
       uses: benjr70/Smart-Smoker-V2/.github/workflows/smoker-deploy.yml@feature/SS2-107-smoker-deployment 
