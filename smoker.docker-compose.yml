@@ -21,13 +21,21 @@ services:
     image: benjr70/smart_smoker:smoker
     ports:
       - 8080:8080
+    healthcheck:
+        test: ["CMD", "curl", "-f", "http://localhost:8080"]
+        interval: 1m30s
+        timeout: 10s
+        retries: 3
+        start_period: 40s
+        start_interval: 5s
 
   electronShell:
     container_name: electron_shell
     restart: always
     network_mode: host
     depends_on: 
-        - frontend
+        frontend:
+            condition: service_healthy
     volumes:
         - '/tmp/.X11-unix:/tmp/.X11-unix'
         - './src:/app/src'
