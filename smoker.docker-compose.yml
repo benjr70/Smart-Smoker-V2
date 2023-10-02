@@ -26,9 +26,7 @@ services:
     container_name: electron_shell
     restart: always
     network_mode: host
-    depends_on: 
-        frontend:
-            condition: service_completed_successfully
+    depends_on: frontend
     volumes:
         - '/tmp/.X11-unix:/tmp/.X11-unix'
         - './src:/app/src'
