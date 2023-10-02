@@ -22,15 +22,8 @@ jobs:
       - name: docker compose down
         run: sudo docker compose -f smoker.docker-compose.yml down
 
-      # - name: kill tailscale
-      #   run: sudo systemctl stop tailscaled
-
-
       - name: docker compose up
         run: sudo docker compose -f smoker.docker-compose.yml up -d
-
-      # - name: start tailscale
-      #   run: sudo systemctl start tailscaled
 
       - name: docker compose remove old containers
         run: sudo docker system prune --force
