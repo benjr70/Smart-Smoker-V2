@@ -23,21 +23,9 @@ const createWindow = (): void => {
     },
   });
 
-  const splash = new BrowserWindow({
-    width: 500, 
-    height: 300, 
-    transparent: true, 
-    frame: false, 
-    alwaysOnTop: true 
-});
-
-  splash.loadFile('splash.html');
-  splash.center();
-
   // and load the index.html of the app.
   mainWindow.loadURL('http://localhost:8080');
   mainWindow.once('ready-to-show', () => {
-    splash.close();
     mainWindow.show();
   })
   // Open the DevTools.
