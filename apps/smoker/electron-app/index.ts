@@ -23,7 +23,8 @@ const createWindow = (): void => {
     },
   });
 
-  mainWindow.loadFile('index.html')
+  mainWindow.loadFile('electron-app/index.html')
+  mainWindow.show();
 
   setTimeout(function() {
     mainWindow.loadURL('http://localhost:8080');
