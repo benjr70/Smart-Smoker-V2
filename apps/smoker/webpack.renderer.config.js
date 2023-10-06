@@ -7,9 +7,9 @@ const thickElectronPlugins = [
     patterns: [
       {
         context: path.resolve(__dirname, 'cra-forge'),
-        globOptions: {
-          ignore: ['**/index.html'],
-        },
+        // globOptions: {
+        //   ignore: ['**/index.html'],
+        // },
         from: './**',
         to: path.resolve(__dirname, '.webpack/renderer/main_window'),
       },

@@ -23,15 +23,23 @@ const createWindow = (): void => {
     },
   });
 
-  mainWindow.loadFile('../../electron-app/index.html')
+  mainWindow.loadFile('index.html')
   mainWindow.show();
 
-  setTimeout(function() {
+  mainWindow.loadURL('http://localhost:8080');
+
+  mainWindow.webContents.on('did-fail-load', () => {
     mainWindow.loadURL('http://localhost:8080');
-    mainWindow.once('ready-to-show', () => {
-      mainWindow.show();
-    })
-  }, 5000)
+  })
+
+
+
+  // setTimeout(function() {
+  //   mainWindow.loadURL('http://localhost:8080');
+  //   mainWindow.once('ready-to-show', () => {
+  //     mainWindow.show();
+  //   })
+  // }, 5000)
 
   // and load the index.html of the app.
   // Open the DevTools.
