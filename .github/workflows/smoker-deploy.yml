@@ -12,18 +12,10 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - run: sudo chmod -R 777 ./
       - uses: actions/checkout@v3
-
-      - name: docker pull
-        run: sudo docker compose -f smoker.docker-compose.yml pull
-
-      - name: docker build
-        run: sudo docker compose -f smoker.docker-compose.yml build --pull
-
-      - name: docker compose down
-        run: sudo docker compose -f smoker.docker-compose.yml down
-
+      
       - name: docker compose up
-        run: sudo docker compose -f smoker.docker-compose.yml up -d
+        run: sudo docker compose -f smoker.docker-compose.yml up --build -d
 
       - name: docker compose remove old containers
-        run: sudo docker system prune --force
+        run: sudo docker compose -f smoker.docker-compose.yml rm -f 
+      

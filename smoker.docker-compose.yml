@@ -3,6 +3,7 @@ version: '3.1'
 services:  
   deviceService:
     container_name: device_service
+    pull_policy: always
     restart: always
     privileged: true
     devices:
@@ -17,6 +18,7 @@ services:
 
   frontend:
     container_name: frontend_smoker
+    pull_policy: always
     restart: always
     image: benjr70/smart_smoker:smoker
     ports:
@@ -31,6 +33,7 @@ services:
 
   electronShell:
     container_name: electron_shell
+    pull_policy: always
     restart: always
     network_mode: host
     depends_on: 

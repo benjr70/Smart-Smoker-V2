@@ -32,15 +32,6 @@ const createWindow = (): void => {
     mainWindow.loadURL('http://localhost:8080');
   })
 
-
-
-  // setTimeout(function() {
-  //   mainWindow.loadURL('http://localhost:8080');
-  //   mainWindow.once('ready-to-show', () => {
-  //     mainWindow.show();
-  //   })
-  // }, 5000)
-
   // and load the index.html of the app.
   // Open the DevTools.
   // mainWindow.webContents.openDevTools();
