@@ -47,3 +47,14 @@ services:
     devices:
         - /dev/snd
     image: 'benjr70/smart_smoker:electron-shell'
+
+  watchtower:
+    container_name: watchtower
+    restart: always
+    environment: 
+        - REPO_USER=${REPO_USER}
+        - REPO_PASS=${REPO_PASS}
+    volumes:
+    - /var/run/docker.sock:/var/run/docker.sock
+    command: --interval 30
+    image: containrrr/watchtower:armhf-latest
