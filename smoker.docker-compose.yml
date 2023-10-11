@@ -1,0 +1,60 @@
+version: '3.1'
+
+services:  
+  deviceService:
+    container_name: device_service
+    pull_policy: always
+    restart: always
+    privileged: true
+    devices:
+        - /dev/ttyUSB0
+    ports:
+        - '3000:3000'
+    network_mode: host
+    volumes:
+        - '/:/host'
+        - '/var/run/dbus:/var/run/dbus'
+    image: 'benjr70/smart_smoker:device-service'
+
+  frontend:
+    container_name: frontend_smoker
+    pull_policy: always
+    restart: always
+    image: benjr70/smart_smoker:smoker
+    ports:
+      - 8080:8080
+    healthcheck:
+        test: ["CMD", "curl", "-f", "http://localhost:8080"]
+        interval: 1m30s
+        timeout: 10s
+        retries: 3
+        start_period: 40s
+        start_interval: 5s
+
+  electronShell:
+    container_name: electron_shell
+    pull_policy: always
+    restart: always
+    network_mode: host
+    depends_on: 
+        frontend:
+            condition: service_healthy
+    volumes:
+        - '/tmp/.X11-unix:/tmp/.X11-unix'
+        - './src:/app/src'
+    environment:
+        - DISPLAY=unix:0
+    devices:
+        - /dev/snd
+    image: 'benjr70/smart_smoker:electron-shell'
+
+  watchtower:
+    container_name: watchtower
+    restart: always
+    environment: 
+        - REPO_USER=${REPO_USER}
+        - REPO_PASS=${REPO_PASS}
+    volumes:
+    - /var/run/docker.sock:/var/run/docker.sock
+    command: --interval 30
+    image: containrrr/watchtower:armhf-latest

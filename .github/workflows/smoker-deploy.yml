@@ -1,0 +1,24 @@
+# This is a basic workflow to help you get started with Actions
+name: Smoker Deploy
+
+on: workflow_dispatch
+
+# uncomment this to call on merge
+# on:
+#   workflow_call:
+
+jobs:
+  deploy: 
+    runs-on: Smoker
+        # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - run: sudo chmod -R 777 ./
+      - uses: actions/checkout@v3
+      
+      - name: docker compose up
+        run: sudo REPO_USER=${{ secrets.DOCKERHUB_USERNAME }} REPO_PASS=${{ secrets.DOCKERHUB_TOKEN }} docker compose -f smoker.docker-compose.yml up --build -d 
+
+      - name: docker compose remove old containers
+        run: sudo  docker compose -f smoker.docker-compose.yml rm -f 
+      

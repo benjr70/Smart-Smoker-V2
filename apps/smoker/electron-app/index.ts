@@ -23,9 +23,16 @@ const createWindow = (): void => {
     },
   });
 
-  // and load the index.html of the app.
+  mainWindow.loadFile('index.html')
+  mainWindow.show();
+
   mainWindow.loadURL('http://localhost:8080');
 
+  mainWindow.webContents.on('did-fail-load', () => {
+    mainWindow.loadURL('http://localhost:8080');
+  })
+
+  // and load the index.html of the app.
   // Open the DevTools.
   // mainWindow.webContents.openDevTools();
 };

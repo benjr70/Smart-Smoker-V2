@@ -2,8 +2,6 @@
   FROM node:16.15.1
   RUN apt-get update --no-install-recommends && apt-get install network-manager -y
 
-  ENV PORT 3001
-
   COPY package*.json ./
   COPY node_modules /node_modules
  
