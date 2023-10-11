@@ -22,6 +22,14 @@
 * `docker run --privileged  --device=/dev/ttyUSB0 -p 3000:3000 benjr70/smart_smoker:device-serviceTest`
 
 
+### Container deployment
+
+Containers for the smoker is handled by watchtower. When a new container is push to docker hub watchertower will see that pull is down and replace the only one on the smoker. The delpoyment workflow is set for a manually trigger. This wil have to be used when there is an update to `smoker.docker-compose.yml` or `smoker-deploy.yml` 
+
+Watchtower settings can be seen in the `smoker.docker-compose.yml` 
+
+Containers for the cloud is still deploy via github action workflows
+
 ### Network
 
 Using Tailscale to manage my network, this provides a private internal network for all devices. 
