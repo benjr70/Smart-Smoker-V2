@@ -24,7 +24,7 @@ let socket: any;
 let batch: State[] = [];
 let batchCount = 0;
 export class Home extends React.Component<{}, {tempState: State, activeScreen: number, connection: boolean}> {
-
+ // comment to test container update
     constructor(props: any) {
         super(props);
         this.state = { tempState: {

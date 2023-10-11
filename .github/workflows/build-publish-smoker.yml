@@ -189,6 +189,6 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:electron-shell
 
-  Deploy:
-      needs: [buildSmoker, buildDeviceService, buildElectronShell]
-      uses: benjr70/Smart-Smoker-V2/.github/workflows/smoker-deploy.yml@feature/SS2-107-smoker-deployment 
+  # Deploy:
+  #     needs: [buildSmoker, buildDeviceService, buildElectronShell]
+  #     uses: benjr70/Smart-Smoker-V2/.github/workflows/smoker-deploy.yml@feature/SS2-107-smoker-deployment 
