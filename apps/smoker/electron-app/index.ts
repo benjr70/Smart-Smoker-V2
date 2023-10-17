@@ -23,8 +23,7 @@ const createWindow = (): void => {
     },
   });
 
-  mainWindow.loadFile('index.html')
-  mainWindow.show();
+  mainWindow.setKiosk(true);
 
   mainWindow.loadURL('http://localhost:8080');
 
