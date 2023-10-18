@@ -64,3 +64,16 @@ This is because tailscale would not let go of the ports I need so i had to kill 
 * [Https](https://tailscale.com/kb/1153/enabling-https/)
 
 
+### Portainer Container Monitoring
+
+using portainer to host the container monitoring dashboard.<br>
+To install on cloud pi just run the following docker run cmd <br>
+`docker run -d -p 10000:9000 --name portainer --restart always -v /var/run/docker.sock:/var/run/docker.sock portainer/portainer-ce`<br>
+
+Once this is done you can connect to it via the smokerCloudIp:10000. using port 10000 because it was the last funnel port in tailscale. <br>
+also had to set that up just like the other ports.
+
+To set up the smoker pi follow the instructions [here](https://docs.portainer.io/admin/environments/add/docker/agent) to set up a portainer agent environment.
+
+I did not add this portainer Container to the deployment process as it should work as a separate entity to the smoker app. also it clears all setting when you reset that container.
+
