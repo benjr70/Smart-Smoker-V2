@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import {
     MessageBody,
     SubscribeMessage,
@@ -31,6 +31,7 @@ export class EventsGateway {
 
   @SubscribeMessage('identity')
   async identity(@MessageBody() data: number): Promise<number> {
+    Logger.log(`identity: ${data}`, 'Websocket')
     return data;
   }
 
@@ -47,6 +48,7 @@ export class EventsGateway {
             ChamberTemp: tempObj.chamberTemp,
             date: tempObj.date,
           }
+          this.handleTempLogging(tempDto);
           this.tempsService.saveNewTemp(tempDto);
         }
       })
@@ -54,18 +56,33 @@ export class EventsGateway {
     }
   }
 
+  handleTempLogging(tempDto: TempDto){
+    let meatTemp = parseFloat(tempDto.MeatTemp);
+    let chamberTemp = parseFloat(tempDto.ChamberTemp)
+    if( meatTemp< -30 || chamberTemp  < -30 ){
+      Logger.log(`temps too cold: ${tempDto}`, 'Websocket');
+    } else if (isNaN(meatTemp) || isNaN(chamberTemp)) {
+      Logger.log(`temps NAN: ${tempDto}`, 'Websocket');
+    } else if(  meatTemp > 500 || chamberTemp > 500){
+      Logger.log(`temps too hot: ${tempDto}`, 'Websocket');
+    }
+  }
+
   @SubscribeMessage('smokeUpdate')
   handleSmokeUpdate(@MessageBody() data: string) {
+    Logger.log(`Clearing smoke: ${data}`, 'Websocket')
     this.server.emit('smokeUpdate', data);
   }
 
   @SubscribeMessage('clear')
   handleClear(@MessageBody() data: string) {
+    Logger.log(`Clearing smoke ${data}`, 'Websocket')
     this.server.emit('clear', data);
   }
 
   @SubscribeMessage('refresh')
   handleRefresh(){
+    Logger.log(`refresh smoke`, 'Websocket')
     this.server.emit('refresh');
   }
 }
