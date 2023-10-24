@@ -60,11 +60,11 @@ export class EventsGateway {
     let meatTemp = parseFloat(tempDto.MeatTemp);
     let chamberTemp = parseFloat(tempDto.ChamberTemp)
     if( meatTemp< -30 || chamberTemp  < -30 ){
-      Logger.log(`temps too cold: ${tempDto}`, 'Websocket');
+      Logger.warn(`temps too cold: ${tempDto}`, 'Websocket');
     } else if (isNaN(meatTemp) || isNaN(chamberTemp)) {
-      Logger.log(`temps NAN: ${tempDto}`, 'Websocket');
+      Logger.error(`temps NAN: ${tempDto}`, 'Websocket');
     } else if(  meatTemp > 500 || chamberTemp > 500){
-      Logger.log(`temps too hot: ${tempDto}`, 'Websocket');
+      Logger.warn(`temps too hot: ${tempDto}`, 'Websocket');
     }
   }
 
