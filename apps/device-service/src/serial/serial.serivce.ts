@@ -1,7 +1,6 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { Subject } from "rxjs";
 import { ReadlineParser, SerialPort } from "serialport";
-import { EventsGateway } from "src/websocket/events.gateway";
 
 
 @Injectable()
@@ -20,6 +19,7 @@ export class SerialService {
         this.port.pipe(parser);
         parser.on('data', (data) => {
             const stringData = data.toString('utf-8');
+            this.handleTempLogging(stringData);
             this.dataSubject.next(stringData);
         });
     }
@@ -28,4 +28,18 @@ export class SerialService {
     onData(): Subject<string> {
         return this.dataSubject;
     }
+
+
+    handleTempLogging(tempString: string){
+        const tempObj = JSON.parse(tempString);
+        let meatTemp = parseFloat(tempObj.meatTemp);
+        let chamberTemp = parseFloat(tempObj.chamberTemp)
+        if( meatTemp< -30 || chamberTemp  < -30 ){
+          Logger.warn(`temps too cold: ${tempObj}`, 'Websocket');
+        } else if (isNaN(meatTemp) || isNaN(chamberTemp)) {
+          Logger.error(`temps NAN: ${tempObj}`, 'Websocket');
+        } else if(  meatTemp > 500 || chamberTemp > 500){
+          Logger.warn(`temps too hot: ${tempObj}`, 'Websocket');
+        }
+      }
 }

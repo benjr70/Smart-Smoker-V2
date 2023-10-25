@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -13,6 +13,7 @@ import { EventsModule } from './websocket/events.module';
 import { ConfigModule } from '@nestjs/config'
 import { RatingsModel } from './ratings/ratings.module';
 import { HistoryModule } from './history/history.module';
+import { LoggerMiddleware } from './logger.middleware';
 
 const ENV = process.env.NODE_ENV.trim();
 @Module({
@@ -33,4 +34,10 @@ const ENV = process.env.NODE_ENV.trim();
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(LoggerMiddleware)
+      .forRoutes({ path: '*', method: RequestMethod.ALL });
+  }
+}
