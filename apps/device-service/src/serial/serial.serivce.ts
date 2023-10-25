@@ -31,15 +31,15 @@ export class SerialService {
 
 
     handleTempLogging(tempString: string){
-        const tempObj = JSON.parse(tempString);
-        let meatTemp = parseFloat(tempObj.meatTemp);
-        let chamberTemp = parseFloat(tempObj.chamberTemp)
-        if( meatTemp< -30 || chamberTemp  < -30 ){
-          Logger.warn(`temps too cold: ${JSON.stringify(tempObj)}`, 'Websocket');
-        } else if (isNaN(meatTemp) || isNaN(chamberTemp)) {
-          Logger.error(`temps NAN: ${JSON.stringify(tempObj)}`, 'Websocket');
-        } else if(  meatTemp > 500 || chamberTemp > 500){
-          Logger.warn(`temps too hot: ${JSON.stringify(tempObj)}`, 'Websocket');
-        }
+      const tempObj = JSON.parse(tempString);
+      let meatTemp = parseFloat(tempObj.Meat);
+      let chamberTemp = parseFloat(tempObj.Chamber)
+      if( meatTemp< -30 || chamberTemp  < -30 ){
+        Logger.warn(`temps too cold: ${JSON.stringify(tempObj)}`, 'Websocket');
+      } else if (isNaN(meatTemp) || isNaN(chamberTemp)) {
+        Logger.error(`temps NAN: ${JSON.stringify(tempObj)}`, 'Websocket');
+      } else if(  meatTemp > 500 || chamberTemp > 500){
+        Logger.warn(`temps too hot: ${JSON.stringify(tempObj)}`, 'Websocket');
       }
+    }
 }
