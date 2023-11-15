@@ -11,7 +11,7 @@ export class SerialService {
 
     constructor(){
          this.port = new SerialPort({
-            path: '/dev/ttyUSB0',
+            path: '/dev/ttyS0',
             baudRate: 9600,
         });
 
