@@ -11,7 +11,7 @@ export class SerialService {
 
     constructor(){
          this.port = new SerialPort({
-            path: '/dev/ttyUSB0',
+            path: '/dev/ttyS0',
             baudRate: 9600,
         });
 
@@ -35,11 +35,11 @@ export class SerialService {
       let meatTemp = parseFloat(tempObj.Meat);
       let chamberTemp = parseFloat(tempObj.Chamber)
       if( meatTemp< -30 || chamberTemp  < -30 ){
-        Logger.warn(`temps too cold: ${JSON.stringify(tempObj)}`, 'Websocket');
+        Logger.warn(`temps too cold: ${JSON.stringify(tempObj)}`, 'SerialService');
       } else if (isNaN(meatTemp) || isNaN(chamberTemp)) {
-        Logger.error(`temps NAN: ${JSON.stringify(tempObj)}`, 'Websocket');
+        Logger.error(`temps NAN: ${JSON.stringify(tempObj)}`, 'SerialService');
       } else if(  meatTemp > 500 || chamberTemp > 500){
-        Logger.warn(`temps too hot: ${JSON.stringify(tempObj)}`, 'Websocket');
+        Logger.warn(`temps too hot: ${JSON.stringify(tempObj)}`, 'SerialService');
       }
     }
 }

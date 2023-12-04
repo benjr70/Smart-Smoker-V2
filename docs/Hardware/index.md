@@ -11,4 +11,8 @@
 
 ### Micro Controller
 
-insert breadboard diagram here
+Breadboard diagram
+
+![BreadBoard Design](../images/breadboardDesign.png)
+
+
