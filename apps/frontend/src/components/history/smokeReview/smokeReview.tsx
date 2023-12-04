@@ -35,6 +35,8 @@ export function SmokeReview(props: smokeReviewProps): JSX.Element {
     let tempInit: TempData[] = [{
         ChamberTemp: 0,
         MeatTemp: 0,
+        Meat2Temp: 0,
+        Meat3Temp: 0,
         date: new Date(),
     }];
     let postSmokeInit: PostSmoke = {

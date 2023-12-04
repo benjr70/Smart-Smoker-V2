@@ -8,7 +8,9 @@ import TempChart, { TempData } from "../../common/components/tempChart";
 import { getCurrentTemps } from "../../../Services/tempsService";
 
 interface State {
-    meatTemp: string;
+    probeTemp1: string;
+    probeTemp2: string;
+    probeTemp3: string;
     chamberTemp: string;
     smoking: boolean;
     notes: string;
@@ -31,7 +33,9 @@ export class SmokeStep extends React.Component<{}, {tempState: State}> {
     constructor(props: any) {
         super(props);
         this.state = { tempState: {
-            meatTemp: '0',
+            probeTemp1: '0',
+            probeTemp2: '0',
+            probeTemp3: '0',
             chamberTemp: '0',
             smoking: false,
             notes: '',
@@ -59,7 +63,9 @@ export class SmokeStep extends React.Component<{}, {tempState: State}> {
             let tempObj = JSON.parse(message);
             let temp = this.state.tempState;
             temp.chamberTemp = tempObj.chamberTemp;
-            temp.meatTemp = tempObj.meatTemp;
+            temp.probeTemp1 = tempObj.probeTemp1;
+            temp.probeTemp2 = tempObj.probeTemp2;
+            temp.probeTemp3 = tempObj.probeTemp3;
             temp.date = tempObj.date;
             this.setState({tempState: temp})
         }))
@@ -116,25 +122,43 @@ export class SmokeStep extends React.Component<{}, {tempState: State}> {
                 <Grid container direction="column" >
                     <Grid container direction="row" justifyContent='space-around' spacing={3}>
                         <Grid item xs={9} className='text' >
-                            Meat Temp
+                            Chamber
                         </Grid>
                         <Grid item className='text' >
-                            {this.state.tempState.meatTemp}
+                            {this.state.tempState.chamberTemp}
                         </Grid>
                     </Grid>
                     <Grid container direction="row" justifyContent='space-around' spacing={3}>
                         <Grid item xs={9} className='text' >
-                            Chamber Temp
+                            Probe 1
                         </Grid>
                         <Grid item className='text' >
-                            {this.state.tempState.chamberTemp}
+                            {this.state.tempState.probeTemp1}
+                        </Grid>
+                    </Grid>
+                    <Grid container direction="row" justifyContent='space-around' spacing={3}>
+                        <Grid item xs={9} className='text' >
+                            Probe 2
+                        </Grid>
+                        <Grid item className='text' >
+                            {this.state.tempState.probeTemp2}
+                        </Grid>
+                    </Grid>
+                    <Grid container direction="row" justifyContent='space-around' spacing={3}>
+                        <Grid item xs={9} className='text' >
+                            Probe 3
+                        </Grid>
+                        <Grid item className='text' >
+                            {this.state.tempState.probeTemp3}
                         </Grid>
                     </Grid>
                 </Grid>
                 <Grid container>
                     <TempChart
                         ChamberTemp={parseFloat(this.state.tempState.chamberTemp)}
-                        MeatTemp={parseFloat(this.state.tempState.meatTemp)}
+                        MeatTemp={parseFloat(this.state.tempState.probeTemp1)}
+                        Meat2Temp={parseFloat(this.state.tempState.probeTemp2)}
+                        Meat3Temp={parseFloat(this.state.tempState.probeTemp3)}
                         date={this.state.tempState.date}
                         width={400}
                         height={150}

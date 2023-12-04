@@ -8,6 +8,12 @@ export class Temp {
     MeatTemp: string;
 
     @Prop()
+    Meat2Temp: string;
+
+    @Prop()
+    Meat3Temp: string;
+
+    @Prop()
     ChamberTemp: string;
 
     @Prop()

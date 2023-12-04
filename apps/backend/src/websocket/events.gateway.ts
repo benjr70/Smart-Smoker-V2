@@ -44,7 +44,9 @@ export class EventsGateway {
         if(state.smoking){
           const tempObj = JSON.parse(data);
           const tempDto: TempDto ={
-            MeatTemp: tempObj.meatTemp,
+            MeatTemp: tempObj.probeTemp1,
+            Meat2Temp: tempObj.probeTemp2,
+            Meat3Temp: tempObj.probeTemp3,
             ChamberTemp: tempObj.chamberTemp,
             date: tempObj.date,
           }
