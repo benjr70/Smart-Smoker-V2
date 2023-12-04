@@ -4,12 +4,16 @@ import * as d3 from 'd3';
  export interface TempData {
   ChamberTemp: number;
   MeatTemp: number;
+  Meat2Temp: number;
+  Meat3Temp: number;
   date: Date;
  }
 
  interface props {
   ChamberTemp: number;
   MeatTemp: number;
+  Meat2Temp: number;
+  Meat3Temp: number;
   date: Date;
   height: number;
   width: number;
@@ -20,7 +24,7 @@ import * as d3 from 'd3';
  function TempChart(props: props) {
     
   const svgRef = useRef() as React.RefObject<SVGSVGElement>;
-  const [data, setData] = useState([{ChamberTemp: props.ChamberTemp, MeatTemp: props.MeatTemp, date: props.date}]);
+  const [data, setData] = useState([{ChamberTemp: props.ChamberTemp, MeatTemp: props.MeatTemp, Meat2Temp: props.Meat2Temp, Meat3Temp: props.Meat3Temp, date: props.date}]);
 
     // set the dimensions and margins of the graph
     const margin = {top: 10, right: 0, bottom: 10, left: 0};
@@ -54,7 +58,19 @@ import * as d3 from 'd3';
       // @ts-ignore
       .x((d) => {return xScale(new Date(d.date).getTime())})
       // @ts-ignore
+      .y((d) => {return yScale(d.MeatTemp2);})
+
+      const generateScaledLine3 = d3.line()
+      // @ts-ignore
+      .x((d) => {return xScale(new Date(d.date).getTime())})
+      // @ts-ignore
       .y((d) => {return yScale(d.MeatTemp);})
+
+      const generateScaledLine4 = d3.line()
+      // @ts-ignore
+      .x((d) => {return xScale(new Date(d.date).getTime())})
+      // @ts-ignore
+      .y((d) => {return yScale(d.MeatTemp3);})
 
   const reDrawGraph =async (data: TempData[]) => {
   
@@ -77,6 +93,24 @@ import * as d3 from 'd3';
       // @ts-ignore
       .attr('d', generateScaledLine2)
 
+      svg.append('path')
+      .data([data])
+      // .join('path')
+      .attr('class', 'line')
+      .attr('fill', 'none')
+      .attr('stroke', 'blue')
+      // @ts-ignore
+      .attr('d', generateScaledLine3)
+
+      svg.append('path')
+      .data([data])
+      // .join('path')
+      .attr('class', 'line')
+      .attr('fill', 'none')
+      .attr('stroke', 'blue')
+      // @ts-ignore
+      .attr('d', generateScaledLine4)
+
 
     svg.selectAll(".xAxis").remove();
     // Add the X Axis
@@ -96,8 +130,8 @@ import * as d3 from 'd3';
   useEffect(() => {
     setData(props.initData);
     if(props.smoking){
-      if(!isNaN(props.ChamberTemp) && props.ChamberTemp != 0 && !isNaN(props.MeatTemp) && props.MeatTemp != 0){
-        data.push({ChamberTemp: props.ChamberTemp, MeatTemp: props.MeatTemp, date: props.date});
+      if(!isNaN(props.ChamberTemp) && props.ChamberTemp != 0 && !isNaN(props.MeatTemp) && props.MeatTemp != 0 && !isNaN(props.Meat2Temp) && props.Meat2Temp != 0 && !isNaN(props.Meat3Temp) && props.Meat3Temp != 0){
+        data.push({ChamberTemp: props.ChamberTemp, MeatTemp: props.MeatTemp, Meat2Temp: props.Meat2Temp, Meat3Temp: props.Meat3Temp, date: props.date});
       }
     }
     reDrawGraph(data);

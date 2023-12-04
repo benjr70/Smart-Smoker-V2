@@ -33,7 +33,7 @@ export class SerialService {
     handleTempLogging(tempString: string){
       const tempObj = JSON.parse(tempString);
       let meatTemp = parseFloat(tempObj.Meat);
-      let chamberTemp = parseFloat(tempObj.Chamber)
+      let chamberTemp = parseFloat(tempObj.Chamber);
       if( meatTemp< -30 || chamberTemp  < -30 ){
         Logger.warn(`temps too cold: ${JSON.stringify(tempObj)}`, 'SerialService');
       } else if (isNaN(meatTemp) || isNaN(chamberTemp)) {

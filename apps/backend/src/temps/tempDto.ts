@@ -6,6 +6,12 @@ export class TempDto {
     MeatTemp: string;
 
     @ApiProperty()
+    Meat2Temp: string;
+
+    @ApiProperty()
+    Meat3Temp: string;
+
+    @ApiProperty()
     ChamberTemp: string;
 
     @ApiProperty()

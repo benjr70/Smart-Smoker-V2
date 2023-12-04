@@ -36,6 +36,8 @@ export function SmokeProfileCard(props: SmokeProfileCardProps): JSX.Element {
                 <TempChart
                     ChamberTemp={props.temps[0].ChamberTemp}
                     MeatTemp={props.temps[0].MeatTemp}
+                    Meat2Temp={props.temps[0].Meat2Temp}
+                    Meat3Temp={props.temps[0].Meat3Temp}
                     date={props.temps[0].date}
                     width={345}
                     height={200}
