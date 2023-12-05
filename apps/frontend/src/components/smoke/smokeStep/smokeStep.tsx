@@ -2,7 +2,7 @@ import React from "react";
 import Grid from '@mui/material/Grid';
 import './smokeStep.style.css'
 import { io } from 'socket.io-client';
-import { Autocomplete, Button, TextField } from "@mui/material";
+import { Autocomplete, Button, Divider, TextField } from "@mui/material";
 import { getCurrentSmokeProfile, getState, setSmokeProfile, smokeProfile, toggleSmoking } from "../../../Services/smokerService";
 import TempChart, { TempData } from "../../common/components/tempChart";
 import { getCurrentTemps } from "../../../Services/tempsService";
@@ -119,48 +119,52 @@ export class SmokeStep extends React.Component<{}, {tempState: State}> {
     render(): React.ReactNode {
         return (
             <Grid container>
-                <Grid container direction="column" >
-                    <Grid container direction="row" justifyContent='space-around' spacing={3}>
-                        <Grid item xs={9} className='text' >
+                <Grid container direction="column" sx={{marginTop: '10px'}}>
+                    <Grid container direction="row" justifyContent='space-around' sx={{margin: '5px'}} color={'#1f4f2d'}>
+                        <Grid item className='text'  >
                             Chamber
                         </Grid>
                         <Grid item className='text' >
                             {this.state.tempState.chamberTemp}
                         </Grid>
                     </Grid>
-                    <Grid container direction="row" justifyContent='space-around' spacing={3}>
-                        <Grid item xs={9} className='text' >
+                    <Divider variant="middle"/>
+                    <Grid container direction="row" justifyContent='space-around' sx={{margin: '5px'}} color={'#2a475e'}>
+                        <Grid item className='text' >
                             Probe 1
                         </Grid>
                         <Grid item className='text' >
                             {this.state.tempState.probeTemp1}
                         </Grid>
                     </Grid>
-                    <Grid container direction="row" justifyContent='space-around' spacing={3}>
-                        <Grid item xs={9} className='text' >
+                    <Divider variant="middle"/>
+                    <Grid container direction="row" justifyContent='space-around' sx={{margin: '5px'}} color={'#118cd8'}>
+                        <Grid item className='text' >
                             Probe 2
                         </Grid>
                         <Grid item className='text' >
                             {this.state.tempState.probeTemp2}
                         </Grid>
                     </Grid>
-                    <Grid container direction="row" justifyContent='space-around' spacing={3}>
-                        <Grid item xs={9} className='text' >
+                    <Divider variant="middle"/>
+                    <Grid container direction="row" justifyContent='space-around' sx={{margin: '5px'}} color={'#5582a7'}>
+                        <Grid item className='text' >
                             Probe 3
                         </Grid>
                         <Grid item className='text' >
                             {this.state.tempState.probeTemp3}
                         </Grid>
                     </Grid>
+                    
                 </Grid>
-                <Grid container>
+                <Grid container justifyContent='center'>
                     <TempChart
                         ChamberTemp={parseFloat(this.state.tempState.chamberTemp)}
                         MeatTemp={parseFloat(this.state.tempState.probeTemp1)}
                         Meat2Temp={parseFloat(this.state.tempState.probeTemp2)}
                         Meat3Temp={parseFloat(this.state.tempState.probeTemp3)}
                         date={this.state.tempState.date}
-                        width={400}
+                        width={405}
                         height={150}
                         smoking={this.state.tempState.smoking}
                         initData={initTemps}></TempChart>

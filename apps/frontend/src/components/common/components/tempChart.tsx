@@ -27,7 +27,7 @@ import * as d3 from 'd3';
   const [data, setData] = useState([{ChamberTemp: props.ChamberTemp, MeatTemp: props.MeatTemp, Meat2Temp: props.Meat2Temp, Meat3Temp: props.Meat3Temp, date: props.date}]);
 
     // set the dimensions and margins of the graph
-    const margin = {top: 10, right: 0, bottom: 10, left: 0};
+    const margin = {top: 10, right: 0, bottom: 10, left: 10};
     const width = props.width - margin.left - margin.right;
     const height = props.height - margin.top - margin.bottom;
 
@@ -40,37 +40,37 @@ import * as d3 from 'd3';
     const xScale = d3.scaleTime()
     // @ts-ignore
       .domain(d3.extent(data, d => new Date(d.date).getTime()))
-      .range([20, width]);
+      .range([30, width]);
 
     const yScale = d3.scaleLinear()
     // @ts-ignore
-      .domain([0,( d3.max(data, d => {return d.ChamberTemp > d.MeatTemp ? d.ChamberTemp : d.MeatTemp}) * 1.15)])
+      .domain([0,( d3.max(data, d => {return Math.max(d.ChamberTemp, d.MeatTemp, d.Meat2Temp, d.Meat3Temp)}) * 1.15)])
       .range([height, 0]);
 
-    const generateScaledLine1 = d3.line()
+    const generateScaledLineChamber = d3.line()
       // @ts-ignore
       .x((d) => {return xScale(new Date(d.date).getTime())})
       // @ts-ignore
       .y((d) => {return yScale(d.ChamberTemp);})
       .curve(d3.curveCardinal)
 
-      const generateScaledLine2 = d3.line()
-      // @ts-ignore
-      .x((d) => {return xScale(new Date(d.date).getTime())})
-      // @ts-ignore
-      .y((d) => {return yScale(d.MeatTemp2);})
-
-      const generateScaledLine3 = d3.line()
+      const generateScaledLineProbe1 = d3.line()
       // @ts-ignore
       .x((d) => {return xScale(new Date(d.date).getTime())})
       // @ts-ignore
       .y((d) => {return yScale(d.MeatTemp);})
 
-      const generateScaledLine4 = d3.line()
+      const generateScaledLineProbe2 = d3.line()
       // @ts-ignore
       .x((d) => {return xScale(new Date(d.date).getTime())})
       // @ts-ignore
-      .y((d) => {return yScale(d.MeatTemp3);})
+      .y((d) => {return yScale(d.Meat2Temp);})
+
+      const generateScaledLineProbe3 = d3.line()
+      // @ts-ignore
+      .x((d) => {return xScale(new Date(d.date).getTime())})
+      // @ts-ignore
+      .y((d) => {return yScale(d.Meat3Temp);})
 
   const reDrawGraph =async (data: TempData[]) => {
   
@@ -79,9 +79,10 @@ import * as d3 from 'd3';
       .join('path')
       .attr('class', 'line')
       .attr('fill', 'none')
-      .attr('stroke', 'black')
+      .attr('stroke', '#1f4f2d')
+      .attr("stroke-width", 1.5)
       // @ts-ignore
-      .attr('d', generateScaledLine1)
+      .attr('d', generateScaledLineChamber)
 
 
       svg.append('path')
@@ -89,27 +90,30 @@ import * as d3 from 'd3';
       // .join('path')
       .attr('class', 'line')
       .attr('fill', 'none')
-      .attr('stroke', 'blue')
+      .attr('stroke', '#2a475e')
+      .attr("stroke-width", 1.5)
       // @ts-ignore
-      .attr('d', generateScaledLine2)
+      .attr('d', generateScaledLineProbe1)
 
       svg.append('path')
       .data([data])
       // .join('path')
       .attr('class', 'line')
       .attr('fill', 'none')
-      .attr('stroke', 'blue')
+      .attr('stroke', '#118cd8')
+      .attr("stroke-width", 1.5)
       // @ts-ignore
-      .attr('d', generateScaledLine3)
+      .attr('d', generateScaledLineProbe2)
 
       svg.append('path')
       .data([data])
       // .join('path')
       .attr('class', 'line')
       .attr('fill', 'none')
-      .attr('stroke', 'blue')
+      .attr('stroke', '#5582a7')
+      .attr("stroke-width", 1.5)
       // @ts-ignore
-      .attr('d', generateScaledLine4)
+      .attr('d', generateScaledLineProbe3)
 
 
     svg.selectAll(".xAxis").remove();
@@ -123,7 +127,7 @@ import * as d3 from 'd3';
     // Add the Y Axis
     svg.append("g")
       .attr('class', 'yAxis')
-      .attr("transform", "translate(20, 0)")
+      .attr("transform", "translate(30, 0)")
       .call(d3.axisLeft(yScale));
   }
 

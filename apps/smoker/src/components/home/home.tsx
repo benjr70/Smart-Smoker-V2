@@ -136,8 +136,8 @@ export class Home extends React.Component<{}, {tempState: State, activeScreen: n
         <Grid container direction='row' className='background'>
             {this.state.activeScreen === 0 ? 
             <>
-                <Grid container xs={3} direction="column" justifyContent='space-evenly'>
-                    <Grid container direction="row"  spacing={2}>
+                <Grid container xs={4} direction="column" justifyContent='space-evenly'>
+                    <Grid container direction="row"  spacing={2} color={'#1f4f2d'}>
                         <Grid item  className='text' >
                             Chamber
                         </Grid>
@@ -145,7 +145,7 @@ export class Home extends React.Component<{}, {tempState: State, activeScreen: n
                             {this.state.tempState.chamberTemp}
                         </Grid>
                     </Grid>
-                    <Grid container direction="row" spacing={4}>
+                    <Grid container direction="row" spacing={4} color={'#118cd8'}>
                         <Grid item  className='text' >
                             Probe 2  
                         </Grid>
@@ -154,8 +154,8 @@ export class Home extends React.Component<{}, {tempState: State, activeScreen: n
                         </Grid>
                     </Grid>
                 </Grid>
-                <Grid container xs={4} direction="column" justifyContent='space-evenly'>
-                    <Grid container direction="row"  spacing={2}>
+                <Grid container xs={3} direction="column" justifyContent='space-evenly'>
+                    <Grid container direction="row"  spacing={2} color={'#2a475e'}>
                         <Grid item  className='text' >
                             Probe 1 
                         </Grid>
@@ -163,7 +163,7 @@ export class Home extends React.Component<{}, {tempState: State, activeScreen: n
                             {this.state.tempState.probeTemp1}
                         </Grid>
                     </Grid>
-                    <Grid container direction="row" spacing={2}>
+                    <Grid container direction="row" spacing={2} color={'#5582a7'}>
                         <Grid item  className='text' >
                             Probe 3 
                         </Grid>
