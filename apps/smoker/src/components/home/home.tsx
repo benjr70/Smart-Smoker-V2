@@ -154,7 +154,7 @@ export class Home extends React.Component<{}, {tempState: State, activeScreen: n
                         </Grid>
                     </Grid>
                 </Grid>
-                <Grid container xs={3} direction="column" justifyContent='space-evenly'>
+                <Grid container xs={4} direction="column" justifyContent='space-evenly'>
                     <Grid container direction="row"  spacing={2} color={'#2a475e'}>
                         <Grid item  className='text' >
                             Probe 1 
@@ -172,7 +172,7 @@ export class Home extends React.Component<{}, {tempState: State, activeScreen: n
                         </Grid>
                     </Grid>
                 </Grid>
-                <Grid container  xs={5}>
+                <Grid container  xs={4}>
                     <Grid container className="buttonContainer" flexDirection='row-reverse'>
                             <Grid item padding={1}>
                                 <Button
