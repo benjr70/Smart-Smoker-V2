@@ -24,7 +24,7 @@ import * as d3 from 'd3';
  function TempChart(props: props) {
     
   const svgRef = useRef() as React.RefObject<SVGSVGElement>;
-  const [data, setData] = useState([{ChamberTemp: props.ChamberTemp, MeatTemp: props.MeatTemp, Meat2Temp: props.Meat2Temp, Meat3Temp: props.Meat3Temp, date: props.date}]);
+  const [data, setData] = useState(props.initData);
 
     // set the dimensions and margins of the graph
     const margin = {top: 10, right: 0, bottom: 10, left: 10};
@@ -132,14 +132,13 @@ import * as d3 from 'd3';
   }
 
   useEffect(() => {
-    setData(props.initData);
     if(props.smoking){
       if(!isNaN(props.ChamberTemp) && props.ChamberTemp != 0 && !isNaN(props.MeatTemp) && props.MeatTemp != 0 && !isNaN(props.Meat2Temp) && props.Meat2Temp != 0 && !isNaN(props.Meat3Temp) && props.Meat3Temp != 0){
         data.push({ChamberTemp: props.ChamberTemp, MeatTemp: props.MeatTemp, Meat2Temp: props.Meat2Temp, Meat3Temp: props.Meat3Temp, date: props.date});
       }
     }
     reDrawGraph(data);
-  },[props.ChamberTemp]);
+  },[props]);
 
   return (
     <div>

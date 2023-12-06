@@ -33,6 +33,7 @@ export function SmokeProfileCard(props: SmokeProfileCardProps): JSX.Element {
                 <Typography variant="h5" component="div" align={'center'}>
                     Smoke
                 </Typography>
+                {props.temps.length > 1 ? 
                 <TempChart
                     ChamberTemp={props.temps[0].ChamberTemp}
                     MeatTemp={props.temps[0].MeatTemp}
@@ -43,7 +44,7 @@ export function SmokeProfileCard(props: SmokeProfileCardProps): JSX.Element {
                     height={200}
                     smoking={false}
                     initData={props.temps}
-                />
+                /> : <></> }
                 <Typography sx={{ fontSize: 18 }}>
                         {props.smokeProfile.woodType} Wood
                 </Typography>
