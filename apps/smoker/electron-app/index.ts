@@ -23,7 +23,7 @@ const createWindow = (): void => {
     },
   });
 
-  mainWindow.setKiosk(false);
+  mainWindow.setKiosk(true);
 
   mainWindow.loadURL('http://localhost:8080');
 
@@ -31,7 +31,7 @@ const createWindow = (): void => {
     mainWindow.loadURL('http://localhost:8080');
   })
 
-  mainWindow.webContents.openDevTools();
+  // mainWindow.webContents.openDevTools();
 
   // and load the index.html of the app.
   // Open the DevTools.
