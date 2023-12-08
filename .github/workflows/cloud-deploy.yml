@@ -16,17 +16,17 @@ jobs:
       - name: docker pull
         run: docker compose -f cloud.docker-compose.yml pull
 
-      # - name: docker build
-      #   run: docker compose -f cloud.docker-compose.yml build
+      - name: docker build
+        run: docker compose -f cloud.docker-compose.yml build
 
-      # - name: docker compose down
-      #   run: sudo docker compose -f cloud.docker-compose.yml down
+      - name: docker compose down
+        run: sudo docker compose -f cloud.docker-compose.yml down
 
       - name: kill tailscale
         run: sudo systemctl stop tailscaled
 
       - name: docker compose up
-        run: sudo docker compose -f cloud.docker-compose.yml up --build -d --force-recreate
+        run: sudo docker compose -f cloud.docker-compose.yml up -d --force-recreate
 
       - name: start tailscale
         run: sudo systemctl start tailscaled
