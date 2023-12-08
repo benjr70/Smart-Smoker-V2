@@ -13,7 +13,7 @@ declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
 const createWindow = (): void => {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
-    height: 400,
+    height: 480,
     width: 800,
     frame: false,
     fullscreen: true,

@@ -72,7 +72,7 @@ export class EventsGateway {
 
   @SubscribeMessage('smokeUpdate')
   handleSmokeUpdate(@MessageBody() data: string) {
-    Logger.log(`Clearing smoke: ${data}`, 'Websocket')
+    Logger.log(`Update Smoking: ${data}`, 'Websocket')
     this.server.emit('smokeUpdate', data);
   }
 
