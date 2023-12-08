@@ -22,14 +22,14 @@ jobs:
       # - name: docker compose down
       #   run: sudo docker compose -f cloud.docker-compose.yml down
 
-      # - name: kill tailscale
-      #   run: sudo systemctl stop tailscaled
+      - name: kill tailscale
+        run: sudo systemctl stop tailscaled
 
       - name: docker compose up
         run: sudo docker compose -f cloud.docker-compose.yml up --build -d --force-recreate
 
-      # - name: start tailscale
-      #   run: sudo systemctl start tailscaled
+      - name: start tailscale
+        run: sudo systemctl start tailscaled
 
       - name: docker compose remove old containers
         run: sudo docker system prune --force
