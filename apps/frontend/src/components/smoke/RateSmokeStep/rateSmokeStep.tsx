@@ -8,16 +8,17 @@ export class RateSmokeStep extends React.Component<{},{ratingState: rating}> {
     constructor(props:any){
         super(props);
         this.state = {ratingState: {
-            smokeFlavor: 5,
-            seasoning: 5,
-            tenderness: 5,
-            overallTaste: 8,
+            smokeFlavor: 0,
+            seasoning: 0,
+            tenderness: 0,
+            overallTaste: 0,
             notes: '',
         }}
 
         getCurrentRatings().then(currentRating => {
-            console.log(currentRating);
-            this.setState({ratingState: currentRating});
+            if(currentRating){
+                this.setState({ratingState: currentRating});
+            }
         })
 
         this.updateValues = this.updateValues.bind(this);
