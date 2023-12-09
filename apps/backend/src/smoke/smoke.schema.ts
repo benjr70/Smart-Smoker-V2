@@ -2,6 +2,8 @@ import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 
 export type SmokeDocument = Smoke & Document
 
+export enum SmokeStatus {'InProgress', 'Complete'}
+
 @Schema()
 export class Smoke {
     @Prop()
@@ -21,6 +23,9 @@ export class Smoke {
 
     @Prop()
     date: Date
+
+    @Prop()
+    status: SmokeStatus;
 }
 
 export const SmokeSchema = SchemaFactory.createForClass(Smoke);
