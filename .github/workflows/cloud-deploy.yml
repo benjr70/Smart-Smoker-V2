@@ -32,4 +32,4 @@ jobs:
         run: sudo systemctl start tailscaled
 
       - name: docker compose remove old containers
-        run: sudo docker system prune --force
+        run: sudo docker system prune -a --volumes --force
