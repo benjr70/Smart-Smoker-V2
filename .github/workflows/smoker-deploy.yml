@@ -18,9 +18,12 @@ jobs:
 
       - name: docker pull
         run: sudo REPO_USER=${{ secrets.DOCKERHUB_USERNAME }} REPO_PASS=${{ secrets.DOCKERHUB_TOKEN }} docker compose -f smoker.docker-compose.yml pull
+
+      - name: docker build
+        run: sudo REPO_USER=${{ secrets.DOCKERHUB_USERNAME }} REPO_PASS=${{ secrets.DOCKERHUB_TOKEN }} docker compose -f smoker.docker-compose.yml build
       
       - name: docker compose up
-        run: sudo REPO_USER=${{ secrets.DOCKERHUB_USERNAME }} REPO_PASS=${{ secrets.DOCKERHUB_TOKEN }} docker compose -f smoker.docker-compose.yml up --build -d 
+        run: sudo REPO_USER=${{ secrets.DOCKERHUB_USERNAME }} REPO_PASS=${{ secrets.DOCKERHUB_TOKEN }} docker compose -f smoker.docker-compose.yml up  -d 
 
       - name: docker compose remove old containers
         run: sudo  docker compose -f smoker.docker-compose.yml rm -f 
