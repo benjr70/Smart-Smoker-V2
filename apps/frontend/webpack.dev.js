@@ -1,6 +1,7 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const Dotenv = require('dotenv-webpack');
+var webpack = require("webpack");
 
 module.exports = (env) = {
   mode: 'development',
@@ -37,6 +38,9 @@ module.exports = (env) = {
     }),
     new Dotenv({
       path: '.env.local'
+    }),
+    new webpack.DefinePlugin({
+      VERSION: JSON.stringify(require("../../package.json").version),
     }),
   ]
 }
