@@ -202,6 +202,6 @@ jobs:
 
   Deploy:
       needs: [buildSmoker, buildDeviceService, buildElectronShell]
-      uses: benjr70/Smart-Smoker-V2/.github/workflows/smoker-deploy.yml
+      uses: benjr70/Smart-Smoker-V2/.github/workflows/smoker-deploy.yml@master
       with:
         version: ${{ github.event.inputs.version }}

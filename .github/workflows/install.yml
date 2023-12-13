@@ -67,14 +67,14 @@ jobs:
 
   BuildAndPublishSmoker:
     needs: SetUp
-    uses: benjr70/Smart-Smoker-V2/.github/workflows/build-publish-smoker.yml
+    uses: benjr70/Smart-Smoker-V2/.github/workflows/build-publish-smoker.yml@master
     secrets: inherit
     with:
       version: ${{ github.event.inputs.version }}
 
   BuildAndPublishCloud:
     needs: SetUp
-    uses: benjr70/Smart-Smoker-V2/.github/workflows/build-publish-cloud.yml
+    uses: benjr70/Smart-Smoker-V2/.github/workflows/build-publish-cloud.yml@master
     secrets: inherit
     with:
       version: ${{ github.event.inputs.version }}

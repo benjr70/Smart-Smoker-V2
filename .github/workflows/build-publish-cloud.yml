@@ -134,6 +134,6 @@ jobs:
 
   Deploy:
       needs: [FrontEnd, Backend]
-      uses: benjr70/Smart-Smoker-V2/.github/workflows/cloud-deploy.yml
+      uses: benjr70/Smart-Smoker-V2/.github/workflows/cloud-deploy.yml@master
       with:
         version: ${{ github.event.inputs.version }}
