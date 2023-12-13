@@ -10,6 +10,11 @@ on:
         required: true
       DOCKERHUB_TOKEN:
         required: true
+    inputs:
+      verion:
+        description: 'version to release'
+        type: string
+        required: true
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
@@ -27,6 +32,8 @@ jobs:
     steps:
       - name: Git Checkout
         uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.inputs.version }}
 
       - name: Setup Node
         uses: actions/setup-node@v2
@@ -69,7 +76,7 @@ jobs:
           context: .
           file: apps/smoker/Dockerfile
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:smoker
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:smoker:${{ github.event.inputs.version }}
 
   buildDeviceService:
     # The type of runner that the job will run on
@@ -85,6 +92,8 @@ jobs:
 
       - name: Git Checkout
         uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.inputs.version }}
 
 
       - name: Setup Node
@@ -128,7 +137,7 @@ jobs:
           context: .
           file: apps/device-service/Dockerfile
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:device-service
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:device-service:${{ github.event.inputs.version }}
 
 
   buildElectronShell:
@@ -145,6 +154,8 @@ jobs:
 
       - name: Git Checkout
         uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.inputs.version }}
 
       - name: Setup Node
         uses: actions/setup-node@v2
@@ -187,8 +198,10 @@ jobs:
           context: .
           file: apps/smoker/shell.dockerfile
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:electron-shell
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:electron-shell:${{ github.event.inputs.version }}
 
   Deploy:
       needs: [buildSmoker, buildDeviceService, buildElectronShell]
-      uses: benjr70/Smart-Smoker-V2/.github/workflows/smoker-deploy.yml@master
+      uses: benjr70/Smart-Smoker-V2/.github/workflows/smoker-deploy.yml
+      with:
+        version: ${{ github.event.inputs.version }}

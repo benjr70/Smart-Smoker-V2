@@ -5,8 +5,8 @@ name: Install Smart Smoker v2
 # Controls when the workflow will run
 on:
   # Triggers the workflow on push or pull request events but only for the master branch
-  push:
-    branches: [ master ]
+  # push:
+  #   branches: [ master ]
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -36,6 +36,8 @@ jobs:
 
       - name: Git Checkout
         uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.inputs.version }}
 
       - name: Setup Node
         uses: actions/setup-node@v2
@@ -65,10 +67,14 @@ jobs:
 
   BuildAndPublishSmoker:
     needs: SetUp
-    uses: benjr70/Smart-Smoker-V2/.github/workflows/build-publish-smoker.yml@master
+    uses: benjr70/Smart-Smoker-V2/.github/workflows/build-publish-smoker.yml
     secrets: inherit
+    with:
+      version: ${{ github.event.inputs.version }}
 
   BuildAndPublishCloud:
     needs: SetUp
-    uses: benjr70/Smart-Smoker-V2/.github/workflows/build-publish-cloud.yml@master
+    uses: benjr70/Smart-Smoker-V2/.github/workflows/build-publish-cloud.yml
     secrets: inherit
+    with:
+      version: ${{ github.event.inputs.version }}
