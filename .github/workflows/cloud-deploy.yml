@@ -4,7 +4,7 @@ name: Cloud Deploy
 on:
   workflow_call:
     inputs:
-      verion:
+      version:
         description: 'version to release'
         type: string
         required: true
