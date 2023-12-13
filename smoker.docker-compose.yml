@@ -14,13 +14,13 @@ services:
     volumes:
         - '/:/host'
         - '/var/run/dbus:/var/run/dbus'
-    image: 'benjr70/smart_smoker:device-service'
+    image: 'benjr70/smart_smoker:device-service:${VERSION}'
 
   frontend:
     container_name: frontend_smoker
     pull_policy: always
     restart: always
-    image: benjr70/smart_smoker:smoker
+    image: benjr70/smart_smoker:smoker:${VERSION}
     ports:
       - 8080:8080
     healthcheck:
@@ -50,7 +50,7 @@ services:
     devices:
         - /dev/snd
         - /dev/dri:/dev/dri
-    image: 'benjr70/smart_smoker:electron-shell'
+    image: 'benjr70/smart_smoker:electron-shell:${VERSION}'
 
   watchtower:
     container_name: watchtower
