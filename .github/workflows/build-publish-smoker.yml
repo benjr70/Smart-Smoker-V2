@@ -11,7 +11,7 @@ on:
       DOCKERHUB_TOKEN:
         required: true
     inputs:
-      verion:
+      version:
         description: 'version to release'
         type: string
         required: true
