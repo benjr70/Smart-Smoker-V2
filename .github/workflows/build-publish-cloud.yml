@@ -77,7 +77,7 @@ jobs:
           context: .
           file: apps/frontend/Dockerfile
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:frontend:${{ github.event.inputs.version }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:frontend_V${{ github.event.inputs.version }}
 
   Backend:
     runs-on: ubuntu-latest
@@ -130,7 +130,7 @@ jobs:
           context: .
           file: apps/backend/Dockerfile
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:backend:${{ github.event.inputs.version }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:backend_V${{ github.event.inputs.version }}
 
   Deploy:
       needs: [FrontEnd, Backend]

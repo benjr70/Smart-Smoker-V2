@@ -76,7 +76,7 @@ jobs:
           context: .
           file: apps/smoker/Dockerfile
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:smoker:${{ github.event.inputs.version }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:smoker_V${{ github.event.inputs.version }}
 
   buildDeviceService:
     # The type of runner that the job will run on
@@ -137,7 +137,7 @@ jobs:
           context: .
           file: apps/device-service/Dockerfile
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:device-service:${{ github.event.inputs.version }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:device-service_V${{ github.event.inputs.version }}
 
 
   buildElectronShell:
@@ -198,7 +198,7 @@ jobs:
           context: .
           file: apps/smoker/shell.dockerfile
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:electron-shell:${{ github.event.inputs.version }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:electron-shell_V${{ github.event.inputs.version }}
 
   Deploy:
       needs: [buildSmoker, buildDeviceService, buildElectronShell]

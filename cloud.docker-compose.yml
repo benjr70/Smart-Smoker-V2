@@ -6,7 +6,7 @@ services:
     restart: always
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    image: benjr70/smart_smoker:backend:${VERSION}
+    image: benjr70/smart_smoker:backend_V${VERSION}
     volumes:
       - /node_modules
     # build:
@@ -35,7 +35,7 @@ services:
   frontend:
     container_name: frontend_cloud
     restart: always
-    image: benjr70/smart_smoker:frontend:${VERSION}
+    image: benjr70/smart_smoker:frontend_V${VERSION}
     # build:
     #   context: ./apps/frontend
     #   dockerfile: ./Dockerfile
