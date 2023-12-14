@@ -13,8 +13,7 @@
 
 Breadboard diagram
 
-![BreadBoard Design](../images/breadboardDesign.png)
-
+![BreadBoard Design](../images/BreadboardDesign.png)
 
 PCB Schematics
 
