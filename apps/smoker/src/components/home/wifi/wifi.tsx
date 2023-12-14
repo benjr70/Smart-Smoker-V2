@@ -14,10 +14,17 @@ interface WifiProps {
 }
 
 
-
+declare const VERSION: string; 
 
 export function Wifi(props: WifiProps): JSX.Element {
     const keyboard = useRef()
+
+    let versionToDisplay = "unknown";
+    try {
+      versionToDisplay = VERSION;
+    } catch (error) {
+      console.log("Cannot get version of application.");
+    }
 
 
     const [ssid, setSsid] = useState('');
@@ -181,8 +188,9 @@ export function Wifi(props: WifiProps): JSX.Element {
                 </>}
             </>}
         </Grid>
-  
-
+        <Grid container sx={{margin: '5px'}} justifyContent='flex-end' alignItems={'flex-end'} >
+            {`Version: ${versionToDisplay}`}
+        </Grid>
         <Grid container spacing={3} alignItems={'flex-end'}>
             <Keyboard
                 keyboardRef={r => (keyboard.current = r)}

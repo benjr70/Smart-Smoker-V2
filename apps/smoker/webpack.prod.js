@@ -1,6 +1,7 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const Dotenv = require('dotenv-webpack');
+var webpack = require("webpack");
 
 module.exports = {
   mode: 'production',
@@ -38,6 +39,9 @@ module.exports = {
     }),
     new Dotenv({
       path: '.env.prod'
+    }),
+    new webpack.DefinePlugin({
+      VERSION: JSON.stringify(require("../../package.json").version),
     }),
   ]
 }
