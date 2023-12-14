@@ -16,3 +16,10 @@ Breadboard diagram
 ![BreadBoard Design](../images/breadboardDesign.png)
 
 
+PCB Schematics
+
+![PCB Schematics](../images/PcbSchematics.png)
+
+PCB Diagram
+
+![PCB diagram](../images/PCBdiagram.png)
