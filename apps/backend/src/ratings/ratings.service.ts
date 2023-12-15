@@ -35,6 +35,7 @@ export class RatingsService {
                     postSmokeId: smoke.postSmokeId,
                     tempsId: smoke.tempsId,
                     ratingId: ratings['_id'].toString(),
+                    status: smoke.status,
                 }
                 await this.smokeService.Update(smoke['_id'].toString(), smokeDto);
                 return ratings;

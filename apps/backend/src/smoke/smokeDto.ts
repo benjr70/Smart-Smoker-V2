@@ -1,4 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
+import { SmokeStatus } from "./smoke.schema";
 
 
 export class SmokeDto {
@@ -19,5 +20,8 @@ export class SmokeDto {
 
     @ApiProperty()
     date?: Date
+
+    @ApiProperty()
+    status: SmokeStatus;
 
 }

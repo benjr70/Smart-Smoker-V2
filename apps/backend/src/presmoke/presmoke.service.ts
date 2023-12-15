@@ -6,6 +6,7 @@ import { SmokeDto } from 'src/smoke/smokeDto';
 import { StateService } from 'src/State/state.service';
 import { PreSmoke, PreSmokeDocument } from './presmoke.schema';
 import { PreSmokeDto } from './presmokeDto';
+import { SmokeStatus } from 'src/smoke/smoke.schema';
 
 @Injectable()
 export class PreSmokeService {
@@ -22,7 +23,8 @@ export class PreSmokeService {
                     } else {
                         return this.create(preSmokeDto).then(preSmoke =>{
                             let smokeDto: SmokeDto = {
-                                preSmokeId: preSmoke["_id"].toString()
+                                preSmokeId: preSmoke["_id"].toString(),
+                                status: smoke.status,
                             }
                              this.smokeService.create(smokeDto);
                              return preSmoke
@@ -31,8 +33,9 @@ export class PreSmokeService {
                 })
             } else {
                return this.create(preSmokeDto).then(preSmoke => {
-                    let smokeDto:SmokeDto = {
-                        preSmokeId: preSmoke["_id"].toString()
+                    let smokeDto: SmokeDto = {
+                        preSmokeId: preSmoke["_id"].toString(),
+                        status: SmokeStatus.InProgress
                       }
                     this.smokeService.create(smokeDto).then(smoke => {
                         state.smokeId = smoke["_id"].toString();

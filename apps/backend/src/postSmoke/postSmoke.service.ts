@@ -42,6 +42,7 @@ export class PostSmokeService {
                     preSmokeId: smoke.preSmokeId,
                     postSmokeId: postSmoke["_id"].toString(),
                     tempsId: smoke.tempsId,
+                    status: smoke.status,
                 }
                 await this.smokeService.Update(smoke['_id'].toString(), smokeDto);
                 return postSmoke;

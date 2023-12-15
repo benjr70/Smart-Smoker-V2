@@ -27,7 +27,8 @@ export class TempsService {
                     this.create(tempDto).then(async temp => {
                         let smokeDto: SmokeDto = {
                             preSmokeId: smoke.preSmokeId,
-                            tempsId: temp["_id"].toString()
+                            tempsId: temp["_id"].toString(),
+                            status: smoke.status,
                         }
                         await this.smokeService.Update(state.smokeId, smokeDto);
                     })

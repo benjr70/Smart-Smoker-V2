@@ -17,6 +17,11 @@ export class SmokeController {
     getAllSmoke(): Promise<Smoke[]>{
         return this.smokeService.getAll();
     }
+    
+    @Post("/finish")
+    FinishSmoke(): Promise<Smoke>{
+        return this.smokeService.FinishSmoke();
+    }
  
     @Get("/:id")
     getById(@Param('id') id: string): Promise<Smoke>{

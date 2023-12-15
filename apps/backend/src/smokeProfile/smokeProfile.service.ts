@@ -1,4 +1,4 @@
-import { forwardRef, Injectable, Inject } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import { SmokeService } from "src/smoke/smoke.service";
@@ -42,6 +42,7 @@ export class SmokeProfileService {
                     preSmokeId: smoke.preSmokeId,
                     postSmokeId: smoke.postSmokeId,
                     tempsId: smoke.tempsId,
+                    status: smoke.status,
                 }
                 await this.smokeService.Update(smoke['_id'].toString(), smokeDto);
                 return smokeProfile;

@@ -4,6 +4,7 @@ import { RatingsService } from "src/ratings/ratings.service";
 import { SmokeService } from "src/smoke/smoke.service";
 import { SmokeProfileService } from "src/smokeProfile/smokeProfile.service";
 import { SmokeHistory } from "./histroyDto";
+import { SmokeStatus } from "src/smoke/smoke.schema";
 
 
 
@@ -18,7 +19,7 @@ export class HistoryService {
 
     async getHistory(): Promise<SmokeHistory[]> {
         return this.smokeService.getAll().then(smokeList => {
-            return Promise.all(smokeList.map(async smoke => {
+            return Promise.all(smokeList.filter(smoke => smoke.status === SmokeStatus.Complete).map(async smoke => {
                 const preSmoke = await this.preSmokeService.GetByID(smoke.preSmokeId);
                 const smokeProfile = await this.smokeProfileService.getById(smoke.smokeProfileId);
                 const ratings = await this.ratingsService.getById(smoke.ratingId);
