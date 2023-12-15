@@ -8,7 +8,7 @@ import { PreSmokeStep } from './preSmokeStep/preSmokeStep';
 import { SmokeStep } from './smokeStep/smokeStep';
 import { PostSmokeStep } from './postSmokeStep/PostSmokeStep';
 import { Button } from '@mui/material';
-import { clearSmoke } from '../../Services/smokerService';
+import { FinishSmoke, clearSmoke } from '../../Services/smokerService';
 import { RateSmokeStep } from './RateSmokeStep/rateSmokeStep';
 
 const steps = [
@@ -38,6 +38,7 @@ export class Smoke extends React.Component<{},{activeStep: number}>{
             nextStep = 0;
             this.setState({activeStep: 5});
             await delay(2);
+            await FinishSmoke();
             await clearSmoke();
             this.setState({activeStep: nextStep});
             return;

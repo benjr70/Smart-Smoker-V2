@@ -3,7 +3,6 @@ import React from "react";
 import { getCurrentPostSmoke, setCurrentPostSmoke } from "../../../Services/postSmokeService";
 import { DynamicList } from "../../common/components/DynamicList";
 import { IMaskInput } from 'react-imask';
-import { clearSmoke } from "../../../Services/smokerService";
 
 
 export interface PostSmoke {

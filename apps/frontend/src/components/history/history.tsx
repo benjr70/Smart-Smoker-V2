@@ -24,7 +24,6 @@ export class History extends React.Component<{},{history: historyInterface}> {
             }
         }
         getSmokeHistory().then( (result:smokeHistory[]) => {
-            result.pop()
             const temp: historyInterface = {
                 smokeHistoryList: result.reverse(),
                 smokeId: undefined
@@ -52,7 +51,6 @@ export class History extends React.Component<{},{history: historyInterface}> {
     async onDeleteClick(smokeId: string){
         await deleteSmoke(smokeId);
         await getSmokeHistory().then( (result:smokeHistory[]) => {
-            result.pop()
             const temp: historyInterface = {
                 smokeHistoryList: result.reverse(),
                 smokeId: undefined

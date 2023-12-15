@@ -1,12 +1,8 @@
-import { Inject, Injectable, forwardRef } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
-import { Model, Promise } from "mongoose";
-import { Smoke, SmokeDocument } from "./smoke.schema";
+import { Model } from "mongoose";
+import { Smoke, SmokeDocument, SmokeStatus } from "./smoke.schema";
 import { SmokeDto } from "./smokeDto";
-import { PreSmokeService } from "src/presmoke/presmoke.service";
-import { SmokeProfileService } from "src/smokeProfile/smokeProfile.service";
-import { PreSmokeDto } from "src/presmoke/presmokeDto";
-import { PreSmoke } from "src/presmoke/presmoke.schema";
 import { StateService } from "src/State/state.service";
 
 
@@ -44,6 +40,20 @@ export class SmokeService {
     async getCurrentSmoke(): Promise<Smoke> {
         return this.stateService.GetState().then(state => {
             return this.GetById(state.smokeId);
+        })
+    }
+
+    async FinishSmoke(): Promise<Smoke> {
+        return await this.getCurrentSmoke().then(async smoke => {
+            let smokeDto: SmokeDto = {
+                smokeProfileId: smoke.smokeProfileId,
+                preSmokeId: smoke.preSmokeId,
+                postSmokeId: smoke.postSmokeId,
+                tempsId: smoke.tempsId,
+                ratingId: smoke.ratingId,
+                status: SmokeStatus.Complete,
+            }
+            return await this.Update(smoke['_id'].toString(), smokeDto);
         })
     }
 
