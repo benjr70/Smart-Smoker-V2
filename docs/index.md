@@ -17,6 +17,7 @@ run this cmd from the base folder of the repo <br>
 `npm run bootstrap` 
 
 This should install all apps in the project. To run each one please see appropriate tab above
+running each app locally should all connect and run together without extra config
 
 ## Project layout
 
