@@ -9,7 +9,7 @@ services:
     devices:
         - /dev/ttyUSB0
     ports:
-        - '3000:3000'
+        - '3003:3003'
     network_mode: host
     volumes:
         - '/:/host'

@@ -54,7 +54,7 @@ export class Home extends React.Component<{}, {tempState: State, activeScreen: n
             temp.smoking = state.smoking
             this.setState({tempState: temp});
         })
-        let deviceClient = io('http://127.0.0.1:3000');
+        let deviceClient = io('http://127.0.0.1:3003');
         let url = process.env.REACT_APP_CLOUD_URL ?? '';
         socket = io(url);
         deviceClient.on('temp', (message: any) => {
