@@ -26,9 +26,14 @@ const woodType = [
     'Apple',
 ];
 
+type SmokeStepProps = {
+    nextButton: JSX.Element;
+  };
+  
+
 let initTemps: TempData[] = [];
 let socket: any;
-export class SmokeStep extends React.Component<{}, {tempState: State}> {
+export class SmokeStep extends React.Component<SmokeStepProps, {tempState: State}> {
 
     constructor(props: any) {
         super(props);
@@ -118,7 +123,7 @@ export class SmokeStep extends React.Component<{}, {tempState: State}> {
 
     render(): React.ReactNode {
         return (
-            <Grid container>
+            <Grid item>
                 <Grid container direction="column" sx={{marginTop: '10px'}}>
                     <Grid container direction="row" justifyContent='space-around' sx={{margin: '5px'}} color={'#1f4f2d'}>
                         <Grid item className='text'  >
@@ -164,10 +169,19 @@ export class SmokeStep extends React.Component<{}, {tempState: State}> {
                         Meat2Temp={parseFloat(this.state.tempState.probeTemp2)}
                         Meat3Temp={parseFloat(this.state.tempState.probeTemp3)}
                         date={this.state.tempState.date}
-                        width={405}
+                        width={window.innerWidth - window.innerWidth * 0.05}
                         height={150}
                         smoking={this.state.tempState.smoking}
                         initData={initTemps}></TempChart>
+                </Grid>
+                <Grid container className="buttonContainer" justifyContent='space-around'>
+                    <Button
+                    className="button"
+                    variant="contained"
+                    size="small"
+                    onClick={() => this.startSmoke()}
+                    >{this.state.tempState.smoking ? 'Stop Smoking' : 'Start Smoking'}
+                    </Button>
                 </Grid>
                 <Grid container  direction="column">
                     <Autocomplete
@@ -182,7 +196,7 @@ export class SmokeStep extends React.Component<{}, {tempState: State}> {
                                 sx={{
                                     marginTop: '10px',
                                     marginBottom: '10px',
-                                    width: '350px'
+                                    width: '95%'
                                     }}
                                 {...params}label="Wood Type"  />
                             </Grid>}
@@ -192,7 +206,7 @@ export class SmokeStep extends React.Component<{}, {tempState: State}> {
                             sx={{
                                 marginTop: '10px',
                                 marginBottom: '10px',
-                                width: '350px'
+                                width: '95%'
                             }}
                             id="outlined-multiline-static"
                             label="Notes"
@@ -204,13 +218,14 @@ export class SmokeStep extends React.Component<{}, {tempState: State}> {
                     </Grid>
                 </Grid>
                 <Grid container className="buttonContainer" flexDirection='row-reverse'>
-                    <Button
+                    {/* <Button
                     className="button"
                     variant="contained"
                     size="small"
                     onClick={() => this.startSmoke()}
                     >{this.state.tempState.smoking ? 'Stop Smoking' : 'Start Smoking'}
-                    </Button>
+                    </Button> */}
+                    {this.props.nextButton}
                 </Grid>
             </Grid>
         );

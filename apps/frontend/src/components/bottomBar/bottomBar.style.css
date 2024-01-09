@@ -19,10 +19,9 @@
   .bottomBar {
     background-color: white;
     font-size: large;
-    display: inline;
     position: fixed;
     bottom: 0;
-    width: 102%;
+    width: 100%;
   }
 
 

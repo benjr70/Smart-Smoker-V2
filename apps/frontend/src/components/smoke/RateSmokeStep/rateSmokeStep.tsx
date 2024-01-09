@@ -2,8 +2,14 @@ import { Grid, Rating, TextField, Typography } from "@mui/material";
 import React from "react";
 import { rating } from "../../common/interfaces/rating";
 import { getCurrentRatings, setCurrentRatings } from "../../../Services/ratingsService";
+import './rateSmokeStep.style.css'
 
-export class RateSmokeStep extends React.Component<{},{ratingState: rating}> {
+
+type RateSmokeStepProps = {
+    nextButton: JSX.Element;
+  };
+
+export class RateSmokeStep extends React.Component<RateSmokeStepProps,{ratingState: rating}> {
 
     constructor(props:any){
         super(props);
@@ -60,7 +66,7 @@ export class RateSmokeStep extends React.Component<{},{ratingState: rating}> {
 
     render(): React.ReactNode {
         return(
-        <Grid padding={3}>
+        <Grid item>
             <Typography component="legend">Smoke Flavor: {this.state.ratingState.smokeFlavor}</Typography>
             <Rating 
                 name="size-large" 
@@ -101,7 +107,7 @@ export class RateSmokeStep extends React.Component<{},{ratingState: rating}> {
                sx={{
                     marginTop: '10px',
                     marginBottom: '10px',
-                    width: '350px'
+                    width: '95%'
                 }}
                 id="outlined-multiline-static"
                 label="Notes"
@@ -110,6 +116,9 @@ export class RateSmokeStep extends React.Component<{},{ratingState: rating}> {
                 onChange={(event) => {this.updateValues(event, 'notes')}}
                 rows={4}
             />
+            <Grid container flexDirection='row-reverse'>
+                {this.props.nextButton}
+            </Grid>
         </Grid>);
     }
 }

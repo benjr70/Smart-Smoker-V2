@@ -1,4 +1,4 @@
-import { Button, TextField } from "@mui/material";
+import { Button, Grid, TextField } from "@mui/material";
 import './Dynamiclist.style.css'
 import React from 'react'
 
@@ -13,8 +13,8 @@ export function DynamicList(props: dynamicListProps ): JSX.Element{
     if(props.steps){
     return (<>
         {props.steps.map((step, index) => (
-            <div className="dynamicList">
-                <p className="stepNumber">{index + 1}.</p>
+            <Grid className="dynamicList">
+                <Grid className="stepNumber">{index + 1}.</Grid>
                 <TextField
                     sx={{marginRight: '10px'}}
                     id="outlined-textarea"
@@ -40,7 +40,7 @@ export function DynamicList(props: dynamicListProps ): JSX.Element{
                     onClick={() => props.removeLine(index)}
                     >-
                 </Button>}
-            </div>
+            </Grid>
         ))}
     </> );  
     } else {

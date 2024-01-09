@@ -1,4 +1,3 @@
-import Box from '@mui/material/Box';
 import Stepper from '@mui/material/Stepper';
 import Step from '@mui/material/Step';
 import StepButton from '@mui/material/StepButton';
@@ -7,7 +6,7 @@ import './smoke.style.css'
 import { PreSmokeStep } from './preSmokeStep/preSmokeStep';
 import { SmokeStep } from './smokeStep/smokeStep';
 import { PostSmokeStep } from './postSmokeStep/PostSmokeStep';
-import { Button } from '@mui/material';
+import { Box, Button, Grid } from '@mui/material';
 import { FinishSmoke, clearSmoke } from '../../Services/smokerService';
 import { RateSmokeStep } from './RateSmokeStep/rateSmokeStep';
 
@@ -21,6 +20,7 @@ const steps = [
 export function delay(ms: number) {
     return new Promise( resolve => setTimeout(resolve, ms) );
 }
+ 
 export class Smoke extends React.Component<{},{activeStep: number}>{
 
     constructor(props: any){
@@ -51,42 +51,48 @@ export class Smoke extends React.Component<{},{activeStep: number}>{
 
       render(): React.ReactNode { 
           let step;
-          switch(this.state.activeStep){
-                case 0:
-                    step = <PreSmokeStep/>;
-                    break;
-                case 1:
-                    step = <SmokeStep/>;
-                    break;
-                case 2:
-                    step = <PostSmokeStep/>;
-                    break;
-                case 3:
-                    step = <RateSmokeStep/>;
-                    break;
-          }
-          return(
-            <div className='smoke'>
-            <Box className='stepper'>
-                <Stepper nonLinear alternativeLabel activeStep={this.state.activeStep}>
-                    {steps.map((label, index) => (
-                        <Step key={label} >
-                            <StepButton color="inherit" onClick={() => this.handleStep(index)}>
-                            {label}
-                            </StepButton>
-                        </Step>
-                    ))}
-                </Stepper>
-            </Box>
-            {step}
+          const nextButton = (
             <Button
                 className="nextButton"
                 variant="contained"
                 size="small"
                 onClick={() => this.nextStep()}
-                >{this.state.activeStep === 3 ? 'Finish' : "Next"}
+            >
+                {this.state.activeStep === 3 ? 'Finish' : "Next"}
             </Button>
-            </div>
+        );
+          switch(this.state.activeStep){
+                case 0:
+                    step = <PreSmokeStep nextButton={nextButton}/>;
+                    break;
+                case 1:
+                    step = <SmokeStep nextButton={nextButton}/>;
+                    break;
+                case 2:
+                    step = <PostSmokeStep nextButton={nextButton}/>;
+                    break;
+                case 3:
+                    step = <RateSmokeStep nextButton={nextButton}/>;
+                    break;
+          }
+
+          return(
+            <Grid container className='smoke'>
+                <Grid className='stepper'>
+                    <Stepper nonLinear alternativeLabel activeStep={this.state.activeStep}>
+                        {steps.map((label, index) => (
+                            <Step key={label} >
+                                <StepButton color="inherit" onClick={() => this.handleStep(index)}>
+                                {label}
+                                </StepButton>
+                            </Step>
+                        ))}
+                    </Stepper>
+                </Grid>
+                <Grid container className='stepScreen'>
+                    {step} 
+                </Grid> 
+            </Grid>
             )
     }
 }

@@ -1,10 +1,11 @@
 
 .App-header {
   background-color: #e0dfdf;
-  min-height: 100vh;
-  display: flex;
+  /* height: 100vh;
+  width: 100vw; */
+  /* display: flex; */
   flex-direction: column;
- 
+  overflow: auto;
   font-size: calc(10px + 2vmin);
   color: rgb(0, 0, 0);
 }

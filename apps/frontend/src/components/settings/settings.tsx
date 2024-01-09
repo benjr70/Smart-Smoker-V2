@@ -11,8 +11,11 @@ export const settings = () => {
       console.log("Cannot get version of application.");
     }
     return (
-        <Grid item className='text' sx={{margin: '5px'}} >
+      <Grid container sx={{display: 'flex', justifyContent: 'center' ,  minHeight: 'calc(100vh - 56px)'}} >
+
+        <Grid item xs={11}  >
             {`Version: ${versionToDisplay}`}
         </Grid>
+      </Grid>
     );
 }

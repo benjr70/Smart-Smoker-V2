@@ -3,3 +3,7 @@
 .card {
     justify-self: center;
 }
+
+.history {
+    min-height: calc(100vh - 56px);
+}
