@@ -218,13 +218,6 @@ export class SmokeStep extends React.Component<SmokeStepProps, {tempState: State
                     </Grid>
                 </Grid>
                 <Grid container className="buttonContainer" flexDirection='row-reverse'>
-                    {/* <Button
-                    className="button"
-                    variant="contained"
-                    size="small"
-                    onClick={() => this.startSmoke()}
-                    >{this.state.tempState.smoking ? 'Stop Smoking' : 'Start Smoking'}
-                    </Button> */}
                     {this.props.nextButton}
                 </Grid>
             </Grid>

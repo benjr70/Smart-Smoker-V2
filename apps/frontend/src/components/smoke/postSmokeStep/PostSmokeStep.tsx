@@ -74,7 +74,7 @@ export class PostSmokeStep extends React.Component<PostSmokeStepProps,{postSmoke
 
     render(): React.ReactNode {
         return (
-        <Grid item>
+        <Grid item sx={{width: '100%'}}>
             <TextField
                 sx={{marginBottom: '10px'}}
                 id="standard-basic" 
@@ -99,7 +99,7 @@ export class PostSmokeStep extends React.Component<PostSmokeStepProps,{postSmoke
                     sx={{
                         marginTop: '10px',
                         marginBottom: '10px',
-                        width: '95%'
+                        width: '100%'
                     }}
                     id="outlined-multiline-static"
                     label="Notes"

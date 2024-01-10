@@ -107,7 +107,7 @@ export class RateSmokeStep extends React.Component<RateSmokeStepProps,{ratingSta
                sx={{
                     marginTop: '10px',
                     marginBottom: '10px',
-                    width: '95%'
+                    width: '100%'
                 }}
                 id="outlined-multiline-static"
                 label="Notes"

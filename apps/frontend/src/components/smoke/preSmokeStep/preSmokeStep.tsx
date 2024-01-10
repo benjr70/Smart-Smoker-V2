@@ -159,7 +159,7 @@ export class PreSmokeStep extends React.Component<PreSmokeStepProps,{preSmokeSta
                sx={{
                     marginTop: '10px',
                     marginBottom: '10px',
-                    width: '95%'
+                    width: '100%'
                 }}
                 id="outlined-multiline-static"
                 label="Notes"
