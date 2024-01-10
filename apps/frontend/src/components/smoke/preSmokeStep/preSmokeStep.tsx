@@ -1,4 +1,4 @@
-import { Autocomplete, MenuItem, Select, TextField } from "@mui/material";
+import { Autocomplete, Grid, MenuItem, Select, TextField } from "@mui/material";
 import React from "react";
 import { getCurrentPreSmoke, setCurrentPreSmoke } from "../../../Services/preSmokeService";
 import { DynamicList } from "../../common/components/DynamicList";
@@ -12,7 +12,12 @@ const meats = [
     'turkey',
 ];
 
-export class PreSmokeStep extends React.Component<{},{preSmokeState: preSmoke}> {
+type PreSmokeStepProps = {
+    nextButton: JSX.Element;
+  };
+  
+
+export class PreSmokeStep extends React.Component<PreSmokeStepProps,{preSmokeState: preSmoke}> {
     constructor(props: any){
         super(props);
         this.state = { preSmokeState: {
@@ -103,7 +108,8 @@ export class PreSmokeStep extends React.Component<{},{preSmokeState: preSmoke}> 
     }
 
     render(): React.ReactNode {
-        return (<div className="presmoke">
+        return (
+        <Grid item xs={11} flexDirection='column'>
             <TextField
                 sx={{marginBottom: '10px'}}
                 id="standard-basic" 
@@ -120,7 +126,7 @@ export class PreSmokeStep extends React.Component<{},{preSmokeState: preSmoke}> 
                 onInputChange={(event, newInputValue) => {this.updateMeatType(newInputValue)}}
                 renderInput={(params) => <TextField  {...params}label="Meat Type"  />}
             />
-            <div className="weight">
+            <Grid className="weight">
                 <TextField
                     sx={{marginBottom: '10px', marginRight: '10px'}} 
                     type='number' 
@@ -141,17 +147,19 @@ export class PreSmokeStep extends React.Component<{},{preSmokeState: preSmoke}> 
                     <MenuItem value={WeightUnits.LB}>LB</MenuItem>
                     <MenuItem value={WeightUnits.OZ}>OZ</MenuItem>
                 </Select>
-            </div>
-            <DynamicList
-                newline ={() => {this.newLine()}}
-                removeLine={(index) => {this.removeLine(index)}}
-                steps={this.state.preSmokeState.steps}
-                onListChange={(step, index) => this.updateSteps(step, index)} />
+            </Grid>
+            <Grid flexDirection='column'>
+                <DynamicList
+                    newline ={() => {this.newLine()}}
+                    removeLine={(index) => {this.removeLine(index)}}
+                    steps={this.state.preSmokeState.steps}
+                    onListChange={(step, index) => this.updateSteps(step, index)} />
+            </Grid>
             <TextField
                sx={{
                     marginTop: '10px',
                     marginBottom: '10px',
-                    width: '350px'
+                    width: '100%'
                 }}
                 id="outlined-multiline-static"
                 label="Notes"
@@ -160,7 +168,10 @@ export class PreSmokeStep extends React.Component<{},{preSmokeState: preSmoke}> 
                 onChange={this.updateNotes}
                 rows={4}
             />
-        </div>)
+            <Grid container flexDirection='row-reverse'>
+                {this.props.nextButton}
+            </Grid>
+        </Grid>)
     }
 }
 

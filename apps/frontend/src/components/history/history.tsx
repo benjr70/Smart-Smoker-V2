@@ -61,7 +61,7 @@ export class History extends React.Component<{},{history: historyInterface}> {
 
     render(): React.ReactNode{
         return (
-        <Grid paddingTop={1}>
+        <Grid paddingTop={1} className='history'>
             {this.state.history.smokeId ?
             <Grid paddingLeft={2}>
                 <IconButton color="primary"  component="label" onClick={this.onBackClick}>

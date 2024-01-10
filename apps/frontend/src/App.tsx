@@ -5,6 +5,7 @@ import { Screens } from './components/common/interfaces/enums';
 import { History } from './components/history/history';
 import { Smoke } from './components/smoke/smoke';
 import { settings } from './components/settings/settings';
+import { Grid } from '@mui/material';
 
 class App extends React.Component<{},{currentScreen: Screens}>{
   constructor(props: any) {
@@ -41,18 +42,19 @@ class App extends React.Component<{},{currentScreen: Screens}>{
     }
   
       return (
-      <div className="App">
-        <header className="App-header">
-        {screen}
+      <Grid className="App-header">
+        <Grid>
+          {screen}
+        </Grid>
         <BottomBar
         smokeOnClick={this.smokeOnClick}
         reviewOnClick={this.reviewOnClick}
         settingsOnClick={this.settingsOnClick}></BottomBar>
-        </header>
-      </div>
+      </Grid>
     );
   }
 
 }
 
 export default App;
+ 

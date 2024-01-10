@@ -3,7 +3,7 @@ import React from "react";
 import { getCurrentPostSmoke, setCurrentPostSmoke } from "../../../Services/postSmokeService";
 import { DynamicList } from "../../common/components/DynamicList";
 import { IMaskInput } from 'react-imask';
-
+import './postSmokeStep.style.css'
 
 export interface PostSmoke {
     restTime: string;
@@ -11,7 +11,12 @@ export interface PostSmoke {
     notes?: string;
 }
 
-export class PostSmokeStep extends React.Component<{},{postSmokeState: PostSmoke}> {
+type PostSmokeStepProps = {
+    nextButton: JSX.Element;
+  };
+  
+
+export class PostSmokeStep extends React.Component<PostSmokeStepProps,{postSmokeState: PostSmoke}> {
 
     constructor(props: any){
         super(props);
@@ -69,7 +74,7 @@ export class PostSmokeStep extends React.Component<{},{postSmokeState: PostSmoke
 
     render(): React.ReactNode {
         return (
-        <Grid container padding={3}>
+        <Grid item sx={{width: '100%'}}>
             <TextField
                 sx={{marginBottom: '10px'}}
                 id="standard-basic" 
@@ -82,17 +87,19 @@ export class PostSmokeStep extends React.Component<{},{postSmokeState: PostSmoke
                 }}
 
             />
+            <Grid>
             <DynamicList
                 newline ={() => {this.newLine()}}
                 removeLine={(index) => {this.removeLine(index)}}
                 steps={this.state.postSmokeState.steps}
                 onListChange={(step, index) => this.updateSteps(step, index)} />
+            </Grid>
             <Grid container direction="row" justifyContent='space-around'>
                 <TextField
                     sx={{
                         marginTop: '10px',
                         marginBottom: '10px',
-                        width: '350px'
+                        width: '100%'
                     }}
                     id="outlined-multiline-static"
                     label="Notes"
@@ -101,6 +108,9 @@ export class PostSmokeStep extends React.Component<{},{postSmokeState: PostSmoke
                     onChange={this.updateNotes}
                     rows={4}
                 />
+            </Grid>
+            <Grid container flexDirection='row-reverse'>
+                {this.props.nextButton}
             </Grid>
         </Grid>);
     }

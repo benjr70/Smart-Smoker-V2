@@ -1,9 +1,30 @@
 .smoke {
   height: max-content;
-  margin-bottom: 70px;
+  justify-content: center;
 }
 
 .stepper {
-    padding-top: 5%;
-    width: 95%;
+  padding-top: 5%;
+  width: 95%;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+
+.nextButton {
+  margin-right: 5%;
+  justify-content: flex-end;
+  height: 50px;
+  width: 125px;
+}
+
+.stepScreen {
+  background-color: #e0dfdf;
+  margin-left: auto;
+  margin-right: auto;
+  justify-content: center;
+  width: 100%;
+  padding: 5%;
+  min-height: calc(93vh - 56px);
+  padding-bottom: 56px;
 }
