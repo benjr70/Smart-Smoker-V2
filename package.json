@@ -12,7 +12,12 @@
     "apps/*"
   ],
   "scripts": {
-    "bootstrap": "npm install --legacy-peer-deps"
+    "bootstrap": "npm install --legacy-peer-deps",
+    "front:start": "npm run start -w frontend",
+    "back:start": "npm run start -w backend",
+    "smoker:start": "npm run start -w smoker",
+    "devices:start": "npm run start -w device-service",
+    "start": "npm-run-all -p front:start back:start smoker:start devices:start"
   },
   "repository": {
     "type": "git",
@@ -23,5 +28,8 @@
   "bugs": {
     "url": "https://github.com/benjr70/Smart-Smoker-V2/issues"
   },
-  "homepage": "https://github.com/benjr70/Smart-Smoker-V2#readme"
+  "homepage": "https://github.com/benjr70/Smart-Smoker-V2#readme",
+  "devDependencies": {
+    "npm-run-all": "^4.1.5"
+  }
 }

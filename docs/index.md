@@ -19,6 +19,9 @@ run this cmd from the base folder of the repo <br>
 This should install all apps in the project. To run each one please see appropriate tab above
 running each app locally should all connect and run together without extra config
 
+or to run all apps locally run run `npm run start` in the root folder. This will app all app in one terminal
+note you must have a local mongo DS instance running for the backend to boot
+
 ## Project layout
 
     mkdocs.yml          # The configuration file.
