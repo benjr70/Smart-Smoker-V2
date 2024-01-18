@@ -1,6 +1,7 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const Dotenv = require('dotenv-webpack');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
 var webpack = require("webpack");
 
 module.exports = (env) = {
@@ -41,6 +42,11 @@ module.exports = (env) = {
     }),
     new webpack.DefinePlugin({
       VERSION: JSON.stringify(require("../../package.json").version),
+    }),
+    new CopyWebpackPlugin({
+      patterns: [
+        { from: 'public', to: '', globOptions: { ignore: ['**/index.html'] } }
+      ],
     }),
   ]
 }

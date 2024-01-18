@@ -31,7 +31,11 @@ jobs:
         run: sudo systemctl stop tailscaled
 
       - name: docker compose up
-        run: sudo VERSION=${{ github.event.inputs.version }} docker compose -f cloud.docker-compose.yml up -d --force-recreate
+        env:
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VERSION: ${{ github.event.inputs.version }}
+        run: sudo docker compose -f cloud.docker-compose.yml up -d --force-recreate
 
       - name: start tailscale
         run: sudo systemctl start tailscaled

@@ -9,9 +9,9 @@ services:
     image: benjr70/smart_smoker:backend_V${VERSION}
     volumes:
       - /node_modules
-    # build:
-    #   context: ./apps/backend
-    #   dockerfile: ./Dockerfile
+    environment:
+      VAPID_PUBLIC_KEY: ${{VAPID_PUBLIC_KEY}}
+      VAPID_PRIVATE_KEY: ${{VAPID_PRIVATE_KEY}}
 
     ports:
       - 8443:3001
@@ -36,9 +36,8 @@ services:
     container_name: frontend_cloud
     restart: always
     image: benjr70/smart_smoker:frontend_V${VERSION}
-    # build:
-    #   context: ./apps/frontend
-    #   dockerfile: ./Dockerfile
+    environment:
+      VAPID_PUBLIC_KEY: ${{VAPID_PUBLIC_KEY}}
 
     ports:
       - 80:3000

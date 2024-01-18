@@ -7,8 +7,10 @@ import {
   } from '@nestjs/websockets';
 import { Server } from 'socket.io';
 import { StateService } from 'src/State/state.service';
+import { NotificationsService } from 'src/notifications/notifications.service';
 import { TempDto } from 'src/temps/tempDto';
 import { TempsService } from 'src/temps/temps.service';
+import * as webpush from 'web-push';
 
 let count = 0;
 @WebSocketGateway({
@@ -23,8 +25,16 @@ export class EventsGateway {
   constructor(
     private tempsService: TempsService,
     private stateService: StateService,
-    ){}
+    private notificationsService: NotificationsService,
+    ){
+      webpush.setVapidDetails(
+        'mailto:benrolf70@gmail.com',
+        process.env.VAPID_PUBLIC_KEY,
+        process.env.VAPID_PRIVATE_KEY
+      );
+    }
 
+  private subscriptions = new Set();
 
   @WebSocketServer()
   server: Server;
@@ -86,5 +96,30 @@ export class EventsGateway {
   handleRefresh(){
     Logger.log(`refresh smoke`, 'Websocket')
     this.server.emit('refresh');
+  }
+
+  @SubscribeMessage('subscribe')
+  async handleSubscribe(@MessageBody() subscription) {
+    this.subscriptions.add(subscription);
+    return { status: 'success', message: 'Subscription added.' };
+  }
+
+  async sendPushNotification(data?: string) {
+    const payload = JSON.stringify({
+      title: 'New Notification',
+      body: 'This is the body of the notification',
+      icon: '/path/to/icon.png'
+    });
+    this.notificationsService.getSubscriptions().then(subscriptions => {
+      subscriptions.forEach(subscription => {
+        webpush.sendNotification(subscription, payload).catch(error => {
+          Logger.error(`Status code: ${error.statusCode}`);
+          Logger.error(`Body: ${error.body}`);
+          Logger.error(error.stack);
+        }).then(() => {
+          Logger.log('notification sent');
+        });
+      });
+    });
   }
 }

@@ -19,6 +19,9 @@ export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer
       .apply(LoggerMiddleware)
+      .exclude(
+        { path: 'api/wifiManager/connection', method: RequestMethod.ALL },
+      )
       .forRoutes({ path: '*', method: RequestMethod.ALL });
   }
 }

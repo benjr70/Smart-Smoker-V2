@@ -14,9 +14,9 @@
   "scripts": {
     "bootstrap": "npm install --legacy-peer-deps",
     "front:start": "npm run start -w frontend",
-    "back:start": "npm run start -w backend",
+    "back:start": "npm run start:dev -w backend",
     "smoker:start": "npm run start -w smoker",
-    "devices:start": "npm run start -w device-service",
+    "devices:start": "npm run start:dev -w device-service",
     "start": "npm-run-all -p front:start back:start smoker:start devices:start"
   },
   "repository": {
