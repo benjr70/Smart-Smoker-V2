@@ -14,6 +14,7 @@ import { ConfigModule } from '@nestjs/config'
 import { RatingsModel } from './ratings/ratings.module';
 import { HistoryModule } from './history/history.module';
 import { LoggerMiddleware } from './logger.middleware';
+import { NotificationsModule } from './notifications/notifications.module';
 
 const ENV = process.env.NODE_ENV.trim();
 @Module({
@@ -27,6 +28,7 @@ const ENV = process.env.NODE_ENV.trim();
     PostSmokeModule,
     RatingsModel,
     HistoryModule,
+    NotificationsModule,
     ConfigModule.forRoot({
       envFilePath: !ENV ? '.env' : `.env.${ENV}`,
     }),

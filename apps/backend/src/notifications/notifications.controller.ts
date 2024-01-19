@@ -1,15 +1,29 @@
-import { Controller, Get } from '@nestjs/common';
+import { Body, Controller, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { NotificationsService } from './notifications.service';
+import { Notifications } from './notifications.schema';
 
 
-@ApiTags('notifications')
+export interface PushSubscription {
+    endpoint: string;
+    expirationTime: number | null;
+    keys: {
+      p256dh: string;
+      auth: string;
+    };
+  }
+
+
+@ApiTags('Notifications')
 @Controller('api/notifications')
 export class NotificationsController {
-  
-    @Get()
-    getNotificationSettings(): string{
-        return 'this is a test';
-    }
 
+    constructor(private readonly notificationsService: NotificationsService){
+    }
+  
+    @Post('/subscribe')
+    setSubscription(@Body() subscription: PushSubscription): Promise<Notifications>{
+        return this.notificationsService.setSubscription(subscription);
+    }
 
 }

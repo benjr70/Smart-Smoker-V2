@@ -6,7 +6,12 @@ before you start you will need to run a local mongodb server <br>
 you may need to do some googling to set that up but here are the [mongoDb Docs](https://www.mongodb.com/docs/manual/administration/install-community/)
 
 make sure it is running on this `http://127.0.0.1:27017` <br>
-if not just update the .env.local in the backend folder
+
+You will need to create a .env.local for this app. The values you need for this are as follows:
+* DB_URL=mongodb://127.0.0.1:27017/SmokerDB
+* VAPID_PUBLIC_KEY=<your_generated_key>
+* VAPID_PRIVATE_KEY=<your_generated_key>
+
 
 once that is set up just run <br>
 `npm run start` <br>
