@@ -44,6 +44,8 @@ nav:
     - CIDI: cidi.md
     - Hardware: Hardware/index.md
     - Pi Software: piSoftware.md
+    - Epics: 
+        - Push Notifications: Epics/pushNotifications.md
   - Apps:
     - Frontend:
       - Frontend/index.md
