@@ -38,7 +38,7 @@ export function PreSmokeCard(props: preSmokeCardProps): JSX.Element {
                     {props.preSmoke.meatType} {props.preSmoke.weight.weight} {props.preSmoke.weight.unit}
                 </Typography>
                 {props.preSmoke.steps.map((step, index) => {
-                    return (<Typography sx={{ fontSize: 18 }}>
+                    return (<Typography sx={{ fontSize: 18 }} key={`pre-smoker-card-${index}`}>
                         {index + 1}. {step}
                     </Typography>)
                 })}

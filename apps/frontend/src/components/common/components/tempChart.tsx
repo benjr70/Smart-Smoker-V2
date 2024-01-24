@@ -35,7 +35,7 @@ import * as d3 from 'd3';
       .attr('width', width + margin.left + margin.right)
       .attr('height', height  + margin.top + margin.bottom)
       .style('background', '#d3d3d3')
-
+      
     //setting the scaling
     const xScale = d3.scaleTime()
     // @ts-ignore
@@ -73,7 +73,8 @@ import * as d3 from 'd3';
       .y((d) => {return yScale(d.Meat3Temp);})
 
   const reDrawGraph =async (data: TempData[]) => {
-  
+
+    if (!svg.empty()) {
       svg.selectAll('.line')
       .data([data])
       .join('path')
@@ -116,19 +117,20 @@ import * as d3 from 'd3';
       .attr('d', generateScaledLineProbe3)
 
 
-    svg.selectAll(".xAxis").remove();
-    // Add the X Axis
-    svg.append("g")
-        .attr('class', 'xAxis')
-        .attr("transform", "translate(0," + height + ")")
-        .call(d3.axisBottom(xScale));
+      svg.selectAll(".xAxis").remove();
+      // Add the X Axis
+      svg.append("g")
+          .attr('class', 'xAxis')
+          .attr("transform", "translate(0," + height + ")")
+          .call(d3.axisBottom(xScale));
 
-    svg.selectAll(".yAxis").remove();
-    // Add the Y Axis
-    svg.append("g")
-      .attr('class', 'yAxis')
-      .attr("transform", "translate(30, 0)")
-      .call(d3.axisLeft(yScale));
+      svg.selectAll(".yAxis").remove();
+      // Add the Y Axis
+      svg.append("g")
+        .attr('class', 'yAxis')
+        .attr("transform", "translate(30, 0)")
+        .call(d3.axisLeft(yScale));
+    }
   }
 
   useEffect(() => {

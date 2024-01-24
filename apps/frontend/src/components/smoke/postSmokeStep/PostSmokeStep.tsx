@@ -26,6 +26,12 @@ export class PostSmokeStep extends React.Component<PostSmokeStepProps,{postSmoke
             notes: ''
         }};
 
+        this.updateName = this.updateName.bind(this);
+        this.updateNotes = this.updateNotes.bind(this);
+        this.updateSteps = this.updateSteps.bind(this);
+    }
+
+    componentDidMount(): void {
         getCurrentPostSmoke().then(postSmoke => {
             let temp = this.state.postSmokeState;
             temp.notes = postSmoke.notes;
@@ -33,9 +39,6 @@ export class PostSmokeStep extends React.Component<PostSmokeStepProps,{postSmoke
             temp.steps = postSmoke.steps;
             this.setState({postSmokeState: temp});
         })
-        this.updateName = this.updateName.bind(this);
-        this.updateNotes = this.updateNotes.bind(this);
-        this.updateSteps = this.updateSteps.bind(this);
     }
 
     updateName(event: any){

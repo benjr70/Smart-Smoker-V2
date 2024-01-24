@@ -36,7 +36,7 @@ export function PostSmokeCard(props: preSmokeCardProps): JSX.Element {
                     Rest Time: {props.postSmoke.restTime}
                 </Typography>
                 {props.postSmoke.steps.map((step, index) => {
-                    return (<Typography sx={{ fontSize: 18 }}>
+                    return (<Typography sx={{ fontSize: 18 }} key={`post-smoker-card-${index}`}>
                         {index + 1}. {step}
                     </Typography>)
                 })}

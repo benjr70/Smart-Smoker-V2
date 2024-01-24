@@ -71,8 +71,8 @@ export class History extends React.Component<{},{history: historyInterface}> {
             : <></>}
             <Grid container spacing={2} sx={{display: 'flex', justifyContent: 'center'}} paddingBottom={8}>
             {!this.state.history.smokeId ?
-                this.state.history.smokeHistoryList.map(smokeHistory => {
-                    return (<Grid item xs={11}>
+                this.state.history.smokeHistoryList.map((smokeHistory, index) => {
+                    return (<Grid item xs={11} key={`smoke-card-${index}`}>
                         <SmokeCard
                             name={smokeHistory.name}
                             meatType={smokeHistory.meatType}
