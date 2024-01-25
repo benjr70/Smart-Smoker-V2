@@ -49,17 +49,17 @@ export class SmokeStep extends React.Component<SmokeStepProps, {tempState: State
             }
         };
 
+        this.updateNotes = this.updateNotes.bind(this);
+        this.updateWoodType = this.updateWoodType.bind(this);
+    }
+
+    async componentDidMount(): Promise<void> {
         getCurrentSmokeProfile().then((smokeProfile: smokeProfile) => {
             let temp = this.state.tempState;
             temp.notes = smokeProfile.notes;
             temp.woodType = smokeProfile.woodType;
             this.setState({tempState: temp});
         })
-        this.updateNotes = this.updateNotes.bind(this);
-        this.updateWoodType = this.updateWoodType.bind(this);
-    }
-
-    async componentDidMount(): Promise<void> {
         initTemps = await getCurrentTemps();
         let url = process.env.WS_URL ?? '';
         socket = io(url);

@@ -13,14 +13,13 @@ export function DynamicList(props: dynamicListProps ): JSX.Element{
     if(props.steps){
     return (<>
         {props.steps.map((step, index) => (
-            <Grid className="dynamicList">
+            <Grid className="dynamicList" key={`dynamic-list-item${index}`}>
                 <Grid className="stepNumber">{index + 1}.</Grid>
                 <TextField
                     sx={{marginRight: '10px'}}
                     id="outlined-textarea"
                     label="Step"
                     placeholder="Placeholder"
-                    defaultValue={step}
                     value={step}
                     onChange={(event) => {props.onListChange(event.target.value, index)}}
                     multiline

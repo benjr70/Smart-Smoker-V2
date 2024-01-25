@@ -21,13 +21,15 @@ export class RateSmokeStep extends React.Component<RateSmokeStepProps,{ratingSta
             notes: '',
         }}
 
+        this.updateValues = this.updateValues.bind(this);
+    }
+
+    componentDidMount(): void {
         getCurrentRatings().then(currentRating => {
             if(currentRating){
                 this.setState({ratingState: currentRating});
             }
         })
-
-        this.updateValues = this.updateValues.bind(this);
     }
 
     updateValues(event: any, field: string){

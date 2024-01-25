@@ -29,9 +29,6 @@ export class PreSmokeStep extends React.Component<PreSmokeStepProps,{preSmokeSta
             steps: [''],
             notes: ''
         }};
-        getCurrentPreSmoke().then(result => {
-           this.setState({preSmokeState: result});
-        })
        this.handleUnitChange = this.handleUnitChange.bind(this);
        this.updateName = this.updateName.bind(this);
        this.updateMeatType = this.updateMeatType.bind(this);
@@ -41,6 +38,12 @@ export class PreSmokeStep extends React.Component<PreSmokeStepProps,{preSmokeSta
        this.newLine = this.newLine.bind(this);
        this.removeLine = this.removeLine.bind(this);
        this.updateSteps = this.updateSteps.bind(this);
+    }
+
+    componentDidMount(): void {
+        getCurrentPreSmoke().then(result => {
+            this.setState({preSmokeState: result});
+         })
     }
 
     handleUnitChange( event: any) {
