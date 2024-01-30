@@ -55,12 +55,15 @@ export function NotificationsCard(): JSX.Element {
                                 handleDelete={handleDelete}
                                 index={index}
                                 onNotificationChange={handleNotificationChange}
-                                key={`notification${index}`}
+                                key={`notification-${index}`}
                                 />
                     })}
-                    <Button variant="contained" startIcon={<AddCircleIcon/>} onClick={handleNewRule} >
-                        New Rule
-                    </Button>
+                    <Grid padding={1}>
+                        <Button variant="contained" startIcon={<AddCircleIcon/>} onClick={handleNewRule} >
+                            New Rule
+                        </Button>
+                    </Grid>
+
                 </Grid>
             </CardContent>
         </Card>
@@ -149,8 +152,7 @@ function Notification(props: NotificationProps): JSX.Element {
         }
 
     return (
-    <Grid item sx={{ p: 0.5, border: '0.5px solid grey',  borderRadius: 1, padding: '5px'  }}>
-        {/* <Box sx={{ p: 0.5, border: '1px solid grey',  borderRadius: 1 }}> */}
+    <Grid item sx={{ p: 0.5, border: '0.5px solid black',  borderRadius: 1, padding: '4px', margin: '5px', paddingBottom: '8px'  }}>
             <Grid>
                 <Stack direction="row" alignItems="center" justifyContent={'space-between'} >
                     <Stack direction="row" alignItems="center" justifyContent={'flex-start'}>
@@ -173,7 +175,6 @@ function Notification(props: NotificationProps): JSX.Element {
                     variant="standard"
                     value={props.notification.message}
                     onChange={onMessageChange}
-                    // size="small"
                     sx={{width: '100%'}}
                 />
             </Grid>
@@ -183,8 +184,8 @@ function Notification(props: NotificationProps): JSX.Element {
                     select
                     label="Probe 1"
                     value={props.notification.probe1}
+                    InputLabelProps={{ shrink: true }}
                     onChange={onProbe1Change}
-                    // size="small"
                     sx={{width: '34%'}}
                     variant="standard"
                     SelectProps={{
@@ -203,7 +204,7 @@ function Notification(props: NotificationProps): JSX.Element {
                     label="Op"
                     value={props.notification.op}
                     onChange={onOpsChange}
-                    // size="small"
+                    InputLabelProps={{ shrink: true }}
                     variant="standard"
                     sx={{width: '16%'}}
                     SelectProps={{
@@ -223,7 +224,7 @@ function Notification(props: NotificationProps): JSX.Element {
                     label="Probe 2"
                     value={props.notification.probe2}
                     onChange={onProbe2Change}
-                    // size="small"
+                    InputLabelProps={{ shrink: true }}
                     variant="standard"
                     sx={{width: '34%'}}
                     SelectProps={{
@@ -242,7 +243,6 @@ function Notification(props: NotificationProps): JSX.Element {
                     variant="standard"
                     value={props.notification.offset}
                     onAbort={offsetChange}
-                    // size="small"
                     type="number"
                     sx={{width: '15%'}}
                 /> </>:
@@ -252,11 +252,9 @@ function Notification(props: NotificationProps): JSX.Element {
                     variant="standard"
                     value={props.notification.temperature}
                     onChange={onTemperatureChange}
-                    // size="small"
                     type="number"
                     sx={{width: '34%'}}
                 /> }
             </Grid>
-        {/* </Box> */}
     </Grid>);
 }
