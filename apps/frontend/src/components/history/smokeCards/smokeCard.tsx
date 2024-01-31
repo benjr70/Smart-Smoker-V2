@@ -34,7 +34,7 @@ export function SmokeCard(props: SmokeCardProps): JSX.Element {
     return (
     <Grid >
         <ThemeProvider theme={theme}>
-        <Card className="card">
+        <Card >
             <CardContent >
                 <Typography variant="h5" component="div">
                     {props.name}
