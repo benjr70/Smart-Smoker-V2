@@ -1,18 +1,8 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
-import { Notifications } from './notifications.schema';
-
-
-export interface PushSubscription {
-    endpoint: string;
-    expirationTime: number | null;
-    keys: {
-      p256dh: string;
-      auth: string;
-    };
-  }
-
+import { NotificationSubscription } from './notificationSubscription.schema';
+import { NotificationSettings } from './notificationSettings.schema';
 
 @ApiTags('Notifications')
 @Controller('api/notifications')
@@ -22,8 +12,18 @@ export class NotificationsController {
     }
   
     @Post('/subscribe')
-    setSubscription(@Body() subscription: PushSubscription): Promise<Notifications>{
+    setSubscription(@Body() subscription: NotificationSubscription): Promise<NotificationSubscription>{
         return this.notificationsService.setSubscription(subscription);
+    }
+
+    @Post('/settings')
+    setSettings(@Body() settings: NotificationSettings): Promise<NotificationSettings>{
+        return this.notificationsService.setSettings(settings);
+    }
+
+    @Get('/settings')
+    getSettings(): Promise<NotificationSettings>{
+        return this.notificationsService.getSettings();
     }
 
 }
