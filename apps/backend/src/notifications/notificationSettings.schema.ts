@@ -8,7 +8,7 @@ export type NotificationSettingsDocument = NotificationSettings & Document
 
 
 @Schema()
-export class NotificationSettings {
+export class NotificationSetting {
 
     @ApiProperty()
     @Prop()
@@ -38,6 +38,16 @@ export class NotificationSettings {
     @Prop({ default: undefined })
     temperature?: number;
 
+}
+
+export const NotificationSettingSchema = SchemaFactory.createForClass(NotificationSetting);
+
+
+@Schema()
+export class NotificationSettings {
+  @ApiProperty({ type: [NotificationSetting] })
+  @Prop({ type: [NotificationSettingSchema] })
+  settings: NotificationSetting[];
 }
 
 export const NotificationSettingsSchema = SchemaFactory.createForClass(NotificationSettings);
