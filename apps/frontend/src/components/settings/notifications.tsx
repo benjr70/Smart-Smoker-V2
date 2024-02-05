@@ -20,8 +20,9 @@ export function NotificationsCard(): JSX.Element {
     const initialNotification: NotificationSettings = {
         type: false,
         message: '',
-        probe1: '',
-        op: '',
+        probe1: 'Chamber',
+        op: '>',
+        probe2: 'Probe 1'
     }
 
     const [Notifications, setNotifications] = React.useState([initialNotification]);
@@ -261,7 +262,7 @@ function Notification(props: NotificationProps): JSX.Element {
                     variant="standard"
                     value={props.notification.offset}
                     InputLabelProps={{ shrink: true }}
-                    onAbort={offsetChange}
+                    onChange={offsetChange}
                     type="number"
                     sx={{width: '15%'}}
                 /> </>:

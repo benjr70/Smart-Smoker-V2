@@ -38,6 +38,8 @@ export class NotificationSetting {
     @Prop({ default: undefined })
     temperature?: number;
 
+    @Prop({ default: new Date(0) })
+    lastNotificationSent: Date;
 }
 
 export const NotificationSettingSchema = SchemaFactory.createForClass(NotificationSetting);

@@ -1,10 +1,13 @@
 self.addEventListener('push', function(event) {
-    const title = 'Push Notification';
+    if ( event.data ) {
+      notification = JSON.parse(event.data.text());
+    }
     const options = {
-      body: 'You have a new message!',
-      // icon: 'images/icon.png',
-      // badge: 'images/badge.png',
+      body: notification.body,
+      title: notification.title,
+      icon: 'logo192.png',
+      badge: 'logo192.png',
     };
     console.log('Push Notification', Notification.permission);
-    event.waitUntil(self.registration.showNotification(title, options));
+    event.waitUntil(self.registration.showNotification(notification.title, options));
   });
