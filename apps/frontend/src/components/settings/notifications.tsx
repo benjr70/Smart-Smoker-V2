@@ -1,10 +1,11 @@
 import { Box, Button, Card, CardContent, Grid, IconButton, Stack, Switch, TextField, ThemeProvider, Typography, createTheme } from "@mui/material";
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddCircleIcon from '@mui/icons-material/AddCircle';
+import { getNotificationSettings, setNotificationSettings } from "../../Services/notificationsService";
 
 
-export interface Notification {
+export interface NotificationSettings {
     type: boolean;
     message: string;
     probe1: string;
@@ -16,14 +17,32 @@ export interface Notification {
 
 export function NotificationsCard(): JSX.Element {
 
-    const initialNotification: Notification = {
+    const initialNotification: NotificationSettings = {
         type: false,
         message: '',
-        probe1: '',
-        op: '',
+        probe1: 'Chamber',
+        op: '>',
+        probe2: 'Probe 1'
     }
 
     const [Notifications, setNotifications] = React.useState([initialNotification]);
+
+    const NotificationsRef = useRef(Notifications); // Create a ref
+
+    useEffect(() => {
+        NotificationsRef.current = Notifications; // Update the ref each time Notifications changes
+    }, [Notifications]);
+
+    useEffect(() => {
+        getNotificationSettings().then((data: NotificationSettings[]) => {
+           setNotifications(data);
+        } );
+
+        return () => {
+            setNotificationSettings({settings: NotificationsRef.current});
+        }
+    }, []);
+
 
     const handleNewRule = () => {
         setNotifications([...Notifications, initialNotification]);
@@ -35,7 +54,7 @@ export function NotificationsCard(): JSX.Element {
         setNotifications([...temp]);
     }
 
-    const handleNotificationChange = (notification: Notification, index: number) => {
+    const handleNotificationChange = (notification: NotificationSettings, index: number) => {
         let temp = Notifications;
         temp[index] = notification;
         setNotifications([...temp]);
@@ -71,9 +90,9 @@ export function NotificationsCard(): JSX.Element {
 }
 
 interface NotificationProps {
-    notification: Notification;
+    notification: NotificationSettings;
     handleDelete: (index: number) => void;
-    onNotificationChange?: (notification: Notification, index: number) => void;
+    onNotificationChange?: (notification: NotificationSettings, index: number) => void;
     index: number;
 }
 
@@ -242,7 +261,8 @@ function Notification(props: NotificationProps): JSX.Element {
                     label="offset"
                     variant="standard"
                     value={props.notification.offset}
-                    onAbort={offsetChange}
+                    InputLabelProps={{ shrink: true }}
+                    onChange={offsetChange}
                     type="number"
                     sx={{width: '15%'}}
                 /> </>:
@@ -251,6 +271,7 @@ function Notification(props: NotificationProps): JSX.Element {
                     label="Temperature"
                     variant="standard"
                     value={props.notification.temperature}
+                    InputLabelProps={{ shrink: true }}
                     onChange={onTemperatureChange}
                     type="number"
                     sx={{width: '34%'}}
