@@ -33,3 +33,6 @@ In the frontend add on start up we:
 
 7. In the events.gateway for the websocket lives our pushNotification function that will detect when and what to send as a push notification to the user 
 
+!!! note "Note"
+     
+     Push notifications are set on a 10 minute timeout, once you get a notification it will not send that same one for another 10 minutes
