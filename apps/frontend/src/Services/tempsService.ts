@@ -1,4 +1,4 @@
-import { TempData } from "../components/common/components/tempChart";
+import { TempData } from 'temperaturechart/src/tempChart';
 
 
 const envUrl = process.env.REACT_APP_CLOUD_URL;

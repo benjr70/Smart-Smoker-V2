@@ -4,7 +4,7 @@ import Grid from '@mui/material/Grid';
 import { io } from 'socket.io-client';
 import { Button } from '@mui/material';
 import { getState, toggleSmoking } from '../../services/stateService';
-import TempChart, { TempData } from '../common/tempChart';
+import  TempChart, { TempData } from 'temperaturechart/src/tempChart';
 import { getCurrentTemps, postTempsBatch } from '../../services/tempsService';
 import WifiIcon from '@mui/icons-material/Wifi';
 import WifiOffIcon from '@mui/icons-material/WifiOff';

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 
- export interface TempData {
+ export type TempData = {
   ChamberTemp: number;
   MeatTemp: number;
   Meat2Temp: number;
@@ -21,7 +21,7 @@ import * as d3 from 'd3';
   initData: TempData[];
  }
 
- function TempChart(props: props) {
+ function TempChart(props: props): JSX.Element {
     
   const svgRef = useRef() as React.RefObject<SVGSVGElement>;
   const [data, setData] = useState(props.initData);

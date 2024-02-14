@@ -1,7 +1,7 @@
 import { Card, CardContent, Grid, ThemeProvider, Typography, createTheme } from "@mui/material";
 import React from "react";
 import { smokeProfile } from "../../../Services/smokerService";
-import TempChart, { TempData } from "../../common/components/tempChart";
+import  TempChart, { TempData } from 'temperaturechart/src/tempChart';
 
 
 interface SmokeProfileCardProps {
