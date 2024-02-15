@@ -19,23 +19,19 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: docker pull
-        run: VERSION=${{ github.event.inputs.version }} docker compose -f cloud.docker-compose.yml pull
+        run: VERSION=${{ github.event.inputs.version }} VAPID_PRIVATE_KEY=${{ secrets.VAPID_PRIVATE_KEY }} VAPID_PUBLIC_KEY=${{ secrets.VAPID_PUBLIC_KEY }} docker compose -f cloud.docker-compose.yml pull
 
       - name: docker build
-        run: VERSION=${{ github.event.inputs.version }} docker compose -f cloud.docker-compose.yml build
+        run: VERSION=${{ github.event.inputs.version }} VAPID_PRIVATE_KEY=${{ secrets.VAPID_PRIVATE_KEY }} VAPID_PUBLIC_KEY=${{ secrets.VAPID_PUBLIC_KEY }} docker compose -f cloud.docker-compose.yml build
 
       - name: docker compose down
-        run: VERSION=${{ github.event.inputs.version }} sudo docker compose -f cloud.docker-compose.yml down
+        run: VERSION=${{ github.event.inputs.version }} VAPID_PRIVATE_KEY=${{ secrets.VAPID_PRIVATE_KEY }} VAPID_PUBLIC_KEY=${{ secrets.VAPID_PUBLIC_KEY }} sudo docker compose -f cloud.docker-compose.yml down
 
       - name: kill tailscale
         run: sudo systemctl stop tailscaled
 
       - name: docker compose up
-        env:
-          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
-          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
-          VERSION: ${{ github.event.inputs.version }}
-        run: sudo docker compose -f cloud.docker-compose.yml up -d --force-recreate
+        run:  VERSION=${{ github.event.inputs.version }} VAPID_PRIVATE_KEY=${{ secrets.VAPID_PRIVATE_KEY }} VAPID_PUBLIC_KEY=${{ secrets.VAPID_PUBLIC_KEY }} sudo docker compose -f cloud.docker-compose.yml up -d --force-recreate
 
       - name: start tailscale
         run: sudo systemctl start tailscaled
