@@ -135,5 +135,6 @@ jobs:
   Deploy:
       needs: [FrontEnd, Backend]
       uses: benjr70/Smart-Smoker-V2/.github/workflows/cloud-deploy.yml@master
+      secrets: inherit
       with:
         version: ${{ github.event.inputs.version }}
