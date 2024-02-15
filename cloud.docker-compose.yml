@@ -10,8 +10,8 @@ services:
     volumes:
       - /node_modules
     environment:
-      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
-      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
 
     ports:
       - 8443:3001
@@ -37,7 +37,6 @@ services:
     restart: always
     image: benjr70/smart_smoker:frontend_V${VERSION}
     environment:
-      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
-
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
     ports:
       - 80:3000
