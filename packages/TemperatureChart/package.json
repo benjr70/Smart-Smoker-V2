@@ -1,0 +1,23 @@
+{
+  "name": "temperaturechart",
+  "version": "1.0.0",
+  "description": "Temperature chart package for smart smoker",
+  "main": "dist/tempChart.js",
+  "scripts": {
+    "bootstrap": "npm install --legacy-peer-deps",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "tsc",
+    "build": "babel src --out-dir dist"
+  },
+  "author": "Ben Rolf",
+  "license": "ISC",
+  "devDependencies": {
+    "@babel/cli": "^7.23.9",
+    "@babel/preset-env": "^7.23.9",
+    "@babel/preset-react": "^7.23.3"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  }
+}

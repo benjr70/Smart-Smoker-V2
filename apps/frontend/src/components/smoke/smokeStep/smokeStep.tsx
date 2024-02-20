@@ -4,8 +4,8 @@ import './smokeStep.style.css'
 import { io } from 'socket.io-client';
 import { Autocomplete, Button, Divider, TextField } from "@mui/material";
 import { getCurrentSmokeProfile, getState, setSmokeProfile, smokeProfile, toggleSmoking } from "../../../Services/smokerService";
-import TempChart, { TempData } from "../../common/components/tempChart";
 import { getCurrentTemps } from "../../../Services/tempsService";
+import  TempChart, { TempData } from 'temperaturechart/src/tempChart';
 
 interface State {
     probeTemp1: string;
@@ -28,8 +28,7 @@ const woodType = [
 
 type SmokeStepProps = {
     nextButton: JSX.Element;
-  };
-  
+};
 
 let initTemps: TempData[] = [];
 let socket: any;

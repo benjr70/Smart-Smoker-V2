@@ -6,8 +6,7 @@ import { getSmokeById, getSmokeProfileById, smokeProfile } from "../../../Servic
 import { PreSmokeCard } from "../smokeCards/preSmokeCard";
 import { SmokeProfileCard } from "../smokeCards/smokeProfileCard";
 import { getTempsById } from "../../../Services/tempsService";
-import { TempData } from "../../common/components/tempChart";
-import { delay } from "../../smoke/smoke";
+import { TempData } from 'temperaturechart/src/tempChart';
 import { PostSmokeCard } from "../smokeCards/postSmokeCard";
 import { PostSmoke } from "../../smoke/postSmokeStep/PostSmokeStep";
 import { getPostSmokeById } from "../../../Services/postSmokeService";
