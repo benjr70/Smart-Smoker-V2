@@ -22,58 +22,56 @@ import * as d3 from 'd3';
  }
 
  function TempChart(props: props): JSX.Element {
+   const svgRef = useRef() as React.RefObject<SVGSVGElement>;
+   const [data, setData] = useState(props.initData);
+
+  // set the dimensions and margins of the graph
+  const margin = {top: 10, right: 0, bottom: 10, left: 10};
+  const width = props.width - margin.left - margin.right;
+  const height = props.height - margin.top - margin.bottom;
+
+  const svg = d3.select(svgRef.current)
+    .attr('width', width + margin.left + margin.right)
+    .attr('height', height  + margin.top + margin.bottom)
+    .style('background', '#d3d3d3')
     
-  const svgRef = useRef() as React.RefObject<SVGSVGElement>;
-  const [data, setData] = useState(props.initData);
+  //setting the scaling
+  const xScale = d3.scaleTime()
+  // @ts-ignore
+    .domain(d3.extent(data, d => new Date(d.date).getTime()))
+    .range([30, width]);
 
-    // set the dimensions and margins of the graph
-    const margin = {top: 10, right: 0, bottom: 10, left: 10};
-    const width = props.width - margin.left - margin.right;
-    const height = props.height - margin.top - margin.bottom;
+  const yScale = d3.scaleLinear()
+  // @ts-ignore
+    .domain([0,( d3.max(data, d => {return Math.max(d.ChamberTemp, d.MeatTemp, d.Meat2Temp, d.Meat3Temp)}) * 1.15)])
+    .range([height, 0]);
 
-    const svg = d3.select(svgRef.current)
-      .attr('width', width + margin.left + margin.right)
-      .attr('height', height  + margin.top + margin.bottom)
-      .style('background', '#d3d3d3')
-      
-    //setting the scaling
-    const xScale = d3.scaleTime()
+  const generateScaledLineChamber = d3.line()
     // @ts-ignore
-      .domain(d3.extent(data, d => new Date(d.date).getTime()))
-      .range([30, width]);
-
-    const yScale = d3.scaleLinear()
+    .x((d) => {return xScale(new Date(d.date).getTime())})
     // @ts-ignore
-      .domain([0,( d3.max(data, d => {return Math.max(d.ChamberTemp, d.MeatTemp, d.Meat2Temp, d.Meat3Temp)}) * 1.15)])
-      .range([height, 0]);
+    .y((d) => {return yScale(d.ChamberTemp);})
+    .curve(d3.curveCardinal)
 
-    const generateScaledLineChamber = d3.line()
-      // @ts-ignore
-      .x((d) => {return xScale(new Date(d.date).getTime())})
-      // @ts-ignore
-      .y((d) => {return yScale(d.ChamberTemp);})
-      .curve(d3.curveCardinal)
+  const generateScaledLineProbe1 = d3.line()
+  // @ts-ignore
+  .x((d) => {return xScale(new Date(d.date).getTime())})
+  // @ts-ignore
+  .y((d) => {return yScale(d.MeatTemp);})
 
-      const generateScaledLineProbe1 = d3.line()
-      // @ts-ignore
-      .x((d) => {return xScale(new Date(d.date).getTime())})
-      // @ts-ignore
-      .y((d) => {return yScale(d.MeatTemp);})
+  const generateScaledLineProbe2 = d3.line()
+  // @ts-ignore
+  .x((d) => {return xScale(new Date(d.date).getTime())})
+  // @ts-ignore
+  .y((d) => {return yScale(d.Meat2Temp);})
 
-      const generateScaledLineProbe2 = d3.line()
-      // @ts-ignore
-      .x((d) => {return xScale(new Date(d.date).getTime())})
-      // @ts-ignore
-      .y((d) => {return yScale(d.Meat2Temp);})
-
-      const generateScaledLineProbe3 = d3.line()
-      // @ts-ignore
-      .x((d) => {return xScale(new Date(d.date).getTime())})
-      // @ts-ignore
-      .y((d) => {return yScale(d.Meat3Temp);})
+  const generateScaledLineProbe3 = d3.line()
+  // @ts-ignore
+  .x((d) => {return xScale(new Date(d.date).getTime())})
+  // @ts-ignore
+  .y((d) => {return yScale(d.Meat3Temp);})
 
   const reDrawGraph =async (data: TempData[]) => {
-
     if (!svg.empty()) {
       svg.selectAll('.line')
       .data([data])
@@ -132,6 +130,8 @@ import * as d3 from 'd3';
         .call(d3.axisLeft(yScale));
     }
   }
+    
+  reDrawGraph(data);
 
   useEffect(() => {
     setData(props.initData);
