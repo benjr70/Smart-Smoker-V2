@@ -40,8 +40,6 @@ export function SmokeProfileCard(props: SmokeProfileCardProps): JSX.Element {
                     Meat2Temp={props.temps[props.temps.length - 1].Meat2Temp}
                     Meat3Temp={props.temps[props.temps.length - 1].Meat3Temp}
                     date={props.temps[props.temps.length - 1].date}
-                    width={345}
-                    height={200}
                     smoking={false}
                     initData={props.temps}
                 />
