@@ -194,7 +194,7 @@ export class Home extends React.Component<{}, {tempState: State, activeScreen: n
                             </Grid>
                     </Grid>
                 </Grid>
-                <Grid>
+                <Grid item xs={12} style={{ height: '83vh' }}>
                     <TempChart
                         ChamberTemp={parseFloat(this.state.tempState.chamberTemp)}
                         MeatTemp={parseFloat(this.state.tempState.probeTemp1)}
@@ -202,8 +202,6 @@ export class Home extends React.Component<{}, {tempState: State, activeScreen: n
                         Meat3Temp={parseFloat(this.state.tempState.probeTemp3)}
                         date={this.state.tempState.date}
                         smoking={this.state.tempState.smoking}
-                        height={380}
-                        width={800}
                         initData={initTemps}
                     ></TempChart>
                 </Grid>

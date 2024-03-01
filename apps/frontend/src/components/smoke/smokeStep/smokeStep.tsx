@@ -122,7 +122,7 @@ export class SmokeStep extends React.Component<SmokeStepProps, {tempState: State
 
     render(): React.ReactNode {
         return (
-            <Grid item>
+            <Grid item xs={12}>
                 <Grid container direction="column" sx={{marginTop: '10px'}}>
                     <Grid container direction="row" justifyContent='space-around' sx={{margin: '5px'}} color={'#1f4f2d'}>
                         <Grid item className='text'  >
@@ -161,15 +161,13 @@ export class SmokeStep extends React.Component<SmokeStepProps, {tempState: State
                     </Grid>
                     
                 </Grid>
-                <Grid container justifyContent='center'>
+                <Grid item justifyContent='center'>
                     <TempChart
                         ChamberTemp={parseFloat(this.state.tempState.chamberTemp)}
                         MeatTemp={parseFloat(this.state.tempState.probeTemp1)}
                         Meat2Temp={parseFloat(this.state.tempState.probeTemp2)}
                         Meat3Temp={parseFloat(this.state.tempState.probeTemp3)}
                         date={this.state.tempState.date}
-                        width={window.innerWidth - window.innerWidth * 0.05}
-                        height={150}
                         smoking={this.state.tempState.smoking}
                         initData={initTemps}></TempChart>
                 </Grid>

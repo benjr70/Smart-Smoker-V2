@@ -15,61 +15,89 @@ import * as d3 from 'd3';
   Meat2Temp: number;
   Meat3Temp: number;
   date: Date;
-  height: number;
-  width: number;
   smoking: boolean;
   initData: TempData[];
  }
 
- function TempChart(props: props): JSX.Element {
-   const svgRef = useRef() as React.RefObject<SVGSVGElement>;
-   const [data, setData] = useState(props.initData);
+function TempChart(props: props): JSX.Element {
+  const svgRef = useRef() as React.RefObject<SVGSVGElement>;
+  const [data, setData] = useState(props.initData);
+  let xScale: any;
+  let yScale: any;
+  let generateScaledLineChamber: any;
+  let generateScaledLineProbe1: any;
+  let generateScaledLineProbe2: any;
+  let generateScaledLineProbe3: any;
+  let svg: any;
 
+  d3.select(window).on('resize', () => {
+    const containerSize = svg.node()?.getBoundingClientRect();
+    width = containerSize!.width;
+    height = containerSize!.width * 0.5;
+    console.log(containerSize);
+    svg.attr('width', width);
+    svg.attr('height', height);
+    svg.attr("viewBox", `0 0 ${width} ${height}`)
+    CreateStuff();
+    reDrawGraph(data);
+  });
+
+  // Select the container
+  const container = d3.select(svgRef.current);
+
+  // Get the size of the container
+  const containerSize = container.node()?.getBoundingClientRect();
   // set the dimensions and margins of the graph
   const margin = {top: 10, right: 0, bottom: 10, left: 10};
-  const width = props.width - margin.left - margin.right;
-  const height = props.height - margin.top - margin.bottom;
-
-  const svg = d3.select(svgRef.current)
-    .attr('width', width + margin.left + margin.right)
-    .attr('height', height  + margin.top + margin.bottom)
+  let width = (containerSize?.width ?? 0);
+  let height = (containerSize?.width ?? 0) * 0.5;
+  console.log('wtf',containerSize);
+  
+  const CreateStuff = () => {
+    svg = d3.select(svgRef.current)
+    .attr('width', '100%')
+    .attr('height', '100%')
+    .attr("viewBox", `0 0 ${width} ${height}`)
     .style('background', '#d3d3d3')
-    
-  //setting the scaling
-  const xScale = d3.scaleTime()
-  // @ts-ignore
-    .domain(d3.extent(data, d => new Date(d.date).getTime()))
-    .range([30, width]);
+    .attr("preserveAspectRatio", "xMinYMin")
 
-  const yScale = d3.scaleLinear()
-  // @ts-ignore
-    .domain([0,( d3.max(data, d => {return Math.max(d.ChamberTemp, d.MeatTemp, d.Meat2Temp, d.Meat3Temp)}) * 1.15)])
-    .range([height, 0]);
+    //setting the scaling
+    xScale = d3.scaleTime()
+    // @ts-ignore
+      .domain(d3.extent(data, d => new Date(d.date).getTime()))
+      .range([30, width]);
 
-  const generateScaledLineChamber = d3.line()
+    yScale = d3.scaleLinear()
+    // @ts-ignore
+      .domain([0,( d3.max(data, d => {return Math.max(d.ChamberTemp, d.MeatTemp, d.Meat2Temp, d.Meat3Temp)}) * 1.15)])
+      .range([height - margin.top - margin.bottom, 0]);
+
+    generateScaledLineChamber = d3.line()
+      // @ts-ignore
+      .x((d) => {return xScale(new Date(d.date).getTime())})
+      // @ts-ignore
+      .y((d) => {return yScale(d.ChamberTemp);})
+      .curve(d3.curveCardinal)
+
+    generateScaledLineProbe1 = d3.line()
     // @ts-ignore
     .x((d) => {return xScale(new Date(d.date).getTime())})
     // @ts-ignore
-    .y((d) => {return yScale(d.ChamberTemp);})
-    .curve(d3.curveCardinal)
+    .y((d) => {return yScale(d.MeatTemp);})
 
-  const generateScaledLineProbe1 = d3.line()
-  // @ts-ignore
-  .x((d) => {return xScale(new Date(d.date).getTime())})
-  // @ts-ignore
-  .y((d) => {return yScale(d.MeatTemp);})
+    generateScaledLineProbe2 = d3.line()
+    // @ts-ignore
+    .x((d) => {return xScale(new Date(d.date).getTime())})
+    // @ts-ignore
+    .y((d) => {return yScale(d.Meat2Temp);})
 
-  const generateScaledLineProbe2 = d3.line()
-  // @ts-ignore
-  .x((d) => {return xScale(new Date(d.date).getTime())})
-  // @ts-ignore
-  .y((d) => {return yScale(d.Meat2Temp);})
-
-  const generateScaledLineProbe3 = d3.line()
-  // @ts-ignore
-  .x((d) => {return xScale(new Date(d.date).getTime())})
-  // @ts-ignore
-  .y((d) => {return yScale(d.Meat3Temp);})
+    generateScaledLineProbe3 = d3.line()
+    // @ts-ignore
+    .x((d) => {return xScale(new Date(d.date).getTime())})
+    // @ts-ignore
+    .y((d) => {return yScale(d.Meat3Temp);})
+  }
+  CreateStuff();
 
   const reDrawGraph =async (data: TempData[]) => {
     if (!svg.empty()) {
@@ -119,7 +147,7 @@ import * as d3 from 'd3';
       // Add the X Axis
       svg.append("g")
           .attr('class', 'xAxis')
-          .attr("transform", "translate(0," + height + ")")
+          .attr("transform", "translate(0," + (height - margin.top - margin.bottom) + ")")
           .call(d3.axisBottom(xScale));
 
       svg.selectAll(".yAxis").remove();
