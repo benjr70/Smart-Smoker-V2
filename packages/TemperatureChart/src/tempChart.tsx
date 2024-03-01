@@ -34,7 +34,6 @@ function TempChart(props: props): JSX.Element {
     const containerSize = svg.node()?.getBoundingClientRect();
     width = containerSize!.width;
     height = containerSize!.width * 0.5;
-    console.log(containerSize);
     svg.attr('width', width);
     svg.attr('height', height);
     svg.attr("viewBox", `0 0 ${width} ${height}`)
@@ -51,7 +50,6 @@ function TempChart(props: props): JSX.Element {
   const margin = {top: 10, right: 0, bottom: 10, left: 10};
   let width = (containerSize?.width ?? 0);
   let height = (containerSize?.width ?? 0) * 0.5;
-  console.log('wtf',containerSize);
   
   const CreateStuff = () => {
     svg = d3.select(svgRef.current)
