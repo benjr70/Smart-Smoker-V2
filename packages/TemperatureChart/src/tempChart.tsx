@@ -29,6 +29,8 @@ function TempChart(props: props): JSX.Element {
   let generateScaledLineProbe2: any;
   let generateScaledLineProbe3: any;
   let svg: any;
+  let tooltip: any;
+  let bisect: any;
 
   d3.select(window).on('resize', () => {
     const containerSize = svg.node()?.getBoundingClientRect();
@@ -40,6 +42,8 @@ function TempChart(props: props): JSX.Element {
     CreateStuff();
     reDrawGraph(data);
   });
+
+  
 
   // Select the container
   const container = d3.select(svgRef.current);
@@ -58,6 +62,14 @@ function TempChart(props: props): JSX.Element {
     .attr("viewBox", `0 0 ${width} ${height}`)
     .style('background', '#d3d3d3')
     .attr("preserveAspectRatio", "xMinYMin")
+    .style("overflow", "visible")
+    .on("pointerenter pointermove", pointermoved)
+    .on("pointerleave", pointerleft)
+    .on("touchstart", event => event.preventDefault());
+
+  tooltip = svg.append("g");
+  // @ts-ignore
+  bisect = d3.bisector(d =>  new Date(d.date).getTime()).center;
 
     //setting the scaling
     xScale = d3.scaleTime()
@@ -96,6 +108,57 @@ function TempChart(props: props): JSX.Element {
     .y((d) => {return yScale(d.Meat3Temp);})
   }
   CreateStuff();
+
+    // Add the event listeners that show or hide the tooltip.
+  function pointermoved(event) {
+
+    const i = bisect(data, xScale.invert(d3.pointer(event)[0]));
+
+    tooltip.style("display", null);
+
+    tooltip.attr("transform", `translate(${xScale(new Date(data[i].date).getTime())},${yScale(data[i].ChamberTemp)})`);
+
+    const path = tooltip.selectAll("path")
+      .data([,])
+      .join("path")
+        .attr("fill", "white")
+        .attr("stroke", "black");
+
+    const text = tooltip.selectAll("text")
+      .data([,])
+      .join("text")
+      .call(text => text
+        .selectAll("tspan")
+        .data([formatDate(data[i].date), formatValue(data[i].ChamberTemp, 'Chamber'), formatValue(data[i].MeatTemp, 'Probe1'), formatValue(data[i].Meat2Temp, 'Probe2'), formatValue(data[i].Meat3Temp, 'Probe3')])
+        .join("tspan")
+          .attr("x", 0)
+          .attr("y", (_, i) => `${i * 1.1}em`)
+          .attr("font-weight", (_, i) => i ? null : "bold")
+          .attr("font-size", (_, i) => i ? "12px" : "14px")
+          .text(d => d))
+
+    size(text, path);
+  }
+
+  function formatValue(value, Probe: string) {
+    return `${Probe}: ${parseFloat(value).toFixed(0) + "°F"}`;
+  }
+  
+  function formatDate(date: Date) {
+    let date2 = new Date(date);
+    return date2.toLocaleTimeString();
+  }
+
+  function pointerleft() {
+    tooltip.style("display", "none");
+  }
+
+  // Wraps the text with a callout path of the correct size, as measured in the page.
+  function size(text, path) {
+    const {x, y, width: w, height: h} = text.node().getBBox();
+    text.attr("transform", `translate(${-w / 2},${15 - y})`);
+    path.attr("d", `M${-w / 2 - 10},5H-5l5,-5l5,5H${w / 2 + 10}v${h + 20}h-${w + 20}z`);
+  }
 
   const reDrawGraph =async (data: TempData[]) => {
     if (!svg.empty()) {
