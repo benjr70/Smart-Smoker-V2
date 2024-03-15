@@ -50,19 +50,18 @@ function TempChart(props: props): JSX.Element {
     d3.select(svgRef.current).attr('width', width);
     d3.select(svgRef.current).attr('height', height);
     d3.select(svgRef.current).attr("viewBox", `0 0 ${width} ${height}`)
-    CreateStuff();
+    setupSVGChart();
     reDrawGraph(data);
   }
 
   
-  const CreateStuff = () => {
+  const setupSVGChart = () => {
     // Select the container
     const container = d3.select(svgRef.current);
   
     // Get the size of the container
     const containerSize = container.node()?.getBoundingClientRect();
-    // set the dimensions and margins of the graph
-    const margin = {top: 10, right: 0, bottom: 10, left: 10};
+    // set the dimensions of the graph
     let width = (containerSize?.width ?? 0);
     let height = (containerSize?.width ?? 0) * 0.5;
     d3.select(svgRef.current)
@@ -72,8 +71,8 @@ function TempChart(props: props): JSX.Element {
     .style('background', '#d3d3d3')
     .attr("preserveAspectRatio", "xMinYMin")
     .style("overflow", "visible")
-    .on("pointerenter pointermove", pointermoved)
-    .on("pointerleave", pointerleft)
+    .on("pointerenter pointermove", pointerMoved)
+    .on("pointerleave", pointerLeft)
     .on("touchstart", event => event.preventDefault());
 
     tooltip.current = d3.select(svgRef.current).append("g");
@@ -88,7 +87,7 @@ function TempChart(props: props): JSX.Element {
 
   useEffect(() => {
     if(!initialized && data.length > 1 ){
-      CreateStuff();
+      setupSVGChart();
       reSize();
       reDrawGraph(data);
       setInitialized(true);
@@ -97,7 +96,7 @@ function TempChart(props: props): JSX.Element {
 
   
   // Add the event listeners that show or hide the tooltip.
-  function pointermoved(event) {
+  function pointerMoved(event) {
 
     const i = d3.bisector((d: TempData) =>  new Date(d.date).getTime()).center(data, xScale.current.invert(d3.pointer(event)[0]));
     tooltip.current.style("display", null);
@@ -135,7 +134,7 @@ function TempChart(props: props): JSX.Element {
     return date2.toLocaleTimeString();
   }
 
-  function pointerleft() {
+  function pointerLeft() {
     tooltip.current.style("display", "none");
   }
 
@@ -150,8 +149,8 @@ function TempChart(props: props): JSX.Element {
     let svg = d3.select(svgRef.current)
     if (svg && !svg.empty()) {
       d3.select(svgRef.current)
-      .on("pointerenter pointermove", pointermoved)
-      .on("pointerleave", pointerleft)
+      .on("pointerenter pointermove", pointerMoved)
+      .on("pointerleave", pointerLeft)
       .on("touchstart", event => event.preventDefault());
 
       // @ts-ignore
