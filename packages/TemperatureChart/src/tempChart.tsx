@@ -22,41 +22,49 @@ import * as d3 from 'd3';
 function TempChart(props: props): JSX.Element {
   const svgRef = useRef() as React.RefObject<SVGSVGElement>;
   const [data, setData] = useState(props.initData);
-  let xScale: any;
-  let yScale: any;
-  let generateScaledLineChamber: any;
-  let generateScaledLineProbe1: any;
-  let generateScaledLineProbe2: any;
-  let generateScaledLineProbe3: any;
-  let svg: any;
-  let tooltip: any;
-  let bisect: any;
+  const xScale =  useRef() as any;
+  const yScale =  useRef() as any;
+  const generateScaledLineChamber =  useRef() as any;
+  const generateScaledLineProbe1 =  useRef() as any;
+  const generateScaledLineProbe2 =  useRef() as any;
+  const generateScaledLineProbe3 =  useRef() as any;
+  const tooltip =  useRef() as any;
+  const bisect =  useRef() as any;
+
+
 
   d3.select(window).on('resize', () => {
-    const containerSize = svg.node()?.getBoundingClientRect();
-    width = containerSize!.width;
-    height = containerSize!.width * 0.5;
-    svg.attr('width', width);
-    svg.attr('height', height);
-    svg.attr("viewBox", `0 0 ${width} ${height}`)
-    CreateStuff();
-    reDrawGraph(data);
+    reSize();
   });
 
-  
+  const reSize = () => {
+    // Select the container
+    const container = d3.select(svgRef.current);
 
-  // Select the container
-  const container = d3.select(svgRef.current);
+    // Get the size of the container
+    const containerSize = container.node()?.getBoundingClientRect();
 
-  // Get the size of the container
-  const containerSize = container.node()?.getBoundingClientRect();
-  // set the dimensions and margins of the graph
-  const margin = {top: 10, right: 0, bottom: 10, left: 10};
-  let width = (containerSize?.width ?? 0);
-  let height = (containerSize?.width ?? 0) * 0.5;
+    let width = containerSize!.width;
+    let height = containerSize!.width * 0.5;
+    d3.select(svgRef.current).attr('width', width);
+    d3.select(svgRef.current).attr('height', height);
+    d3.select(svgRef.current).attr("viewBox", `0 0 ${width} ${height}`)
+    CreateStuff();
+    reDrawGraph(data);
+  }
+
   
   const CreateStuff = () => {
-    svg = d3.select(svgRef.current)
+    // Select the container
+    const container = d3.select(svgRef.current);
+  
+    // Get the size of the container
+    const containerSize = container.node()?.getBoundingClientRect();
+    // set the dimensions and margins of the graph
+    const margin = {top: 10, right: 0, bottom: 10, left: 10};
+    let width = (containerSize?.width ?? 0);
+    let height = (containerSize?.width ?? 0) * 0.5;
+    d3.select(svgRef.current)
     .attr('width', '100%')
     .attr('height', '100%')
     .attr("viewBox", `0 0 ${width} ${height}`)
@@ -67,64 +75,37 @@ function TempChart(props: props): JSX.Element {
     .on("pointerleave", pointerleft)
     .on("touchstart", event => event.preventDefault());
 
-  tooltip = svg.append("g");
-  // @ts-ignore
-  bisect = d3.bisector(d =>  new Date(d.date).getTime()).center;
+    tooltip.current = d3.select(svgRef.current).append("g");
+    
 
-    //setting the scaling
-    xScale = d3.scaleTime()
-    // @ts-ignore
-      .domain(d3.extent(data, d => new Date(d.date).getTime()))
-      .range([30, width]);
-
-    yScale = d3.scaleLinear()
-    // @ts-ignore
-      .domain([0,( d3.max(data, d => {return Math.max(d.ChamberTemp, d.MeatTemp, d.Meat2Temp, d.Meat3Temp)}) * 1.15)])
-      .range([height - margin.top - margin.bottom, 0]);
-
-    generateScaledLineChamber = d3.line()
-      // @ts-ignore
-      .x((d) => {return xScale(new Date(d.date).getTime())})
-      // @ts-ignore
-      .y((d) => {return yScale(d.ChamberTemp);})
-      .curve(d3.curveCardinal)
-
-    generateScaledLineProbe1 = d3.line()
-    // @ts-ignore
-    .x((d) => {return xScale(new Date(d.date).getTime())})
-    // @ts-ignore
-    .y((d) => {return yScale(d.MeatTemp);})
-
-    generateScaledLineProbe2 = d3.line()
-    // @ts-ignore
-    .x((d) => {return xScale(new Date(d.date).getTime())})
-    // @ts-ignore
-    .y((d) => {return yScale(d.Meat2Temp);})
-
-    generateScaledLineProbe3 = d3.line()
-    // @ts-ignore
-    .x((d) => {return xScale(new Date(d.date).getTime())})
-    // @ts-ignore
-    .y((d) => {return yScale(d.Meat3Temp);})
   }
-  CreateStuff();
 
-    // Add the event listeners that show or hide the tooltip.
+  useEffect(() => {
+    if(props.initData.length > 1){
+      console.log(props);
+      setData(props.initData);
+      CreateStuff();
+      reSize();
+      reDrawGraph(props.initData);
+
+    }
+  },[props.initData]);
+
+  // Add the event listeners that show or hide the tooltip.
   function pointermoved(event) {
 
-    const i = bisect(data, xScale.invert(d3.pointer(event)[0]));
+    const i = d3.bisector((d: TempData) =>  new Date(d.date).getTime()).center(data, xScale.current.invert(d3.pointer(event)[0]));
+    tooltip.current.style("display", null);
+    
+    tooltip.current.attr("transform", `translate(${xScale.current(new Date(data[i].date).getTime())},${yScale.current(data[i].ChamberTemp)})`);
 
-    tooltip.style("display", null);
-
-    tooltip.attr("transform", `translate(${xScale(new Date(data[i].date).getTime())},${yScale(data[i].ChamberTemp)})`);
-
-    const path = tooltip.selectAll("path")
+    const path = tooltip.current.selectAll("path")
       .data([,])
       .join("path")
         .attr("fill", "white")
         .attr("stroke", "black");
 
-    const text = tooltip.selectAll("text")
+    const text = tooltip.current.selectAll("text")
       .data([,])
       .join("text")
       .call(text => text
@@ -135,7 +116,7 @@ function TempChart(props: props): JSX.Element {
           .attr("y", (_, i) => `${i * 1.1}em`)
           .attr("font-weight", (_, i) => i ? null : "bold")
           .attr("font-size", (_, i) => i ? "12px" : "14px")
-          .text(d => d))
+          .text(d => d));
 
     size(text, path);
   }
@@ -150,7 +131,7 @@ function TempChart(props: props): JSX.Element {
   }
 
   function pointerleft() {
-    tooltip.style("display", "none");
+    tooltip.current.style("display", "none");
   }
 
   // Wraps the text with a callout path of the correct size, as measured in the page.
@@ -161,7 +142,62 @@ function TempChart(props: props): JSX.Element {
   }
 
   const reDrawGraph =async (data: TempData[]) => {
-    if (!svg.empty()) {
+    let svg = d3.select(svgRef.current)
+    if (svg && !svg.empty()) {
+
+      d3.select(svgRef.current)
+      .on("pointerenter pointermove", pointermoved)
+      .on("pointerleave", pointerleft)
+      .on("touchstart", event => event.preventDefault());
+
+      // @ts-ignore
+      bisect.current = d3.bisector(d =>  new Date(d.date).getTime()).center;
+      // Select the container
+      const container = d3.select(svgRef.current);
+    
+      // Get the size of the container
+      const containerSize = container.node()?.getBoundingClientRect();
+      // set the dimensions and margins of the graph
+      const margin = {top: 10, right: 0, bottom: 10, left: 10};
+      let width = (containerSize?.width ?? 0);
+      let height = (containerSize?.width ?? 0) * 0.5;
+
+      //setting the scaling
+      xScale.current = d3.scaleTime()
+      // @ts-ignore
+        .domain(d3.extent(data, d => new Date(d.date).getTime()))
+        .range([30, width]);
+
+      yScale.current = d3.scaleLinear()
+      // @ts-ignore
+        .domain([0,( d3.max(data, d => {return Math.max(d.ChamberTemp, d.MeatTemp, d.Meat2Temp, d.Meat3Temp)}) * 1.15)])
+        .range([height - margin.top - margin.bottom, 0]);
+
+      generateScaledLineChamber.current = d3.line()
+        // @ts-ignore
+        .x((d) => {return xScale.current(new Date(d.date).getTime())})
+        // @ts-ignore
+        .y((d) => {return yScale.current(d.ChamberTemp);})
+        .curve(d3.curveCardinal)
+
+      generateScaledLineProbe1.current = d3.line()
+      // @ts-ignore
+      .x((d) => {return xScale.current(new Date(d.date).getTime())})
+      // @ts-ignore
+      .y((d) => {return yScale.current(d.MeatTemp);})
+
+      generateScaledLineProbe2.current = d3.line()
+      // @ts-ignore
+      .x((d) => {return xScale.current(new Date(d.date).getTime())})
+      // @ts-ignore
+      .y((d) => {return yScale.current(d.Meat2Temp);})
+
+      generateScaledLineProbe3.current = d3.line()
+      // @ts-ignore
+      .x((d) => {return xScale.current(new Date(d.date).getTime())})
+      // @ts-ignore
+      .y((d) => {return yScale.current(d.Meat3Temp);})
+
       svg.selectAll('.line')
       .data([data])
       .join('path')
@@ -170,8 +206,7 @@ function TempChart(props: props): JSX.Element {
       .attr('stroke', '#1f4f2d')
       .attr("stroke-width", 1.5)
       // @ts-ignore
-      .attr('d', generateScaledLineChamber)
-
+      .attr('d', generateScaledLineChamber.current)
 
       svg.append('path')
       .data([data])
@@ -181,7 +216,7 @@ function TempChart(props: props): JSX.Element {
       .attr('stroke', '#2a475e')
       .attr("stroke-width", 1.5)
       // @ts-ignore
-      .attr('d', generateScaledLineProbe1)
+      .attr('d', generateScaledLineProbe1.current)
 
       svg.append('path')
       .data([data])
@@ -191,7 +226,7 @@ function TempChart(props: props): JSX.Element {
       .attr('stroke', '#118cd8')
       .attr("stroke-width", 1.5)
       // @ts-ignore
-      .attr('d', generateScaledLineProbe2)
+      .attr('d', generateScaledLineProbe2.current)
 
       svg.append('path')
       .data([data])
@@ -201,36 +236,36 @@ function TempChart(props: props): JSX.Element {
       .attr('stroke', '#5582a7')
       .attr("stroke-width", 1.5)
       // @ts-ignore
-      .attr('d', generateScaledLineProbe3)
-
+      .attr('d', generateScaledLineProbe3.current)
 
       svg.selectAll(".xAxis").remove();
       // Add the X Axis
       svg.append("g")
           .attr('class', 'xAxis')
           .attr("transform", "translate(0," + (height - margin.top - margin.bottom) + ")")
-          .call(d3.axisBottom(xScale));
+          .call(d3.axisBottom(xScale.current));
 
       svg.selectAll(".yAxis").remove();
       // Add the Y Axis
       svg.append("g")
         .attr('class', 'yAxis')
         .attr("transform", "translate(30, 0)")
-        .call(d3.axisLeft(yScale));
+        .call(d3.axisLeft(yScale.current));
+
+
+      tooltip.current.raise();
     }
   }
     
-  reDrawGraph(data);
 
   useEffect(() => {
-    setData(props.initData);
     if(props.smoking){
       if(!isNaN(props.ChamberTemp) && props.ChamberTemp != 0 && !isNaN(props.MeatTemp) && props.MeatTemp != 0 && !isNaN(props.Meat2Temp) && props.Meat2Temp != 0 && !isNaN(props.Meat3Temp) && props.Meat3Temp != 0){
-        data.push({ChamberTemp: props.ChamberTemp, MeatTemp: props.MeatTemp, Meat2Temp: props.Meat2Temp, Meat3Temp: props.Meat3Temp, date: props.date});
+        setData(data => [...data, ...[{ChamberTemp: props.ChamberTemp, MeatTemp: props.MeatTemp, Meat2Temp: props.Meat2Temp, Meat3Temp: props.Meat3Temp, date: props.date}]]);
       }
     }
     reDrawGraph(data);
-  },[props]);
+  },[props.ChamberTemp, props.MeatTemp, props.Meat2Temp, props.Meat3Temp, props.date, props.smoking]);
 
   return (
     <div>
