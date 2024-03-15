@@ -22,6 +22,7 @@ import * as d3 from 'd3';
 function TempChart(props: props): JSX.Element {
   const svgRef = useRef() as React.RefObject<SVGSVGElement>;
   const [data, setData] = useState(props.initData);
+  const [initialized, setInitialized] = useState(false);
   const xScale =  useRef() as any;
   const yScale =  useRef() as any;
   const generateScaledLineChamber =  useRef() as any;
@@ -76,21 +77,25 @@ function TempChart(props: props): JSX.Element {
     .on("touchstart", event => event.preventDefault());
 
     tooltip.current = d3.select(svgRef.current).append("g");
-    
 
   }
 
   useEffect(() => {
     if(props.initData.length > 1){
-      console.log(props);
       setData(props.initData);
-      CreateStuff();
-      reSize();
-      reDrawGraph(props.initData);
-
     }
   },[props.initData]);
 
+  useEffect(() => {
+    if(!initialized && data.length > 1 ){
+      CreateStuff();
+      reSize();
+      reDrawGraph(data);
+      setInitialized(true);
+    }
+  },[data]);
+
+  
   // Add the event listeners that show or hide the tooltip.
   function pointermoved(event) {
 
@@ -110,7 +115,7 @@ function TempChart(props: props): JSX.Element {
       .join("text")
       .call(text => text
         .selectAll("tspan")
-        .data([formatDate(data[i].date), formatValue(data[i].ChamberTemp, 'Chamber'), formatValue(data[i].MeatTemp, 'Probe1'), formatValue(data[i].Meat2Temp, 'Probe2'), formatValue(data[i].Meat3Temp, 'Probe3')])
+        .data([formatDate(data[i].date), formatValue(data[i].ChamberTemp, 'Chamdber'), formatValue(data[i].MeatTemp, 'Probe1'), formatValue(data[i].Meat2Temp, 'Probe2'), formatValue(data[i].Meat3Temp, 'Probe3')])
         .join("tspan")
           .attr("x", 0)
           .attr("y", (_, i) => `${i * 1.1}em`)
@@ -144,7 +149,6 @@ function TempChart(props: props): JSX.Element {
   const reDrawGraph =async (data: TempData[]) => {
     let svg = d3.select(svgRef.current)
     if (svg && !svg.empty()) {
-
       d3.select(svgRef.current)
       .on("pointerenter pointermove", pointermoved)
       .on("pointerleave", pointerleft)
@@ -263,8 +267,8 @@ function TempChart(props: props): JSX.Element {
       if(!isNaN(props.ChamberTemp) && props.ChamberTemp != 0 && !isNaN(props.MeatTemp) && props.MeatTemp != 0 && !isNaN(props.Meat2Temp) && props.Meat2Temp != 0 && !isNaN(props.Meat3Temp) && props.Meat3Temp != 0){
         setData(data => [...data, ...[{ChamberTemp: props.ChamberTemp, MeatTemp: props.MeatTemp, Meat2Temp: props.Meat2Temp, Meat3Temp: props.Meat3Temp, date: props.date}]]);
       }
+      reDrawGraph(data);
     }
-    reDrawGraph(data);
   },[props.ChamberTemp, props.MeatTemp, props.Meat2Temp, props.Meat3Temp, props.date, props.smoking]);
 
   return (
