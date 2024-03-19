@@ -80,9 +80,8 @@ function TempChart(props: props): JSX.Element {
   }
 
   useEffect(() => {
-    if(props.initData.length > 1){
       setData(props.initData);
-    }
+      reDrawGraph(props.initData);
   },[props.initData]);
 
   useEffect(() => {
@@ -93,6 +92,11 @@ function TempChart(props: props): JSX.Element {
       setInitialized(true);
     }
   },[data]);
+
+  useEffect(() => {
+    setupSVGChart();
+    reDrawGraph(props.initData);
+  },[]);
 
   
   // Add the event listeners that show or hide the tooltip.
@@ -114,7 +118,7 @@ function TempChart(props: props): JSX.Element {
       .join("text")
       .call(text => text
         .selectAll("tspan")
-        .data([formatDate(data[i].date), formatValue(data[i].ChamberTemp, 'Chamdber'), formatValue(data[i].MeatTemp, 'Probe1'), formatValue(data[i].Meat2Temp, 'Probe2'), formatValue(data[i].Meat3Temp, 'Probe3')])
+        .data([formatDate(data[i].date), formatValue(data[i].ChamberTemp, 'Chamber'), formatValue(data[i].MeatTemp, 'Probe1'), formatValue(data[i].Meat2Temp, 'Probe2'), formatValue(data[i].Meat3Temp, 'Probe3')])
         .join("tspan")
           .attr("x", 0)
           .attr("y", (_, i) => `${i * 1.1}em`)
@@ -255,8 +259,9 @@ function TempChart(props: props): JSX.Element {
         .attr("transform", "translate(30, 0)")
         .call(d3.axisLeft(yScale.current));
 
-
-      tooltip.current.raise();
+      if(tooltip.current){
+        tooltip.current.raise();
+      }
     }
   }
     

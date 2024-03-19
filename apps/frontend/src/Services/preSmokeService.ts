@@ -8,13 +8,17 @@ export const getCurrentPreSmoke = async ():Promise<preSmoke> => {
     axios.defaults.baseURL = envUrl;
     return axios.get('presmoke/').then((result:any) => {
         return result.data;
+    }).catch((error: any) => {
+        console.log(error);
     });
 }
 
 export const setCurrentPreSmoke = async(presmoke: preSmoke): Promise<any> => {
     const axios = require('axios');
     axios.defaults.baseURL = envUrl;
-    return axios.post('presmoke', presmoke);
+    return axios.post('presmoke', presmoke).catch((error: any) => {
+        console.log(error);
+    });
 }
 
 export const getPreSmokeById = async(id: string): Promise<preSmoke> => {

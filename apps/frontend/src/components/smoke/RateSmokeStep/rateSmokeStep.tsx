@@ -34,21 +34,22 @@ export class RateSmokeStep extends React.Component<RateSmokeStepProps,{ratingSta
 
     updateValues(event: any, field: string){
         let temp = this.state.ratingState;
+        console.log(typeof event.target.value);
         switch(field){
             case 'smokeFlavor': { 
-                temp.smokeFlavor = event.target.value;
+                temp.smokeFlavor = parseFloat(event.target.value);
                 break;
             }
             case 'seasoning': { 
-                temp.seasoning = event.target.value;
+                temp.seasoning = parseFloat(event.target.value);
                 break;
             }
             case 'tenderness': { 
-                temp.tenderness = event.target.value;
+                temp.tenderness = parseFloat(event.target.value);
                 break;
             }
             case 'overallTaste': { 
-                temp.overallTaste = event.target.value;
+                temp.overallTaste = parseFloat(event.target.value);
                 break;
             }
             case 'notes': { 
