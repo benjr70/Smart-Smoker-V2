@@ -14,5 +14,7 @@ export const deleteSmoke = (smokeId: string): Promise<void> => {
         await deleteRatingsById(smoke.ratingId);
     }).finally(async ()=> {
        await deleteSmokeById(smokeId);
-    })
+    }).catch((error: any) => {
+        console.log(error);
+    });
 }

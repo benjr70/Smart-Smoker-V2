@@ -24,8 +24,11 @@ export const clearSmoke = async ():Promise<State> => {
     socket.emit('clear', true);
     const axios = require('axios');
     axios.defaults.baseURL = envUrl;
-    return axios.put('state/clearSmoke').then((result:any) => {
+    return axios.put('state/clearSmoke')
+    .then((result:any) => {
         return result.data;
+    }).catch((error: any) => {
+        console.log(error);
     });
 }
 
@@ -34,13 +37,18 @@ export const getState =async ():Promise<State>  => {
     axios.defaults.baseURL = envUrl;
     return axios.get('state').then((result:any) => {
         return result.data;
+    }).catch((error: any) => {
+        console.log(error);
     });
 }
 
 export const setSmokeProfile=async (smokeProfileDTO: smokeProfile) => {
     const axios = require('axios');
     axios.defaults.baseURL = envUrl;
-    return axios.post('smokeProfile/current', smokeProfileDTO);
+    return axios.post('smokeProfile/current', smokeProfileDTO)
+        .catch((error: any) => {
+            console.log(error);
+        });
 }
 
 export const getSmokeProfileById = async (id: string):Promise<smokeProfile> => {
@@ -54,6 +62,8 @@ export const getSmokeProfileById = async (id: string):Promise<smokeProfile> => {
             result.data.woodType = ''
         }
         return result.data;
+    }).catch((error: any) => {
+        console.log(error);
     });
 }
 
@@ -62,6 +72,8 @@ export const FinishSmoke =async (): Promise<any> => {
     axios.defaults.baseURL = envUrl;
     return axios.post('smoke/finish').then((result:any) => {
         return result.data;
+    }).catch((error: any) => {
+        console.log(error);
     });
 }
 
@@ -76,6 +88,8 @@ export const getCurrentSmokeProfile = async ():Promise<smokeProfile> => {
             result.data.woodType = ''
         }
         return result.data;
+    }).catch((error: any) => {
+        console.log(error);
     });
 }
 
@@ -84,6 +98,8 @@ export const getSmokeHistory = async (): Promise<smokeHistory[]> => {
     axios.defaults.baseURL = envUrl;
     return axios.get('history').then((result:any) => {
         return result.data;
+    }).catch((error: any) => {
+        console.log(error);
     });
 }
 
@@ -92,6 +108,8 @@ export const getAllSmoke = async(): Promise<any> => {
     axios.defaults.baseURL = envUrl;
     return axios.get('smoke/all').then((result:any) => {
         return result.data;
+    }).catch((error: any) => {
+        console.log(error);
     });
 }
 
@@ -100,17 +118,25 @@ export const getSmokeById = async(id: string): Promise<any> => {
     axios.defaults.baseURL = envUrl;
     return axios.get('smoke/' + id).then((result:any) => {
         return result.data;
+    }).catch((error: any) => {
+        console.log(error);
     });
 }
 
 export const deleteSmokeProfileById = async(id: string) => {
     const axios = require('axios');
     axios.defaults.baseURL = envUrl;
-    return axios.delete('smokeProfile/' + id);
+    return axios.delete('smokeProfile/' + id)
+    .catch((error: any) => {
+        console.log(error);
+    });
 }
 
 export const deleteSmokeById = async(id: string) => {
     const axios = require('axios');
     axios.defaults.baseURL = envUrl;
-    return axios.delete('smoke/' + id);
+    return axios.delete('smoke/' + id)
+    .catch((error: any) => {
+        console.log(error);
+    });
 }
