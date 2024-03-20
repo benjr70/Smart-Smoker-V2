@@ -39,7 +39,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v2
         with:
-          node-version: '16.15'
+          node-version: '18.19'
 
       - name: Use npm 8
         run: npm i -g npm@8
@@ -92,7 +92,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v2
         with:
-          node-version: '16.15'
+          node-version: '18.19'
 
       - name: Use npm 8
         run: npm i -g npm@8

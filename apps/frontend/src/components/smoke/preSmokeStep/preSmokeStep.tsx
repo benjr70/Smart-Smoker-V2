@@ -42,7 +42,9 @@ export class PreSmokeStep extends React.Component<PreSmokeStepProps,{preSmokeSta
 
     componentDidMount(): void {
         getCurrentPreSmoke().then(result => {
-            this.setState({preSmokeState: result});
+            if(result){
+                this.setState({preSmokeState: result});
+            }
          })
     }
 
