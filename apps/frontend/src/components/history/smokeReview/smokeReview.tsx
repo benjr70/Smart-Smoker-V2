@@ -58,23 +58,31 @@ export function SmokeReview(props: smokeReviewProps): JSX.Element {
     useEffect( () => {
         getSmokeById(props.smokeId).then((result) => {
             getPreSmokeById(result.preSmokeId).then(preSmokeResult => {
-                setPreSmoke(preSmokeResult);
+                if(preSmokeResult){
+                    setPreSmoke(preSmokeResult);
+                }
             });
             getSmokeProfileById(result.smokeProfileId).then(smokeProfileResult => {
-                setSmokeProfile(smokeProfileResult);
+                if(smokeProfileResult){
+                    setSmokeProfile(smokeProfileResult);
+                }
             })
             if(result.tempsId){
                 getTempsById(result.tempsId).then(tempResult => {
-                    if(tempResult.length > 0){
+                    if(tempResult && tempResult.length > 0){
                         setTemps(tempResult);
                     }
                 })
             }
             getPostSmokeById(result.postSmokeId).then(postSmokeResult => {
-                setPostSmoke(postSmokeResult);
+                if(postSmokeResult){
+                    setPostSmoke(postSmokeResult);
+                }
             })
             getRatingById(result.ratingId).then(ratings => {
-                setRatings(ratings);
+                if(ratings){
+                    setRatings(ratings);
+                }
             })
          })
     }, [props.smokeId])
