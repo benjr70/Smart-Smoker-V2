@@ -127,8 +127,11 @@ export class Home extends React.Component<{}, {tempState: State, activeScreen: n
         })
     }
 
-    setActiveScreen(screen: number): void {
+    async setActiveScreen(screen: number): Promise<void> {
         this.setState({activeScreen: screen});
+        if(screen === 0){
+            initTemps = await getCurrentTemps();
+        }
     }
 
     render(): React.ReactNode { 

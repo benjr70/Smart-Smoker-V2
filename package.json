@@ -18,7 +18,8 @@
     "back:start": "npm run start:dev -w backend",
     "smoker:start": "npm run start -w smoker",
     "devices:start": "npm run start:dev -w device-service",
-    "start": "npm-run-all -p front:start back:start smoker:start devices:start"
+    "start": "npm-run-all -p front:start back:start smoker:start devices:start",
+    "clean": "rimraf ./node_modules ./apps/frontend/node_modules ./apps/backend/node_modules ./apps/smoker/node_modules ./apps/device-service/node_modules ./package-lock.json"
   },
   "repository": {
     "type": "git",
@@ -31,6 +32,7 @@
   },
   "homepage": "https://github.com/benjr70/Smart-Smoker-V2#readme",
   "devDependencies": {
-    "npm-run-all": "^4.1.5"
+    "npm-run-all": "^4.1.5",
+    "rimraf": "^5.0.5"
   }
 }

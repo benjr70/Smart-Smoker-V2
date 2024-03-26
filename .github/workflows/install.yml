@@ -42,7 +42,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v2
         with:
-          node-version: '18.19'
+          node-version: '20.11.1'
 
       - name: Use npm 10
         run: npm i -g npm@10
