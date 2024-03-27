@@ -35,12 +35,12 @@ jobs:
       - run: sudo chmod -R 777 ./
 
       - name: Git Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.version }}
 
       - name: Setup Node
-        uses: actions/setup-node@v2
+        uses: actions/setup-node@v4
         with:
           node-version: '20.11.1'
 
@@ -48,7 +48,7 @@ jobs:
         run: npm i -g npm@10
 
       - name: Cache Node Modules
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         env:
           cache-name: cache-node-modules
         with:
