@@ -10,8 +10,8 @@ This project uses npm workspaces for all its apps, therefore you can install all
 
 pre-requisite to install
 
- * `node v16`
- * `npm v8`
+ * `node v20`
+ * `npm v10`
 
 run this cmd from the base folder of the repo <br>
 `npm run bootstrap` 
@@ -51,4 +51,4 @@ DO NOT COMMIT STRAIGHT TO MASTER
 
 PR Requirments
 * must be rebase off of latest master
-* all PR's must have Ben Approval before being merged
+* all PR's must have Bens Approval before being merged
