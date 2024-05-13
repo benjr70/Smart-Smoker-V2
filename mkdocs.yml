@@ -46,6 +46,7 @@ nav:
     - Pi Software: piSoftware.md
     - Epics: 
         - Push Notifications: Epics/pushNotifications.md
+        - Google Assistant: Epics/googleAssistant.md
   - Apps:
     - Frontend:
       - Frontend/index.md
