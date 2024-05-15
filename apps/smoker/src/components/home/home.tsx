@@ -12,10 +12,10 @@ import { Wifi } from './wifi/wifi';
 import { getConnection } from '../../services/deviceService';
 
 interface State {
-    probeTemp1: string;
-    probeTemp2: string;
-    probeTemp3: string;
-    chamberTemp: string;
+    probeTemp1?: number;
+    probeTemp2?: number;
+    probeTemp3?: number;
+    chamberTemp?: number;
     smoking: boolean;
     date: Date;
 } 
@@ -30,10 +30,10 @@ export class Home extends React.Component<{}, {tempState: State, activeScreen: n
     constructor(props: any) {
         super(props);
         this.state = { tempState: {
-            probeTemp1: '0',
-            probeTemp2: '0',
-            probeTemp3: '0',
-            chamberTemp: '0',
+            probeTemp1: 0,
+            probeTemp2: 0,
+            probeTemp3: 0,
+            chamberTemp: 0,
             smoking: false,
             date: new Date(),
             },
@@ -57,7 +57,7 @@ export class Home extends React.Component<{}, {tempState: State, activeScreen: n
         let deviceClient = io('http://127.0.0.1:3003');
         let url = process.env.REACT_APP_CLOUD_URL ?? '';
         socket = io(url);
-        deviceClient.on('temp', (message: any) => {
+        deviceClient.on('temp', (tempObj: any) => {
             try{
                 getConnection().then(result => {
                     if(result.length > 0){
@@ -66,7 +66,6 @@ export class Home extends React.Component<{}, {tempState: State, activeScreen: n
                         this.setState({connection: false});
                     }
                 })
-                let tempObj = JSON.parse(message);
                 let temp = this.state.tempState;
                 temp.chamberTemp = tempObj.Chamber;
                 temp.probeTemp1 = tempObj.Meat;
@@ -106,12 +105,12 @@ export class Home extends React.Component<{}, {tempState: State, activeScreen: n
 
 
     sendTempBatch(): Promise<void> {
-        const tempBatch: TempData[] = batch.map(temp => {
+        const tempBatch: TempData[] = batch.map((temp: State) => {
             return {
-                ChamberTemp: parseFloat(temp.chamberTemp),
-                MeatTemp: parseFloat(temp.probeTemp1),
-                Meat2Temp: parseFloat(temp.probeTemp2),
-                Meat3Temp: parseFloat(temp.probeTemp3),
+                ChamberTemp: temp.chamberTemp,
+                MeatTemp: temp.probeTemp1,
+                Meat2Temp: temp.probeTemp2,
+                Meat3Temp: temp.probeTemp3,
                 date: temp.date,
             }
         });
@@ -159,12 +158,16 @@ export class Home extends React.Component<{}, {tempState: State, activeScreen: n
                 </Grid>
                 <Grid item xs={4} container justifyContent='space-evenly' alignItems='center'>
                     <Grid container   spacing={2} color={'#2a475e'}>
+                        {this.state.tempState.probeTemp1 ?
+                        <>
                         <Grid item  className='text' >
                             Probe 1 
                         </Grid>
                         <Grid item className='text' >
                             {this.state.tempState.probeTemp1}
                         </Grid>
+                        </>
+                        : <></>}
                     </Grid>
                     <Grid container  spacing={2} color={'#5582a7'}>
                         <Grid item  className='text' >
@@ -199,10 +202,10 @@ export class Home extends React.Component<{}, {tempState: State, activeScreen: n
                 </Grid>
                 <Grid item xs={12} style={{ height: '83vh' }}>
                     <TempChart
-                        ChamberTemp={parseFloat(this.state.tempState.chamberTemp)}
-                        MeatTemp={parseFloat(this.state.tempState.probeTemp1)}
-                        Meat2Temp={parseFloat(this.state.tempState.probeTemp2)}
-                        Meat3Temp={parseFloat(this.state.tempState.probeTemp3)}
+                        ChamberTemp={this.state.tempState.chamberTemp}
+                        MeatTemp={this.state.tempState.probeTemp1}
+                        Meat2Temp={this.state.tempState.probeTemp2}
+                        Meat3Temp={this.state.tempState.probeTemp3}
                         date={this.state.tempState.date}
                         smoking={this.state.tempState.smoking}
                         initData={initTemps}
