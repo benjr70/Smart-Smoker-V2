@@ -2,18 +2,18 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 
  export type TempData = {
-  ChamberTemp: number;
-  MeatTemp: number;
-  Meat2Temp: number;
-  Meat3Temp: number;
+  ChamberTemp?: number;
+  MeatTemp?: number;
+  Meat2Temp?: number;
+  Meat3Temp?: number;
   date: Date;
  }
 
  interface props {
-  ChamberTemp: number;
-  MeatTemp: number;
-  Meat2Temp: number;
-  Meat3Temp: number;
+  ChamberTemp?: number;
+  MeatTemp?: number;
+  Meat2Temp?: number;
+  Meat3Temp?: number;
   date: Date;
   smoking: boolean;
   initData: TempData[];
@@ -268,7 +268,7 @@ function TempChart(props: props): JSX.Element {
 
   useEffect(() => {
     if(props.smoking){
-      if(!isNaN(props.ChamberTemp) && props.ChamberTemp != 0 && !isNaN(props.MeatTemp) && props.MeatTemp != 0 && !isNaN(props.Meat2Temp) && props.Meat2Temp != 0 && !isNaN(props.Meat3Temp) && props.Meat3Temp != 0){
+      if(!isNaN(props.ChamberTemp || 0) && props.ChamberTemp != 0 && !isNaN(props.MeatTemp || 0) && props.MeatTemp != 0 && !isNaN(props.Meat2Temp || 0) && props.Meat2Temp != 0 && !isNaN(props.Meat3Temp || 0) && props.Meat3Temp != 0){
         setData(data => [...data, ...[{ChamberTemp: props.ChamberTemp, MeatTemp: props.MeatTemp, Meat2Temp: props.Meat2Temp, Meat3Temp: props.Meat3Temp, date: props.date}]]);
       }
       reDrawGraph(data);
