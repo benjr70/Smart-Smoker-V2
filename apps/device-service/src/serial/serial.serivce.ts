@@ -45,9 +45,14 @@ export class SerialService {
           });
           this.port.pipe(parser);
           parser.on('data', (data) => {
+            try{
               const stringData = data.toString('utf-8');
-              this.handleTempLogging(stringData);
+              // this.handleTempLogging(stringData);
+              Logger.debug(stringData, 'SerialService');
               this.dataSubject.next(stringData);
+            } catch(e){
+              Logger.error(e, 'SerialService');
+            }
           });
       }
     }
