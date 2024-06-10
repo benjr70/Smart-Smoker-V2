@@ -50,7 +50,7 @@ services:
     devices:
         - /dev/snd
         - /dev/dri:/dev/dri
-    image: 'benjr70/smart_smoker:electron-shell_V${VERSION}'
+    image: 'benjr70/smart_smoker:electron-shell_V$1.4.3'
 
   watchtower:
     container_name: watchtower
