@@ -1,6 +1,6 @@
 {
   "name": "smart-smoker-v2",
-  "version": "1.4.4",
+  "version": "1.4.5",
   "description": "smart smoker v2",
   "main": "index.js",
   "dependencies": {
