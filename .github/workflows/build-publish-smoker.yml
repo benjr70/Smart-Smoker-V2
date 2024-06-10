@@ -140,68 +140,68 @@ jobs:
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:device-service_V${{ github.event.inputs.version }}
 
 
-  buildElectronShell:
-    # The type of runner that the job will run on
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        platform:
-          - linux/arm/v7
+  # buildElectronShell:
+  #   # The type of runner that the job will run on
+  #   runs-on: ubuntu-latest
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       platform:
+  #         - linux/arm/v7
           
-    # Steps represent a sequence of tasks that will be executed as part of the job
-    steps:
+  #   # Steps represent a sequence of tasks that will be executed as part of the job
+  #   steps:
 
-      - name: Git Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.version }}
+  #     - name: Git Checkout
+  #       uses: actions/checkout@v4
+  #       with:
+  #         ref: ${{ github.event.inputs.version }}
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20.11.1'
+  #     - name: Setup Node
+  #       uses: actions/setup-node@v4
+  #       with:
+  #         node-version: '20.11.1'
 
-      - name: Use npm 10
-        run: npm i -g npm@10
+  #     - name: Use npm 10
+  #       run: npm i -g npm@10
 
-      - name: Cache Node Modules
-        uses: actions/cache@v4
-        env:
-          cache-name: cache-node-modules
-        with:
-          path: |
-            node_modules
-            */*/node_modules
-          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-build-${{ env.cache-name }}-
-            ${{ runner.os }}-build-
-            ${{ runner.os }}-
+  #     - name: Cache Node Modules
+  #       uses: actions/cache@v4
+  #       env:
+  #         cache-name: cache-node-modules
+  #       with:
+  #         path: |
+  #           node_modules
+  #           */*/node_modules
+  #         key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('package-lock.json') }}
+  #         restore-keys: |
+  #           ${{ runner.os }}-build-${{ env.cache-name }}-
+  #           ${{ runner.os }}-build-
+  #           ${{ runner.os }}-
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+  #     - name: Set up Docker Buildx
+  #       uses: docker/setup-buildx-action@v3
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+  #     - name: Login to Docker Hub
+  #       uses: docker/login-action@v3
+  #       with:
+  #         username: ${{ secrets.DOCKERHUB_USERNAME }}
+  #         password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: electron-shell make
-        run: npm run forgeLinux64:thin --prefix apps/smoker
+  #     - name: electron-shell make
+  #       run: npm run forgeLinux64:thin --prefix apps/smoker
 
-      - name: Build and push Electron Shell
-        uses: docker/build-push-action@v5
-        with:
-          platforms: ${{ matrix.platform }}
-          context: .
-          file: apps/smoker/shell.dockerfile
-          push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:electron-shell_V${{ github.event.inputs.version }}
+  #     - name: Build and push Electron Shell
+  #       uses: docker/build-push-action@v5
+  #       with:
+  #         platforms: ${{ matrix.platform }}
+  #         context: .
+  #         file: apps/smoker/shell.dockerfile
+  #         push: true
+  #         tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:electron-shell_V${{ github.event.inputs.version }}
 
   Deploy:
-      needs: [buildSmoker, buildDeviceService, buildElectronShell]
+      needs: [buildSmoker, buildDeviceService]
       uses: benjr70/Smart-Smoker-V2/.github/workflows/smoker-deploy.yml@master
       with:
         version: ${{ github.event.inputs.version }}
