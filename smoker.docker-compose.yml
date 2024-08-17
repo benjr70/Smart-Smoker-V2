@@ -49,8 +49,8 @@ services:
         - DBUS_SESSION_BUS_ADDRESS=unix:path=/run/dbus/system_bus_socket
     devices:
         - /dev/snd
-        # - /dev/dri:/dev/dri
-    image: 'benjr70/smart_smoker:electron-shell_V1.4.3'
+        - /dev/dri:/dev/dri
+    image: 'benjr70/smart_smoker:electron-shell_V${VERSION}'
 
   watchtower:
     container_name: watchtower
