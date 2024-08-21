@@ -36,7 +36,6 @@ jobs:
 
       - name: Git Checkout
         uses: actions/checkout@v4
-        if: github.event_name != 'pull_request'
         with:
           ref: ${{ github.event.inputs.version || 'master' }}
 
@@ -80,7 +79,7 @@ jobs:
           platforms: linux/arm64
           context: .
           file: apps/frontend/Dockerfile
-          push: ${{github.event_name != 'pull_request'}}
+          push: ${{github.event.inputs.pull_request != 'pull_request'}}
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:frontend_V${{ github.event.inputs.version }}
 
   Backend:
@@ -90,7 +89,6 @@ jobs:
 
       - name: Git Checkout
         uses: actions/checkout@v4
-        if: github.event_name != 'pull_request'
         with:
           ref: ${{ github.event.inputs.version || 'master' }}
 
@@ -134,7 +132,7 @@ jobs:
           platforms: linux/arm64
           context: .
           file: apps/backend/Dockerfile
-          push: ${{github.event_name != 'pull_request'}}
+          push: ${{github.event.inputs.pull_request != 'pull_request'}}
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:backend_V${{ github.event.inputs.version }}
 
   Deploy:
