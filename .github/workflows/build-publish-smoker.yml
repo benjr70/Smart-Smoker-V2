@@ -15,6 +15,9 @@ on:
         description: 'version to release'
         type: string
         required: true
+      pull_request:
+          type: string
+          required: false
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
@@ -32,7 +35,6 @@ jobs:
     steps:
       - name: Git Checkout
         uses: actions/checkout@v4
-        if: github.event_name != 'pull_request'
         with:
           ref: ${{ github.event.inputs.version || 'master' }}
 
@@ -93,7 +95,6 @@ jobs:
 
       - name: Git Checkout
         uses: actions/checkout@v4
-        if: github.event_name != 'pull_request'
         with:
           ref: ${{ github.event.inputs.version || 'master' }}
 
@@ -156,7 +157,6 @@ jobs:
 
       - name: Git Checkout
         uses: actions/checkout@v4
-        if: github.event_name != 'pull_request'
         with:
           ref: ${{ github.event.inputs.version || 'master' }}
 
@@ -204,7 +204,7 @@ jobs:
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:electron-shell_V${{ github.event.inputs.version }}
 
   Deploy:
-      if: github.event_name != 'pull_request'
+      if: github.event.inputs.pull_request != 'pull_request'
       needs: [buildSmoker, buildDeviceService]
       uses: benjr70/Smart-Smoker-V2/.github/workflows/smoker-deploy.yml@master
       with:
