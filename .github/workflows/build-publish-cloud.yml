@@ -33,6 +33,7 @@ jobs:
 
       - name: Git Checkout
         uses: actions/checkout@v4
+        if: github.event_name != 'pull_request'
         with:
           ref: ${{ github.event.inputs.version }}
 
@@ -76,7 +77,7 @@ jobs:
           platforms: linux/arm64
           context: .
           file: apps/frontend/Dockerfile
-          push: true
+          push: ${{github.event_name != 'pull_request'}}
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:frontend_V${{ github.event.inputs.version }}
 
   Backend:
@@ -86,6 +87,7 @@ jobs:
 
       - name: Git Checkout
         uses: actions/checkout@v4
+        if: github.event_name != 'pull_request'
         with:
           ref: ${{ github.event.inputs.version }}
 
@@ -129,10 +131,11 @@ jobs:
           platforms: linux/arm64
           context: .
           file: apps/backend/Dockerfile
-          push: true
+          push: ${{github.event_name != 'pull_request'}}
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:backend_V${{ github.event.inputs.version }}
 
   Deploy:
+      if: github.event_name != 'pull_request'
       needs: [FrontEnd, Backend]
       uses: benjr70/Smart-Smoker-V2/.github/workflows/cloud-deploy.yml@master
       secrets: inherit

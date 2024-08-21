@@ -7,6 +7,9 @@ on:
   # Triggers the workflow on push or pull request events but only for the master branch
   # push:
   #   branches: [ master ]
+  pull_request:
+    types: [opened, synchronize]
+  
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -36,6 +39,7 @@ jobs:
 
       - name: Git Checkout
         uses: actions/checkout@v4
+        if: github.event_name != 'pull_request'
         with:
           ref: ${{ github.event.inputs.version }}
 
@@ -70,11 +74,11 @@ jobs:
     uses: benjr70/Smart-Smoker-V2/.github/workflows/build-publish-smoker.yml@master
     secrets: inherit
     with:
-      version: ${{ github.event.inputs.version }}
+      version: ${{ github.event.inputs.version || github.event.pull_request.number }}
 
   BuildAndPublishCloud:
     needs: SetUp
     uses: benjr70/Smart-Smoker-V2/.github/workflows/build-publish-cloud.yml@master
     secrets: inherit
     with:
-      version: ${{ github.event.inputs.version }}
+      version: ${{ github.event.inputs.version || github.event.pull_request.number }}
