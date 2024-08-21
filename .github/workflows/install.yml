@@ -70,7 +70,7 @@ jobs:
 
   BuildAndPublishSmoker:
     needs: SetUp
-    uses: benjr70/Smart-Smoker-V2/.github/workflows/build-publish-smoker.yml@master
+    uses: benjr70/Smart-Smoker-V2/.github/workflows/build-publish-smoker.yml@bugfix/SS2-176-build-check-on-PRs
     secrets: inherit
     with:
       version: ${{ github.event.inputs.version || github.event.pull_request.number }}
@@ -78,7 +78,7 @@ jobs:
 
   BuildAndPublishCloud:
     needs: SetUp
-    uses: benjr70/Smart-Smoker-V2/.github/workflows/build-publish-cloud.yml@master
+    uses: benjr70/Smart-Smoker-V2/.github/workflows/build-publish-cloud.yml@bugfix/SS2-176-build-check-on-PRs
     secrets: inherit
     with:
       version: ${{ github.event.inputs.version || github.event.pull_request.number }}
