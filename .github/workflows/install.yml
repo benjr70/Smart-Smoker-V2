@@ -39,9 +39,8 @@ jobs:
 
       - name: Git Checkout
         uses: actions/checkout@v4
-        if: github.event_name != 'pull_request'
         with:
-          ref: ${{ github.event.inputs.version }}
+          ref: ${{ github.event.inputs.version || 'master' }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
