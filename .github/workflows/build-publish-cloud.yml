@@ -15,6 +15,9 @@ on:
         description: 'version to release'
         type: string
         required: true
+      pull_request:
+        type: string
+        required: false
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -31,10 +34,15 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - run: sudo chmod -R 777 ./
 
-      - name: Git Checkout
+      - name: Git Checkout tag
+        if: inputs.pull_request != 'pull_request'
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.version }}
+          ref: ${{ inputs.version}}
+
+      - name: Git Checkout master
+        if: inputs.pull_request == 'pull_request'
+        uses: actions/checkout@v4
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -76,18 +84,23 @@ jobs:
           platforms: linux/arm64
           context: .
           file: apps/frontend/Dockerfile
-          push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:frontend_V${{ github.event.inputs.version }}
+          push: ${{inputs.pull_request != 'pull_request'}}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:frontend_V${{ inputs.version }}
 
   Backend:
     runs-on: ubuntu-latest
     steps:
       - run: sudo chmod -R 777 ./
 
-      - name: Git Checkout
+      - name: Git Checkout tag
+        if: inputs.pull_request != 'pull_request'
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.version }}
+          ref: ${{ inputs.version}}
+
+      - name: Git Checkout master
+        if: inputs.pull_request == 'pull_request'
+        uses: actions/checkout@v4
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -129,12 +142,14 @@ jobs:
           platforms: linux/arm64
           context: .
           file: apps/backend/Dockerfile
-          push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:backend_V${{ github.event.inputs.version }}
+          push: ${{inputs.pull_request != 'pull_request'}}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:backend_V${{ inputs.version }}
 
   Deploy:
+      if: inputs.pull_request != 'pull_request'
       needs: [FrontEnd, Backend]
       uses: benjr70/Smart-Smoker-V2/.github/workflows/cloud-deploy.yml@master
       secrets: inherit
       with:
-        version: ${{ github.event.inputs.version }}
+        version: ${{ inputs.version }}
+

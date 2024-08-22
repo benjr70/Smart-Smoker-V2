@@ -15,6 +15,9 @@ on:
         description: 'version to release'
         type: string
         required: true
+      pull_request:
+          type: string
+          required: false
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
@@ -30,10 +33,16 @@ jobs:
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      - name: Git Checkout
+
+      - name: Git Checkout tag
+        if: inputs.pull_request != 'pull_request'
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.version }}
+          ref: ${{ inputs.version}}
+
+      - name: Git Checkout master
+        if: inputs.pull_request == 'pull_request'
+        uses: actions/checkout@v4
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -75,8 +84,8 @@ jobs:
           platforms: linux/arm/v7
           context: .
           file: apps/smoker/Dockerfile
-          push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:smoker_V${{ github.event.inputs.version }}
+          push: ${{ inputs.pull_request != 'pull_request'}}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:smoker_V${{ inputs.version }}
 
   buildDeviceService:
     # The type of runner that the job will run on
@@ -90,10 +99,15 @@ jobs:
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
 
-      - name: Git Checkout
+      - name: Git Checkout tag
+        if: inputs.pull_request != 'pull_request'
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.version }}
+          ref: ${{ inputs.version}}
+
+      - name: Git Checkout master
+        if: inputs.pull_request == 'pull_request'
+        uses: actions/checkout@v4
 
 
       - name: Setup Node
@@ -136,72 +150,78 @@ jobs:
           platforms: linux/arm/v7
           context: .
           file: apps/device-service/Dockerfile
-          push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:device-service_V${{ github.event.inputs.version }}
+          push: ${{ inputs.pull_request  != 'pull_request'}}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:device-service_V${{ inputs.version }}
 
 
-  # buildElectronShell:
-  #   # The type of runner that the job will run on
-  #   runs-on: ubuntu-latest
-  #   strategy:
-  #     fail-fast: false
-  #     matrix:
-  #       platform:
-  #         - linux/arm/v7
+  buildElectronShell:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - linux/arm/v7
           
-  #   # Steps represent a sequence of tasks that will be executed as part of the job
-  #   steps:
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
 
-  #     - name: Git Checkout
-  #       uses: actions/checkout@v4
-  #       with:
-  #         ref: ${{ github.event.inputs.version }}
+      - name: Git Checkout tag
+        if: inputs.pull_request != 'pull_request'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.version}}
 
-  #     - name: Setup Node
-  #       uses: actions/setup-node@v4
-  #       with:
-  #         node-version: '20.11.1'
+      - name: Git Checkout master
+        if: inputs.pull_request == 'pull_request'
+        uses: actions/checkout@v4
 
-  #     - name: Use npm 10
-  #       run: npm i -g npm@10
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.19'
 
-  #     - name: Cache Node Modules
-  #       uses: actions/cache@v4
-  #       env:
-  #         cache-name: cache-node-modules
-  #       with:
-  #         path: |
-  #           node_modules
-  #           */*/node_modules
-  #         key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('package-lock.json') }}
-  #         restore-keys: |
-  #           ${{ runner.os }}-build-${{ env.cache-name }}-
-  #           ${{ runner.os }}-build-
-  #           ${{ runner.os }}-
+      - name: Use npm 8
+        run: npm i -g npm@8
 
-  #     - name: Set up Docker Buildx
-  #       uses: docker/setup-buildx-action@v3
+      - name: Cache Node Modules
+        uses: actions/cache@v4
+        env:
+          cache-name: cache-node-modules
+        with:
+          path: |
+            node_modules
+            */*/node_modules
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+            ${{ runner.os }}-build-
+            ${{ runner.os }}-
 
-  #     - name: Login to Docker Hub
-  #       uses: docker/login-action@v3
-  #       with:
-  #         username: ${{ secrets.DOCKERHUB_USERNAME }}
-  #         password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-  #     - name: electron-shell make
-  #       run: npm run forgeLinux64:thin --prefix apps/smoker
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-  #     - name: Build and push Electron Shell
-  #       uses: docker/build-push-action@v5
-  #       with:
-  #         platforms: ${{ matrix.platform }}
-  #         context: .
-  #         file: apps/smoker/shell.dockerfile
-  #         push: true
-  #         tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:electron-shell_V${{ github.event.inputs.version }}
+      - name: electron-shell make
+        run: npm run forgeLinux64:thin --prefix apps/smoker
+
+      - name: Build and push Electron Shell
+        uses: docker/build-push-action@v5
+        with:
+          platforms: ${{ matrix.platform }}
+          context: .
+          file: apps/smoker/shell.dockerfile
+          push: ${{ inputs.pull_request != 'pull_request'}}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:electron-shell_V${{ inputs.version }}
 
   Deploy:
-      needs: [buildSmoker, buildDeviceService]
+      if: inputs.pull_request != 'pull_request'
+      needs: [buildSmoker, buildDeviceService, buildElectronShell]
       uses: benjr70/Smart-Smoker-V2/.github/workflows/smoker-deploy.yml@master
       with:
-        version: ${{ github.event.inputs.version }}
+        version: ${{ inputs.version }}
