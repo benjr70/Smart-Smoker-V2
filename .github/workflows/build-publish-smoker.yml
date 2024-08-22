@@ -33,10 +33,15 @@ jobs:
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
+
+      - run: echo ${{ inputs.version }}
+
+      - run: echo ${{ inputs.pull_request }}
+      
       - name: Git Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.version || 'master' }}
+          ref: ${{ inputs.version || 'master' }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -79,7 +84,7 @@ jobs:
           context: .
           file: apps/smoker/Dockerfile
           push: ${{github.event.inputs.pull_request != 'pull_request'}}
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:smoker_V${{ github.event.inputs.version }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:smoker_V${{ inputs.version }}
 
   buildDeviceService:
     # The type of runner that the job will run on
@@ -96,7 +101,7 @@ jobs:
       - name: Git Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.version || 'master' }}
+          ref: ${{ inputs.version || 'master' }}
 
 
       - name: Setup Node
@@ -140,7 +145,7 @@ jobs:
           context: .
           file: apps/device-service/Dockerfile
           push: ${{github.event.inputs.pull_request  != 'pull_request'}}
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:device-service_V${{ github.event.inputs.version }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:device-service_V${{ inputs.version }}
 
 
   buildElectronShell:
@@ -158,7 +163,7 @@ jobs:
       - name: Git Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.version || 'master' }}
+          ref: ${{ inputs.version || 'master' }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -201,11 +206,11 @@ jobs:
           context: .
           file: apps/smoker/shell.dockerfile
           push: ${{github.event.inputs.pull_request != 'pull_request'}}
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:electron-shell_V${{ github.event.inputs.version }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:electron-shell_V${{ inputs.version }}
 
   Deploy:
-      if: github.event.inputs.pull_request != 'pull_request'
+      if: inputs.pull_request != 'pull_request'
       needs: [buildSmoker, buildDeviceService]
       uses: benjr70/Smart-Smoker-V2/.github/workflows/smoker-deploy.yml@master
       with:
-        version: ${{ github.event.inputs.version }}
+        version: ${{ inputs.version }}

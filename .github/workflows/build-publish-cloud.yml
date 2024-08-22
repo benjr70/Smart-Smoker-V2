@@ -34,14 +34,14 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - run: sudo chmod -R 777 ./
 
-      - run: echo ${{ github.event.inputs.version }}
+      - run: echo ${{ inputs.version }}
 
-      - run: echo ${{ github.event.inputs.pull_request }}
+      - run: echo ${{ inputs.pull_request }}
 
       - name: Git Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.version || 'master' }}
+          ref: ${{ inputs.version || 'master' }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -83,8 +83,8 @@ jobs:
           platforms: linux/arm64
           context: .
           file: apps/frontend/Dockerfile
-          push: ${{github.event.inputs.pull_request != 'pull_request'}}
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:frontend_V${{ github.event.inputs.version }}
+          push: ${{inputs.pull_request != 'pull_request'}}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:frontend_V${{ inputs.version }}
 
   Backend:
     runs-on: ubuntu-latest
@@ -94,7 +94,7 @@ jobs:
       - name: Git Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.version || 'master' }}
+          ref: ${{ inputs.version || 'master' }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -136,14 +136,14 @@ jobs:
           platforms: linux/arm64
           context: .
           file: apps/backend/Dockerfile
-          push: ${{github.event.inputs.pull_request != 'pull_request'}}
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:backend_V${{ github.event.inputs.version }}
+          push: ${{inputs.pull_request != 'pull_request'}}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:backend_V${{ inputs.version }}
 
   Deploy:
-      if: github.event.inputs.pull_request != 'pull_request'
+      if: inputs.pull_request != 'pull_request'
       needs: [FrontEnd, Backend]
       uses: benjr70/Smart-Smoker-V2/.github/workflows/cloud-deploy.yml@master
       secrets: inherit
       with:
-        version: ${{ github.event.inputs.version }}
+        version: ${{ inputs.version }}
 
