@@ -34,6 +34,10 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - run: sudo chmod -R 777 ./
 
+      - run: echo ${{ github.event.inputs.version }}
+
+      - run: echo ${{ github.event.inputs.pull_request }}
+
       - name: Git Checkout
         uses: actions/checkout@v4
         with:
@@ -142,3 +146,4 @@ jobs:
       secrets: inherit
       with:
         version: ${{ github.event.inputs.version }}
+
