@@ -84,7 +84,7 @@ jobs:
           platforms: linux/arm/v7
           context: .
           file: apps/smoker/Dockerfile
-          push: ${{github.event.inputs.pull_request != 'pull_request'}}
+          push: ${{ inputs.pull_request != 'pull_request'}}
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:smoker_V${{ inputs.version }}
 
   buildDeviceService:
@@ -150,7 +150,7 @@ jobs:
           platforms: linux/arm/v7
           context: .
           file: apps/device-service/Dockerfile
-          push: ${{github.event.inputs.pull_request  != 'pull_request'}}
+          push: ${{ inputs.pull_request  != 'pull_request'}}
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:device-service_V${{ inputs.version }}
 
 
@@ -216,7 +216,7 @@ jobs:
           platforms: ${{ matrix.platform }}
           context: .
           file: apps/smoker/shell.dockerfile
-          push: ${{github.event.inputs.pull_request != 'pull_request'}}
+          push: ${{ inputs.pull_request != 'pull_request'}}
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:electron-shell_V${{ inputs.version }}
 
   Deploy:
