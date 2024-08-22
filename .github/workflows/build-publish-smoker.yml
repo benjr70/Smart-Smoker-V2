@@ -179,10 +179,10 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20.11.1'
+          node-version: '18.19'
 
-      - name: Use npm 10
-        run: npm i -g npm@10
+      - name: Use npm 8
+        run: npm i -g npm@8
 
       - name: Cache Node Modules
         uses: actions/cache@v4
@@ -221,7 +221,7 @@ jobs:
 
   Deploy:
       if: inputs.pull_request != 'pull_request'
-      needs: [buildSmoker, buildDeviceService]
+      needs: [buildSmoker, buildDeviceService, buildElectronShell]
       uses: benjr70/Smart-Smoker-V2/.github/workflows/smoker-deploy.yml@master
       with:
         version: ${{ inputs.version }}
