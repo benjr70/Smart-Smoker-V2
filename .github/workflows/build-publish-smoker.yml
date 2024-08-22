@@ -34,14 +34,15 @@ jobs:
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
 
-      - run: echo ${{ inputs.version }}
-
-      - run: echo ${{ inputs.pull_request }}
-      
-      - name: Git Checkout
+      - name: Git Checkout tag
+        if: inputs.pull_request != 'pull_request'
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.version || 'master' }}
+          ref: ${{ inputs.version}}
+
+      - name: Git Checkout master
+        if: inputs.pull_request == 'pull_request'
+        uses: actions/checkout@v4
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -98,10 +99,15 @@ jobs:
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
 
-      - name: Git Checkout
+      - name: Git Checkout tag
+        if: inputs.pull_request != 'pull_request'
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.version || 'master' }}
+          ref: ${{ inputs.version}}
+
+      - name: Git Checkout master
+        if: inputs.pull_request == 'pull_request'
+        uses: actions/checkout@v4
 
 
       - name: Setup Node
@@ -160,10 +166,15 @@ jobs:
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
 
-      - name: Git Checkout
+      - name: Git Checkout tag
+        if: inputs.pull_request != 'pull_request'
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.version || 'master' }}
+          ref: ${{ inputs.version}}
+
+      - name: Git Checkout master
+        if: inputs.pull_request == 'pull_request'
+        uses: actions/checkout@v4
 
       - name: Setup Node
         uses: actions/setup-node@v4
