@@ -1,7 +1,7 @@
 FROM arm32v7/ubuntu:20.04
 
-RUN echo "tzdata tzdata/Areas select America" | debconf-set-selections
-RUN echo "tzdata tzdata/Zones/America select New_York" | debconf-set-selections
+ENV TZ=America/New_York
+RUN dpkg-reconfigure -f noninteractive tzdata
 
 RUN apt-get update && \
     apt-get install -y \
