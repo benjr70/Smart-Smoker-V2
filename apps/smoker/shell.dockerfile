@@ -1,6 +1,7 @@
 FROM arm32v7/ubuntu:20.04
 
-ENV DEBCONF_TIMEZONE=America/New_York
+RUN echo "tzdata tzdata/Areas select America" | debconf-set-selections
+RUN echo "tzdata tzdata/Zones/America select New_York" | debconf-set-selections
 
 RUN apt-get update && \
     apt-get install -y \
