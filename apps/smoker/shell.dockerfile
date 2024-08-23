@@ -1,7 +1,7 @@
 FROM arm32v7/ubuntu:20.04
 
+ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=America/New_York
-RUN dpkg-reconfigure -f noninteractive tzdata
 
 RUN apt-get update && \
     apt-get install -y \
