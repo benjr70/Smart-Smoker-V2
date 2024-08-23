@@ -1,5 +1,7 @@
 FROM arm32v7/ubuntu:20.04
 
+ENV DEBCONF_TIMEZONE=America/New_York
+
 RUN apt-get update && \
     apt-get install -y \
         socat \
