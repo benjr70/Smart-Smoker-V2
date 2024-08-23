@@ -16,7 +16,7 @@ RUN apt-get update && \
         libatk1.0 \
         libatk-bridge2.0-0 \
         librust-gdk-pixbuf-sys-dev \
-        libgdk-pixbuf-2.0-0 \
+        libgdk-pixbuf2.0-0 \
         libgtk-3-0 \
         libasound2 \
         xauth && \
