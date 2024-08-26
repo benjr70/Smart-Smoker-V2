@@ -22,6 +22,15 @@ export const setCurrentRatings = async(rating: rating): Promise<rating> => {
         });
 }
 
+export const updateRatings = async(rating: rating): Promise<rating> => {
+    const axios = require('axios');
+    axios.defaults.baseURL = envUrl;
+    return axios.post('ratings/' + rating._id, rating)
+        .catch((error: any) => {
+            console.log(error);
+        });
+}
+
 export const getRatingById =async (id: string): Promise<rating> => {
     const axios = require('axios');
     axios.defaults.baseURL = envUrl;

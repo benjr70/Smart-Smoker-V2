@@ -4,4 +4,5 @@ export interface rating {
     tenderness: number,
     overallTaste: number,
     notes: string,
+    _id?: string,
 }

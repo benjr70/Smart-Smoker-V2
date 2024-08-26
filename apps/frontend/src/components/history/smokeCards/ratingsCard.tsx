@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { preSmoke } from "../../common/interfaces/preSmoke";
 import { PostSmoke } from "../../smoke/postSmokeStep/PostSmokeStep";
 import { rating } from "../../common/interfaces/rating";
-import { setCurrentRatings } from "../../../Services/ratingsService";
+import { updateRatings } from "../../../Services/ratingsService";
 
 
 interface RatingsCardProps {
@@ -35,7 +35,7 @@ export function RatingsCard(props: RatingsCardProps): JSX.Element {
 
     useEffect(() => {
         return () => {
-            // setCurrentRatings(ratings);
+            updateRatings(ratings);
         }
     })
 
