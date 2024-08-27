@@ -1,7 +1,5 @@
 import { Card, CardContent, Grid, Rating, ThemeProvider, Typography, createTheme } from "@mui/material";
 import React, { useEffect, useState } from "react";
-import { preSmoke } from "../../common/interfaces/preSmoke";
-import { PostSmoke } from "../../smoke/postSmokeStep/PostSmokeStep";
 import { rating } from "../../common/interfaces/rating";
 import { updateRatings } from "../../../Services/ratingsService";
 
@@ -34,10 +32,10 @@ export function RatingsCard(props: RatingsCardProps): JSX.Element {
     }, [props.ratings])
 
     useEffect(() => {
-        return () => {
+        if(ratings._id){
             updateRatings(ratings);
         }
-    })
+    }, [ratings])
 
     return (
     <Grid>
