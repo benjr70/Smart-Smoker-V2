@@ -22,6 +22,11 @@ export class RatingsController {
         return this.ratingsService.saveCurrentRatings(dto);
     }
 
+    @Post('/:id')
+    updateRatings(@Param('id') id: string, @Body() dto: RatingsDto): Promise<Ratings> {
+        return this.ratingsService.update(id, dto);
+    }
+
     @Get('/:id')
     getRatingById(@Param('id') id: string): Promise<Ratings> {
         return this.ratingsService.getById(id);

@@ -42,14 +42,19 @@ export class History extends React.Component<{},{history: historyInterface}> {
         this.setState({history: tempState});
     }
 
-    onBackClick(){
+    async onBackClick(){
         const tempState = this.state.history;
         tempState.smokeId = undefined;
         this.setState({history: tempState});
+        await this.updateList();
     }
 
     async onDeleteClick(smokeId: string){
         await deleteSmoke(smokeId);
+        await this.updateList();
+    }
+
+    async updateList() {
         await getSmokeHistory().then( (result:smokeHistory[]) => {
             const temp: historyInterface = {
                 smokeHistoryList: result.reverse(),

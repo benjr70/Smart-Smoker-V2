@@ -1,8 +1,7 @@
 import { Card, CardContent, Grid, Rating, ThemeProvider, Typography, createTheme } from "@mui/material";
-import React from "react";
-import { preSmoke } from "../../common/interfaces/preSmoke";
-import { PostSmoke } from "../../smoke/postSmokeStep/PostSmokeStep";
+import React, { useEffect, useState } from "react";
 import { rating } from "../../common/interfaces/rating";
+import { updateRatings } from "../../../Services/ratingsService";
 
 
 interface RatingsCardProps {
@@ -25,6 +24,19 @@ const theme = createTheme({
 
 
 export function RatingsCard(props: RatingsCardProps): JSX.Element {
+
+    const [ratings, setRatings] = useState<rating>(props.ratings)
+    
+    useEffect(() => {
+        setRatings(props.ratings)
+    }, [props.ratings])
+
+    useEffect(() => {
+        if(ratings._id){
+            updateRatings(ratings);
+        }
+    }, [ratings])
+
     return (
     <Grid>
         <ThemeProvider theme={theme}>
@@ -33,39 +45,41 @@ export function RatingsCard(props: RatingsCardProps): JSX.Element {
                 <Typography variant="h5" component="div" align={'center'}>
                     Ratings
                 </Typography>
-                <Typography component="legend">Smoke Flavor: {props.ratings.smokeFlavor}</Typography>
+                <Typography component="legend">Smoke Flavor: {ratings.smokeFlavor}</Typography>
                 <Rating 
                     name="size-large" 
                     defaultValue={5} 
                     size="large" 
                     max={(10)}
-                    value={props.ratings.smokeFlavor}
-
+                    value={ratings.smokeFlavor}
+                    onChange={(event) => {setRatings({...ratings, smokeFlavor: parseFloat((event.target as HTMLInputElement).value)})}}  
                 />
-                <Typography component="legend">Seasoning: {props.ratings.seasoning}</Typography>
+                <Typography component="legend">Seasoning: {ratings.seasoning}</Typography>
                 <Rating 
                     name="size-large" 
                     defaultValue={5} 
                     size="large" 
                     max={(10)}
-                    value={props.ratings.seasoning}
-
+                    value={ratings.seasoning}
+                    onChange={(event) => {setRatings({...ratings, seasoning: parseFloat((event.target as HTMLInputElement).value)})}}  
                 />
-                <Typography component="legend">Tenderness: {props.ratings.tenderness}</Typography>
+                <Typography component="legend">Tenderness: {ratings.tenderness}</Typography>
                 <Rating 
                     name="size-large" 
                     defaultValue={5} 
                     size="large" 
                     max={(10)}
-                    value={props.ratings.tenderness}
+                    value={ratings.tenderness}
+                    onChange={(event) => {setRatings({...ratings, tenderness: parseFloat((event.target as HTMLInputElement).value)})}}  
                 />
-                <Typography component="legend">Overall Taste: {props.ratings.overallTaste}</Typography>
+                <Typography component="legend">Overall Taste: {ratings.overallTaste}</Typography>
                 <Rating
                     name="size-large" 
                     defaultValue={5} 
                     size="large" 
                     max={(10)} 
-                    value={props.ratings.overallTaste}
+                    value={ratings.overallTaste}
+                    onChange={(event) => {setRatings({...ratings, overallTaste: parseFloat((event.target as HTMLInputElement).value)})}}  
                     />
                 </CardContent>
         </Card>

@@ -14,7 +14,7 @@ const steps = [
     'Pre-Smoke',
     'Smoke',
     'Post-Smoke',
-    'Rate',
+    // 'Rate',
   ];
   
 export function delay(ms: number) {
@@ -34,7 +34,7 @@ export class Smoke extends React.Component<{},{activeStep: number}>{
 
       async nextStep(){
         let nextStep = this.state.activeStep
-        if(this.state.activeStep === 3){
+        if(this.state.activeStep === 2){
             nextStep = 0;
             this.setState({activeStep: 5});
             await delay(2);
@@ -44,7 +44,7 @@ export class Smoke extends React.Component<{},{activeStep: number}>{
             return;
         }
         nextStep++;
-         if(nextStep < 4){
+         if(nextStep < 3){
             this.setState({activeStep: nextStep});
          }
       }
@@ -58,7 +58,7 @@ export class Smoke extends React.Component<{},{activeStep: number}>{
                 size="small"
                 onClick={() => this.nextStep()}
             >
-                {this.state.activeStep === 3 ? 'Finish' : "Next"}
+                {this.state.activeStep === 2 ? 'Finish' : "Next"}
             </Button>
         );
           switch(this.state.activeStep){
@@ -71,9 +71,9 @@ export class Smoke extends React.Component<{},{activeStep: number}>{
                 case 2:
                     step = <PostSmokeStep nextButton={nextButton}/>;
                     break;
-                case 3:
-                    step = <RateSmokeStep nextButton={nextButton}/>;
-                    break;
+                // case 3:
+                //     step = <RateSmokeStep nextButton={nextButton}/>;
+                //     break;
           }
 
           return(
