@@ -28,6 +28,10 @@ export function SmokeReview(props: smokeReviewProps): JSX.Element {
         steps: []
     };
     let smokeProfileInit: smokeProfile = {
+        chamberName: 'Chamber',
+        probe1Name: 'Probe 1',
+        probe2Name: 'Probe 2',
+        probe3Name: 'Probe 3',
         woodType: '',
         notes: '',
     }

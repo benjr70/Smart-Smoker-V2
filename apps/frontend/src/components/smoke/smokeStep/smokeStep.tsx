@@ -9,6 +9,10 @@ import  TempChart, { TempData } from 'temperaturechart/src/tempChart';
 
 
 interface State {
+    chamberName: string;
+    probe1Name: string;
+    probe2Name: string;
+    probe3Name: string;
     probeTemp1: string;
     probeTemp2: string;
     probeTemp3: string;
@@ -39,6 +43,10 @@ export class SmokeStep extends React.Component<SmokeStepProps, {tempState: State
     constructor(props: any) {
         super(props);
         this.state = { tempState: {
+            chamberName: 'Chamber',
+            probe1Name: 'probe 1',
+            probe2Name: 'probe 2',
+            probe3Name: 'probe 3',
             probeTemp1: '0',
             probeTemp2: '0',
             probeTemp3: '0',
@@ -52,11 +60,19 @@ export class SmokeStep extends React.Component<SmokeStepProps, {tempState: State
 
         this.updateNotes = this.updateNotes.bind(this);
         this.updateWoodType = this.updateWoodType.bind(this);
+        this.updateChamberName = this.updateChamberName.bind(this);
+        this.updateProbe1Name = this.updateProbe1Name.bind(this);
+        this.updateProbe2Name = this.updateProbe2Name.bind(this);
+        this.updateProbe3Name = this.updateProbe3Name.bind(this);
     }
 
     async componentDidMount(): Promise<void> {
         getCurrentSmokeProfile().then((smokeProfile: smokeProfile) => {
             let temp = this.state.tempState;
+            temp.chamberName = smokeProfile.chamberName;
+            temp.probe1Name = smokeProfile.probe1Name;
+            temp.probe2Name = smokeProfile.probe2Name;
+            temp.probe3Name = smokeProfile.probe3Name;
             temp.notes = smokeProfile.notes;
             temp.woodType = smokeProfile.woodType;
             this.setState({tempState: temp});
@@ -113,8 +129,36 @@ export class SmokeStep extends React.Component<SmokeStepProps, {tempState: State
         this.setState({tempState: temp});
     }
 
+    updateChamberName(newInputValue: string){
+        let temp = this.state.tempState;
+        temp.chamberName = newInputValue;
+        this.setState({tempState: temp});
+    }
+
+    updateProbe1Name(newInputValue: string){
+        let temp = this.state.tempState;
+        temp.probe1Name = newInputValue;
+        this.setState({tempState: temp});       
+    }
+
+    updateProbe2Name(newInputValue: string){
+        let temp = this.state.tempState;
+        temp.probe2Name = newInputValue;
+        this.setState({tempState: temp});       
+    }  
+    
+    updateProbe3Name(newInputValue: string){
+        let temp = this.state.tempState;
+        temp.probe3Name = newInputValue;
+        this.setState({tempState: temp});       
+    }
+
     componentWillUnmount(){
         const smokeProfileDto: smokeProfile = {
+            chamberName: this.state.tempState.chamberName,
+            probe1Name: this.state.tempState.probe1Name,
+            probe2Name: this.state.tempState.probe2Name,
+            probe3Name: this.state.tempState.probe3Name,
             notes: this.state.tempState.notes,
             woodType: this.state.tempState.woodType,
         }
@@ -129,6 +173,8 @@ export class SmokeStep extends React.Component<SmokeStepProps, {tempState: State
                     <Grid container direction="row" justifyContent='space-around' sx={{margin: '5px'}} color={'#1f4f2d'}>
                         <Input 
                             defaultValue="Chamber"
+                            value={this.state.tempState.chamberName}
+                            onChange={(event) => this.updateChamberName(event.target.value)}
                             sx={{
                                 fontSize: 24,
                                 fontWeight: 700,
@@ -145,6 +191,8 @@ export class SmokeStep extends React.Component<SmokeStepProps, {tempState: State
                     <Grid container direction="row" justifyContent='space-around' sx={{margin: '5px'}} color={'#2a475e'}>
                         <Input 
                             defaultValue="Probe 1"
+                            value={this.state.tempState.probe1Name}
+                            onChange={(event) => this.updateProbe1Name(event.target.value)}
                             sx={{
                                 fontSize: 24,
                                 fontWeight: 700,
@@ -161,6 +209,8 @@ export class SmokeStep extends React.Component<SmokeStepProps, {tempState: State
                     <Grid container direction="row" justifyContent='space-around' sx={{margin: '5px'}} color={'#118cd8'}>
                         <Input 
                             defaultValue="Probe 2"
+                            value={this.state.tempState.probe2Name}
+                            onChange={(event) => this.updateProbe2Name(event.target.value)}
                             sx={{
                                 fontSize: 24,
                                 fontWeight: 700,
@@ -177,6 +227,8 @@ export class SmokeStep extends React.Component<SmokeStepProps, {tempState: State
                     <Grid container direction="row" justifyContent='space-around' sx={{margin: '5px'}} color={'#5582a7'}>
                         <Input 
                             defaultValue="Probe 3"
+                            value={this.state.tempState.probe3Name}
+                            onChange={(event) => this.updateProbe3Name(event.target.value)}
                             sx={{
                                 fontSize: 24,
                                 fontWeight: 700,
