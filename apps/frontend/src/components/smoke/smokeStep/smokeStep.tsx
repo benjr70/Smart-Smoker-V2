@@ -93,7 +93,7 @@ export class SmokeStep extends React.Component<SmokeStepProps, {tempState: State
         }))
         socket.on('smokeUpdate', ((message) => {
             let temp = this.state.tempState;
-            temp.smoking = message;
+            temp.smoking = message.smoking;
             this.setState({tempState: temp});
         }))
 
@@ -112,7 +112,14 @@ export class SmokeStep extends React.Component<SmokeStepProps, {tempState: State
         toggleSmoking().then(state => {
             let temp = this.state.tempState;
             temp.smoking = state.smoking
-            socket.emit('smokeUpdate', state.smoking);
+            let update = {
+                smoking: state.smoking,
+                chamberName: temp.chamberName,
+                probe1Name: temp.probe1Name,
+                probe2Name: temp.probe2Name,
+                probe3Name: temp.probe3Name,
+            }
+            socket.emit('smokeUpdate', update);
             this.setState({tempState: temp});
         })
     }
@@ -132,24 +139,52 @@ export class SmokeStep extends React.Component<SmokeStepProps, {tempState: State
     updateChamberName(newInputValue: string){
         let temp = this.state.tempState;
         temp.chamberName = newInputValue;
+        socket.emit('smokeUpdate', {
+            smoking: temp.smoking,
+            chamberName: temp.chamberName,
+            probe1Name: temp.probe1Name,
+            probe2Name: temp.probe2Name,
+            probe3Name: temp.probe3Name,
+        });
         this.setState({tempState: temp});
     }
 
     updateProbe1Name(newInputValue: string){
         let temp = this.state.tempState;
         temp.probe1Name = newInputValue;
+        socket.emit('smokeUpdate', {
+            smoking: temp.smoking,
+            chamberName: temp.chamberName,
+            probe1Name: temp.probe1Name,
+            probe2Name: temp.probe2Name,
+            probe3Name: temp.probe3Name,
+        });
         this.setState({tempState: temp});       
     }
 
     updateProbe2Name(newInputValue: string){
         let temp = this.state.tempState;
         temp.probe2Name = newInputValue;
+        socket.emit('smokeUpdate', {
+            smoking: temp.smoking,
+            chamberName: temp.chamberName,
+            probe1Name: temp.probe1Name,
+            probe2Name: temp.probe2Name,
+            probe3Name: temp.probe3Name,
+        });
         this.setState({tempState: temp});       
     }  
     
     updateProbe3Name(newInputValue: string){
         let temp = this.state.tempState;
         temp.probe3Name = newInputValue;
+        socket.emit('smokeUpdate', {
+            smoking: temp.smoking,
+            chamberName: temp.chamberName,
+            probe1Name: temp.probe1Name,
+            probe2Name: temp.probe2Name,
+            probe3Name: temp.probe3Name,
+        });
         this.setState({tempState: temp});       
     }
 
@@ -249,6 +284,10 @@ export class SmokeStep extends React.Component<SmokeStepProps, {tempState: State
                         MeatTemp={parseFloat(this.state.tempState.probeTemp1)}
                         Meat2Temp={parseFloat(this.state.tempState.probeTemp2)}
                         Meat3Temp={parseFloat(this.state.tempState.probeTemp3)}
+                        ChamberName={this.state.tempState.chamberName}
+                        Probe1Name={this.state.tempState.probe1Name}
+                        Probe2Name={this.state.tempState.probe2Name}
+                        Probe3Name={this.state.tempState.probe3Name}
                         date={this.state.tempState.date}
                         smoking={this.state.tempState.smoking}
                         initData={initTemps}></TempChart>
