@@ -2,12 +2,17 @@ import React from "react";
 import Grid from '@mui/material/Grid';
 import './smokeStep.style.css'
 import { io } from 'socket.io-client';
-import { Autocomplete, Button, Divider, TextField } from "@mui/material";
+import { Autocomplete, Button, Divider, Input, TextField } from "@mui/material";
 import { getCurrentSmokeProfile, getState, setSmokeProfile, smokeProfile, toggleSmoking } from "../../../Services/smokerService";
 import { getCurrentTemps } from "../../../Services/tempsService";
 import  TempChart, { TempData } from 'temperaturechart/src/tempChart';
 
+
 interface State {
+    chamberName: string;
+    probe1Name: string;
+    probe2Name: string;
+    probe3Name: string;
     probeTemp1: string;
     probeTemp2: string;
     probeTemp3: string;
@@ -30,6 +35,7 @@ type SmokeStepProps = {
     nextButton: JSX.Element;
 };
 
+const ariaLabel = { 'aria-label': 'description' };
 let initTemps: TempData[] = [];
 let socket: any;
 export class SmokeStep extends React.Component<SmokeStepProps, {tempState: State}> {
@@ -37,6 +43,10 @@ export class SmokeStep extends React.Component<SmokeStepProps, {tempState: State
     constructor(props: any) {
         super(props);
         this.state = { tempState: {
+            chamberName: 'Chamber',
+            probe1Name: 'probe 1',
+            probe2Name: 'probe 2',
+            probe3Name: 'probe 3',
             probeTemp1: '0',
             probeTemp2: '0',
             probeTemp3: '0',
@@ -50,11 +60,19 @@ export class SmokeStep extends React.Component<SmokeStepProps, {tempState: State
 
         this.updateNotes = this.updateNotes.bind(this);
         this.updateWoodType = this.updateWoodType.bind(this);
+        this.updateChamberName = this.updateChamberName.bind(this);
+        this.updateProbe1Name = this.updateProbe1Name.bind(this);
+        this.updateProbe2Name = this.updateProbe2Name.bind(this);
+        this.updateProbe3Name = this.updateProbe3Name.bind(this);
     }
 
     async componentDidMount(): Promise<void> {
         getCurrentSmokeProfile().then((smokeProfile: smokeProfile) => {
             let temp = this.state.tempState;
+            temp.chamberName = smokeProfile.chamberName;
+            temp.probe1Name = smokeProfile.probe1Name;
+            temp.probe2Name = smokeProfile.probe2Name;
+            temp.probe3Name = smokeProfile.probe3Name;
             temp.notes = smokeProfile.notes;
             temp.woodType = smokeProfile.woodType;
             this.setState({tempState: temp});
@@ -75,7 +93,7 @@ export class SmokeStep extends React.Component<SmokeStepProps, {tempState: State
         }))
         socket.on('smokeUpdate', ((message) => {
             let temp = this.state.tempState;
-            temp.smoking = message;
+            temp.smoking = message.smoking;
             this.setState({tempState: temp});
         }))
 
@@ -94,7 +112,14 @@ export class SmokeStep extends React.Component<SmokeStepProps, {tempState: State
         toggleSmoking().then(state => {
             let temp = this.state.tempState;
             temp.smoking = state.smoking
-            socket.emit('smokeUpdate', state.smoking);
+            let update = {
+                smoking: state.smoking,
+                chamberName: temp.chamberName,
+                probe1Name: temp.probe1Name,
+                probe2Name: temp.probe2Name,
+                probe3Name: temp.probe3Name,
+            }
+            socket.emit('smokeUpdate', update);
             this.setState({tempState: temp});
         })
     }
@@ -111,8 +136,64 @@ export class SmokeStep extends React.Component<SmokeStepProps, {tempState: State
         this.setState({tempState: temp});
     }
 
+    updateChamberName(newInputValue: string){
+        let temp = this.state.tempState;
+        temp.chamberName = newInputValue;
+        socket.emit('smokeUpdate', {
+            smoking: temp.smoking,
+            chamberName: temp.chamberName,
+            probe1Name: temp.probe1Name,
+            probe2Name: temp.probe2Name,
+            probe3Name: temp.probe3Name,
+        });
+        this.setState({tempState: temp});
+    }
+
+    updateProbe1Name(newInputValue: string){
+        let temp = this.state.tempState;
+        temp.probe1Name = newInputValue;
+        socket.emit('smokeUpdate', {
+            smoking: temp.smoking,
+            chamberName: temp.chamberName,
+            probe1Name: temp.probe1Name,
+            probe2Name: temp.probe2Name,
+            probe3Name: temp.probe3Name,
+        });
+        this.setState({tempState: temp});       
+    }
+
+    updateProbe2Name(newInputValue: string){
+        let temp = this.state.tempState;
+        temp.probe2Name = newInputValue;
+        socket.emit('smokeUpdate', {
+            smoking: temp.smoking,
+            chamberName: temp.chamberName,
+            probe1Name: temp.probe1Name,
+            probe2Name: temp.probe2Name,
+            probe3Name: temp.probe3Name,
+        });
+        this.setState({tempState: temp});       
+    }  
+    
+    updateProbe3Name(newInputValue: string){
+        let temp = this.state.tempState;
+        temp.probe3Name = newInputValue;
+        socket.emit('smokeUpdate', {
+            smoking: temp.smoking,
+            chamberName: temp.chamberName,
+            probe1Name: temp.probe1Name,
+            probe2Name: temp.probe2Name,
+            probe3Name: temp.probe3Name,
+        });
+        this.setState({tempState: temp});       
+    }
+
     componentWillUnmount(){
         const smokeProfileDto: smokeProfile = {
+            chamberName: this.state.tempState.chamberName,
+            probe1Name: this.state.tempState.probe1Name,
+            probe2Name: this.state.tempState.probe2Name,
+            probe3Name: this.state.tempState.probe3Name,
             notes: this.state.tempState.notes,
             woodType: this.state.tempState.woodType,
         }
@@ -125,36 +206,72 @@ export class SmokeStep extends React.Component<SmokeStepProps, {tempState: State
             <Grid item xs={12}>
                 <Grid container direction="column" sx={{marginTop: '10px'}}>
                     <Grid container direction="row" justifyContent='space-around' sx={{margin: '5px'}} color={'#1f4f2d'}>
-                        <Grid item className='text'  >
-                            Chamber
-                        </Grid>
+                        <Input 
+                            defaultValue="Chamber"
+                            value={this.state.tempState.chamberName}
+                            onChange={(event) => this.updateChamberName(event.target.value)}
+                            sx={{
+                                fontSize: 24,
+                                fontWeight: 700,
+                                color: '#1f4f2d',
+                                width: '75%',
+                            }}
+                            disableUnderline={true}
+                          />
                         <Grid item className='text' >
                             {this.state.tempState.chamberTemp}
                         </Grid>
                     </Grid>
                     <Divider variant="middle"/>
                     <Grid container direction="row" justifyContent='space-around' sx={{margin: '5px'}} color={'#2a475e'}>
-                        <Grid item className='text' >
-                            Probe 1
-                        </Grid>
+                        <Input 
+                            defaultValue="Probe 1"
+                            value={this.state.tempState.probe1Name}
+                            onChange={(event) => this.updateProbe1Name(event.target.value)}
+                            sx={{
+                                fontSize: 24,
+                                fontWeight: 700,
+                                color: '#2a475e',
+                                width: '75%',
+                            }}
+                            disableUnderline={true}
+                          />
                         <Grid item className='text' >
                             {this.state.tempState.probeTemp1}
                         </Grid>
                     </Grid>
                     <Divider variant="middle"/>
                     <Grid container direction="row" justifyContent='space-around' sx={{margin: '5px'}} color={'#118cd8'}>
-                        <Grid item className='text' >
-                            Probe 2
-                        </Grid>
+                        <Input 
+                            defaultValue="Probe 2"
+                            value={this.state.tempState.probe2Name}
+                            onChange={(event) => this.updateProbe2Name(event.target.value)}
+                            sx={{
+                                fontSize: 24,
+                                fontWeight: 700,
+                                color: '#118cd8',
+                                width: '75%',
+                            }}
+                            disableUnderline={true}
+                          />
                         <Grid item className='text' >
                             {this.state.tempState.probeTemp2}
                         </Grid>
                     </Grid>
                     <Divider variant="middle"/>
                     <Grid container direction="row" justifyContent='space-around' sx={{margin: '5px'}} color={'#5582a7'}>
-                        <Grid item className='text' >
-                            Probe 3
-                        </Grid>
+                        <Input 
+                            defaultValue="Probe 3"
+                            value={this.state.tempState.probe3Name}
+                            onChange={(event) => this.updateProbe3Name(event.target.value)}
+                            sx={{
+                                fontSize: 24,
+                                fontWeight: 700,
+                                color: '#5582a7',
+                                width: '75%',
+                            }}
+                            disableUnderline={true}
+                          />
                         <Grid item className='text' >
                             {this.state.tempState.probeTemp3}
                         </Grid>
@@ -167,6 +284,10 @@ export class SmokeStep extends React.Component<SmokeStepProps, {tempState: State
                         MeatTemp={parseFloat(this.state.tempState.probeTemp1)}
                         Meat2Temp={parseFloat(this.state.tempState.probeTemp2)}
                         Meat3Temp={parseFloat(this.state.tempState.probeTemp3)}
+                        ChamberName={this.state.tempState.chamberName}
+                        Probe1Name={this.state.tempState.probe1Name}
+                        Probe2Name={this.state.tempState.probe2Name}
+                        Probe3Name={this.state.tempState.probe3Name}
                         date={this.state.tempState.date}
                         smoking={this.state.tempState.smoking}
                         initData={initTemps}></TempChart>

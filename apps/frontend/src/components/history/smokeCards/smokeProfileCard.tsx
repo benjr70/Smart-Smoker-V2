@@ -33,12 +33,60 @@ export function SmokeProfileCard(props: SmokeProfileCardProps): JSX.Element {
                 <Typography variant="h5" component="div" align={'center'}>
                     Smoke
                 </Typography>
+                <Typography  
+                    sx={{
+                        fontSize: 18,
+                        fontWeight: 700,
+                        width: '75%',
+                    }} >
+                    Probes
+                </Typography>
+                <Typography  
+                    sx={{
+                        fontSize: 16,
+                        fontWeight: 600,
+                        color: '#1f4f2d',
+                        width: '75%',
+                    }} >
+                    {props.smokeProfile.chamberName ?? 'Chamber'}
+                </Typography>
+                <Typography  
+                    sx={{
+                        fontSize: 16,
+                        fontWeight: 600,
+                        color: '#2a475e',
+                        width: '75%',
+                    }} >
+                    {props.smokeProfile.probe1Name ?? 'Probe 1'}
+                </Typography>
+                <Typography  
+                    sx={{
+                        fontSize: 16,
+                        fontWeight: 600,
+                        color: '#118cd8',
+                        width: '75%',
+                    }} >
+                    {props.smokeProfile.probe2Name ?? 'Probe 2'}
+                </Typography>
+                <Typography  
+                    sx={{
+                        fontSize: 16,
+                        fontWeight: 600,
+                        color: '#5582a7',
+                        width: '75%',
+                    }} >
+                    {props.smokeProfile.probe3Name ?? 'Probe 3'}
+                </Typography>
                
                 <TempChart
                     ChamberTemp={props.temps[props.temps.length - 1].ChamberTemp}
                     MeatTemp={props.temps[props.temps.length - 1].MeatTemp}
                     Meat2Temp={props.temps[props.temps.length - 1].Meat2Temp}
                     Meat3Temp={props.temps[props.temps.length - 1].Meat3Temp}
+                    ChamberName={props.smokeProfile.chamberName ?? 'Chamber'}
+                    Probe1Name={props.smokeProfile.probe1Name ?? 'Probe 1'}
+                    Probe2Name={props.smokeProfile.probe2Name ?? 'Probe 2'}
+                    Probe3Name={props.smokeProfile.probe3Name ?? 'Probe 3'}
                     date={props.temps[props.temps.length - 1].date}
                     smoking={false}
                     initData={props.temps}

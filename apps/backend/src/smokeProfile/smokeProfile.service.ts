@@ -23,7 +23,7 @@ export class SmokeProfileService {
                 if(smoke.smokeProfileId){
                     return this.smokeProfileModel.findById(smoke.smokeProfileId)
                 } else {
-                    return {notes: '', woodType: ''}
+                    return {notes: '', woodType: '', chamberName: 'Chamber', probe1Name: 'Probe1', probe2Name: 'Probe2', probe3Name: 'Probe2'}
                 }
              })
          })

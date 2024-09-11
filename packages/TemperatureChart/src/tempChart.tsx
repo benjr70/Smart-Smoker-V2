@@ -10,6 +10,10 @@ import * as d3 from 'd3';
  }
 
  interface props {
+  ChamberName: string;
+  Probe1Name: string;
+  Probe2Name: string;
+  Probe3Name: string;
   ChamberTemp: number;
   MeatTemp: number;
   Meat2Temp: number;
@@ -118,7 +122,7 @@ function TempChart(props: props): JSX.Element {
       .join("text")
       .call(text => text
         .selectAll("tspan")
-        .data([formatDate(data[i].date), formatValue(data[i].ChamberTemp, 'Chamber'), formatValue(data[i].MeatTemp, 'Probe1'), formatValue(data[i].Meat2Temp, 'Probe2'), formatValue(data[i].Meat3Temp, 'Probe3')])
+        .data([formatDate(data[i].date), formatValue(data[i].ChamberTemp, props.ChamberName), formatValue(data[i].MeatTemp, props.Probe1Name), formatValue(data[i].Meat2Temp, props.Probe2Name), formatValue(data[i].Meat3Temp, props.Probe3Name)])
         .join("tspan")
           .attr("x", 0)
           .attr("y", (_, i) => `${i * 1.1}em`)

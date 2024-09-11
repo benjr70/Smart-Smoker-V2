@@ -6,6 +6,10 @@ import { smokeHistory } from "../components/common/interfaces/history";
 const envUrl =  process.env.REACT_APP_CLOUD_URL;
 
 export interface smokeProfile {
+    chamberName: string;
+    probe1Name: string;
+    probe2Name: string;
+    probe3Name: string;
     notes: string;
     woodType: string;
 }
