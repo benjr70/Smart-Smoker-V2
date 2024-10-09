@@ -6,13 +6,15 @@ import { SmokeDto } from "src/smoke/smokeDto";
 import { StateService } from "src/State/state.service";
 import { SmokeProfile, SmokeProFileDocument } from "./smokeProfile.schema";
 import { SmokeProFileDto } from "./smokeProfileDto";
+import { RatingsService } from "src/ratings/ratings.service";
 
 
 @Injectable()
 export class SmokeProfileService {
     constructor(@InjectModel('SmokeProfile')private smokeProfileModel: Model<SmokeProFileDocument>,
     private stateService: StateService,
-    private smokeService: SmokeService){}
+    private smokeService: SmokeService,
+    private ratingsService: RatingsService){}
 
     async getCurrentSmokeProfile(): Promise<SmokeProfile>{
         return this.stateService.GetState().then(async state => {
@@ -33,6 +35,15 @@ export class SmokeProfileService {
         let state = await this.stateService.GetState();
         if(state.smokeId.length > 0){
             let smoke = await this.smokeService.GetById(state.smokeId);
+            if(!smoke.ratingId){
+                await this.ratingsService.saveCurrentRatings({
+                    smokeFlavor: 0,
+                    seasoning: 0,
+                    tenderness: 0,
+                    overallTaste: 0,
+                    notes: '',
+                });
+            }
             if(smoke.smokeProfileId){
                 await this.update(smoke.smokeProfileId, dto);
             }else {
