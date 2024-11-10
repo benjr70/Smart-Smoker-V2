@@ -53,72 +53,74 @@ export class NotificationsService {
 
     async checkForNotification(temps: TempDto) {
       const notificationsSettings = await this.notificationSettingsModel.findOne().exec();
-      const test = notificationsSettings.settings.map((setting) => {
-        let watchTemp = 0;
-        let compareTemp = setting.temperature;
-        switch(setting.probe1){
-          case 'Chamber': {
-            watchTemp = parseFloat(temps.ChamberTemp);
-            break;
-          }
-          case 'Meat1': {
-            watchTemp = parseFloat(temps.MeatTemp);
-            break;
-          }
-          case 'Meat2': {
-            watchTemp = parseFloat(temps.Meat2Temp);
-            break;
-          }
-          case 'Meat3': {
-            watchTemp = parseFloat(temps.Meat3Temp);
-            break;
-          }
-        }
-        if(setting.type){
-          switch(setting.probe2){
+      if(notificationsSettings){
+        const test = notificationsSettings.settings.map((setting) => {
+          let watchTemp = 0;
+          let compareTemp = setting.temperature;
+          switch(setting.probe1){
             case 'Chamber': {
-              compareTemp = parseFloat(temps.ChamberTemp) + setting.offset;
+              watchTemp = parseFloat(temps.ChamberTemp);
               break;
             }
             case 'Meat1': {
-              compareTemp = parseFloat(temps.MeatTemp) + setting.offset;
+              watchTemp = parseFloat(temps.MeatTemp);
               break;
             }
             case 'Meat2': {
-              compareTemp = parseFloat(temps.Meat2Temp) + setting.offset;
+              watchTemp = parseFloat(temps.Meat2Temp);
               break;
             }
             case 'Meat3': {
-              compareTemp = parseFloat(temps.Meat3Temp) + setting.offset;
+              watchTemp = parseFloat(temps.Meat3Temp);
               break;
             }
           }
-        }
-        switch(setting.op){
-          case '>': {
-            if(watchTemp > compareTemp){
-              const tenMinutesAgo = new Date(Date.now() - TEN_MINUTES);
-              if(setting.lastNotificationSent < tenMinutesAgo){
-                this.sendPushNotification(setting.message);
-                setting.lastNotificationSent = new Date();
+          if(setting.type){
+            switch(setting.probe2){
+              case 'Chamber': {
+                compareTemp = parseFloat(temps.ChamberTemp) + setting.offset;
+                break;
+              }
+              case 'Meat1': {
+                compareTemp = parseFloat(temps.MeatTemp) + setting.offset;
+                break;
+              }
+              case 'Meat2': {
+                compareTemp = parseFloat(temps.Meat2Temp) + setting.offset;
+                break;
+              }
+              case 'Meat3': {
+                compareTemp = parseFloat(temps.Meat3Temp) + setting.offset;
+                break;
               }
             }
-            break;
           }
-          case '<': {
-            if(watchTemp < compareTemp){
-              const tenMinutesAgo = new Date(Date.now() - TEN_MINUTES);
-              if(setting.lastNotificationSent < tenMinutesAgo){
-                this.sendPushNotification(setting.message);
-                setting.lastNotificationSent = new Date();
+          switch(setting.op){
+            case '>': {
+              if(watchTemp > compareTemp){
+                const tenMinutesAgo = new Date(Date.now() - TEN_MINUTES);
+                if(setting.lastNotificationSent < tenMinutesAgo){
+                  this.sendPushNotification(setting.message);
+                  setting.lastNotificationSent = new Date();
+                }
               }
+              break;
             }
-            break;
+            case '<': {
+              if(watchTemp < compareTemp){
+                const tenMinutesAgo = new Date(Date.now() - TEN_MINUTES);
+                if(setting.lastNotificationSent < tenMinutesAgo){
+                  this.sendPushNotification(setting.message);
+                  setting.lastNotificationSent = new Date();
+                }
+              }
+              break;
+            }
           }
-        }
-        return setting;
-      });
-      this.setSettings({settings: test});
+          return setting;
+        });
+        this.setSettings({settings: test});
+      }
     }
 
     async sendPushNotification(data: string) {

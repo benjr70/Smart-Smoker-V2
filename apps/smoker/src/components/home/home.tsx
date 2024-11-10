@@ -78,13 +78,15 @@ export class Home extends React.Component<{}, {tempState: State, activeScreen: n
         socket = io(url);
         deviceClient.on('temp', (message: any) => {
             try{
-                getConnection().then(result => {
-                    if(result.length > 0){
-                        this.setState({connection: true});
-                    } else {
-                        this.setState({connection: false});
-                    }
-                })
+                if(process.env.ENV == 'production'){
+                    getConnection().then(result => {
+                        if(result.length > 0){
+                            this.setState({connection: true});
+                        } else {
+                            this.setState({connection: false});
+                        }
+                    })
+                }
                 let tempObj = JSON.parse(message);
                 let temp = this.state.tempState;
                 temp.chamberTemp = tempObj.Chamber;

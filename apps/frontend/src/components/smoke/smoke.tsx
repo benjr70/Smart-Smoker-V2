@@ -38,8 +38,7 @@ export class Smoke extends React.Component<{},{activeStep: number}>{
             nextStep = 0;
             this.setState({activeStep: 5});
             await delay(2);
-            await FinishSmoke();
-            await clearSmoke();
+            await FinishSmoke().then(() => clearSmoke());
             this.setState({activeStep: nextStep});
             return;
         }
