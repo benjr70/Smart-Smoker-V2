@@ -16,7 +16,8 @@ import { HistoryModule } from './history/history.module';
 import { LoggerMiddleware } from './logger.middleware';
 import { NotificationsModule } from './notifications/notifications.module';
 
-const ENV = process.env.NODE_ENV.trim();
+const ENV = process.env.NODE_ENV;
+console.log(process.env.NODE_ENV);
 @Module({
   imports: [SettingsModule,
     PreSmokeModule,

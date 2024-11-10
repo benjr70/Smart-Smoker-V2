@@ -68,7 +68,7 @@ export function NotificationsCard(): JSX.Element {
                     <Typography variant="h5" component="div" align={'center'}>
                         Notifications
                     </Typography>
-                    {Notifications.map((notification, index) => {
+                    {Notifications && Notifications.map((notification, index) => {
                         return <Notification 
                                 notification={notification}
                                 handleDelete={handleDelete}
