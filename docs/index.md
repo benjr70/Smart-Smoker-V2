@@ -22,6 +22,10 @@ running each app locally should all connect and run together without extra confi
 or to run all apps locally run run `npm run start` in the root folder. This will app all app in one terminal
 note you must have a local mongo DS instance running for the backend to boot
 
+You will also need a local mongo db running </br>
+[install link](https://www.mongodb.com/docs/manual/tutorial/install-mongodb-on-ubuntu/) </br>
+Run `sudo systemctl start mongod` to start on linux 
+
 ## Project layout
 
     mkdocs.yml          # The configuration file.

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { SmokeCard } from './smokeCards/smokeCard';
 import { Grid, TextField } from '@mui/material';
 import './history.style.css';
@@ -14,69 +14,67 @@ interface historyInterface {
     smokeId?: string
 }
 
-export class History extends React.Component<{},{history: historyInterface}> {
+export function History(): JSX.Element {
 
-    constructor(props: any){
-        super(props);
-        this.state = { history: {
-            smokeHistoryList: [],
-            smokeId: undefined
-            }
-        }
+    const [history, setHistory] = useState<historyInterface>({
+        smokeHistoryList: [],
+        smokeId: undefined
+    });
+
+    useEffect(() => {
         getSmokeHistory().then( (result:smokeHistory[]) => {
             const temp: historyInterface = {
                 smokeHistoryList: result.reverse(),
                 smokeId: undefined
             }
-            this.setState({history: temp})
+            setHistory(temp);
         }
         );
-        this.onViewClick = this.onViewClick.bind(this);
-        this.onBackClick = this.onBackClick.bind(this);
-        this.onDeleteClick = this.onDeleteClick.bind(this);
+    }, []);
+
+
+    const onViewClick = (smokeId: string) => {
+        setHistory((prevHistory) => ({
+            smokeHistoryList: prevHistory.smokeHistoryList,
+            smokeId: smokeId
+        }));
     }
 
-     onViewClick(smokeId: string) {
-        const tempState = this.state.history;
-        tempState.smokeId = smokeId;
-        this.setState({history: tempState});
+    const onBackClick = async () => {
+        setHistory((prevHistory) => ({
+            smokeHistoryList: prevHistory.smokeHistoryList,
+            smokeId: undefined
+        }));
+        await updateList();
     }
 
-    async onBackClick(){
-        const tempState = this.state.history;
-        tempState.smokeId = undefined;
-        this.setState({history: tempState});
-        await this.updateList();
-    }
-
-    async onDeleteClick(smokeId: string){
+    const onDeleteClick = async(smokeId: string) => {
         await deleteSmoke(smokeId);
-        await this.updateList();
+        await updateList();
     }
 
-    async updateList() {
+    const updateList = async() => {
         await getSmokeHistory().then( (result:smokeHistory[]) => {
-            const temp: historyInterface = {
+            setHistory(() => ({
                 smokeHistoryList: result.reverse(),
                 smokeId: undefined
-            }
-            this.setState({history: temp});
+            }));
         });
     }
 
-    render(): React.ReactNode{
-        return (
+    
+    return (
         <Grid paddingTop={1} className='history'>
-            {this.state.history.smokeId ?
+            {history.smokeId ?
             <Grid paddingLeft={2}>
-                <IconButton color="primary"  component="label" onClick={this.onBackClick}>
+                <IconButton color="primary"  component="label" onClick={onBackClick}>
                     <ArrowBackIosIcon/>
                 </IconButton>
             </Grid>
             : <></>}
             <Grid container spacing={2} sx={{display: 'flex', justifyContent: 'center'}} paddingBottom={8}>
-            {!this.state.history.smokeId ?
-                this.state.history.smokeHistoryList.map((smokeHistory, index) => {
+            {!history.smokeId ?
+                history.smokeHistoryList.map((smokeHistory, index) => {
                     return (<Grid item xs={11} key={`smoke-card-${index}`}>
                         <SmokeCard
                             name={smokeHistory.name}
@@ -87,16 +85,15 @@ export class History extends React.Component<{},{history: historyInterface}> {
                             weightUnit={smokeHistory.weightUnit}
                             woodType={smokeHistory.woodType}
                             smokeId={smokeHistory.smokeId}
-                            onViewClick={this.onViewClick}
-                            onDeleteClick={this.onDeleteClick}
+                            onViewClick={onViewClick}
+                            onDeleteClick={onDeleteClick}
                         />
                     </Grid>)
                 }) :
                 <SmokeReview
-                    smokeId={this.state.history.smokeId}
+                    smokeId={history.smokeId}
                 />
             }
             </Grid>
         </Grid>);
     }
-}
