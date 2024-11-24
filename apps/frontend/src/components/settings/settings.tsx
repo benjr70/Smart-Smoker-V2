@@ -17,7 +17,7 @@ const theme = createTheme({
   }
 })
 
-export const settings = () => {
+export const Settings = (): JSX.Element => {
     let versionToDisplay = "unknown";
     try {
       versionToDisplay = VERSION;
