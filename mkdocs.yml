@@ -27,6 +27,14 @@ theme:
         name: Switch to light mode
 repo_url: https://github.com/benjr70/Smart-Smoker-V2
 repo_name: benjr70/Smart-Smoker-V2
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
 plugins:
   - search
 extra:
@@ -52,6 +60,7 @@ nav:
       - Frontend/index.md
     - BackEnd:
       - Backend/index.md
+      - Backend/backend-architecture.md
     - Smoker Frontend:
       - Smoker Frontend/index.md
     - Device Service:
