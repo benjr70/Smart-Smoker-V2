@@ -50,6 +50,7 @@ nav:
     - index.md
     - Documentation: Documentation.md
     - CIDI: cidi.md
+    - Infra: infra.md
     - Hardware: Hardware/index.md
     - Pi Software: piSoftware.md
     - Epics: 

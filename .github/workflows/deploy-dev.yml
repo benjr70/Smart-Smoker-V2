@@ -1,0 +1,31 @@
+name: Deploy to Dev Environment
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Terraform
+      uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: 1.5.0
+
+    - name: Initialize Terraform
+      working-directory: infra
+      run: terraform init
+
+    - name: Plan Terraform
+      working-directory: infra
+      run: terraform plan -var="proxmox_password=\${{ secrets.PROXMOX_PASSWORD }}" -var="env_name=dev"
+
+    - name: Apply Terraform
+      working-directory: infra
+      run: terraform apply -auto-approve -var="proxmox_password=\${{ secrets.PROXMOX_PASSWORD }}" -var="env_name=dev"
