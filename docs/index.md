@@ -26,17 +26,56 @@ You will also need a local mongo db running </br>
 [install link](https://www.mongodb.com/docs/manual/tutorial/install-mongodb-on-ubuntu/) </br>
 Run `sudo systemctl start mongod` to start on linux 
 
+## Documentation Development
+
+This project uses MkDocs with Material theme for documentation. To work with the documentation:
+
+### Prerequisites
+Make sure you have `mise` installed and the project tools set up:
+```bash
+mise install  # Installs Python 3.11, Node 20, and npm 10
+```
+
+### Required Dependencies
+- **MkDocs**: `1.6.1`
+- **MkDocs Material Theme**: `9.6.15`
+
+### Documentation Commands
+```bash
+# Install documentation dependencies
+mise run docs-install
+
+# Serve documentation locally (auto-reload on changes)
+mise run docs-serve
+
+# Build static documentation site
+mise run docs-build
+
+# Deploy to GitHub Pages (requires permissions)
+mise run docs-deploy
+```
+
+The documentation will be available at: http://127.0.0.1:8001
+
+### Adding New Documentation
+- Add new markdown files to the `docs/` folder
+- Update `mkdocs.yml` navigation if needed
+- Follow the existing structure and Material theme guidelines
+
 ## Project layout
 
     mkdocs.yml          # The configuration file.
     docs/
         index.md        # The documentation homepage.
+        CI-CD/          # CI/CD and deployment documentation
         ...             # Other markdown pages, images and other files.
     apps/
         backend/        # umm this is the backend
         device-service/ # handles pi devices example. serial port, wifi
         frontend/       # frontend for cloud app
         smoker/         # frontend for pi on smoker
+    packages/           # shared components and utilities
+        TemperatureChart/ # D3.js temperature visualization component
     MicroController/    # arduino file
     .github/
         workflows/      # github action workflows
@@ -44,15 +83,32 @@ Run `sudo systemctl start mongod` to start on linux
 
 ## Dev/Git Requirements
 
-Branch naming
-* names start with either feature/bug/hotfix
-* then has jira number example SS2-14
-* then has name of card
-* example feature/SS2-14-login
+### Branch Naming Convention
+* Names start with either `feature/`, `bug/`, or `hotfix/`
+* Then has Jira number example `SS2-14`
+* Then has name of card
+* Example: `feature/SS2-14-login`
 
-all changes must come from a separate branch and merged to master via a PR. 
-DO NOT COMMIT STRAIGHT TO MASTER
+### Pull Request Workflow
+All changes must come from a separate branch and merged to master via a PR.
+**DO NOT COMMIT STRAIGHT TO MASTER**
 
-PR Requirments
-* must be rebase off of latest master
-* all PR's must have Bens Approval before being merged
+### PR Requirements
+* Must be rebased off of latest master
+* All PR's must have Ben's approval before being merged
+* **All automated tests must pass** (enforced by GitHub Actions)
+
+### Automated Testing (CI/CD)
+Every PR automatically runs:
+- ✅ **Jest Tests**: All 4 apps (backend, device-service, frontend, smoker)
+- ✅ **Package Tests**: TemperatureChart and future packages  
+- ✅ **TypeScript Compilation**: Ensures code compiles without errors
+- ✅ **Build Verification**: Frontend and Smoker apps must build successfully
+- ✅ **Code Quality**: Linting and formatting checks
+
+**Branch Protection**: The `master` branch is protected and requires all status checks to pass before merging.
+
+For detailed CI/CD documentation, see the [CI/CD section](CI-CD/index.md).
+
+### Setting Up Branch Protection
+See `.github/BRANCH_PROTECTION_SETUP.md` for detailed instructions on configuring required status checks in GitHub.

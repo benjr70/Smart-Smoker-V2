@@ -49,7 +49,6 @@ nav:
   - Welcome:
     - index.md
     - Documentation: Documentation.md
-    - CIDI: cidi.md
     - Hardware: Hardware/index.md
     - Pi Software: piSoftware.md
     - Epics: 
@@ -65,3 +64,12 @@ nav:
       - Smoker Frontend/index.md
     - Device Service:
       - Device Service/index.md
+  - Packages:
+    - Packages/index.md
+    - Testing Template: Packages/testing-template.md
+  - CI/CD:
+    - CI-CD/index.md
+    - GitHub Actions: CI-CD/github-actions.md
+    - Test Coverage: CI-CD/test-coverage.md
+    - Dependency Management: CI-CD/dependency-management.md
+    - Deployment & Infrastructure: CI-CD/deployment-infrastructure.md

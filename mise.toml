@@ -1,3 +1,14 @@
 [tools]
 node = "20"
 npm = "10"
+python = "3.11"
+
+[env]
+# Environment variables for the project
+
+[tasks]
+# Documentation tasks
+docs-install = "python -m pip install mkdocs==1.6.1 mkdocs-material==9.6.15"
+docs-serve = "mkdocs serve --dev-addr=127.0.0.1:8001"
+docs-build = "mkdocs build"
+docs-deploy = "mkdocs gh-deploy"
