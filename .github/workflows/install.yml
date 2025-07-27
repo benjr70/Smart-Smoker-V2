@@ -1,46 +1,36 @@
-# This is a basic workflow to help you get started with Actions
+# Reusable workflow for dependency installation and workspace setup
 
-name: Install Smart Smoker v2
+name: Install Dependencies
 
-# Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the master branch
-  # push:
-  #   branches: [ master ]
-  pull_request:
-    types: [opened, synchronize]
-  
+  workflow_call:
+    inputs:
+      ref:
+        description: 'Git ref to checkout'
+        type: string
+        required: false
+        default: 'master'
+      artifact_name:
+        description: 'Name for the workspace artifact (to avoid conflicts)'
+        type: string
+        required: false
+        default: 'workspace'
+    outputs:
+      cache-hit:
+        description: 'Whether dependencies were restored from cache'
+        value: ${{ jobs.install.outputs.cache-hit }}
 
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
-      inputs:
-        version:
-          description: 'version to release'
-          type: string
-          required: true
-           
-
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
-  SetUp:
-    # The type of runner that the job will run on
+  install:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        platform:
-          - linux/arm/v7
-
-    # Steps represent a sequence of tasks that will be executed as part of the job
+    outputs:
+      cache-hit: ${{ steps.cache.outputs.cache-hit }}
+    
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - run: sudo chmod -R 777 ./
-
       - name: Git Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.version || 'master' }}
+          ref: ${{ inputs.ref }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -51,6 +41,7 @@ jobs:
         run: npm i -g npm@10
 
       - name: Cache Node Modules
+        id: cache
         uses: actions/cache@v4
         env:
           cache-name: cache-node-modules
@@ -65,21 +56,16 @@ jobs:
             ${{ runner.os }}-
 
       - name: NPM Bootstrap
+        if: steps.cache.outputs.cache-hit != 'true'
         run: npm run bootstrap
 
-
-  BuildAndPublishSmoker:
-    needs: SetUp
-    uses: benjr70/Smart-Smoker-V2/.github/workflows/build-publish-smoker.yml@master
-    secrets: inherit
-    with:
-      version: ${{ github.event.inputs.version || github.event.pull_request.number }}
-      pull_request: ${{ github.event_name }}
-
-  BuildAndPublishCloud:
-    needs: SetUp
-    uses: benjr70/Smart-Smoker-V2/.github/workflows/build-publish-cloud.yml@master
-    secrets: inherit
-    with:
-      version: ${{ github.event.inputs.version || github.event.pull_request.number }}
-      pull_request: ${{ github.event_name }}
+      - name: Upload workspace
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: |
+            .
+            !.git
+            !node_modules
+            !*/*/node_modules
+          retention-days: 1

@@ -1,0 +1,87 @@
+# Reusable workflow for testing Smart Smoker v2 applications
+
+name: Test Applications
+
+on:
+  workflow_call:
+    inputs:
+      apps:
+        description: 'JSON array of apps to test (e.g., ["backend", "device-service", "frontend", "smoker", "TemperatureChart"])'
+        type: string
+        required: true
+      ref:
+        description: 'Git ref to checkout'
+        type: string
+        required: false
+        default: 'master'
+
+jobs:
+  # Install dependencies once
+  install:
+    uses: ./.github/workflows/install.yml
+    with:
+      ref: ${{ inputs.ref }}
+      artifact_name: 'test-workspace'
+
+  # Test applications
+  test:
+    needs: install
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJson(inputs.apps) }}
+    
+    steps:
+      - name: Download workspace
+        uses: actions/download-artifact@v4
+        with:
+          name: test-workspace
+          path: .
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.11.1'
+
+      - name: Use npm 10
+        run: npm i -g npm@10
+
+      - name: Cache Node Modules
+        uses: actions/cache@v4
+        env:
+          cache-name: cache-node-modules
+        with:
+          path: |
+            node_modules
+            */*/node_modules
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+            ${{ runner.os }}-build-
+            ${{ runner.os }}-
+
+      # Run tests
+      - name: Test ${{ matrix.app }}
+        run: |
+          case "${{ matrix.app }}" in
+            "backend")
+              npm run test --prefix apps/backend
+              ;;
+            "device-service")
+              npm run test --prefix apps/device-service
+              ;;
+            "frontend")
+              npm run test --prefix apps/frontend -- --forceExit
+              ;;
+            "smoker")
+              npm run test --prefix apps/smoker
+              ;;
+            "TemperatureChart")
+              npm run test --prefix packages/TemperatureChart
+              ;;
+            *)
+              echo "Unknown app: ${{ matrix.app }}"
+              exit 1
+              ;;
+          esac

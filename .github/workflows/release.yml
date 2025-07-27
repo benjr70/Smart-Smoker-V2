@@ -1,0 +1,72 @@
+# Main release workflow for Smart Smoker v2
+
+name: Release Smart Smoker v2
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.0)'
+        type: string
+        required: true
+      deploy_smoker:
+        description: 'Deploy to smoker devices'
+        type: boolean
+        required: false
+        default: true
+      deploy_cloud:
+        description: 'Deploy to cloud infrastructure'
+        type: boolean
+        required: false
+        default: true
+
+jobs:
+  # Build smoker applications (no Docker)
+  build-smoker:
+    uses: ./.github/workflows/build.yml
+    with:
+      apps: '["smoker", "device-service", "electron-shell"]'
+      mode: "build"
+      ref: ${{ github.event.inputs.version }}
+
+  # Build cloud applications (no Docker)
+  build-cloud:
+    uses: ./.github/workflows/build.yml
+    with:
+      apps: '["backend", "frontend"]'
+      mode: "build"
+      ref: ${{ github.event.inputs.version }}
+
+  # Build and publish smoker Docker images
+  publish-smoker:
+    uses: ./.github/workflows/publish.yml
+    with:
+      apps: '["smoker", "device-service", "electron-shell"]'
+      version: ${{ github.event.inputs.version }}
+      ref: ${{ github.event.inputs.version }}
+    secrets: inherit
+
+  # Build and publish cloud Docker images
+  publish-cloud:
+    uses: ./.github/workflows/publish.yml
+    with:
+      apps: '["backend", "frontend"]'
+      version: ${{ github.event.inputs.version }}
+      ref: ${{ github.event.inputs.version }}
+    secrets: inherit
+
+  # Deploy to smoker devices
+  deploy-smoker:
+    if: ${{ github.event.inputs.deploy_smoker == 'true' }}
+    needs: publish-smoker
+    uses: ./.github/workflows/smoker-deploy.yml
+    with:
+      version: ${{ github.event.inputs.version }}
+
+  # Deploy to cloud infrastructure
+  deploy-cloud:
+    if: ${{ github.event.inputs.deploy_cloud == 'true' }}
+    needs: publish-cloud
+    uses: ./.github/workflows/cloud-deploy.yml
+    with:
+      version: ${{ github.event.inputs.version }}

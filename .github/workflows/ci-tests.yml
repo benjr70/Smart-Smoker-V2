@@ -1,0 +1,28 @@
+name: CI - Tests and Build Validation
+
+on:
+  pull_request:
+    branches: [ master ]
+    paths:
+      - 'apps/**'
+      - 'packages/**'
+      - 'package.json'
+      - '.github/workflows/**'
+  push:
+    branches: [ master ]
+
+jobs:
+  # Run tests for all applications
+  test-apps:
+    uses: ./.github/workflows/test.yml
+    with:
+      apps: '["backend", "device-service", "frontend", "smoker", "TemperatureChart"]'
+      ref: ${{ github.ref }}
+
+  # Build validation - ensure all apps can build
+  build-validation:
+    uses: ./.github/workflows/build.yml
+    with:
+      apps: '["backend", "device-service", "frontend", "smoker"]'
+      mode: "build"
+      ref: ${{ github.ref }}

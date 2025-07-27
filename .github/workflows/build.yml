@@ -1,0 +1,102 @@
+# Reusable workflow for building Smart Smoker v2 applications
+
+name: Build Applications
+
+on:
+  workflow_call:
+    inputs:
+      apps:
+        description: 'JSON array of apps to build (e.g., ["smoker", "device-service", "backend", "frontend"])'
+        type: string
+        required: true
+      mode:
+        description: 'Build mode: only "build" (Docker export removed - use publish.yml for Docker operations)'
+        type: string
+        required: false
+        default: 'build'
+      version:
+        description: 'Version tag for Docker images'
+        type: string
+        required: false
+        default: 'latest'
+      ref:
+        description: 'Git ref to checkout'
+        type: string
+        required: false
+        default: 'master'
+    secrets:
+      DOCKERHUB_USERNAME:
+        required: false
+      DOCKERHUB_TOKEN:
+        required: false
+
+jobs:
+  # Install dependencies once
+  install:
+    uses: ./.github/workflows/install.yml
+    with:
+      ref: ${{ inputs.ref }}
+      artifact_name: 'build-workspace'
+
+  # Build applications
+  build:
+    needs: install
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJson(inputs.apps) }}
+    
+    steps:
+      - name: Download workspace
+        uses: actions/download-artifact@v4
+        with:
+          name: build-workspace
+          path: .
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.11.1'
+
+      - name: Use npm 10
+        run: npm i -g npm@10
+
+      - name: Cache Node Modules
+        uses: actions/cache@v4
+        env:
+          cache-name: cache-node-modules
+        with:
+          path: |
+            node_modules
+            */*/node_modules
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+            ${{ runner.os }}-build-
+            ${{ runner.os }}-
+
+      # Build applications
+      - name: Build ${{ matrix.app }}
+        run: |
+          case "${{ matrix.app }}" in
+            "backend")
+              npm run build --prefix apps/backend
+              ;;
+            "device-service")
+              npm run build --prefix apps/device-service
+              ;;
+            "frontend")
+              npm run build --prefix apps/frontend
+              ;;
+            "smoker")
+              npm run build:prod --prefix apps/smoker
+              ;;
+            "electron-shell")
+              npm run forgeLinux64:thin --prefix apps/smoker
+              ;;
+            *)
+              echo "Unknown app: ${{ matrix.app }}"
+              exit 1
+              ;;
+          esac
