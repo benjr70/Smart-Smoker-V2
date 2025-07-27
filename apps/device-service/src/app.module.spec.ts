@@ -51,24 +51,30 @@ describe('AppModule', () => {
   });
 
   describe('configure middleware', () => {
-    let mockConsumer: jest.Mocked<MiddlewareConsumer>;
+    interface MockMiddlewareConsumer {
+      apply: jest.Mock;
+      exclude: jest.Mock;
+      forRoutes: jest.Mock;
+    }
+
+    let mockConsumer: MockMiddlewareConsumer;
 
     beforeEach(() => {
       mockConsumer = {
         apply: jest.fn().mockReturnThis(),
         exclude: jest.fn().mockReturnThis(),
         forRoutes: jest.fn().mockReturnThis(),
-      } as any;
+      };
     });
 
     it('should configure LoggerMiddleware', () => {
-      appModule.configure(mockConsumer);
+      appModule.configure(mockConsumer as any);
 
       expect(mockConsumer.apply).toHaveBeenCalledWith(LoggerMiddleware);
     });
 
     it('should exclude specific routes from logging', () => {
-      appModule.configure(mockConsumer);
+      appModule.configure(mockConsumer as any);
 
       expect(mockConsumer.exclude).toHaveBeenCalledWith({
         path: 'api/wifiManager/connection',
@@ -77,7 +83,7 @@ describe('AppModule', () => {
     });
 
     it('should apply middleware to all routes after exclusions', () => {
-      appModule.configure(mockConsumer);
+      appModule.configure(mockConsumer as any);
 
       expect(mockConsumer.forRoutes).toHaveBeenCalledWith({
         path: '*',
@@ -86,7 +92,7 @@ describe('AppModule', () => {
     });
 
     it('should chain middleware configuration correctly', () => {
-      appModule.configure(mockConsumer);
+      appModule.configure(mockConsumer as any);
 
       // Verify the chain: apply -> exclude -> forRoutes
       expect(mockConsumer.apply).toHaveBeenCalled();

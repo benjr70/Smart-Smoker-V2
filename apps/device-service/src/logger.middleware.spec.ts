@@ -116,7 +116,7 @@ describe('LoggerMiddleware', () => {
   });
 
   describe('error handling', () => {
-    it('should continue execution even if logging fails', () => {
+    it('should fail if logging throws an error', () => {
       // Mock Logger.log to throw an error
       (Logger.log as jest.Mock).mockImplementation(() => {
         throw new Error('Logging failed');
@@ -126,8 +126,8 @@ describe('LoggerMiddleware', () => {
         middleware.use(mockRequest as Request, mockResponse as Response, mockNext);
       }).toThrow('Logging failed');
 
-      // Next should still be called despite logging error
-      expect(mockNext).toHaveBeenCalled();
+      // Next should not be called when logging fails
+      expect(mockNext).not.toHaveBeenCalled();
     });
 
     it('should handle request without method', () => {

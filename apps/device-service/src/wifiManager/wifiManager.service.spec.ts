@@ -2,28 +2,32 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { HttpException, HttpStatus } from '@nestjs/common';
 import { WifiManagerService } from './wifiManager.service';
 import { wifiDto } from './wifiDto';
+import { exec } from 'child_process';
+
+// Mock child_process
+jest.mock('child_process', () => ({
+  exec: jest.fn(),
+}));
 
 // Mock node-wifi
-const mockWifi = {
+jest.mock('node-wifi', () => ({
   init: jest.fn(),
   getCurrentConnections: jest.fn(),
   scan: jest.fn(),
   connect: jest.fn(),
-};
-
-jest.mock('node-wifi', () => mockWifi);
-
-// Mock child_process
-const mockExec = jest.fn();
-jest.mock('child_process', () => ({
-  exec: mockExec,
 }));
+
+const mockExec = exec as jest.MockedFunction<typeof exec>;
 
 describe('WifiManagerService', () => {
   let service: WifiManagerService;
+  let mockWifi: any;
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    
+    // Get the mocked module
+    mockWifi = require('node-wifi');
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [WifiManagerService],
@@ -93,8 +97,9 @@ describe('WifiManagerService', () => {
   describe('disconnectFromWiFi', () => {
     it('should successfully disconnect from WiFi', async () => {
       const mockStdout = 'Device disconnected';
-      mockExec.mockImplementation((command, callback) => {
+      mockExec.mockImplementation((command: string, callback: any) => {
         callback(null, mockStdout, '');
+        return {} as any;
       });
 
       const result = await service.disconnectFromWiFi();
@@ -108,8 +113,9 @@ describe('WifiManagerService', () => {
 
     it('should handle disconnection error', async () => {
       const mockStderr = 'Error: Could not disconnect';
-      mockExec.mockImplementation((command, callback) => {
+      mockExec.mockImplementation((command: string, callback: any) => {
         callback(new Error('Failed'), '', mockStderr);
+        return {} as any;
       });
 
       await expect(service.disconnectFromWiFi()).rejects.toBe(mockStderr);
