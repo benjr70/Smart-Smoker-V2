@@ -18,6 +18,7 @@ export class SerialService {
     
     port: SerialPort;
     private dataSubject: Subject<string> = new Subject<string>();
+    private temperatureInterval: NodeJS.Timeout | null = null;
 
     constructor(){
         NODE_ENV = process.env.NODE_ENV ? process.env.NODE_ENV.trim() : '';
@@ -32,7 +33,7 @@ export class SerialService {
             Meat3: 0,
             Chamber: 0,
           };
-          setInterval(() => {
+          this.temperatureInterval = setInterval(() => {
             stringData = this.generateTempString(stringData);
             this.handleTempLogging(JSON.stringify(stringData));
             this.dataSubject.next(JSON.stringify(stringData));
@@ -57,6 +58,14 @@ export class SerialService {
       }
     }
     
+    onDestroy() {
+      if (this.temperatureInterval) {
+        clearInterval(this.temperatureInterval);
+      }
+      if (this.port) {
+        this.port.close();
+      }
+    }
 
     onData(): Subject<string> {
         return this.dataSubject;

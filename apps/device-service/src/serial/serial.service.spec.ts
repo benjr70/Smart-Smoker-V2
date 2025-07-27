@@ -2,8 +2,22 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { Logger } from '@nestjs/common';
 import { SerialService } from './serial.serivce';
 
-// Mock serialport
-jest.mock('serialport');
+// Mock serialport with proper cleanup
+const mockParser = {
+  on: jest.fn(),
+  removeAllListeners: jest.fn(),
+};
+
+const mockPort = {
+  pipe: jest.fn(),
+  close: jest.fn(),
+  removeAllListeners: jest.fn(),
+};
+
+jest.mock('serialport', () => ({
+  SerialPort: jest.fn().mockImplementation(() => mockPort),
+  ReadlineParser: jest.fn().mockImplementation(() => mockParser),
+}));
 
 describe('SerialService', () => {
   let service: SerialService;
@@ -29,6 +43,12 @@ describe('SerialService', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+    jest.clearAllTimers();
+    
+    // Clean up any service instances to prevent memory leaks
+    if (service && typeof service.onDestroy === 'function') {
+      service.onDestroy();
+    }
   });
 
   it('should be defined', () => {
@@ -60,6 +80,50 @@ describe('SerialService', () => {
 
       expect(Logger.log).toHaveBeenCalledWith('Running in production mode', 'SerialService');
       expect(prodService).toBeDefined();
+    });
+
+    it('should handle production mode data parsing errors', async () => {
+      process.env.NODE_ENV = 'production';
+
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [SerialService],
+      }).compile();
+
+      const prodService = module.get<SerialService>(SerialService);
+
+      // Get the data handler function
+      const dataHandler = mockParser.on.mock.calls.find(call => call[0] === 'data')[1];
+
+      // Simulate error in data processing
+      const mockData = { toString: () => { throw new Error('Parse error'); } };
+      dataHandler(mockData);
+
+      expect(Logger.error).toHaveBeenCalledWith(
+        expect.any(Error),
+        'SerialService'
+      );
+    });
+
+    it('should handle production mode data processing successfully', async () => {
+      process.env.NODE_ENV = 'production';
+
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [SerialService],
+      }).compile();
+
+      const prodService = module.get<SerialService>(SerialService);
+
+      // Get the data handler function
+      const dataHandler = mockParser.on.mock.calls.find(call => call[0] === 'data')[1];
+
+      // Simulate successful data processing
+      const mockData = { toString: () => '{"Meat": 150, "Chamber": 200}' };
+      dataHandler(mockData);
+
+      expect(Logger.debug).toHaveBeenCalledWith(
+        'raw data {"Meat": 150, "Chamber": 200}',
+        'SerialService'
+      );
     });
   });
 
@@ -177,6 +241,44 @@ describe('SerialService', () => {
         Meat3: 3,
         Chamber: 4,
       });
+    });
+  });
+
+  describe('onDestroy', () => {
+    it('should clear interval in local mode', () => {
+      process.env.NODE_ENV = 'local';
+      
+      const clearIntervalSpy = jest.spyOn(global, 'clearInterval');
+      
+      // Create a new service instance in local mode
+      const localService = new (require('./serial.serivce').SerialService)();
+      
+      // Call onDestroy
+      localService.onDestroy();
+      
+      expect(clearIntervalSpy).toHaveBeenCalled();
+      
+      clearIntervalSpy.mockRestore();
+    });
+
+    it('should close port in production mode', () => {
+      process.env.NODE_ENV = 'production';
+      
+      // Create a new service instance in production mode
+      const prodService = new (require('./serial.serivce').SerialService)();
+      
+      // Mock the port close method
+      prodService.port = { close: jest.fn() };
+      
+      // Call onDestroy
+      prodService.onDestroy();
+      
+      expect(prodService.port.close).toHaveBeenCalled();
+    });
+
+    it('should handle onDestroy when no interval or port exists', () => {
+      // This should not throw an error
+      expect(() => service.onDestroy()).not.toThrow();
     });
   });
 });
