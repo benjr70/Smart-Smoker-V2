@@ -23,9 +23,19 @@ describe('Bootstrap', () => {
     mockApp = {
       enableCors: jest.fn(),
       listen: jest.fn().mockResolvedValue(undefined),
+      close: jest.fn().mockResolvedValue(undefined),
     };
     
     (NestFactory.create as jest.Mock).mockResolvedValue(mockApp);
+  });
+
+  afterEach(async () => {
+    jest.clearAllMocks();
+    
+    // Clean up any created app instance
+    if (mockApp && typeof mockApp.close === 'function') {
+      await mockApp.close();
+    }
   });
 
   it('should create NestJS application with correct configuration', async () => {

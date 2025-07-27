@@ -69,7 +69,7 @@ jobs:
               npm run test --prefix apps/backend
               ;;
             "device-service")
-              npm run test --prefix apps/device-service
+              npm run test:ci --prefix apps/device-service
               ;;
             "frontend")
               npm run test --prefix apps/frontend -- --forceExit

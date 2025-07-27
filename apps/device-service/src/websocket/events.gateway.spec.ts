@@ -1,7 +1,29 @@
+// Mock serialport BEFORE any imports to prevent real device access
+jest.mock('serialport', () => {
+  const mockPort = {
+    pipe: jest.fn().mockReturnThis(),
+    close: jest.fn(),
+    removeAllListeners: jest.fn(),
+  };
+  
+  const mockParser = {
+    on: jest.fn(),
+    removeAllListeners: jest.fn(),
+  };
+  
+  const MockSerialPort = jest.fn().mockImplementation(() => mockPort);
+  const MockReadlineParser = jest.fn().mockImplementation(() => mockParser);
+  
+  return {
+    SerialPort: MockSerialPort,
+    ReadlineParser: MockReadlineParser,
+  };
+});
+
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventsGateway } from './events.gateway';
 import { SerialService } from '../serial/serial.serivce';
-import { Subject } from 'rxjs';
+import { Subject, Subscription } from 'rxjs';
 
 // Mock Socket.IO Server
 const mockServer = {
@@ -17,14 +39,20 @@ describe('EventsGateway', () => {
   let gateway: EventsGateway;
   let serialService: SerialService;
   let dataSubject: Subject<string>;
+  let module: TestingModule;
+  let subscriptions: Subscription[] = [];
 
   beforeEach(async () => {
     jest.clearAllMocks();
     
+    // Clean up previous subscriptions
+    subscriptions.forEach(sub => sub.unsubscribe());
+    subscriptions = [];
+    
     dataSubject = new Subject<string>();
     mockSerialService.onData.mockReturnValue(dataSubject);
 
-    const module: TestingModule = await Test.createTestingModule({
+    module = await Test.createTestingModule({
       providers: [
         EventsGateway,
         { provide: SerialService, useValue: mockSerialService },
@@ -36,6 +64,28 @@ describe('EventsGateway', () => {
     
     // Set the mock server
     gateway.server = mockServer as any;
+  });
+
+  afterEach(async () => {
+    // Clean up all subscriptions to prevent memory leaks
+    subscriptions.forEach(sub => {
+      if (sub && !sub.closed) {
+        sub.unsubscribe();
+      }
+    });
+    subscriptions = [];
+    
+    // Complete and clean up the data subject
+    if (dataSubject && !dataSubject.closed) {
+      dataSubject.complete();
+    }
+    
+    // Clean up test module
+    if (module) {
+      await module.close();
+    }
+    
+    jest.clearAllMocks();
   });
 
   it('should be defined', () => {

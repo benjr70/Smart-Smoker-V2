@@ -8,6 +8,7 @@ describe('LoggerMiddleware', () => {
   let mockRequest: Partial<Request>;
   let mockResponse: Partial<Response>;
   let mockNext: NextFunction;
+  let module: TestingModule;
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -15,7 +16,7 @@ describe('LoggerMiddleware', () => {
     // Mock Logger
     jest.spyOn(Logger, 'log').mockImplementation();
 
-    const module: TestingModule = await Test.createTestingModule({
+    module = await Test.createTestingModule({
       providers: [LoggerMiddleware],
     }).compile();
 
@@ -40,6 +41,15 @@ describe('LoggerMiddleware', () => {
       statusCode: 200,
       once: jest.fn(),
     };
+  });
+
+  afterEach(async () => {
+    jest.clearAllMocks();
+    
+    // Clean up test module
+    if (module) {
+      await module.close();
+    }
   });
 
   it('should be defined', () => {

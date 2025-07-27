@@ -22,6 +22,7 @@ const mockExec = exec as jest.MockedFunction<typeof exec>;
 describe('WifiManagerService', () => {
   let service: WifiManagerService;
   let mockWifi: any;
+  let module: TestingModule;
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -29,11 +30,18 @@ describe('WifiManagerService', () => {
     // Get the mocked module
     mockWifi = require('node-wifi');
 
-    const module: TestingModule = await Test.createTestingModule({
+    module = await Test.createTestingModule({
       providers: [WifiManagerService],
     }).compile();
 
     service = module.get<WifiManagerService>(WifiManagerService);
+  });
+
+  afterEach(async () => {
+    jest.clearAllMocks();
+    if (module) {
+      await module.close();
+    }
   });
 
   describe('constructor', () => {

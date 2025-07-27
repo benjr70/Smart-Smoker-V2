@@ -1,3 +1,25 @@
+// Mock serialport BEFORE any imports to prevent real device access
+jest.mock('serialport', () => {
+  const mockPort = {
+    pipe: jest.fn().mockReturnThis(),
+    close: jest.fn(),
+    removeAllListeners: jest.fn(),
+  };
+  
+  const mockParser = {
+    on: jest.fn(),
+    removeAllListeners: jest.fn(),
+  };
+  
+  const MockSerialPort = jest.fn().mockImplementation(() => mockPort);
+  const MockReadlineParser = jest.fn().mockImplementation(() => mockParser);
+  
+  return {
+    SerialPort: MockSerialPort,
+    ReadlineParser: MockReadlineParser,
+  };
+});
+
 import { Test, TestingModule } from '@nestjs/testing';
 import { AppModule } from './app.module';
 import { AppController } from './app.controller';
@@ -13,6 +35,9 @@ describe('AppModule', () => {
   let module: TestingModule;
 
   beforeEach(async () => {
+    // Set to local mode to avoid SerialPort issues
+    process.env.NODE_ENV = 'local';
+    
     module = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -22,6 +47,7 @@ describe('AppModule', () => {
 
   afterEach(async () => {
     await module.close();
+    delete process.env.NODE_ENV;
   });
 
   it('should be defined', () => {

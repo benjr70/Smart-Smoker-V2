@@ -6,6 +6,7 @@ import { wifiDto } from './wifiDto';
 describe('WifiManagerController', () => {
   let controller: WifiManagerController;
   let service: WifiManagerService;
+  let module: TestingModule;
 
   const mockWifiManagerService = {
     connectToWiFi: jest.fn(),
@@ -16,7 +17,7 @@ describe('WifiManagerController', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
 
-    const module: TestingModule = await Test.createTestingModule({
+    module = await Test.createTestingModule({
       controllers: [WifiManagerController],
       providers: [
         {
@@ -28,6 +29,13 @@ describe('WifiManagerController', () => {
 
     controller = module.get<WifiManagerController>(WifiManagerController);
     service = module.get<WifiManagerService>(WifiManagerService);
+  });
+
+  afterEach(async () => {
+    jest.clearAllMocks();
+    if (module) {
+      await module.close();
+    }
   });
 
   it('should be defined', () => {
