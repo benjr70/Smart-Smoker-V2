@@ -79,15 +79,15 @@ export function SmokeProfileCard(props: SmokeProfileCardProps): JSX.Element {
                 </Typography>
                
                 <TempChart
-                    ChamberTemp={props.temps[props.temps.length - 1].ChamberTemp}
-                    MeatTemp={props.temps[props.temps.length - 1].MeatTemp}
-                    Meat2Temp={props.temps[props.temps.length - 1].Meat2Temp}
-                    Meat3Temp={props.temps[props.temps.length - 1].Meat3Temp}
+                    ChamberTemp={props.temps.length > 0 ? props.temps[props.temps.length - 1].ChamberTemp : 0}
+                    MeatTemp={props.temps.length > 0 ? props.temps[props.temps.length - 1].MeatTemp : 0}
+                    Meat2Temp={props.temps.length > 0 ? props.temps[props.temps.length - 1].Meat2Temp : 0}
+                    Meat3Temp={props.temps.length > 0 ? props.temps[props.temps.length - 1].Meat3Temp : 0}
                     ChamberName={props.smokeProfile.chamberName ?? 'Chamber'}
                     Probe1Name={props.smokeProfile.probe1Name ?? 'Probe 1'}
                     Probe2Name={props.smokeProfile.probe2Name ?? 'Probe 2'}
                     Probe3Name={props.smokeProfile.probe3Name ?? 'Probe 3'}
-                    date={props.temps[props.temps.length - 1].date}
+                    date={props.temps.length > 0 ? props.temps[props.temps.length - 1].date : new Date()}
                     smoking={false}
                     initData={props.temps}
                 />

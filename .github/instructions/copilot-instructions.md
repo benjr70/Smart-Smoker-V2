@@ -91,7 +91,7 @@ The backend follows a modular architecture:
 
 ### Testing Standards
 
-- **Unit Tests**: All services and controllers should have unit tests
+- **Unit Tests**: All services and controllers should have unit tests and they must all be passing
 - **Integration Tests**: Test module interactions
 - **E2E Tests**: Test complete user workflows
 - **Coverage**: Maintain >80% test coverage

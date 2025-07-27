@@ -27,13 +27,19 @@ export function BottomBar (props: buttonBarProps) {
                     onChange={(event, newValue) => {
                     switch(newValue){
                         case 0:
-                            props.smokeOnClick();
+                            if (props.smokeOnClick && typeof props.smokeOnClick === 'function') {
+                                props.smokeOnClick();
+                            }
                             break;
                         case 1 :
-                            props.reviewOnClick();
+                            if (props.reviewOnClick && typeof props.reviewOnClick === 'function') {
+                                props.reviewOnClick();
+                            }
                             break;
                         case 2:
-                            props.settingsOnClick();
+                            if (props.settingsOnClick && typeof props.settingsOnClick === 'function') {
+                                props.settingsOnClick();
+                            }
                             break;
                     }
                     setValue(newValue);

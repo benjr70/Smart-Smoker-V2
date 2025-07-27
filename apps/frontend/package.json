@@ -53,6 +53,11 @@
     ]
   },
   "jest": {
+    "coveragePathIgnorePatterns": [
+      "/node_modules/",
+      "\\.test\\.(ts|tsx|js|jsx)$",
+      "\\.spec\\.(ts|tsx|js|jsx)$"
+    ],
     "transformIgnorePatterns": [
       "node_modules/(?!(d3|d3-.*|internmap|delaunator|robust-predicates)/)"
     ],
