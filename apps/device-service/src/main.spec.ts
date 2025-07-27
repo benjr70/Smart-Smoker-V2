@@ -69,4 +69,37 @@ describe('Bootstrap', () => {
     
     await expect(actualBootstrap()).rejects.toThrow('Listen failed');
   });
+
+  it('should enable CORS with specific configuration options', async () => {
+    const { bootstrap: actualBootstrap } = jest.requireActual('./main');
+    
+    await actualBootstrap();
+
+    expect(mockApp.enableCors).toHaveBeenCalledWith(
+      expect.objectContaining({
+        origin: true,
+        methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
+        preflightContinue: false,
+        optionsSuccessStatus: 200
+      })
+    );
+  });
+
+  it('should listen on port 3003', async () => {
+    const { bootstrap: actualBootstrap } = jest.requireActual('./main');
+    
+    await actualBootstrap();
+
+    expect(mockApp.listen).toHaveBeenCalledWith(3003);
+  });
+
+  it('should handle CORS configuration errors gracefully', async () => {
+    mockApp.enableCors.mockImplementation(() => {
+      throw new Error('CORS configuration failed');
+    });
+    
+    const { bootstrap: actualBootstrap } = jest.requireActual('./main');
+    
+    await expect(actualBootstrap()).rejects.toThrow('CORS configuration failed');
+  });
 });
