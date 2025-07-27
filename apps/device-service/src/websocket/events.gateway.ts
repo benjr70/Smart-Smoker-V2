@@ -4,7 +4,7 @@ import {
     WebSocketServer,
   } from '@nestjs/websockets';
   import { Server } from 'socket.io';
-import { SerialService } from 'src/serial/serial.serivce';
+import { SerialService } from '../serial/serial.serivce';
 
 
 
