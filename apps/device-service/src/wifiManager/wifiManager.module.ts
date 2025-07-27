@@ -8,5 +8,6 @@ import { WifiManagerService } from "./wifiManager.service";
 @Module({
     controllers: [WifiManagerController],
     providers: [WifiManagerService],
+    exports: [WifiManagerService],
 })
 export class WifiManagerModule {}
