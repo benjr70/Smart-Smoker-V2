@@ -6,10 +6,10 @@ import {
     WebSocketServer,
   } from '@nestjs/websockets';
 import { Server } from 'socket.io';
-import { StateService } from 'src/State/state.service';
-import { NotificationsService } from 'src/notifications/notifications.service';
-import { TempDto } from 'src/temps/tempDto';
-import { TempsService } from 'src/temps/temps.service';
+import { StateService } from '../State/state.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { TempDto } from '../temps/tempDto';
+import { TempsService } from '../temps/temps.service';
 
 let count = 0;
 @WebSocketGateway({
