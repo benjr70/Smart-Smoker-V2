@@ -1,4 +1,6 @@
 // Mock D3 module for testing
+let storedCallbacks: { [key: string]: Function } = {};
+
 const mockChainable = {
   attr: jest.fn().mockReturnThis(),
   style: jest.fn().mockReturnThis(),
@@ -7,83 +9,115 @@ const mockChainable = {
   call: jest.fn().mockReturnThis(),
   transition: jest.fn().mockReturnThis(),
   duration: jest.fn().mockReturnThis(),
-  on: jest.fn().mockReturnThis(),
-};
-
-const mockSelection = {
-  ...mockChainable,
-  selectAll: jest.fn(() => ({
-    ...mockChainable,
-    data: jest.fn(() => ({
-      join: jest.fn(() => mockChainable),
-      enter: jest.fn(() => ({
-        append: jest.fn(() => mockChainable),
-      })),
-      exit: jest.fn(() => ({
-        remove: jest.fn(),
-      })),
-    })),
-    remove: jest.fn(),
-  })),
-  append: jest.fn(() => ({
-    ...mockChainable,
-    data: jest.fn(() => ({
-      join: jest.fn(() => mockChainable),
-      enter: jest.fn(() => ({
-        append: jest.fn(() => mockChainable),
-      })),
-      exit: jest.fn(() => ({
-        remove: jest.fn(),
-      })),
-    })),
-    selectAll: jest.fn(() => ({
-      data: jest.fn(() => ({
-        enter: jest.fn(() => ({
-          append: jest.fn(() => mockChainable),
-        })),
-      })),
-    })),
-  })),
+  on: jest.fn((event: string, callback: Function) => {
+    // Store callbacks so we can trigger them in tests
+    if (callback) {
+      storedCallbacks[event] = callback;
+    }
+    return mockChainable;
+  }),
+  data: jest.fn().mockReturnThis(),
+  join: jest.fn().mockReturnThis(),
+  remove: jest.fn().mockReturnThis(),
+  append: jest.fn().mockReturnThis(),
+  raise: jest.fn().mockReturnThis(),
+  selectAll: jest.fn().mockReturnThis(),
+  enter: jest.fn().mockReturnThis(),
+  exit: jest.fn().mockReturnThis(),
   empty: jest.fn(() => false),
   node: jest.fn(() => ({
     getBoundingClientRect: jest.fn(() => ({
       width: 800,
       height: 400,
+      x: 0,
+      y: 0,
+    })),
+    getBBox: jest.fn(() => ({
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 50,
     })),
   })),
 };
 
-export const select = jest.fn(() => mockSelection);
+const mockSelection = mockChainable;
 
-export const scaleLinear = jest.fn(() => ({
+const mockScale = {
   domain: jest.fn().mockReturnThis(),
   range: jest.fn().mockReturnThis(),
-}));
+  invert: jest.fn((x) => x * 2), // Mock invert function
+};
 
-export const scaleTime = jest.fn(() => ({
-  domain: jest.fn().mockReturnThis(),
-  range: jest.fn().mockReturnThis(),
-}));
-
-export const line = jest.fn(() => ({
+const mockLine = {
   x: jest.fn().mockReturnThis(),
   y: jest.fn().mockReturnThis(),
   curve: jest.fn().mockReturnThis(),
-}));
+};
+
+export const select = jest.fn(() => mockSelection);
+
+export const scaleLinear = jest.fn(() => mockScale);
+export const scaleTime = jest.fn(() => mockScale);
+
+export const line = jest.fn(() => mockLine);
 
 export const axisBottom = jest.fn();
 export const axisLeft = jest.fn();
 
-export const extent = jest.fn(() => [0, 100]);
-export const max = jest.fn(() => 100);
-export const min = jest.fn(() => 0);
+export const extent = jest.fn((data, accessor) => {
+  if (!data || data.length === 0) return [0, 100];
+  try {
+    const values = data.map(accessor || ((d) => d));
+    return [Math.min(...values), Math.max(...values)];
+  } catch (e) {
+    return [0, 100];
+  }
+});
 
-export const bisector = jest.fn(() => ({
+export const max = jest.fn((data, accessor) => {
+  if (!data || data.length === 0) return 100;
+  try {
+    const values = data.map(accessor || ((d) => d));
+    return Math.max(...values);
+  } catch (e) {
+    return 100;
+  }
+});
+
+export const min = jest.fn((data, accessor) => {
+  if (!data || data.length === 0) return 0;
+  try {
+    const values = data.map(accessor || ((d) => d));
+    return Math.min(...values);
+  } catch (e) {
+    return 0;
+  }
+});
+
+export const bisector = jest.fn((accessor) => ({
   left: jest.fn(),
+  center: jest.fn((array, x) => {
+    if (!array || array.length === 0) return 0;
+    return Math.floor(array.length / 2);
+  }),
 }));
 
+export const pointer = jest.fn(() => [400, 200]);
 export const mouse = jest.fn(() => [0, 0]);
 export const curveCardinal = 'mockCurveCardinal';
+
+// Export function to trigger stored callbacks for testing
+export const triggerCallback = (event: string, ...args: any[]) => {
+  if (storedCallbacks[event]) {
+    storedCallbacks[event](...args);
+  }
+};
+
+// Function to clear stored callbacks between tests
+export const clearStoredCallbacks = () => {
+  storedCallbacks = {};
+};
 
 // Export all other D3 functions as mocks
 export default {
