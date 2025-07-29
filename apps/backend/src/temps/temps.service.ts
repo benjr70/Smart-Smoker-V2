@@ -1,9 +1,9 @@
 import { Injectable } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
-import { SmokeService } from "src/smoke/smoke.service";
-import { SmokeDto } from "src/smoke/smokeDto";
-import { StateService } from "src/State/state.service";
+import { SmokeService } from "../smoke/smoke.service";
+import { SmokeDto } from "../smoke/smokeDto";
+import { StateService } from "../State/state.service";
 import { TempDto } from "./tempDto";
 import { Temp, TempDocument } from "./temps.schema";
 

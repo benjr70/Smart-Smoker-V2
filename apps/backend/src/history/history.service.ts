@@ -1,10 +1,10 @@
 import { Injectable } from "@nestjs/common";
-import { PreSmokeService } from "src/presmoke/presmoke.service";
-import { RatingsService } from "src/ratings/ratings.service";
-import { SmokeService } from "src/smoke/smoke.service";
-import { SmokeProfileService } from "src/smokeProfile/smokeProfile.service";
+import { PreSmokeService } from "../presmoke/presmoke.service";
+import { RatingsService } from "../ratings/ratings.service";
+import { SmokeService } from "../smoke/smoke.service";
+import { SmokeProfileService } from "../smokeProfile/smokeProfile.service";
 import { SmokeHistory } from "./histroyDto";
-import { SmokeStatus } from "src/smoke/smoke.schema";
+import { SmokeStatus } from "../smoke/smoke.schema";
 
 
 

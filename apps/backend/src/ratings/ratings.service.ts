@@ -2,11 +2,11 @@ import { Injectable } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Ratings, RatingsDocument } from "./ratings.schema";
 import { Model } from "mongoose";
-import { StateService } from "src/State/state.service";
-import { SmokeService } from "src/smoke/smoke.service";
+import { StateService } from "../State/state.service";
+import { SmokeService } from "../smoke/smoke.service";
 import { RatingsDto } from "./ratingsDto";
-import { SmokeDto } from "src/smoke/smokeDto";
-import { Smoke } from "src/smoke/smoke.schema";
+import { SmokeDto } from "../smoke/smokeDto";
+import { Smoke } from "../smoke/smoke.schema";
 
 
 

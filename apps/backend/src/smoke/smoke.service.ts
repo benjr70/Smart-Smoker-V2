@@ -3,7 +3,7 @@ import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import { Smoke, SmokeDocument, SmokeStatus } from "./smoke.schema";
 import { SmokeDto } from "./smokeDto";
-import { StateService } from "src/State/state.service";
+import { StateService } from "../State/state.service";
 
 
 
