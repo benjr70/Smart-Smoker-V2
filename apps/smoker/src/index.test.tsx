@@ -4,6 +4,8 @@
  * we focus on testing the imported functions and components
  */
 
+export {};
+
 describe('Index module', () => {
   beforeEach(() => {
     jest.clearAllMocks();

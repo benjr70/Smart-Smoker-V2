@@ -1,6 +1,8 @@
 // Mock console.log to capture the output
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
 
+export {};
+
 describe('Renderer Process', () => {
   beforeEach(() => {
     jest.clearAllMocks();

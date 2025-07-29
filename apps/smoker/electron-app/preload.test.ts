@@ -1,3 +1,5 @@
+export {};
+
 describe('Preload Script', () => {
   beforeEach(() => {
     jest.clearAllMocks();

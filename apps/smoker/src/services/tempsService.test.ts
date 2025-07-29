@@ -31,20 +31,18 @@ describe('tempsService', () => {
     it('should successfully get current temperature data', async () => {
       const mockTempData: TempData[] = [
         { 
-          chamber: 225, 
-          probe1: 185, 
-          probe2: 190, 
-          probe3: 0, 
-          date: new Date('2023-01-01T12:00:00Z'),
-          smokeId: 'smoke123'
+          ChamberTemp: 225, 
+          MeatTemp: 185, 
+          Meat2Temp: 190, 
+          Meat3Temp: 0, 
+          date: new Date('2023-01-01T12:00:00Z')
         },
         { 
-          chamber: 230, 
-          probe1: 190, 
-          probe2: 195, 
-          probe3: 0, 
-          date: new Date('2023-01-01T12:05:00Z'),
-          smokeId: 'smoke123'
+          ChamberTemp: 230, 
+          MeatTemp: 190, 
+          Meat2Temp: 195, 
+          Meat3Temp: 0, 
+          date: new Date('2023-01-01T12:05:00Z')
         }
       ];
       const mockResponse = { data: mockTempData };
@@ -102,12 +100,11 @@ describe('tempsService', () => {
     it('should handle single temperature reading', async () => {
       const mockTempData: TempData[] = [
         { 
-          chamber: 225, 
-          probe1: 185, 
-          probe2: 190, 
-          probe3: 0, 
-          date: new Date('2023-01-01T12:00:00Z'),
-          smokeId: 'smoke123'
+          ChamberTemp: 225, 
+          MeatTemp: 185, 
+          Meat2Temp: 190, 
+          Meat3Temp: 0, 
+          date: new Date('2023-01-01T12:00:00Z')
         }
       ];
       const mockResponse = { data: mockTempData };
@@ -125,20 +122,18 @@ describe('tempsService', () => {
     it('should successfully post temperature batch data', async () => {
       const mockBatch: TempData[] = [
         { 
-          chamber: 225, 
-          probe1: 185, 
-          probe2: 190, 
-          probe3: 0, 
-          date: new Date('2023-01-01T12:00:00Z'),
-          smokeId: 'smoke123'
+          ChamberTemp: 225, 
+          MeatTemp: 185, 
+          Meat2Temp: 190, 
+          Meat3Temp: 0, 
+          date: new Date('2023-01-01T12:00:00Z')
         },
         { 
-          chamber: 230, 
-          probe1: 190, 
-          probe2: 195, 
-          probe3: 0, 
-          date: new Date('2023-01-01T12:05:00Z'),
-          smokeId: 'smoke123'
+          ChamberTemp: 230, 
+          MeatTemp: 190, 
+          Meat2Temp: 195, 
+          Meat3Temp: 0, 
+          date: new Date('2023-01-01T12:00:00Z')
         }
       ];
       const mockResponse = { data: { success: true, count: 2 } };
@@ -166,12 +161,11 @@ describe('tempsService', () => {
     it('should handle single item batch', async () => {
       const singleBatch: TempData[] = [
         { 
-          chamber: 225, 
-          probe1: 185, 
-          probe2: 190, 
-          probe3: 0, 
-          date: new Date('2023-01-01T12:00:00Z'),
-          smokeId: 'smoke123'
+          ChamberTemp: 225, 
+          MeatTemp: 185, 
+          Meat2Temp: 190, 
+          Meat3Temp: 0, 
+          date: new Date('2023-01-01T12:00:00Z')
         }
       ];
       const mockResponse = { data: { success: true, count: 1 } };
@@ -187,12 +181,11 @@ describe('tempsService', () => {
     it('should handle API error when posting batch', async () => {
       const mockBatch: TempData[] = [
         { 
-          chamber: 225, 
-          probe1: 185, 
-          probe2: 190, 
-          probe3: 0, 
-          date: new Date('2023-01-01T12:00:00Z'),
-          smokeId: 'smoke123'
+          ChamberTemp: 225, 
+          MeatTemp: 185, 
+          Meat2Temp: 190, 
+          Meat3Temp: 0, 
+          date: new Date('2023-01-01T12:00:00Z')
         }
       ];
       const apiError = new Error('Failed to save temperature batch');
@@ -206,12 +199,11 @@ describe('tempsService', () => {
     it('should handle network timeout during batch post', async () => {
       const mockBatch: TempData[] = [
         { 
-          chamber: 225, 
-          probe1: 185, 
-          probe2: 190, 
-          probe3: 0, 
-          date: new Date('2023-01-01T12:00:00Z'),
-          smokeId: 'smoke123'
+          ChamberTemp: 225, 
+          MeatTemp: 185, 
+          Meat2Temp: 190, 
+          Meat3Temp: 0, 
+          date: new Date('2023-01-01T12:00:00Z')
         }
       ];
       const timeoutError = new Error('timeout of 5000ms exceeded');
@@ -224,12 +216,11 @@ describe('tempsService', () => {
     it('should handle server error response during batch post', async () => {
       const mockBatch: TempData[] = [
         { 
-          chamber: 225, 
-          probe1: 185, 
-          probe2: 190, 
-          probe3: 0, 
-          date: new Date('2023-01-01T12:00:00Z'),
-          smokeId: 'smoke123'
+          ChamberTemp: 225, 
+          MeatTemp: 185, 
+          Meat2Temp: 190, 
+          Meat3Temp: 0, 
+          date: new Date('2023-01-01T12:00:00Z')
         }
       ];
       const serverError = {
@@ -246,12 +237,11 @@ describe('tempsService', () => {
 
     it('should handle large batch data', async () => {
       const largeBatch: TempData[] = Array.from({ length: 100 }, (_, i) => ({
-        chamber: 225 + i, 
-        probe1: 185 + i, 
-        probe2: 190 + i, 
-        probe3: 0, 
-        date: new Date(`2023-01-01T${12 + Math.floor(i/60)}:${i%60}:00Z`),
-        smokeId: 'smoke123'
+        ChamberTemp: 225 + i, 
+        MeatTemp: 185 + i, 
+        Meat2Temp: 190 + i, 
+        Meat3Temp: 0, 
+        date: new Date('2023-01-01T12:00:00Z')
       }));
       const mockResponse = { data: { success: true, count: 100 } };
 
