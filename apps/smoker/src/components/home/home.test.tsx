@@ -447,7 +447,7 @@ describe('Home Component', () => {
     });
   });
 
-  it('should batch and send temperature data when socket is not connected', async () => {
+  it('should batch temperature data when socket is not connected', async () => {
     let tempCallback: (message: string) => void;
     
     mockSocket.connected = false; // Not connected, should batch temps
@@ -477,10 +477,19 @@ describe('Home Component', () => {
       });
     }
     
-    // Should have called postTempsBatch due to batching
+    // Should NOT have called postTempsBatch while disconnected - batching waits for reconnection
+    expect(mockPostTempsBatch).not.toHaveBeenCalled();
+    
+    // When socket reconnects and we send another temp, it should send the batch
+    mockSocket.connected = true;
+    await act(async () => {
+      tempCallback!(tempMessage);
+    });
+    
+    // Now it should have sent the batched data
     await waitFor(() => {
       expect(mockPostTempsBatch).toHaveBeenCalled();
-    });
+    }, { timeout: 5000 });
   });
 
   it('should send temp batch and emit refresh when socket is connected', async () => {
