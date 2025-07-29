@@ -109,9 +109,7 @@ describe('Home Component', () => {
   });
 
   it('should render all main UI elements in home screen', async () => {
-    await act(async () => {
-      render(<Home />);
-    });
+    render(<Home />);
     
     await waitFor(() => {
       // Check that probe names and temps are displayed

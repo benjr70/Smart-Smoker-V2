@@ -246,17 +246,15 @@ describe('Wifi Component', () => {
     render(<Wifi onBack={mockOnBack} />);
     
     await waitFor(() => {
-      // Find inputs by their specific selectors that work with Material-UI
-      const inputs = screen.getAllByRole('textbox');
-      expect(inputs).toHaveLength(2);
-      
-      // Check that both inputs exist
-      expect(inputs[0]).toBeInTheDocument();
-      expect(inputs[1]).toBeInTheDocument();
-      
-      // Check that labels exist in the rendered output
+      // Password field doesn't have textbox role due to type="password"
+      // Check for the presence of the component elements instead
       expect(screen.getByText('SSid')).toBeInTheDocument();
       expect(screen.getByText('Password')).toBeInTheDocument();
+      expect(screen.getByText('Connect')).toBeInTheDocument();
+      
+      // Check for at least one textbox (the SSid input)
+      const textboxes = screen.getAllByRole('textbox');
+      expect(textboxes.length).toBeGreaterThanOrEqual(1);
     });
   });
 
