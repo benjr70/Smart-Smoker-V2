@@ -77,5 +77,40 @@ describe('LoggerMiddleware', () => {
       expect(mockResponse.write).not.toBe(originalWrite);
       expect(mockResponse.end).not.toBe(originalEnd);
     });
+
+    it('should handle response write with data', () => {
+      const logSpy = jest.spyOn(Logger, 'log').mockImplementation();
+      const originalWrite = jest.fn().mockReturnValue(true);
+      mockResponse.write = originalWrite;
+
+      middleware.use(mockRequest as Request, mockResponse as Response, mockNext);
+
+      // Call the modified write method with data
+      const testData = 'test response data';
+      (mockResponse.write as any)(testData);
+
+      expect(originalWrite).toHaveBeenCalledWith(testData);
+      logSpy.mockRestore();
+    });
+
+    it('should handle response end and log response', () => {
+      const logSpy = jest.spyOn(Logger, 'log').mockImplementation();
+      const originalEnd = jest.fn();
+      mockResponse.end = originalEnd;
+
+      middleware.use(mockRequest as Request, mockResponse as Response, mockNext);
+
+      // Call the modified end method with data
+      const responseData = '{"status":"success"}';
+      (mockResponse.end as any)(responseData);
+
+      expect(mockResponse.setHeader).toHaveBeenCalledWith('origin', 'restjs-req-res-logging-repo');
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.stringContaining('res:'),
+        '/api/test Response'
+      );
+      expect(originalEnd).toHaveBeenCalledWith(responseData);
+      logSpy.mockRestore();
+    });
   });
 });

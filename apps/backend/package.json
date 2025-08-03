@@ -81,7 +81,10 @@
       "!**/*.interface.ts",
       "!**/*.d.ts",
       "!**/node_modules/**",
-      "!main.ts"
+      "!main.ts",
+      "!**/*.module.ts",
+      "!**/*.schema.ts",
+      "!logger.middleware.ts"
     ],
     "coverageDirectory": "../coverage",
     "coverageReporters": [
@@ -92,10 +95,10 @@
     ],
     "coverageThreshold": {
       "global": {
-        "branches": 75,
-        "functions": 75,
-        "lines": 75,
-        "statements": 75
+        "branches": 80,
+        "functions": 80,
+        "lines": 80,
+        "statements": 80
       }
     },
     "testEnvironment": "node",
