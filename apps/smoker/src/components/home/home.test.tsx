@@ -548,6 +548,7 @@ describe('Home Component', () => {
       fireEvent.click(wifiButton);
     });
     
+        
     // Come back to home (this should trigger getCurrentTemps)
     await waitFor(() => {
       const backButton = screen.getByText('Back to Home');
@@ -556,6 +557,18 @@ describe('Home Component', () => {
     
     await waitFor(() => {
       expect(mockGetCurrentTemps).toHaveBeenCalledTimes(2); // Once on mount, once on return
+    });
+  });
+
+  it('should handle getCurrentTemps error on componentDidMount', async () => {
+    // Mock getCurrentTemps to throw an error
+    mockGetCurrentTemps.mockRejectedValueOnce(new Error('Temperature service unavailable'));
+    
+    render(<Home />);
+    
+    // The component should still render despite the error
+    await waitFor(() => {
+      expect(screen.getByText(/Chamber/i)).toBeInTheDocument();
     });
   });
 });
