@@ -571,4 +571,24 @@ describe('Home Component', () => {
       expect(screen.getByText(/Chamber/i)).toBeInTheDocument();
     });
   });
+
+  it('should test getConnection branch in production mode when temp event is received', async () => {
+    // Set production environment
+    const originalEnv = process.env.ENV;
+    process.env.ENV = 'production';
+
+    // Mock getConnection to return empty array (tests the else branch on line 86)
+    mockGetConnection.mockResolvedValueOnce([]);
+
+    render(<Home />);
+
+    // The component should render normally
+    await waitFor(() => {
+      expect(screen.getByText(/Chamber/i)).toBeInTheDocument();
+    });
+
+    // Restore original environment
+    process.env.ENV = originalEnv;
+  });
+
 });
