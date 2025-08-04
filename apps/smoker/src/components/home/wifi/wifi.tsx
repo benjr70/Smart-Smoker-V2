@@ -89,14 +89,16 @@ export function Wifi(props: WifiProps): JSX.Element {
             console.log('from connect to', result);
             await getConnection().then(result => {
                 console.log('from get connection',result)
-                setConnectionMessage(result[0].ssid);
+                if (result && result.length > 0) {
+                    setConnectionMessage(result[0].ssid);
+                }
             });
             setConnection(true);
         })
         .catch(e => {
             console.log(e);
             setConnection(false);
-            setConnectionMessage(e.response.data.error);
+            setConnectionMessage(e?.response?.data?.error || e.message || 'Connection error');
         }).finally(() => {
             setLoading(false);
         });
