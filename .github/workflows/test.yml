@@ -65,26 +65,25 @@ jobs:
             ${{ runner.os }}-build-
             ${{ runner.os }}-
 
-      # Run tests with coverage
+      # Run tests with coverage - will fail if coverage thresholds not met
       - name: Test ${{ matrix.app }}
         id: test-step
-        continue-on-error: true
         run: |
           case "${{ matrix.app }}" in
             "backend")
-              npm run test:cov --prefix apps/backend
+              npm run test:cov --prefix apps/backend -- --coverageReporters=json-summary --coverageReporters=lcov --coverageReporters=text --reporters=default --reporters=jest-junit --outputFile=test-results.xml 2>&1 | tee test-output.log
               ;;
             "device-service")
-              npm run test:cov --prefix apps/device-service
+              npm run test:cov --prefix apps/device-service -- --coverageReporters=json-summary --coverageReporters=lcov --coverageReporters=text --reporters=default --reporters=jest-junit --outputFile=test-results.xml 2>&1 | tee test-output.log
               ;;
             "frontend")
-              npm run test --prefix apps/frontend -- --watchAll=false --coverage --coverageReporters=text-lcov --coverageReporters=json-summary
+              npm run test --prefix apps/frontend -- --watchAll=false --coverage --coverageReporters=json-summary --coverageReporters=lcov --coverageReporters=text --reporters=default --reporters=jest-junit --outputFile=test-results.xml 2>&1 | tee test-output.log
               ;;
             "smoker")
-              npm run test --prefix apps/smoker -- --coverage --coverageReporters=text-lcov --coverageReporters=json-summary
+              npm run test --prefix apps/smoker -- --coverage --coverageReporters=json-summary --coverageReporters=lcov --coverageReporters=text --reporters=default --reporters=jest-junit --outputFile=test-results.xml 2>&1 | tee test-output.log
               ;;
             "TemperatureChart")
-              npm run test:coverage --prefix packages/TemperatureChart
+              npm run test:coverage --prefix packages/TemperatureChart -- --coverageReporters=json-summary --coverageReporters=lcov --coverageReporters=text --reporters=default --reporters=jest-junit --outputFile=test-results.xml 2>&1 | tee test-output.log
               ;;
             *)
               echo "Unknown app: ${{ matrix.app }}"
@@ -98,8 +97,34 @@ jobs:
         run: |
           if [ "${{ steps.test-step.outcome }}" = "success" ]; then
             echo "success" > test-status.txt
+            echo "All tests passed and coverage thresholds met" > test-details.txt
           else
             echo "failure" > test-status.txt
+            
+            # Extract failed test information from output
+            if [ -f "test-output.log" ]; then
+              # Look for Jest failure patterns
+              failed_tests=$(grep -E "(FAIL|✕|Failed:|Test Suites: .* failed)" test-output.log || echo "")
+              coverage_failures=$(grep -E "(Coverage threshold|Jest: Coverage threshold)" test-output.log || echo "")
+              
+              if [ -n "$coverage_failures" ]; then
+                echo "Tests passed but coverage thresholds not met" > test-details.txt
+                echo "" >> test-details.txt
+                echo "Coverage threshold failures:" >> test-details.txt
+                echo "$coverage_failures" >> test-details.txt
+              elif [ -n "$failed_tests" ]; then
+                echo "Test failures detected" > test-details.txt
+                echo "" >> test-details.txt
+                echo "Failed tests:" >> test-details.txt
+                
+                # Extract specific test names that failed
+                grep -E "✕|FAIL.*\.spec\.|FAIL.*\.test\." test-output.log | head -20 >> test-details.txt || echo "See logs for details" >> test-details.txt
+              else
+                echo "Test run failed - check logs for details" > test-details.txt
+              fi
+            else
+              echo "Test run failed - no output log available" > test-details.txt
+            fi
           fi
 
       # Upload coverage reports
@@ -119,7 +144,10 @@ jobs:
         if: always()
         with:
           name: test-status-${{ matrix.app }}
-          path: test-status.txt
+          path: |
+            test-status.txt
+            test-details.txt
+            test-output.log
           retention-days: 1
 
       # Upload test results 
@@ -134,11 +162,6 @@ jobs:
             packages/${{ matrix.app }}/test-results.xml
             packages/${{ matrix.app }}/junit.xml
           retention-days: 1
-
-      # Fail the job if tests failed
-      - name: Check test result
-        if: steps.test-step.outcome == 'failure'
-        run: exit 1
 
   # Collect and summarize results
   collect-results:
@@ -176,10 +199,17 @@ jobs:
             
             # Check test status
             status_file="./artifacts/test-status-$app/test-status.txt"
+            details_file="./artifacts/test-status-$app/test-details.txt"
             if [ -f "$status_file" ]; then
               test_status=$(cat "$status_file")
+              if [ -f "$details_file" ]; then
+                test_details=$(cat "$details_file")
+              else
+                test_details="No details available"
+              fi
             else
               test_status="unknown"
+              test_details="Status file not found"
             fi
             
             # Check if coverage exists
@@ -198,8 +228,8 @@ jobs:
             fi
             
             # Create app entry in summary
-            jq --arg app "$app" --argjson cov "$coverage" --arg status "$test_status" \
-               '.apps[$app] = {"coverage": $cov, "status": $status}' \
+            jq --arg app "$app" --argjson cov "$coverage" --arg status "$test_status" --arg details "$test_details" \
+               '.apps[$app] = {"coverage": $cov, "status": $status, "details": $details}' \
                $summary_file > temp.json && mv temp.json $summary_file
           done
           

@@ -63,6 +63,14 @@
     ],
     "moduleNameMapper": {
       "\\.(css|less|scss)$": "identity-obj-proxy"
+    },
+    "coverageThreshold": {
+      "global": {
+        "branches": 70,
+        "functions": 75,
+        "lines": 75,
+        "statements": 75
+      }
     }
   },
   "devDependencies": {
