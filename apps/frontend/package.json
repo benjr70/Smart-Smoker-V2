@@ -58,6 +58,14 @@
       "\\.test\\.(ts|tsx|js|jsx)$",
       "\\.spec\\.(ts|tsx|js|jsx)$"
     ],
+    "coverageDirectory": "coverage",
+    "coverageReporters": [
+      "html",
+      "text",
+      "lcov", 
+      "clover",
+      "json-summary"
+    ],
     "transformIgnorePatterns": [
       "node_modules/(?!(d3|d3-.*|internmap|delaunator|robust-predicates)/)"
     ],

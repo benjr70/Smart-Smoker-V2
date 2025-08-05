@@ -138,15 +138,20 @@ jobs:
             coverage_display="N/A"
             
             # Debug: Show what artifacts directories exist
-            echo "=== DEBUG: All artifact directories ===" >&2
-            ls -la ./artifacts/ >&2
-            echo "=== DEBUG: Looking for coverage-$app ===" >&2
-            ls -la "./artifacts/" | grep "coverage-$app" >&2
+            echo "=== DEBUG: Looking for coverage-$app directory ===" >&2
+            if [ -d "./artifacts/coverage-$app" ]; then
+              echo "Found coverage directory for $app" >&2
+            else
+              echo "No coverage directory found for $app" >&2
+              # Show what directories actually exist
+              echo "Available directories:" >&2
+              ls -1 ./artifacts/ | grep -E "(coverage|$app)" >&2 || echo "No matching directories" >&2
+            fi
             
             if [ -d "./artifacts/coverage-$app" ]; then
               # Debug: Show what files exist
               echo "=== DEBUG: Coverage files for $app ===" >&2
-              find "./artifacts/coverage-$app" -type f | head -10 >&2
+              find "./artifacts/coverage-$app" -type f | head -5 >&2
               
               # Try multiple possible paths for coverage-summary.json
               coverage_summary_path=""

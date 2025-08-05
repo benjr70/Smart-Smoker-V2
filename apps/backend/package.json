@@ -86,12 +86,13 @@
       "!**/*.schema.ts",
       "!logger.middleware.ts"
     ],
-    "coverageDirectory": "../coverage",
+    "coverageDirectory": "coverage",
     "coverageReporters": [
       "html",
       "text",
       "lcov",
-      "clover"
+      "clover",
+      "json-summary"
     ],
     "coverageThreshold": {
       "global": {

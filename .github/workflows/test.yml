@@ -139,6 +139,35 @@ jobs:
             packages/${{ matrix.app }}/coverage/
           retention-days: 1
 
+      # Debug: Show what coverage files exist before upload
+      - name: Debug coverage files
+        if: always()
+        run: |
+          echo "=== DEBUG: Coverage files check for ${{ matrix.app }} ===" >&2
+          echo "Current directory: $(pwd)" >&2
+          echo "Looking for coverage files..." >&2
+          
+          if [ -d "coverage" ]; then
+            echo "Found root coverage directory:" >&2
+            find coverage -name "*.json" -o -name "*.info" 2>/dev/null | head -5 >&2
+          else
+            echo "No root coverage directory" >&2
+          fi
+          
+          if [ -d "apps/${{ matrix.app }}/coverage" ]; then
+            echo "Found apps/${{ matrix.app }}/coverage directory:" >&2
+            find "apps/${{ matrix.app }}/coverage" -name "*.json" -o -name "*.info" 2>/dev/null | head -5 >&2
+          else
+            echo "No apps/${{ matrix.app }}/coverage directory" >&2
+          fi
+          
+          if [ -d "packages/${{ matrix.app }}/coverage" ]; then
+            echo "Found packages/${{ matrix.app }}/coverage directory:" >&2
+            find "packages/${{ matrix.app }}/coverage" -name "*.json" -o -name "*.info" 2>/dev/null | head -5 >&2
+          else
+            echo "No packages/${{ matrix.app }}/coverage directory" >&2
+          fi
+
       # Upload test status
       - name: Upload test status
         uses: actions/upload-artifact@v4
