@@ -144,6 +144,7 @@ jobs:
               # Try multiple possible paths for coverage-summary.json
               coverage_summary_path=""
               for possible_path in \
+                "./artifacts/coverage-$app/coverage/coverage-summary.json" \
                 "./artifacts/coverage-$app/apps/$app/coverage/coverage-summary.json" \
                 "./artifacts/coverage-$app/packages/$app/coverage/coverage-summary.json" \
                 "./artifacts/coverage-$app/coverage-summary.json"; do
@@ -184,6 +185,7 @@ jobs:
                 # Try multiple possible paths for lcov.info as fallback
                 lcov_path=""
                 for possible_path in \
+                  "./artifacts/coverage-$app/coverage/lcov.info" \
                   "./artifacts/coverage-$app/apps/$app/coverage/lcov.info" \
                   "./artifacts/coverage-$app/packages/$app/coverage/lcov.info" \
                   "./artifacts/coverage-$app/lcov.info"; do
@@ -344,6 +346,7 @@ jobs:
               # Try multiple possible paths for coverage-summary.json (same logic as table section)
               coverage_summary_path=""
               for possible_path in \
+                "./artifacts/coverage-$app/coverage/coverage-summary.json" \
                 "./artifacts/coverage-$app/apps/$app/coverage/coverage-summary.json" \
                 "./artifacts/coverage-$app/packages/$app/coverage/coverage-summary.json" \
                 "./artifacts/coverage-$app/coverage-summary.json"; do
