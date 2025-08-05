@@ -135,14 +135,27 @@ jobs:
               echo "=== DEBUG: Coverage files for $app ===" >&2
               find "./artifacts/coverage-$app" -type f | head -10 >&2
               
+              # Try multiple possible paths for coverage-summary.json
+              coverage_summary_path=""
+              for possible_path in \
+                "./artifacts/coverage-$app/apps/$app/coverage/coverage-summary.json" \
+                "./artifacts/coverage-$app/packages/$app/coverage/coverage-summary.json" \
+                "./artifacts/coverage-$app/coverage-summary.json"; do
+                if [ -f "$possible_path" ]; then
+                  coverage_summary_path="$possible_path"
+                  echo "Found coverage-summary.json at: $possible_path" >&2
+                  break
+                fi
+              done
+              
               # Try to get the most comprehensive coverage display
-              if [ -f "./artifacts/coverage-$app/coverage-summary.json" ]; then
-                echo "Found coverage-summary.json for $app" >&2
+              if [ -n "$coverage_summary_path" ] && [ -f "$coverage_summary_path" ]; then
+                echo "Using coverage-summary.json for $app at: $coverage_summary_path" >&2
                 # Extract detailed coverage from Jest summary (preferred method)
-                lines_pct=$(jq -r '.total.lines.pct // "N/A"' "./artifacts/coverage-$app/coverage-summary.json" 2>/dev/null || echo "N/A")
-                branches_pct=$(jq -r '.total.branches.pct // "N/A"' "./artifacts/coverage-$app/coverage-summary.json" 2>/dev/null || echo "N/A")
-                functions_pct=$(jq -r '.total.functions.pct // "N/A"' "./artifacts/coverage-$app/coverage-summary.json" 2>/dev/null || echo "N/A")
-                statements_pct=$(jq -r '.total.statements.pct // "N/A"' "./artifacts/coverage-$app/coverage-summary.json" 2>/dev/null || echo "N/A")
+                lines_pct=$(jq -r '.total.lines.pct // "N/A"' "$coverage_summary_path" 2>/dev/null || echo "N/A")
+                branches_pct=$(jq -r '.total.branches.pct // "N/A"' "$coverage_summary_path" 2>/dev/null || echo "N/A")
+                functions_pct=$(jq -r '.total.functions.pct // "N/A"' "$coverage_summary_path" 2>/dev/null || echo "N/A")
+                statements_pct=$(jq -r '.total.statements.pct // "N/A"' "$coverage_summary_path" 2>/dev/null || echo "N/A")
                 
                 echo "Coverage extracted - Lines: $lines_pct, Branches: $branches_pct, Functions: $functions_pct, Statements: $statements_pct" >&2
                 
@@ -161,15 +174,29 @@ jobs:
                 else
                   echo "Lines percentage was N/A or null" >&2
                 fi
-              elif [ -f "./artifacts/coverage-$app/lcov.info" ]; then
-                echo "Using lcov.info for $app" >&2
-                # Parse lcov.info for coverage percentage (fallback)
-                total_lines=$(grep '^LF:' "./artifacts/coverage-$app/lcov.info" | awk -F: '{sum += $2} END {print sum}' 2>/dev/null || echo "0")
-                hit_lines=$(grep '^LH:' "./artifacts/coverage-$app/lcov.info" | awk -F: '{sum += $2} END {print sum}' 2>/dev/null || echo "0")
-                total_branches=$(grep '^BRF:' "./artifacts/coverage-$app/lcov.info" | awk -F: '{sum += $2} END {print sum}' 2>/dev/null || echo "0")
-                hit_branches=$(grep '^BRH:' "./artifacts/coverage-$app/lcov.info" | awk -F: '{sum += $2} END {print sum}' 2>/dev/null || echo "0")
-                total_functions=$(grep '^FNF:' "./artifacts/coverage-$app/lcov.info" | awk -F: '{sum += $2} END {print sum}' 2>/dev/null || echo "0")
-                hit_functions=$(grep '^FNH:' "./artifacts/coverage-$app/lcov.info" | awk -F: '{sum += $2} END {print sum}' 2>/dev/null || echo "0")
+              else
+                # Try multiple possible paths for lcov.info as fallback
+                lcov_path=""
+                for possible_path in \
+                  "./artifacts/coverage-$app/apps/$app/coverage/lcov.info" \
+                  "./artifacts/coverage-$app/packages/$app/coverage/lcov.info" \
+                  "./artifacts/coverage-$app/lcov.info"; do
+                  if [ -f "$possible_path" ]; then
+                    lcov_path="$possible_path"
+                    echo "Found lcov.info at: $possible_path" >&2
+                    break
+                  fi
+                done
+                
+                if [ -n "$lcov_path" ] && [ -f "$lcov_path" ]; then
+                  echo "Using lcov.info for $app at: $lcov_path" >&2
+                  # Parse lcov.info for coverage percentage (fallback)
+                  total_lines=$(grep '^LF:' "$lcov_path" | awk -F: '{sum += $2} END {print sum}' 2>/dev/null || echo "0")
+                  hit_lines=$(grep '^LH:' "$lcov_path" | awk -F: '{sum += $2} END {print sum}' 2>/dev/null || echo "0")
+                  total_branches=$(grep '^BRF:' "$lcov_path" | awk -F: '{sum += $2} END {print sum}' 2>/dev/null || echo "0")
+                  hit_branches=$(grep '^BRH:' "$lcov_path" | awk -F: '{sum += $2} END {print sum}' 2>/dev/null || echo "0")
+                  total_functions=$(grep '^FNF:' "$lcov_path" | awk -F: '{sum += $2} END {print sum}' 2>/dev/null || echo "0")
+                  hit_functions=$(grep '^FNH:' "$lcov_path" | awk -F: '{sum += $2} END {print sum}' 2>/dev/null || echo "0")
                 
                 echo "LCOV totals - Lines: $hit_lines/$total_lines, Branches: $hit_branches/$total_branches, Functions: $hit_functions/$total_functions" >&2
                 
