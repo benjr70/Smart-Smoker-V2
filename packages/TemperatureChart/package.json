@@ -58,6 +58,14 @@
       "!src/setupTests.ts",
       "!src/__mocks__/**"
     ],
+    "coverageDirectory": "coverage",
+    "coverageReporters": [
+      "json-summary",
+      "lcov",
+      "text",
+      "html",
+      "clover"
+    ],
     "coverageThreshold": {
       "global": {
         "statements": 75,
