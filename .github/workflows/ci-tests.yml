@@ -224,9 +224,6 @@ jobs:
                   echo "No recognized coverage files found for $app" >&2
                   coverage_display="📊 Report available"
                 fi
-              else
-                echo "No recognized coverage files found for $app" >&2
-                coverage_display="📊 Report available"
               fi
               
               # Final check - if coverage_display is still empty, set fallback
