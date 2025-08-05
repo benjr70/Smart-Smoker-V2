@@ -136,6 +136,13 @@ jobs:
             
             # Check if coverage artifact exists and extract coverage
             coverage_display="N/A"
+            
+            # Debug: Show what artifacts directories exist
+            echo "=== DEBUG: All artifact directories ===" >&2
+            ls -la ./artifacts/ >&2
+            echo "=== DEBUG: Looking for coverage-$app ===" >&2
+            ls -la "./artifacts/" | grep "coverage-$app" >&2
+            
             if [ -d "./artifacts/coverage-$app" ]; then
               # Debug: Show what files exist
               echo "=== DEBUG: Coverage files for $app ===" >&2
@@ -390,7 +397,7 @@ jobs:
           
           echo "" >> comment.md
           echo "---" >> comment.md
-          echo "*🤖 Generated automatically by CI workflow • Last updated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')*" >> comment.md
+          echo "*🤖 Generated automatically by CI workflow • Last updated: $(date -u '+%Y-%m-%d %H:%M:%S UTC') • Run #${{ github.run_number }}*" >> comment.md
           
           # Set output for comment body
           comment_body=$(cat comment.md)
@@ -428,3 +435,5 @@ jobs:
         run: |
           echo "=== DEBUG: Comment creation completed ===" >&2
           echo "PR number used: ${{ github.event.pull_request.number }}" >&2
+          echo "Comment ID: ${{ steps.find-comment.outputs.comment-id }}" >&2
+          echo "Current time: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >&2
