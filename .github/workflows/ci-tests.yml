@@ -48,6 +48,12 @@ jobs:
       - name: Generate PR comment
         id: generate-comment
         run: |
+          echo "=== DEBUG: Starting PR comment generation ===" >&2
+          echo "Event name: ${{ github.event_name }}" >&2
+          echo "PR number: ${{ github.event.pull_request.number }}" >&2
+          echo "Test apps result: ${{ needs.test-apps.result }}" >&2
+          echo "Build validation result: ${{ needs.build-validation.result }}" >&2
+          
           echo "# 🧪 Test Results Summary" > comment.md
           echo "" >> comment.md
           
@@ -335,12 +341,24 @@ jobs:
               has_coverage_data=true
               echo "### $app" >> comment.md
               
-              if [ -f "./artifacts/coverage-$app/coverage-summary.json" ]; then
+              # Try multiple possible paths for coverage-summary.json (same logic as table section)
+              coverage_summary_path=""
+              for possible_path in \
+                "./artifacts/coverage-$app/apps/$app/coverage/coverage-summary.json" \
+                "./artifacts/coverage-$app/packages/$app/coverage/coverage-summary.json" \
+                "./artifacts/coverage-$app/coverage-summary.json"; do
+                if [ -f "$possible_path" ]; then
+                  coverage_summary_path="$possible_path"
+                  break
+                fi
+              done
+              
+              if [ -n "$coverage_summary_path" ] && [ -f "$coverage_summary_path" ]; then
                 # Extract detailed coverage metrics from Jest summary
-                lines_pct=$(jq -r '.total.lines.pct // "N/A"' "./artifacts/coverage-$app/coverage-summary.json" 2>/dev/null || echo "N/A")
-                branches_pct=$(jq -r '.total.branches.pct // "N/A"' "./artifacts/coverage-$app/coverage-summary.json" 2>/dev/null || echo "N/A")
-                functions_pct=$(jq -r '.total.functions.pct // "N/A"' "./artifacts/coverage-$app/coverage-summary.json" 2>/dev/null || echo "N/A")
-                statements_pct=$(jq -r '.total.statements.pct // "N/A"' "./artifacts/coverage-$app/coverage-summary.json" 2>/dev/null || echo "N/A")
+                lines_pct=$(jq -r '.total.lines.pct // "N/A"' "$coverage_summary_path" 2>/dev/null || echo "N/A")
+                branches_pct=$(jq -r '.total.branches.pct // "N/A"' "$coverage_summary_path" 2>/dev/null || echo "N/A")
+                functions_pct=$(jq -r '.total.functions.pct // "N/A"' "$coverage_summary_path" 2>/dev/null || echo "N/A")
+                statements_pct=$(jq -r '.total.statements.pct // "N/A"' "$coverage_summary_path" 2>/dev/null || echo "N/A")
                 
                 if [ "$lines_pct" != "N/A" ]; then
                   echo "- **Lines**: ${lines_pct}%" >> comment.md
@@ -373,6 +391,10 @@ jobs:
           
           # Set output for comment body
           comment_body=$(cat comment.md)
+          echo "=== DEBUG: Comment content generated ===" >&2
+          echo "Comment length: ${#comment_body} characters" >&2
+          echo "First 200 chars: ${comment_body:0:200}" >&2
+          
           echo "comment-body<<EOF" >> $GITHUB_OUTPUT
           echo "$comment_body" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
@@ -385,6 +407,12 @@ jobs:
           comment-author: 'github-actions[bot]'
           body-includes: '🧪 Test Results Summary'
 
+      - name: Debug comment search
+        run: |
+          echo "=== DEBUG: Comment search results ===" >&2
+          echo "Found comment ID: ${{ steps.find-comment.outputs.comment-id }}" >&2
+          echo "Comment exists: ${{ steps.find-comment.outputs.comment-id != '' }}" >&2
+
       - name: Create or update PR comment
         uses: peter-evans/create-or-update-comment@v4
         with:
@@ -392,3 +420,8 @@ jobs:
           issue-number: ${{ github.event.pull_request.number }}
           body: ${{ steps.generate-comment.outputs.comment-body }}
           edit-mode: replace
+
+      - name: Debug comment creation
+        run: |
+          echo "=== DEBUG: Comment creation completed ===" >&2
+          echo "PR number used: ${{ github.event.pull_request.number }}" >&2
