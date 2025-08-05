@@ -14,6 +14,10 @@ on:
         type: string
         required: false
         default: 'master'
+    outputs:
+      test-results:
+        description: 'Test results summary'
+        value: ${{ jobs.collect-results.outputs.test-results }}
 
 jobs:
   # Install dependencies once
@@ -61,27 +65,153 @@ jobs:
             ${{ runner.os }}-build-
             ${{ runner.os }}-
 
-      # Run tests
+      # Run tests with coverage
       - name: Test ${{ matrix.app }}
+        id: test-step
+        continue-on-error: true
         run: |
           case "${{ matrix.app }}" in
             "backend")
-              npm run test --prefix apps/backend
+              npm run test:cov --prefix apps/backend
               ;;
             "device-service")
-              npm run test:ci --prefix apps/device-service
+              npm run test:cov --prefix apps/device-service
               ;;
             "frontend")
-              npm run test --prefix apps/frontend -- --forceExit
+              npm run test --prefix apps/frontend -- --watchAll=false --coverage --coverageReporters=text-lcov --coverageReporters=json-summary
               ;;
             "smoker")
-              npm run test --prefix apps/smoker
+              npm run test --prefix apps/smoker -- --coverage --coverageReporters=text-lcov --coverageReporters=json-summary
               ;;
             "TemperatureChart")
-              npm run test --prefix packages/TemperatureChart
+              npm run test:coverage --prefix packages/TemperatureChart
               ;;
             *)
               echo "Unknown app: ${{ matrix.app }}"
               exit 1
               ;;
           esac
+
+      # Create test result status file
+      - name: Create test status
+        if: always()
+        run: |
+          if [ "${{ steps.test-step.outcome }}" = "success" ]; then
+            echo "success" > test-status.txt
+          else
+            echo "failure" > test-status.txt
+          fi
+
+      # Upload coverage reports
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-${{ matrix.app }}
+          path: |
+            apps/${{ matrix.app }}/coverage/
+            packages/${{ matrix.app }}/coverage/
+          retention-days: 1
+
+      # Upload test status
+      - name: Upload test status
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-status-${{ matrix.app }}
+          path: test-status.txt
+          retention-days: 1
+
+      # Upload test results 
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-${{ matrix.app }}
+          path: |
+            apps/${{ matrix.app }}/test-results.xml
+            apps/${{ matrix.app }}/junit.xml
+            packages/${{ matrix.app }}/test-results.xml
+            packages/${{ matrix.app }}/junit.xml
+          retention-days: 1
+
+      # Fail the job if tests failed
+      - name: Check test result
+        if: steps.test-step.outcome == 'failure'
+        run: exit 1
+
+  # Collect and summarize results
+  collect-results:
+    needs: test
+    runs-on: ubuntu-latest
+    if: always()
+    outputs:
+      test-results: ${{ steps.summary.outputs.test-results }}
+    
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Create test summary
+        id: summary
+        run: |
+          echo "Creating test results summary..."
+          
+          # Create summary output
+          summary_file="test-summary.json"
+          echo '{"apps": {}}' > $summary_file
+          
+          # Parse the input apps list and process each one
+          apps_input='${{ inputs.apps }}'
+          # Convert JSON array to bash array
+          apps_array=$(echo $apps_input | jq -r '.[]')
+          
+          for app in $apps_array; do
+            echo "Processing app: $app"
+            
+            # Check test status
+            status_file="./artifacts/test-status-$app/test-status.txt"
+            if [ -f "$status_file" ]; then
+              test_status=$(cat "$status_file")
+            else
+              test_status="unknown"
+            fi
+            
+            # Check if coverage exists
+            coverage_dir="./artifacts/coverage-$app"
+            if [ -d "$coverage_dir" ]; then
+              # Try to find coverage summary
+              if [ -f "$coverage_dir/coverage-summary.json" ]; then
+                coverage=$(cat "$coverage_dir/coverage-summary.json")
+              elif [ -f "$coverage_dir/lcov-report/index.html" ]; then
+                coverage='{"total": {"lines": {"pct": "Available in HTML report"}}}'
+              else
+                coverage='{"total": {"lines": {"pct": "N/A"}}}'
+              fi
+            else
+              coverage='{"total": {"lines": {"pct": "No coverage data"}}}'
+            fi
+            
+            # Create app entry in summary
+            jq --arg app "$app" --argjson cov "$coverage" --arg status "$test_status" \
+               '.apps[$app] = {"coverage": $cov, "status": $status}' \
+               $summary_file > temp.json && mv temp.json $summary_file
+          done
+          
+          # Output the summary
+          test_results=$(cat $summary_file)
+          echo "test-results<<EOF" >> $GITHUB_OUTPUT
+          echo "$test_results" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+      - name: Upload summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-summary
+          path: test-summary.json
+          retention-days: 1

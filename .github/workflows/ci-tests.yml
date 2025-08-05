@@ -26,3 +26,159 @@ jobs:
       apps: '["backend", "device-service", "frontend", "smoker"]'
       mode: "build"
       ref: ${{ github.ref }}
+
+  # Report test results on PR
+  report-results:
+    needs: [test-apps, build-validation]
+    runs-on: ubuntu-latest
+    if: always() && github.event_name == 'pull_request'
+    permissions:
+      pull-requests: write
+      contents: read
+    
+    steps:
+      - name: Download test artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Generate PR comment
+        id: generate-comment
+        run: |
+          echo "# 🧪 Test Results Summary" > comment.md
+          echo "" >> comment.md
+          
+          # Check overall status
+          test_status="${{ needs.test-apps.result }}"
+          build_status="${{ needs.build-validation.result }}"
+          
+          if [[ "$test_status" == "success" && "$build_status" == "success" ]]; then
+            echo "✅ **All tests passed and builds successful!**" >> comment.md
+            overall_status="✅"
+          elif [[ "$test_status" == "failure" || "$build_status" == "failure" ]]; then
+            echo "❌ **Some tests failed or builds unsuccessful**" >> comment.md
+            overall_status="❌"
+          else
+            echo "⚠️ **Tests completed with warnings**" >> comment.md
+            overall_status="⚠️"
+          fi
+          
+          echo "" >> comment.md
+          echo "## Test Status by Application" >> comment.md
+          echo "" >> comment.md
+          echo "| Application | Test Status | Coverage | Build Status |" >> comment.md
+          echo "|-------------|-------------|----------|--------------|" >> comment.md
+          
+          # Process each app
+          apps=("backend" "device-service" "frontend" "smoker" "TemperatureChart")
+          failed_apps=()
+          
+          for app in "${apps[@]}"; do
+            # Check test status
+            status_file="./artifacts/test-status-$app/test-status.txt"
+            if [ -f "$status_file" ]; then
+              test_result=$(cat "$status_file" 2>/dev/null || echo "unknown")
+              if [ "$test_result" = "success" ]; then
+                test_status_icon="✅ Passed"
+              else
+                test_status_icon="❌ Failed"
+                failed_apps+=("$app")
+              fi
+            else
+              test_status_icon="⚠️ No data"
+              failed_apps+=("$app")
+            fi
+            
+            # Check if coverage artifact exists and extract coverage
+            coverage_pct="N/A"
+            if [ -d "./artifacts/coverage-$app" ]; then
+              # Try different coverage file formats
+              if [ -f "./artifacts/coverage-$app/coverage-summary.json" ]; then
+                coverage_pct=$(jq -r '.total.lines.pct // "N/A"' "./artifacts/coverage-$app/coverage-summary.json" 2>/dev/null || echo "N/A")
+                if [ "$coverage_pct" != "N/A" ] && [ "$coverage_pct" != "null" ]; then
+                  coverage_pct="${coverage_pct}%"
+                fi
+              elif [ -f "./artifacts/coverage-$app/lcov.info" ]; then
+                # Parse lcov.info for coverage percentage
+                lines_found=$(grep -c '^LF:' "./artifacts/coverage-$app/lcov.info" 2>/dev/null || echo "0")
+                lines_hit=$(grep -c '^LH:' "./artifacts/coverage-$app/lcov.info" 2>/dev/null || echo "0")
+                if [ "$lines_found" -gt 0 ]; then
+                  total_lines=$(grep '^LF:' "./artifacts/coverage-$app/lcov.info" | awk -F: '{sum += $2} END {print sum}' || echo "0")
+                  hit_lines=$(grep '^LH:' "./artifacts/coverage-$app/lcov.info" | awk -F: '{sum += $2} END {print sum}' || echo "0")
+                  if [ "$total_lines" -gt 0 ]; then
+                    coverage_pct=$(( hit_lines * 100 / total_lines ))
+                    coverage_pct="${coverage_pct}%"
+                  fi
+                fi
+              else
+                coverage_pct="📊 Available"
+              fi
+            fi
+            
+            # Build status (for apps that have builds)
+            if [[ "$app" == "TemperatureChart" ]]; then
+              build_status_icon="N/A"
+            elif [[ "$build_status" == "success" ]]; then
+              build_status_icon="✅ Passed"
+            else
+              build_status_icon="❌ Failed"
+            fi
+            
+            echo "| $app | $test_status_icon | $coverage_pct | $build_status_icon |" >> comment.md
+          done
+          
+          # Add failed tests details if any
+          if [ ${#failed_apps[@]} -gt 0 ]; then
+            echo "" >> comment.md
+            echo "## ❌ Failed Tests Details" >> comment.md
+            echo "" >> comment.md
+            echo "The following applications had test failures:" >> comment.md
+            for app in "${failed_apps[@]}"; do
+              echo "- **$app**: Check the test logs for detailed error information" >> comment.md
+            done
+          fi
+          
+          echo "" >> comment.md
+          echo "## Build Status" >> comment.md
+          echo "" >> comment.md
+          if [[ "$build_status" == "success" ]]; then
+            echo "✅ All applications built successfully" >> comment.md
+          elif [[ "$build_status" == "failure" ]]; then
+            echo "❌ Some applications failed to build - check build logs for details" >> comment.md
+          else
+            echo "⚠️ Build validation completed with issues" >> comment.md
+          fi
+          
+          echo "" >> comment.md
+          echo "## 📊 Coverage Summary" >> comment.md
+          echo "" >> comment.md
+          echo "Coverage reports are available for each application. Review the detailed reports in the job artifacts for complete metrics including line, branch, and function coverage." >> comment.md
+          
+          echo "" >> comment.md
+          echo "---" >> comment.md
+          echo "*🤖 Generated automatically by CI workflow • Last updated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')*" >> comment.md
+          
+          # Set output for comment body
+          comment_body=$(cat comment.md)
+          echo "comment-body<<EOF" >> $GITHUB_OUTPUT
+          echo "$comment_body" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Find existing comment
+        uses: peter-evans/find-comment@v3
+        id: find-comment
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: 'github-actions[bot]'
+          body-includes: '🧪 Test Results Summary'
+
+      - name: Create or update PR comment
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          comment-id: ${{ steps.find-comment.outputs.comment-id }}
+          issue-number: ${{ github.event.pull_request.number }}
+          body: ${{ steps.generate-comment.outputs.comment-body }}
+          edit-mode: replace
