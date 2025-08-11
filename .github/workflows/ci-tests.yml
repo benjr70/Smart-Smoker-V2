@@ -151,21 +151,29 @@ jobs:
             if [ -d "./artifacts/coverage-$app" ]; then
               # Debug: Show what files exist
               echo "=== DEBUG: Coverage files for $app ===" >&2
-              find "./artifacts/coverage-$app" -type f | head -5 >&2
+              find "./artifacts/coverage-$app" -maxdepth 3 -type f -name "coverage-summary.json" -o -name "lcov.info" | sed 's/^/  - /' | head -10 >&2
               
-              # Try multiple possible paths for coverage-summary.json
+              # Try multiple possible paths for coverage-summary.json based on app type
               coverage_summary_path=""
-              for possible_path in \
-                "./artifacts/coverage-$app/coverage/coverage-summary.json" \
-                "./artifacts/coverage-$app/apps/$app/coverage/coverage-summary.json" \
-                "./artifacts/coverage-$app/packages/$app/coverage/coverage-summary.json" \
-                "./artifacts/coverage-$app/coverage-summary.json"; do
-                if [ -f "$possible_path" ]; then
-                  coverage_summary_path="$possible_path"
-                  echo "Found coverage-summary.json at: $possible_path" >&2
-                  break
-                fi
-              done
+              if [ "$app" = "TemperatureChart" ]; then
+                # Look in packages/TemperatureChart/coverage first
+                for possible_path in "./artifacts/coverage-$app/packages/TemperatureChart/coverage/coverage-summary.json" "./artifacts/coverage-$app/coverage-summary.json"; do
+                  if [ -f "$possible_path" ]; then
+                    coverage_summary_path="$possible_path"
+                    echo "Found coverage-summary.json at: $possible_path" >&2
+                    break
+                  fi
+                done
+              else
+                # Look in apps/app/coverage first
+                for possible_path in "./artifacts/coverage-$app/apps/$app/coverage/coverage-summary.json" "./artifacts/coverage-$app/coverage-summary.json"; do
+                  if [ -f "$possible_path" ]; then
+                    coverage_summary_path="$possible_path"
+                    echo "Found coverage-summary.json at: $possible_path" >&2
+                    break
+                  fi
+                done
+              fi
               
               # Try to get the most comprehensive coverage display
               if [ -n "$coverage_summary_path" ] && [ -f "$coverage_summary_path" ]; then
@@ -196,17 +204,25 @@ jobs:
               else
                 # Try multiple possible paths for lcov.info as fallback
                 lcov_path=""
-                for possible_path in \
-                  "./artifacts/coverage-$app/coverage/lcov.info" \
-                  "./artifacts/coverage-$app/apps/$app/coverage/lcov.info" \
-                  "./artifacts/coverage-$app/packages/$app/coverage/lcov.info" \
-                  "./artifacts/coverage-$app/lcov.info"; do
-                  if [ -f "$possible_path" ]; then
-                    lcov_path="$possible_path"
-                    echo "Found lcov.info at: $possible_path" >&2
-                    break
-                  fi
-                done
+                if [ "$app" = "TemperatureChart" ]; then
+                  # Look in packages/TemperatureChart/coverage first
+                  for possible_path in "./artifacts/coverage-$app/packages/TemperatureChart/coverage/lcov.info" "./artifacts/coverage-$app/lcov.info"; do
+                    if [ -f "$possible_path" ]; then
+                      lcov_path="$possible_path"
+                      echo "Found lcov.info at: $possible_path" >&2
+                      break
+                    fi
+                  done
+                else
+                  # Look in apps/app/coverage first
+                  for possible_path in "./artifacts/coverage-$app/apps/$app/coverage/lcov.info" "./artifacts/coverage-$app/lcov.info"; do
+                    if [ -f "$possible_path" ]; then
+                      lcov_path="$possible_path"
+                      echo "Found lcov.info at: $possible_path" >&2
+                      break
+                    fi
+                  done
+                fi
                 
                 if [ -n "$lcov_path" ] && [ -f "$lcov_path" ]; then
                   echo "Using lcov.info for $app at: $lcov_path" >&2
@@ -217,8 +233,8 @@ jobs:
                   hit_branches=$(grep '^BRH:' "$lcov_path" | awk -F: '{sum += $2} END {print sum}' 2>/dev/null || echo "0")
                   total_functions=$(grep '^FNF:' "$lcov_path" | awk -F: '{sum += $2} END {print sum}' 2>/dev/null || echo "0")
                   hit_functions=$(grep '^FNH:' "$lcov_path" | awk -F: '{sum += $2} END {print sum}' 2>/dev/null || echo "0")
-                
-                echo "LCOV totals - Lines: $hit_lines/$total_lines, Branches: $hit_branches/$total_branches, Functions: $hit_functions/$total_functions" >&2
+                  
+                  echo "LCOV totals - Lines: $hit_lines/$total_lines, Branches: $hit_branches/$total_branches, Functions: $hit_functions/$total_functions" >&2
                 
                 coverage_display=""
                 if [ "$total_lines" -gt 0 ]; then
@@ -240,8 +256,28 @@ jobs:
                 
                 # Remove trailing <br> if exists
                 coverage_display=$(echo "$coverage_display" | sed 's/<br>$//')
+                fi
+              else
+                echo "No recognized coverage files found for $app" >&2
+                # Fallback: parse textual coverage summary from Jest output
+                test_output="./artifacts/test-status-$app/test-output.log"
+                if [ -f "$test_output" ]; then
+                  summary_line=$(grep -E "All files\s+\|" "$test_output" | tail -1 || true)
+                  if [ -n "$summary_line" ]; then
+                    # Extract columns: % Stmts | % Branch | % Funcs | % Lines
+                    stmts_pct=$(echo "$summary_line" | awk -F'\|' '{print $3}' | tr -d ' %' | xargs)
+                    branches_pct=$(echo "$summary_line" | awk -F'\|' '{print $4}' | tr -d ' %' | xargs)
+                    funcs_pct=$(echo "$summary_line" | awk -F'\|' '{print $5}' | tr -d ' %' | xargs)
+                    lines_pct=$(echo "$summary_line" | awk -F'\|' '{print $6}' | tr -d ' %' | xargs)
+                    if [ -n "$lines_pct" ]; then
+                      coverage_display="**Lines:** ${lines_pct}%<br>**Branches:** ${branches_pct}%<br>**Functions:** ${funcs_pct}%<br>**Statements:** ${stmts_pct}%"
+                    else
+                      coverage_display="📊 Report available"
+                    fi
+                  else
+                    coverage_display="📊 Report available"
+                  fi
                 else
-                  echo "No recognized coverage files found for $app" >&2
                   coverage_display="📊 Report available"
                 fi
               fi
@@ -357,16 +393,23 @@ jobs:
               
               # Try multiple possible paths for coverage-summary.json (same logic as table section)
               coverage_summary_path=""
-              for possible_path in \
-                "./artifacts/coverage-$app/coverage/coverage-summary.json" \
-                "./artifacts/coverage-$app/apps/$app/coverage/coverage-summary.json" \
-                "./artifacts/coverage-$app/packages/$app/coverage/coverage-summary.json" \
-                "./artifacts/coverage-$app/coverage-summary.json"; do
-                if [ -f "$possible_path" ]; then
-                  coverage_summary_path="$possible_path"
-                  break
-                fi
-              done
+              if [ "$app" = "TemperatureChart" ]; then
+                # Look in packages/TemperatureChart/coverage first
+                for possible_path in "./artifacts/coverage-$app/packages/TemperatureChart/coverage/coverage-summary.json" "./artifacts/coverage-$app/coverage-summary.json"; do
+                  if [ -f "$possible_path" ]; then
+                    coverage_summary_path="$possible_path"
+                    break
+                  fi
+                done
+              else
+                # Look in apps/app/coverage first
+                for possible_path in "./artifacts/coverage-$app/apps/$app/coverage/coverage-summary.json" "./artifacts/coverage-$app/coverage-summary.json"; do
+                  if [ -f "$possible_path" ]; then
+                    coverage_summary_path="$possible_path"
+                    break
+                  fi
+                done
+              fi
               
               if [ -n "$coverage_summary_path" ] && [ -f "$coverage_summary_path" ]; then
                 # Extract detailed coverage metrics from Jest summary
@@ -388,7 +431,29 @@ jobs:
                   echo "- **Statements**: ${statements_pct}%" >> comment.md
                 fi
               else
-                echo "- Coverage data available in artifacts" >> comment.md
+                # Fallback: parse textual coverage summary from Jest output
+                test_output="./artifacts/test-status-$app/test-output.log"
+                if [ -f "$test_output" ]; then
+                  summary_line=$(grep -E "All files\s+\|" "$test_output" | tail -1 || true)
+                  if [ -n "$summary_line" ]; then
+                    stmts_pct=$(echo "$summary_line" | awk -F'\|' '{print $3}' | tr -d ' %' | xargs)
+                    branches_pct=$(echo "$summary_line" | awk -F'\|' '{print $4}' | tr -d ' %' | xargs)
+                    functions_pct=$(echo "$summary_line" | awk -F'\|' '{print $5}' | tr -d ' %' | xargs)
+                    lines_pct=$(echo "$summary_line" | awk -F'\|' '{print $6}' | tr -d ' %' | xargs)
+                    if [ -n "$lines_pct" ]; then
+                      echo "- **Lines**: ${lines_pct}%" >> comment.md
+                      echo "- **Branches**: ${branches_pct}%" >> comment.md
+                      echo "- **Functions**: ${functions_pct}%" >> comment.md
+                      echo "- **Statements**: ${stmts_pct}%" >> comment.md
+                    else
+                      echo "- Coverage data available in artifacts" >> comment.md
+                    fi
+                  else
+                    echo "- Coverage data available in artifacts" >> comment.md
+                  fi
+                else
+                  echo "- Coverage data available in artifacts" >> comment.md
+                fi
               fi
               echo "" >> comment.md
             fi

@@ -71,19 +71,23 @@ jobs:
         run: |
           case "${{ matrix.app }}" in
             "backend")
-              npm run test:cov --prefix apps/backend -- --coverageReporters=json-summary --coverageReporters=lcov --coverageReporters=text --reporters=default --reporters=jest-junit --outputFile=test-results.xml 2>&1 | tee test-output.log
+              npm run test:cov --prefix apps/backend -- --coverageReporters=json-summary --coverageReporters=lcov --coverageReporters=text 2>&1 | tee test-output.log
               ;;
             "device-service")
-              npm run test:cov --prefix apps/device-service -- --coverageReporters=json-summary --coverageReporters=lcov --coverageReporters=text --reporters=default --reporters=jest-junit --outputFile=test-results.xml 2>&1 | tee test-output.log
+              npm run test:cov --prefix apps/device-service -- --coverageReporters=json-summary --coverageReporters=lcov --coverageReporters=text 2>&1 | tee test-output.log
               ;;
             "frontend")
-              npm run test --prefix apps/frontend -- --watchAll=false --coverage --coverageReporters=json-summary --coverageReporters=lcov --coverageReporters=text --reporters=default --reporters=jest-junit --outputFile=test-results.xml 2>&1 | tee test-output.log
+              cd apps/frontend
+              CI=true npm test -- --watchAll=false --coverage 2>&1 | tee ../../test-output.log
+              cd ../..
               ;;
             "smoker")
-              npm run test --prefix apps/smoker -- --coverage --coverageReporters=json-summary --coverageReporters=lcov --coverageReporters=text --reporters=default --reporters=jest-junit --outputFile=test-results.xml 2>&1 | tee test-output.log
+              cd apps/smoker
+              CI=true npm test -- --watchAll=false --coverage 2>&1 | tee ../../test-output.log
+              cd ../..
               ;;
             "TemperatureChart")
-              npm run test:coverage --prefix packages/TemperatureChart -- --coverageReporters=json-summary --coverageReporters=lcov --coverageReporters=text --reporters=default --reporters=jest-junit --outputFile=test-results.xml 2>&1 | tee test-output.log
+              npm run test:coverage --prefix packages/TemperatureChart -- --coverageReporters=json-summary --coverageReporters=lcov --coverageReporters=text 2>&1 | tee test-output.log
               ;;
             *)
               echo "Unknown app: ${{ matrix.app }}"
@@ -127,16 +131,70 @@ jobs:
             fi
           fi
 
-      # Upload coverage reports
+      # Prepare coverage artifact with a consistent structure
+      - name: Prepare coverage artifact
+        if: always()
+        run: |
+          set -e
+          mkdir -p artifacts_to_upload
+          
+          # Determine where to search for coverage and where to place it in artifact
+          if [ "${{ matrix.app }}" = "TemperatureChart" ]; then
+            search_root="packages/TemperatureChart"
+            rel_dest="packages/TemperatureChart/coverage"
+          else
+            search_root="apps/${{ matrix.app }}"
+            rel_dest="apps/${{ matrix.app }}/coverage"
+          fi
+          
+          echo "Searching for coverage under: $search_root" >&2
+          
+          # Look for coverage directory directly in the app root first
+          if [ -d "$search_root/coverage" ]; then
+            coverage_dir="$search_root/coverage"
+            echo "Found coverage directory at: $coverage_dir" >&2
+          else
+            # Fallback: search recursively for any coverage files
+            coverage_file=$(find "$search_root" -type f \( -name coverage-summary.json -o -name lcov.info \) | head -n1 || true)
+            if [ -n "$coverage_file" ]; then
+              coverage_dir=$(dirname "$coverage_file")
+              echo "Found coverage files at: $coverage_dir" >&2
+            else
+              echo "No coverage directory or files found under $search_root" >&2
+              echo "Available directories in $search_root:" >&2
+              ls -la "$search_root" 2>/dev/null >&2 || true
+              # Try a global search as last resort
+              coverage_file=$(find . -path "./node_modules" -prune -o -type f \( -name coverage-summary.json -o -name lcov.info \) -print | grep "/${{ matrix.app }}/" | head -n1 || true)
+              if [ -n "$coverage_file" ]; then
+                coverage_dir=$(dirname "$coverage_file")
+                echo "Global search found coverage at: $coverage_dir" >&2
+              else
+                echo "No coverage files found anywhere for ${{ matrix.app }}" >&2
+                exit 0
+              fi
+            fi
+          fi
+          
+          # Create destination and copy coverage files
+          dst_path="artifacts_to_upload/$rel_dest"
+          mkdir -p "$dst_path"
+          
+          if [ -d "$coverage_dir" ] && [ "$(ls -A "$coverage_dir" 2>/dev/null)" ]; then
+            cp -R "$coverage_dir/"* "$dst_path/" 2>/dev/null || true
+            echo "Copied coverage files from $coverage_dir to $dst_path" >&2
+            echo "Files copied:" >&2
+            ls -la "$dst_path" 2>/dev/null >&2 || true
+          else
+            echo "Coverage directory $coverage_dir is empty or does not exist" >&2
+          fi
+
+      # Upload coverage reports (from prepared directory)
       - name: Upload coverage reports
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: coverage-${{ matrix.app }}
-          path: |
-            coverage/
-            apps/${{ matrix.app }}/coverage/
-            packages/${{ matrix.app }}/coverage/
+          path: artifacts_to_upload/**
           retention-days: 1
 
       # Debug: Show what coverage files exist before upload
@@ -147,25 +205,30 @@ jobs:
           echo "Current directory: $(pwd)" >&2
           echo "Looking for coverage files..." >&2
           
-          if [ -d "coverage" ]; then
-            echo "Found root coverage directory:" >&2
-            find coverage -name "*.json" -o -name "*.info" 2>/dev/null | head -5 >&2
+          # Check for coverage in the correct app-specific location
+          if [ "${{ matrix.app }}" = "TemperatureChart" ]; then
+            coverage_path="packages/TemperatureChart/coverage"
           else
-            echo "No root coverage directory" >&2
+            coverage_path="apps/${{ matrix.app }}/coverage"
           fi
           
-          if [ -d "apps/${{ matrix.app }}/coverage" ]; then
-            echo "Found apps/${{ matrix.app }}/coverage directory:" >&2
-            find "apps/${{ matrix.app }}/coverage" -name "*.json" -o -name "*.info" 2>/dev/null | head -5 >&2
+          if [ -d "$coverage_path" ]; then
+            echo "Found coverage directory at: $coverage_path" >&2
+            echo "Coverage files:" >&2
+            find "$coverage_path" -name "*.json" -o -name "*.info" 2>/dev/null | head -10 >&2
+            
+            # Check for specific coverage files
+            if [ -f "$coverage_path/coverage-summary.json" ]; then
+              echo "Found coverage-summary.json" >&2
+              echo "Coverage summary content:" >&2
+              jq '.total' "$coverage_path/coverage-summary.json" 2>/dev/null >&2 || echo "Could not parse coverage-summary.json" >&2
+            fi
+            
+            if [ -f "$coverage_path/lcov.info" ]; then
+              echo "Found lcov.info" >&2
+            fi
           else
-            echo "No apps/${{ matrix.app }}/coverage directory" >&2
-          fi
-          
-          if [ -d "packages/${{ matrix.app }}/coverage" ]; then
-            echo "Found packages/${{ matrix.app }}/coverage directory:" >&2
-            find "packages/${{ matrix.app }}/coverage" -name "*.json" -o -name "*.info" 2>/dev/null | head -5 >&2
-          else
-            echo "No packages/${{ matrix.app }}/coverage directory" >&2
+            echo "No coverage directory found at: $coverage_path" >&2
           fi
 
       # Upload test status
@@ -180,17 +243,49 @@ jobs:
             test-output.log
           retention-days: 1
 
-      # Upload test results 
+      # Prepare test results artifact (JUnit XML)
+      - name: Prepare test results artifact
+        if: always()
+        run: |
+          mkdir -p junit_to_upload
+          results_file=""
+          # Prefer a jest-junit XML if present; otherwise try CRA default locations
+          # Try common locations for the JUnit file
+          for p in \
+            "apps/${{ matrix.app }}/test-results.xml" \
+            "apps/${{ matrix.app }}/junit.xml" \
+            "packages/${{ matrix.app }}/test-results.xml" \
+            "packages/${{ matrix.app }}/junit.xml" \
+            "apps/${{ matrix.app }}/coverage/junit.xml" \
+            "packages/${{ matrix.app }}/coverage/junit.xml" \
+            "test-results.xml"; do
+            if [ -f "$p" ]; then
+              results_file="$p"
+              break
+            fi
+          done
+          if [ -n "$results_file" ]; then
+            if [[ "$results_file" == apps/* ]]; then
+              app_dir="apps/${{ matrix.app }}"
+            elif [[ "$results_file" == packages/* ]]; then
+              app_dir="packages/${{ matrix.app }}"
+            else
+              app_dir="."
+            fi
+            mkdir -p "junit_to_upload/$app_dir"
+            cp "$results_file" "junit_to_upload/$app_dir/test-results.xml"
+            echo "Prepared test results from $results_file to junit_to_upload/$app_dir/test-results.xml" >&2
+          else
+            echo "No junit results file found" >&2
+          fi
+
+      # Upload test results (from prepared directory)
       - name: Upload test results
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: test-results-${{ matrix.app }}
-          path: |
-            apps/${{ matrix.app }}/test-results.xml
-            apps/${{ matrix.app }}/junit.xml
-            packages/${{ matrix.app }}/test-results.xml
-            packages/${{ matrix.app }}/junit.xml
+          path: junit_to_upload/**
           retention-days: 1
 
   # Collect and summarize results
@@ -245,9 +340,32 @@ jobs:
             # Check if coverage exists
             coverage_dir="./artifacts/coverage-$app"
             if [ -d "$coverage_dir" ]; then
-              # Try to find coverage summary
-              if [ -f "$coverage_dir/coverage-summary.json" ]; then
-                coverage=$(cat "$coverage_dir/coverage-summary.json")
+              # Try to find coverage summary in the correct location
+              coverage_summary_path=""
+              if [ "$app" = "TemperatureChart" ]; then
+                # Look in packages/TemperatureChart/coverage first
+                for possible_path in \
+                  "$coverage_dir/packages/TemperatureChart/coverage/coverage-summary.json" \
+                  "$coverage_dir/coverage-summary.json"; do
+                  if [ -f "$possible_path" ]; then
+                    coverage_summary_path="$possible_path"
+                    break
+                  fi
+                done
+              else
+                # Look in apps/app/coverage first
+                for possible_path in \
+                  "$coverage_dir/apps/$app/coverage/coverage-summary.json" \
+                  "$coverage_dir/coverage-summary.json"; do
+                  if [ -f "$possible_path" ]; then
+                    coverage_summary_path="$possible_path"
+                    break
+                  fi
+                done
+              fi
+              
+              if [ -n "$coverage_summary_path" ] && [ -f "$coverage_summary_path" ]; then
+                coverage=$(cat "$coverage_summary_path")
               elif [ -f "$coverage_dir/lcov-report/index.html" ]; then
                 coverage='{"total": {"lines": {"pct": "Available in HTML report"}}}'
               else

@@ -69,7 +69,6 @@
     "moduleNameMapper": {
       "\\.(css|less|scss)$": "identity-obj-proxy"
     },
-    "coverageDirectory": "coverage",
     "coverageReporters": [
       "json-summary",
       "lcov",
