@@ -238,52 +238,50 @@ jobs:
                   hit_functions=$(grep '^FNH:' "$lcov_path" | awk -F: '{sum += $2} END {print sum}' 2>/dev/null || echo "0")
                   
                   echo "LCOV totals - Lines: $hit_lines/$total_lines, Branches: $hit_branches/$total_branches, Functions: $hit_functions/$total_functions" >&2
-                
-                coverage_display=""
-                if [ "$total_lines" -gt 0 ]; then
-                  lines_pct=$(awk "BEGIN {printf \"%.1f\", ($hit_lines / $total_lines) * 100}")
-                  coverage_display="**Lines:** ${lines_pct}%<br>"
-                fi
-                if [ "$total_branches" -gt 0 ]; then
-                  branches_pct=$(awk "BEGIN {printf \"%.1f\", ($hit_branches / $total_branches) * 100}")
-                  coverage_display+="**Branches:** ${branches_pct}%<br>"
-                fi
-                if [ "$total_functions" -gt 0 ]; then
-                  functions_pct=$(awk "BEGIN {printf \"%.1f\", ($hit_functions / $total_functions) * 100}")
-                  coverage_display+="**Functions:** ${functions_pct}%<br>"
-                fi
-                # For statements, use lines as approximation if no separate statement data
-                if [ "$total_lines" -gt 0 ]; then
-                  coverage_display+="**Statements:** ${lines_pct}%"
-                fi
-                
-                # Remove trailing <br> if exists
-                coverage_display=$(echo "$coverage_display" | sed 's/<br>$//')
+                  
+                  coverage_display=""
+                  if [ "$total_lines" -gt 0 ]; then
+                    lines_pct=$(awk "BEGIN {printf \"%.1f\", ($hit_lines / $total_lines) * 100}")
+                    coverage_display="**Lines:** ${lines_pct}%<br>"
+                  fi
+                  if [ "$total_branches" -gt 0 ]; then
+                    branches_pct=$(awk "BEGIN {printf \"%.1f\", ($hit_branches / $total_branches) * 100}")
+                    coverage_display+="**Branches:** ${branches_pct}%<br>"
+                  fi
+                  if [ "$total_functions" -gt 0 ]; then
+                    functions_pct=$(awk "BEGIN {printf \"%.1f\", ($hit_functions / $total_functions) * 100}")
+                    coverage_display+="**Functions:** ${functions_pct}%<br>"
+                  fi
+                  # For statements, use lines as approximation if no separate statement data
+                  if [ "$total_lines" -gt 0 ]; then
+                    coverage_display+="**Statements:** ${lines_pct}%"
+                  fi
+                  
+                  # Remove trailing <br> if exists
+                  coverage_display=$(echo "$coverage_display" | sed 's/<br>$//')
                 else
-                  coverage_display="📊 Report available"
-                fi
-              else
-                echo "No recognized coverage files found for $app" >&2
-                # Fallback: parse textual coverage summary from Jest output
-                test_output="./artifacts/test-status-$app/test-output.log"
-                if [ -f "$test_output" ]; then
-                  summary_line=$(grep -E "All files\s+\|" "$test_output" | tail -1 || true)
-                  if [ -n "$summary_line" ]; then
-                    # Extract columns: % Stmts | % Branch | % Funcs | % Lines
-                    stmts_pct=$(echo "$summary_line" | awk -F'\|' '{print $3}' | tr -d ' %' | xargs)
-                    branches_pct=$(echo "$summary_line" | awk -F'\|' '{print $4}' | tr -d ' %' | xargs)
-                    funcs_pct=$(echo "$summary_line" | awk -F'\|' '{print $5}' | tr -d ' %' | xargs)
-                    lines_pct=$(echo "$summary_line" | awk -F'\|' '{print $6}' | tr -d ' %' | xargs)
-                    if [ -n "$lines_pct" ]; then
-                      coverage_display="**Lines:** ${lines_pct}%<br>**Branches:** ${branches_pct}%<br>**Functions:** ${funcs_pct}%<br>**Statements:** ${stmts_pct}%"
+                  echo "No recognized coverage files found for $app" >&2
+                  # Fallback: parse textual coverage summary from Jest output
+                  test_output="./artifacts/test-status-$app/test-output.log"
+                  if [ -f "$test_output" ]; then
+                    summary_line=$(grep -E "All files\s+\|" "$test_output" | tail -1 || true)
+                    if [ -n "$summary_line" ]; then
+                      # Extract columns: % Stmts | % Branch | % Funcs | % Lines
+                      stmts_pct=$(echo "$summary_line" | awk -F'\|' '{print $3}' | tr -d ' %' | xargs)
+                      branches_pct=$(echo "$summary_line" | awk -F'\|' '{print $4}' | tr -d ' %' | xargs)
+                      funcs_pct=$(echo "$summary_line" | awk -F'\|' '{print $5}' | tr -d ' %' | xargs)
+                      lines_pct=$(echo "$summary_line" | awk -F'\|' '{print $6}' | tr -d ' %' | xargs)
+                      if [ -n "$lines_pct" ]; then
+                        coverage_display="**Lines:** ${lines_pct}%<br>**Branches:** ${branches_pct}%<br>**Functions:** ${funcs_pct}%<br>**Statements:** ${stmts_pct}%"
+                      else
+                        coverage_display="📊 Report available"
+                      fi
                     else
                       coverage_display="📊 Report available"
                     fi
                   else
                     coverage_display="📊 Report available"
                   fi
-                else
-                  coverage_display="📊 Report available"
                 fi
               fi
               
