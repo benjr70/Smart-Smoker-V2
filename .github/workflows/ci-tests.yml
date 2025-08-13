@@ -153,7 +153,7 @@ jobs:
               echo "=== DEBUG: Coverage files for $app ===" >&2
               find "./artifacts/coverage-$app" -maxdepth 3 -type f -name "coverage-summary.json" -o -name "lcov.info" | sed 's/^/  - /' | head -10 >&2
               
-              # Try multiple possible paths for coverage-summary.json based on app type
+                            # Try multiple possible paths for coverage-summary.json based on app type
               coverage_summary_path=""
               if [ "$app" = "TemperatureChart" ]; then
                 # Look in packages/TemperatureChart/coverage first
@@ -198,8 +198,11 @@ jobs:
                   if [ "$statements_pct" != "N/A" ] && [ "$statements_pct" != "null" ]; then
                     coverage_display+="**Statements:** ${statements_pct}%"
                   fi
+                  # Remove trailing <br> if exists
+                  coverage_display=$(echo "$coverage_display" | sed 's/<br>$//')
                 else
                   echo "Lines percentage was N/A or null" >&2
+                  coverage_display="📊 Report available"
                 fi
               else
                 # Try multiple possible paths for lcov.info as fallback
@@ -256,6 +259,8 @@ jobs:
                 
                 # Remove trailing <br> if exists
                 coverage_display=$(echo "$coverage_display" | sed 's/<br>$//')
+                else
+                  coverage_display="📊 Report available"
                 fi
               else
                 echo "No recognized coverage files found for $app" >&2

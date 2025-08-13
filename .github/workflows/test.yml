@@ -251,14 +251,7 @@ jobs:
           results_file=""
           # Prefer a jest-junit XML if present; otherwise try CRA default locations
           # Try common locations for the JUnit file
-          for p in \
-            "apps/${{ matrix.app }}/test-results.xml" \
-            "apps/${{ matrix.app }}/junit.xml" \
-            "packages/${{ matrix.app }}/test-results.xml" \
-            "packages/${{ matrix.app }}/junit.xml" \
-            "apps/${{ matrix.app }}/coverage/junit.xml" \
-            "packages/${{ matrix.app }}/coverage/junit.xml" \
-            "test-results.xml"; do
+          for p in "apps/${{ matrix.app }}/test-results.xml" "apps/${{ matrix.app }}/junit.xml" "packages/${{ matrix.app }}/test-results.xml" "packages/${{ matrix.app }}/junit.xml" "apps/${{ matrix.app }}/coverage/junit.xml" "packages/${{ matrix.app }}/coverage/junit.xml" "test-results.xml"; do
             if [ -f "$p" ]; then
               results_file="$p"
               break
@@ -344,9 +337,7 @@ jobs:
               coverage_summary_path=""
               if [ "$app" = "TemperatureChart" ]; then
                 # Look in packages/TemperatureChart/coverage first
-                for possible_path in \
-                  "$coverage_dir/packages/TemperatureChart/coverage/coverage-summary.json" \
-                  "$coverage_dir/coverage-summary.json"; do
+                for possible_path in "$coverage_dir/packages/TemperatureChart/coverage/coverage-summary.json" "$coverage_dir/coverage-summary.json"; do
                   if [ -f "$possible_path" ]; then
                     coverage_summary_path="$possible_path"
                     break
@@ -354,9 +345,7 @@ jobs:
                 done
               else
                 # Look in apps/app/coverage first
-                for possible_path in \
-                  "$coverage_dir/apps/$app/coverage/coverage-summary.json" \
-                  "$coverage_dir/coverage-summary.json"; do
+                for possible_path in "$coverage_dir/apps/$app/coverage/coverage-summary.json" "$coverage_dir/coverage-summary.json"; do
                   if [ -f "$possible_path" ]; then
                     coverage_summary_path="$possible_path"
                     break
