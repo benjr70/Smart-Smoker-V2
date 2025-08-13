@@ -372,20 +372,10 @@ jobs:
             echo "- **TemperatureChart**: 75% lines/branches/statements, 45% functions" >> comment.md
           fi
           
-          echo "" >> comment.md
-          echo "## Build Status" >> comment.md
-          echo "" >> comment.md
-          if [[ "$build_status" == "success" ]]; then
-            echo "✅ All applications built successfully" >> comment.md
-          elif [[ "$build_status" == "failure" ]]; then
-            echo "❌ Some applications failed to build - check build logs for details" >> comment.md
-          else
-            echo "⚠️ Build validation completed with issues" >> comment.md
           fi
           
           echo "" >> comment.md
-          echo "## 📊 Coverage Summary" >> comment.md
-          echo "" >> comment.md
+          echo "---" >> comment.md
           
           # Show detailed coverage breakdown for each app
           has_coverage_data=false
