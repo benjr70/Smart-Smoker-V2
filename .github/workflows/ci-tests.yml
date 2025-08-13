@@ -26,3 +26,391 @@ jobs:
       apps: '["backend", "device-service", "frontend", "smoker"]'
       mode: "build"
       ref: ${{ github.ref }}
+
+  # Report test results on PR
+  report-results:
+    needs: [test-apps, build-validation]
+    runs-on: ubuntu-latest
+    if: always() && github.event_name == 'pull_request'
+    permissions:
+      pull-requests: write
+      contents: read
+    
+    steps:
+      - name: Download test artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Generate PR comment
+        id: generate-comment
+        run: |
+          echo "=== DEBUG: Starting PR comment generation ===" >&2
+          echo "Event name: ${{ github.event_name }}" >&2
+          echo "PR number: ${{ github.event.pull_request.number }}" >&2
+          echo "Test apps result: ${{ needs.test-apps.result }}" >&2
+          echo "Build validation result: ${{ needs.build-validation.result }}" >&2
+          
+          echo "# 🧪 Test Results Summary" > comment.md
+          echo "" >> comment.md
+          
+          # Process each app first to build the arrays
+          apps=("backend" "device-service" "frontend" "smoker" "TemperatureChart")
+          failed_apps=()
+          coverage_failed_apps=()
+          
+          for app in "${apps[@]}"; do
+            # Check test status and details
+            status_file="./artifacts/test-status-$app/test-status.txt"
+            details_file="./artifacts/test-status-$app/test-details.txt"
+            
+            if [ -f "$status_file" ]; then
+              test_result=$(cat "$status_file" 2>/dev/null || echo "unknown")
+              test_details=$(cat "$details_file" 2>/dev/null || echo "No details available")
+              
+              if [ "$test_result" != "success" ]; then
+                if [[ "$test_details" == *"coverage thresholds not met"* ]]; then
+                  coverage_failed_apps+=("$app")
+                else
+                  failed_apps+=("$app")
+                fi
+              fi
+            else
+              failed_apps+=("$app")
+            fi
+          done
+          
+          # Now determine overall status
+          test_status="${{ needs.test-apps.result }}"
+          build_status="${{ needs.build-validation.result }}"
+          
+          if [[ "$test_status" == "success" && "$build_status" == "success" ]]; then
+            echo "✅ **All tests passed, coverage thresholds met, and builds successful!**" >> comment.md
+            overall_status="✅"
+          elif [[ "$test_status" == "failure" || "$build_status" == "failure" ]]; then
+            # Determine if failures are due to coverage or actual test failures
+            if [ ${#coverage_failed_apps[@]} -gt 0 ] && [ ${#failed_apps[@]} -eq 0 ]; then
+              echo "📊 **Tests passed but coverage thresholds not met**" >> comment.md
+            elif [ ${#failed_apps[@]} -gt 0 ] && [ ${#coverage_failed_apps[@]} -eq 0 ]; then
+              echo "❌ **Some tests failed**" >> comment.md
+            else
+              echo "❌ **Tests failed and/or coverage thresholds not met**" >> comment.md
+            fi
+            overall_status="❌"
+          else
+            echo "⚠️ **Tests completed with warnings**" >> comment.md
+            overall_status="⚠️"
+          fi
+          
+          echo "" >> comment.md
+          echo "## Test Status by Application" >> comment.md
+          echo "" >> comment.md
+          echo "| Application | Test Status | Coverage | Build Status |" >> comment.md
+          echo "|-------------|-------------|----------|--------------|" >> comment.md
+          
+          # Process each app again for the table
+          for app in "${apps[@]}"; do
+            # Check test status and details for display
+            status_file="./artifacts/test-status-$app/test-status.txt"
+            details_file="./artifacts/test-status-$app/test-details.txt"
+            
+            if [ -f "$status_file" ]; then
+              test_result=$(cat "$status_file" 2>/dev/null || echo "unknown")
+              test_details=$(cat "$details_file" 2>/dev/null || echo "No details available")
+              
+              if [ "$test_result" = "success" ]; then
+                test_status_icon="✅ Passed"
+              else
+                if [[ "$test_details" == *"coverage thresholds not met"* ]]; then
+                  test_status_icon="📊 Coverage below threshold"
+                else
+                  test_status_icon="❌ Tests failed"
+                fi
+              fi
+            else
+              test_status_icon="⚠️ No data"
+            fi
+            
+            # Check if coverage artifact exists and extract coverage
+            coverage_display="N/A"
+            
+            # Debug: Show what artifacts directories exist
+            echo "=== DEBUG: Looking for coverage-$app directory ===" >&2
+            if [ -d "./artifacts/coverage-$app" ]; then
+              echo "Found coverage directory for $app" >&2
+            else
+              echo "No coverage directory found for $app" >&2
+              # Show what directories actually exist
+              echo "Available directories:" >&2
+              ls -1 ./artifacts/ | grep -E "(coverage|$app)" >&2 || echo "No matching directories" >&2
+            fi
+            
+            if [ -d "./artifacts/coverage-$app" ]; then
+              # Debug: Show what files exist
+              echo "=== DEBUG: Coverage files for $app ===" >&2
+              find "./artifacts/coverage-$app" -maxdepth 3 -type f -name "coverage-summary.json" -o -name "lcov.info" | sed 's/^/  - /' | head -10 >&2
+              
+                            # Try multiple possible paths for coverage-summary.json based on app type
+              coverage_summary_path=""
+              if [ "$app" = "TemperatureChart" ]; then
+                # Look in packages/TemperatureChart/coverage first
+                for possible_path in "./artifacts/coverage-$app/packages/TemperatureChart/coverage/coverage-summary.json" "./artifacts/coverage-$app/coverage-summary.json"; do
+                  if [ -f "$possible_path" ]; then
+                    coverage_summary_path="$possible_path"
+                    echo "Found coverage-summary.json at: $possible_path" >&2
+                    break
+                  fi
+                done
+              else
+                # Look in apps/app/coverage first
+                for possible_path in "./artifacts/coverage-$app/apps/$app/coverage/coverage-summary.json" "./artifacts/coverage-$app/coverage-summary.json"; do
+                  if [ -f "$possible_path" ]; then
+                    coverage_summary_path="$possible_path"
+                    echo "Found coverage-summary.json at: $possible_path" >&2
+                    break
+                  fi
+                done
+              fi
+              
+              # Try to get the most comprehensive coverage display
+              if [ -n "$coverage_summary_path" ] && [ -f "$coverage_summary_path" ]; then
+                echo "Using coverage-summary.json for $app at: $coverage_summary_path" >&2
+                # Extract detailed coverage from Jest summary (preferred method)
+                lines_pct=$(jq -r '.total.lines.pct // "N/A"' "$coverage_summary_path" 2>/dev/null || echo "N/A")
+                branches_pct=$(jq -r '.total.branches.pct // "N/A"' "$coverage_summary_path" 2>/dev/null || echo "N/A")
+                functions_pct=$(jq -r '.total.functions.pct // "N/A"' "$coverage_summary_path" 2>/dev/null || echo "N/A")
+                statements_pct=$(jq -r '.total.statements.pct // "N/A"' "$coverage_summary_path" 2>/dev/null || echo "N/A")
+                
+                echo "Coverage extracted - Lines: $lines_pct, Branches: $branches_pct, Functions: $functions_pct, Statements: $statements_pct" >&2
+                
+                # Create detailed coverage display
+                if [ "$lines_pct" != "N/A" ] && [ "$lines_pct" != "null" ]; then
+                  coverage_display="**Lines:** ${lines_pct}%<br>"
+                  if [ "$branches_pct" != "N/A" ] && [ "$branches_pct" != "null" ]; then
+                    coverage_display+="**Branches:** ${branches_pct}%<br>"
+                  fi
+                  if [ "$functions_pct" != "N/A" ] && [ "$functions_pct" != "null" ]; then
+                    coverage_display+="**Functions:** ${functions_pct}%<br>"
+                  fi
+                  if [ "$statements_pct" != "N/A" ] && [ "$statements_pct" != "null" ]; then
+                    coverage_display+="**Statements:** ${statements_pct}%"
+                  fi
+                  # Remove trailing <br> if exists
+                  coverage_display=$(echo "$coverage_display" | sed 's/<br>$//')
+                else
+                  echo "Lines percentage was N/A or null" >&2
+                  coverage_display="📊 Report available"
+                fi
+              else
+                # Try multiple possible paths for lcov.info as fallback
+                lcov_path=""
+                if [ "$app" = "TemperatureChart" ]; then
+                  # Look in packages/TemperatureChart/coverage first
+                  for possible_path in "./artifacts/coverage-$app/packages/TemperatureChart/coverage/lcov.info" "./artifacts/coverage-$app/lcov.info"; do
+                    if [ -f "$possible_path" ]; then
+                      lcov_path="$possible_path"
+                      echo "Found lcov.info at: $possible_path" >&2
+                      break
+                    fi
+                  done
+                else
+                  # Look in apps/app/coverage first
+                  for possible_path in "./artifacts/coverage-$app/apps/$app/coverage/lcov.info" "./artifacts/coverage-$app/lcov.info"; do
+                    if [ -f "$possible_path" ]; then
+                      lcov_path="$possible_path"
+                      echo "Found lcov.info at: $possible_path" >&2
+                      break
+                    fi
+                  done
+                fi
+                
+                if [ -n "$lcov_path" ] && [ -f "$lcov_path" ]; then
+                  echo "Using lcov.info for $app at: $lcov_path" >&2
+                  # Parse lcov.info for coverage percentage (fallback)
+                  total_lines=$(grep '^LF:' "$lcov_path" | awk -F: '{sum += $2} END {print sum}' 2>/dev/null || echo "0")
+                  hit_lines=$(grep '^LH:' "$lcov_path" | awk -F: '{sum += $2} END {print sum}' 2>/dev/null || echo "0")
+                  total_branches=$(grep '^BRF:' "$lcov_path" | awk -F: '{sum += $2} END {print sum}' 2>/dev/null || echo "0")
+                  hit_branches=$(grep '^BRH:' "$lcov_path" | awk -F: '{sum += $2} END {print sum}' 2>/dev/null || echo "0")
+                  total_functions=$(grep '^FNF:' "$lcov_path" | awk -F: '{sum += $2} END {print sum}' 2>/dev/null || echo "0")
+                  hit_functions=$(grep '^FNH:' "$lcov_path" | awk -F: '{sum += $2} END {print sum}' 2>/dev/null || echo "0")
+                  
+                  echo "LCOV totals - Lines: $hit_lines/$total_lines, Branches: $hit_branches/$total_branches, Functions: $hit_functions/$total_functions" >&2
+                  
+                  coverage_display=""
+                  if [ "$total_lines" -gt 0 ]; then
+                    lines_pct=$(awk "BEGIN {printf \"%.1f\", ($hit_lines / $total_lines) * 100}")
+                    coverage_display="**Lines:** ${lines_pct}%<br>"
+                  fi
+                  if [ "$total_branches" -gt 0 ]; then
+                    branches_pct=$(awk "BEGIN {printf \"%.1f\", ($hit_branches / $total_branches) * 100}")
+                    coverage_display+="**Branches:** ${branches_pct}%<br>"
+                  fi
+                  if [ "$total_functions" -gt 0 ]; then
+                    functions_pct=$(awk "BEGIN {printf \"%.1f\", ($hit_functions / $total_functions) * 100}")
+                    coverage_display+="**Functions:** ${functions_pct}%<br>"
+                  fi
+                  # For statements, use lines as approximation if no separate statement data
+                  if [ "$total_lines" -gt 0 ]; then
+                    coverage_display+="**Statements:** ${lines_pct}%"
+                  fi
+                  
+                  # Remove trailing <br> if exists
+                  coverage_display=$(echo "$coverage_display" | sed 's/<br>$//')
+                else
+                  echo "No recognized coverage files found for $app" >&2
+                  # Fallback: parse textual coverage summary from Jest output
+                  test_output="./artifacts/test-status-$app/test-output.log"
+                  if [ -f "$test_output" ]; then
+                    summary_line=$(grep -E "All files\s+\|" "$test_output" | tail -1 || true)
+                    if [ -n "$summary_line" ]; then
+                      # Extract columns: % Stmts | % Branch | % Funcs | % Lines
+                      stmts_pct=$(echo "$summary_line" | awk -F'\|' '{print $3}' | tr -d ' %' | xargs)
+                      branches_pct=$(echo "$summary_line" | awk -F'\|' '{print $4}' | tr -d ' %' | xargs)
+                      funcs_pct=$(echo "$summary_line" | awk -F'\|' '{print $5}' | tr -d ' %' | xargs)
+                      lines_pct=$(echo "$summary_line" | awk -F'\|' '{print $6}' | tr -d ' %' | xargs)
+                      if [ -n "$lines_pct" ]; then
+                        coverage_display="**Lines:** ${lines_pct}%<br>**Branches:** ${branches_pct}%<br>**Functions:** ${funcs_pct}%<br>**Statements:** ${stmts_pct}%"
+                      else
+                        coverage_display="📊 Report available"
+                      fi
+                    else
+                      coverage_display="📊 Report available"
+                    fi
+                  else
+                    coverage_display="📊 Report available"
+                  fi
+                fi
+              fi
+              
+              # Final check - if coverage_display is still empty, set fallback
+              if [ -z "$coverage_display" ] || [ "$coverage_display" = "" ]; then
+                coverage_display="📊 Report available"
+              fi
+            else
+              echo "No coverage directory found for $app" >&2
+              coverage_display="❌ No data"
+            fi
+            
+            # Build status (for apps that have builds)
+            if [[ "$app" == "TemperatureChart" ]]; then
+              build_status_icon="N/A"
+            elif [[ "$build_status" == "success" ]]; then
+              build_status_icon="✅ Passed"
+            else
+              build_status_icon="❌ Failed"
+            fi
+            
+            echo "| $app | $test_status_icon | $coverage_display | $build_status_icon |" >> comment.md
+          done
+          
+          # Add failed tests details if any
+          if [ ${#failed_apps[@]} -gt 0 ]; then
+            echo "" >> comment.md
+            echo "## ❌ Failed Tests Details" >> comment.md
+            echo "" >> comment.md
+            echo "The following applications had test failures:" >> comment.md
+            for app in "${failed_apps[@]}"; do
+              echo "" >> comment.md
+              echo "### $app" >> comment.md
+              
+              # Try to get specific test failure details
+              details_file="./artifacts/test-status-$app/test-details.txt"
+              if [ -f "$details_file" ]; then
+                # Read the details and format them
+                details_content=$(cat "$details_file" 2>/dev/null || echo "No details available")
+                
+                # If the details contain specific test information, show it
+                if [[ "$details_content" == *"Failed tests:"* ]]; then
+                  echo "$details_content" | grep -A 20 "Failed tests:" | tail -n +2 | while read line; do
+                    if [ -n "$line" ]; then
+                      echo "- \`$line\`" >> comment.md
+                    fi
+                  done
+                else
+                  echo "- Check the test logs for detailed error information" >> comment.md
+                fi
+                
+                # Also check for output log with more details
+                output_log="./artifacts/test-status-$app/test-output.log"
+                if [ -f "$output_log" ]; then
+                  # Extract specific failed test names from Jest output
+                  failed_test_names=$(grep -E "✕|FAIL.*\.(spec|test)\." "$output_log" | head -10 | sed 's/.*FAIL //' | sed 's/.*✕ //' || echo "")
+                  if [ -n "$failed_test_names" ]; then
+                    echo "" >> comment.md
+                    echo "**Specific test failures:**" >> comment.md
+                    echo "$failed_test_names" | while read test_name; do
+                      if [ -n "$test_name" ]; then
+                        echo "- \`$test_name\`" >> comment.md
+                      fi
+                    done
+                  fi
+                fi
+              else
+                echo "- Check the test logs for detailed error information" >> comment.md
+              fi
+            done
+          fi
+          
+          # Add coverage threshold failures if any
+          if [ ${#coverage_failed_apps[@]} -gt 0 ]; then
+            echo "" >> comment.md
+            echo "## 📊 Coverage Threshold Failures" >> comment.md
+            echo "" >> comment.md
+            echo "The following applications failed to meet coverage thresholds:" >> comment.md
+            for app in "${coverage_failed_apps[@]}"; do
+              echo "- **$app**: Coverage below required threshold - review and add more tests" >> comment.md
+            done
+            echo "" >> comment.md
+            echo "**Coverage Thresholds:**" >> comment.md
+            echo "- **Backend**: 80% (lines, functions, branches, statements)" >> comment.md
+            echo "- **Device Service**: 75% (lines, functions, branches, statements)" >> comment.md
+            echo "- **Frontend**: 75% lines/functions/statements, 70% branches" >> comment.md
+            echo "- **Smoker**: 80% lines/functions/statements, 75% branches" >> comment.md
+            echo "- **TemperatureChart**: 75% lines/branches/statements, 45% functions" >> comment.md
+          fi
+          
+          echo "" >> comment.md
+          echo "---" >> comment.md
+          echo "*🤖 Generated automatically by CI workflow • Last updated: $(date -u '+%Y-%m-%d %H:%M:%S UTC') • Run #${{ github.run_number }}*" >> comment.md
+          
+          # Set output for comment body
+          comment_body=$(cat comment.md)
+          echo "=== DEBUG: Comment content generated ===" >&2
+          echo "Comment length: ${#comment_body} characters" >&2
+          echo "First 200 chars: ${comment_body:0:200}" >&2
+          
+          echo "comment-body<<EOF" >> $GITHUB_OUTPUT
+          echo "$comment_body" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Find existing comment
+        uses: peter-evans/find-comment@v3
+        id: find-comment
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: 'github-actions[bot]'
+          body-includes: '🧪 Test Results Summary'
+
+      - name: Debug comment search
+        run: |
+          echo "=== DEBUG: Comment search results ===" >&2
+          echo "Found comment ID: ${{ steps.find-comment.outputs.comment-id }}" >&2
+          echo "Comment exists: ${{ steps.find-comment.outputs.comment-id != '' }}" >&2
+
+      - name: Create or update PR comment
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          comment-id: ${{ steps.find-comment.outputs.comment-id }}
+          issue-number: ${{ github.event.pull_request.number }}
+          body: ${{ steps.generate-comment.outputs.comment-body }}
+          edit-mode: replace
+
+      - name: Debug comment creation
+        run: |
+          echo "=== DEBUG: Comment creation completed ===" >&2
+          echo "PR number used: ${{ github.event.pull_request.number }}" >&2
+          echo "Comment ID: ${{ steps.find-comment.outputs.comment-id }}" >&2
+          echo "Current time: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >&2

@@ -69,6 +69,13 @@
     "moduleNameMapper": {
       "\\.(css|less|scss)$": "identity-obj-proxy"
     },
+    "coverageReporters": [
+      "json-summary",
+      "lcov",
+      "text",
+      "html",
+      "clover"
+    ],
     "coverageThreshold": {
       "global": {
         "branches": 75,

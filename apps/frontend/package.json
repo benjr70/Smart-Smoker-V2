@@ -58,11 +58,26 @@
       "\\.test\\.(ts|tsx|js|jsx)$",
       "\\.spec\\.(ts|tsx|js|jsx)$"
     ],
+    "coverageReporters": [
+      "html",
+      "text",
+      "lcov", 
+      "clover",
+      "json-summary"
+    ],
     "transformIgnorePatterns": [
       "node_modules/(?!(d3|d3-.*|internmap|delaunator|robust-predicates)/)"
     ],
     "moduleNameMapper": {
       "\\.(css|less|scss)$": "identity-obj-proxy"
+    },
+    "coverageThreshold": {
+      "global": {
+        "branches": 70,
+        "functions": 75,
+        "lines": 75,
+        "statements": 75
+      }
     }
   },
   "devDependencies": {
