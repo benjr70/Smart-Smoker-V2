@@ -773,7 +773,7 @@ describe('Wifi Component', () => {
     // First test our isolated onChange logic
     const TestComponent = () => {
       const [textInput, setTextInput] = React.useState(0);
-      const [ssid, setSsid] = React.useState('');
+      const [_ssid, setSsid] = React.useState('');
       const [password, setPassword] = React.useState('');
       
       // Recreate the exact onChange logic from the component

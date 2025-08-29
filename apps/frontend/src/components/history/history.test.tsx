@@ -159,10 +159,9 @@ describe('History Component', () => {
     test('should render smoke cards when smoke history list is loaded', async () => {
       render(<History />);
       
-      await waitFor(() => {
-        expect(screen.getByTestId('smoke-card-smoke-1')).toBeInTheDocument();
-        expect(screen.getByTestId('smoke-card-smoke-2')).toBeInTheDocument();
-      });
+      await screen.findByTestId('smoke-card-smoke-1');
+      
+      expect(screen.getByTestId('smoke-card-smoke-2')).toBeInTheDocument();
 
       expect(screen.getByText('Brisket Smoke')).toBeInTheDocument();
       expect(screen.getByText('Pork Shoulder')).toBeInTheDocument();
@@ -187,10 +186,9 @@ describe('History Component', () => {
 
       fireEvent.click(screen.getByTestId('view-button-smoke-1'));
 
-      await waitFor(() => {
-        expect(screen.getByTestId('smoke-review')).toBeInTheDocument();
-        expect(screen.getByText('smoke-1')).toBeInTheDocument();
-      });
+      await screen.findByTestId('smoke-review');
+      
+      expect(screen.getByText('smoke-1')).toBeInTheDocument();
 
       expect(screen.queryByTestId('smoke-card-smoke-1')).not.toBeInTheDocument();
     });
@@ -221,7 +219,6 @@ describe('History Component', () => {
     });
 
     test('should reverse the smoke history list when loaded', async () => {
-      const originalData = [...mockSmokeHistoryData];
       render(<History />);
       
       await waitFor(() => {

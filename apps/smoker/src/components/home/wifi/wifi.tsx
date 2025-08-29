@@ -50,7 +50,7 @@ export function Wifi(props: WifiProps): JSX.Element {
                 console.log(err);
             })
         }
-    },[])
+    },[loading])
 
 
 

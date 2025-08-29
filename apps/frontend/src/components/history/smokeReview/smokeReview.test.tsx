@@ -171,6 +171,7 @@ describe('SmokeReview Component', () => {
   test('should fetch and display all smoke data successfully', async () => {
     render(<SmokeReview smokeId={mockSmokeId} />);
 
+    // Wait for all services to be called
     await waitFor(() => {
       expect(mockSmokerService.getSmokeById).toHaveBeenCalledWith(mockSmokeId);
       expect(mockPreSmokeService.getPreSmokeById).toHaveBeenCalledWith(mockSmokeData.preSmokeId);
@@ -204,10 +205,11 @@ describe('SmokeReview Component', () => {
 
     render(<SmokeReview smokeId={mockSmokeId} />);
 
-    await waitFor(() => {
-      expect(mockSmokerService.getSmokeById).toHaveBeenCalledWith(mockSmokeId);
-      expect(mockTempsService.getTempsById).not.toHaveBeenCalled();
-    });
+    await waitFor(() => 
+      expect(mockSmokerService.getSmokeById).toHaveBeenCalledWith(mockSmokeId)
+    );
+    
+    expect(mockTempsService.getTempsById).not.toHaveBeenCalled();
 
     // Should still render with initial temp data
     const smokeProfileCard = screen.getByTestId('smoke-profile-card');

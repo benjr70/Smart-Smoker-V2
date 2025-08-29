@@ -19,9 +19,11 @@ jest.setTimeout(15000);
 const originalConsoleWarn = console.warn;
 console.warn = (...args: any[]) => {
   const message = args.join(' ');
-  if (message.includes('Permission denied') || 
-      message.includes('/dev/ttyS0') ||
-      message.includes('SerialPort')) {
+  if (
+    message.includes('Permission denied') ||
+    message.includes('/dev/ttyS0') ||
+    message.includes('SerialPort')
+  ) {
     return; // Suppress known test environment warnings
   }
   originalConsoleWarn.apply(console, args);
@@ -32,7 +34,7 @@ afterEach(() => {
   // Clear all timers and intervals
   jest.clearAllTimers();
   jest.clearAllMocks();
-  
+
   // Force garbage collection if available
   if (global.gc) {
     try {

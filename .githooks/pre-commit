@@ -1,0 +1,26 @@
+#!/bin/sh
+# Smart Smoker V2 - Pre-commit hook
+# This hook runs linting and formatting checks before each commit
+
+echo "🔍 Running pre-commit checks..."
+
+# Run linting
+echo "📝 Checking lint..."
+npm run lint:fix --silent
+if [ $? -ne 0 ]; then
+  echo "❌ Linting failed. Please fix the issues and try again."
+  exit 1
+fi
+
+# Run formatting
+echo "✨ Checking formatting..."
+npm run format:check --silent
+if [ $? -ne 0 ]; then
+  echo "❌ Code formatting issues found. Running prettier..."
+  npm run format --silent
+  echo "✅ Code formatted. Please review changes and commit again."
+  exit 1
+fi
+
+echo "✅ All checks passed!"
+exit 0

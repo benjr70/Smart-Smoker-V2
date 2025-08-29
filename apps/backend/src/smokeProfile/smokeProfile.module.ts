@@ -7,15 +7,17 @@ import { SmokeProfileController } from './smokeProfile.controller';
 import { SmokeProfileService } from './smokeProfile.service';
 import { RatingsModel } from 'src/ratings/ratings.module';
 
-
 @Module({
-  imports: [MongooseModule.forFeature([{name: 'SmokeProfile', schema: SmokeProFileSchema}]),
+  imports: [
+    MongooseModule.forFeature([
+      { name: 'SmokeProfile', schema: SmokeProFileSchema },
+    ]),
     StateModule,
     SmokeModule,
-    RatingsModel
+    RatingsModel,
   ],
   controllers: [SmokeProfileController],
   providers: [SmokeProfileService],
-  exports: [SmokeProfileService]
+  exports: [SmokeProfileService],
 })
 export class SmokeProfileModule {}

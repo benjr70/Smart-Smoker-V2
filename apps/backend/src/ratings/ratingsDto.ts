@@ -1,18 +1,18 @@
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiProperty } from '@nestjs/swagger';
 
 export class RatingsDto {
-    @ApiProperty()
-    smokeFlavor: number;
+  @ApiProperty()
+  smokeFlavor: number;
 
-    @ApiProperty()
-    seasoning: number;
+  @ApiProperty()
+  seasoning: number;
 
-    @ApiProperty()
-    tenderness: number;
+  @ApiProperty()
+  tenderness: number;
 
-    @ApiProperty()
-    overallTaste: number;
+  @ApiProperty()
+  overallTaste: number;
 
-    @ApiProperty()
-    notes: string;
+  @ApiProperty()
+  notes: string;
 }

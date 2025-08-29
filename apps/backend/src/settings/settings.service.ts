@@ -6,14 +6,16 @@ import { CreateSettingsDto } from './settingsDto';
 
 @Injectable()
 export class SettingsService {
-    constructor(@InjectModel(Settings.name)private settingsModel: Model<SettingsDocument>){}
+  constructor(
+    @InjectModel(Settings.name) private settingsModel: Model<SettingsDocument>,
+  ) {}
 
-    async create(createSettingsDto: CreateSettingsDto): Promise<Settings>{
-        const createdSettings = new this.settingsModel(createSettingsDto);
-        return createdSettings.save();
-    }
+  async create(createSettingsDto: CreateSettingsDto): Promise<Settings> {
+    const createdSettings = new this.settingsModel(createSettingsDto);
+    return createdSettings.save();
+  }
 
-    async findAll(): Promise<Settings[]> {
-        return this.settingsModel.find().exec();
-    }
+  async findAll(): Promise<Settings[]> {
+    return this.settingsModel.find().exec();
+  }
 }

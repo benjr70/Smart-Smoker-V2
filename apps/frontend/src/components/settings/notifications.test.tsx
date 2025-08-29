@@ -101,36 +101,28 @@ describe('NotificationsCard', () => {
 
   describe('Rendering', () => {
     test('should render NotificationsCard component successfully', async () => {
-      await act(async () => {
-        render(<NotificationsCard />);
-      });
+      render(<NotificationsCard />);
       
       expect(screen.getByTestId('card')).toBeInTheDocument();
       expect(screen.getByText('Notifications')).toBeInTheDocument();
     });
 
     test('should render Add New Rule button', async () => {
-      await act(async () => {
-        render(<NotificationsCard />);
-      });
+      render(<NotificationsCard />);
       
       expect(screen.getByText('New Rule')).toBeInTheDocument();
       expect(screen.getByTestId('button')).toBeInTheDocument();
     });
 
     test('should have proper card structure', async () => {
-      await act(async () => {
-        render(<NotificationsCard />);
-      });
+      render(<NotificationsCard />);
       
       expect(screen.getByTestId('card')).toBeInTheDocument();
       expect(screen.getByTestId('card-content')).toBeInTheDocument();
     });
 
     test('should render ThemeProvider (note: wrapped inside the component)', async () => {
-      await act(async () => {
-        render(<NotificationsCard />);
-      });
+      render(<NotificationsCard />);
       
       // The component uses an internal ThemeProvider, so we just check it renders
       expect(screen.getByTestId('card')).toBeInTheDocument();
@@ -147,9 +139,7 @@ describe('NotificationsCard', () => {
 
   describe('Service Integration', () => {
     test('should call getNotificationSettings on mount', async () => {
-      await act(async () => {
-        render(<NotificationsCard />);
-      });
+      render(<NotificationsCard />);
       
       await waitFor(() => {
         expect(mockGetNotificationSettings).toHaveBeenCalled();

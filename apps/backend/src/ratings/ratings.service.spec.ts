@@ -52,8 +52,12 @@ describe('RatingsService', () => {
     }));
 
     mockRatingsModel.findById = jest.fn().mockResolvedValue(mockRatings);
-    mockRatingsModel.deleteOne = jest.fn().mockResolvedValue({ deletedCount: 1 });
-    mockRatingsModel.findByIdAndUpdate = jest.fn().mockResolvedValue(mockRatings);
+    mockRatingsModel.deleteOne = jest
+      .fn()
+      .mockResolvedValue({ deletedCount: 1 });
+    mockRatingsModel.findByIdAndUpdate = jest
+      .fn()
+      .mockResolvedValue(mockRatings);
 
     // Mock SmokeService
     mockSmokeService = {
@@ -93,7 +97,9 @@ describe('RatingsService', () => {
       const result = await service.getCurrentRating();
 
       expect(mockSmokeService.getCurrentSmoke).toHaveBeenCalled();
-      expect(mockRatingsModel.findById).toHaveBeenCalledWith(mockSmoke.ratingId);
+      expect(mockRatingsModel.findById).toHaveBeenCalledWith(
+        mockSmoke.ratingId,
+      );
       expect(result).toEqual(mockRatings);
     });
 
@@ -101,7 +107,9 @@ describe('RatingsService', () => {
       const error = new Error('Smoke not found');
       mockSmokeService.getCurrentSmoke.mockRejectedValue(error);
 
-      await expect(service.getCurrentRating()).rejects.toThrow('Smoke not found');
+      await expect(service.getCurrentRating()).rejects.toThrow(
+        'Smoke not found',
+      );
     });
   });
 
@@ -113,12 +121,17 @@ describe('RatingsService', () => {
       const result = await service.saveCurrentRatings(mockRatingsDto);
 
       expect(mockSmokeService.getCurrentSmoke).toHaveBeenCalled();
-      expect(service.update).toHaveBeenCalledWith(mockSmoke.ratingId, mockRatingsDto);
+      expect(service.update).toHaveBeenCalledWith(
+        mockSmoke.ratingId,
+        mockRatingsDto,
+      );
       expect(result).toBeUndefined(); // The service doesn't return anything for updates
     });
 
     it('should create new rating when smoke has no ratingId', async () => {
-      mockSmokeService.getCurrentSmoke.mockResolvedValue(mockSmokeWithoutRating);
+      mockSmokeService.getCurrentSmoke.mockResolvedValue(
+        mockSmokeWithoutRating,
+      );
       jest.spyOn(service, 'create').mockResolvedValue(mockRatings);
 
       const expectedSmokeDto: SmokeDto = {
@@ -136,7 +149,7 @@ describe('RatingsService', () => {
       expect(service.create).toHaveBeenCalledWith(mockRatingsDto);
       expect(mockSmokeService.Update).toHaveBeenCalledWith(
         mockSmokeWithoutRating._id,
-        expectedSmokeDto
+        expectedSmokeDto,
       );
       expect(result).toEqual(mockRatings);
     });
@@ -145,7 +158,9 @@ describe('RatingsService', () => {
       const error = new Error('Database error');
       mockSmokeService.getCurrentSmoke.mockRejectedValue(error);
 
-      await expect(service.saveCurrentRatings(mockRatingsDto)).rejects.toThrow('Database error');
+      await expect(service.saveCurrentRatings(mockRatingsDto)).rejects.toThrow(
+        'Database error',
+      );
     });
   });
 
@@ -171,7 +186,9 @@ describe('RatingsService', () => {
     it('should delete rating by id', async () => {
       const result = await service.Delete('rating-id-123');
 
-      expect(mockRatingsModel.deleteOne).toHaveBeenCalledWith({ _id: 'rating-id-123' });
+      expect(mockRatingsModel.deleteOne).toHaveBeenCalledWith({
+        _id: 'rating-id-123',
+      });
       expect(result).toEqual({ deletedCount: 1 });
     });
 
@@ -180,7 +197,9 @@ describe('RatingsService', () => {
 
       const result = await service.Delete('non-existent-id');
 
-      expect(mockRatingsModel.deleteOne).toHaveBeenCalledWith({ _id: 'non-existent-id' });
+      expect(mockRatingsModel.deleteOne).toHaveBeenCalledWith({
+        _id: 'non-existent-id',
+      });
       expect(result).toEqual({ deletedCount: 0 });
     });
   });
@@ -193,7 +212,7 @@ describe('RatingsService', () => {
 
       expect(mockRatingsModel.findByIdAndUpdate).toHaveBeenCalledWith(
         { _id: 'rating-id-123' },
-        mockRatingsDto
+        mockRatingsDto,
       );
       expect(service.getById).toHaveBeenCalledWith('rating-id-123');
       expect(result).toEqual(mockRatings);
@@ -203,9 +222,9 @@ describe('RatingsService', () => {
       const error = new Error('Update failed');
       mockRatingsModel.findByIdAndUpdate.mockRejectedValue(error);
 
-      await expect(service.update('rating-id-123', mockRatingsDto)).rejects.toThrow(
-        'Update failed'
-      );
+      await expect(
+        service.update('rating-id-123', mockRatingsDto),
+      ).rejects.toThrow('Update failed');
     });
   });
 
@@ -223,7 +242,9 @@ describe('RatingsService', () => {
       };
       mockRatingsModel.mockImplementation(() => mockInstance);
 
-      await expect(service.create(mockRatingsDto)).rejects.toThrow('Creation failed');
+      await expect(service.create(mockRatingsDto)).rejects.toThrow(
+        'Creation failed',
+      );
     });
   });
 });

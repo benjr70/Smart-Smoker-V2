@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import './home.style.css'
 import Grid from '@mui/material/Grid';
 import { io } from 'socket.io-client';
@@ -78,7 +78,7 @@ export class Home extends React.Component<{}, {tempState: State, activeScreen: n
         socket = io(url);
         deviceClient.on('temp', (message: any) => {
             try{
-                if(process.env.ENV == 'production'){
+                if(process.env.ENV === 'production'){
                     getConnection().then(result => {
                         if(result.length > 0){
                             this.setState({connection: true});

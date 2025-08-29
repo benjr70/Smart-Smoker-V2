@@ -5,15 +5,15 @@ jest.mock('serialport', () => {
     close: jest.fn(),
     removeAllListeners: jest.fn(),
   };
-  
+
   const mockParser = {
     on: jest.fn(),
     removeAllListeners: jest.fn(),
   };
-  
+
   const MockSerialPort = jest.fn().mockImplementation(() => mockPort);
   const MockReadlineParser = jest.fn().mockImplementation(() => mockParser);
-  
+
   return {
     SerialPort: MockSerialPort,
     ReadlineParser: MockReadlineParser,
@@ -44,11 +44,11 @@ describe('EventsGateway', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    
+
     // Clean up previous subscriptions
-    subscriptions.forEach(sub => sub.unsubscribe());
+    subscriptions.forEach((sub) => sub.unsubscribe());
     subscriptions = [];
-    
+
     dataSubject = new Subject<string>();
     mockSerialService.onData.mockReturnValue(dataSubject);
 
@@ -61,30 +61,30 @@ describe('EventsGateway', () => {
 
     gateway = module.get<EventsGateway>(EventsGateway);
     serialService = module.get<SerialService>(SerialService);
-    
+
     // Set the mock server
     gateway.server = mockServer as any;
   });
 
   afterEach(async () => {
     // Clean up all subscriptions to prevent memory leaks
-    subscriptions.forEach(sub => {
+    subscriptions.forEach((sub) => {
       if (sub && !sub.closed) {
         sub.unsubscribe();
       }
     });
     subscriptions = [];
-    
+
     // Complete and clean up the data subject
     if (dataSubject && !dataSubject.closed) {
       dataSubject.complete();
     }
-    
+
     // Clean up test module
     if (module) {
       await module.close();
     }
-    
+
     jest.clearAllMocks();
   });
 

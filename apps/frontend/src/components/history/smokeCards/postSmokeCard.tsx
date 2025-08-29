@@ -1,6 +1,5 @@
 import { Card, CardContent, Grid, ThemeProvider, Typography, createTheme } from "@mui/material";
 import React from "react";
-import { preSmoke } from "../../common/interfaces/preSmoke";
 import { PostSmoke } from "../../smoke/postSmokeStep/PostSmokeStep";
 
 

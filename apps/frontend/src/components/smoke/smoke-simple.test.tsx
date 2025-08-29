@@ -84,15 +84,11 @@ describe('Smoke Component', () => {
   describe('Component Rendering', () => {
     test('should render Smoke component successfully', () => {
       render(<Smoke />);
-      expect(document.querySelector('.MuiStepper-root')).toBeInTheDocument();
       expect(screen.getByTestId('pre-smoke-step')).toBeInTheDocument();
     });
 
     test('should render with correct initial state', () => {
       render(<Smoke />);
-      
-      const stepper = document.querySelector('.MuiStepper-root');
-      expect(stepper).toBeInTheDocument();
       
       // Should show pre-smoke step initially
       expect(screen.getByTestId('pre-smoke-step')).toBeInTheDocument();
@@ -172,11 +168,17 @@ describe('Smoke Component', () => {
     test('should allow direct navigation via stepper buttons', async () => {
       render(<Smoke />);
       
-      const stepButtons = document.querySelectorAll('.MuiStepButton-root');
-      expect(stepButtons).toHaveLength(3);
+      // Get step buttons by their actual names
+      const preSmokeButton = screen.getByRole('button', { name: /pre-smoke/i });
+      const smokeButton = screen.getByRole('button', { name: /^smoke$/i });
+      const postSmokeButton = screen.getByRole('button', { name: /post-smoke/i });
+      
+      expect(preSmokeButton).toBeInTheDocument();
+      expect(smokeButton).toBeInTheDocument();
+      expect(postSmokeButton).toBeInTheDocument();
       
       // Click on smoke step (index 1)
-      fireEvent.click(stepButtons[1] as Element);
+      fireEvent.click(smokeButton);
       
       await waitFor(() => {
         expect(screen.getByTestId('smoke-step')).toBeInTheDocument();

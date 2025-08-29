@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { SmokeCard } from './smokeCards/smokeCard';
-import { Grid, TextField } from '@mui/material';
+import { Grid } from '@mui/material';
 import './history.style.css';
 import { getSmokeHistory } from '../../Services/smokerService';
 import { smokeHistory } from '../common/interfaces/history';

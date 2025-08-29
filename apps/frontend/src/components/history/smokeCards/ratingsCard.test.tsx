@@ -401,12 +401,13 @@ describe('RatingsCard Component', () => {
       const ratingInputs = screen.getAllByTestId('rating');
       fireEvent.change(ratingInputs[0], { target: { value: '9' } });
       
-      await waitFor(() => {
-        expect(mockUpdateRatings).toHaveBeenCalledTimes(2); // Called once on initial render, once on change
-        expect(mockUpdateRatings).toHaveBeenCalledWith({
-          ...mockRatingData,
-          smokeFlavor: 9
-        });
+      await waitFor(() => 
+        expect(mockUpdateRatings).toHaveBeenCalledTimes(2) // Called once on initial render, once on change
+      );
+      
+      expect(mockUpdateRatings).toHaveBeenCalledWith({
+        ...mockRatingData,
+        smokeFlavor: 9
       });
     });
 

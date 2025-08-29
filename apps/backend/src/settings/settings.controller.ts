@@ -7,15 +7,15 @@ import { CreateSettingsDto } from './settingsDto';
 @ApiTags('settings')
 @Controller('api/settings')
 export class SettingsController {
-    constructor(private readonly settingsService: SettingsService){}
-    
-    @Get()
-    getSettings(): Promise<Settings[]> {
-        return this.settingsService.findAll();
-    }
+  constructor(private readonly settingsService: SettingsService) {}
 
-    @Post()
-    SetSettings(@Body() dto: CreateSettingsDto): Promise<Settings> {
-        return this.settingsService.create(dto);
-    }
+  @Get()
+  getSettings(): Promise<Settings[]> {
+    return this.settingsService.findAll();
+  }
+
+  @Post()
+  SetSettings(@Body() dto: CreateSettingsDto): Promise<Settings> {
+    return this.settingsService.create(dto);
+  }
 }

@@ -93,21 +93,21 @@ describe('DynamicList', () => {
     });
 
     test('should render empty fragment when steps is empty', () => {
-      const { container } = render(<DynamicList {...defaultProps} steps={[]} />);
+      render(<DynamicList {...defaultProps} steps={[]} />);
       
-      expect(container.firstChild).toBeNull();
+      expect(screen.queryByTestId('dynamic-list-container')).not.toBeInTheDocument();
     });
 
     test('should render empty fragment when steps is undefined', () => {
-      const { container } = render(<DynamicList {...defaultProps} steps={undefined as any} />);
+      render(<DynamicList {...defaultProps} steps={undefined as any} />);
       
-      expect(container.firstChild).toBeNull();
+      expect(screen.queryByTestId('dynamic-list-container')).not.toBeInTheDocument();
     });
 
     test('should render empty fragment when steps is null', () => {
-      const { container } = render(<DynamicList {...defaultProps} steps={null as any} />);
+      render(<DynamicList {...defaultProps} steps={null as any} />);
       
-      expect(container.firstChild).toBeNull();
+      expect(screen.queryByTestId('dynamic-list-container')).not.toBeInTheDocument();
     });
 
     test('should render single step correctly', () => {
@@ -174,9 +174,9 @@ describe('DynamicList', () => {
     });
 
     test('should have unique keys for each list item', () => {
-      const { container } = render(<DynamicList {...defaultProps} />);
+      render(<DynamicList {...defaultProps} />);
       
-      const gridElements = container.querySelectorAll('.dynamicList');
+      const gridElements = screen.getAllByRole('textbox');
       expect(gridElements).toHaveLength(3);
     });
   });

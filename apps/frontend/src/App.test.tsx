@@ -1,7 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import App from './App';
-import { Screens } from './components/common/interfaces/enums';
 
 // Mock the components
 jest.mock('./components/smoke/smoke', () => ({

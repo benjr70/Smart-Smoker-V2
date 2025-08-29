@@ -5,6 +5,8 @@ import { SmokeStep } from './smokeStep';
 import { getCurrentSmokeProfile, getState, setSmokeProfile, toggleSmoking } from '../../../Services/smokerService';
 import { io } from 'socket.io-client';
 
+import { getCurrentTemps } from '../../../Services/tempsService';
+
 // Mock socket.io-client
 const mockSocket = {
   on: jest.fn(),
@@ -123,8 +125,6 @@ jest.mock('../../../Services/smokerService', () => ({
 jest.mock('../../../Services/tempsService', () => ({
   getCurrentTemps: jest.fn()
 }));
-
-import { getCurrentTemps } from '../../../Services/tempsService';
 
 const mockGetCurrentSmokeProfile = getCurrentSmokeProfile as jest.MockedFunction<typeof getCurrentSmokeProfile>;
 const mockGetState = getState as jest.MockedFunction<typeof getState>;
