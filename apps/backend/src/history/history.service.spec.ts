@@ -18,7 +18,7 @@ describe('HistoryService', () => {
     preSmokeId: 'presmoke-id',
     smokeProfileId: 'profile-id',
     ratingId: 'rating-id',
-    date: new Date('2023-01-01'),
+    date: new Date('2023-01-01T00:00:00.000Z'),
     status: SmokeStatus.Complete,
   };
 
@@ -99,7 +99,7 @@ describe('HistoryService', () => {
         {
           name: 'Brisket Cook',
           meatType: 'beef',
-          date: 'Sun Jan 01 2023',
+          date: 'Sat Dec 31 2022',
           weight: '5.5',
           weightUnit: 'lbs',
           woodType: 'hickory',

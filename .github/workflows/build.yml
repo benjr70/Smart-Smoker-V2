@@ -57,7 +57,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20.11.1'
+          node-version: '24.7.0'
 
       - name: Use npm 10
         run: npm i -g npm@10
