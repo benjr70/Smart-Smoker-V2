@@ -191,57 +191,48 @@ function TempChart(props: props): JSX.Element {
 
       yScale.current = d3
         .scaleLinear()
-        // @ts-ignore
         .domain([
           0,
-          d3.max(data, d => {
+          (d3.max(data, (d: TempData) => {
             return Math.max(d.ChamberTemp, d.MeatTemp, d.Meat2Temp, d.Meat3Temp);
-          }) * 1.15,
+          }) || 100) * 1.15,
         ])
         .range([height - margin.top - margin.bottom, 0]);
 
       generateScaledLineChamber.current = d3
-        .line()
-        // @ts-ignore
-        .x(d => {
+        .line<TempData>()
+        .x((d: TempData) => {
           return xScale.current(new Date(d.date).getTime());
         })
-        // @ts-ignore
-        .y(d => {
+        .y((d: TempData) => {
           return yScale.current(d.ChamberTemp);
         })
         .curve(d3.curveCardinal);
 
       generateScaledLineProbe1.current = d3
-        .line()
-        // @ts-ignore
-        .x(d => {
+        .line<TempData>()
+        .x((d: TempData) => {
           return xScale.current(new Date(d.date).getTime());
         })
-        // @ts-ignore
-        .y(d => {
+        .y((d: TempData) => {
           return yScale.current(d.MeatTemp);
         });
 
       generateScaledLineProbe2.current = d3
-        .line()
-        // @ts-ignore
-        .x(d => {
+        .line<TempData>()
+        .x((d: TempData) => {
           return xScale.current(new Date(d.date).getTime());
         })
-        // @ts-ignore
-        .y(d => {
+        .y((d: TempData) => {
           return yScale.current(d.Meat2Temp);
         });
 
       generateScaledLineProbe3.current = d3
-        .line()
-        // @ts-ignore
-        .x(d => {
+        .line<TempData>()
+        .x((d: TempData) => {
           return xScale.current(new Date(d.date).getTime());
         })
-        // @ts-ignore
-        .y(d => {
+        .y((d: TempData) => {
           return yScale.current(d.Meat3Temp);
         });
 
