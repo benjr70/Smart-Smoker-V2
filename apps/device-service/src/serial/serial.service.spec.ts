@@ -403,22 +403,23 @@ describe('SerialService', () => {
       delete process.env.NODE_ENV;
     });
 
-    it('should generate and emit temperature data in local mode', (done) => {
+    it('should generate and emit temperature data in local mode', async () => {
       jest.spyOn(Logger, 'log').mockImplementation();
 
       process.env.NODE_ENV = 'local';
 
-      import('./serial.serivce').then(({ SerialService }) => {
-        const localService = new SerialService();
+      const { SerialService } = await import('./serial.serivce');
+      const localService = new SerialService();
 
-        // Subscribe to data
+      // Subscribe to data
+      return new Promise<void>((resolve) => {
         const subscription = localService.onData().subscribe((data: string) => {
           const parsedData = JSON.parse(data);
           expect(parsedData).toHaveProperty('Meat');
           expect(parsedData).toHaveProperty('Chamber');
           subscription.unsubscribe();
           localService.onDestroy();
-          done();
+          resolve();
         });
 
         // Wait for the interval to trigger naturally
@@ -426,29 +427,30 @@ describe('SerialService', () => {
           if (!subscription.closed) {
             subscription.unsubscribe();
             localService.onDestroy();
-            done();
+            resolve();
           }
         }, 600);
       });
     });
 
-    it('should call handleTempLogging in local mode', (done) => {
+    it('should call handleTempLogging in local mode', async () => {
       jest.spyOn(Logger, 'log').mockImplementation();
 
       process.env.NODE_ENV = 'local';
 
-      import('./serial.serivce').then(({ SerialService }) => {
-        const localService = new SerialService();
-        const handleTempLoggingSpy = jest.spyOn(
-          localService,
-          'handleTempLogging',
-        );
+      const { SerialService } = await import('./serial.serivce');
+      const localService = new SerialService();
+      const handleTempLoggingSpy = jest.spyOn(
+        localService,
+        'handleTempLogging',
+      );
 
-        // Wait for the interval to trigger naturally
+      // Wait for the interval to trigger naturally
+      return new Promise<void>((resolve) => {
         setTimeout(() => {
           expect(handleTempLoggingSpy).toHaveBeenCalled();
           localService.onDestroy();
-          done();
+          resolve();
         }, 600);
       });
     });

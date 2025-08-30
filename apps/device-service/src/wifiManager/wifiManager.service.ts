@@ -1,7 +1,7 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { exec } from 'child_process';
 import { wifiDto } from './wifiDto';
-import * as wifi from 'node-wifi';
+const wifi = require('node-wifi');
 
 @Injectable()
 export class WifiManagerService {
