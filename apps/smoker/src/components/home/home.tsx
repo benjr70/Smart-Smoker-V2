@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Component } from 'react';
 import './home.style.css'
 import Grid from '@mui/material/Grid';
 import { io } from 'socket.io-client';

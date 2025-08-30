@@ -27,18 +27,6 @@ import { SerialService } from './serial.serivce';
 // Get references to the mocked objects for use in tests
 // These will now refer to the same instances used by the SerialService
 
-// Global cleanup to prevent memory leaks
-global.beforeEach =
-  global.beforeEach ||
-  function (): void {
-    // Global setup if needed
-  };
-global.afterEach =
-  global.afterEach ||
-  function (): void {
-    // Global cleanup if needed
-  };
-
 describe('SerialService', () => {
   let service: SerialService;
   let module: TestingModule;
