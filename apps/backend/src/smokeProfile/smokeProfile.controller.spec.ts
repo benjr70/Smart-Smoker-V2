@@ -28,7 +28,7 @@ describe('SmokeProfileController', () => {
     chamberName: 'Chamber',
     probe1Name: 'Probe1',
     probe2Name: 'Probe2',
-    probe3Name: 'Probe2',
+    probe3Name: 'Probe3',
   };
 
   const mockSmokeProfileService = {
