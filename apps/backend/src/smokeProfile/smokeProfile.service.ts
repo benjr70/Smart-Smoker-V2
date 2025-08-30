@@ -1,12 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { RatingsService } from 'src/ratings/ratings.service';
 import { SmokeService } from 'src/smoke/smoke.service';
 import { SmokeDto } from 'src/smoke/smokeDto';
 import { StateService } from 'src/State/state.service';
 import { SmokeProfile, SmokeProFileDocument } from './smokeProfile.schema';
 import { SmokeProFileDto } from './smokeProfileDto';
-import { RatingsService } from 'src/ratings/ratings.service';
 
 @Injectable()
 export class SmokeProfileService {

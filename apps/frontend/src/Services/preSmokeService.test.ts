@@ -1,8 +1,8 @@
-import { 
-  getCurrentPreSmoke, 
-  setCurrentPreSmoke, 
-  getPreSmokeById, 
-  deletePreSmokeById 
+import {
+  getCurrentPreSmoke,
+  setCurrentPreSmoke,
+  getPreSmokeById,
+  deletePreSmokeById,
 } from './preSmokeService';
 import { preSmoke } from '../components/common/interfaces/preSmoke';
 import { WeightUnits } from '../components/common/interfaces/enums';
@@ -15,9 +15,13 @@ const mockAxios = {
   delete: jest.fn(),
   put: jest.fn(),
   defaults: {
-    get baseURL() { return currentBaseURL; },
-    set baseURL(value) { currentBaseURL = value; }
-  }
+    get baseURL() {
+      return currentBaseURL;
+    },
+    set baseURL(value) {
+      currentBaseURL = value;
+    },
+  },
 };
 
 jest.mock('axios', () => mockAxios);
@@ -31,10 +35,10 @@ beforeEach(() => {
   mockAxios.delete.mockClear();
   if (mockAxios.put) mockAxios.put.mockClear();
   mockAxios.defaults.baseURL = '';
-  
+
   process.env = {
     ...originalEnv,
-    REACT_APP_CLOUD_URL: 'http://localhost:3001/'
+    REACT_APP_CLOUD_URL: 'http://localhost:3001/',
   };
   jest.spyOn(console, 'log').mockImplementation(() => {});
 });
@@ -50,17 +54,16 @@ describe('preSmokeService', () => {
     meatType: 'Beef',
     weight: {
       weight: 12,
-      unit: WeightUnits.LB
+      unit: WeightUnits.LB,
     },
     steps: ['Season meat', 'Let rest'],
-    notes: 'Test notes'
+    notes: 'Test notes',
   };
 
   describe('getCurrentPreSmoke', () => {
     test('should fetch current pre smoke successfully', async () => {
-      
       mockAxios.get.mockResolvedValue({
-        data: mockPreSmoke
+        data: mockPreSmoke,
       });
 
       const result = await getCurrentPreSmoke();
@@ -71,7 +74,7 @@ describe('preSmokeService', () => {
 
     test('should handle getCurrentPreSmoke error and log it', async () => {
       const mockError = new Error('Network error');
-      
+
       mockAxios.get.mockRejectedValue(mockError);
 
       const consoleLogSpy = jest.spyOn(console, 'log');
@@ -85,20 +88,17 @@ describe('preSmokeService', () => {
 
     test('should set correct baseURL from environment variable', async () => {
       process.env.REACT_APP_CLOUD_URL = 'https://api.example.com/';
-      
-      
+
       mockAxios.get.mockResolvedValue({ data: mockPreSmoke });
 
       await getCurrentPreSmoke();
-
     });
   });
 
   describe('setCurrentPreSmoke', () => {
     test('should post current pre smoke successfully', async () => {
-      
       mockAxios.post.mockResolvedValue({
-        data: mockPreSmoke
+        data: mockPreSmoke,
       });
 
       const result = await setCurrentPreSmoke(mockPreSmoke);
@@ -109,7 +109,7 @@ describe('preSmokeService', () => {
 
     test('should handle setCurrentPreSmoke error and log it', async () => {
       const mockError = new Error('Server error');
-      
+
       mockAxios.post.mockRejectedValue(mockError);
 
       const consoleLogSpy = jest.spyOn(console, 'log');
@@ -125,12 +125,11 @@ describe('preSmokeService', () => {
       const minimalPreSmoke: preSmoke = {
         weight: {
           weight: 5,
-          unit: WeightUnits.LB
+          unit: WeightUnits.LB,
         },
-        steps: []
+        steps: [],
       };
 
-      
       mockAxios.post.mockResolvedValue({ data: minimalPreSmoke });
 
       const result = await setCurrentPreSmoke(minimalPreSmoke);
@@ -144,12 +143,11 @@ describe('preSmokeService', () => {
         name: 'Small piece',
         weight: {
           weight: 16,
-          unit: WeightUnits.OZ
+          unit: WeightUnits.OZ,
         },
-        steps: ['Prepare']
+        steps: ['Prepare'],
       };
 
-      
       mockAxios.post.mockResolvedValue({ data: ozPreSmoke });
 
       const result = await setCurrentPreSmoke(ozPreSmoke);
@@ -160,21 +158,19 @@ describe('preSmokeService', () => {
 
     test('should set correct baseURL from environment variable', async () => {
       process.env.REACT_APP_CLOUD_URL = 'https://api.example.com/';
-      
-      
+
       mockAxios.post.mockResolvedValue({ data: mockPreSmoke });
 
       await setCurrentPreSmoke(mockPreSmoke);
-
     });
   });
 
   describe('getPreSmokeById', () => {
     test('should fetch pre smoke by id successfully', async () => {
       const testId = 'test-id-123';
-      
+
       mockAxios.get.mockResolvedValue({
-        data: mockPreSmoke
+        data: mockPreSmoke,
       });
 
       const result = await getPreSmokeById(testId);
@@ -186,7 +182,7 @@ describe('preSmokeService', () => {
     test('should handle getPreSmokeById error and log it', async () => {
       const testId = 'test-id-123';
       const mockError = new Error('Not found');
-      
+
       mockAxios.get.mockRejectedValue(mockError);
 
       const consoleLogSpy = jest.spyOn(console, 'log');
@@ -200,7 +196,7 @@ describe('preSmokeService', () => {
 
     test('should handle special characters in id', async () => {
       const testId = 'test-id-with-special-chars-!@#';
-      
+
       mockAxios.get.mockResolvedValue({ data: mockPreSmoke });
 
       await getPreSmokeById(testId);
@@ -210,20 +206,19 @@ describe('preSmokeService', () => {
 
     test('should set correct baseURL from environment variable', async () => {
       process.env.REACT_APP_CLOUD_URL = 'https://api.example.com/';
-      
+
       const testId = 'test-id';
-      
+
       mockAxios.get.mockResolvedValue({ data: mockPreSmoke });
 
       await getPreSmokeById(testId);
-
     });
   });
 
   describe('deletePreSmokeById', () => {
     test('should delete pre smoke by id successfully', async () => {
       const testId = 'test-id-123';
-      
+
       mockAxios.delete.mockResolvedValue({});
 
       const result = await deletePreSmokeById(testId);
@@ -235,7 +230,7 @@ describe('preSmokeService', () => {
     test('should handle deletePreSmokeById error and log it', async () => {
       const testId = 'test-id-123';
       const mockError = new Error('Delete failed');
-      
+
       mockAxios.delete.mockRejectedValue(mockError);
 
       const consoleLogSpy = jest.spyOn(console, 'log');
@@ -249,7 +244,7 @@ describe('preSmokeService', () => {
 
     test('should handle empty string id', async () => {
       const testId = '';
-      
+
       mockAxios.delete.mockResolvedValue({});
 
       await deletePreSmokeById(testId);
@@ -259,13 +254,12 @@ describe('preSmokeService', () => {
 
     test('should set correct baseURL from environment variable', async () => {
       process.env.REACT_APP_CLOUD_URL = 'https://api.example.com/';
-      
+
       const testId = 'test-id';
-      
+
       mockAxios.delete.mockResolvedValue({});
 
       await deletePreSmokeById(testId);
-
     });
   });
 });

@@ -1,6 +1,6 @@
-import React from 'react';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import '@testing-library/jest-dom';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import React from 'react';
 import { NotificationsCard, NotificationSettings } from './notifications';
 
 // Mock the notifications service
@@ -9,12 +9,16 @@ const mockSetNotificationSettings = jest.fn();
 
 jest.mock('../../Services/notificationsService', () => ({
   getNotificationSettings: () => mockGetNotificationSettings(),
-  setNotificationSettings: (data: any) => mockSetNotificationSettings(data)
+  setNotificationSettings: (data: any) => mockSetNotificationSettings(data),
 }));
 
 // Mock Material-UI components
 jest.mock('@mui/material', () => ({
-  Box: ({ children, ...props }: any) => <div data-testid="box" {...props}>{children}</div>,
+  Box: ({ children, ...props }: any) => (
+    <div data-testid="box" {...props}>
+      {children}
+    </div>
+  ),
   Button: ({ children, startIcon, ...props }: any) => (
     <button data-testid="button" {...props}>
       {startIcon && <span data-testid="start-icon">{startIcon}</span>}
@@ -22,34 +26,38 @@ jest.mock('@mui/material', () => ({
     </button>
   ),
   Card: ({ children, ...props }: any) => (
-    <div data-testid="card" {...props}>{children}</div>
+    <div data-testid="card" {...props}>
+      {children}
+    </div>
   ),
   CardContent: ({ children, ...props }: any) => (
-    <div data-testid="card-content" {...props}>{children}</div>
+    <div data-testid="card-content" {...props}>
+      {children}
+    </div>
   ),
   Grid: ({ children, ...props }: any) => (
-    <div data-testid="grid" {...props}>{children}</div>
+    <div data-testid="grid" {...props}>
+      {children}
+    </div>
   ),
   IconButton: ({ children, ...props }: any) => (
-    <button data-testid="icon-button" aria-label="delete" {...props}>{children}</button>
+    <button data-testid="icon-button" aria-label="delete" {...props}>
+      {children}
+    </button>
   ),
   Stack: ({ children, ...props }: any) => (
-    <div data-testid="stack" {...props}>{children}</div>
+    <div data-testid="stack" {...props}>
+      {children}
+    </div>
   ),
   Switch: ({ checked, onChange, ...props }: any) => (
-    <input 
-      data-testid="switch" 
-      type="checkbox" 
-      checked={checked}
-      onChange={onChange}
-      {...props} 
-    />
+    <input data-testid="switch" type="checkbox" checked={checked} onChange={onChange} {...props} />
   ),
   TextField: ({ label, value, onChange, select, children, ...props }: any) => {
     if (select) {
       return (
-        <select 
-          data-testid={`textfield-${label}`} 
+        <select
+          data-testid={`textfield-${label}`}
           data-label={label}
           value={value}
           onChange={onChange}
@@ -60,37 +68,43 @@ jest.mock('@mui/material', () => ({
       );
     }
     return (
-      <input 
-        data-testid={`textfield-${label}`} 
+      <input
+        data-testid={`textfield-${label}`}
         data-label={label}
         type={props.type || 'text'}
         value={value || ''}
         onChange={onChange}
-        {...props} 
+        {...props}
       />
     );
   },
   ThemeProvider: ({ children, ...props }: any) => (
-    <div data-testid="theme-provider" {...props}>{children}</div>
+    <div data-testid="theme-provider" {...props}>
+      {children}
+    </div>
   ),
   Typography: ({ children, ...props }: any) => (
-    <div data-testid="typography" {...props}>{children}</div>
+    <div data-testid="typography" {...props}>
+      {children}
+    </div>
   ),
-  createTheme: jest.fn((theme) => theme),
+  createTheme: jest.fn(theme => theme),
   MenuItem: ({ children, value, ...props }: any) => (
-    <option value={value} {...props}>{children}</option>
-  )
+    <option value={value} {...props}>
+      {children}
+    </option>
+  ),
 }));
 
 // Mock Material-UI icons
 jest.mock('@mui/icons-material/Delete', () => ({
   __esModule: true,
-  default: () => <span data-testid="delete-icon">Delete</span>
+  default: () => <span data-testid="delete-icon">Delete</span>,
 }));
 
 jest.mock('@mui/icons-material/AddCircle', () => ({
   __esModule: true,
-  default: () => <span data-testid="add-circle-icon">Add</span>
+  default: () => <span data-testid="add-circle-icon">Add</span>,
 }));
 
 describe('NotificationsCard', () => {
@@ -102,28 +116,28 @@ describe('NotificationsCard', () => {
   describe('Rendering', () => {
     test('should render NotificationsCard component successfully', async () => {
       render(<NotificationsCard />);
-      
+
       expect(screen.getByTestId('card')).toBeInTheDocument();
       expect(screen.getByText('Notifications')).toBeInTheDocument();
     });
 
     test('should render Add New Rule button', async () => {
       render(<NotificationsCard />);
-      
+
       expect(screen.getByText('New Rule')).toBeInTheDocument();
       expect(screen.getByTestId('button')).toBeInTheDocument();
     });
 
     test('should have proper card structure', async () => {
       render(<NotificationsCard />);
-      
+
       expect(screen.getByTestId('card')).toBeInTheDocument();
       expect(screen.getByTestId('card-content')).toBeInTheDocument();
     });
 
     test('should render ThemeProvider (note: wrapped inside the component)', async () => {
       render(<NotificationsCard />);
-      
+
       // The component uses an internal ThemeProvider, so we just check it renders
       expect(screen.getByTestId('card')).toBeInTheDocument();
     });
@@ -132,7 +146,7 @@ describe('NotificationsCard', () => {
       await act(async () => {
         render(<NotificationsCard />);
       });
-      
+
       expect(screen.getByText('Notifications')).toBeInTheDocument();
     });
   });
@@ -140,7 +154,7 @@ describe('NotificationsCard', () => {
   describe('Service Integration', () => {
     test('should call getNotificationSettings on mount', async () => {
       render(<NotificationsCard />);
-      
+
       await waitFor(() => {
         expect(mockGetNotificationSettings).toHaveBeenCalled();
       });
@@ -153,16 +167,16 @@ describe('NotificationsCard', () => {
           message: 'Test notification',
           probe1: 'Chamber',
           op: '>',
-          temperature: 225
-        }
+          temperature: 225,
+        },
       ];
-      
+
       mockGetNotificationSettings.mockResolvedValue(mockData);
-      
+
       await act(async () => {
         render(<NotificationsCard />);
       });
-      
+
       await waitFor(() => {
         expect(mockGetNotificationSettings).toHaveBeenCalled();
       });
@@ -170,23 +184,23 @@ describe('NotificationsCard', () => {
 
     test('should handle service errors gracefully', async () => {
       const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-      
+
       // Mock successful service call instead of testing unhandled rejection
       mockGetNotificationSettings.mockResolvedValue([]);
-      
+
       await act(async () => {
         render(<NotificationsCard />);
       });
-      
+
       // Component should render without crashing
       expect(screen.getByText('Notifications')).toBeInTheDocument();
-      
+
       consoleSpy.mockRestore();
     });
 
     test('should handle undefined service response', async () => {
       mockGetNotificationSettings.mockResolvedValue(undefined);
-      
+
       await act(async () => {
         expect(() => {
           render(<NotificationsCard />);
@@ -196,7 +210,7 @@ describe('NotificationsCard', () => {
 
     test('should handle null service response', async () => {
       mockGetNotificationSettings.mockResolvedValue(null);
-      
+
       await act(async () => {
         expect(() => {
           render(<NotificationsCard />);
@@ -210,13 +224,13 @@ describe('NotificationsCard', () => {
       await act(async () => {
         render(<NotificationsCard />);
       });
-      
+
       const addButton = screen.getByText('New Rule');
-      
+
       await act(async () => {
         fireEvent.click(addButton);
       });
-      
+
       expect(addButton).toBeInTheDocument();
     });
 
@@ -224,7 +238,7 @@ describe('NotificationsCard', () => {
       await act(async () => {
         render(<NotificationsCard />);
       });
-      
+
       const button = screen.getByTestId('button');
       expect(button).toHaveAttribute('variant', 'contained');
     });
@@ -233,11 +247,11 @@ describe('NotificationsCard', () => {
   describe('Component Lifecycle', () => {
     test('should call setNotificationSettings on unmount', async () => {
       const { unmount } = render(<NotificationsCard />);
-      
+
       await act(async () => {
         unmount();
       });
-      
+
       await waitFor(() => {
         expect(mockSetNotificationSettings).toHaveBeenCalled();
       });
@@ -245,13 +259,13 @@ describe('NotificationsCard', () => {
 
     test('should handle component mounting and unmounting', async () => {
       const { unmount } = render(<NotificationsCard />);
-      
+
       expect(screen.getByText('Notifications')).toBeInTheDocument();
-      
+
       await act(async () => {
         unmount();
       });
-      
+
       expect(() => screen.getByText('Notifications')).toThrow();
     });
   });
@@ -261,7 +275,7 @@ describe('NotificationsCard', () => {
       await act(async () => {
         render(<NotificationsCard />);
       });
-      
+
       await waitFor(() => {
         expect(screen.getByText('Notifications')).toBeInTheDocument();
         expect(screen.getByText('New Rule')).toBeInTheDocument();
@@ -276,16 +290,16 @@ describe('NotificationsCard', () => {
           probe1: 'Chamber',
           op: '>',
           probe2: 'Probe 1',
-          offset: 5
-        }
+          offset: 5,
+        },
       ];
-      
+
       mockGetNotificationSettings.mockResolvedValue(mockData);
-      
+
       await act(async () => {
         render(<NotificationsCard />);
       });
-      
+
       await waitFor(() => {
         expect(mockGetNotificationSettings).toHaveBeenCalled();
       });
@@ -303,11 +317,11 @@ describe('NotificationsCard', () => {
 
     test('should handle empty notifications array', async () => {
       mockGetNotificationSettings.mockResolvedValue([]);
-      
+
       await act(async () => {
         render(<NotificationsCard />);
       });
-      
+
       await waitFor(() => {
         expect(screen.getByText('New Rule')).toBeInTheDocument();
       });
@@ -319,7 +333,7 @@ describe('NotificationsCard', () => {
       await act(async () => {
         render(<NotificationsCard />);
       });
-      
+
       const button = screen.getByText('New Rule');
       expect(button).toBeInTheDocument();
     });
@@ -328,7 +342,7 @@ describe('NotificationsCard', () => {
       await act(async () => {
         render(<NotificationsCard />);
       });
-      
+
       expect(screen.getByTestId('card')).toBeInTheDocument();
       expect(screen.getByTestId('card-content')).toBeInTheDocument();
     });
@@ -344,8 +358,8 @@ describe('NotificationsCard', () => {
           probe2: 'Probe 1',
           temperature: 225,
           offset: 5,
-          type: true
-        }
+          type: true,
+        },
       ];
 
       mockGetNotificationSettings.mockResolvedValue(mockNotifications);
@@ -368,7 +382,7 @@ describe('NotificationsCard', () => {
           probe2: 'Probe 1',
           temperature: 225,
           offset: 5,
-          type: true
+          type: true,
         },
         {
           message: 'Test notification 2',
@@ -377,8 +391,8 @@ describe('NotificationsCard', () => {
           probe2: 'Probe 3',
           temperature: 180,
           offset: 10,
-          type: false
-        }
+          type: false,
+        },
       ];
 
       mockGetNotificationSettings.mockResolvedValue(mockNotifications);
@@ -408,8 +422,8 @@ describe('NotificationsCard', () => {
           probe2: 'Probe 1',
           temperature: 225,
           offset: 5,
-          type: false
-        }
+          type: false,
+        },
       ];
 
       mockGetNotificationSettings.mockResolvedValue(mockNotifications);
@@ -437,8 +451,8 @@ describe('NotificationsCard', () => {
           probe2: 'Probe 1',
           temperature: 225,
           offset: 5,
-          type: true
-        }
+          type: true,
+        },
       ];
 
       mockGetNotificationSettings.mockResolvedValue(mockNotifications);
@@ -448,7 +462,7 @@ describe('NotificationsCard', () => {
       });
 
       const messageInput = screen.getByDisplayValue('Original message');
-      
+
       await act(async () => {
         fireEvent.change(messageInput, { target: { value: 'Updated message' } });
       });
@@ -465,8 +479,8 @@ describe('NotificationsCard', () => {
           probe2: 'Probe 1',
           temperature: 225,
           offset: 5,
-          type: true
-        }
+          type: true,
+        },
       ];
 
       mockGetNotificationSettings.mockResolvedValue(mockNotifications);
@@ -476,7 +490,7 @@ describe('NotificationsCard', () => {
       });
 
       const probe1Select = screen.getByDisplayValue('Chamber');
-      
+
       await act(async () => {
         fireEvent.change(probe1Select, { target: { value: 'Probe 1' } });
       });
@@ -493,8 +507,8 @@ describe('NotificationsCard', () => {
           probe2: 'Probe 1',
           temperature: 225,
           offset: 5,
-          type: true
-        }
+          type: true,
+        },
       ];
 
       mockGetNotificationSettings.mockResolvedValue(mockNotifications);
@@ -504,7 +518,7 @@ describe('NotificationsCard', () => {
       });
 
       const opSelect = screen.getByDisplayValue('>');
-      
+
       await act(async () => {
         fireEvent.change(opSelect, { target: { value: '<' } });
       });
@@ -521,8 +535,8 @@ describe('NotificationsCard', () => {
           probe2: 'Probe 1',
           temperature: 225,
           offset: 5,
-          type: true
-        }
+          type: true,
+        },
       ];
 
       mockGetNotificationSettings.mockResolvedValue(mockNotifications);
@@ -532,7 +546,7 @@ describe('NotificationsCard', () => {
       });
 
       const probe2Select = screen.getByDisplayValue('Probe 1');
-      
+
       await act(async () => {
         fireEvent.change(probe2Select, { target: { value: 'Probe 2' } });
       });
@@ -549,8 +563,8 @@ describe('NotificationsCard', () => {
           probe2: 'Probe 1',
           temperature: 225,
           offset: 5,
-          type: true
-        }
+          type: true,
+        },
       ];
 
       mockGetNotificationSettings.mockResolvedValue(mockNotifications);
@@ -560,7 +574,7 @@ describe('NotificationsCard', () => {
       });
 
       const offsetInput = screen.getByDisplayValue('5');
-      
+
       await act(async () => {
         fireEvent.change(offsetInput, { target: { value: '10' } });
       });
@@ -577,8 +591,8 @@ describe('NotificationsCard', () => {
           probe2: 'Probe 1',
           temperature: 225,
           offset: 5,
-          type: false
-        }
+          type: false,
+        },
       ];
 
       mockGetNotificationSettings.mockResolvedValue(mockNotifications);
@@ -588,7 +602,7 @@ describe('NotificationsCard', () => {
       });
 
       const temperatureInput = screen.getByDisplayValue('225');
-      
+
       await act(async () => {
         fireEvent.change(temperatureInput, { target: { value: '250' } });
       });
@@ -605,8 +619,8 @@ describe('NotificationsCard', () => {
           probe2: 'Probe 1',
           temperature: 225,
           offset: 5,
-          type: false
-        }
+          type: false,
+        },
       ];
 
       mockGetNotificationSettings.mockResolvedValue(tempNotifications);
@@ -630,8 +644,8 @@ describe('NotificationsCard', () => {
           probe2: 'Probe 1',
           temperature: 225,
           offset: 5,
-          type: true
-        }
+          type: true,
+        },
       ];
 
       mockGetNotificationSettings.mockResolvedValue(probeNotifications);
@@ -654,8 +668,8 @@ describe('NotificationsCard', () => {
           probe2: 'Probe 1',
           temperature: 225,
           offset: 5,
-          type: true
-        }
+          type: true,
+        },
       ];
 
       mockGetNotificationSettings.mockResolvedValue(mockNotifications);
@@ -665,7 +679,7 @@ describe('NotificationsCard', () => {
       });
 
       const messageInput = screen.getByDisplayValue('Test notification');
-      
+
       await act(async () => {
         fireEvent.change(messageInput, { target: { value: 'Changed message' } });
       });

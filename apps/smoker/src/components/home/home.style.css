@@ -1,26 +1,24 @@
-
-
 .background {
-    background-color: #e0dfdf;
-    min-height: 100vh;
+  background-color: #e0dfdf;
+  min-height: 100vh;
 }
 
 .text {
-    font-family: "Roboto","Helvetica","Arial",sans-serif;
-    font-size: 1.5rem;
-    font-weight: 700;
+  font-family: 'Roboto', 'Helvetica', 'Arial', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 700;
 }
 
 .buttonContainer {
-    padding: 2%;
+  padding: 2%;
 }
 
 .button {
-    height: 50px;
-    width: 125px;
+  height: 50px;
+  width: 125px;
 }
 
 .wifiButton {
-    height: 50px;
-    width: 75px;
+  height: 50px;
+  width: 75px;
 }

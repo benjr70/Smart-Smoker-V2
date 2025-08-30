@@ -1,28 +1,34 @@
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import App from './App';
 
 // Mock the components
 jest.mock('./components/smoke/smoke', () => ({
-  Smoke: () => <div data-testid="smoke-component">Smoke Component</div>
+  Smoke: () => <div data-testid="smoke-component">Smoke Component</div>,
 }));
 
 jest.mock('./components/history/history', () => ({
-  History: () => <div data-testid="history-component">History Component</div>
+  History: () => <div data-testid="history-component">History Component</div>,
 }));
 
 jest.mock('./components/settings/settings', () => ({
-  Settings: () => <div data-testid="settings-component">Settings Component</div>
+  Settings: () => <div data-testid="settings-component">Settings Component</div>,
 }));
 
 jest.mock('../src/components/bottomBar/bottombar', () => ({
   BottomBar: ({ smokeOnClick, reviewOnClick, settingsOnClick }: any) => (
     <div data-testid="bottom-bar">
-      <button data-testid="smoke-button" onClick={smokeOnClick}>Smoke</button>
-      <button data-testid="review-button" onClick={reviewOnClick}>Review</button>
-      <button data-testid="settings-button" onClick={settingsOnClick}>Settings</button>
+      <button data-testid="smoke-button" onClick={smokeOnClick}>
+        Smoke
+      </button>
+      <button data-testid="review-button" onClick={reviewOnClick}>
+        Review
+      </button>
+      <button data-testid="settings-button" onClick={settingsOnClick}>
+        Settings
+      </button>
     </div>
-  )
+  ),
 }));
 
 // Mock environment variables
@@ -37,13 +43,13 @@ beforeEach(() => {
   process.env = {
     ...originalEnv,
     REACT_APP_CLOUD_URL: 'http://localhost:3001/',
-    VAPID_PUBLIC_KEY: 'BMJ0-abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ' // Valid base64
+    VAPID_PUBLIC_KEY: 'BMJ0-abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ', // Valid base64
   };
-  
+
   // Reset fetch mock
   mockFetch.mockClear();
   mockFetch.mockResolvedValue({ ok: true });
-  
+
   // Reset console methods
   jest.spyOn(console, 'error').mockImplementation(() => {});
 });
@@ -59,23 +65,23 @@ describe('App Component', () => {
     const mockServiceWorker = {
       register: jest.fn().mockResolvedValue({
         pushManager: {
-          subscribe: jest.fn().mockResolvedValue({})
-        }
-      })
+          subscribe: jest.fn().mockResolvedValue({}),
+        },
+      }),
     };
-    
+
     Object.defineProperty(navigator, 'serviceWorker', {
       value: mockServiceWorker,
-      configurable: true
+      configurable: true,
     });
-    
+
     Object.defineProperty(window, 'PushManager', {
-      value: function() {},
-      configurable: true
+      value: function () {},
+      configurable: true,
     });
-    
+
     render(<App />);
-    
+
     expect(screen.getByTestId('smoke-component')).toBeInTheDocument();
     expect(screen.getByTestId('bottom-bar')).toBeInTheDocument();
   });
@@ -85,21 +91,21 @@ describe('App Component', () => {
     const mockServiceWorker = {
       register: jest.fn().mockResolvedValue({
         pushManager: {
-          subscribe: jest.fn().mockResolvedValue({})
-        }
-      })
+          subscribe: jest.fn().mockResolvedValue({}),
+        },
+      }),
     };
-    
+
     Object.defineProperty(navigator, 'serviceWorker', {
       value: mockServiceWorker,
-      configurable: true
+      configurable: true,
     });
-    
+
     Object.defineProperty(window, 'PushManager', {
-      value: function() {},
-      configurable: true
+      value: function () {},
+      configurable: true,
     });
-    
+
     render(<App />);
     expect(screen.getByTestId('smoke-component')).toBeInTheDocument();
   });
@@ -109,27 +115,27 @@ describe('App Component', () => {
     const mockServiceWorker = {
       register: jest.fn().mockResolvedValue({
         pushManager: {
-          subscribe: jest.fn().mockResolvedValue({})
-        }
-      })
+          subscribe: jest.fn().mockResolvedValue({}),
+        },
+      }),
     };
-    
+
     Object.defineProperty(navigator, 'serviceWorker', {
       value: mockServiceWorker,
-      configurable: true
+      configurable: true,
     });
-    
+
     Object.defineProperty(window, 'PushManager', {
-      value: function() {},
-      configurable: true
+      value: function () {},
+      configurable: true,
     });
-    
+
     render(<App />);
-    
+
     // First navigate to a different screen
     fireEvent.click(screen.getByTestId('review-button'));
     expect(screen.getByTestId('history-component')).toBeInTheDocument();
-    
+
     // Then click smoke button to go back to HOME
     fireEvent.click(screen.getByTestId('smoke-button'));
     expect(screen.getByTestId('smoke-component')).toBeInTheDocument();
@@ -140,23 +146,23 @@ describe('App Component', () => {
     const mockServiceWorker = {
       register: jest.fn().mockResolvedValue({
         pushManager: {
-          subscribe: jest.fn().mockResolvedValue({})
-        }
-      })
+          subscribe: jest.fn().mockResolvedValue({}),
+        },
+      }),
     };
-    
+
     Object.defineProperty(navigator, 'serviceWorker', {
       value: mockServiceWorker,
-      configurable: true
+      configurable: true,
     });
-    
+
     Object.defineProperty(window, 'PushManager', {
-      value: function() {},
-      configurable: true
+      value: function () {},
+      configurable: true,
     });
-    
+
     render(<App />);
-    
+
     fireEvent.click(screen.getByTestId('review-button'));
     expect(screen.getByTestId('history-component')).toBeInTheDocument();
   });
@@ -166,23 +172,23 @@ describe('App Component', () => {
     const mockServiceWorker = {
       register: jest.fn().mockResolvedValue({
         pushManager: {
-          subscribe: jest.fn().mockResolvedValue({})
-        }
-      })
+          subscribe: jest.fn().mockResolvedValue({}),
+        },
+      }),
     };
-    
+
     Object.defineProperty(navigator, 'serviceWorker', {
       value: mockServiceWorker,
-      configurable: true
+      configurable: true,
     });
-    
+
     Object.defineProperty(window, 'PushManager', {
-      value: function() {},
-      configurable: true
+      value: function () {},
+      configurable: true,
     });
-    
+
     render(<App />);
-    
+
     fireEvent.click(screen.getByTestId('settings-button'));
     expect(screen.getByTestId('settings-component')).toBeInTheDocument();
   });
@@ -191,7 +197,7 @@ describe('App Component', () => {
     const app = new App({});
     const testBase64 = 'SGVsbG8gV29ybGQ'; // "Hello World" in base64
     const result = app.urlBase64ToUint8Array(testBase64);
-    
+
     expect(result).toBeInstanceOf(Uint8Array);
     expect(result.length).toBeGreaterThan(0);
   });
@@ -200,7 +206,7 @@ describe('App Component', () => {
     const app = new App({});
     const testBase64 = 'SGVsbG8'; // Base64 string that needs padding
     const result = app.urlBase64ToUint8Array(testBase64);
-    
+
     expect(result).toBeInstanceOf(Uint8Array);
     expect(result.length).toBeGreaterThan(0);
   });
@@ -209,7 +215,7 @@ describe('App Component', () => {
     const app = new App({});
     const testBase64 = 'SGVsbG8_V29ybGQ-'; // Base64 with URL-safe characters
     const result = app.urlBase64ToUint8Array(testBase64);
-    
+
     expect(result).toBeInstanceOf(Uint8Array);
     expect(result.length).toBeGreaterThan(0);
   });
@@ -221,26 +227,26 @@ describe('App Component', () => {
           endpoint: 'test-endpoint',
           keys: {
             p256dh: 'test-key',
-            auth: 'test-auth'
-          }
-        })
-      }
+            auth: 'test-auth',
+          },
+        }),
+      },
     };
 
     const mockServiceWorker = {
-      register: jest.fn().mockResolvedValue(mockRegistration)
+      register: jest.fn().mockResolvedValue(mockRegistration),
     };
 
     // Mock navigator.serviceWorker
     Object.defineProperty(navigator, 'serviceWorker', {
       value: mockServiceWorker,
-      configurable: true
+      configurable: true,
     });
 
     // Mock PushManager
     Object.defineProperty(window, 'PushManager', {
-      value: function() {},
-      configurable: true
+      value: function () {},
+      configurable: true,
     });
 
     render(<App />);
@@ -249,67 +255,70 @@ describe('App Component', () => {
     await waitFor(() => {
       expect(mockServiceWorker.register).toHaveBeenCalledWith('/sw.js');
     });
-    
+
     await waitFor(() => {
       expect(mockRegistration.pushManager.subscribe).toHaveBeenCalledWith({
         userVisibleOnly: true,
-        applicationServerKey: expect.any(Uint8Array)
+        applicationServerKey: expect.any(Uint8Array),
       });
     });
-    
+
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalledWith('http://localhost:3001/notifications/subscribe', {
         method: 'POST',
         body: expect.any(String),
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
     });
   });
 
   test('componentDidMount handles service worker registration error', async () => {
     const mockServiceWorker = {
-      register: jest.fn().mockRejectedValue(new Error('Registration failed'))
+      register: jest.fn().mockRejectedValue(new Error('Registration failed')),
     };
 
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
 
     Object.defineProperty(navigator, 'serviceWorker', {
       value: mockServiceWorker,
-      configurable: true
+      configurable: true,
     });
 
     render(<App />);
 
     await waitFor(() => {
-      expect(consoleSpy).toHaveBeenCalledWith('Service Worker registration failed: ', expect.any(Error));
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'Service Worker registration failed: ',
+        expect.any(Error)
+      );
     });
-    
+
     consoleSpy.mockRestore();
   });
 
   test('componentDidMount handles push subscription error', async () => {
     const mockRegistration = {
       pushManager: {
-        subscribe: jest.fn().mockRejectedValue(new Error('Subscription failed'))
-      }
+        subscribe: jest.fn().mockRejectedValue(new Error('Subscription failed')),
+      },
     };
 
     const mockServiceWorker = {
-      register: jest.fn().mockResolvedValue(mockRegistration)
+      register: jest.fn().mockResolvedValue(mockRegistration),
     };
 
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
 
     Object.defineProperty(navigator, 'serviceWorker', {
       value: mockServiceWorker,
-      configurable: true
+      configurable: true,
     });
 
     Object.defineProperty(window, 'PushManager', {
-      value: function() {},
-      configurable: true
+      value: function () {},
+      configurable: true,
     });
 
     render(<App />);
@@ -317,7 +326,7 @@ describe('App Component', () => {
     await waitFor(() => {
       expect(consoleSpy).toHaveBeenCalledWith('Failed to subscribe the user: ', expect.any(Error));
     });
-    
+
     consoleSpy.mockRestore();
   });
 
@@ -343,12 +352,12 @@ describe('App Component', () => {
   test('componentDidMount skips push subscription when PushManager not available', async () => {
     const mockRegistration = {
       pushManager: {
-        subscribe: jest.fn()
-      }
+        subscribe: jest.fn(),
+      },
     };
 
     const mockServiceWorker = {
-      register: jest.fn().mockResolvedValue(mockRegistration)
+      register: jest.fn().mockResolvedValue(mockRegistration),
     };
 
     // Remove PushManager from window
@@ -357,7 +366,7 @@ describe('App Component', () => {
 
     Object.defineProperty(navigator, 'serviceWorker', {
       value: mockServiceWorker,
-      configurable: true
+      configurable: true,
     });
 
     render(<App />);
@@ -380,31 +389,31 @@ describe('App Component', () => {
     const mockServiceWorker = {
       register: jest.fn().mockResolvedValue({
         pushManager: {
-          subscribe: jest.fn().mockResolvedValue({})
-        }
-      })
+          subscribe: jest.fn().mockResolvedValue({}),
+        },
+      }),
     };
-    
+
     Object.defineProperty(navigator, 'serviceWorker', {
       value: mockServiceWorker,
-      configurable: true
+      configurable: true,
     });
-    
+
     Object.defineProperty(window, 'PushManager', {
-      value: function() {},
-      configurable: true
+      value: function () {},
+      configurable: true,
     });
-    
+
     render(<App />);
-    
+
     // Default should be smoke
     expect(screen.getByTestId('smoke-component')).toBeInTheDocument();
-    
+
     // Navigate to history
     fireEvent.click(screen.getByTestId('review-button'));
     expect(screen.getByTestId('history-component')).toBeInTheDocument();
     expect(screen.queryByTestId('smoke-component')).not.toBeInTheDocument();
-    
+
     // Navigate to settings
     fireEvent.click(screen.getByTestId('settings-button'));
     expect(screen.getByTestId('settings-component')).toBeInTheDocument();
@@ -416,30 +425,30 @@ describe('App Component', () => {
     const mockServiceWorker = {
       register: jest.fn().mockResolvedValue({
         pushManager: {
-          subscribe: jest.fn().mockResolvedValue({})
-        }
-      })
+          subscribe: jest.fn().mockResolvedValue({}),
+        },
+      }),
     };
-    
+
     Object.defineProperty(navigator, 'serviceWorker', {
       value: mockServiceWorker,
-      configurable: true
+      configurable: true,
     });
-    
+
     Object.defineProperty(window, 'PushManager', {
-      value: function() {},
-      configurable: true
+      value: function () {},
+      configurable: true,
     });
-    
+
     render(<App />);
-    
+
     // Test HOME screen (default)
     expect(screen.getByTestId('smoke-component')).toBeInTheDocument();
-    
+
     // Test HISTORY screen
     fireEvent.click(screen.getByTestId('review-button'));
     expect(screen.getByTestId('history-component')).toBeInTheDocument();
-    
+
     // Test SETTINGS screen
     fireEvent.click(screen.getByTestId('settings-button'));
     expect(screen.getByTestId('settings-component')).toBeInTheDocument();

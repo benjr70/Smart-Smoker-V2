@@ -8,28 +8,70 @@ import { TempData } from 'temperaturechart/src/tempChart';
 // Mock Material-UI components
 jest.mock('@mui/material', () => ({
   Card: ({ children, ...props }: any) => (
-    <div data-testid="card" {...props}>{children}</div>
+    <div data-testid="card" {...props}>
+      {children}
+    </div>
   ),
   CardContent: ({ children, ...props }: any) => (
-    <div data-testid="card-content" {...props}>{children}</div>
+    <div data-testid="card-content" {...props}>
+      {children}
+    </div>
   ),
   Grid: ({ children, ...props }: any) => (
-    <div data-testid="grid" {...props}>{children}</div>
+    <div data-testid="grid" {...props}>
+      {children}
+    </div>
   ),
   ThemeProvider: ({ children, theme, ...props }: any) => (
-    <div data-testid="theme-provider" data-theme={JSON.stringify(theme)} {...props}>{children}</div>
+    <div data-testid="theme-provider" data-theme={JSON.stringify(theme)} {...props}>
+      {children}
+    </div>
   ),
   Typography: ({ children, variant, component, align, sx, ...props }: any) => (
-    <div data-testid="typography" data-variant={variant} data-component={component} data-align={align} data-sx={JSON.stringify(sx)} {...props}>{children}</div>
+    <div
+      data-testid="typography"
+      data-variant={variant}
+      data-component={component}
+      data-align={align}
+      data-sx={JSON.stringify(sx)}
+      {...props}
+    >
+      {children}
+    </div>
   ),
-  createTheme: jest.fn((theme) => theme)
+  createTheme: jest.fn(theme => theme),
 }));
 
 // Mock TempChart
 jest.mock('temperaturechart/src/tempChart', () => ({
   __esModule: true,
-  default: ({ ChamberTemp, MeatTemp, Meat2Temp, Meat3Temp, ChamberName, Probe1Name, Probe2Name, Probe3Name, date, smoking, initData }: any) => (
-    <div data-testid="temp-chart" data-chamber-temp={ChamberTemp} data-meat-temp={MeatTemp} data-meat2-temp={Meat2Temp} data-meat3-temp={Meat3Temp} data-chamber-name={ChamberName} data-probe1-name={Probe1Name} data-probe2-name={Probe2Name} data-probe3-name={Probe3Name} data-date={date} data-smoking={smoking ? 'true' : 'false'} data-init-data={JSON.stringify(initData)} />
+  default: ({
+    ChamberTemp,
+    MeatTemp,
+    Meat2Temp,
+    Meat3Temp,
+    ChamberName,
+    Probe1Name,
+    Probe2Name,
+    Probe3Name,
+    date,
+    smoking,
+    initData,
+  }: any) => (
+    <div
+      data-testid="temp-chart"
+      data-chamber-temp={ChamberTemp}
+      data-meat-temp={MeatTemp}
+      data-meat2-temp={Meat2Temp}
+      data-meat3-temp={Meat3Temp}
+      data-chamber-name={ChamberName}
+      data-probe1-name={Probe1Name}
+      data-probe2-name={Probe2Name}
+      data-probe3-name={Probe3Name}
+      data-date={date}
+      data-smoking={smoking ? 'true' : 'false'}
+      data-init-data={JSON.stringify(initData)}
+    />
   ),
 }));
 
@@ -40,7 +82,7 @@ describe('SmokeProfileCard Component', () => {
     probe2Name: 'Flat',
     probe3Name: 'Ambient',
     notes: 'Great smoke session',
-    woodType: 'Hickory'
+    woodType: 'Hickory',
   };
 
   const mockTemps: TempData[] = [
@@ -49,20 +91,20 @@ describe('SmokeProfileCard Component', () => {
       MeatTemp: 150,
       Meat2Temp: 145,
       Meat3Temp: 140,
-      date: new Date('2023-07-15T12:00:00Z')
+      date: new Date('2023-07-15T12:00:00Z'),
     },
     {
       ChamberTemp: 250,
       MeatTemp: 180,
       Meat2Temp: 170,
       Meat3Temp: 160,
-      date: new Date('2023-07-15T14:00:00Z')
-    }
+      date: new Date('2023-07-15T14:00:00Z'),
+    },
   ];
 
   const mockProps = {
     smokeProfile: mockSmokeProfile,
-    temps: mockTemps
+    temps: mockTemps,
   };
 
   describe('Component Rendering', () => {
@@ -117,9 +159,9 @@ describe('SmokeProfileCard Component', () => {
           chamberName: null as any,
           probe1Name: null as any,
           probe2Name: null as any,
-          probe3Name: null as any
+          probe3Name: null as any,
         },
-        temps: mockTemps
+        temps: mockTemps,
       };
       render(<SmokeProfileCard {...propsWithMissingNames} />);
       expect(screen.getByText('Chamber')).toBeInTheDocument();
@@ -131,7 +173,7 @@ describe('SmokeProfileCard Component', () => {
     test('should handle empty temps array', () => {
       const propsWithEmptyTemps = {
         smokeProfile: mockSmokeProfile,
-        temps: []
+        temps: [],
       };
       render(<SmokeProfileCard {...propsWithEmptyTemps} />);
       // Should not crash, but TempChart will get undefined values
@@ -173,12 +215,14 @@ describe('SmokeProfileCard Component', () => {
         smokeProfile: {
           ...mockSmokeProfile,
           notes: 'A'.repeat(200),
-          woodType: 'VeryLongWoodTypeNameThatExceedsNormalLength'
+          woodType: 'VeryLongWoodTypeNameThatExceedsNormalLength',
         },
-        temps: mockTemps
+        temps: mockTemps,
       };
       render(<SmokeProfileCard {...propsWithLongNotes} />);
-      expect(screen.getByText('VeryLongWoodTypeNameThatExceedsNormalLength Wood')).toBeInTheDocument();
+      expect(
+        screen.getByText('VeryLongWoodTypeNameThatExceedsNormalLength Wood')
+      ).toBeInTheDocument();
       expect(screen.getByText('A'.repeat(200))).toBeInTheDocument();
     });
   });

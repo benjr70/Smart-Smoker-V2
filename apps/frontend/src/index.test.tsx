@@ -31,15 +31,15 @@ describe('index.tsx', () => {
     mockRender.mockClear();
     mockCreateRoot.mockClear();
     mockReportWebVitals.mockClear();
-    
+
     // Reset mockCreateRoot to return the object with render method
     mockCreateRoot.mockReturnValue({
       render: mockRender,
     });
-    
+
     // Store original function
     originalGetElementById = document.getElementById;
-    
+
     // Clear module cache
     jest.resetModules();
   });
@@ -53,7 +53,7 @@ describe('index.tsx', () => {
     test('should render App when root element exists', () => {
       const mockRootElement = document.createElement('div');
       mockRootElement.id = 'root';
-      
+
       // Mock getElementById
       document.getElementById = jest.fn().mockReturnValue(mockRootElement);
 
@@ -126,7 +126,7 @@ describe('index.tsx', () => {
 
       // Import and execute index.tsx
       require('./index');
-      
+
       expect(mockReportWebVitals).toHaveBeenCalledTimes(1);
       expect(mockReportWebVitals).toHaveBeenCalledWith();
     });
@@ -136,7 +136,7 @@ describe('index.tsx', () => {
     test('should complete full initialization flow when root exists', () => {
       const mockRootElement = document.createElement('div');
       mockRootElement.id = 'root';
-      
+
       document.getElementById = jest.fn().mockReturnValue(mockRootElement);
 
       // Import index.tsx to trigger the execution
@@ -171,7 +171,7 @@ describe('index.tsx', () => {
       require('./index');
 
       expect(mockRender).toHaveBeenCalledTimes(1);
-      
+
       // Verify that some element was passed to render
       expect(mockRender.mock.calls[0]).toHaveLength(1);
     });

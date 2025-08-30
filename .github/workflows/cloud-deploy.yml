@@ -10,9 +10,10 @@ on:
         required: true
 
 jobs:
-  deploy: 
-    runs-on: SmokeCloud
-        # Steps represent a sequence of tasks that will be executed as part of the job
+  deploy:
+    runs-on:
+      SmokeCloud
+      # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - run: sudo chmod -R 777 ./

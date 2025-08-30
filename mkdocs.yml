@@ -11,16 +11,15 @@ theme:
     - toc.follow
     - toc.integrate
   palette:
-
     # Palette toggle for light mode
-    - media: "(prefers-color-scheme: light)"
+    - media: '(prefers-color-scheme: light)'
       scheme: default
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
 
     # Palette toggle for dark mode
-    - media: "(prefers-color-scheme: dark)"
+    - media: '(prefers-color-scheme: dark)'
       scheme: slate
       toggle:
         icon: material/brightness-4
@@ -47,29 +46,29 @@ extra:
 
 nav:
   - Welcome:
-    - index.md
-    - Documentation: Documentation.md
-    - Hardware: Hardware/index.md
-    - Pi Software: piSoftware.md
-    - Epics: 
-        - Push Notifications: Epics/pushNotifications.md
-        - Google Assistant: Epics/googleAssistant.md
+      - index.md
+      - Documentation: Documentation.md
+      - Hardware: Hardware/index.md
+      - Pi Software: piSoftware.md
+      - Epics:
+          - Push Notifications: Epics/pushNotifications.md
+          - Google Assistant: Epics/googleAssistant.md
   - Apps:
-    - Frontend:
-      - Frontend/index.md
-    - BackEnd:
-      - Backend/index.md
-      - Backend/backend-architecture.md
-    - Smoker Frontend:
-      - Smoker Frontend/index.md
-    - Device Service:
-      - Device Service/index.md
+      - Frontend:
+          - Frontend/index.md
+      - BackEnd:
+          - Backend/index.md
+          - Backend/backend-architecture.md
+      - Smoker Frontend:
+          - Smoker Frontend/index.md
+      - Device Service:
+          - Device Service/index.md
   - Packages:
-    - Packages/index.md
-    - Testing Template: Packages/testing-template.md
+      - Packages/index.md
+      - Testing Template: Packages/testing-template.md
   - CI/CD:
-    - CI-CD/index.md
-    - GitHub Actions: CI-CD/github-actions.md
-    - Test Coverage: CI-CD/test-coverage.md
-    - Dependency Management: CI-CD/dependency-management.md
-    - Deployment & Infrastructure: CI-CD/deployment-infrastructure.md
+      - CI-CD/index.md
+      - GitHub Actions: CI-CD/github-actions.md
+      - Test Coverage: CI-CD/test-coverage.md
+      - Dependency Management: CI-CD/dependency-management.md
+      - Deployment & Infrastructure: CI-CD/deployment-infrastructure.md

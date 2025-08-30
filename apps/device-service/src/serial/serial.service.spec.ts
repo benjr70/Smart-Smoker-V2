@@ -20,8 +20,8 @@ jest.mock('serialport', () => {
   };
 });
 
-import { Test, TestingModule } from '@nestjs/testing';
 import { Logger } from '@nestjs/common';
+import { Test, TestingModule } from '@nestjs/testing';
 import { SerialService } from './serial.serivce';
 
 // Get references to the mocked objects for use in tests

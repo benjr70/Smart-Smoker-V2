@@ -75,7 +75,7 @@
     "coverageDirectory": "coverage",
     "coverageReporters": [
       "html",
-      "text", 
+      "text",
       "lcov",
       "clover",
       "json-summary"
@@ -88,7 +88,9 @@
     "clearMocks": true,
     "resetMocks": true,
     "restoreMocks": true,
-    "setupFilesAfterEnv": ["<rootDir>/test-setup.ts"],
+    "setupFilesAfterEnv": [
+      "<rootDir>/test-setup.ts"
+    ],
     "bail": true,
     "coverageThreshold": {
       "global": {

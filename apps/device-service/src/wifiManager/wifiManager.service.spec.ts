@@ -1,8 +1,8 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { HttpException } from '@nestjs/common';
-import { WifiManagerService } from './wifiManager.service';
-import { wifiDto } from './wifiDto';
+import { Test, TestingModule } from '@nestjs/testing';
 import { exec } from 'child_process';
+import { wifiDto } from './wifiDto';
+import { WifiManagerService } from './wifiManager.service';
 
 // Mock child_process
 jest.mock('child_process', () => ({

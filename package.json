@@ -42,7 +42,7 @@
     "lint:backend:safe": "cd apps/backend && npm run lint",
     "lint:backend:fix": "cd apps/backend && npm run lint",
     "lint:frontend:safe": "cd apps/frontend && npm run lint || echo 'Frontend linting completed'",
-    "lint:frontend:fix": "cd apps/frontend && npm run lint || echo 'Frontend linting completed'", 
+    "lint:frontend:fix": "cd apps/frontend && npm run lint || echo 'Frontend linting completed'",
     "lint:smoker:safe": "cd apps/smoker && npm run lint || echo 'Smoker linting completed'",
     "lint:smoker:fix": "cd apps/smoker && npm run lint || echo 'Smoker linting completed'",
     "lint:device-service:safe": "cd apps/device-service && npm run lint",

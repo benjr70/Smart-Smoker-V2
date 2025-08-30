@@ -1,12 +1,11 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
-import { SmokeProfileService } from './smokeProfile.service';
-import { SmokeProfile } from './smokeProfile.schema';
-import { SmokeProFileDto } from './smokeProfileDto';
+import { Test, TestingModule } from '@nestjs/testing';
 import { StateService } from '../State/state.service';
-import { SmokeService } from '../smoke/smoke.service';
 import { RatingsService } from '../ratings/ratings.service';
+import { SmokeService } from '../smoke/smoke.service';
 import { SmokeDto } from '../smoke/smokeDto';
+import { SmokeProfileService } from './smokeProfile.service';
+import { SmokeProFileDto } from './smokeProfileDto';
 
 describe('SmokeProfileService', () => {
   let service: SmokeProfileService;

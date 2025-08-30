@@ -1,18 +1,18 @@
 .text {
-    font-family: "Roboto","Helvetica","Arial",sans-serif;
-    font-size: 1.5rem;
-    font-weight: 700;
+  font-family: 'Roboto', 'Helvetica', 'Arial', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 700;
 }
 
 .tempContainer {
-    justify-content: space-around;
+  justify-content: space-around;
 }
 
 .buttonContainer {
-    padding: 2%;
+  padding: 2%;
 }
 
 .button {
-    height: 50px;
-    width: 100%;
+  height: 50px;
+  width: 100%;
 }

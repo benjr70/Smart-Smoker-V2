@@ -1,28 +1,28 @@
-import { 
-  toggleSmoking, 
-  clearSmoke, 
-  getState, 
-  setSmokeProfile, 
-  getSmokeProfileById, 
-  FinishSmoke, 
-  getCurrentSmokeProfile, 
-  getSmokeHistory, 
-  getAllSmoke, 
-  getSmokeById, 
-  deleteSmokeProfileById, 
+import {
+  toggleSmoking,
+  clearSmoke,
+  getState,
+  setSmokeProfile,
+  getSmokeProfileById,
+  FinishSmoke,
+  getCurrentSmokeProfile,
+  getSmokeHistory,
+  getAllSmoke,
+  getSmokeById,
+  deleteSmokeProfileById,
   deleteSmokeById,
-  smokeProfile
+  smokeProfile,
 } from './smokerService';
 import { State } from '../components/common/interfaces/state';
 import { smokeHistory } from '../components/common/interfaces/history';
 
 // Mock socket.io-client
 const mockSocket = {
-  emit: jest.fn()
+  emit: jest.fn(),
 };
 
 jest.mock('socket.io-client', () => ({
-  io: jest.fn(() => mockSocket)
+  io: jest.fn(() => mockSocket),
 }));
 
 // Create a mock that allows baseURL to be tracked
@@ -33,9 +33,13 @@ const mockAxios = {
   delete: jest.fn(),
   put: jest.fn(),
   defaults: {
-    get baseURL() { return currentBaseURL; },
-    set baseURL(value) { currentBaseURL = value; }
-  }
+    get baseURL() {
+      return currentBaseURL;
+    },
+    set baseURL(value) {
+      currentBaseURL = value;
+    },
+  },
 };
 
 jest.mock('axios', () => mockAxios);
@@ -47,7 +51,7 @@ beforeEach(() => {
   process.env = {
     ...originalEnv,
     REACT_APP_CLOUD_URL: 'http://localhost:3001/',
-    WS_URL: 'ws://localhost:3002'
+    WS_URL: 'ws://localhost:3002',
   };
   mockAxios.get.mockClear();
   mockAxios.post.mockClear();
@@ -65,7 +69,7 @@ afterEach(() => {
 describe('smokerService', () => {
   const mockState: State = {
     smokeId: 'test-smoke-id',
-    smoking: true
+    smoking: true,
   };
 
   const mockSmokeProfile: smokeProfile = {
@@ -74,7 +78,7 @@ describe('smokerService', () => {
     probe2Name: 'Chamber Probe',
     probe3Name: 'Water Pan',
     notes: 'Test smoke',
-    woodType: 'Hickory'
+    woodType: 'Hickory',
   };
 
   const mockSmokeHistory: smokeHistory[] = [
@@ -86,15 +90,15 @@ describe('smokerService', () => {
       woodType: 'Hickory',
       date: '2025-01-01',
       smokeId: 'smoke-id-1',
-      overAllRating: '8'
-    }
+      overAllRating: '8',
+    },
   ];
 
   describe('toggleSmoking', () => {
     test('should toggle smoking successfully', async () => {
       const mockAxios = require('axios');
       mockAxios.put.mockResolvedValue({
-        data: mockState
+        data: mockState,
       });
 
       const result = await toggleSmoking();
@@ -114,26 +118,25 @@ describe('smokerService', () => {
 
     test('should set correct baseURL from environment variable', async () => {
       process.env.REACT_APP_CLOUD_URL = 'https://api.example.com/';
-      
+
       const mockAxios = require('axios');
       mockAxios.put.mockResolvedValue({ data: mockState });
 
       await toggleSmoking();
-
     });
   });
 
   describe('clearSmoke', () => {
     test('should clear smoke successfully with socket emission', async () => {
       const mockSocket = {
-        emit: jest.fn()
+        emit: jest.fn(),
       };
       const { io } = require('socket.io-client');
       io.mockReturnValue(mockSocket);
 
       const mockAxios = require('axios');
       mockAxios.put.mockResolvedValue({
-        data: mockState
+        data: mockState,
       });
 
       const result = await clearSmoke();
@@ -146,7 +149,7 @@ describe('smokerService', () => {
 
     test('should handle clearSmoke error and log it', async () => {
       const mockSocket = {
-        emit: jest.fn()
+        emit: jest.fn(),
       };
       const { io } = require('socket.io-client');
       io.mockReturnValue(mockSocket);
@@ -169,7 +172,7 @@ describe('smokerService', () => {
       delete process.env.WS_URL;
 
       const mockSocket = {
-        emit: jest.fn()
+        emit: jest.fn(),
       };
       const { io } = require('socket.io-client');
       io.mockReturnValue(mockSocket);
@@ -188,7 +191,7 @@ describe('smokerService', () => {
     test('should get state successfully', async () => {
       const mockAxios = require('axios');
       mockAxios.get.mockResolvedValue({
-        data: mockState
+        data: mockState,
       });
 
       const result = await getState();
@@ -216,7 +219,7 @@ describe('smokerService', () => {
     test('should set smoke profile successfully', async () => {
       const mockAxios = require('axios');
       mockAxios.post.mockResolvedValue({
-        data: mockSmokeProfile
+        data: mockSmokeProfile,
       });
 
       const result = await setSmokeProfile(mockSmokeProfile);
@@ -245,7 +248,7 @@ describe('smokerService', () => {
       const testId = 'profile-id-123';
       const mockAxios = require('axios');
       mockAxios.get.mockResolvedValue({
-        data: mockSmokeProfile
+        data: mockSmokeProfile,
       });
 
       const result = await getSmokeProfileById(testId);
@@ -260,13 +263,13 @@ describe('smokerService', () => {
         chamberName: 'Main Chamber',
         probe1Name: 'Meat Probe',
         probe2Name: 'Chamber Probe',
-        probe3Name: 'Water Pan'
+        probe3Name: 'Water Pan',
         // notes and woodType missing
       };
 
       const mockAxios = require('axios');
       mockAxios.get.mockResolvedValue({
-        data: profileWithoutOptionalFields
+        data: profileWithoutOptionalFields,
       });
 
       const result = await getSmokeProfileById(testId);
@@ -296,7 +299,7 @@ describe('smokerService', () => {
       const mockFinishResponse = { message: 'Smoke finished' };
       const mockAxios = require('axios');
       mockAxios.post.mockResolvedValue({
-        data: mockFinishResponse
+        data: mockFinishResponse,
       });
 
       const result = await FinishSmoke();
@@ -324,7 +327,7 @@ describe('smokerService', () => {
     test('should get current smoke profile successfully', async () => {
       const mockAxios = require('axios');
       mockAxios.get.mockResolvedValue({
-        data: mockSmokeProfile
+        data: mockSmokeProfile,
       });
 
       const result = await getCurrentSmokeProfile();
@@ -338,12 +341,12 @@ describe('smokerService', () => {
         chamberName: 'Main Chamber',
         probe1Name: 'Meat Probe',
         probe2Name: 'Chamber Probe',
-        probe3Name: 'Water Pan'
+        probe3Name: 'Water Pan',
       };
 
       const mockAxios = require('axios');
       mockAxios.get.mockResolvedValue({
-        data: profileWithoutOptionalFields
+        data: profileWithoutOptionalFields,
       });
 
       const result = await getCurrentSmokeProfile();
@@ -371,7 +374,7 @@ describe('smokerService', () => {
     test('should get smoke history successfully', async () => {
       const mockAxios = require('axios');
       mockAxios.get.mockResolvedValue({
-        data: mockSmokeHistory
+        data: mockSmokeHistory,
       });
 
       const result = await getSmokeHistory();
@@ -400,7 +403,7 @@ describe('smokerService', () => {
       const mockAllSmoke = [{ id: '1' }, { id: '2' }];
       const mockAxios = require('axios');
       mockAxios.get.mockResolvedValue({
-        data: mockAllSmoke
+        data: mockAllSmoke,
       });
 
       const result = await getAllSmoke();
@@ -430,7 +433,7 @@ describe('smokerService', () => {
       const mockSmoke = { id: testId, duration: 180 };
       const mockAxios = require('axios');
       mockAxios.get.mockResolvedValue({
-        data: mockSmoke
+        data: mockSmoke,
       });
 
       const result = await getSmokeById(testId);

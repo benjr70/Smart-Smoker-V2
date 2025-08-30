@@ -1,4 +1,4 @@
 export interface State {
-    smokeId: string;
-    smoking: boolean;
+  smokeId: string;
+  smoking: boolean;
 }

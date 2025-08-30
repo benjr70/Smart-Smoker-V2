@@ -20,11 +20,7 @@ module.exports = {
         // Don't use project references at root level - rely on app-level configs
       },
       plugins: ['@typescript-eslint'],
-      extends: [
-        'eslint:recommended',
-        '@typescript-eslint/recommended',
-        'prettier',
-      ],
+      extends: ['eslint:recommended', '@typescript-eslint/recommended', 'prettier'],
       env: {
         node: true,
         jest: true,
@@ -84,10 +80,13 @@ module.exports = {
         'react-hooks/exhaustive-deps': 'warn',
         // Functional component enforcement (per best practices)
         'react/prefer-stateless-function': 'error',
-        'react/function-component-definition': ['error', {
-          'namedComponents': 'arrow-function',
-          'unnamedComponents': 'arrow-function'
-        }],
+        'react/function-component-definition': [
+          'error',
+          {
+            namedComponents: 'arrow-function',
+            unnamedComponents: 'arrow-function',
+          },
+        ],
         // TypeScript rules (relaxed for React)
         '@typescript-eslint/explicit-function-return-type': 'off',
         '@typescript-eslint/explicit-module-boundary-types': 'off',

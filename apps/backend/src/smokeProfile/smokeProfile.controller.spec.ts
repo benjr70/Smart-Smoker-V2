@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { SmokeProfileController } from './smokeProfile.controller';
 import { SmokeProfileService } from './smokeProfile.service';
 import { SmokeProFileDto } from './smokeProfileDto';
-import { SmokeProfile } from './smokeProfile.schema';
 
 describe('SmokeProfileController', () => {
   let controller: SmokeProfileController;
@@ -132,9 +131,8 @@ describe('SmokeProfileController', () => {
         mockSmokeProfile,
       );
 
-      const result = await controller.saveCurrentSmokeProfile(
-        mockSmokeProfileDto,
-      );
+      const result =
+        await controller.saveCurrentSmokeProfile(mockSmokeProfileDto);
 
       expect(service.saveCurrentSmokeProfile).toHaveBeenCalledWith(
         mockSmokeProfileDto,
@@ -165,9 +163,8 @@ describe('SmokeProfileController', () => {
         undefined,
       );
 
-      const result = await controller.saveCurrentSmokeProfile(
-        mockSmokeProfileDto,
-      );
+      const result =
+        await controller.saveCurrentSmokeProfile(mockSmokeProfileDto);
 
       expect(service.saveCurrentSmokeProfile).toHaveBeenCalledWith(
         mockSmokeProfileDto,

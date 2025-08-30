@@ -1,33 +1,33 @@
-import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { History } from './history';
-import { getSmokeHistory } from '../../Services/smokerService';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import React from 'react';
 import { deleteSmoke } from '../../Services/deleteSmokeService';
+import { getSmokeHistory } from '../../Services/smokerService';
 import { smokeHistory } from '../common/interfaces/history';
+import { History } from './history';
 
 // Mock the services
 jest.mock('../../Services/smokerService', () => ({
-  getSmokeHistory: jest.fn()
+  getSmokeHistory: jest.fn(),
 }));
 
 jest.mock('../../Services/deleteSmokeService', () => ({
-  deleteSmoke: jest.fn()
+  deleteSmoke: jest.fn(),
 }));
 
 // Mock the child components
 jest.mock('./smokeCards/smokeCard', () => ({
-  SmokeCard: ({ 
-    name, 
-    meatType, 
-    date, 
-    weight, 
-    overAllRatings, 
-    weightUnit, 
-    woodType, 
-    smokeId, 
-    onViewClick, 
-    onDeleteClick 
+  SmokeCard: ({
+    name,
+    meatType,
+    date,
+    weight,
+    overAllRatings,
+    weightUnit,
+    woodType,
+    smokeId,
+    onViewClick,
+    onDeleteClick,
   }: any) => (
     <div data-testid={`smoke-card-${smokeId}`}>
       <div data-testid="smoke-name">{name}</div>
@@ -37,20 +37,14 @@ jest.mock('./smokeCards/smokeCard', () => ({
       <div data-testid="overall-ratings">{overAllRatings}</div>
       <div data-testid="weight-unit">{weightUnit}</div>
       <div data-testid="wood-type">{woodType}</div>
-      <button 
-        data-testid={`view-button-${smokeId}`}
-        onClick={() => onViewClick(smokeId)}
-      >
+      <button data-testid={`view-button-${smokeId}`} onClick={() => onViewClick(smokeId)}>
         View
       </button>
-      <button 
-        data-testid={`delete-button-${smokeId}`}
-        onClick={() => onDeleteClick(smokeId)}
-      >
+      <button data-testid={`delete-button-${smokeId}`} onClick={() => onDeleteClick(smokeId)}>
         Delete
       </button>
     </div>
-  )
+  ),
 }));
 
 jest.mock('./smokeReview/smokeReview', () => ({
@@ -58,20 +52,32 @@ jest.mock('./smokeReview/smokeReview', () => ({
     <div data-testid="smoke-review">
       <div data-testid="review-smoke-id">{smokeId}</div>
     </div>
-  )
+  ),
 }));
 
 // Mock Material-UI components
 jest.mock('@mui/material', () => ({
-  Grid: ({ children, className, paddingTop, paddingLeft, container, spacing, sx, paddingBottom, item, xs, ...props }: any) => {
+  Grid: ({
+    children,
+    className,
+    paddingTop,
+    paddingLeft,
+    container,
+    spacing,
+    sx,
+    paddingBottom,
+    item,
+    xs,
+    ...props
+  }: any) => {
     let testId = 'grid';
     if (className === 'history') testId = 'main-grid';
     if (container) testId = 'container-grid';
     if (item) testId = `item-grid-${xs || 'default'}`;
     if (paddingLeft) testId = 'back-button-grid';
-    
+
     return (
-      <div 
+      <div
         data-testid={testId}
         className={className}
         data-padding-top={paddingTop}
@@ -88,12 +94,10 @@ jest.mock('@mui/material', () => ({
       </div>
     );
   },
-  TextField: ({ ...props }: any) => (
-    <input data-testid="text-field" {...props} />
-  ),
+  TextField: ({ ...props }: any) => <input data-testid="text-field" {...props} />,
   IconButton: ({ children, onClick, color, component, ...props }: any) => (
-    <button 
-      data-testid="icon-button" 
+    <button
+      data-testid="icon-button"
       onClick={onClick}
       data-color={color}
       data-component={component}
@@ -101,7 +105,7 @@ jest.mock('@mui/material', () => ({
     >
       {children}
     </button>
-  )
+  ),
 }));
 
 jest.mock('@mui/icons-material/ArrowBackIos', () => {
@@ -126,7 +130,7 @@ describe('History Component', () => {
       overAllRating: '5',
       weightUnit: 'lbs',
       woodType: 'Hickory',
-      smokeId: 'smoke-1'
+      smokeId: 'smoke-1',
     },
     {
       name: 'Pork Shoulder',
@@ -136,8 +140,8 @@ describe('History Component', () => {
       overAllRating: '4',
       weightUnit: 'lbs',
       woodType: 'Apple',
-      smokeId: 'smoke-2'
-    }
+      smokeId: 'smoke-2',
+    },
   ];
 
   beforeEach(() => {
@@ -150,7 +154,7 @@ describe('History Component', () => {
   describe('Component Rendering', () => {
     test('should render History component successfully', async () => {
       render(<History />);
-      
+
       await waitFor(() => {
         expect(screen.getByTestId('main-grid')).toBeInTheDocument();
       });
@@ -158,9 +162,9 @@ describe('History Component', () => {
 
     test('should render smoke cards when smoke history list is loaded', async () => {
       render(<History />);
-      
+
       await screen.findByTestId('smoke-card-smoke-1');
-      
+
       expect(screen.getByTestId('smoke-card-smoke-2')).toBeInTheDocument();
 
       expect(screen.getByText('Brisket Smoke')).toBeInTheDocument();
@@ -169,7 +173,7 @@ describe('History Component', () => {
 
     test('should not render back button when no smoke is selected', async () => {
       render(<History />);
-      
+
       await waitFor(() => {
         expect(screen.getByTestId('smoke-card-smoke-1')).toBeInTheDocument();
       });
@@ -179,7 +183,7 @@ describe('History Component', () => {
 
     test('should render SmokeReview component when a smoke is selected', async () => {
       render(<History />);
-      
+
       await waitFor(() => {
         expect(screen.getByTestId('view-button-smoke-1')).toBeInTheDocument();
       });
@@ -187,7 +191,7 @@ describe('History Component', () => {
       fireEvent.click(screen.getByTestId('view-button-smoke-1'));
 
       await screen.findByTestId('smoke-review');
-      
+
       expect(screen.getByText('smoke-1')).toBeInTheDocument();
 
       expect(screen.queryByTestId('smoke-card-smoke-1')).not.toBeInTheDocument();
@@ -195,7 +199,7 @@ describe('History Component', () => {
 
     test('should render back button when a smoke is selected', async () => {
       render(<History />);
-      
+
       await waitFor(() => {
         expect(screen.getByTestId('view-button-smoke-1')).toBeInTheDocument();
       });
@@ -212,7 +216,7 @@ describe('History Component', () => {
   describe('Data Loading', () => {
     test('should call getSmokeHistory on component mount', async () => {
       render(<History />);
-      
+
       await waitFor(() => {
         expect(mockGetSmokeHistory).toHaveBeenCalledTimes(1);
       });
@@ -220,7 +224,7 @@ describe('History Component', () => {
 
     test('should reverse the smoke history list when loaded', async () => {
       render(<History />);
-      
+
       await waitFor(() => {
         expect(screen.getByTestId('smoke-card-smoke-1')).toBeInTheDocument();
       });
@@ -232,9 +236,9 @@ describe('History Component', () => {
 
     test('should handle empty smoke history list', async () => {
       mockGetSmokeHistory.mockResolvedValue([]);
-      
+
       render(<History />);
-      
+
       await waitFor(() => {
         expect(mockGetSmokeHistory).toHaveBeenCalledTimes(1);
       });
@@ -244,9 +248,9 @@ describe('History Component', () => {
 
     test('should handle getSmokeHistory service returning undefined', async () => {
       mockGetSmokeHistory.mockResolvedValue([] as any); // Return empty array instead of undefined
-      
+
       render(<History />);
-      
+
       await waitFor(() => {
         expect(mockGetSmokeHistory).toHaveBeenCalledTimes(1);
       });
@@ -261,7 +265,7 @@ describe('History Component', () => {
   describe('User Interactions', () => {
     test('should handle view click correctly', async () => {
       render(<History />);
-      
+
       await waitFor(() => {
         expect(screen.getByTestId('view-button-smoke-1')).toBeInTheDocument();
       });
@@ -276,7 +280,7 @@ describe('History Component', () => {
 
     test('should handle back click correctly', async () => {
       render(<History />);
-      
+
       // First select a smoke
       await waitFor(() => {
         expect(screen.getByTestId('view-button-smoke-1')).toBeInTheDocument();
@@ -302,7 +306,7 @@ describe('History Component', () => {
 
     test('should handle delete click correctly', async () => {
       render(<History />);
-      
+
       await waitFor(() => {
         expect(screen.getByTestId('delete-button-smoke-1')).toBeInTheDocument();
       });
@@ -317,9 +321,9 @@ describe('History Component', () => {
 
     test('should handle delete service returning undefined', async () => {
       mockDeleteSmoke.mockResolvedValue(undefined);
-      
+
       render(<History />);
-      
+
       await waitFor(() => {
         expect(screen.getByTestId('delete-button-smoke-1')).toBeInTheDocument();
       });
@@ -338,7 +342,7 @@ describe('History Component', () => {
   describe('State Management', () => {
     test('should maintain smoke history list when switching between views', async () => {
       render(<History />);
-      
+
       await waitFor(() => {
         expect(screen.getByTestId('view-button-smoke-1')).toBeInTheDocument();
       });
@@ -361,7 +365,7 @@ describe('History Component', () => {
 
     test('should clear smokeId when going back to list view', async () => {
       render(<History />);
-      
+
       await waitFor(() => {
         expect(screen.getByTestId('view-button-smoke-1')).toBeInTheDocument();
       });
@@ -386,7 +390,7 @@ describe('History Component', () => {
   describe('Component Props and Data Flow', () => {
     test('should pass correct props to SmokeCard components', async () => {
       render(<History />);
-      
+
       await waitFor(() => {
         expect(screen.getByTestId('smoke-card-smoke-1')).toBeInTheDocument();
       });
@@ -403,7 +407,7 @@ describe('History Component', () => {
 
     test('should pass correct smokeId to SmokeReview component', async () => {
       render(<History />);
-      
+
       await waitFor(() => {
         expect(screen.getByTestId('view-button-smoke-2')).toBeInTheDocument();
       });
@@ -418,7 +422,7 @@ describe('History Component', () => {
 
     test('should render correct number of smoke cards', async () => {
       render(<History />);
-      
+
       await waitFor(() => {
         const smokeCards = screen.getAllByTestId(/smoke-card-/);
         expect(smokeCards).toHaveLength(2);
@@ -429,7 +433,7 @@ describe('History Component', () => {
   describe('Grid Layout and Styling', () => {
     test('should apply correct Grid props for main container', async () => {
       render(<History />);
-      
+
       const mainGrid = screen.getByTestId('main-grid');
       expect(mainGrid).toHaveAttribute('data-padding-top', '1');
       expect(mainGrid).toHaveClass('history');
@@ -437,7 +441,7 @@ describe('History Component', () => {
 
     test('should apply correct Grid props for card container', async () => {
       render(<History />);
-      
+
       await waitFor(() => {
         const cardContainer = screen.getByTestId('container-grid');
         expect(cardContainer).toHaveAttribute('data-spacing', '2');
@@ -447,7 +451,7 @@ describe('History Component', () => {
 
     test('should apply correct Grid props for individual cards', async () => {
       render(<History />);
-      
+
       await waitFor(() => {
         const itemGrids = screen.getAllByTestId('item-grid-11');
         expect(itemGrids.length).toBeGreaterThan(0);
