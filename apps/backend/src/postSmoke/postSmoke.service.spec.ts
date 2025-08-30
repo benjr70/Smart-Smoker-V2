@@ -47,9 +47,15 @@ describe('PostSmokeService', () => {
     }));
 
     // Add static methods to the mock constructor
-    mockPostSmokeModel.findById = jest.fn().mockResolvedValue(mockPostSmokeDocument);
-    mockPostSmokeModel.findByIdAndUpdate = jest.fn().mockResolvedValue(mockPostSmokeDocument);
-    mockPostSmokeModel.deleteOne = jest.fn().mockResolvedValue({ deletedCount: 1 });
+    mockPostSmokeModel.findById = jest
+      .fn()
+      .mockResolvedValue(mockPostSmokeDocument);
+    mockPostSmokeModel.findByIdAndUpdate = jest
+      .fn()
+      .mockResolvedValue(mockPostSmokeDocument);
+    mockPostSmokeModel.deleteOne = jest
+      .fn()
+      .mockResolvedValue({ deletedCount: 1 });
 
     mockStateService = {
       GetState: jest.fn().mockResolvedValue(mockState),
@@ -111,13 +117,17 @@ describe('PostSmokeService', () => {
 
       expect(mockStateService.GetState).toHaveBeenCalled();
       expect(mockSmokeService.GetById).toHaveBeenCalledWith(mockState.smokeId);
-      expect(mockPostSmokeModel.findById).toHaveBeenCalledWith(mockSmoke.postSmokeId);
+      expect(mockPostSmokeModel.findById).toHaveBeenCalledWith(
+        mockSmoke.postSmokeId,
+      );
       expect(result).toEqual(mockPostSmokeDocument);
     });
 
     it('should return default post-smoke when none exists', async () => {
       const smokeWithoutPostSmokeId = { ...mockSmoke, postSmokeId: undefined };
-      mockSmokeService.GetById = jest.fn().mockResolvedValue(smokeWithoutPostSmokeId);
+      mockSmokeService.GetById = jest
+        .fn()
+        .mockResolvedValue(smokeWithoutPostSmokeId);
 
       const result = await service.getCurrentPostSmoke();
 
@@ -155,13 +165,18 @@ describe('PostSmokeService', () => {
         notes: 'Updated notes',
       };
 
-      jest.spyOn(service, 'update').mockResolvedValue(mockPostSmokeDocument as PostSmoke);
+      jest
+        .spyOn(service, 'update')
+        .mockResolvedValue(mockPostSmokeDocument as PostSmoke);
 
       const result = await service.saveCurrentPostSmoke(postSmokeDto);
 
       expect(mockStateService.GetState).toHaveBeenCalled();
       expect(mockSmokeService.GetById).toHaveBeenCalledWith(mockState.smokeId);
-      expect(service.update).toHaveBeenCalledWith(mockSmoke.postSmokeId, postSmokeDto);
+      expect(service.update).toHaveBeenCalledWith(
+        mockSmoke.postSmokeId,
+        postSmokeDto,
+      );
     });
 
     it('should create new post-smoke when none exists', async () => {
@@ -172,9 +187,14 @@ describe('PostSmokeService', () => {
       };
 
       const smokeWithoutPostSmokeId = { ...mockSmoke, postSmokeId: undefined };
-      mockSmokeService.GetById = jest.fn().mockResolvedValue(smokeWithoutPostSmokeId);
+      mockSmokeService.GetById = jest
+        .fn()
+        .mockResolvedValue(smokeWithoutPostSmokeId);
 
-      jest.spyOn(service, 'create').mockResolvedValue({ ...mockPostSmokeDocument, _id: 'new-postsmoke-id' } as PostSmoke);
+      jest.spyOn(service, 'create').mockResolvedValue({
+        ...mockPostSmokeDocument,
+        _id: 'new-postsmoke-id',
+      } as PostSmoke);
 
       const result = await service.saveCurrentPostSmoke(postSmokeDto);
 
@@ -197,7 +217,9 @@ describe('PostSmokeService', () => {
       };
 
       const stateWithoutSmoke = { ...mockState, smokeId: '' };
-      mockStateService.GetState = jest.fn().mockResolvedValue(stateWithoutSmoke);
+      mockStateService.GetState = jest
+        .fn()
+        .mockResolvedValue(stateWithoutSmoke);
 
       const result = await service.saveCurrentPostSmoke(postSmokeDto);
 
@@ -226,13 +248,15 @@ describe('PostSmokeService', () => {
         notes: 'Updated notes',
       };
 
-      jest.spyOn(service, 'getById').mockResolvedValue(mockPostSmokeDocument as PostSmoke);
+      jest
+        .spyOn(service, 'getById')
+        .mockResolvedValue(mockPostSmokeDocument as PostSmoke);
 
       const result = await service.update(id, postSmokeDto);
 
       expect(mockPostSmokeModel.findByIdAndUpdate).toHaveBeenCalledWith(
         { _id: id },
-        postSmokeDto
+        postSmokeDto,
       );
       expect(service.getById).toHaveBeenCalledWith(id);
     });

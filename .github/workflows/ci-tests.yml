@@ -2,14 +2,14 @@ name: CI - Tests and Build Validation
 
 on:
   pull_request:
-    branches: [ master ]
+    branches: [master]
     paths:
       - 'apps/**'
       - 'packages/**'
       - 'package.json'
       - '.github/workflows/**'
   push:
-    branches: [ master ]
+    branches: [master]
 
 jobs:
   # Run tests for all applications
@@ -24,7 +24,7 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       apps: '["backend", "device-service", "frontend", "smoker"]'
-      mode: "build"
+      mode: 'build'
       ref: ${{ github.ref }}
 
   # Report test results on PR
@@ -35,7 +35,7 @@ jobs:
     permissions:
       pull-requests: write
       contents: read
-    
+
     steps:
       - name: Download test artifacts
         uses: actions/download-artifact@v4
@@ -53,15 +53,15 @@ jobs:
           echo "PR number: ${{ github.event.pull_request.number }}" >&2
           echo "Test apps result: ${{ needs.test-apps.result }}" >&2
           echo "Build validation result: ${{ needs.build-validation.result }}" >&2
-          
+
           echo "# 🧪 Test Results Summary" > comment.md
           echo "" >> comment.md
-          
+
           # Process each app first to build the arrays
           apps=("backend" "device-service" "frontend" "smoker" "TemperatureChart")
           failed_apps=()
           coverage_failed_apps=()
-          
+
           for app in "${apps[@]}"; do
             # Check test status and details
             status_file="./artifacts/test-status-$app/test-status.txt"
@@ -82,11 +82,11 @@ jobs:
               failed_apps+=("$app")
             fi
           done
-          
+
           # Now determine overall status
           test_status="${{ needs.test-apps.result }}"
           build_status="${{ needs.build-validation.result }}"
-          
+
           if [[ "$test_status" == "success" && "$build_status" == "success" ]]; then
             echo "✅ **All tests passed, coverage thresholds met, and builds successful!**" >> comment.md
             overall_status="✅"
@@ -104,13 +104,13 @@ jobs:
             echo "⚠️ **Tests completed with warnings**" >> comment.md
             overall_status="⚠️"
           fi
-          
+
           echo "" >> comment.md
           echo "## Test Status by Application" >> comment.md
           echo "" >> comment.md
           echo "| Application | Test Status | Coverage | Build Status |" >> comment.md
           echo "|-------------|-------------|----------|--------------|" >> comment.md
-          
+
           # Process each app again for the table
           for app in "${apps[@]}"; do
             # Check test status and details for display
@@ -305,7 +305,7 @@ jobs:
             
             echo "| $app | $test_status_icon | $coverage_display | $build_status_icon |" >> comment.md
           done
-          
+
           # Add failed tests details if any
           if [ ${#failed_apps[@]} -gt 0 ]; then
             echo "" >> comment.md
@@ -353,7 +353,7 @@ jobs:
               fi
             done
           fi
-          
+
           # Add coverage threshold failures if any
           if [ ${#coverage_failed_apps[@]} -gt 0 ]; then
             echo "" >> comment.md
@@ -371,17 +371,17 @@ jobs:
             echo "- **Smoker**: 80% lines/functions/statements, 75% branches" >> comment.md
             echo "- **TemperatureChart**: 75% lines/branches/statements, 45% functions" >> comment.md
           fi
-          
+
           echo "" >> comment.md
           echo "---" >> comment.md
           echo "*🤖 Generated automatically by CI workflow • Last updated: $(date -u '+%Y-%m-%d %H:%M:%S UTC') • Run #${{ github.run_number }}*" >> comment.md
-          
+
           # Set output for comment body
           comment_body=$(cat comment.md)
           echo "=== DEBUG: Comment content generated ===" >&2
           echo "Comment length: ${#comment_body} characters" >&2
           echo "First 200 chars: ${comment_body:0:200}" >&2
-          
+
           echo "comment-body<<EOF" >> $GITHUB_OUTPUT
           echo "$comment_body" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT

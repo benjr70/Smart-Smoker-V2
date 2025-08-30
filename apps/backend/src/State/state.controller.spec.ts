@@ -18,7 +18,9 @@ describe('StateController', () => {
       GetState: jest.fn().mockResolvedValue(mockState),
       update: jest.fn().mockResolvedValue(mockState),
       create: jest.fn().mockResolvedValue(mockState),
-      toggleSmoking: jest.fn().mockResolvedValue({ ...mockState, smoking: false }),
+      toggleSmoking: jest
+        .fn()
+        .mockResolvedValue({ ...mockState, smoking: false }),
       clearSmoke: jest.fn().mockResolvedValue({ smokeId: '', smoking: false }),
     };
 

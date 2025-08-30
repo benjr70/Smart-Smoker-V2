@@ -10,75 +10,78 @@ import { SmokeStatus } from '../smoke/smoke.schema';
 
 @Injectable()
 export class PreSmokeService {
-    constructor(@InjectModel(PreSmoke.name)private preSmokeModel: Model<PreSmokeDocument>,
-                private stateService: StateService,
-                private smokeService: SmokeService){}
+  constructor(
+    @InjectModel(PreSmoke.name) private preSmokeModel: Model<PreSmokeDocument>,
+    private stateService: StateService,
+    private smokeService: SmokeService,
+  ) {}
 
-    async save(preSmokeDto: PreSmokeDto): Promise<PreSmoke>{
-        return this.stateService.GetState().then( state => {
-            if( state.smokeId.length > 0){
-               return this.smokeService.GetById(state.smokeId).then(smoke => {
-                    if(smoke.preSmokeId){
-                        return this.Update(smoke.preSmokeId, preSmokeDto);
-                    } else {
-                        return this.create(preSmokeDto).then(preSmoke =>{
-                            let smokeDto: SmokeDto = {
-                                preSmokeId: preSmoke["_id"].toString(),
-                                status: smoke.status,
-                            }
-                             this.smokeService.create(smokeDto);
-                             return preSmoke
-                        })
-                    }
-                })
-            } else {
-               return this.create(preSmokeDto).then(preSmoke => {
-                    let smokeDto: SmokeDto = {
-                        preSmokeId: preSmoke["_id"].toString(),
-                        status: SmokeStatus.InProgress
-                      }
-                    this.smokeService.create(smokeDto).then(smoke => {
-                        state.smokeId = smoke["_id"].toString();
-                        this.stateService.update(state);
-                    })
-                    return preSmoke;
-                })
-            }
-        })
-    }
-
-    async create(preSmokeDto: PreSmokeDto): Promise<PreSmoke>{
-        const createdPreSmoke = new this.preSmokeModel(preSmokeDto);
-        return createdPreSmoke.save();
-    }
-
-    async findAll(): Promise<PreSmokeDto[]> {
-        return this.preSmokeModel.find().exec();
-    }
-
-    async GetByID(id: string): Promise<PreSmoke> {
-        return await this.preSmokeModel.findById(id);   
-    }
-
-    
-    async GetByCurrent(): Promise<PreSmoke> {
-        return this.stateService.GetState().then(async state => {
-            if(!state){
-               await this.stateService.create({smokeId: '', smoking: false});
-            }
-            return this.smokeService.GetById(state.smokeId).then(smoke => {
-                 return this.preSmokeModel.findById(smoke.preSmokeId)
-             })
-         })
-    }
-
-    async Update(id: string, preSmokeDto: PreSmokeDto): Promise<PreSmoke> {
-        return this.preSmokeModel.findOneAndUpdate({_id: id}, preSmokeDto).then(() => {
-            return this.GetByID(id);
+  async save(preSmokeDto: PreSmokeDto): Promise<PreSmoke> {
+    return this.stateService.GetState().then((state) => {
+      if (state.smokeId.length > 0) {
+        return this.smokeService.GetById(state.smokeId).then((smoke) => {
+          if (smoke.preSmokeId) {
+            return this.Update(smoke.preSmokeId, preSmokeDto);
+          } else {
+            return this.create(preSmokeDto).then((preSmoke) => {
+              const smokeDto: SmokeDto = {
+                preSmokeId: preSmoke['_id'].toString(),
+                status: smoke.status,
+              };
+              this.smokeService.create(smokeDto);
+              return preSmoke;
+            });
+          }
         });
-    }
+      } else {
+        return this.create(preSmokeDto).then((preSmoke) => {
+          const smokeDto: SmokeDto = {
+            preSmokeId: preSmoke['_id'].toString(),
+            status: SmokeStatus.InProgress,
+          };
+          this.smokeService.create(smokeDto).then((smoke) => {
+            state.smokeId = smoke['_id'].toString();
+            this.stateService.update(state);
+          });
+          return preSmoke;
+        });
+      }
+    });
+  }
 
-    async Delete(id: string) {
-        return this.preSmokeModel.deleteOne({_id: id});
-    }
+  async create(preSmokeDto: PreSmokeDto): Promise<PreSmoke> {
+    const createdPreSmoke = new this.preSmokeModel(preSmokeDto);
+    return createdPreSmoke.save();
+  }
+
+  async findAll(): Promise<PreSmokeDto[]> {
+    return this.preSmokeModel.find().exec();
+  }
+
+  async GetByID(id: string): Promise<PreSmoke> {
+    return await this.preSmokeModel.findById(id);
+  }
+
+  async GetByCurrent(): Promise<PreSmoke> {
+    return this.stateService.GetState().then(async (state) => {
+      if (!state) {
+        await this.stateService.create({ smokeId: '', smoking: false });
+      }
+      return this.smokeService.GetById(state.smokeId).then((smoke) => {
+        return this.preSmokeModel.findById(smoke.preSmokeId);
+      });
+    });
+  }
+
+  async Update(id: string, preSmokeDto: PreSmokeDto): Promise<PreSmoke> {
+    return this.preSmokeModel
+      .findOneAndUpdate({ _id: id }, preSmokeDto)
+      .then(() => {
+        return this.GetByID(id);
+      });
+  }
+
+  async Delete(id: string) {
+    return this.preSmokeModel.deleteOne({ _id: id });
+  }
 }

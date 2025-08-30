@@ -12,7 +12,7 @@ describe('LoggerMiddleware', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    
+
     // Mock Logger
     jest.spyOn(Logger, 'log').mockImplementation();
 
@@ -36,7 +36,9 @@ describe('LoggerMiddleware', () => {
     mockResponse = {
       write: jest.fn().mockReturnValue(true),
       end: jest.fn(),
-      getHeaders: jest.fn().mockReturnValue({ 'content-type': 'application/json' }),
+      getHeaders: jest
+        .fn()
+        .mockReturnValue({ 'content-type': 'application/json' }),
       setHeader: jest.fn(),
       statusCode: 200,
       once: jest.fn(),
@@ -45,7 +47,7 @@ describe('LoggerMiddleware', () => {
 
   afterEach(async () => {
     jest.clearAllMocks();
-    
+
     // Clean up test module
     if (module) {
       await module.close();
@@ -58,11 +60,15 @@ describe('LoggerMiddleware', () => {
 
   describe('use method', () => {
     it('should log the request method and body', () => {
-      middleware.use(mockRequest as Request, mockResponse as Response, mockNext);
+      middleware.use(
+        mockRequest as Request,
+        mockResponse as Response,
+        mockNext,
+      );
 
       expect(Logger.log).toHaveBeenCalledWith(
         '"POST" body: {"test":"data"}',
-        '/api/test Request'
+        '/api/test Request',
       );
       expect(mockNext).toHaveBeenCalled();
     });
@@ -70,53 +76,69 @@ describe('LoggerMiddleware', () => {
     it('should handle empty request body', () => {
       mockRequest.body = {};
 
-      middleware.use(mockRequest as Request, mockResponse as Response, mockNext);
+      middleware.use(
+        mockRequest as Request,
+        mockResponse as Response,
+        mockNext,
+      );
 
       expect(Logger.log).toHaveBeenCalledWith(
         '"POST" body: {}',
-        '/api/test Request'
+        '/api/test Request',
       );
     });
 
     it('should handle null request body', () => {
       mockRequest.body = null;
 
-      middleware.use(mockRequest as Request, mockResponse as Response, mockNext);
+      middleware.use(
+        mockRequest as Request,
+        mockResponse as Response,
+        mockNext,
+      );
 
       expect(Logger.log).toHaveBeenCalledWith(
         '"POST" body: null',
-        '/api/test Request'
+        '/api/test Request',
       );
     });
 
     it('should handle different HTTP methods', () => {
       const methods = ['GET', 'PUT', 'DELETE'];
-      
-      methods.forEach(method => {
+
+      methods.forEach((method) => {
         jest.clearAllMocks();
         mockRequest.method = method;
-        
-        middleware.use(mockRequest as Request, mockResponse as Response, mockNext);
-        
+
+        middleware.use(
+          mockRequest as Request,
+          mockResponse as Response,
+          mockNext,
+        );
+
         expect(Logger.log).toHaveBeenCalledWith(
           `"${method}" body: {"test":"data"}`,
-          '/api/test Request'
+          '/api/test Request',
         );
       });
     });
 
     it('should handle different URLs', () => {
       const urls = ['/api/users', '/health', '/api/v1/data'];
-      
-      urls.forEach(url => {
+
+      urls.forEach((url) => {
         jest.clearAllMocks();
         mockRequest.url = url;
-        
-        middleware.use(mockRequest as Request, mockResponse as Response, mockNext);
-        
+
+        middleware.use(
+          mockRequest as Request,
+          mockResponse as Response,
+          mockNext,
+        );
+
         expect(Logger.log).toHaveBeenCalledWith(
           '"POST" body: {"test":"data"}',
-          `${url} Request`
+          `${url} Request`,
         );
       });
     });
@@ -126,8 +148,12 @@ describe('LoggerMiddleware', () => {
     it('should override response methods', () => {
       const originalWrite = mockResponse.write;
       const originalEnd = mockResponse.end;
-      
-      middleware.use(mockRequest as Request, mockResponse as Response, mockNext);
+
+      middleware.use(
+        mockRequest as Request,
+        mockResponse as Response,
+        mockNext,
+      );
 
       // Response methods should be overridden
       expect(mockResponse.write).not.toBe(originalWrite);
@@ -135,17 +161,28 @@ describe('LoggerMiddleware', () => {
     });
 
     it('should set origin header when response ends', () => {
-      middleware.use(mockRequest as Request, mockResponse as Response, mockNext);
+      middleware.use(
+        mockRequest as Request,
+        mockResponse as Response,
+        mockNext,
+      );
 
       // Simulate response ending
       const overriddenEnd = mockResponse.end as jest.Mock;
       overriddenEnd();
 
-      expect(mockResponse.setHeader).toHaveBeenCalledWith('origin', 'restjs-req-res-logging-repo');
+      expect(mockResponse.setHeader).toHaveBeenCalledWith(
+        'origin',
+        'restjs-req-res-logging-repo',
+      );
     });
 
     it('should log response when response ends', () => {
-      middleware.use(mockRequest as Request, mockResponse as Response, mockNext);
+      middleware.use(
+        mockRequest as Request,
+        mockResponse as Response,
+        mockNext,
+      );
 
       // Simulate response ending
       const overriddenEnd = mockResponse.end as jest.Mock;
@@ -153,7 +190,7 @@ describe('LoggerMiddleware', () => {
 
       expect(Logger.log).toHaveBeenCalledWith(
         expect.stringContaining('res:'),
-        '/api/test Response'
+        '/api/test Response',
       );
     });
   });
@@ -162,22 +199,30 @@ describe('LoggerMiddleware', () => {
     it('should handle request without method', () => {
       delete mockRequest.method;
 
-      middleware.use(mockRequest as Request, mockResponse as Response, mockNext);
+      middleware.use(
+        mockRequest as Request,
+        mockResponse as Response,
+        mockNext,
+      );
 
       expect(Logger.log).toHaveBeenCalledWith(
         'undefined body: {"test":"data"}',
-        '/api/test Request'
+        '/api/test Request',
       );
     });
 
     it('should handle request without URL', () => {
       delete mockRequest.url;
 
-      middleware.use(mockRequest as Request, mockResponse as Response, mockNext);
+      middleware.use(
+        mockRequest as Request,
+        mockResponse as Response,
+        mockNext,
+      );
 
       expect(Logger.log).toHaveBeenCalledWith(
         '"POST" body: {"test":"data"}',
-        'undefined Request'
+        'undefined Request',
       );
     });
 
@@ -188,14 +233,18 @@ describe('LoggerMiddleware', () => {
         string: 'test',
         number: 42,
         boolean: true,
-        null: null
+        null: null,
       };
 
-      middleware.use(mockRequest as Request, mockResponse as Response, mockNext);
+      middleware.use(
+        mockRequest as Request,
+        mockResponse as Response,
+        mockNext,
+      );
 
       expect(Logger.log).toHaveBeenCalledWith(
         expect.stringContaining('"POST" body:'),
-        '/api/test Request'
+        '/api/test Request',
       );
     });
   });

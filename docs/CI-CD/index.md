@@ -27,6 +27,20 @@ Complete guide to generating, viewing, and interpreting test coverage:
 - **CI Integration**: Coverage reports in GitHub Actions
 - **Best Practices**: Improving coverage quality and identifying gaps
 
+### [Code Quality & Linting](code-quality.md)
+Comprehensive guide to linting, formatting, and code quality tools:
+- **ESLint & Prettier Setup**: Workspace-wide configuration for consistent code style
+- **App-Specific Linting**: TypeScript, React, and NestJS best practices
+- **VS Code Integration**: Auto-formatting and error detection
+- **CI/CD Integration**: Automated code quality checks in GitHub Actions
+
+### [Testing Library Migration Guide](testing-library-migration.md)
+Systematic approach to fixing Testing Library rule violations:
+- **240+ Violations Analysis**: Categories and priority ranking for fixes
+- **Migration Strategy**: Phase-by-phase approach to modernize testing patterns
+- **Best Practices**: Modern Testing Library patterns and anti-patterns to avoid
+- **Implementation Timeline**: Structured 6-week plan for systematic improvements
+
 ### [Dependency Management](dependency-management.md)
 Comprehensive guide to managing dependencies across the monorepo:
 - **Clean Installation**: npm run clean and bootstrap processes
@@ -50,7 +64,7 @@ Every PR must pass these automated checks:
 - `Run Jest Tests (frontend)`
 - `Run Jest Tests (smoker)`
 - `Test Packages`
-- `Lint Check`
+- `Code Quality Check` (linting & formatting)
 - `Build Check (frontend)`
 - `Build Check (smoker)`
 - `All Tests Status`
@@ -70,11 +84,12 @@ Every PR must pass these automated checks:
 ### Development Workflow
 
 1. **Create Feature Branch**: `feature/SS2-XX-description`
-2. **Develop & Test Locally**: Run tests before pushing
-3. **Create Pull Request**: CI automatically runs all tests
-4. **Code Review**: Requires approval + passing tests
-5. **Merge to Master**: Triggers deployment workflows
-6. **Production Release**: Tag version for container updates
+2. **Develop & Test Locally**: Run tests and code quality checks before pushing
+3. **Code Quality**: Use `npm run check` for linting and formatting
+4. **Create Pull Request**: CI automatically runs all tests and quality checks
+5. **Code Review**: Requires approval + passing tests + code quality
+6. **Merge to Master**: Triggers deployment workflows
+7. **Production Release**: Tag version for container updates
 
 ## Architecture Diagram
 
@@ -98,8 +113,9 @@ Every PR must pass these automated checks:
 
 ### For Developers
 - **Test Locally**: Run `npm test` before pushing
+- **Code Quality**: Run `npm run check` for linting and formatting
 - **Check CI Status**: Monitor Actions tab for test results
-- **Fix Failing Tests**: Address issues before requesting review
+- **Fix Issues**: Address linting, formatting, and test failures before requesting review
 - **Keep PRs Small**: Easier to review and test
 
 ### For DevOps

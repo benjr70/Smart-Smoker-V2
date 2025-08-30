@@ -1,0 +1,32 @@
+# Prettier ignore patterns
+node_modules/
+dist/
+build/
+coverage/
+.webpack/
+electron-app/
+
+# Generated files
+*.min.js
+*.bundle.js
+
+# Documentation
+docs/
+
+# Infrastructure
+infra/
+
+# Hardware
+MicroController/
+
+# Package lock files
+package-lock.json
+yarn.lock
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db

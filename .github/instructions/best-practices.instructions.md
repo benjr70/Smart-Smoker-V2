@@ -1,5 +1,5 @@
 ---
-applyTo: "apps/**"
+applyTo: 'apps/**'
 ---
 
 # Smart Smoker V2 - Best Practices & Design Patterns
@@ -7,12 +7,14 @@ applyTo: "apps/**"
 ## Code Standards & Conventions
 
 ### TypeScript Standards (ENFORCED)
+
 - **Strict Mode**: All applications use TypeScript strict mode
 - **Type Safety**: Prefer explicit typing over `any`
 - **Interface Design**: Use PascalCase for interfaces and types
 - **Variable Naming**: camelCase for variables and functions
 
 ### File & Directory Naming
+
 - **Backend files**: `kebab-case` (e.g., `smoke-profile.service.ts`)
 - **Frontend components**: `PascalCase` (e.g., `TemperatureChart.tsx`)
 - **Database collections**: `camelCase` in MongoDB
@@ -22,6 +24,7 @@ applyTo: "apps/**"
 ## NestJS Backend Patterns (REQUIRED)
 
 ### Service Pattern
+
 ```typescript
 @Injectable()
 export class ExampleService {
@@ -39,6 +42,7 @@ export class ExampleService {
 ```
 
 ### Controller Pattern
+
 ```typescript
 @Controller('example')
 @ApiTags('Example')
@@ -55,6 +59,7 @@ export class ExampleController {
 ```
 
 ### WebSocket Gateway Pattern
+
 ```typescript
 @WebSocketGateway()
 export class ExampleGateway {
@@ -69,6 +74,7 @@ export class ExampleGateway {
 ```
 
 ### DTO Pattern (Input Validation)
+
 ```typescript
 export class CreateExampleDto {
   @IsString()
@@ -86,6 +92,7 @@ export class CreateExampleDto {
 ## React Frontend Patterns (REQUIRED)
 
 ### Functional Component Pattern
+
 ```typescript
 interface ExampleProps {
   data: ExampleData;
@@ -97,9 +104,9 @@ export const ExampleComponent: React.FC<ExampleProps> = ({ data, onUpdate }) => 
   // Avoid class components entirely
   // Use Material-UI for consistent styling
   // Implement proper error boundaries
-  
+
   const [state, setState] = useState<StateType>(initialState);
-  
+
   useEffect(() => {
     // Handle side effects properly
   }, [dependencies]);
@@ -113,6 +120,7 @@ export const ExampleComponent: React.FC<ExampleProps> = ({ data, onUpdate }) => 
 ```
 
 ### Custom Hook Pattern
+
 ```typescript
 export const useExampleData = (id: string) => {
   const [data, setData] = useState<ExampleData | null>(null);
@@ -130,6 +138,7 @@ export const useExampleData = (id: string) => {
 ## Database Patterns (MongoDB/Mongoose)
 
 ### Schema Definition Pattern
+
 ```typescript
 export const ExampleSchema = new mongoose.Schema({
   name: { type: String, required: true },
@@ -140,6 +149,7 @@ export const ExampleSchema = new mongoose.Schema({
 ```
 
 ### Repository Pattern
+
 ```typescript
 @Injectable()
 export class ExampleRepository {
@@ -153,9 +163,9 @@ export class ExampleRepository {
 
   // Use aggregation pipelines for complex queries
   async getStatistics(): Promise<any[]> {
-    return this.exampleModel.aggregate([
-      { $group: { _id: null, total: { $sum: '$value' } } }
-    ]).exec();
+    return this.exampleModel
+      .aggregate([{ $group: { _id: null, total: { $sum: '$value' } } }])
+      .exec();
   }
 }
 ```
@@ -165,31 +175,37 @@ export class ExampleRepository {
 ### Core Modules & Responsibilities
 
 #### State Module
+
 - **Purpose**: Central state management for smoker status
 - **Pattern**: Singleton service with observable state
 - **Dependencies**: WebSocket gateway for real-time updates
 
-#### Smoke Module  
+#### Smoke Module
+
 - **Purpose**: Core smoking operations and timer management
 - **Pattern**: Service with scheduled tasks and event emitters
 - **Dependencies**: State, Temps, WebSocket modules
 
 #### Temps Module
+
 - **Purpose**: Temperature monitoring and PID control
 - **Pattern**: Service with hardware communication and control algorithms
 - **Dependencies**: Device service communication, State module
 
 #### PreSmoke/PostSmoke Modules
+
 - **Purpose**: Workflow state management
 - **Pattern**: State machine implementation
 - **Dependencies**: State, Smoke, Notification modules
 
 #### SmokeProfile Module
+
 - **Purpose**: Recipe and cooking profile management
 - **Pattern**: CRUD service with validation
 - **Dependencies**: Database repository pattern
 
 #### WebSocket Module
+
 - **Purpose**: Real-time communication hub
 - **Pattern**: Gateway with event broadcasting
 - **Dependencies**: All other modules for state broadcasting
@@ -197,6 +213,7 @@ export class ExampleRepository {
 ## Error Handling Patterns
 
 ### Backend Exception Handling
+
 ```typescript
 @Catch(HttpException)
 export class HttpExceptionFilter implements ExceptionFilter {
@@ -209,6 +226,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
 ```
 
 ### Frontend Error Boundaries
+
 ```typescript
 // Note: Error boundaries currently require class components in React
 // This is an exception to the functional component rule
@@ -222,6 +240,7 @@ class ErrorBoundary extends React.Component {
 ## Testing Patterns
 
 ### Unit Test Pattern
+
 ```typescript
 describe('ExampleService', () => {
   let service: ExampleService;
@@ -242,6 +261,7 @@ describe('ExampleService', () => {
 ```
 
 ### E2E Test Pattern
+
 ```typescript
 describe('Example E2E', () => {
   // Test complete user workflows
@@ -253,16 +273,19 @@ describe('Example E2E', () => {
 ## Security Best Practices
 
 ### Input Validation
+
 - Always use DTOs with class-validator decorators
 - Sanitize all user inputs
 - Implement proper type checking
 
 ### Authentication & Authorization
+
 - Implement JWT token validation
 - Use proper authentication guards
 - Validate WebSocket connections before message handling
 
 ### Database Security
+
 - Use Mongoose schema validation
 - Implement proper query sanitization
 - Avoid direct database injection risks
@@ -270,16 +293,19 @@ describe('Example E2E', () => {
 ## Performance Guidelines
 
 ### Database Optimization
+
 - Use appropriate indexing for frequent queries
 - Implement aggregation pipelines for complex operations
 - Consider caching for frequently accessed data
 
 ### Frontend Optimization
+
 - Use React component lazy loading
 - Implement proper WebSocket message throttling
 - Optimize D3.js chart rendering for large datasets
 
 ### Real-time Communication
+
 - Throttle WebSocket message frequency
 - Implement proper connection pooling
 - Handle connection drops gracefully
@@ -287,17 +313,20 @@ describe('Example E2E', () => {
 ## Code Quality Standards
 
 ### Documentation Requirements
+
 - Use JSDoc for all TypeScript functions
 - Update API documentation in Swagger
 - Maintain architectural decisions in docs/
 - Document environment variables and configuration
 
 ### Logging Standards
+
 - Use structured logging throughout applications
 - Include sufficient context in error logs
 - Implement different log levels appropriately
 
 ### Code Review Checklist
+
 - TypeScript strict mode compliance
 - Proper error handling implementation
 - Test coverage meets thresholds

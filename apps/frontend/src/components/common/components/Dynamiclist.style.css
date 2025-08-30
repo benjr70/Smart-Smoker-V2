@@ -1,14 +1,13 @@
-
 .dynamicList {
-    margin-bottom: 10px;
-    display: flex;
-    flexDirection: 'column';
+  margin-bottom: 10px;
+  display: flex;
+  flexdirection: 'column';
 }
 
 .stepNumber {
-    font-size: x-large;
-    padding-right: 5px;
+  font-size: x-large;
+  padding-right: 5px;
 }
 .addButton {
-    height: 55px;
+  height: 55px;
 }

@@ -2,9 +2,9 @@ const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const Dotenv = require('dotenv-webpack');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
-var webpack = require("webpack");
+var webpack = require('webpack');
 
-module.exports = (env) = {
+module.exports = env = {
   mode: 'production',
   devtool: 'source-map',
   entry: './src/index.tsx',
@@ -12,47 +12,45 @@ module.exports = (env) = {
   target: 'web',
   output: {
     path: path.join(__dirname, '/dist'),
-    filename: 'bundle.js'
+    filename: 'bundle.js',
   },
-    devtool: 'inline-source-map',
-    devServer: {
+  devtool: 'inline-source-map',
+  devServer: {
     static: './dist',
   },
   module: {
-  rules: [
-    {
-      test: /\.tsx?$/,
-      use: {
-        loader: 'ts-loader',
-        options: {
-          transpileOnly: true
-        }
+    rules: [
+      {
+        test: /\.tsx?$/,
+        use: {
+          loader: 'ts-loader',
+          options: {
+            transpileOnly: true,
+          },
+        },
+        exclude: /node_modules/,
       },
-      exclude: /node_modules/,
-    },
-    {
-      test: /\.css$/,
-      use: ["style-loader", "css-loader"],
-    }
-  ]
+      {
+        test: /\.css$/,
+        use: ['style-loader', 'css-loader'],
+      },
+    ],
   },
   resolve: {
     extensions: ['.tsx', '.ts', '.js'],
   },
-  plugins:[
+  plugins: [
     new HtmlWebpackPlugin({
-      template: './public/index.html'
+      template: './public/index.html',
     }),
     new Dotenv({
-      path: '.env.prod'
+      path: '.env.prod',
     }),
     new webpack.DefinePlugin({
-      VERSION: JSON.stringify(require("../../package.json").version),
+      VERSION: JSON.stringify(require('../../package.json').version),
     }),
     new CopyWebpackPlugin({
-      patterns: [
-        { from: 'public', to: '', globOptions: { ignore: ['**/index.html'] } }
-      ],
+      patterns: [{ from: 'public', to: '', globOptions: { ignore: ['**/index.html'] } }],
     }),
-  ]
-}
+  ],
+};

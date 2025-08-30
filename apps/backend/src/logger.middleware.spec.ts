@@ -10,7 +10,7 @@ describe('LoggerMiddleware', () => {
 
   beforeEach(() => {
     middleware = new LoggerMiddleware();
-    
+
     mockRequest = {
       method: 'GET',
       url: '/api/test',
@@ -21,7 +21,9 @@ describe('LoggerMiddleware', () => {
       write: jest.fn(),
       end: jest.fn(),
       setHeader: jest.fn(),
-      getHeaders: jest.fn().mockReturnValue({ 'content-type': 'application/json' }),
+      getHeaders: jest
+        .fn()
+        .mockReturnValue({ 'content-type': 'application/json' }),
       statusCode: 200,
       once: jest.fn(),
     };
@@ -41,11 +43,15 @@ describe('LoggerMiddleware', () => {
     it('should log request and call next', () => {
       const logSpy = jest.spyOn(Logger, 'log').mockImplementation();
 
-      middleware.use(mockRequest as Request, mockResponse as Response, mockNext);
+      middleware.use(
+        mockRequest as Request,
+        mockResponse as Response,
+        mockNext,
+      );
 
       expect(logSpy).toHaveBeenCalledWith(
         `"GET" body: {"test":"data"}`,
-        '/api/test Request'
+        '/api/test Request',
       );
       expect(mockNext).toHaveBeenCalled();
 
@@ -56,11 +62,15 @@ describe('LoggerMiddleware', () => {
       const logSpy = jest.spyOn(Logger, 'log').mockImplementation();
       mockRequest.body = undefined;
 
-      middleware.use(mockRequest as Request, mockResponse as Response, mockNext);
+      middleware.use(
+        mockRequest as Request,
+        mockResponse as Response,
+        mockNext,
+      );
 
       expect(logSpy).toHaveBeenCalledWith(
         `"GET" body: undefined`,
-        '/api/test Request'
+        '/api/test Request',
       );
       expect(mockNext).toHaveBeenCalled();
 
@@ -71,7 +81,11 @@ describe('LoggerMiddleware', () => {
       const originalWrite = mockResponse.write;
       const originalEnd = mockResponse.end;
 
-      middleware.use(mockRequest as Request, mockResponse as Response, mockNext);
+      middleware.use(
+        mockRequest as Request,
+        mockResponse as Response,
+        mockNext,
+      );
 
       // Check that response methods were modified
       expect(mockResponse.write).not.toBe(originalWrite);
@@ -83,7 +97,11 @@ describe('LoggerMiddleware', () => {
       const originalWrite = jest.fn().mockReturnValue(true);
       mockResponse.write = originalWrite;
 
-      middleware.use(mockRequest as Request, mockResponse as Response, mockNext);
+      middleware.use(
+        mockRequest as Request,
+        mockResponse as Response,
+        mockNext,
+      );
 
       // Call the modified write method with data
       const testData = 'test response data';
@@ -98,16 +116,23 @@ describe('LoggerMiddleware', () => {
       const originalEnd = jest.fn();
       mockResponse.end = originalEnd;
 
-      middleware.use(mockRequest as Request, mockResponse as Response, mockNext);
+      middleware.use(
+        mockRequest as Request,
+        mockResponse as Response,
+        mockNext,
+      );
 
       // Call the modified end method with data
       const responseData = '{"status":"success"}';
       (mockResponse.end as any)(responseData);
 
-      expect(mockResponse.setHeader).toHaveBeenCalledWith('origin', 'restjs-req-res-logging-repo');
+      expect(mockResponse.setHeader).toHaveBeenCalledWith(
+        'origin',
+        'restjs-req-res-logging-repo',
+      );
       expect(logSpy).toHaveBeenCalledWith(
         expect.stringContaining('res:'),
-        '/api/test Response'
+        '/api/test Response',
       );
       expect(originalEnd).toHaveBeenCalledWith(responseData);
       logSpy.mockRestore();

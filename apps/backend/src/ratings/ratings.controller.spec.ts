@@ -66,7 +66,9 @@ describe('RatingsController', () => {
       const error = new Error('No current smoke found');
       mockRatingsService.getCurrentRating.mockRejectedValue(error);
 
-      await expect(controller.getCurrentRatings()).rejects.toThrow('No current smoke found');
+      await expect(controller.getCurrentRatings()).rejects.toThrow(
+        'No current smoke found',
+      );
     });
   });
 
@@ -84,9 +86,9 @@ describe('RatingsController', () => {
       const error = new Error('Invalid rating values');
       mockRatingsService.saveCurrentRatings.mockRejectedValue(error);
 
-      await expect(controller.saveCurrentRatings(mockRatingsDto)).rejects.toThrow(
-        'Invalid rating values'
-      );
+      await expect(
+        controller.saveCurrentRatings(mockRatingsDto),
+      ).rejects.toThrow('Invalid rating values');
     });
   });
 
@@ -106,9 +108,9 @@ describe('RatingsController', () => {
       const error = new Error('Rating not found');
       mockRatingsService.update.mockRejectedValue(error);
 
-      await expect(controller.updateRatings(id, mockRatingsDto)).rejects.toThrow(
-        'Rating not found'
-      );
+      await expect(
+        controller.updateRatings(id, mockRatingsDto),
+      ).rejects.toThrow('Rating not found');
     });
   });
 
@@ -138,7 +140,9 @@ describe('RatingsController', () => {
       const error = new Error('Invalid ObjectId');
       mockRatingsService.getById.mockRejectedValue(error);
 
-      await expect(controller.getRatingById(id)).rejects.toThrow('Invalid ObjectId');
+      await expect(controller.getRatingById(id)).rejects.toThrow(
+        'Invalid ObjectId',
+      );
     });
   });
 

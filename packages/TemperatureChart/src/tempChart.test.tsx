@@ -84,7 +84,7 @@ describe('TemperatureChart Package', () => {
         Meat3Temp: 160,
         date: new Date('2023-01-01T12:00:00'),
       };
-      
+
       expect(validTempData.ChamberTemp).toBe(225);
       expect(validTempData.MeatTemp).toBe(165);
       expect(validTempData.Meat2Temp).toBe(170);
@@ -100,7 +100,7 @@ describe('TemperatureChart Package', () => {
         Meat3Temp: 32.5,
         date: new Date(),
       };
-      
+
       expect(tempData.ChamberTemp).toBe(0);
       expect(tempData.MeatTemp).toBe(-10);
       expect(tempData.Meat2Temp).toBe(999);
@@ -142,17 +142,20 @@ describe('TemperatureChart Package', () => {
 
     test('should update when initData prop changes', async () => {
       const { rerender } = render(<TempChart {...defaultProps} />);
-      
-      const newData = [...mockTempData, {
-        ChamberTemp: 235,
-        MeatTemp: 165,
-        Meat2Temp: 175,
-        Meat3Temp: 170,
-        date: new Date('2023-01-01T12:15:00'),
-      }];
-      
+
+      const newData = [
+        ...mockTempData,
+        {
+          ChamberTemp: 235,
+          MeatTemp: 165,
+          Meat2Temp: 175,
+          Meat3Temp: 170,
+          date: new Date('2023-01-01T12:15:00'),
+        },
+      ];
+
       rerender(<TempChart {...defaultProps} initData={newData} />);
-      
+
       await waitFor(() => {
         expect(d3.select).toHaveBeenCalled();
       });
@@ -167,10 +170,10 @@ describe('TemperatureChart Package', () => {
         Meat2Temp: 180,
         Meat3Temp: 175,
       };
-      
+
       const { rerender } = render(<TempChart {...defaultProps} />);
       rerender(<TempChart {...smokingProps} />);
-      
+
       await waitFor(() => {
         expect(d3.select).toHaveBeenCalled();
       });
@@ -185,7 +188,7 @@ describe('TemperatureChart Package', () => {
         Meat2Temp: 0, // Invalid
         Meat3Temp: 0, // Invalid
       };
-      
+
       render(<TempChart {...invalidTempProps} />);
       await waitFor(() => {
         expect(d3.select).toHaveBeenCalled();
@@ -201,7 +204,7 @@ describe('TemperatureChart Package', () => {
         Meat2Temp: NaN,
         Meat3Temp: NaN,
       };
-      
+
       render(<TempChart {...nanTempProps} />);
       await waitFor(() => {
         expect(d3.select).toHaveBeenCalled();
@@ -217,18 +220,18 @@ describe('TemperatureChart Package', () => {
 
     test('should handle window resize events', () => {
       render(<TempChart {...defaultProps} />);
-      
+
       // Simulate window resize
       fireEvent.resize(window);
-      
+
       expect(d3.select).toHaveBeenCalled();
     });
 
     test('should initialize chart when data length becomes greater than 1', async () => {
       const { rerender } = render(<TempChart {...defaultProps} initData={[]} />);
-      
+
       rerender(<TempChart {...defaultProps} initData={mockTempData} />);
-      
+
       await waitFor(() => {
         expect(d3.select).toHaveBeenCalled();
       });
@@ -267,29 +270,29 @@ describe('TemperatureChart Package', () => {
     test('should handle pointer events on SVG', () => {
       const { container } = render(<TempChart {...defaultProps} />);
       const svg = container.querySelector('svg');
-      
+
       // Test mouse events instead of pointer events for better compatibility
       fireEvent.mouseEnter(svg!);
       fireEvent.mouseMove(svg!);
-      
+
       expect(d3.select).toHaveBeenCalled();
     });
 
     test('should handle pointer leave events', () => {
       const { container } = render(<TempChart {...defaultProps} />);
       const svg = container.querySelector('svg');
-      
+
       fireEvent.mouseLeave(svg!);
-      
+
       expect(d3.select).toHaveBeenCalled();
     });
 
     test('should handle touch events', () => {
       const { container } = render(<TempChart {...defaultProps} />);
       const svg = container.querySelector('svg');
-      
+
       fireEvent.touchStart(svg!);
-      
+
       expect(d3.select).toHaveBeenCalled();
     });
   });
@@ -303,17 +306,17 @@ describe('TemperatureChart Package', () => {
     });
 
     test('should format date values correctly', () => {
-      // Test component rendering which uses formatDate internally  
+      // Test component rendering which uses formatDate internally
       render(<TempChart {...defaultProps} />);
       expect(d3.select).toHaveBeenCalled();
     });
 
     test('should handle tooltip positioning and sizing', () => {
       render(<TempChart {...defaultProps} />);
-      
+
       // The pointer events are set up during SVG setup, so this is tested indirectly
       expect(d3.select).toHaveBeenCalled();
-      
+
       // Test that D3 functions are available (they'll be called when real events occur)
       expect(d3.pointer).toBeDefined();
       expect(d3.bisector).toBeDefined();
@@ -321,14 +324,14 @@ describe('TemperatureChart Package', () => {
 
     test('should handle window resize correctly', () => {
       render(<TempChart {...defaultProps} />);
-      
+
       // Test the resize function by simulating window resize
       Object.defineProperty(window, 'innerWidth', { value: 1200 });
       Object.defineProperty(window, 'innerHeight', { value: 800 });
-      
+
       // Trigger resize event
       fireEvent.resize(window);
-      
+
       expect(d3.select).toHaveBeenCalled();
     });
   });
@@ -348,7 +351,7 @@ describe('TemperatureChart Package', () => {
         smoking: false,
         initData: [],
       };
-      
+
       render(<TempChart {...requiredProps} />);
       expect(d3.select).toHaveBeenCalled();
     });
@@ -361,7 +364,7 @@ describe('TemperatureChart Package', () => {
         Meat2Temp: 0,
         Meat3Temp: 1000,
       };
-      
+
       render(<TempChart {...extremeProps} />);
       expect(d3.select).toHaveBeenCalled();
     });
@@ -369,24 +372,24 @@ describe('TemperatureChart Package', () => {
     test('should handle future dates', () => {
       const futureDate = new Date();
       futureDate.setFullYear(futureDate.getFullYear() + 1);
-      
+
       const futureProps = {
         ...defaultProps,
         date: futureDate,
       };
-      
+
       render(<TempChart {...futureProps} />);
       expect(d3.select).toHaveBeenCalled();
     });
 
     test('should handle past dates', () => {
       const pastDate = new Date('1990-01-01');
-      
+
       const pastProps = {
         ...defaultProps,
         date: pastDate,
       };
-      
+
       render(<TempChart {...pastProps} />);
       expect(d3.select).toHaveBeenCalled();
     });
@@ -395,14 +398,14 @@ describe('TemperatureChart Package', () => {
   describe('Memory Management', () => {
     test('should not leak memory on multiple renders', () => {
       const { rerender, unmount } = render(<TempChart {...defaultProps} />);
-      
+
       // Re-render multiple times
       for (let i = 0; i < 10; i++) {
         rerender(<TempChart {...defaultProps} ChamberTemp={200 + i} />);
       }
-      
+
       unmount();
-      
+
       // Verify D3 calls were made but not excessively
       expect(d3.select).toHaveBeenCalled();
     });
@@ -410,7 +413,7 @@ describe('TemperatureChart Package', () => {
     test('should clean up properly on unmount', () => {
       const { unmount } = render(<TempChart {...defaultProps} />);
       unmount();
-      
+
       // Component should unmount without errors
       expect(d3.select).toHaveBeenCalled();
     });
@@ -420,12 +423,12 @@ describe('TemperatureChart Package', () => {
     test('should handle pointer moved events with tooltip', async () => {
       const { container } = render(<TempChart {...defaultProps} />);
       const svg = container.querySelector('svg');
-      
+
       // Make sure we have data first
       await waitFor(() => {
         expect(d3.select).toHaveBeenCalled();
       });
-      
+
       // The actual pointer events would be handled by D3, so we test setup
       expect(svg).toBeInTheDocument();
       expect(d3.bisector).toHaveBeenCalled();
@@ -433,17 +436,20 @@ describe('TemperatureChart Package', () => {
 
     test('should handle data updates during smoking', async () => {
       const { rerender } = render(<TempChart {...defaultProps} smoking={false} />);
-      
+
       // Update to smoking state with valid temperatures
-      rerender(<TempChart {...defaultProps} 
-        smoking={true}
-        ChamberTemp={250}
-        MeatTemp={180}
-        Meat2Temp={185}
-        Meat3Temp={175}
-        date={new Date()}
-      />);
-      
+      rerender(
+        <TempChart
+          {...defaultProps}
+          smoking={true}
+          ChamberTemp={250}
+          MeatTemp={180}
+          Meat2Temp={185}
+          Meat3Temp={175}
+          date={new Date()}
+        />
+      );
+
       await waitFor(() => {
         expect(d3.select).toHaveBeenCalled();
       });
@@ -451,17 +457,20 @@ describe('TemperatureChart Package', () => {
 
     test('should handle temperature validation during smoking', async () => {
       const { rerender } = render(<TempChart {...defaultProps} smoking={false} />);
-      
+
       // Test with some invalid temperatures (0 values)
-      rerender(<TempChart {...defaultProps} 
-        smoking={true}
-        ChamberTemp={250}
-        MeatTemp={0}  // Invalid
-        Meat2Temp={185}
-        Meat3Temp={175}
-        date={new Date()}
-      />);
-      
+      rerender(
+        <TempChart
+          {...defaultProps}
+          smoking={true}
+          ChamberTemp={250}
+          MeatTemp={0} // Invalid
+          Meat2Temp={185}
+          Meat3Temp={175}
+          date={new Date()}
+        />
+      );
+
       await waitFor(() => {
         expect(d3.select).toHaveBeenCalled();
       });
@@ -469,11 +478,11 @@ describe('TemperatureChart Package', () => {
 
     test('should handle component re-initialization', async () => {
       const { rerender } = render(<TempChart {...defaultProps} initData={[]} />);
-      
+
       // Add enough data to trigger initialization
       const newData = [...mockTempData];
       rerender(<TempChart {...defaultProps} initData={newData} />);
-      
+
       await waitFor(() => {
         expect(d3.select).toHaveBeenCalled();
       });
@@ -481,7 +490,7 @@ describe('TemperatureChart Package', () => {
 
     test('should handle chart redraw with different data', async () => {
       const { rerender } = render(<TempChart {...defaultProps} />);
-      
+
       const newData = [
         ...mockTempData,
         {
@@ -497,11 +506,11 @@ describe('TemperatureChart Package', () => {
           Meat2Temp: 185,
           Meat3Temp: 175,
           date: new Date('2023-01-01T12:20:00'),
-        }
+        },
       ];
-      
+
       rerender(<TempChart {...defaultProps} initData={newData} />);
-      
+
       await waitFor(() => {
         expect(d3.extent).toHaveBeenCalled();
         expect(d3.max).toHaveBeenCalled();
@@ -521,7 +530,7 @@ describe('TemperatureChart Package', () => {
         y: 0,
         toJSON: jest.fn(),
       }));
-      
+
       render(<TempChart {...defaultProps} />);
       expect(d3.select).toHaveBeenCalled();
     });
@@ -541,9 +550,9 @@ describe('TemperatureChart Package', () => {
           Meat2Temp: 1000,
           Meat3Temp: 1000,
           date: new Date('2023-01-01T12:05:00'),
-        }
+        },
       ];
-      
+
       render(<TempChart {...defaultProps} initData={extremeData} />);
       expect(d3.select).toHaveBeenCalled();
     });
@@ -551,10 +560,10 @@ describe('TemperatureChart Package', () => {
     test('should handle component initialization order', async () => {
       // Test the specific useEffect dependencies
       const { rerender } = render(<TempChart {...defaultProps} initData={[mockTempData[0]]} />);
-      
-      // Change to enough data to trigger initialization  
+
+      // Change to enough data to trigger initialization
       rerender(<TempChart {...defaultProps} initData={mockTempData} />);
-      
+
       await waitFor(() => {
         expect(d3.select).toHaveBeenCalled();
       });
@@ -562,19 +571,22 @@ describe('TemperatureChart Package', () => {
 
     test('should handle different smoking state transitions', async () => {
       const { rerender } = render(<TempChart {...defaultProps} smoking={false} />);
-      
+
       // Test transition to smoking with all valid temperatures
-      rerender(<TempChart {...defaultProps} 
-        smoking={true}
-        ChamberTemp={225}
-        MeatTemp={150}
-        Meat2Temp={160}
-        Meat3Temp={155}
-      />);
-      
+      rerender(
+        <TempChart
+          {...defaultProps}
+          smoking={true}
+          ChamberTemp={225}
+          MeatTemp={150}
+          Meat2Temp={160}
+          Meat3Temp={155}
+        />
+      );
+
       // Test transition back to not smoking
       rerender(<TempChart {...defaultProps} smoking={false} />);
-      
+
       await waitFor(() => {
         expect(d3.select).toHaveBeenCalled();
       });
@@ -590,7 +602,7 @@ describe('TemperatureChart Package', () => {
         Probe2Name: '',
         Probe3Name: '',
       };
-      
+
       render(<TempChart {...emptyNamesProps} />);
       expect(d3.select).toHaveBeenCalled();
     });
@@ -606,7 +618,7 @@ describe('TemperatureChart Package', () => {
           date: new Date(Date.now() + i * 60000), // 1 minute intervals
         });
       }
-      
+
       const largeDataProps = { ...defaultProps, initData: largeData };
       render(<TempChart {...largeDataProps} />);
       expect(d3.select).toHaveBeenCalled();
@@ -618,7 +630,7 @@ describe('TemperatureChart Package', () => {
         { ...mockTempData[0], ChamberTemp: 230 },
         { ...mockTempData[0], ChamberTemp: 235 },
       ];
-      
+
       const sameTimeProps = { ...defaultProps, initData: sameTimeData };
       render(<TempChart {...sameTimeProps} />);
       expect(d3.select).toHaveBeenCalled();
@@ -633,7 +645,7 @@ describe('TemperatureChart Package', () => {
         Meat3Temp: 155,
         date: new Date(Date.now() + index * 60000),
       }));
-      
+
       const sameTempProps = { ...defaultProps, initData: sameTempData };
       render(<TempChart {...sameTempProps} />);
       expect(d3.select).toHaveBeenCalled();
@@ -649,9 +661,9 @@ describe('TemperatureChart Package', () => {
           Meat2Temp: 170,
           Meat3Temp: 160,
           date: new Date(),
-        }
+        },
       ];
-      
+
       expect(testData).toHaveLength(1);
       expect(testData[0].ChamberTemp).toBe(225);
     });
@@ -688,7 +700,7 @@ describe('TemperatureChart Package', () => {
         y: 0,
         toJSON: jest.fn(),
       }));
-      
+
       render(<TempChart {...defaultProps} />);
       expect(d3.select).toHaveBeenCalled();
     });
@@ -697,21 +709,21 @@ describe('TemperatureChart Package', () => {
       // Test edge case data that might trigger different scale calculations
       const edgeData: TempData[] = [
         {
-          ChamberTemp: 32,  // Freezing point
+          ChamberTemp: 32, // Freezing point
           MeatTemp: 32,
           Meat2Temp: 32,
           Meat3Temp: 32,
           date: new Date('2023-01-01T00:00:00'),
         },
         {
-          ChamberTemp: 212,  // Boiling point
+          ChamberTemp: 212, // Boiling point
           MeatTemp: 212,
           Meat2Temp: 212,
           Meat3Temp: 212,
           date: new Date('2023-01-01T00:01:00'),
-        }
+        },
       ];
-      
+
       render(<TempChart {...defaultProps} initData={edgeData} />);
       expect(d3.scaleLinear).toHaveBeenCalled();
       expect(d3.scaleTime).toHaveBeenCalled();
@@ -720,7 +732,7 @@ describe('TemperatureChart Package', () => {
     test('should initialize without crashing even with undefined containerSize', () => {
       // Mock getBoundingClientRect to return undefined to test error handling
       HTMLElement.prototype.getBoundingClientRect = jest.fn(() => undefined as any);
-      
+
       // Component should still render without crashing
       render(<TempChart {...defaultProps} />);
       expect(d3.select).toHaveBeenCalled();
@@ -728,19 +740,22 @@ describe('TemperatureChart Package', () => {
 
     test('should handle rapid prop changes', async () => {
       const { rerender } = render(<TempChart {...defaultProps} />);
-      
+
       // Rapidly change props to test different useEffect paths
       for (let i = 0; i < 5; i++) {
-        rerender(<TempChart {...defaultProps} 
-          ChamberTemp={200 + i * 10}
-          MeatTemp={140 + i * 5}
-          Meat2Temp={150 + i * 5}
-          Meat3Temp={145 + i * 5}
-          date={new Date(Date.now() + i * 1000)}
-          smoking={i % 2 === 0}
-        />);
+        rerender(
+          <TempChart
+            {...defaultProps}
+            ChamberTemp={200 + i * 10}
+            MeatTemp={140 + i * 5}
+            Meat2Temp={150 + i * 5}
+            Meat3Temp={145 + i * 5}
+            date={new Date(Date.now() + i * 1000)}
+            smoking={i % 2 === 0}
+          />
+        );
       }
-      
+
       await waitFor(() => {
         expect(d3.select).toHaveBeenCalled();
       });
@@ -748,7 +763,7 @@ describe('TemperatureChart Package', () => {
 
     test('should handle all temperature validation edge cases', async () => {
       const { rerender } = render(<TempChart {...defaultProps} smoking={false} />);
-      
+
       // Test edge cases for temperature validation in smoking mode
       const testCases = [
         { ChamberTemp: 0, MeatTemp: 150, Meat2Temp: 160, Meat3Temp: 155 }, // Chamber 0
@@ -758,15 +773,11 @@ describe('TemperatureChart Package', () => {
         { ChamberTemp: NaN, MeatTemp: 150, Meat2Temp: 160, Meat3Temp: 155 }, // Chamber NaN
         { ChamberTemp: 225, MeatTemp: NaN, Meat2Temp: 160, Meat3Temp: 155 }, // Meat NaN
       ];
-      
+
       for (const testCase of testCases) {
-        rerender(<TempChart {...defaultProps} 
-          smoking={true}
-          {...testCase}
-          date={new Date()}
-        />);
+        rerender(<TempChart {...defaultProps} smoking={true} {...testCase} date={new Date()} />);
       }
-      
+
       await waitFor(() => {
         expect(d3.select).toHaveBeenCalled();
       });
@@ -775,12 +786,12 @@ describe('TemperatureChart Package', () => {
     test('should handle data initialization edge cases', async () => {
       // Test with exactly 1 data point (edge case for initialization)
       const { rerender } = render(<TempChart {...defaultProps} initData={[]} />);
-      
+
       rerender(<TempChart {...defaultProps} initData={[mockTempData[0]]} />);
-      
+
       // Then test transition to 2+ data points
       rerender(<TempChart {...defaultProps} initData={mockTempData} />);
-      
+
       await waitFor(() => {
         expect(d3.select).toHaveBeenCalled();
       });
@@ -788,14 +799,14 @@ describe('TemperatureChart Package', () => {
 
     test('should handle component cleanup and re-initialization', () => {
       const { unmount, rerender } = render(<TempChart {...defaultProps} />);
-      
+
       // Test unmounting and re-mounting
       unmount();
-      
+
       // Re-render to test initialization again
       const { unmount: unmount2 } = render(<TempChart {...defaultProps} />);
       unmount2();
-      
+
       expect(d3.select).toHaveBeenCalled();
     });
 
@@ -817,9 +828,9 @@ describe('TemperatureChart Package', () => {
           date: new Date('2023-01-01T12:05:00'),
         },
       ];
-      
+
       const { rerender } = render(<TempChart {...defaultProps} initData={complexData} />);
-      
+
       // Force re-render with different data to trigger reDrawGraph
       const newComplexData = [
         ...complexData,
@@ -829,11 +840,11 @@ describe('TemperatureChart Package', () => {
           Meat2Temp: 170,
           Meat3Temp: 165,
           date: new Date('2023-01-01T12:10:00'),
-        }
+        },
       ];
-      
+
       rerender(<TempChart {...defaultProps} initData={newComplexData} />);
-      
+
       await waitFor(() => {
         expect(d3.line).toHaveBeenCalled();
         expect(d3.scaleTime).toHaveBeenCalled();
@@ -858,35 +869,38 @@ describe('TemperatureChart Package', () => {
           toJSON: jest.fn(),
         };
       });
-      
+
       const { rerender } = render(<TempChart {...defaultProps} />);
-      
+
       // Force re-render to trigger different container size handling
       rerender(<TempChart {...defaultProps} ChamberTemp={240} />);
-      
+
       expect(d3.select).toHaveBeenCalled();
     });
 
     test('should handle different initialization states', async () => {
       // Start with minimal data to test initialization logic
       const { rerender } = render(<TempChart {...defaultProps} initData={[]} />);
-      
+
       // Add single data point (should not initialize chart)
       rerender(<TempChart {...defaultProps} initData={[mockTempData[0]]} />);
-      
+
       // Add enough data to trigger initialization
       rerender(<TempChart {...defaultProps} initData={mockTempData} />);
-      
+
       // Change smoking state multiple times to test different code paths
-      rerender(<TempChart {...defaultProps} 
-        initData={mockTempData}
-        smoking={true}
-        ChamberTemp={235}
-        MeatTemp={165}
-        Meat2Temp={175}
-        Meat3Temp={170}
-      />);
-      
+      rerender(
+        <TempChart
+          {...defaultProps}
+          initData={mockTempData}
+          smoking={true}
+          ChamberTemp={235}
+          MeatTemp={165}
+          Meat2Temp={175}
+          Meat3Temp={170}
+        />
+      );
+
       await waitFor(() => {
         expect(d3.select).toHaveBeenCalled();
       });
@@ -894,21 +908,21 @@ describe('TemperatureChart Package', () => {
 
     test('should handle window resize directly', () => {
       render(<TempChart {...defaultProps} />);
-      
+
       // Simulate window resize event by changing dimensions and firing resize
       Object.defineProperty(window, 'innerWidth', { value: 1400, configurable: true });
       Object.defineProperty(window, 'innerHeight', { value: 900, configurable: true });
-      
+
       // Fire the resize event
       const resizeEvent = new Event('resize');
       window.dispatchEvent(resizeEvent);
-      
+
       expect(d3.select).toHaveBeenCalledWith(window);
     });
 
     test('should exercise all smoking validation branches', async () => {
       const { rerender } = render(<TempChart {...defaultProps} smoking={false} />);
-      
+
       // Test the specific validation logic in the smoking useEffect
       const validationTests = [
         // Test case: smoking=true, all temps valid and non-zero
@@ -918,7 +932,7 @@ describe('TemperatureChart Package', () => {
           MeatTemp: 150,
           Meat2Temp: 160,
           Meat3Temp: 155,
-          shouldAddData: true
+          shouldAddData: true,
         },
         // Test case: smoking=true, one temp is 0 (should not add data)
         {
@@ -927,7 +941,7 @@ describe('TemperatureChart Package', () => {
           MeatTemp: 150,
           Meat2Temp: 160,
           Meat3Temp: 155,
-          shouldAddData: false
+          shouldAddData: false,
         },
         // Test case: smoking=true, one temp is NaN (should not add data)
         {
@@ -936,7 +950,7 @@ describe('TemperatureChart Package', () => {
           MeatTemp: NaN,
           Meat2Temp: 160,
           Meat3Temp: 155,
-          shouldAddData: false
+          shouldAddData: false,
         },
         // Test case: smoking=false (should not add data regardless)
         {
@@ -945,20 +959,23 @@ describe('TemperatureChart Package', () => {
           MeatTemp: 150,
           Meat2Temp: 160,
           Meat3Temp: 155,
-          shouldAddData: false
-        }
+          shouldAddData: false,
+        },
       ];
-      
+
       for (const test of validationTests) {
-        rerender(<TempChart {...defaultProps} 
-          smoking={test.smoking}
-          ChamberTemp={test.ChamberTemp}
-          MeatTemp={test.MeatTemp}
-          Meat2Temp={test.Meat2Temp}
-          Meat3Temp={test.Meat3Temp}
-          date={new Date()}
-        />);
-        
+        rerender(
+          <TempChart
+            {...defaultProps}
+            smoking={test.smoking}
+            ChamberTemp={test.ChamberTemp}
+            MeatTemp={test.MeatTemp}
+            Meat2Temp={test.Meat2Temp}
+            Meat3Temp={test.Meat3Temp}
+            date={new Date()}
+          />
+        );
+
         await waitFor(() => {
           expect(d3.select).toHaveBeenCalled();
         });
@@ -967,31 +984,31 @@ describe('TemperatureChart Package', () => {
 
     test('should trigger window resize callback directly', () => {
       render(<TempChart {...defaultProps} />);
-      
+
       // The component sets up a resize listener on window, trigger it directly
       try {
         triggerCallback('resize');
       } catch (e) {
         // Expected - the callback might fail due to missing DOM context, but it will be executed
       }
-      
+
       expect(d3.select).toHaveBeenCalledWith(window);
     });
 
     test('should trigger SVG event handlers', async () => {
       render(<TempChart {...defaultProps} />);
-      
+
       await waitFor(() => {
         expect(d3.select).toHaveBeenCalled();
       });
-      
+
       // Test that event handlers are set up (captured in our mock)
       try {
         triggerCallback('resize');
       } catch (e) {
         // Expected - callback may fail but we're testing it can be triggered
       }
-      
+
       expect(d3.pointer).toBeDefined();
       expect(d3.bisector).toHaveBeenCalled();
     });
@@ -999,17 +1016,17 @@ describe('TemperatureChart Package', () => {
     test('should exercise internal callback functions completely', async () => {
       // Render component with data that will enable full function execution
       const { container } = render(<TempChart {...defaultProps} initData={mockTempData} />);
-      
+
       // Wait for component to be fully initialized
       await waitFor(() => {
         expect(d3.select).toHaveBeenCalled();
         expect(d3.bisector).toHaveBeenCalled();
       });
-      
+
       // Verify SVG is rendered
       const svg = container.querySelector('svg');
       expect(svg).toBeInTheDocument();
-      
+
       // The internal functions are tested indirectly through component rendering
       // and the D3 mock setup which captures the callbacks
       expect(d3.pointer).toBeDefined();
@@ -1022,7 +1039,7 @@ describe('TemperatureChart Package', () => {
     test('should test pointerMoved function directly through DOM events', async () => {
       const { container } = render(<TempChart {...defaultProps} initData={mockTempData} />);
       const svg = container.querySelector('svg');
-      
+
       await waitFor(() => {
         expect(d3.select).toHaveBeenCalled();
       });
@@ -1042,14 +1059,14 @@ describe('TemperatureChart Package', () => {
     test('should test pointerLeft function through DOM events', async () => {
       const { container } = render(<TempChart {...defaultProps} initData={mockTempData} />);
       const svg = container.querySelector('svg');
-      
+
       await waitFor(() => {
         expect(d3.select).toHaveBeenCalled();
       });
 
       // First trigger mouse enter to show tooltip
       fireEvent.mouseEnter(svg!);
-      
+
       // Then trigger mouse leave to hide tooltip
       fireEvent.mouseLeave(svg!);
 
@@ -1075,10 +1092,10 @@ describe('TemperatureChart Package', () => {
       });
 
       render(<TempChart {...defaultProps} initData={mockTempData} />);
-      
+
       // Trigger window resize to exercise reSize function
       fireEvent.resize(window);
-      
+
       expect(d3.select).toHaveBeenCalled();
     });
 
@@ -1118,11 +1135,11 @@ describe('TemperatureChart Package', () => {
 
     test('should test reDrawGraph function with different data scenarios', async () => {
       const { rerender } = render(<TempChart {...defaultProps} initData={[]} />);
-      
+
       // Test with minimal data
       const minimalData = [mockTempData[0], mockTempData[1]];
       rerender(<TempChart {...defaultProps} initData={minimalData} />);
-      
+
       await waitFor(() => {
         expect(d3.scaleTime).toHaveBeenCalled();
         expect(d3.scaleLinear).toHaveBeenCalled();
@@ -1134,7 +1151,7 @@ describe('TemperatureChart Package', () => {
         { ...mockTempData[1], ChamberTemp: 500, MeatTemp: 400, Meat2Temp: 450, Meat3Temp: 425 },
       ];
       rerender(<TempChart {...defaultProps} initData={extremeData} />);
-      
+
       await waitFor(() => {
         expect(d3.line).toHaveBeenCalled();
         expect(d3.extent).toHaveBeenCalled();
@@ -1144,14 +1161,14 @@ describe('TemperatureChart Package', () => {
 
     test('should test smoking effect with all validation paths', async () => {
       const { rerender } = render(<TempChart {...defaultProps} smoking={false} />);
-      
+
       // Test each validation condition separately
       const testCases = [
         // Valid case - should add data
         { ChamberTemp: 225, MeatTemp: 150, Meat2Temp: 160, Meat3Temp: 155, shouldPass: true },
         // ChamberTemp is 0 - should not add data
         { ChamberTemp: 0, MeatTemp: 150, Meat2Temp: 160, Meat3Temp: 155, shouldPass: false },
-        // MeatTemp is 0 - should not add data  
+        // MeatTemp is 0 - should not add data
         { ChamberTemp: 225, MeatTemp: 0, Meat2Temp: 160, Meat3Temp: 155, shouldPass: false },
         // Meat2Temp is 0 - should not add data
         { ChamberTemp: 225, MeatTemp: 150, Meat2Temp: 0, Meat3Temp: 155, shouldPass: false },
@@ -1166,17 +1183,20 @@ describe('TemperatureChart Package', () => {
         // Meat3Temp is NaN - should not add data
         { ChamberTemp: 225, MeatTemp: 150, Meat2Temp: 160, Meat3Temp: NaN, shouldPass: false },
       ];
-      
+
       for (const testCase of testCases) {
-        rerender(<TempChart {...defaultProps} 
-          smoking={true}
-          ChamberTemp={testCase.ChamberTemp}
-          MeatTemp={testCase.MeatTemp}
-          Meat2Temp={testCase.Meat2Temp}
-          Meat3Temp={testCase.Meat3Temp}
-          date={new Date()}
-        />);
-        
+        rerender(
+          <TempChart
+            {...defaultProps}
+            smoking={true}
+            ChamberTemp={testCase.ChamberTemp}
+            MeatTemp={testCase.MeatTemp}
+            Meat2Temp={testCase.Meat2Temp}
+            Meat3Temp={testCase.Meat3Temp}
+            date={new Date()}
+          />
+        );
+
         await waitFor(() => {
           expect(d3.select).toHaveBeenCalled();
         });
@@ -1185,17 +1205,20 @@ describe('TemperatureChart Package', () => {
 
     test('should test all useEffect dependencies and triggers', async () => {
       const { rerender } = render(<TempChart {...defaultProps} />);
-      
+
       // Test initData changes
-      const newInitData = [...mockTempData, {
-        ChamberTemp: 240,
-        MeatTemp: 170,
-        Meat2Temp: 180,
-        Meat3Temp: 175,
-        date: new Date('2023-01-01T12:15:00'),
-      }];
+      const newInitData = [
+        ...mockTempData,
+        {
+          ChamberTemp: 240,
+          MeatTemp: 170,
+          Meat2Temp: 180,
+          Meat3Temp: 175,
+          date: new Date('2023-01-01T12:15:00'),
+        },
+      ];
       rerender(<TempChart {...defaultProps} initData={newInitData} />);
-      
+
       // Test smoking props changes individually
       rerender(<TempChart {...defaultProps} ChamberTemp={230} />);
       rerender(<TempChart {...defaultProps} MeatTemp={160} />);
@@ -1203,7 +1226,7 @@ describe('TemperatureChart Package', () => {
       rerender(<TempChart {...defaultProps} Meat3Temp={165} />);
       rerender(<TempChart {...defaultProps} date={new Date()} />);
       rerender(<TempChart {...defaultProps} smoking={true} />);
-      
+
       await waitFor(() => {
         expect(d3.select).toHaveBeenCalled();
       });
@@ -1212,16 +1235,16 @@ describe('TemperatureChart Package', () => {
     test('should test initialization with different data length scenarios', async () => {
       // Start with empty data
       const { rerender } = render(<TempChart {...defaultProps} initData={[]} />);
-      
+
       // Test with exactly 1 data point (should not initialize)
       rerender(<TempChart {...defaultProps} initData={[mockTempData[0]]} />);
-      
+
       // Test with exactly 2 data points (should initialize)
       rerender(<TempChart {...defaultProps} initData={[mockTempData[0], mockTempData[1]]} />);
-      
+
       // Test with 3+ data points
       rerender(<TempChart {...defaultProps} initData={mockTempData} />);
-      
+
       await waitFor(() => {
         expect(d3.select).toHaveBeenCalled();
       });
@@ -1230,7 +1253,7 @@ describe('TemperatureChart Package', () => {
     test('should test SVG event handling with touch and pointer events', async () => {
       const { container } = render(<TempChart {...defaultProps} initData={mockTempData} />);
       const svg = container.querySelector('svg');
-      
+
       await waitFor(() => {
         expect(svg).toBeInTheDocument();
       });
@@ -1260,18 +1283,36 @@ describe('TemperatureChart Package', () => {
         { ...mockTempData[1], date: new Date('2023-01-01T12:00:00') },
         { ...mockTempData[2], date: new Date('2023-01-01T12:00:00') },
       ];
-      
+
       render(<TempChart {...defaultProps} initData={sameTimeData} />);
       expect(d3.scaleTime).toHaveBeenCalled();
       expect(d3.line).toHaveBeenCalled();
 
       // Test with data that has same temperatures
       const sameTempData = [
-        { ChamberTemp: 225, MeatTemp: 150, Meat2Temp: 160, Meat3Temp: 155, date: new Date('2023-01-01T12:00:00') },
-        { ChamberTemp: 225, MeatTemp: 150, Meat2Temp: 160, Meat3Temp: 155, date: new Date('2023-01-01T12:05:00') },
-        { ChamberTemp: 225, MeatTemp: 150, Meat2Temp: 160, Meat3Temp: 155, date: new Date('2023-01-01T12:10:00') },
+        {
+          ChamberTemp: 225,
+          MeatTemp: 150,
+          Meat2Temp: 160,
+          Meat3Temp: 155,
+          date: new Date('2023-01-01T12:00:00'),
+        },
+        {
+          ChamberTemp: 225,
+          MeatTemp: 150,
+          Meat2Temp: 160,
+          Meat3Temp: 155,
+          date: new Date('2023-01-01T12:05:00'),
+        },
+        {
+          ChamberTemp: 225,
+          MeatTemp: 150,
+          Meat2Temp: 160,
+          Meat3Temp: 155,
+          date: new Date('2023-01-01T12:10:00'),
+        },
       ];
-      
+
       render(<TempChart {...defaultProps} initData={sameTempData} />);
       expect(d3.scaleLinear).toHaveBeenCalled();
       expect(d3.max).toHaveBeenCalled();
@@ -1280,7 +1321,7 @@ describe('TemperatureChart Package', () => {
     test('should test tooltip functionality with various data points', async () => {
       const { container } = render(<TempChart {...defaultProps} initData={mockTempData} />);
       const svg = container.querySelector('svg');
-      
+
       await waitFor(() => {
         expect(svg).toBeInTheDocument();
       });
@@ -1305,7 +1346,7 @@ describe('TemperatureChart Package', () => {
 
     test('should test axis creation and updates', async () => {
       const { rerender } = render(<TempChart {...defaultProps} initData={mockTempData} />);
-      
+
       await waitFor(() => {
         expect(d3.select).toHaveBeenCalled();
       });
@@ -1320,7 +1361,7 @@ describe('TemperatureChart Package', () => {
       }));
 
       rerender(<TempChart {...defaultProps} initData={newData} />);
-      
+
       await waitFor(() => {
         expect(d3.scaleTime).toHaveBeenCalled();
         expect(d3.scaleLinear).toHaveBeenCalled();
@@ -1356,15 +1397,15 @@ describe('TemperatureChart Package', () => {
 
     test('should test component re-initialization scenarios', async () => {
       const { rerender, unmount } = render(<TempChart {...defaultProps} initData={[]} />);
-      
+
       // Test initialization state changes
       rerender(<TempChart {...defaultProps} initData={[mockTempData[0]]} />);
       rerender(<TempChart {...defaultProps} initData={mockTempData} />);
-      
+
       // Test unmount and remount
       unmount();
       render(<TempChart {...defaultProps} initData={mockTempData} />);
-      
+
       await waitFor(() => {
         expect(d3.select).toHaveBeenCalled();
       });
@@ -1374,7 +1415,7 @@ describe('TemperatureChart Package', () => {
     test('should test tooltip formatting functions comprehensively', async () => {
       const { container } = render(<TempChart {...defaultProps} initData={mockTempData} />);
       const svg = container.querySelector('svg');
-      
+
       await waitFor(() => {
         expect(svg).toBeInTheDocument();
       });
@@ -1391,7 +1432,7 @@ describe('TemperatureChart Package', () => {
         // Enter and move to trigger tooltip
         fireEvent.mouseEnter(svg!, { clientX: pos.x, clientY: pos.y });
         fireEvent.mouseMove(svg!, { clientX: pos.x, clientY: pos.y });
-        
+
         // Leave to hide tooltip
         fireEvent.mouseLeave(svg!);
       }
@@ -1403,7 +1444,7 @@ describe('TemperatureChart Package', () => {
     test('should test tooltip sizing and path calculations', async () => {
       const { container } = render(<TempChart {...defaultProps} initData={mockTempData} />);
       const svg = container.querySelector('svg');
-      
+
       await waitFor(() => {
         expect(svg).toBeInTheDocument();
       });
@@ -1420,20 +1461,17 @@ describe('TemperatureChart Package', () => {
     // Test for lines around empty SVG check and reDrawGraph edge cases
     test('should test reDrawGraph with edge cases and empty SVG handling', async () => {
       const { rerender } = render(<TempChart {...defaultProps} initData={mockTempData} />);
-      
+
       // Test with empty data array
       rerender(<TempChart {...defaultProps} initData={[]} />);
-      
+
       // Test with single data point
       rerender(<TempChart {...defaultProps} initData={[mockTempData[0]]} />);
-      
+
       // Test with data containing undefined/null values (edge case)
-      const edgeData = [
-        { ...mockTempData[0] },
-        { ...mockTempData[1] },
-      ];
+      const edgeData = [{ ...mockTempData[0] }, { ...mockTempData[1] }];
       rerender(<TempChart {...defaultProps} initData={edgeData} />);
-      
+
       await waitFor(() => {
         expect(d3.select).toHaveBeenCalled();
       });
@@ -1442,57 +1480,72 @@ describe('TemperatureChart Package', () => {
     // Test specific useEffect triggers for smoking state
     test('should test smoking useEffect with precise validation logic', async () => {
       const { rerender } = render(<TempChart {...defaultProps} smoking={false} />);
-      
+
       // Test the exact conditions in the smoking useEffect
       // First test: smoking=false (should not trigger data addition)
-      rerender(<TempChart {...defaultProps} 
-        smoking={false}
-        ChamberTemp={225}
-        MeatTemp={150}
-        Meat2Temp={160}
-        Meat3Temp={155}
-        date={new Date()}
-      />);
-      
+      rerender(
+        <TempChart
+          {...defaultProps}
+          smoking={false}
+          ChamberTemp={225}
+          MeatTemp={150}
+          Meat2Temp={160}
+          Meat3Temp={155}
+          date={new Date()}
+        />
+      );
+
       // Test: smoking=true with all valid temperatures
-      rerender(<TempChart {...defaultProps} 
-        smoking={true}
-        ChamberTemp={225}
-        MeatTemp={150}
-        Meat2Temp={160}
-        Meat3Temp={155}
-        date={new Date()}
-      />);
-      
+      rerender(
+        <TempChart
+          {...defaultProps}
+          smoking={true}
+          ChamberTemp={225}
+          MeatTemp={150}
+          Meat2Temp={160}
+          Meat3Temp={155}
+          date={new Date()}
+        />
+      );
+
       // Test each individual NaN condition
-      rerender(<TempChart {...defaultProps} 
-        smoking={true}
-        ChamberTemp={NaN}
-        MeatTemp={150}
-        Meat2Temp={160}
-        Meat3Temp={155}
-        date={new Date()}
-      />);
-      
-      rerender(<TempChart {...defaultProps} 
-        smoking={true}
-        ChamberTemp={225}
-        MeatTemp={NaN}
-        Meat2Temp={160}
-        Meat3Temp={155}
-        date={new Date()}
-      />);
-      
+      rerender(
+        <TempChart
+          {...defaultProps}
+          smoking={true}
+          ChamberTemp={NaN}
+          MeatTemp={150}
+          Meat2Temp={160}
+          Meat3Temp={155}
+          date={new Date()}
+        />
+      );
+
+      rerender(
+        <TempChart
+          {...defaultProps}
+          smoking={true}
+          ChamberTemp={225}
+          MeatTemp={NaN}
+          Meat2Temp={160}
+          Meat3Temp={155}
+          date={new Date()}
+        />
+      );
+
       // Test each individual zero condition
-      rerender(<TempChart {...defaultProps} 
-        smoking={true}
-        ChamberTemp={0}
-        MeatTemp={150}
-        Meat2Temp={160}
-        Meat3Temp={155}
-        date={new Date()}
-      />);
-      
+      rerender(
+        <TempChart
+          {...defaultProps}
+          smoking={true}
+          ChamberTemp={0}
+          MeatTemp={150}
+          Meat2Temp={160}
+          Meat3Temp={155}
+          date={new Date()}
+        />
+      );
+
       await waitFor(() => {
         expect(d3.select).toHaveBeenCalled();
       });
@@ -1502,23 +1555,26 @@ describe('TemperatureChart Package', () => {
     test('should test setupSVGChart with undefined containerSize handling', () => {
       // Mock getBoundingClientRect to return undefined to trigger default values
       HTMLElement.prototype.getBoundingClientRect = jest.fn(() => undefined as any);
-      
+
       render(<TempChart {...defaultProps} initData={mockTempData} />);
       expect(d3.select).toHaveBeenCalled();
-      
+
       // Test with containerSize that has undefined width
-      HTMLElement.prototype.getBoundingClientRect = jest.fn(() => ({
-        width: undefined,
-        height: undefined,
-        top: 0,
-        left: 0,
-        bottom: 0,
-        right: 0,
-        x: 0,
-        y: 0,
-        toJSON: jest.fn(),
-      }) as any);
-      
+      HTMLElement.prototype.getBoundingClientRect = jest.fn(
+        () =>
+          ({
+            width: undefined,
+            height: undefined,
+            top: 0,
+            left: 0,
+            bottom: 0,
+            right: 0,
+            x: 0,
+            y: 0,
+            toJSON: jest.fn(),
+          }) as any
+      );
+
       render(<TempChart {...defaultProps} initData={mockTempData} />);
       expect(d3.select).toHaveBeenCalled();
     });
@@ -1526,57 +1582,57 @@ describe('TemperatureChart Package', () => {
     // Test window resize callback more thoroughly
     test('should test window resize with different callback scenarios', () => {
       render(<TempChart {...defaultProps} initData={mockTempData} />);
-      
+
       // Trigger resize multiple times with different window sizes
       Object.defineProperty(window, 'innerWidth', { value: 1200, configurable: true });
       Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
       fireEvent.resize(window);
-      
+
       Object.defineProperty(window, 'innerWidth', { value: 800, configurable: true });
       Object.defineProperty(window, 'innerHeight', { value: 600, configurable: true });
       fireEvent.resize(window);
-      
+
       // Try to trigger the callback directly if available
       try {
         triggerCallback('resize');
       } catch (e) {
         // Expected in test environment
       }
-      
+
       expect(d3.select).toHaveBeenCalledWith(window);
     });
 
     // Test to trigger internal D3 callback functions for better coverage
     test('should execute internal D3 callbacks to improve function coverage', async () => {
       const { container } = render(<TempChart {...defaultProps} initData={mockTempData} />);
-      
+
       await waitFor(() => {
         expect(d3.select).toHaveBeenCalled();
       });
 
       // Try to trigger stored callbacks for pointer events
       try {
-        triggerCallback('pointerenter pointermove', { 
+        triggerCallback('pointerenter pointermove', {
           target: container.querySelector('svg'),
           clientX: 400,
-          clientY: 200 
+          clientY: 200,
         });
       } catch (e) {
         // Expected - callback may fail but should improve coverage
       }
 
       try {
-        triggerCallback('pointerleave', { 
-          target: container.querySelector('svg') 
-        });
-      } catch (e) {
-        // Expected - callback may fail but should improve coverage
-      }
-
-      try {
-        triggerCallback('touchstart', { 
+        triggerCallback('pointerleave', {
           target: container.querySelector('svg'),
-          preventDefault: jest.fn()
+        });
+      } catch (e) {
+        // Expected - callback may fail but should improve coverage
+      }
+
+      try {
+        triggerCallback('touchstart', {
+          target: container.querySelector('svg'),
+          preventDefault: jest.fn(),
         });
       } catch (e) {
         // Expected - callback may fail but should improve coverage
@@ -1590,7 +1646,13 @@ describe('TemperatureChart Package', () => {
       // Test with invalid data scenarios that might trigger error handling
       const invalidData = [
         { ChamberTemp: null, MeatTemp: null, Meat2Temp: null, Meat3Temp: null, date: null },
-        { ChamberTemp: undefined, MeatTemp: undefined, Meat2Temp: undefined, Meat3Temp: undefined, date: undefined },
+        {
+          ChamberTemp: undefined,
+          MeatTemp: undefined,
+          Meat2Temp: undefined,
+          Meat3Temp: undefined,
+          date: undefined,
+        },
       ] as any;
 
       try {
@@ -1601,7 +1663,7 @@ describe('TemperatureChart Package', () => {
 
       // Test with very minimal data
       render(<TempChart {...defaultProps} initData={[]} />);
-      
+
       await waitFor(() => {
         expect(d3.select).toHaveBeenCalled();
       });
@@ -1628,14 +1690,14 @@ describe('TemperatureChart Package', () => {
       ];
 
       const { container } = render(<TempChart {...defaultProps} initData={specificData} />);
-      
+
       await waitFor(() => {
         expect(container.querySelector('svg')).toBeInTheDocument();
       });
 
       // Test various mouse interactions to potentially trigger internal functions
       const svg = container.querySelector('svg');
-      
+
       // Multiple interactions to increase the chance of hitting internal function paths
       for (let i = 0; i < 10; i++) {
         fireEvent.mouseEnter(svg!, { clientX: 100 + i * 50, clientY: 100 + i * 30 });
@@ -1650,24 +1712,30 @@ describe('TemperatureChart Package', () => {
     test('should test remaining uncovered conditions', async () => {
       // Test with exactly the conditions that might trigger uncovered lines
       const { rerender } = render(<TempChart {...defaultProps} initData={mockTempData} />);
-      
+
       // Test multiple rapid re-renders to potentially hit different code paths
       for (let i = 0; i < 5; i++) {
-        rerender(<TempChart {...defaultProps} 
-          smoking={i % 2 === 0}
-          ChamberTemp={200 + i * 10}
-          MeatTemp={140 + i * 8}
-          Meat2Temp={150 + i * 6}
-          Meat3Temp={145 + i * 7}
-          date={new Date(Date.now() + i * 1000)}
-          initData={[...mockTempData, {
-            ChamberTemp: 230 + i,
-            MeatTemp: 160 + i,
-            Meat2Temp: 170 + i,
-            Meat3Temp: 165 + i,
-            date: new Date(Date.now() + i * 60000),
-          }]}
-        />);
+        rerender(
+          <TempChart
+            {...defaultProps}
+            smoking={i % 2 === 0}
+            ChamberTemp={200 + i * 10}
+            MeatTemp={140 + i * 8}
+            Meat2Temp={150 + i * 6}
+            Meat3Temp={145 + i * 7}
+            date={new Date(Date.now() + i * 1000)}
+            initData={[
+              ...mockTempData,
+              {
+                ChamberTemp: 230 + i,
+                MeatTemp: 160 + i,
+                Meat2Temp: 170 + i,
+                Meat3Temp: 165 + i,
+                date: new Date(Date.now() + i * 60000),
+              },
+            ]}
+          />
+        );
       }
 
       await waitFor(() => {
@@ -1679,7 +1747,7 @@ describe('TemperatureChart Package', () => {
     test('should test reDrawGraph conditional branches', async () => {
       // Start with empty data
       const { rerender } = render(<TempChart {...defaultProps} initData={[]} />);
-      
+
       // Test the svg.empty() condition and other conditional branches
       HTMLElement.prototype.getBoundingClientRect = jest.fn(() => ({
         width: 1000,
@@ -1712,7 +1780,7 @@ describe('TemperatureChart Package', () => {
       ];
 
       rerender(<TempChart {...defaultProps} initData={testData} />);
-      
+
       await waitFor(() => {
         expect(d3.scaleLinear).toHaveBeenCalled();
         expect(d3.scaleTime).toHaveBeenCalled();
@@ -1723,9 +1791,9 @@ describe('TemperatureChart Package', () => {
     // Additional test to trigger more internal function paths
     test('should trigger internal D3 callback paths for better coverage', async () => {
       const { container } = render(<TempChart {...defaultProps} initData={mockTempData} />);
-      
+
       const svg = container.querySelector('svg');
-      
+
       // Try to trigger pointerMoved by simulating D3 event callbacks
       const mockPointerEvent = {
         clientX: 200,
@@ -1734,32 +1802,41 @@ describe('TemperatureChart Package', () => {
         pageX: 200,
         pageY: 150,
       };
-      
+
       // Use the stored callbacks from our D3 mock
       if ((d3 as any).triggerCallback) {
         (d3 as any).triggerCallback('pointermove', mockPointerEvent);
         (d3 as any).triggerCallback('pointerenter', mockPointerEvent);
         (d3 as any).triggerCallback('pointerleave', mockPointerEvent);
       }
-      
+
       // Also try direct DOM events which might trigger different paths
-      fireEvent(svg!, new MouseEvent('pointerenter', { 
-        bubbles: true, 
-        clientX: 200, 
-        clientY: 150 
-      }));
-      
-      fireEvent(svg!, new MouseEvent('pointermove', { 
-        bubbles: true, 
-        clientX: 250, 
-        clientY: 200 
-      }));
-      
-      fireEvent(svg!, new MouseEvent('pointerleave', { 
-        bubbles: true, 
-        clientX: 300, 
-        clientY: 250 
-      }));
+      fireEvent(
+        svg!,
+        new MouseEvent('pointerenter', {
+          bubbles: true,
+          clientX: 200,
+          clientY: 150,
+        })
+      );
+
+      fireEvent(
+        svg!,
+        new MouseEvent('pointermove', {
+          bubbles: true,
+          clientX: 250,
+          clientY: 200,
+        })
+      );
+
+      fireEvent(
+        svg!,
+        new MouseEvent('pointerleave', {
+          bubbles: true,
+          clientX: 300,
+          clientY: 250,
+        })
+      );
 
       expect(d3.select).toHaveBeenCalled();
     });
@@ -1768,7 +1845,7 @@ describe('TemperatureChart Package', () => {
     test('should cover initialization edge cases', async () => {
       // Test with different container sizes
       const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
-      
+
       // Test with very small container
       HTMLElement.prototype.getBoundingClientRect = jest.fn(() => ({
         width: 10,
@@ -1781,9 +1858,9 @@ describe('TemperatureChart Package', () => {
         y: 0,
         toJSON: jest.fn(),
       }));
-      
+
       const { rerender } = render(<TempChart {...defaultProps} initData={[]} />);
-      
+
       // Test with zero size container
       HTMLElement.prototype.getBoundingClientRect = jest.fn(() => ({
         width: 0,
@@ -1796,12 +1873,12 @@ describe('TemperatureChart Package', () => {
         y: 0,
         toJSON: jest.fn(),
       }));
-      
+
       rerender(<TempChart {...defaultProps} initData={mockTempData} />);
-      
+
       // Restore original function
       HTMLElement.prototype.getBoundingClientRect = originalGetBoundingClientRect;
-      
+
       expect(d3.select).toHaveBeenCalled();
     });
   });

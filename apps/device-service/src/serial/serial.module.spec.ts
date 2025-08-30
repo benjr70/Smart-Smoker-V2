@@ -5,15 +5,15 @@ jest.mock('serialport', () => {
     close: jest.fn(),
     removeAllListeners: jest.fn(),
   };
-  
+
   const mockParser = {
     on: jest.fn(),
     removeAllListeners: jest.fn(),
   };
-  
+
   const MockSerialPort = jest.fn().mockImplementation(() => mockPort);
   const MockReadlineParser = jest.fn().mockImplementation(() => mockParser);
-  
+
   return {
     SerialPort: MockSerialPort,
     ReadlineParser: MockReadlineParser,
@@ -76,7 +76,7 @@ describe('SerialModule', () => {
   it('should create SerialService as singleton', () => {
     const serialService1 = module.get<SerialService>(SerialService);
     const serialService2 = module.get<SerialService>(SerialService);
-    
+
     expect(serialService1).toBe(serialService2);
   });
 
@@ -93,7 +93,7 @@ describe('SerialModule', () => {
     it('should handle different environments', async () => {
       // Test with local environment
       process.env.NODE_ENV = 'local';
-      
+
       const localModule = await Test.createTestingModule({
         imports: [SerialModule],
       }).compile();
@@ -133,7 +133,7 @@ describe('SerialModule', () => {
 
     it('should resolve SerialService dependencies correctly', () => {
       const serialService = module.get<SerialService>(SerialService);
-      
+
       // Verify that the service has been instantiated with its dependencies
       expect(serialService.onData).toBeDefined();
       expect(typeof serialService.onData).toBe('function');
@@ -145,7 +145,7 @@ describe('SerialModule', () => {
       // This test verifies the module structure by ensuring
       // SerialService can be instantiated and used
       const serialService = module.get<SerialService>(SerialService);
-      
+
       expect(serialService).toBeDefined();
       expect(serialService.onData).toBeDefined();
       expect(serialService.generateTempString).toBeDefined();
@@ -153,12 +153,6 @@ describe('SerialModule', () => {
     });
 
     it('should be importable by other modules', async () => {
-      const ParentModule = {
-        imports: [SerialModule],
-        providers: [],
-        exports: [],
-      };
-
       const testModule = await Test.createTestingModule({
         imports: [SerialModule],
       }).compile();
@@ -176,7 +170,7 @@ describe('SerialModule', () => {
       }).compile();
 
       expect(testModule).toBeDefined();
-      
+
       // Verify service can be retrieved even with potential hardware issues
       const serialService = testModule.get<SerialService>(SerialService);
       expect(serialService).toBeDefined();

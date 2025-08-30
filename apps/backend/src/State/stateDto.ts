@@ -1,10 +1,9 @@
-import { ApiProperty } from "@nestjs/swagger";
-
+import { ApiProperty } from '@nestjs/swagger';
 
 export class StateDto {
-    @ApiProperty()
-    smokeId: string;
+  @ApiProperty()
+  smokeId: string;
 
-    @ApiProperty()
-    smoking: boolean;
+  @ApiProperty()
+  smoking: boolean;
 }

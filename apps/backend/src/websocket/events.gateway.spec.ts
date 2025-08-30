@@ -150,7 +150,10 @@ describe('EventsGateway', () => {
 
       gateway.handleTempLogging(tempDto);
 
-      expect(warnSpy).toHaveBeenCalledWith(`temps too cold: ${tempDto}`, 'Websocket');
+      expect(warnSpy).toHaveBeenCalledWith(
+        `temps too cold: ${tempDto}`,
+        'Websocket',
+      );
     });
 
     it('should log error for NaN temperatures', () => {
@@ -163,7 +166,10 @@ describe('EventsGateway', () => {
 
       gateway.handleTempLogging(tempDto);
 
-      expect(errorSpy).toHaveBeenCalledWith(`temps NAN: ${tempDto}`, 'Websocket');
+      expect(errorSpy).toHaveBeenCalledWith(
+        `temps NAN: ${tempDto}`,
+        'Websocket',
+      );
     });
 
     it('should log warning for too hot temperatures', () => {
@@ -176,7 +182,10 @@ describe('EventsGateway', () => {
 
       gateway.handleTempLogging(tempDto);
 
-      expect(warnSpy).toHaveBeenCalledWith(`temps too hot: ${tempDto}`, 'Websocket');
+      expect(warnSpy).toHaveBeenCalledWith(
+        `temps too hot: ${tempDto}`,
+        'Websocket',
+      );
     });
 
     it('should not log anything for normal temperatures', () => {
@@ -202,7 +211,10 @@ describe('EventsGateway', () => {
       gateway.handleSmokeUpdate(testData);
 
       expect(mockServer.emit).toHaveBeenCalledWith('smokeUpdate', testData);
-      expect(logSpy).toHaveBeenCalledWith(`Update Smoking: ${testData}`, 'Websocket');
+      expect(logSpy).toHaveBeenCalledWith(
+        `Update Smoking: ${testData}`,
+        'Websocket',
+      );
 
       logSpy.mockRestore();
     });
@@ -216,7 +228,10 @@ describe('EventsGateway', () => {
       gateway.handleClear(testData);
 
       expect(mockServer.emit).toHaveBeenCalledWith('clear', testData);
-      expect(logSpy).toHaveBeenCalledWith(`Clearing smoke ${testData}`, 'Websocket');
+      expect(logSpy).toHaveBeenCalledWith(
+        `Clearing smoke ${testData}`,
+        'Websocket',
+      );
 
       logSpy.mockRestore();
     });

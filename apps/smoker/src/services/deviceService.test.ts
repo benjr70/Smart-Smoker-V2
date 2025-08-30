@@ -81,9 +81,7 @@ describe('deviceService', () => {
 
   describe('getConnection', () => {
     it('should successfully get connection status', async () => {
-      const mockConnectionData = [
-        { ssid: 'ConnectedNetwork', status: 'connected' }
-      ];
+      const mockConnectionData = [{ ssid: 'ConnectedNetwork', status: 'connected' }];
       const mockResponse = { data: mockConnectionData };
 
       mockAxios.get.mockResolvedValue(mockResponse);
@@ -119,8 +117,8 @@ describe('deviceService', () => {
       const serverError = {
         response: {
           status: 500,
-          data: { error: 'Internal server error' }
-        }
+          data: { error: 'Internal server error' },
+        },
       };
 
       mockAxios.get.mockRejectedValue(serverError);
@@ -131,7 +129,7 @@ describe('deviceService', () => {
     it('should handle multiple connections', async () => {
       const mockConnectionData = [
         { ssid: 'Network1', status: 'connected' },
-        { ssid: 'Network2', status: 'available' }
+        { ssid: 'Network2', status: 'available' },
       ];
       const mockResponse = { data: mockConnectionData };
 

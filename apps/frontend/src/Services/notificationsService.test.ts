@@ -8,9 +8,13 @@ const mockAxios = {
   delete: jest.fn(),
   put: jest.fn(),
   defaults: {
-    get baseURL() { return currentBaseURL; },
-    set baseURL(value) { currentBaseURL = value; }
-  }
+    get baseURL() {
+      return currentBaseURL;
+    },
+    set baseURL(value) {
+      currentBaseURL = value;
+    },
+  },
 };
 
 jest.mock('axios', () => mockAxios);
@@ -22,10 +26,10 @@ beforeEach(() => {
   jest.resetModules();
   process.env = {
     ...originalEnv,
-    REACT_APP_CLOUD_URL: 'http://localhost:3001/'
+    REACT_APP_CLOUD_URL: 'http://localhost:3001/',
   };
   jest.spyOn(console, 'log').mockImplementation(() => {});
-  
+
   // Reset the mock and set initial baseURL
   mockAxios.get.mockClear();
   mockAxios.post.mockClear();
@@ -42,11 +46,11 @@ describe('notificationsService', () => {
     test('should fetch notification settings successfully', async () => {
       const mockSettings = [
         { id: 1, name: 'Email Notifications', enabled: true },
-        { id: 2, name: 'Push Notifications', enabled: false }
+        { id: 2, name: 'Push Notifications', enabled: false },
       ];
 
       mockAxios.get.mockResolvedValue({
-        data: { settings: mockSettings }
+        data: { settings: mockSettings },
       });
 
       const result = await getNotificationSettings();
@@ -70,13 +74,12 @@ describe('notificationsService', () => {
 
     test('should set correct baseURL from environment variable', async () => {
       process.env.REACT_APP_CLOUD_URL = 'https://api.example.com/';
-      
+
       mockAxios.get.mockResolvedValue({
-        data: { settings: [] }
+        data: { settings: [] },
       });
 
       await getNotificationSettings();
-
     });
   });
 
@@ -85,11 +88,11 @@ describe('notificationsService', () => {
       const mockSettings = {
         emailNotifications: true,
         pushNotifications: false,
-        smsNotifications: true
+        smsNotifications: true,
       };
 
       mockAxios.post.mockResolvedValue({
-        data: mockSettings
+        data: mockSettings,
       });
 
       const result = await setNotificationSettings(mockSettings);
@@ -116,7 +119,7 @@ describe('notificationsService', () => {
       const mockSettings = {};
 
       mockAxios.post.mockResolvedValue({
-        data: mockSettings
+        data: mockSettings,
       });
 
       const result = await setNotificationSettings(mockSettings);
@@ -129,7 +132,7 @@ describe('notificationsService', () => {
       const mockSettings = null;
 
       mockAxios.post.mockResolvedValue({
-        data: null
+        data: null,
       });
 
       const result = await setNotificationSettings(mockSettings);
@@ -140,12 +143,11 @@ describe('notificationsService', () => {
 
     test('should set correct baseURL from environment variable', async () => {
       process.env.REACT_APP_CLOUD_URL = 'https://api.example.com/';
-      
+
       const mockSettings = { test: true };
       mockAxios.post.mockResolvedValue({ data: mockSettings });
 
       await setNotificationSettings(mockSettings);
-
     });
   });
 });

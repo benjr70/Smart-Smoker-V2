@@ -6,13 +6,7 @@ import { SmokeCard } from './smokeCard';
 // Mock Material-UI components
 jest.mock('@mui/material', () => ({
   Button: ({ children, onClick, size, color, ...props }: any) => (
-    <button
-      data-testid="button"
-      onClick={onClick}
-      data-size={size}
-      data-color={color}
-      {...props}
-    >
+    <button data-testid="button" onClick={onClick} data-size={size} data-color={color} {...props}>
       {children}
     </button>
   ),
@@ -22,11 +16,7 @@ jest.mock('@mui/material', () => ({
     </div>
   ),
   CardActions: ({ children, sx, ...props }: any) => (
-    <div 
-      data-testid="card-actions" 
-      data-sx={JSON.stringify(sx)}
-      {...props}
-    >
+    <div data-testid="card-actions" data-sx={JSON.stringify(sx)} {...props}>
       {children}
     </div>
   ),
@@ -54,11 +44,7 @@ jest.mock('@mui/material', () => ({
     </div>
   ),
   ThemeProvider: ({ children, theme, ...props }: any) => (
-    <div 
-      data-testid="theme-provider" 
-      data-theme={JSON.stringify(theme)}
-      {...props}
-    >
+    <div data-testid="theme-provider" data-theme={JSON.stringify(theme)} {...props}>
       {children}
     </div>
   ),
@@ -74,7 +60,7 @@ jest.mock('@mui/material', () => ({
       {children}
     </div>
   ),
-  createTheme: jest.fn((theme) => theme)
+  createTheme: jest.fn(theme => theme),
 }));
 
 describe('SmokeCard Component', () => {
@@ -88,7 +74,7 @@ describe('SmokeCard Component', () => {
     woodType: 'Hickory',
     overAllRatings: '8.5',
     onViewClick: jest.fn(),
-    onDeleteClick: jest.fn()
+    onDeleteClick: jest.fn(),
   };
 
   beforeEach(() => {
@@ -98,7 +84,7 @@ describe('SmokeCard Component', () => {
   describe('Component Rendering', () => {
     test('should render SmokeCard component successfully', () => {
       render(<SmokeCard {...mockProps} />);
-      
+
       expect(screen.getByTestId('grid')).toBeInTheDocument();
       expect(screen.getByTestId('theme-provider')).toBeInTheDocument();
       expect(screen.getByTestId('card')).toBeInTheDocument();
@@ -118,7 +104,7 @@ describe('SmokeCard Component', () => {
 
     test('should render rating component with correct value', () => {
       render(<SmokeCard {...mockProps} />);
-      
+
       const rating = screen.getByTestId('rating');
       expect(rating).toHaveAttribute('data-value', '8.5');
       expect(rating).toHaveAttribute('data-max', '10');
@@ -128,7 +114,7 @@ describe('SmokeCard Component', () => {
 
     test('should render View and Delete buttons', () => {
       render(<SmokeCard {...mockProps} />);
-      
+
       expect(screen.getByText('View')).toBeInTheDocument();
       expect(screen.getByText('delete')).toBeInTheDocument();
     });
@@ -156,7 +142,7 @@ describe('SmokeCard Component', () => {
     test('should handle zero rating', () => {
       const propsWithZeroRating = { ...mockProps, overAllRatings: '0' };
       render(<SmokeCard {...propsWithZeroRating} />);
-      
+
       const rating = screen.getByTestId('rating');
       expect(rating).toHaveAttribute('data-value', '0');
     });
@@ -164,7 +150,7 @@ describe('SmokeCard Component', () => {
     test('should handle maximum rating', () => {
       const propsWithMaxRating = { ...mockProps, overAllRatings: '10' };
       render(<SmokeCard {...propsWithMaxRating} />);
-      
+
       const rating = screen.getByTestId('rating');
       expect(rating).toHaveAttribute('data-value', '10');
     });
@@ -172,7 +158,7 @@ describe('SmokeCard Component', () => {
     test('should handle decimal ratings', () => {
       const propsWithDecimal = { ...mockProps, overAllRatings: '7.3' };
       render(<SmokeCard {...propsWithDecimal} />);
-      
+
       const rating = screen.getByTestId('rating');
       expect(rating).toHaveAttribute('data-value', '7.3');
     });
@@ -181,27 +167,27 @@ describe('SmokeCard Component', () => {
   describe('User Interactions', () => {
     test('should call onViewClick when View button is clicked', () => {
       render(<SmokeCard {...mockProps} />);
-      
+
       const viewButton = screen.getByText('View');
       fireEvent.click(viewButton);
-      
+
       expect(mockProps.onViewClick).toHaveBeenCalledTimes(1);
       expect(mockProps.onViewClick).toHaveBeenCalledWith('smoke-123');
     });
 
     test('should call onDeleteClick when delete button is clicked', () => {
       render(<SmokeCard {...mockProps} />);
-      
+
       const deleteButton = screen.getByText('delete');
       fireEvent.click(deleteButton);
-      
+
       expect(mockProps.onDeleteClick).toHaveBeenCalledTimes(1);
       expect(mockProps.onDeleteClick).toHaveBeenCalledWith('smoke-123');
     });
 
     test('should not call callbacks when buttons are not clicked', () => {
       render(<SmokeCard {...mockProps} />);
-      
+
       expect(mockProps.onViewClick).not.toHaveBeenCalled();
       expect(mockProps.onDeleteClick).not.toHaveBeenCalled();
     });
@@ -210,33 +196,32 @@ describe('SmokeCard Component', () => {
   describe('Component Structure', () => {
     test('should have correct typography variants', () => {
       render(<SmokeCard {...mockProps} />);
-      
+
       const typographies = screen.getAllByTestId('typography');
-      
+
       // Check name typography
-      const nameTypography = typographies.find(t => 
-        t.getAttribute('data-variant') === 'h5' && 
-        t.getAttribute('data-component') === 'div'
+      const nameTypography = typographies.find(
+        t => t.getAttribute('data-variant') === 'h5' && t.getAttribute('data-component') === 'div'
       );
       expect(nameTypography).toBeInTheDocument();
       expect(nameTypography).toHaveTextContent('Brisket Smoke');
-      
+
       // Check detail typographies
-      const detailTypographies = typographies.filter(t => 
-        t.getAttribute('data-color') === 'text.secondary'
+      const detailTypographies = typographies.filter(
+        t => t.getAttribute('data-color') === 'text.secondary'
       );
       expect(detailTypographies).toHaveLength(2);
     });
 
     test('should have correct button properties', () => {
       render(<SmokeCard {...mockProps} />);
-      
+
       const buttons = screen.getAllByTestId('button');
       expect(buttons).toHaveLength(2);
-      
+
       const viewButton = buttons.find(b => b.textContent === 'View');
       const deleteButton = buttons.find(b => b.textContent === 'delete');
-      
+
       expect(viewButton).toHaveAttribute('data-size', 'small');
       expect(deleteButton).toHaveAttribute('data-size', 'small');
       expect(deleteButton).toHaveAttribute('data-color', 'error');
@@ -244,10 +229,10 @@ describe('SmokeCard Component', () => {
 
     test('should have correct card actions styling', () => {
       render(<SmokeCard {...mockProps} />);
-      
+
       const cardActions = screen.getByTestId('card-actions');
       const sx = JSON.parse(cardActions.getAttribute('data-sx') || '{}');
-      
+
       expect(sx.display).toBe('flex');
       expect(sx.justifyContent).toBe('space-between');
     });
@@ -256,10 +241,10 @@ describe('SmokeCard Component', () => {
   describe('Theme Integration', () => {
     test('should apply theme provider with custom theme', () => {
       render(<SmokeCard {...mockProps} />);
-      
+
       const themeProvider = screen.getByTestId('theme-provider');
       const theme = JSON.parse(themeProvider.getAttribute('data-theme') || '{}');
-      
+
       expect(theme.components.MuiCard.styleOverrides.root.backgroundColor).toBe('white');
       expect(theme.components.MuiCard.styleOverrides.root.borderRadius).toBe('15px');
     });
@@ -274,7 +259,7 @@ describe('SmokeCard Component', () => {
         woodType: '',
         weight: '',
         weightUnit: '',
-        date: ''
+        date: '',
       };
       render(<SmokeCard {...emptyProps} />);
       expect(screen.getByTestId('card')).toBeInTheDocument();
@@ -285,7 +270,7 @@ describe('SmokeCard Component', () => {
     test('should handle invalid rating strings', () => {
       const invalidRatingProps = { ...mockProps, overAllRatings: 'invalid' };
       render(<SmokeCard {...invalidRatingProps} />);
-      
+
       const rating = screen.getByTestId('rating');
       expect(rating).toHaveAttribute('data-value', 'NaN');
     });
@@ -295,11 +280,11 @@ describe('SmokeCard Component', () => {
         ...mockProps,
         name: 'A very long smoke session name that might overflow the container',
         meatType: 'Super long meat type description',
-        woodType: 'Extremely descriptive wood type name'
+        woodType: 'Extremely descriptive wood type name',
       };
-      
+
       render(<SmokeCard {...longTextProps} />);
-      
+
       expect(screen.getByText(longTextProps.name)).toBeInTheDocument();
     });
   });
@@ -307,17 +292,17 @@ describe('SmokeCard Component', () => {
   describe('Accessibility', () => {
     test('should have proper button roles', () => {
       render(<SmokeCard {...mockProps} />);
-      
+
       const viewButton = screen.getByText('View');
       const deleteButton = screen.getByText('delete');
-      
+
       expect(viewButton.tagName).toBe('BUTTON');
       expect(deleteButton.tagName).toBe('BUTTON');
     });
 
     test('should have rating component with proper attributes', () => {
       render(<SmokeCard {...mockProps} />);
-      
+
       const rating = screen.getByTestId('rating');
       expect(rating).toHaveAttribute('data-name', 'size-large');
     });

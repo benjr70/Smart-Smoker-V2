@@ -4,7 +4,10 @@ import { Request, Response, NextFunction } from 'express';
 @Injectable()
 export class LoggerMiddleware implements NestMiddleware {
   use(req: Request, res: Response, next: NextFunction) {
-    Logger.log(`${JSON.stringify(req.method)} body: ${JSON.stringify(req.body)}`, `${req.url} Request`);
+    Logger.log(
+      `${JSON.stringify(req.method)} body: ${JSON.stringify(req.body)}`,
+      `${req.url} Request`,
+    );
     getResponseLog(res, req.url);
     next();
   }
@@ -38,10 +41,10 @@ const getResponseLog = (res: Response, url: string) => {
     }
     const body = Buffer.concat(chunkBuffers).toString('utf8');
     res.setHeader('origin', 'restjs-req-res-logging-repo');
-     const responseLog = {
+    const responseLog = {
       response: {
         statusCode: res.statusCode,
-        body:  body || {},
+        body: body || {},
         // Returns a shallow copy of the current outgoing headers
         headers: res.getHeaders(),
       },

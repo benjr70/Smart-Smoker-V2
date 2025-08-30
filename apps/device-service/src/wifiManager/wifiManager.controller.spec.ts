@@ -45,7 +45,7 @@ describe('WifiManagerController', () => {
   describe('connectWifi', () => {
     const testDto: wifiDto = {
       ssid: 'TestNetwork',
-      password: 'testPassword123'
+      password: 'testPassword123',
     };
 
     it('should successfully connect to WiFi', async () => {
@@ -80,7 +80,7 @@ describe('WifiManagerController', () => {
     it('should handle DTO with special characters', async () => {
       const specialDto: wifiDto = {
         ssid: 'Network-With_Special.Chars',
-        password: 'p@ssw0rd!@#$%^&*()_+'
+        password: 'p@ssw0rd!@#$%^&*()_+',
       };
       const mockResult = { success: true };
       mockWifiManagerService.connectToWiFi.mockResolvedValue(mockResult);
@@ -94,7 +94,7 @@ describe('WifiManagerController', () => {
     it('should handle very long SSID and password', async () => {
       const longDto: wifiDto = {
         ssid: 'A'.repeat(100),
-        password: 'B'.repeat(100)
+        password: 'B'.repeat(100),
       };
       const mockResult = { success: true };
       mockWifiManagerService.connectToWiFi.mockResolvedValue(mockResult);
@@ -108,7 +108,7 @@ describe('WifiManagerController', () => {
 
   describe('disconnectWifi', () => {
     it('should successfully disconnect from WiFi', async () => {
-      const mockResult = 'Device \'wlan0\' successfully disconnected.';
+      const mockResult = "Device 'wlan0' successfully disconnected.";
       mockWifiManagerService.disconnectFromWiFi.mockResolvedValue(mockResult);
 
       const result = await controller.disconnectWifi();
@@ -148,7 +148,7 @@ describe('WifiManagerController', () => {
     it('should return current WiFi connections', async () => {
       const mockConnections = [
         { ssid: 'Network1', signal_level: -40 },
-        { ssid: 'Network2', signal_level: -60 }
+        { ssid: 'Network2', signal_level: -60 },
       ];
       mockWifiManagerService.getConnection.mockResolvedValue(mockConnections);
 
@@ -192,8 +192,8 @@ describe('WifiManagerController', () => {
           security: 'WPA2',
           frequency: 2400,
           quality: 70,
-          mac: '00:11:22:33:44:55'
-        }
+          mac: '00:11:22:33:44:55',
+        },
       ];
       mockWifiManagerService.getConnection.mockResolvedValue(mockConnections);
 
@@ -211,9 +211,11 @@ describe('WifiManagerController', () => {
 
     it('should call service methods through controller', async () => {
       const testDto: wifiDto = { ssid: 'test', password: 'test' };
-      
+
       mockWifiManagerService.connectToWiFi.mockResolvedValue({ success: true });
-      mockWifiManagerService.disconnectFromWiFi.mockResolvedValue('disconnected');
+      mockWifiManagerService.disconnectFromWiFi.mockResolvedValue(
+        'disconnected',
+      );
       mockWifiManagerService.getConnection.mockResolvedValue([]);
 
       await controller.connectWifi(testDto);
@@ -233,7 +235,7 @@ describe('WifiManagerController', () => {
       mockWifiManagerService.connectToWiFi.mockRejectedValue(httpError);
 
       const testDto: wifiDto = { ssid: 'test', password: 'test' };
-      
+
       await expect(controller.connectWifi(testDto)).rejects.toThrow(httpError);
     });
 

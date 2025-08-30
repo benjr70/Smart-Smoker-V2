@@ -30,20 +30,20 @@ describe('tempsService', () => {
   describe('getCurrentTemps', () => {
     it('should successfully get current temperature data', async () => {
       const mockTempData: TempData[] = [
-        { 
-          ChamberTemp: 225, 
-          MeatTemp: 185, 
-          Meat2Temp: 190, 
-          Meat3Temp: 0, 
-          date: new Date('2023-01-01T12:00:00Z')
+        {
+          ChamberTemp: 225,
+          MeatTemp: 185,
+          Meat2Temp: 190,
+          Meat3Temp: 0,
+          date: new Date('2023-01-01T12:00:00Z'),
         },
-        { 
-          ChamberTemp: 230, 
-          MeatTemp: 190, 
-          Meat2Temp: 195, 
-          Meat3Temp: 0, 
-          date: new Date('2023-01-01T12:05:00Z')
-        }
+        {
+          ChamberTemp: 230,
+          MeatTemp: 190,
+          Meat2Temp: 195,
+          Meat3Temp: 0,
+          date: new Date('2023-01-01T12:05:00Z'),
+        },
       ];
       const mockResponse = { data: mockTempData };
 
@@ -88,8 +88,8 @@ describe('tempsService', () => {
       const serverError = {
         response: {
           status: 500,
-          data: { error: 'Internal server error' }
-        }
+          data: { error: 'Internal server error' },
+        },
       };
 
       mockAxios.get.mockRejectedValue(serverError);
@@ -99,13 +99,13 @@ describe('tempsService', () => {
 
     it('should handle single temperature reading', async () => {
       const mockTempData: TempData[] = [
-        { 
-          ChamberTemp: 225, 
-          MeatTemp: 185, 
-          Meat2Temp: 190, 
-          Meat3Temp: 0, 
-          date: new Date('2023-01-01T12:00:00Z')
-        }
+        {
+          ChamberTemp: 225,
+          MeatTemp: 185,
+          Meat2Temp: 190,
+          Meat3Temp: 0,
+          date: new Date('2023-01-01T12:00:00Z'),
+        },
       ];
       const mockResponse = { data: mockTempData };
 
@@ -121,20 +121,20 @@ describe('tempsService', () => {
   describe('postTempsBatch', () => {
     it('should successfully post temperature batch data', async () => {
       const mockBatch: TempData[] = [
-        { 
-          ChamberTemp: 225, 
-          MeatTemp: 185, 
-          Meat2Temp: 190, 
-          Meat3Temp: 0, 
-          date: new Date('2023-01-01T12:00:00Z')
+        {
+          ChamberTemp: 225,
+          MeatTemp: 185,
+          Meat2Temp: 190,
+          Meat3Temp: 0,
+          date: new Date('2023-01-01T12:00:00Z'),
         },
-        { 
-          ChamberTemp: 230, 
-          MeatTemp: 190, 
-          Meat2Temp: 195, 
-          Meat3Temp: 0, 
-          date: new Date('2023-01-01T12:00:00Z')
-        }
+        {
+          ChamberTemp: 230,
+          MeatTemp: 190,
+          Meat2Temp: 195,
+          Meat3Temp: 0,
+          date: new Date('2023-01-01T12:00:00Z'),
+        },
       ];
       const mockResponse = { data: { success: true, count: 2 } };
 
@@ -160,13 +160,13 @@ describe('tempsService', () => {
 
     it('should handle single item batch', async () => {
       const singleBatch: TempData[] = [
-        { 
-          ChamberTemp: 225, 
-          MeatTemp: 185, 
-          Meat2Temp: 190, 
-          Meat3Temp: 0, 
-          date: new Date('2023-01-01T12:00:00Z')
-        }
+        {
+          ChamberTemp: 225,
+          MeatTemp: 185,
+          Meat2Temp: 190,
+          Meat3Temp: 0,
+          date: new Date('2023-01-01T12:00:00Z'),
+        },
       ];
       const mockResponse = { data: { success: true, count: 1 } };
 
@@ -180,13 +180,13 @@ describe('tempsService', () => {
 
     it('should handle API error when posting batch', async () => {
       const mockBatch: TempData[] = [
-        { 
-          ChamberTemp: 225, 
-          MeatTemp: 185, 
-          Meat2Temp: 190, 
-          Meat3Temp: 0, 
-          date: new Date('2023-01-01T12:00:00Z')
-        }
+        {
+          ChamberTemp: 225,
+          MeatTemp: 185,
+          Meat2Temp: 190,
+          Meat3Temp: 0,
+          date: new Date('2023-01-01T12:00:00Z'),
+        },
       ];
       const apiError = new Error('Failed to save temperature batch');
 
@@ -198,13 +198,13 @@ describe('tempsService', () => {
 
     it('should handle network timeout during batch post', async () => {
       const mockBatch: TempData[] = [
-        { 
-          ChamberTemp: 225, 
-          MeatTemp: 185, 
-          Meat2Temp: 190, 
-          Meat3Temp: 0, 
-          date: new Date('2023-01-01T12:00:00Z')
-        }
+        {
+          ChamberTemp: 225,
+          MeatTemp: 185,
+          Meat2Temp: 190,
+          Meat3Temp: 0,
+          date: new Date('2023-01-01T12:00:00Z'),
+        },
       ];
       const timeoutError = new Error('timeout of 5000ms exceeded');
 
@@ -215,19 +215,19 @@ describe('tempsService', () => {
 
     it('should handle server error response during batch post', async () => {
       const mockBatch: TempData[] = [
-        { 
-          ChamberTemp: 225, 
-          MeatTemp: 185, 
-          Meat2Temp: 190, 
-          Meat3Temp: 0, 
-          date: new Date('2023-01-01T12:00:00Z')
-        }
+        {
+          ChamberTemp: 225,
+          MeatTemp: 185,
+          Meat2Temp: 190,
+          Meat3Temp: 0,
+          date: new Date('2023-01-01T12:00:00Z'),
+        },
       ];
       const serverError = {
         response: {
           status: 500,
-          data: { error: 'Database connection failed' }
-        }
+          data: { error: 'Database connection failed' },
+        },
       };
 
       mockAxios.post.mockRejectedValue(serverError);
@@ -237,11 +237,11 @@ describe('tempsService', () => {
 
     it('should handle large batch data', async () => {
       const largeBatch: TempData[] = Array.from({ length: 100 }, (_, i) => ({
-        ChamberTemp: 225 + i, 
-        MeatTemp: 185 + i, 
-        Meat2Temp: 190 + i, 
-        Meat3Temp: 0, 
-        date: new Date('2023-01-01T12:00:00Z')
+        ChamberTemp: 225 + i,
+        MeatTemp: 185 + i,
+        Meat2Temp: 190 + i,
+        Meat3Temp: 0,
+        date: new Date('2023-01-01T12:00:00Z'),
       }));
       const mockResponse = { data: { success: true, count: 100 } };
 

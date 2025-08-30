@@ -14,9 +14,10 @@ on:
 #   workflow_call:
 
 jobs:
-  deploy: 
-    runs-on: Smoker
-        # Steps represent a sequence of tasks that will be executed as part of the job
+  deploy:
+    runs-on:
+      Smoker
+      # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - run: sudo chmod -R 777 ./
@@ -30,10 +31,9 @@ jobs:
 
       - name: docker down
         run: sudo VERSION=${{ github.event.inputs.version }} REPO_USER=${{ secrets.DOCKERHUB_USERNAME }} REPO_PASS=${{ secrets.DOCKERHUB_TOKEN }} docker compose -f smoker.docker-compose.yml build
-      
+
       - name: docker compose up
-        run: sudo VERSION=${{ github.event.inputs.version }} REPO_USER=${{ secrets.DOCKERHUB_USERNAME }} REPO_PASS=${{ secrets.DOCKERHUB_TOKEN }} docker compose -f smoker.docker-compose.yml up  -d 
+        run: sudo VERSION=${{ github.event.inputs.version }} REPO_USER=${{ secrets.DOCKERHUB_USERNAME }} REPO_PASS=${{ secrets.DOCKERHUB_TOKEN }} docker compose -f smoker.docker-compose.yml up  -d
 
       - name: docker compose remove old containers
         run: sudo docker system prune -a --volumes --force
-      

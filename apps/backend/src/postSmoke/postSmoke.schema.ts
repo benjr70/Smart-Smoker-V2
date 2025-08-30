@@ -1,19 +1,17 @@
-import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 
-
-export type PostSmokeDocument = PostSmoke & Document
+export type PostSmokeDocument = PostSmoke & Document;
 
 @Schema()
 export class PostSmoke {
-    @Prop()
-    restTime: string;
+  @Prop()
+  restTime: string;
 
-    @Prop()
-    steps: string[];
+  @Prop()
+  steps: string[];
 
-    @Prop()
-    notes: string;
-
+  @Prop()
+  notes: string;
 }
 
-export const PostSmokeSchema = SchemaFactory.createForClass(PostSmoke)
+export const PostSmokeSchema = SchemaFactory.createForClass(PostSmoke);

@@ -12,11 +12,15 @@ jest.mock('./ratingsService');
 jest.mock('./smokerService');
 jest.mock('./tempsService');
 
-const mockDeletePostSmokeById = deletePostSmokeById as jest.MockedFunction<typeof deletePostSmokeById>;
+const mockDeletePostSmokeById = deletePostSmokeById as jest.MockedFunction<
+  typeof deletePostSmokeById
+>;
 const mockDeletePreSmokeById = deletePreSmokeById as jest.MockedFunction<typeof deletePreSmokeById>;
 const mockDeleteRatingsById = deleteRatingsById as jest.MockedFunction<typeof deleteRatingsById>;
 const mockDeleteSmokeById = deleteSmokeById as jest.MockedFunction<typeof deleteSmokeById>;
-const mockDeleteSmokeProfileById = deleteSmokeProfileById as jest.MockedFunction<typeof deleteSmokeProfileById>;
+const mockDeleteSmokeProfileById = deleteSmokeProfileById as jest.MockedFunction<
+  typeof deleteSmokeProfileById
+>;
 const mockGetSmokeById = getSmokeById as jest.MockedFunction<typeof getSmokeById>;
 const mockDeleteTempsById = deleteTempsById as jest.MockedFunction<typeof deleteTempsById>;
 
@@ -34,10 +38,10 @@ describe('deleteSmokeService', () => {
     const mockSmokeId = 'test-smoke-id';
     const mockSmoke = {
       preSmokeId: 'pre-smoke-id',
-      smokeProfileId: 'smoke-profile-id', 
+      smokeProfileId: 'smoke-profile-id',
       tempsId: 'temps-id',
       postSmokeId: 'post-smoke-id',
-      ratingId: 'rating-id'
+      ratingId: 'rating-id',
     };
 
     mockGetSmokeById.mockResolvedValue(mockSmoke);
@@ -64,9 +68,9 @@ describe('deleteSmokeService', () => {
     const mockSmoke = {
       preSmokeId: 'pre-smoke-id',
       smokeProfileId: 'smoke-profile-id',
-      tempsId: 'temps-id', 
+      tempsId: 'temps-id',
       postSmokeId: 'post-smoke-id',
-      ratingId: 'rating-id'
+      ratingId: 'rating-id',
     };
 
     mockGetSmokeById.mockResolvedValue(mockSmoke);
@@ -88,8 +92,8 @@ describe('deleteSmokeService', () => {
       preSmokeId: 'pre-smoke-id',
       smokeProfileId: 'smoke-profile-id',
       tempsId: 'temps-id',
-      postSmokeId: 'post-smoke-id', 
-      ratingId: 'rating-id'
+      postSmokeId: 'post-smoke-id',
+      ratingId: 'rating-id',
     };
 
     mockGetSmokeById.mockResolvedValue(mockSmoke);
@@ -129,7 +133,7 @@ describe('deleteSmokeService', () => {
       smokeProfileId: 'smoke-profile-id',
       tempsId: 'temps-id',
       postSmokeId: 'post-smoke-id',
-      ratingId: 'rating-id'
+      ratingId: 'rating-id',
     };
 
     mockGetSmokeById.mockResolvedValue(mockSmoke);
@@ -162,7 +166,7 @@ describe('deleteSmokeService', () => {
       smokeProfileId: 'smoke-profile-id',
       tempsId: 'temps-id',
       postSmokeId: 'post-smoke-id',
-      ratingId: 'rating-id'
+      ratingId: 'rating-id',
     };
 
     mockGetSmokeById.mockResolvedValue(mockSmoke);

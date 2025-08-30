@@ -8,10 +8,10 @@ export {};
 
 describe('Index module', () => {
   let container: HTMLElement;
-  
+
   beforeEach(() => {
     jest.clearAllMocks();
-    
+
     // Create a fresh container for each test
     container = document.createElement('div');
     container.id = 'root';
@@ -20,7 +20,7 @@ describe('Index module', () => {
 
   afterEach(() => {
     jest.restoreAllMocks();
-    
+
     // Clean up the container
     if (container && container.parentNode) {
       container.parentNode.removeChild(container);
@@ -42,7 +42,7 @@ describe('Index module', () => {
   it('should have React and ReactDOM imports working', () => {
     const React = require('react');
     const ReactDOM = require('react-dom/client');
-    
+
     expect(React).toBeDefined();
     expect(ReactDOM).toBeDefined();
     expect(ReactDOM.createRoot).toBeDefined();
@@ -51,7 +51,7 @@ describe('Index module', () => {
   it('should be able to create a root element', () => {
     const ReactDOM = require('react-dom/client');
     const testContainer = document.createElement('div');
-    
+
     expect(() => {
       const root = ReactDOM.createRoot(testContainer);
       expect(root).toBeDefined();
@@ -63,16 +63,12 @@ describe('Index module', () => {
     const ReactDOM = require('react-dom/client');
     const React = require('react');
     const App = require('./App').default;
-    
+
     const testContainer = document.createElement('div');
     const root = ReactDOM.createRoot(testContainer);
-    
+
     expect(() => {
-      root.render(
-        React.createElement(React.StrictMode, null,
-          React.createElement(App)
-        )
-      );
+      root.render(React.createElement(React.StrictMode, null, React.createElement(App)));
     }).not.toThrow();
   });
 
@@ -80,24 +76,24 @@ describe('Index module', () => {
     const mockRootElement = document.createElement('div');
     mockRootElement.id = 'root';
     document.body.appendChild(mockRootElement);
-    
+
     const originalGetElementById = document.getElementById;
     document.getElementById = jest.fn().mockReturnValue(mockRootElement);
-    
+
     // Mock reportWebVitals before requiring the module
     const mockReportWebVitals = jest.fn();
     jest.doMock('./reportWebVitals', () => ({
       __esModule: true,
-      default: mockReportWebVitals
+      default: mockReportWebVitals,
     }));
-    
+
     // Clear the require cache and re-import to test reportWebVitals call
     delete require.cache[require.resolve('./index')];
     delete require.cache[require.resolve('./reportWebVitals')];
     require('./index');
-    
+
     expect(mockReportWebVitals).toHaveBeenCalled();
-    
+
     // Restore and clean up
     document.getElementById = originalGetElementById;
     document.body.removeChild(mockRootElement);
@@ -106,13 +102,13 @@ describe('Index module', () => {
 
   it('should handle missing root element gracefully', () => {
     const ReactDOM = require('react-dom/client');
-    
+
     // Remove the root element
     const rootElement = document.getElementById('root');
     if (rootElement && rootElement.parentNode) {
       rootElement.parentNode.removeChild(rootElement);
     }
-    
+
     // This should throw because root element is missing
     expect(() => {
       ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
@@ -122,12 +118,10 @@ describe('Index module', () => {
   it('should verify StrictMode wrapper is applied', () => {
     const React = require('react');
     const App = require('./App').default;
-    
+
     // Create StrictMode element like in index.tsx
-    const strictModeElement = React.createElement(React.StrictMode, null,
-      React.createElement(App)
-    );
-    
+    const strictModeElement = React.createElement(React.StrictMode, null, React.createElement(App));
+
     expect(strictModeElement).toBeDefined();
     expect(strictModeElement.type).toBe(React.StrictMode);
     expect(strictModeElement.props.children.type).toBe(App);

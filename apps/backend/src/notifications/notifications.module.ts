@@ -6,10 +6,15 @@ import { NotificationSubscriptionSchema } from './notificationSubscription.schem
 import { NotificationSettingsSchema } from './notificationSettings.schema';
 
 @Module({
-  imports: [MongooseModule.forFeature([
-    {name: 'NotificationSubscription', schema: NotificationSubscriptionSchema},
-    {name: 'NotificationSettings', schema: NotificationSettingsSchema}
-  ])],
+  imports: [
+    MongooseModule.forFeature([
+      {
+        name: 'NotificationSubscription',
+        schema: NotificationSubscriptionSchema,
+      },
+      { name: 'NotificationSettings', schema: NotificationSettingsSchema },
+    ]),
+  ],
   controllers: [NotificationsController],
   providers: [NotificationsService],
   exports: [NotificationsService],

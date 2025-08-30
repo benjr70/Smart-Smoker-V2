@@ -22,7 +22,9 @@ describe('SmokeController', () => {
   beforeEach(async () => {
     mockSmokeService = {
       getAll: jest.fn().mockResolvedValue(mockSmokes),
-      FinishSmoke: jest.fn().mockResolvedValue({ ...mockSmoke, status: SmokeStatus.Complete }),
+      FinishSmoke: jest
+        .fn()
+        .mockResolvedValue({ ...mockSmoke, status: SmokeStatus.Complete }),
       GetById: jest.fn().mockResolvedValue(mockSmoke),
       Delete: jest.fn().mockResolvedValue({ deletedCount: 1 }),
     };

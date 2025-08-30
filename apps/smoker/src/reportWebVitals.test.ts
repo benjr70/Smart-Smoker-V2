@@ -30,11 +30,11 @@ describe('reportWebVitals', () => {
     expect(() => {
       reportWebVitals('not a function' as any);
     }).not.toThrow();
-    
+
     expect(() => {
       reportWebVitals(null as any);
     }).not.toThrow();
-    
+
     expect(() => {
       reportWebVitals(undefined);
     }).not.toThrow();
@@ -43,7 +43,7 @@ describe('reportWebVitals', () => {
   it('should perform function type check correctly', () => {
     const validFunction = jest.fn();
     const invalidInput = 'not a function';
-    
+
     // Both calls should not throw
     expect(() => reportWebVitals(validFunction)).not.toThrow();
     expect(() => reportWebVitals(invalidInput as any)).not.toThrow();
@@ -51,7 +51,7 @@ describe('reportWebVitals', () => {
 
   it('should call web-vitals functions when passed a valid function', async () => {
     const mockOnPerfEntry = jest.fn();
-    
+
     // Mock the dynamic import of web-vitals
     const mockWebVitals = {
       getCLS: jest.fn(),
@@ -63,13 +63,13 @@ describe('reportWebVitals', () => {
 
     // Mock the dynamic import
     jest.doMock('web-vitals', () => mockWebVitals, { virtual: true });
-    
+
     // Call reportWebVitals with a valid function
     reportWebVitals(mockOnPerfEntry);
-    
+
     // Wait for the dynamic import to resolve
     await new Promise(resolve => setTimeout(resolve, 0));
-    
+
     // The mock won't actually be called due to the dynamic import,
     // but this tests the code path where onPerfEntry is a function
   });
@@ -86,10 +86,10 @@ describe('reportWebVitals', () => {
     reportWebVitals('string' as any);
     reportWebVitals(123 as any);
     reportWebVitals({} as any);
-    
+
     // Restore
     global.__DYNAMIC_IMPORT__ = originalImport;
-    
+
     // This test ensures the branch where the condition is false is covered
     expect(() => reportWebVitals(null as any)).not.toThrow();
   });
@@ -98,8 +98,8 @@ describe('reportWebVitals', () => {
     // Test objects that might look like functions but aren't
     const notAFunction = { name: 'function', length: 0 };
     const arrow = () => {}; // This IS a function
-    const regularFunc = function() {}; // This IS a function
-    
+    const regularFunc = function () {}; // This IS a function
+
     expect(() => reportWebVitals(notAFunction as any)).not.toThrow();
     expect(() => reportWebVitals(arrow)).not.toThrow();
     expect(() => reportWebVitals(regularFunc)).not.toThrow();

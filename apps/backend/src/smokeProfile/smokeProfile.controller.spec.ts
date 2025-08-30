@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { SmokeProfileController } from './smokeProfile.controller';
 import { SmokeProfileService } from './smokeProfile.service';
 import { SmokeProFileDto } from './smokeProfileDto';
-import { SmokeProfile } from './smokeProfile.schema';
 
 describe('SmokeProfileController', () => {
   let controller: SmokeProfileController;
@@ -28,7 +27,7 @@ describe('SmokeProfileController', () => {
     chamberName: 'Chamber',
     probe1Name: 'Probe1',
     probe2Name: 'Probe2',
-    probe3Name: 'Probe2',
+    probe3Name: 'Probe3',
   };
 
   const mockSmokeProfileService = {
@@ -63,7 +62,9 @@ describe('SmokeProfileController', () => {
 
   describe('getCurrentSmokeProfile', () => {
     it('should return current smoke profile', async () => {
-      mockSmokeProfileService.getCurrentSmokeProfile.mockResolvedValue(mockSmokeProfile);
+      mockSmokeProfileService.getCurrentSmokeProfile.mockResolvedValue(
+        mockSmokeProfile,
+      );
 
       const result = await controller.getCurrentSmokeProfile();
 
@@ -72,7 +73,9 @@ describe('SmokeProfileController', () => {
     });
 
     it('should return default profile when no current profile exists', async () => {
-      mockSmokeProfileService.getCurrentSmokeProfile.mockResolvedValue(mockDefaultProfile);
+      mockSmokeProfileService.getCurrentSmokeProfile.mockResolvedValue(
+        mockDefaultProfile,
+      );
 
       const result = await controller.getCurrentSmokeProfile();
 
@@ -84,7 +87,9 @@ describe('SmokeProfileController', () => {
       const error = new Error('No current smoke found');
       mockSmokeProfileService.getCurrentSmokeProfile.mockRejectedValue(error);
 
-      await expect(controller.getCurrentSmokeProfile()).rejects.toThrow('No current smoke found');
+      await expect(controller.getCurrentSmokeProfile()).rejects.toThrow(
+        'No current smoke found',
+      );
     });
   });
 
@@ -114,17 +119,24 @@ describe('SmokeProfileController', () => {
       const error = new Error('Invalid ObjectId');
       mockSmokeProfileService.getById.mockRejectedValue(error);
 
-      await expect(controller.getSmokeProfileById(id)).rejects.toThrow('Invalid ObjectId');
+      await expect(controller.getSmokeProfileById(id)).rejects.toThrow(
+        'Invalid ObjectId',
+      );
     });
   });
 
   describe('saveCurrentSmokeProfile', () => {
     it('should save current smoke profile', async () => {
-      mockSmokeProfileService.saveCurrentSmokeProfile.mockResolvedValue(mockSmokeProfile);
+      mockSmokeProfileService.saveCurrentSmokeProfile.mockResolvedValue(
+        mockSmokeProfile,
+      );
 
-      const result = await controller.saveCurrentSmokeProfile(mockSmokeProfileDto);
+      const result =
+        await controller.saveCurrentSmokeProfile(mockSmokeProfileDto);
 
-      expect(service.saveCurrentSmokeProfile).toHaveBeenCalledWith(mockSmokeProfileDto);
+      expect(service.saveCurrentSmokeProfile).toHaveBeenCalledWith(
+        mockSmokeProfileDto,
+      );
       expect(result).toEqual(mockSmokeProfile);
     });
 
@@ -132,26 +144,31 @@ describe('SmokeProfileController', () => {
       const error = new Error('Invalid profile data');
       mockSmokeProfileService.saveCurrentSmokeProfile.mockRejectedValue(error);
 
-      await expect(controller.saveCurrentSmokeProfile(mockSmokeProfileDto)).rejects.toThrow(
-        'Invalid profile data'
-      );
+      await expect(
+        controller.saveCurrentSmokeProfile(mockSmokeProfileDto),
+      ).rejects.toThrow('Invalid profile data');
     });
 
     it('should handle service errors during save', async () => {
       const error = new Error('Database error');
       mockSmokeProfileService.saveCurrentSmokeProfile.mockRejectedValue(error);
 
-      await expect(controller.saveCurrentSmokeProfile(mockSmokeProfileDto)).rejects.toThrow(
-        'Database error'
-      );
+      await expect(
+        controller.saveCurrentSmokeProfile(mockSmokeProfileDto),
+      ).rejects.toThrow('Database error');
     });
 
     it('should handle empty smoke state', async () => {
-      mockSmokeProfileService.saveCurrentSmokeProfile.mockResolvedValue(undefined);
+      mockSmokeProfileService.saveCurrentSmokeProfile.mockResolvedValue(
+        undefined,
+      );
 
-      const result = await controller.saveCurrentSmokeProfile(mockSmokeProfileDto);
+      const result =
+        await controller.saveCurrentSmokeProfile(mockSmokeProfileDto);
 
-      expect(service.saveCurrentSmokeProfile).toHaveBeenCalledWith(mockSmokeProfileDto);
+      expect(service.saveCurrentSmokeProfile).toHaveBeenCalledWith(
+        mockSmokeProfileDto,
+      );
       expect(result).toBeUndefined();
     });
   });

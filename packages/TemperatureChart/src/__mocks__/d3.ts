@@ -6,7 +6,7 @@ const mockChainable = {
   style: jest.fn().mockReturnThis(),
   text: jest.fn().mockReturnThis(),
   classed: jest.fn().mockReturnThis(),
-  call: jest.fn((callback) => {
+  call: jest.fn(callback => {
     // Execute callback functions to improve function coverage
     if (typeof callback === 'function') {
       try {
@@ -64,7 +64,7 @@ const mockSelection = mockChainable;
 const mockScale = {
   domain: jest.fn().mockReturnThis(),
   range: jest.fn().mockReturnThis(),
-  invert: jest.fn((x) => x * 2), // Mock invert function
+  invert: jest.fn(x => x * 2), // Mock invert function
 };
 
 const mockLine = {
@@ -73,7 +73,7 @@ const mockLine = {
   curve: jest.fn().mockReturnThis(),
 };
 
-export const select = jest.fn((selector) => {
+export const select = jest.fn(selector => {
   // Return different mocks based on selector to better simulate real behavior
   if (selector === window) {
     return {
@@ -98,7 +98,7 @@ export const axisLeft = jest.fn();
 export const extent = jest.fn((data, accessor) => {
   if (!data || data.length === 0) return [0, 100];
   try {
-    const values = data.map(accessor || ((d) => d));
+    const values = data.map(accessor || (d => d));
     return [Math.min(...values), Math.max(...values)];
   } catch (e) {
     return [0, 100];
@@ -108,7 +108,7 @@ export const extent = jest.fn((data, accessor) => {
 export const max = jest.fn((data, accessor) => {
   if (!data || data.length === 0) return 100;
   try {
-    const values = data.map(accessor || ((d) => d));
+    const values = data.map(accessor || (d => d));
     return Math.max(...values);
   } catch (e) {
     return 100;
@@ -118,14 +118,14 @@ export const max = jest.fn((data, accessor) => {
 export const min = jest.fn((data, accessor) => {
   if (!data || data.length === 0) return 0;
   try {
-    const values = data.map(accessor || ((d) => d));
+    const values = data.map(accessor || (d => d));
     return Math.min(...values);
   } catch (e) {
     return 0;
   }
 });
 
-export const bisector = jest.fn((accessor) => ({
+export const bisector = jest.fn(accessor => ({
   left: jest.fn(),
   center: jest.fn((array, x) => {
     if (!array || array.length === 0) return 0;

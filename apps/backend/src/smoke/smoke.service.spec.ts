@@ -43,7 +43,9 @@ describe('SmokeService', () => {
       exec: jest.fn().mockResolvedValue([mockSmokeDocument]),
     });
     mockSmokeModel.findById = jest.fn().mockResolvedValue(mockSmokeDocument);
-    mockSmokeModel.findOneAndUpdate = jest.fn().mockResolvedValue(mockSmokeDocument);
+    mockSmokeModel.findOneAndUpdate = jest
+      .fn()
+      .mockResolvedValue(mockSmokeDocument);
     mockSmokeModel.deleteOne = jest.fn().mockResolvedValue({ deletedCount: 1 });
 
     mockStateService = {
@@ -116,13 +118,15 @@ describe('SmokeService', () => {
         status: SmokeStatus.Complete,
       };
 
-      jest.spyOn(service, 'GetById').mockResolvedValue(mockSmokeDocument as Smoke);
+      jest
+        .spyOn(service, 'GetById')
+        .mockResolvedValue(mockSmokeDocument as Smoke);
 
       const result = await service.Update(id, smokeDto);
 
       expect(mockSmokeModel.findOneAndUpdate).toHaveBeenCalledWith(
         { _id: id },
-        smokeDto
+        smokeDto,
       );
       expect(service.GetById).toHaveBeenCalledWith(id);
     });
@@ -150,7 +154,9 @@ describe('SmokeService', () => {
 
   describe('getCurrentSmoke', () => {
     it('should return current smoke based on state', async () => {
-      jest.spyOn(service, 'GetById').mockResolvedValue(mockSmokeDocument as Smoke);
+      jest
+        .spyOn(service, 'GetById')
+        .mockResolvedValue(mockSmokeDocument as Smoke);
 
       const result = await service.getCurrentSmoke();
 
@@ -162,7 +168,9 @@ describe('SmokeService', () => {
 
   describe('FinishSmoke', () => {
     it('should finish current smoke by setting status to Complete', async () => {
-      jest.spyOn(service, 'getCurrentSmoke').mockResolvedValue(mockSmokeDocument as Smoke);
+      jest
+        .spyOn(service, 'getCurrentSmoke')
+        .mockResolvedValue(mockSmokeDocument as Smoke);
       jest.spyOn(service, 'Update').mockResolvedValue({
         ...mockSmokeDocument,
         status: SmokeStatus.Complete,

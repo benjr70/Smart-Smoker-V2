@@ -1,10 +1,10 @@
-export enum Screens{
-    HOME = 'HOME',
-    HISTORY = 'HISTORY',
-    SETTINGS = 'SETTINGS',
+export enum Screens {
+  HOME = 'HOME',
+  HISTORY = 'HISTORY',
+  SETTINGS = 'SETTINGS',
 }
 
 export enum WeightUnits {
-    LB = 'LB',
-    OZ = 'OZ',
+  LB = 'LB',
+  OZ = 'OZ',
 }

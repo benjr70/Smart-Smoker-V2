@@ -1,5 +1,4 @@
-
 export class wifiDto {
-    ssid: string;
-    password: string;
+  ssid: string;
+  password: string;
 }

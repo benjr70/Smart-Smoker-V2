@@ -30,22 +30,18 @@ jest.mock('@mui/material', () => ({
       {children}
     </div>
   ),
-  createTheme: jest.fn((theme) => theme)
+  createTheme: jest.fn(theme => theme),
 }));
 
 // Mock the NotificationsCard component
 jest.mock('./notifications', () => ({
-  NotificationsCard: () => (
-    <div data-testid="notifications-card">
-      Mocked NotificationsCard
-    </div>
-  )
+  NotificationsCard: () => <div data-testid="notifications-card">Mocked NotificationsCard</div>,
 }));
 
 describe('Settings Component', () => {
   test('should render Settings component successfully', () => {
     render(<Settings />);
-    
+
     expect(screen.getByText('Settings')).toBeInTheDocument();
     expect(screen.getByTestId('notifications-card')).toBeInTheDocument();
     expect(screen.getByText(/Version:/)).toBeInTheDocument();
@@ -53,14 +49,14 @@ describe('Settings Component', () => {
 
   test('should render version information', () => {
     render(<Settings />);
-    
+
     const versionText = screen.getByText(/Version:/);
     expect(versionText).toBeInTheDocument();
   });
 
   test('should render NotificationsCard component', () => {
     render(<Settings />);
-    
+
     expect(screen.getByTestId('notifications-card')).toBeInTheDocument();
     expect(screen.getByText('Mocked NotificationsCard')).toBeInTheDocument();
   });

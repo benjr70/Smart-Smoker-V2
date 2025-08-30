@@ -46,7 +46,7 @@ jobs:
       fail-fast: false
       matrix:
         app: ${{ fromJson(inputs.apps) }}
-    
+
     steps:
       - name: Download workspace
         uses: actions/download-artifact@v4

@@ -5,15 +5,15 @@ jest.mock('serialport', () => {
     close: jest.fn(),
     removeAllListeners: jest.fn(),
   };
-  
+
   const mockParser = {
     on: jest.fn(),
     removeAllListeners: jest.fn(),
   };
-  
+
   const MockSerialPort = jest.fn().mockImplementation(() => mockPort);
   const MockReadlineParser = jest.fn().mockImplementation(() => mockParser);
-  
+
   return {
     SerialPort: MockSerialPort,
     ReadlineParser: MockReadlineParser,
@@ -37,7 +37,7 @@ describe('AppModule', () => {
   beforeEach(async () => {
     // Set to local mode to avoid SerialPort issues
     process.env.NODE_ENV = 'local';
-    
+
     module = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -145,7 +145,7 @@ describe('AppModule', () => {
       // Test that all main dependencies can be resolved
       expect(() => testModule.get(AppController)).not.toThrow();
       expect(() => testModule.get(AppService)).not.toThrow();
-      
+
       await testModule.close();
     });
   });
@@ -155,11 +155,11 @@ describe('AppModule', () => {
       // This test verifies the module structure by checking that
       // the module can be instantiated and all dependencies resolve
       expect(appModule).toBeDefined();
-      
+
       // Verify that the module contains the expected providers
       const appService = module.get<AppService>(AppService);
       const appController = module.get<AppController>(AppController);
-      
+
       expect(appService).toBeDefined();
       expect(appController).toBeDefined();
     });
@@ -178,7 +178,7 @@ describe('AppModule', () => {
 
     it('should handle invalid consumer in configure', () => {
       const invalidConsumer = {} as MiddlewareConsumer;
-      
+
       expect(() => {
         appModule.configure(invalidConsumer);
       }).toThrow();

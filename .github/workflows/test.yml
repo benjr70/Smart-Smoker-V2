@@ -35,7 +35,7 @@ jobs:
       fail-fast: false
       matrix:
         app: ${{ fromJson(inputs.apps) }}
-    
+
     steps:
       - name: Download workspace
         uses: actions/download-artifact@v4
@@ -137,7 +137,7 @@ jobs:
         run: |
           set -e
           mkdir -p artifacts_to_upload
-          
+
           # Determine where to search for coverage and where to place it in artifact
           if [ "${{ matrix.app }}" = "TemperatureChart" ]; then
             search_root="packages/TemperatureChart"
@@ -146,9 +146,9 @@ jobs:
             search_root="apps/${{ matrix.app }}"
             rel_dest="apps/${{ matrix.app }}/coverage"
           fi
-          
+
           echo "Searching for coverage under: $search_root" >&2
-          
+
           # Look for coverage directory directly in the app root first
           if [ -d "$search_root/coverage" ]; then
             coverage_dir="$search_root/coverage"
@@ -174,11 +174,11 @@ jobs:
               fi
             fi
           fi
-          
+
           # Create destination and copy coverage files
           dst_path="artifacts_to_upload/$rel_dest"
           mkdir -p "$dst_path"
-          
+
           if [ -d "$coverage_dir" ] && [ "$(ls -A "$coverage_dir" 2>/dev/null)" ]; then
             cp -R "$coverage_dir/"* "$dst_path/" 2>/dev/null || true
             echo "Copied coverage files from $coverage_dir to $dst_path" >&2
@@ -204,14 +204,14 @@ jobs:
           echo "=== DEBUG: Coverage files check for ${{ matrix.app }} ===" >&2
           echo "Current directory: $(pwd)" >&2
           echo "Looking for coverage files..." >&2
-          
+
           # Check for coverage in the correct app-specific location
           if [ "${{ matrix.app }}" = "TemperatureChart" ]; then
             coverage_path="packages/TemperatureChart/coverage"
           else
             coverage_path="apps/${{ matrix.app }}/coverage"
           fi
-          
+
           if [ -d "$coverage_path" ]; then
             echo "Found coverage directory at: $coverage_path" >&2
             echo "Coverage files:" >&2
@@ -288,7 +288,7 @@ jobs:
     if: always()
     outputs:
       test-results: ${{ steps.summary.outputs.test-results }}
-    
+
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -302,16 +302,16 @@ jobs:
         id: summary
         run: |
           echo "Creating test results summary..."
-          
+
           # Create summary output
           summary_file="test-summary.json"
           echo '{"apps": {}}' > $summary_file
-          
+
           # Parse the input apps list and process each one
           apps_input='${{ inputs.apps }}'
           # Convert JSON array to bash array
           apps_array=$(echo $apps_input | jq -r '.[]')
-          
+
           for app in $apps_array; do
             echo "Processing app: $app"
             
@@ -369,13 +369,13 @@ jobs:
                '.apps[$app] = {"coverage": $cov, "status": $status, "details": $details}' \
                $summary_file > temp.json && mv temp.json $summary_file
           done
-          
+
           # Output the summary
           test_results=$(cat $summary_file)
           echo "test-results<<EOF" >> $GITHUB_OUTPUT
           echo "$test_results" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
-          
+
       - name: Upload summary
         uses: actions/upload-artifact@v4
         with:
