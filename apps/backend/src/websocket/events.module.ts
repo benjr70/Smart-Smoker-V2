@@ -5,7 +5,7 @@ import { EventsGateway } from './events.gateway';
 import { NotificationsModule } from 'src/notifications/notifications.module';
 
 @Module({
-  imports: [ StateModule, TempModule, NotificationsModule],
+  imports: [StateModule, TempModule, NotificationsModule],
   providers: [EventsGateway],
 })
 export class EventsModule {}

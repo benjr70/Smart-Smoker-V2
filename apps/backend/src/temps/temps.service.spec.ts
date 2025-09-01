@@ -133,9 +133,14 @@ describe('TempsService', () => {
       };
 
       const smokeWithoutTempsId = { ...mockSmoke, tempsId: undefined };
-      mockSmokeService.GetById = jest.fn().mockResolvedValue(smokeWithoutTempsId);
+      mockSmokeService.GetById = jest
+        .fn()
+        .mockResolvedValue(smokeWithoutTempsId);
 
-      jest.spyOn(service, 'create').mockResolvedValue({ ...mockTempDocument, _id: 'new-temps-id' } as Temp);
+      jest.spyOn(service, 'create').mockResolvedValue({
+        ...mockTempDocument,
+        _id: 'new-temps-id',
+      } as Temp);
 
       await service.saveNewTemp(tempDto);
 
@@ -150,7 +155,9 @@ describe('TempsService', () => {
       // Note: The original logic has a bug - it checks for length < 0 instead of <= 0 or == 0
       // This test reflects the current implementation, not the expected behavior
       const stateWithInvalidSmokeId = { ...mockState, smokeId: '' };
-      mockStateService.GetState = jest.fn().mockResolvedValue(stateWithInvalidSmokeId);
+      mockStateService.GetState = jest
+        .fn()
+        .mockResolvedValue(stateWithInvalidSmokeId);
 
       const tempDto: TempDto = {
         MeatTemp: '150',
@@ -217,13 +224,17 @@ describe('TempsService', () => {
 
       expect(mockStateService.GetState).toHaveBeenCalled();
       expect(mockSmokeService.GetById).toHaveBeenCalledWith(mockState.smokeId);
-      expect(mockTempModel.find).toHaveBeenCalledWith({ tempsId: mockSmoke.tempsId });
+      expect(mockTempModel.find).toHaveBeenCalledWith({
+        tempsId: mockSmoke.tempsId,
+      });
       expect(result).toEqual([mockTempDocument]);
     });
 
     it('should return empty array when no smokeId', async () => {
       const stateWithoutSmoke = { ...mockState, smokeId: '' };
-      mockStateService.GetState = jest.fn().mockResolvedValue(stateWithoutSmoke);
+      mockStateService.GetState = jest
+        .fn()
+        .mockResolvedValue(stateWithoutSmoke);
 
       const result = await service.getAllTempsCurrent();
 
@@ -233,7 +244,9 @@ describe('TempsService', () => {
 
     it('should return empty array when smoke has no tempsId', async () => {
       const smokeWithoutTempsId = { ...mockSmoke, tempsId: '' };
-      mockSmokeService.GetById = jest.fn().mockResolvedValue(smokeWithoutTempsId);
+      mockSmokeService.GetById = jest
+        .fn()
+        .mockResolvedValue(smokeWithoutTempsId);
 
       const result = await service.getAllTempsCurrent();
 
@@ -266,7 +279,9 @@ describe('TempsService', () => {
       // Note: The original logic has a bug - it checks for length < 0 instead of <= 0 or == 0
       // This test reflects the current implementation, not the expected behavior
       const stateWithInvalidSmokeId = { ...mockState, smokeId: '' };
-      mockStateService.GetState = jest.fn().mockResolvedValue(stateWithInvalidSmokeId);
+      mockStateService.GetState = jest
+        .fn()
+        .mockResolvedValue(stateWithInvalidSmokeId);
 
       const result = await service.GetTempID();
 

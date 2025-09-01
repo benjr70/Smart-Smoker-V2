@@ -30,7 +30,9 @@ describe('StateService', () => {
     mockStateModel.find = jest.fn().mockReturnValue({
       exec: jest.fn().mockResolvedValue([mockStateDocument]),
     });
-    mockStateModel.findOneAndUpdate = jest.fn().mockResolvedValue(mockStateDocument);
+    mockStateModel.findOneAndUpdate = jest
+      .fn()
+      .mockResolvedValue(mockStateDocument);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -93,37 +95,57 @@ describe('StateService', () => {
         smoking: false,
       };
 
-      jest.spyOn(service, 'GetState').mockResolvedValue(mockStateDocument as State);
+      jest
+        .spyOn(service, 'GetState')
+        .mockResolvedValue(mockStateDocument as State);
 
       const result = await service.update(updateDto);
 
       expect(mockStateModel.findOneAndUpdate).toHaveBeenCalledWith(
         { _id: 'test-id' },
-        updateDto
+        updateDto,
       );
     });
   });
 
   describe('toggleSmoking', () => {
     it('should toggle smoking to false when currently true', async () => {
-      const currentState = { ...mockStateDocument, smoking: true, smokeId: 'test-id' };
+      const currentState = {
+        ...mockStateDocument,
+        smoking: true,
+        smokeId: 'test-id',
+      };
       jest.spyOn(service, 'GetState').mockResolvedValue(currentState as State);
-      jest.spyOn(service, 'update').mockResolvedValue({ ...currentState, smoking: false } as State);
+      jest
+        .spyOn(service, 'update')
+        .mockResolvedValue({ ...currentState, smoking: false } as State);
 
       const result = await service.toggleSmoking();
 
-      expect(service.update).toHaveBeenCalledWith({ ...currentState, smoking: false });
+      expect(service.update).toHaveBeenCalledWith({
+        ...currentState,
+        smoking: false,
+      });
       expect(result.smoking).toBe(false);
     });
 
     it('should toggle smoking to true when currently false', async () => {
-      const currentState = { ...mockStateDocument, smoking: false, smokeId: 'test-id' };
+      const currentState = {
+        ...mockStateDocument,
+        smoking: false,
+        smokeId: 'test-id',
+      };
       jest.spyOn(service, 'GetState').mockResolvedValue(currentState as State);
-      jest.spyOn(service, 'update').mockResolvedValue({ ...currentState, smoking: true } as State);
+      jest
+        .spyOn(service, 'update')
+        .mockResolvedValue({ ...currentState, smoking: true } as State);
 
       const result = await service.toggleSmoking();
 
-      expect(service.update).toHaveBeenCalledWith({ ...currentState, smoking: true });
+      expect(service.update).toHaveBeenCalledWith({
+        ...currentState,
+        smoking: true,
+      });
       expect(result.smoking).toBe(true);
     });
 

@@ -1,23 +1,18 @@
-import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { SmokeReview } from './smokeReview';
+import { render, screen, waitFor } from '@testing-library/react';
+import React from 'react';
+import * as postSmokeService from '../../../Services/postSmokeService';
 import * as preSmokeService from '../../../Services/preSmokeService';
+import * as ratingsService from '../../../Services/ratingsService';
 import * as smokerService from '../../../Services/smokerService';
 import * as tempsService from '../../../Services/tempsService';
-import * as postSmokeService from '../../../Services/postSmokeService';
-import * as ratingsService from '../../../Services/ratingsService';
 import { WeightUnits } from '../../common/interfaces/enums';
+import { SmokeReview } from './smokeReview';
 
 // Mock Material-UI Grid component
 jest.mock('@mui/material', () => ({
   Grid: ({ children, item, xs, ...props }: any) => (
-    <div 
-      data-testid="grid" 
-      data-item={item}
-      data-xs={xs}
-      {...props}
-    >
+    <div data-testid="grid" data-item={item} data-xs={xs} {...props}>
       {children}
     </div>
   ),
@@ -34,8 +29,8 @@ jest.mock('../smokeCards/preSmokeCard', () => ({
 
 jest.mock('../smokeCards/smokeProfileCard', () => ({
   SmokeProfileCard: ({ smokeProfile, temps }: any) => (
-    <div 
-      data-testid="smoke-profile-card" 
+    <div
+      data-testid="smoke-profile-card"
       data-smokeprofile={JSON.stringify(smokeProfile)}
       data-temps={JSON.stringify(temps)}
     >
@@ -69,7 +64,7 @@ jest.mock('../../../Services/ratingsService');
 
 // Mock temperaturechart module
 jest.mock('temperaturechart/src/tempChart', () => ({
-  TempData: {}
+  TempData: {},
 }));
 
 const mockPreSmokeService = preSmokeService as jest.Mocked<typeof preSmokeService>;
@@ -139,7 +134,7 @@ describe('SmokeReview Component', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
+
     // Setup default successful mock responses
     mockSmokerService.getSmokeById.mockResolvedValue(mockSmokeData);
     mockPreSmokeService.getPreSmokeById.mockResolvedValue(mockPreSmokeData);
@@ -171,10 +166,13 @@ describe('SmokeReview Component', () => {
   test('should fetch and display all smoke data successfully', async () => {
     render(<SmokeReview smokeId={mockSmokeId} />);
 
+    // Wait for all services to be called
     await waitFor(() => {
       expect(mockSmokerService.getSmokeById).toHaveBeenCalledWith(mockSmokeId);
       expect(mockPreSmokeService.getPreSmokeById).toHaveBeenCalledWith(mockSmokeData.preSmokeId);
-      expect(mockSmokerService.getSmokeProfileById).toHaveBeenCalledWith(mockSmokeData.smokeProfileId);
+      expect(mockSmokerService.getSmokeProfileById).toHaveBeenCalledWith(
+        mockSmokeData.smokeProfileId
+      );
       expect(mockTempsService.getTempsById).toHaveBeenCalledWith(mockSmokeData.tempsId);
       expect(mockPostSmokeService.getPostSmokeById).toHaveBeenCalledWith(mockSmokeData.postSmokeId);
       expect(mockRatingsService.getRatingById).toHaveBeenCalledWith(mockSmokeData.ratingId);
@@ -185,7 +183,10 @@ describe('SmokeReview Component', () => {
     expect(preSmokeCard).toHaveAttribute('data-presmoke', JSON.stringify(mockPreSmokeData));
 
     const smokeProfileCard = screen.getByTestId('smoke-profile-card');
-    expect(smokeProfileCard).toHaveAttribute('data-smokeprofile', JSON.stringify(mockSmokeProfileData));
+    expect(smokeProfileCard).toHaveAttribute(
+      'data-smokeprofile',
+      JSON.stringify(mockSmokeProfileData)
+    );
     expect(smokeProfileCard).toHaveAttribute('data-temps', JSON.stringify(mockTempsData));
 
     const postSmokeCard = screen.getByTestId('post-smoke-card');
@@ -204,21 +205,22 @@ describe('SmokeReview Component', () => {
 
     render(<SmokeReview smokeId={mockSmokeId} />);
 
-    await waitFor(() => {
-      expect(mockSmokerService.getSmokeById).toHaveBeenCalledWith(mockSmokeId);
-      expect(mockTempsService.getTempsById).not.toHaveBeenCalled();
-    });
+    await waitFor(() => expect(mockSmokerService.getSmokeById).toHaveBeenCalledWith(mockSmokeId));
+
+    expect(mockTempsService.getTempsById).not.toHaveBeenCalled();
 
     // Should still render with initial temp data
     const smokeProfileCard = screen.getByTestId('smoke-profile-card');
-    const expectedInitialTempData = [{
-      ChamberTemp: 0,
-      MeatTemp: 0,
-      Meat2Temp: 0,
-      Meat3Temp: 0,
-      date: expect.any(Date),
-    }];
-    
+    const expectedInitialTempData = [
+      {
+        ChamberTemp: 0,
+        MeatTemp: 0,
+        Meat2Temp: 0,
+        Meat3Temp: 0,
+        date: expect.any(Date),
+      },
+    ];
+
     const actualTempData = JSON.parse(smokeProfileCard.getAttribute('data-temps') || '[]');
     expect(actualTempData).toHaveLength(1);
     expect(actualTempData[0]).toMatchObject({
@@ -283,14 +285,20 @@ describe('SmokeReview Component', () => {
       woodType: '',
       notes: '',
     };
-    expect(smokeProfileCard).toHaveAttribute('data-smokeprofile', JSON.stringify(expectedInitialSmokeProfile));
+    expect(smokeProfileCard).toHaveAttribute(
+      'data-smokeprofile',
+      JSON.stringify(expectedInitialSmokeProfile)
+    );
 
     const postSmokeCard = screen.getByTestId('post-smoke-card');
     const expectedInitialPostSmoke = {
       restTime: '',
       steps: [],
     };
-    expect(postSmokeCard).toHaveAttribute('data-postsmoke', JSON.stringify(expectedInitialPostSmoke));
+    expect(postSmokeCard).toHaveAttribute(
+      'data-postsmoke',
+      JSON.stringify(expectedInitialPostSmoke)
+    );
 
     const ratingsCard = screen.getByTestId('ratings-card');
     const expectedInitialRating = {
@@ -394,7 +402,7 @@ describe('SmokeReview Component', () => {
     expect(mockSmokerService.getSmokeProfileById).toHaveBeenCalled();
     expect(mockPostSmokeService.getPostSmokeById).toHaveBeenCalled();
     expect(mockRatingsService.getRatingById).toHaveBeenCalled();
-    
+
     // Component should still render
     expect(screen.getByTestId('pre-smoke-card')).toBeInTheDocument();
     expect(screen.getByTestId('smoke-profile-card')).toBeInTheDocument();

@@ -92,7 +92,9 @@ describe('HistoryService', () => {
 
       expect(mockSmokeService.getAll).toHaveBeenCalled();
       expect(mockPreSmokeService.GetByID).toHaveBeenCalledWith('presmoke-id');
-      expect(mockSmokeProfileService.getById).toHaveBeenCalledWith('profile-id');
+      expect(mockSmokeProfileService.getById).toHaveBeenCalledWith(
+        'profile-id',
+      );
       expect(mockRatingsService.getById).toHaveBeenCalledWith('rating-id');
 
       expect(result).toEqual([
@@ -130,7 +132,7 @@ describe('HistoryService', () => {
           meatType: '',
           weight: '',
           weightUnit: '',
-        })
+        }),
       );
     });
 
@@ -142,7 +144,7 @@ describe('HistoryService', () => {
       expect(result[0]).toEqual(
         expect.objectContaining({
           woodType: '',
-        })
+        }),
       );
     });
 
@@ -154,7 +156,7 @@ describe('HistoryService', () => {
       expect(result[0]).toEqual(
         expect.objectContaining({
           overAllRating: '',
-        })
+        }),
       );
     });
 
@@ -167,7 +169,7 @@ describe('HistoryService', () => {
       expect(result[0]).toEqual(
         expect.objectContaining({
           date: '',
-        })
+        }),
       );
     });
   });

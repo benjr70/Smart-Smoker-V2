@@ -70,7 +70,9 @@ describe('NotificationsService', () => {
     mockNotificationSubscriptionModel.findOne = jest.fn().mockReturnValue({
       exec: jest.fn().mockResolvedValue(null),
     });
-    mockNotificationSubscriptionModel.find = jest.fn().mockResolvedValue([mockSubscription]);
+    mockNotificationSubscriptionModel.find = jest
+      .fn()
+      .mockResolvedValue([mockSubscription]);
 
     // Mock NotificationSettings model
     mockNotificationSettingsModel = jest.fn().mockImplementation((dto) => ({
@@ -118,7 +120,9 @@ describe('NotificationsService', () => {
       expect(mockNotificationSubscriptionModel.findOne).toHaveBeenCalledWith({
         endpoint: mockSubscription.endpoint,
       });
-      expect(mockNotificationSubscriptionModel).toHaveBeenCalledWith(mockSubscription);
+      expect(mockNotificationSubscriptionModel).toHaveBeenCalledWith(
+        mockSubscription,
+      );
       expect(result).toEqual(expect.objectContaining(mockSubscription));
     });
 
@@ -128,7 +132,7 @@ describe('NotificationsService', () => {
       });
 
       await expect(service.setSubscription(mockSubscription)).rejects.toThrow(
-        'Subscription already exists'
+        'Subscription already exists',
       );
     });
   });
@@ -147,7 +151,9 @@ describe('NotificationsService', () => {
       const result = await service.setSettings(mockNotificationSettings);
 
       expect(mockNotificationSettingsModel.findOne).toHaveBeenCalled();
-      expect(mockNotificationSettingsModel).toHaveBeenCalledWith(mockNotificationSettings);
+      expect(mockNotificationSettingsModel).toHaveBeenCalledWith(
+        mockNotificationSettings,
+      );
       expect(result).toEqual(expect.objectContaining(mockNotificationSettings));
     });
 
@@ -187,7 +193,9 @@ describe('NotificationsService', () => {
         exec: jest.fn().mockResolvedValue(mockNotificationSettings),
       });
       jest.spyOn(service, 'sendPushNotification').mockResolvedValue(undefined);
-      jest.spyOn(service, 'setSettings').mockResolvedValue(mockNotificationSettings);
+      jest
+        .spyOn(service, 'setSettings')
+        .mockResolvedValue(mockNotificationSettings);
     });
 
     it('should trigger notification when chamber temp exceeds threshold', async () => {
@@ -195,16 +203,24 @@ describe('NotificationsService', () => {
 
       await service.checkForNotification(highTempDto);
 
-      expect(service.sendPushNotification).toHaveBeenCalledWith('Chamber temp too high');
+      expect(service.sendPushNotification).toHaveBeenCalledWith(
+        'Chamber temp too high',
+      );
       expect(service.setSettings).toHaveBeenCalled();
     });
 
     it('should trigger notification when meat temp exceeds chamber temp + offset', async () => {
-      const highMeatTempDto = { ...mockTempDto, MeatTemp: '320', ChamberTemp: '250' };
+      const highMeatTempDto = {
+        ...mockTempDto,
+        MeatTemp: '320',
+        ChamberTemp: '250',
+      };
 
       await service.checkForNotification(highMeatTempDto);
 
-      expect(service.sendPushNotification).toHaveBeenCalledWith('Meat temp reached target');
+      expect(service.sendPushNotification).toHaveBeenCalledWith(
+        'Meat temp reached target',
+      );
     });
 
     it('should handle different probe types', async () => {
@@ -229,7 +245,9 @@ describe('NotificationsService', () => {
 
       await service.checkForNotification(mockTempDto);
 
-      expect(service.sendPushNotification).toHaveBeenCalledWith('Meat2 temp too low');
+      expect(service.sendPushNotification).toHaveBeenCalledWith(
+        'Meat2 temp too low',
+      );
     });
 
     it('should handle Meat3 probe type', async () => {
@@ -254,7 +272,9 @@ describe('NotificationsService', () => {
 
       await service.checkForNotification(mockTempDto);
 
-      expect(service.sendPushNotification).toHaveBeenCalledWith('Meat3 temp too low');
+      expect(service.sendPushNotification).toHaveBeenCalledWith(
+        'Meat3 temp too low',
+      );
     });
 
     it('should handle probe2 comparison with different probes', async () => {
@@ -279,7 +299,9 @@ describe('NotificationsService', () => {
 
       await service.checkForNotification(mockTempDto);
 
-      expect(service.sendPushNotification).toHaveBeenCalledWith('Meat1 exceeds Meat2');
+      expect(service.sendPushNotification).toHaveBeenCalledWith(
+        'Meat1 exceeds Meat2',
+      );
     });
 
     it('should not trigger notification if recently sent', async () => {
@@ -316,13 +338,17 @@ describe('NotificationsService', () => {
 
   describe('sendPushNotification', () => {
     beforeEach(() => {
-      jest.spyOn(service, 'getSubscriptions').mockResolvedValue([mockSubscription]);
+      jest
+        .spyOn(service, 'getSubscriptions')
+        .mockResolvedValue([mockSubscription]);
       // Reset the webpush mock before each test
       (webpush.sendNotification as jest.Mock).mockClear();
     });
 
     it('should send push notification to all subscriptions', async () => {
-      (webpush.sendNotification as jest.Mock).mockResolvedValue({ statusCode: 201 });
+      (webpush.sendNotification as jest.Mock).mockResolvedValue({
+        statusCode: 201,
+      });
       const message = 'Test notification';
 
       await service.sendPushNotification(message);
@@ -334,7 +360,7 @@ describe('NotificationsService', () => {
           title: 'Smoker',
           body: message,
           icon: '/path/to/icon.png',
-        })
+        }),
       );
     });
 
@@ -350,7 +376,7 @@ describe('NotificationsService', () => {
         Promise.reject(mockError).catch(() => {
           // This simulates the error handling in the actual service
           return Promise.resolve();
-        })
+        }),
       );
 
       // Should not throw an error despite the webpush failure

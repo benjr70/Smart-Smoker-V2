@@ -1,12 +1,12 @@
-import { WeightUnits } from "./enums"
+import { WeightUnits } from './enums';
 
 export interface preSmoke {
-    name?: string
-    meatType?: string
-    weight: {
-        weight?: number
-        unit?: WeightUnits
-    }
-    steps: string[]
-    notes?: string
+  name?: string;
+  meatType?: string;
+  weight: {
+    weight?: number;
+    unit?: WeightUnits;
+  };
+  steps: string[];
+  notes?: string;
 }

@@ -1,11 +1,11 @@
 version: '3.1'
 
-services:  
+services:
   backend:
     container_name: backend_cloud
     restart: always
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - 'host.docker.internal:host-gateway'
     image: benjr70/smart_smoker:backend_V${VERSION}
     volumes:
       - /node_modules
@@ -23,15 +23,14 @@ services:
       - mongo
 
   mongo:
-      container_name: mongo
-      image: mongo:4.4.14-rc0-focal
-      restart: always
-      volumes:
-        - ./../../../../database:/data/db:z
-      ports:
-        - 27017:27017
-   
-  
+    container_name: mongo
+    image: mongo:4.4.14-rc0-focal
+    restart: always
+    volumes:
+      - ./../../../../database:/data/db:z
+    ports:
+      - 27017:27017
+
   frontend:
     container_name: frontend_cloud
     restart: always

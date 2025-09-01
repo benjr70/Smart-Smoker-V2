@@ -1,8 +1,8 @@
+import { HttpException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { HttpException, HttpStatus } from '@nestjs/common';
-import { WifiManagerService } from './wifiManager.service';
-import { wifiDto } from './wifiDto';
 import { exec } from 'child_process';
+import { wifiDto } from './wifiDto';
+import { WifiManagerService } from './wifiManager.service';
 
 // Mock child_process
 jest.mock('child_process', () => ({
@@ -26,7 +26,7 @@ describe('WifiManagerService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    
+
     // Get the mocked module
     mockWifi = require('node-wifi');
 
@@ -47,7 +47,7 @@ describe('WifiManagerService', () => {
   describe('constructor', () => {
     it('should initialize wifi with wlan0 interface', () => {
       expect(mockWifi.init).toHaveBeenCalledWith({
-        iface: 'wlan0'
+        iface: 'wlan0',
       });
     });
   });
@@ -75,7 +75,7 @@ describe('WifiManagerService', () => {
   describe('connectToWiFi', () => {
     const testDto: wifiDto = {
       ssid: 'TestNetwork',
-      password: 'testPassword123'
+      password: 'testPassword123',
     };
 
     it('should successfully connect to WiFi', async () => {
@@ -88,17 +88,21 @@ describe('WifiManagerService', () => {
       expect(mockWifi.scan).toHaveBeenCalled();
       expect(mockWifi.connect).toHaveBeenCalledWith({
         ssid: testDto.ssid,
-        password: testDto.password
+        password: testDto.password,
       });
       expect(result).toBe(mockResult);
     });
 
     it('should handle connection failure and throw HttpException', async () => {
-      const connectionError = new Error('Connection failed\nDetailed error message');
+      const connectionError = new Error(
+        'Connection failed\nDetailed error message',
+      );
       mockWifi.scan.mockResolvedValue([]);
       mockWifi.connect.mockRejectedValue(connectionError);
 
-      await expect(service.connectToWiFi(testDto)).rejects.toThrow(HttpException);
+      await expect(service.connectToWiFi(testDto)).rejects.toThrow(
+        HttpException,
+      );
     });
   });
 
@@ -114,7 +118,7 @@ describe('WifiManagerService', () => {
 
       expect(mockExec).toHaveBeenCalledWith(
         'nmcli device disconnect wlan0',
-        expect.any(Function)
+        expect.any(Function),
       );
       expect(result).toBe(mockStdout);
     });

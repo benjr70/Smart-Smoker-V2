@@ -1,4 +1,9 @@
-import { MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/common';
+import {
+  MiddlewareConsumer,
+  Module,
+  NestModule,
+  RequestMethod,
+} from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -10,7 +15,7 @@ import { SmokeProfileModule } from './smokeProfile/smokeProfile.module';
 import { StateModule } from './State/state.module';
 import { TempModule } from './temps/temps.module';
 import { EventsModule } from './websocket/events.module';
-import { ConfigModule } from '@nestjs/config'
+import { ConfigModule } from '@nestjs/config';
 import { RatingsModel } from './ratings/ratings.module';
 import { HistoryModule } from './history/history.module';
 import { LoggerMiddleware } from './logger.middleware';
@@ -19,7 +24,8 @@ import { NotificationsModule } from './notifications/notifications.module';
 const ENV = process.env.NODE_ENV;
 console.log(process.env.NODE_ENV);
 @Module({
-  imports: [SettingsModule,
+  imports: [
+    SettingsModule,
     PreSmokeModule,
     StateModule,
     SmokeModule,
@@ -33,7 +39,8 @@ console.log(process.env.NODE_ENV);
     ConfigModule.forRoot({
       envFilePath: !ENV ? '.env' : `.env.${ENV}`,
     }),
-    MongooseModule.forRoot(process.env.DB_URL)],
+    MongooseModule.forRoot(process.env.DB_URL),
+  ],
   controllers: [AppController],
   providers: [AppService],
 })

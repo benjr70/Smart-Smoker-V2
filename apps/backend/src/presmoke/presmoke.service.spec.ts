@@ -54,9 +54,15 @@ describe('PreSmokeService', () => {
     mockPreSmokeModel.find = jest.fn().mockReturnValue({
       exec: jest.fn().mockResolvedValue([mockPreSmokeDocument]),
     });
-    mockPreSmokeModel.findById = jest.fn().mockResolvedValue(mockPreSmokeDocument);
-    mockPreSmokeModel.findOneAndUpdate = jest.fn().mockResolvedValue(mockPreSmokeDocument);
-    mockPreSmokeModel.deleteOne = jest.fn().mockResolvedValue({ deletedCount: 1 });
+    mockPreSmokeModel.findById = jest
+      .fn()
+      .mockResolvedValue(mockPreSmokeDocument);
+    mockPreSmokeModel.findOneAndUpdate = jest
+      .fn()
+      .mockResolvedValue(mockPreSmokeDocument);
+    mockPreSmokeModel.deleteOne = jest
+      .fn()
+      .mockResolvedValue({ deletedCount: 1 });
 
     mockStateService = {
       GetState: jest.fn().mockResolvedValue(mockState),
@@ -66,7 +72,9 @@ describe('PreSmokeService', () => {
 
     mockSmokeService = {
       GetById: jest.fn().mockResolvedValue(mockSmoke),
-      create: jest.fn().mockResolvedValue({ ...mockSmoke, _id: 'new-smoke-id' }),
+      create: jest
+        .fn()
+        .mockResolvedValue({ ...mockSmoke, _id: 'new-smoke-id' }),
       Update: jest.fn().mockResolvedValue(mockSmoke),
     };
 
@@ -126,13 +134,18 @@ describe('PreSmokeService', () => {
         notes: 'Updated notes',
       };
 
-      jest.spyOn(service, 'Update').mockResolvedValue(mockPreSmokeDocument as PreSmoke);
+      jest
+        .spyOn(service, 'Update')
+        .mockResolvedValue(mockPreSmokeDocument as PreSmoke);
 
       const result = await service.save(preSmokeDto);
 
       expect(mockStateService.GetState).toHaveBeenCalled();
       expect(mockSmokeService.GetById).toHaveBeenCalledWith(mockState.smokeId);
-      expect(service.Update).toHaveBeenCalledWith(mockSmoke.preSmokeId, preSmokeDto);
+      expect(service.Update).toHaveBeenCalledWith(
+        mockSmoke.preSmokeId,
+        preSmokeDto,
+      );
       expect(result).toEqual(mockPreSmokeDocument);
     });
 
@@ -146,9 +159,14 @@ describe('PreSmokeService', () => {
       };
 
       const smokeWithoutPreSmokeId = { ...mockSmoke, preSmokeId: undefined };
-      mockSmokeService.GetById = jest.fn().mockResolvedValue(smokeWithoutPreSmokeId);
+      mockSmokeService.GetById = jest
+        .fn()
+        .mockResolvedValue(smokeWithoutPreSmokeId);
 
-      jest.spyOn(service, 'create').mockResolvedValue({ ...mockPreSmokeDocument, _id: 'new-presmoke-id' } as PreSmoke);
+      jest.spyOn(service, 'create').mockResolvedValue({
+        ...mockPreSmokeDocument,
+        _id: 'new-presmoke-id',
+      } as PreSmoke);
 
       const result = await service.save(preSmokeDto);
 
@@ -169,9 +187,14 @@ describe('PreSmokeService', () => {
       };
 
       const stateWithoutSmoke = { ...mockState, smokeId: '' };
-      mockStateService.GetState = jest.fn().mockResolvedValue(stateWithoutSmoke);
+      mockStateService.GetState = jest
+        .fn()
+        .mockResolvedValue(stateWithoutSmoke);
 
-      jest.spyOn(service, 'create').mockResolvedValue({ ...mockPreSmokeDocument, _id: 'brand-new-presmoke-id' } as PreSmoke);
+      jest.spyOn(service, 'create').mockResolvedValue({
+        ...mockPreSmokeDocument,
+        _id: 'brand-new-presmoke-id',
+      } as PreSmoke);
 
       const result = await service.save(preSmokeDto);
 
@@ -210,7 +233,9 @@ describe('PreSmokeService', () => {
 
       expect(mockStateService.GetState).toHaveBeenCalled();
       expect(mockSmokeService.GetById).toHaveBeenCalledWith(mockState.smokeId);
-      expect(mockPreSmokeModel.findById).toHaveBeenCalledWith(mockSmoke.preSmokeId);
+      expect(mockPreSmokeModel.findById).toHaveBeenCalledWith(
+        mockSmoke.preSmokeId,
+      );
       expect(result).toEqual(mockPreSmokeDocument);
     });
 
@@ -247,13 +272,15 @@ describe('PreSmokeService', () => {
         notes: 'Updated notes',
       };
 
-      jest.spyOn(service, 'GetByID').mockResolvedValue(mockPreSmokeDocument as PreSmoke);
+      jest
+        .spyOn(service, 'GetByID')
+        .mockResolvedValue(mockPreSmokeDocument as PreSmoke);
 
       const result = await service.Update(id, preSmokeDto);
 
       expect(mockPreSmokeModel.findOneAndUpdate).toHaveBeenCalledWith(
         { _id: id },
-        preSmokeDto
+        preSmokeDto,
       );
       expect(service.GetByID).toHaveBeenCalledWith(id);
     });

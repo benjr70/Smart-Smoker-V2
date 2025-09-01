@@ -1,27 +1,25 @@
-import { ApiProperty } from "@nestjs/swagger";
-import { SmokeStatus } from "./smoke.schema";
-
+import { ApiProperty } from '@nestjs/swagger';
+import { SmokeStatus } from './smoke.schema';
 
 export class SmokeDto {
-    @ApiProperty()
-    preSmokeId: string;
+  @ApiProperty()
+  preSmokeId: string;
 
-    @ApiProperty()
-    tempsId?: string;
+  @ApiProperty()
+  tempsId?: string;
 
-    @ApiProperty()
-    postSmokeId?: string;
+  @ApiProperty()
+  postSmokeId?: string;
 
-    @ApiProperty()
-    smokeProfileId?: string;
+  @ApiProperty()
+  smokeProfileId?: string;
 
-    @ApiProperty()
-    ratingId?: string;
+  @ApiProperty()
+  ratingId?: string;
 
-    @ApiProperty()
-    date?: Date
+  @ApiProperty()
+  date?: Date;
 
-    @ApiProperty()
-    status: SmokeStatus;
-
+  @ApiProperty()
+  status: SmokeStatus;
 }

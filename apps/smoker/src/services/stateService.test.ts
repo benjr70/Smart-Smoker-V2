@@ -1,4 +1,10 @@
-import { toggleSmoking, getState, getCurrentSmokeProfile, State, smokeProfile } from './stateService';
+import {
+  toggleSmoking,
+  getState,
+  getCurrentSmokeProfile,
+  State,
+  smokeProfile,
+} from './stateService';
 
 // Mock environment variable before importing
 const mockEnvUrl = 'http://test-api.com';
@@ -78,8 +84,8 @@ describe('stateService', () => {
       const serverError = {
         response: {
           status: 500,
-          data: { error: 'Internal server error' }
-        }
+          data: { error: 'Internal server error' },
+        },
       };
 
       mockAxios.put.mockRejectedValue(serverError);
@@ -108,8 +114,8 @@ describe('stateService', () => {
       const notFoundError = {
         response: {
           status: 404,
-          data: { error: 'State not found' }
-        }
+          data: { error: 'State not found' },
+        },
       };
 
       mockAxios.get.mockRejectedValue(notFoundError);
@@ -229,7 +235,7 @@ describe('stateService', () => {
 
       expect(consoleLogSpy).toHaveBeenCalledWith(apiError);
       expect(result).toBeUndefined();
-      
+
       consoleLogSpy.mockRestore();
     });
 
@@ -243,7 +249,7 @@ describe('stateService', () => {
 
       expect(consoleLogSpy).toHaveBeenCalledWith(timeoutError);
       expect(result).toBeUndefined();
-      
+
       consoleLogSpy.mockRestore();
     });
 
@@ -252,8 +258,8 @@ describe('stateService', () => {
       const serverError = {
         response: {
           status: 500,
-          data: { error: 'Internal server error' }
-        }
+          data: { error: 'Internal server error' },
+        },
       };
 
       mockAxios.get.mockRejectedValue(serverError);
@@ -262,7 +268,7 @@ describe('stateService', () => {
 
       expect(consoleLogSpy).toHaveBeenCalledWith(serverError);
       expect(result).toBeUndefined();
-      
+
       consoleLogSpy.mockRestore();
     });
   });

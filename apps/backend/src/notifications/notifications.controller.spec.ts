@@ -63,7 +63,9 @@ describe('NotificationsController', () => {
 
   describe('setSubscription', () => {
     it('should call service setSubscription method', async () => {
-      mockNotificationsService.setSubscription.mockResolvedValue(mockSubscription);
+      mockNotificationsService.setSubscription.mockResolvedValue(
+        mockSubscription,
+      );
 
       const result = await controller.setSubscription(mockSubscription);
 
@@ -75,19 +77,23 @@ describe('NotificationsController', () => {
       const error = new Error('Subscription already exists');
       mockNotificationsService.setSubscription.mockRejectedValue(error);
 
-      await expect(controller.setSubscription(mockSubscription)).rejects.toThrow(
-        'Subscription already exists'
-      );
+      await expect(
+        controller.setSubscription(mockSubscription),
+      ).rejects.toThrow('Subscription already exists');
     });
   });
 
   describe('setSettings', () => {
     it('should call service setSettings method', async () => {
-      mockNotificationsService.setSettings.mockResolvedValue(mockNotificationSettings);
+      mockNotificationsService.setSettings.mockResolvedValue(
+        mockNotificationSettings,
+      );
 
       const result = await controller.setSettings(mockNotificationSettings);
 
-      expect(service.setSettings).toHaveBeenCalledWith(mockNotificationSettings);
+      expect(service.setSettings).toHaveBeenCalledWith(
+        mockNotificationSettings,
+      );
       expect(result).toEqual(mockNotificationSettings);
     });
 
@@ -95,15 +101,17 @@ describe('NotificationsController', () => {
       const error = new Error('Database error');
       mockNotificationsService.setSettings.mockRejectedValue(error);
 
-      await expect(controller.setSettings(mockNotificationSettings)).rejects.toThrow(
-        'Database error'
-      );
+      await expect(
+        controller.setSettings(mockNotificationSettings),
+      ).rejects.toThrow('Database error');
     });
   });
 
   describe('getSettings', () => {
     it('should call service getSettings method', async () => {
-      mockNotificationsService.getSettings.mockResolvedValue(mockNotificationSettings);
+      mockNotificationsService.getSettings.mockResolvedValue(
+        mockNotificationSettings,
+      );
 
       const result = await controller.getSettings();
 
@@ -124,7 +132,9 @@ describe('NotificationsController', () => {
       const error = new Error('Database connection failed');
       mockNotificationsService.getSettings.mockRejectedValue(error);
 
-      await expect(controller.getSettings()).rejects.toThrow('Database connection failed');
+      await expect(controller.getSettings()).rejects.toThrow(
+        'Database connection failed',
+      );
     });
   });
 });

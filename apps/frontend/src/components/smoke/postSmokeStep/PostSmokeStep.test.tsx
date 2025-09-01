@@ -7,8 +7,8 @@ import { getCurrentPostSmoke, setCurrentPostSmoke } from '../../../Services/post
 // Mock Material-UI components
 jest.mock('@mui/material', () => ({
   Grid: ({ children, item, sx, direction, justifyContent, flexDirection, ...props }: any) => (
-    <div 
-      data-testid="grid" 
+    <div
+      data-testid="grid"
       data-item={item}
       data-sx={JSON.stringify(sx)}
       data-direction={direction}
@@ -19,20 +19,30 @@ jest.mock('@mui/material', () => ({
       {children}
     </div>
   ),
-  TextField: ({ label, value, onChange, multiline, rows, variant, sx, InputProps, ...props }: any) => (
-    <input 
-      data-testid="text-field" 
+  TextField: ({
+    label,
+    value,
+    onChange,
+    multiline,
+    rows,
+    variant,
+    sx,
+    InputProps,
+    ...props
+  }: any) => (
+    <input
+      data-testid="text-field"
       data-label={label}
-      value={value || ''} 
-      onChange={onChange} 
+      value={value || ''}
+      onChange={onChange}
       data-multiline={multiline}
       data-rows={rows}
       data-variant={variant}
       data-sx={JSON.stringify(sx)}
       data-input-props={JSON.stringify(InputProps)}
-      {...props} 
+      {...props}
     />
-  )
+  ),
 }));
 
 // Mock DynamicList component
@@ -41,22 +51,21 @@ jest.mock('../../common/components/DynamicList', () => ({
     <div data-testid="dynamic-list" {...props}>
       {steps.map((step: string, index: number) => (
         <div key={index} data-testid={`step-${index}`}>
-          <input 
+          <input
             data-testid={`step-input-${index}`}
             value={step}
-            onChange={(e) => onListChange(e.target.value, index)}
+            onChange={e => onListChange(e.target.value, index)}
           />
-          <button 
-            data-testid={`remove-step-${index}`}
-            onClick={() => removeLine(index)}
-          >
+          <button data-testid={`remove-step-${index}`} onClick={() => removeLine(index)}>
             Remove
           </button>
         </div>
       ))}
-      <button data-testid="add-step" onClick={newline}>Add Step</button>
+      <button data-testid="add-step" onClick={newline}>
+        Add Step
+      </button>
     </div>
-  )
+  ),
 }));
 
 // Mock react-imask
@@ -69,7 +78,7 @@ jest.mock('react-imask', () => ({
         data-mask={mask}
         data-definitions={JSON.stringify(definitions)}
         data-overwrite={overwrite}
-        onChange={(e) => {
+        onChange={e => {
           if (onAccept) {
             onAccept(e.target.value);
           }
@@ -77,17 +86,21 @@ jest.mock('react-imask', () => ({
         {...restProps}
       />
     );
-  }
+  },
 }));
 
 // Mock services
 jest.mock('../../../Services/postSmokeService', () => ({
   getCurrentPostSmoke: jest.fn(),
-  setCurrentPostSmoke: jest.fn()
+  setCurrentPostSmoke: jest.fn(),
 }));
 
-const mockGetCurrentPostSmoke = getCurrentPostSmoke as jest.MockedFunction<typeof getCurrentPostSmoke>;
-const mockSetCurrentPostSmoke = setCurrentPostSmoke as jest.MockedFunction<typeof setCurrentPostSmoke>;
+const mockGetCurrentPostSmoke = getCurrentPostSmoke as jest.MockedFunction<
+  typeof getCurrentPostSmoke
+>;
+const mockSetCurrentPostSmoke = setCurrentPostSmoke as jest.MockedFunction<
+  typeof setCurrentPostSmoke
+>;
 
 describe('PostSmokeStep Component', () => {
   const mockNextButton = <button data-testid="next-button">Finish</button>;
@@ -95,7 +108,7 @@ describe('PostSmokeStep Component', () => {
   const mockPostSmokeData = {
     restTime: '02:30',
     steps: ['Let rest', 'Slice against grain'],
-    notes: 'Test post-smoke notes'
+    notes: 'Test post-smoke notes',
   };
 
   beforeEach(() => {
@@ -107,7 +120,7 @@ describe('PostSmokeStep Component', () => {
   describe('Component Rendering', () => {
     test('should render PostSmokeStep component successfully', async () => {
       render(<PostSmokeStep nextButton={mockNextButton} />);
-      
+
       await waitFor(() => {
         expect(screen.getAllByTestId('grid')).toHaveLength(4);
         expect(screen.getAllByTestId('text-field')).toHaveLength(2); // rest time and notes
@@ -118,15 +131,15 @@ describe('PostSmokeStep Component', () => {
 
     test('should load existing post-smoke data on mount', async () => {
       render(<PostSmokeStep nextButton={mockNextButton} />);
-      
+
       await waitFor(() => {
         expect(mockGetCurrentPostSmoke).toHaveBeenCalledTimes(1);
       });
-      
+
       await waitFor(() => {
         const restTimeField = screen.getByDisplayValue('02:30');
         expect(restTimeField).toBeInTheDocument();
-        
+
         const notesField = screen.getByDisplayValue('Test post-smoke notes');
         expect(notesField).toBeInTheDocument();
       });
@@ -134,12 +147,14 @@ describe('PostSmokeStep Component', () => {
 
     test('should render all form fields with correct labels', async () => {
       render(<PostSmokeStep nextButton={mockNextButton} />);
-      
+
       const textFields = screen.getAllByTestId('text-field');
-      
-      const restTimeField = textFields.find(field => field.getAttribute('data-label') === 'Rest Time');
+
+      const restTimeField = textFields.find(
+        field => field.getAttribute('data-label') === 'Rest Time'
+      );
       const notesField = textFields.find(field => field.getAttribute('data-label') === 'Notes');
-      
+
       expect(restTimeField).toBeInTheDocument();
       expect(notesField).toBeInTheDocument();
     });
@@ -148,33 +163,37 @@ describe('PostSmokeStep Component', () => {
   describe('Rest Time Field', () => {
     test('should render rest time field with correct variant', () => {
       render(<PostSmokeStep nextButton={mockNextButton} />);
-      
+
       const textFields = screen.getAllByTestId('text-field');
-      const restTimeField = textFields.find(field => field.getAttribute('data-label') === 'Rest Time');
-      
+      const restTimeField = textFields.find(
+        field => field.getAttribute('data-label') === 'Rest Time'
+      );
+
       expect(restTimeField).toHaveAttribute('data-variant', 'outlined');
     });
 
     test('should have InputProps for custom input component', () => {
       render(<PostSmokeStep nextButton={mockNextButton} />);
-      
+
       const textFields = screen.getAllByTestId('text-field');
-      const restTimeField = textFields.find(field => field.getAttribute('data-label') === 'Rest Time');
-      
+      const restTimeField = textFields.find(
+        field => field.getAttribute('data-label') === 'Rest Time'
+      );
+
       const inputProps = JSON.parse(restTimeField?.getAttribute('data-input-props') || '{}');
       expect(inputProps.inputComponent).toBeDefined();
     });
 
     test('should update rest time when changed', async () => {
       render(<PostSmokeStep nextButton={mockNextButton} />);
-      
+
       await waitFor(() => {
         expect(screen.getByDisplayValue('02:30')).toBeInTheDocument();
       });
-      
+
       const restTimeField = screen.getByDisplayValue('02:30');
       fireEvent.change(restTimeField, { target: { value: '03:45' } });
-      
+
       expect(restTimeField).toHaveValue('03:45');
     });
   });
@@ -182,7 +201,7 @@ describe('PostSmokeStep Component', () => {
   describe('Dynamic List Integration', () => {
     test('should render dynamic list with existing steps', async () => {
       render(<PostSmokeStep nextButton={mockNextButton} />);
-      
+
       await waitFor(() => {
         expect(screen.getByTestId('step-input-0')).toHaveValue('Let rest');
         expect(screen.getByTestId('step-input-1')).toHaveValue('Slice against grain');
@@ -191,17 +210,17 @@ describe('PostSmokeStep Component', () => {
 
     test('should add new step when add button clicked', async () => {
       render(<PostSmokeStep nextButton={mockNextButton} />);
-      
+
       await waitFor(() => {
         expect(screen.getByTestId('dynamic-list')).toBeInTheDocument();
       });
-      
+
       const addButton = screen.getByTestId('add-step');
       expect(addButton).toBeInTheDocument();
-      
+
       // The mock doesn't actually add new steps, but we can verify the button exists and can be clicked
       fireEvent.click(addButton);
-      
+
       // Since our mock is static, we just verify that the existing steps are still there
       await waitFor(() => {
         expect(screen.getByTestId('step-input-0')).toBeInTheDocument();
@@ -211,14 +230,14 @@ describe('PostSmokeStep Component', () => {
 
     test('should remove step when remove button clicked', async () => {
       render(<PostSmokeStep nextButton={mockNextButton} />);
-      
+
       await waitFor(() => {
         expect(screen.getByTestId('step-input-1')).toBeInTheDocument();
       });
-      
+
       const removeButton = screen.getByTestId('remove-step-1');
       fireEvent.click(removeButton);
-      
+
       await waitFor(() => {
         expect(screen.queryByTestId('step-input-1')).not.toBeInTheDocument();
       });
@@ -226,14 +245,14 @@ describe('PostSmokeStep Component', () => {
 
     test('should update step content when input changed', async () => {
       render(<PostSmokeStep nextButton={mockNextButton} />);
-      
+
       await waitFor(() => {
         expect(screen.getByTestId('step-input-0')).toHaveValue('Let rest');
       });
-      
+
       const stepInput = screen.getByTestId('step-input-0');
       fireEvent.change(stepInput, { target: { value: 'Let rest for 1 hour' } });
-      
+
       expect(stepInput).toHaveValue('Let rest for 1 hour');
     });
   });
@@ -241,33 +260,33 @@ describe('PostSmokeStep Component', () => {
   describe('Notes Field', () => {
     test('should update notes field', async () => {
       render(<PostSmokeStep nextButton={mockNextButton} />);
-      
+
       await waitFor(() => {
         expect(screen.getByDisplayValue('Test post-smoke notes')).toBeInTheDocument();
       });
-      
+
       const notesField = screen.getByDisplayValue('Test post-smoke notes');
       fireEvent.change(notesField, { target: { value: 'Updated post-smoke notes' } });
-      
+
       expect(notesField).toHaveValue('Updated post-smoke notes');
     });
 
     test('should render multiline notes field', async () => {
       render(<PostSmokeStep nextButton={mockNextButton} />);
-      
+
       const textFields = screen.getAllByTestId('text-field');
       const notesField = textFields.find(field => field.getAttribute('data-label') === 'Notes');
-      
+
       expect(notesField).toHaveAttribute('data-multiline', 'true');
       expect(notesField).toHaveAttribute('data-rows', '4');
     });
 
     test('should have correct width styling for notes field', async () => {
       render(<PostSmokeStep nextButton={mockNextButton} />);
-      
+
       const textFields = screen.getAllByTestId('text-field');
       const notesField = textFields.find(field => field.getAttribute('data-label') === 'Notes');
-      
+
       const sx = JSON.parse(notesField?.getAttribute('data-sx') || '{}');
       expect(sx.width).toBe('100%');
     });
@@ -276,18 +295,18 @@ describe('PostSmokeStep Component', () => {
   describe('Component Lifecycle', () => {
     test('should call setCurrentPostSmoke on unmount', async () => {
       const { unmount } = render(<PostSmokeStep nextButton={mockNextButton} />);
-      
+
       await waitFor(() => {
         expect(mockGetCurrentPostSmoke).toHaveBeenCalled();
       });
-      
+
       unmount();
-      
+
       expect(mockSetCurrentPostSmoke).toHaveBeenCalledWith(
         expect.objectContaining({
           restTime: expect.any(String),
           steps: expect.any(Array),
-          notes: expect.any(String)
+          notes: expect.any(String),
         })
       );
     });
@@ -296,19 +315,21 @@ describe('PostSmokeStep Component', () => {
       const emptyData = {
         restTime: '',
         steps: [''],
-        notes: ''
+        notes: '',
       };
       mockGetCurrentPostSmoke.mockResolvedValue(emptyData);
-      
+
       render(<PostSmokeStep nextButton={mockNextButton} />);
-      
+
       await waitFor(() => {
         expect(mockGetCurrentPostSmoke).toHaveBeenCalled();
       });
-      
+
       // Should render with empty values
       const textFields = screen.getAllByTestId('text-field');
-      const restTimeField = textFields.find(field => field.getAttribute('data-label') === 'Rest Time');
+      const restTimeField = textFields.find(
+        field => field.getAttribute('data-label') === 'Rest Time'
+      );
       expect(restTimeField).toHaveValue('');
     });
   });
@@ -316,10 +337,10 @@ describe('PostSmokeStep Component', () => {
   describe('Component Structure', () => {
     test('should have correct grid structure', async () => {
       render(<PostSmokeStep nextButton={mockNextButton} />);
-      
+
       const grids = screen.getAllByTestId('grid');
       expect(grids).toHaveLength(4);
-      
+
       // Check for main container grid
       const mainGrid = grids.find(grid => {
         const sx = JSON.parse(grid.getAttribute('data-sx') || '{}');
@@ -330,22 +351,24 @@ describe('PostSmokeStep Component', () => {
 
     test('should render next button in correct position', () => {
       render(<PostSmokeStep nextButton={mockNextButton} />);
-      
+
       expect(screen.getByTestId('next-button')).toBeInTheDocument();
-      
+
       // Should be in a grid with flexDirection row-reverse
-      const buttonGrid = screen.getAllByTestId('grid').find(
-        grid => grid.getAttribute('data-flex-direction') === 'row-reverse'
-      );
+      const buttonGrid = screen
+        .getAllByTestId('grid')
+        .find(grid => grid.getAttribute('data-flex-direction') === 'row-reverse');
       expect(buttonGrid).toBeInTheDocument();
     });
 
     test('should have correct spacing for fields', () => {
       render(<PostSmokeStep nextButton={mockNextButton} />);
-      
+
       const textFields = screen.getAllByTestId('text-field');
-      const restTimeField = textFields.find(field => field.getAttribute('data-label') === 'Rest Time');
-      
+      const restTimeField = textFields.find(
+        field => field.getAttribute('data-label') === 'Rest Time'
+      );
+
       const sx = JSON.parse(restTimeField?.getAttribute('data-sx') || '{}');
       expect(sx.marginBottom).toBe('10px');
     });
@@ -354,12 +377,14 @@ describe('PostSmokeStep Component', () => {
   describe('TextMaskCustom Component', () => {
     test('should render with correct mask pattern', () => {
       render(<PostSmokeStep nextButton={mockNextButton} />);
-      
+
       // The TextMaskCustom is used as InputProps.inputComponent
       // We can verify it's being used by checking the InputProps
       const textFields = screen.getAllByTestId('text-field');
-      const restTimeField = textFields.find(field => field.getAttribute('data-label') === 'Rest Time');
-      
+      const restTimeField = textFields.find(
+        field => field.getAttribute('data-label') === 'Rest Time'
+      );
+
       const inputProps = JSON.parse(restTimeField?.getAttribute('data-input-props') || '{}');
       expect(inputProps.inputComponent).toBeDefined();
     });
@@ -368,14 +393,14 @@ describe('PostSmokeStep Component', () => {
   describe('Form Validation', () => {
     test('should handle invalid rest time format', async () => {
       render(<PostSmokeStep nextButton={mockNextButton} />);
-      
+
       await waitFor(() => {
         expect(screen.getByDisplayValue('02:30')).toBeInTheDocument();
       });
-      
+
       const restTimeField = screen.getByDisplayValue('02:30');
       fireEvent.change(restTimeField, { target: { value: 'invalid' } });
-      
+
       // Component should handle invalid input gracefully
       expect(restTimeField).toHaveValue('invalid');
     });
@@ -384,9 +409,9 @@ describe('PostSmokeStep Component', () => {
   describe('Props Interface', () => {
     test('should accept nextButton prop correctly', () => {
       const customButton = <button data-testid="custom-button">Custom Finish</button>;
-      
+
       render(<PostSmokeStep nextButton={customButton} />);
-      
+
       expect(screen.getByTestId('custom-button')).toBeInTheDocument();
       expect(screen.getByText('Custom Finish')).toBeInTheDocument();
     });
@@ -395,24 +420,24 @@ describe('PostSmokeStep Component', () => {
   describe('Error Handling', () => {
     test('should handle service calls gracefully', async () => {
       render(<PostSmokeStep nextButton={mockNextButton} />);
-      
+
       await waitFor(() => {
         expect(mockGetCurrentPostSmoke).toHaveBeenCalled();
       });
-      
+
       // Component should render with proper service interaction
       expect(screen.getAllByTestId('text-field')).toHaveLength(2);
     });
 
     test('should call setCurrentPostSmoke on unmount', async () => {
       const { unmount } = render(<PostSmokeStep nextButton={mockNextButton} />);
-      
+
       await waitFor(() => {
         expect(mockGetCurrentPostSmoke).toHaveBeenCalled();
       });
-      
+
       unmount();
-      
+
       expect(mockSetCurrentPostSmoke).toHaveBeenCalled();
     });
   });
@@ -420,29 +445,29 @@ describe('PostSmokeStep Component', () => {
   describe('State Management', () => {
     test('should maintain state across re-renders', async () => {
       const { rerender } = render(<PostSmokeStep nextButton={mockNextButton} />);
-      
+
       await waitFor(() => {
         expect(screen.getByDisplayValue('02:30')).toBeInTheDocument();
       });
-      
+
       const restTimeField = screen.getByDisplayValue('02:30');
       fireEvent.change(restTimeField, { target: { value: '04:00' } });
-      
+
       rerender(<PostSmokeStep nextButton={mockNextButton} />);
-      
+
       expect(restTimeField).toHaveValue('04:00');
     });
 
     test('should update latestState ref when state changes', async () => {
       render(<PostSmokeStep nextButton={mockNextButton} />);
-      
+
       await waitFor(() => {
         expect(screen.getByDisplayValue('02:30')).toBeInTheDocument();
       });
-      
+
       const restTimeField = screen.getByDisplayValue('02:30');
       fireEvent.change(restTimeField, { target: { value: '05:15' } });
-      
+
       expect(restTimeField).toHaveValue('05:15');
     });
   });
@@ -452,16 +477,19 @@ describe('PostSmokeStep Component', () => {
       const defaultData = {
         restTime: '',
         steps: [''],
-        notes: ''
+        notes: '',
       };
       mockGetCurrentPostSmoke.mockResolvedValue(defaultData);
-      
+
       render(<PostSmokeStep nextButton={mockNextButton} />);
-      
+
       await waitFor(() => {
         const textFields = screen.getAllByTestId('text-field');
         textFields.forEach(field => {
-          if (field.getAttribute('data-label') === 'Rest Time' || field.getAttribute('data-label') === 'Notes') {
+          if (
+            field.getAttribute('data-label') === 'Rest Time' ||
+            field.getAttribute('data-label') === 'Notes'
+          ) {
             expect(field).toHaveValue('');
           }
         });

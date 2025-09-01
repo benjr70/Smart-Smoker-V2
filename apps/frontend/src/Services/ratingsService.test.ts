@@ -1,9 +1,9 @@
-import { 
-  getCurrentRatings, 
-  setCurrentRatings, 
-  updateRatings, 
-  getRatingById, 
-  deleteRatingsById 
+import {
+  getCurrentRatings,
+  setCurrentRatings,
+  updateRatings,
+  getRatingById,
+  deleteRatingsById,
 } from './ratingsService';
 import { rating } from '../components/common/interfaces/rating';
 
@@ -15,9 +15,13 @@ const mockAxios = {
   delete: jest.fn(),
   put: jest.fn(),
   defaults: {
-    get baseURL() { return currentBaseURL; },
-    set baseURL(value) { currentBaseURL = value; }
-  }
+    get baseURL() {
+      return currentBaseURL;
+    },
+    set baseURL(value) {
+      currentBaseURL = value;
+    },
+  },
 };
 
 jest.mock('axios', () => mockAxios);
@@ -31,10 +35,10 @@ beforeEach(() => {
   mockAxios.delete.mockClear();
   if (mockAxios.put) mockAxios.put.mockClear();
   mockAxios.defaults.baseURL = '';
-  
+
   process.env = {
     ...originalEnv,
-    REACT_APP_CLOUD_URL: 'http://localhost:3001/'
+    REACT_APP_CLOUD_URL: 'http://localhost:3001/',
   };
   jest.spyOn(console, 'log').mockImplementation(() => {});
 });
@@ -51,14 +55,13 @@ describe('ratingsService', () => {
     tenderness: 9,
     overallTaste: 8,
     notes: 'Delicious!',
-    _id: 'test-id-123'
+    _id: 'test-id-123',
   };
 
   describe('getCurrentRatings', () => {
     test('should fetch current ratings successfully', async () => {
-      
       mockAxios.get.mockResolvedValue({
-        data: mockRating
+        data: mockRating,
       });
 
       const result = await getCurrentRatings();
@@ -69,7 +72,7 @@ describe('ratingsService', () => {
 
     test('should handle getCurrentRatings error and log it', async () => {
       const mockError = new Error('Network error');
-      
+
       mockAxios.get.mockRejectedValue(mockError);
 
       const consoleLogSpy = jest.spyOn(console, 'log');
@@ -83,20 +86,17 @@ describe('ratingsService', () => {
 
     test('should set correct baseURL from environment variable', async () => {
       process.env.REACT_APP_CLOUD_URL = 'https://api.example.com/';
-      
-      
+
       mockAxios.get.mockResolvedValue({ data: mockRating });
 
       await getCurrentRatings();
-
     });
   });
 
   describe('setCurrentRatings', () => {
     test('should post current ratings successfully', async () => {
-      
       mockAxios.post.mockResolvedValue({
-        data: mockRating
+        data: mockRating,
       });
 
       const result = await setCurrentRatings(mockRating);
@@ -107,7 +107,7 @@ describe('ratingsService', () => {
 
     test('should handle setCurrentRatings error and log it', async () => {
       const mockError = new Error('Server error');
-      
+
       mockAxios.post.mockRejectedValue(mockError);
 
       const consoleLogSpy = jest.spyOn(console, 'log');
@@ -125,10 +125,9 @@ describe('ratingsService', () => {
         seasoning: 1,
         tenderness: 1,
         overallTaste: 1,
-        notes: ''
+        notes: '',
       };
 
-      
       mockAxios.post.mockResolvedValue({ data: minRating });
 
       const result = await setCurrentRatings(minRating);
@@ -143,10 +142,9 @@ describe('ratingsService', () => {
         seasoning: 10,
         tenderness: 10,
         overallTaste: 10,
-        notes: 'Perfect smoke!'
+        notes: 'Perfect smoke!',
       };
 
-      
       mockAxios.post.mockResolvedValue({ data: maxRating });
 
       const result = await setCurrentRatings(maxRating);
@@ -157,21 +155,19 @@ describe('ratingsService', () => {
 
     test('should set correct baseURL from environment variable', async () => {
       process.env.REACT_APP_CLOUD_URL = 'https://api.example.com/';
-      
-      
+
       mockAxios.post.mockResolvedValue({ data: mockRating });
 
       await setCurrentRatings(mockRating);
-
     });
   });
 
   describe('updateRatings', () => {
     test('should update ratings successfully', async () => {
       const ratingWithId: rating = { ...mockRating, _id: 'update-id-123' };
-      
+
       mockAxios.post.mockResolvedValue({
-        data: ratingWithId
+        data: ratingWithId,
       });
 
       const result = await updateRatings(ratingWithId);
@@ -183,7 +179,7 @@ describe('ratingsService', () => {
     test('should handle updateRatings error and log it', async () => {
       const ratingWithId: rating = { ...mockRating, _id: 'update-id-123' };
       const mockError = new Error('Update failed');
-      
+
       mockAxios.post.mockRejectedValue(mockError);
 
       const consoleLogSpy = jest.spyOn(console, 'log');
@@ -201,10 +197,9 @@ describe('ratingsService', () => {
         seasoning: 6,
         tenderness: 7,
         overallTaste: 6,
-        notes: 'No ID'
+        notes: 'No ID',
       };
 
-      
       mockAxios.post.mockResolvedValue({ data: ratingWithoutId });
 
       const result = await updateRatings(ratingWithoutId);
@@ -215,22 +210,21 @@ describe('ratingsService', () => {
 
     test('should set correct baseURL from environment variable', async () => {
       process.env.REACT_APP_CLOUD_URL = 'https://api.example.com/';
-      
+
       const ratingWithId: rating = { ...mockRating, _id: 'test-id' };
-      
+
       mockAxios.post.mockResolvedValue({ data: ratingWithId });
 
       await updateRatings(ratingWithId);
-
     });
   });
 
   describe('getRatingById', () => {
     test('should fetch rating by id successfully', async () => {
       const testId = 'test-id-123';
-      
+
       mockAxios.get.mockResolvedValue({
-        data: mockRating
+        data: mockRating,
       });
 
       const result = await getRatingById(testId);
@@ -242,7 +236,7 @@ describe('ratingsService', () => {
     test('should handle getRatingById error and log it', async () => {
       const testId = 'test-id-123';
       const mockError = new Error('Not found');
-      
+
       mockAxios.get.mockRejectedValue(mockError);
 
       const consoleLogSpy = jest.spyOn(console, 'log');
@@ -256,7 +250,7 @@ describe('ratingsService', () => {
 
     test('should handle special characters in id', async () => {
       const testId = 'test-id-with-special-chars-!@#';
-      
+
       mockAxios.get.mockResolvedValue({ data: mockRating });
 
       await getRatingById(testId);
@@ -266,20 +260,19 @@ describe('ratingsService', () => {
 
     test('should set correct baseURL from environment variable', async () => {
       process.env.REACT_APP_CLOUD_URL = 'https://api.example.com/';
-      
+
       const testId = 'test-id';
-      
+
       mockAxios.get.mockResolvedValue({ data: mockRating });
 
       await getRatingById(testId);
-
     });
   });
 
   describe('deleteRatingsById', () => {
     test('should delete rating by id successfully', async () => {
       const testId = 'test-id-123';
-      
+
       mockAxios.delete.mockResolvedValue({});
 
       const result = await deleteRatingsById(testId);
@@ -291,7 +284,7 @@ describe('ratingsService', () => {
     test('should handle deleteRatingsById error and log it', async () => {
       const testId = 'test-id-123';
       const mockError = new Error('Delete failed');
-      
+
       mockAxios.delete.mockRejectedValue(mockError);
 
       const consoleLogSpy = jest.spyOn(console, 'log');
@@ -305,7 +298,7 @@ describe('ratingsService', () => {
 
     test('should handle empty string id', async () => {
       const testId = '';
-      
+
       mockAxios.delete.mockResolvedValue({});
 
       await deleteRatingsById(testId);
@@ -315,13 +308,12 @@ describe('ratingsService', () => {
 
     test('should set correct baseURL from environment variable', async () => {
       process.env.REACT_APP_CLOUD_URL = 'https://api.example.com/';
-      
+
       const testId = 'test-id';
-      
+
       mockAxios.delete.mockResolvedValue({});
 
       await deleteRatingsById(testId);
-
     });
   });
 });

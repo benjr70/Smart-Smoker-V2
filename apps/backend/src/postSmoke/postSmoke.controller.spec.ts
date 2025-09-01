@@ -62,7 +62,9 @@ describe('PostSmokeController', () => {
 
       const result = await controller.saveCurrentPostSmoke(postSmokeDto);
 
-      expect(mockPostSmokeService.saveCurrentPostSmoke).toHaveBeenCalledWith(postSmokeDto);
+      expect(mockPostSmokeService.saveCurrentPostSmoke).toHaveBeenCalledWith(
+        postSmokeDto,
+      );
       expect(result).toEqual(mockPostSmoke);
     });
   });

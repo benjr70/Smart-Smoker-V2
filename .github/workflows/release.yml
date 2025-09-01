@@ -26,7 +26,7 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       apps: '["smoker", "device-service", "electron-shell"]'
-      mode: "build"
+      mode: 'build'
       ref: ${{ github.event.inputs.version }}
 
   # Build cloud applications (no Docker)
@@ -34,7 +34,7 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       apps: '["backend", "frontend"]'
-      mode: "build"
+      mode: 'build'
       ref: ${{ github.event.inputs.version }}
 
   # Build and publish smoker Docker images

@@ -1,9 +1,8 @@
-import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
-import { ApiProperty } from "@nestjs/swagger";
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { ApiProperty } from '@nestjs/swagger';
 
-
-
-export type NotificationSubscriptionDocument = NotificationSubscription & Document
+export type NotificationSubscriptionDocument = NotificationSubscription &
+  Document;
 
 @Schema()
 export class Keys {
@@ -18,17 +17,19 @@ export class Keys {
 
 @Schema()
 export class NotificationSubscription {
-    @ApiProperty()
-    @Prop()
-    endpoint: string;
-  
-    @ApiProperty()
-    @Prop()
-    expirationTime: number | null;
-  
-    @ApiProperty()
-    @Prop()
-    keys: Keys;
+  @ApiProperty()
+  @Prop()
+  endpoint: string;
+
+  @ApiProperty()
+  @Prop()
+  expirationTime: number | null;
+
+  @ApiProperty()
+  @Prop()
+  keys: Keys;
 }
 
-export const NotificationSubscriptionSchema = SchemaFactory.createForClass(NotificationSubscription);
+export const NotificationSubscriptionSchema = SchemaFactory.createForClass(
+  NotificationSubscription,
+);

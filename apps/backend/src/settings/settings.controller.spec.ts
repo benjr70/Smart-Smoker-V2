@@ -74,7 +74,9 @@ describe('SettingsController', () => {
 
       const result = await controller.SetSettings(createSettingsDto);
 
-      expect(mockSettingsService.create).toHaveBeenCalledWith(createSettingsDto);
+      expect(mockSettingsService.create).toHaveBeenCalledWith(
+        createSettingsDto,
+      );
       expect(result).toEqual(mockSettings);
     });
   });

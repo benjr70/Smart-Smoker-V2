@@ -1,19 +1,19 @@
 version: '3.1'
 
-services:  
+services:
   deviceService:
     container_name: device_service
     pull_policy: always
     restart: always
     privileged: true
     devices:
-        - /dev/ttyUSB0
+      - /dev/ttyUSB0
     ports:
-        - '3003:3003'
+      - '3003:3003'
     network_mode: host
     volumes:
-        - '/:/host'
-        - '/var/run/dbus:/var/run/dbus'
+      - '/:/host'
+      - '/var/run/dbus:/var/run/dbus'
     image: 'benjr70/smart_smoker:device-service_V${VERSION}'
 
   frontend:
@@ -24,41 +24,41 @@ services:
     ports:
       - 8080:8080
     healthcheck:
-        test: ["CMD", "curl", "-f", "http://localhost:8080"]
-        interval: 1m30s
-        timeout: 10s
-        retries: 3
-        start_period: 40s
-        start_interval: 5s
+      test: ['CMD', 'curl', '-f', 'http://localhost:8080']
+      interval: 1m30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+      start_interval: 5s
 
   electronShell:
     container_name: electron_shell
     pull_policy: always
     restart: always
     network_mode: host
-    depends_on: 
-        frontend:
-            condition: service_healthy
+    depends_on:
+      frontend:
+        condition: service_healthy
     volumes:
-        - '/tmp/.X11-unix:/tmp/.X11-unix'
-        - './src:/app/src'
-        - '/run/dbus/system_bus_socket:/run/dbus/system_bus_socket'
-        - '/etc/localtime:/etc/localtime:ro'
+      - '/tmp/.X11-unix:/tmp/.X11-unix'
+      - './src:/app/src'
+      - '/run/dbus/system_bus_socket:/run/dbus/system_bus_socket'
+      - '/etc/localtime:/etc/localtime:ro'
     environment:
-        - DISPLAY=unix:0
-        - DBUS_SESSION_BUS_ADDRESS=unix:path=/run/dbus/system_bus_socket
+      - DISPLAY=unix:0
+      - DBUS_SESSION_BUS_ADDRESS=unix:path=/run/dbus/system_bus_socket
     devices:
-        - /dev/snd
-        - /dev/dri:/dev/dri
+      - /dev/snd
+      - /dev/dri:/dev/dri
     image: 'benjr70/smart_smoker:electron-shell_V${VERSION}'
 
   watchtower:
     container_name: watchtower
     restart: always
-    environment: 
-        - REPO_USER=${REPO_USER}
-        - REPO_PASS=${REPO_PASS}
+    environment:
+      - REPO_USER=${REPO_USER}
+      - REPO_PASS=${REPO_PASS}
     volumes:
-    - /var/run/docker.sock:/var/run/docker.sock
+      - /var/run/docker.sock:/var/run/docker.sock
     command: --interval 30
     image: containrrr/watchtower:armhf-latest

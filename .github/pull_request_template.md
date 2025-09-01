@@ -2,10 +2,10 @@
 
 # Screenshots/videos
 
-
 # Requirements
+
 - [ ] Unit tests passed
-- [ ] E2E tests passed  
+- [ ] E2E tests passed
 - [ ] Coverage thresholds met
 - [ ] TypeScript strict mode compliance
 - [ ] ESLint/Prettier formatting applied
