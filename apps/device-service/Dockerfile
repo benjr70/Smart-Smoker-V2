@@ -1,17 +1,23 @@
 
-  FROM node:16.15.1
-  RUN apt-get update --no-install-recommends && apt-get install network-manager -y
+  FROM node:20-bookworm-slim
 
-  COPY package*.json ./
-  COPY node_modules /node_modules
- 
-  COPY apps/device-service/dist apps/device-service/dist
-  COPY apps/device-service/package.json apps/device-service/package.json
-  COPY apps/device-service/node_modules apps/device-service/node_modules
+  ENV DEBIAN_FRONTEND=noninteractive
 
+  # Install NetworkManager for wifi management (nmcli)
+  RUN apt-get update \
+      && apt-get install -y --no-install-recommends network-manager \
+      && rm -rf /var/lib/apt/lists/*
+
+  # Prepare runtime
   WORKDIR /apps/device-service
+
+  # Install only production dependencies for the device-service
+  COPY apps/device-service/package.json ./
+  RUN npm install --omit=dev --legacy-peer-deps
+
+  # Copy compiled output
+  COPY apps/device-service/dist ./dist
 
   CMD ["npm", "run", "start:prod"]
 
   # sudo docker run --privileged  --device=/dev/ttyUSB0 -p 3000:3000 --net host -it --volume /:/host -v /var/run/dbus:/var/run/dbus  benjr70/smart_smoker:device-serviceTest
-
