@@ -60,8 +60,6 @@ jobs:
     if: ${{ github.event.inputs.deploy_smoker == 'true' }}
     needs: publish-smoker
     uses: ./.github/workflows/smoker-deploy.yml
-    with:
-      version: ${{ github.event.inputs.version }}
 
   # Deploy to cloud infrastructure
   deploy-cloud:
@@ -69,4 +67,4 @@ jobs:
     needs: publish-cloud
     uses: ./.github/workflows/cloud-deploy.yml
     with:
-      version: ${{ github.event.inputs.version }}
+      version: v${{ github.event.inputs.version }}

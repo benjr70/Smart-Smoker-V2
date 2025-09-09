@@ -60,5 +60,5 @@ services:
       - REPO_PASS=${REPO_PASS}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-    command: --interval 30
+    command: --interval 300 --cleanup
     image: containrrr/watchtower:armhf-latest
