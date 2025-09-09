@@ -122,6 +122,13 @@ jobs:
       - name: Set up QEMU (multi-arch)
         uses: docker/setup-qemu-action@v3
 
+      - name: Prepare device-service ARMv7 node_modules
+        if: ${{ matrix.app == 'device-service' }}
+        run: |
+          docker run --rm --platform linux/arm/v7 \
+            -v "$PWD":/work -w /work/apps/device-service \
+            node:20-bookworm-slim bash -lc "apt-get update && apt-get install -y --no-install-recommends python3 make g++ && npm ci --omit=dev --legacy-peer-deps"
+
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
@@ -132,7 +139,7 @@ jobs:
       - name: Build and push ${{ matrix.app }} Docker image
         uses: docker/build-push-action@v5
         with:
-          platforms: ${{ matrix.app == 'electron-shell' && 'linux/arm/v7' || inputs.platforms }}
+          platforms: ${{ matrix.app == 'electron-shell' && 'linux/arm/v7' || (matrix.app == 'device-service' && 'linux/arm/v7') || inputs.platforms }}
           context: .
           file: |
             ${{ 

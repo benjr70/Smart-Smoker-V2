@@ -11,8 +11,7 @@
   WORKDIR /apps/device-service
 
   # We do NOT run npm install inside the image.
-  # Hoisted workspace deps plus any local node_modules if present
-  COPY node_modules /node_modules
+  # Use the app's prebuilt (ARM) node_modules only.
   COPY apps/device-service/node_modules ./node_modules
 
   COPY apps/device-service/package.json ./package.json
