@@ -8,14 +8,14 @@
       && apt-get install -y --no-install-recommends network-manager \
       && rm -rf /var/lib/apt/lists/*
 
-  # Prepare runtime
   WORKDIR /apps/device-service
 
-  # Install only production dependencies for the device-service
-  COPY apps/device-service/package.json ./
-  RUN npm install --omit=dev --legacy-peer-deps
+  # We do NOT run npm install inside the image.
+  # Hoisted workspace deps plus any local node_modules if present
+  COPY node_modules /node_modules
+  COPY apps/device-service/node_modules ./node_modules
 
-  # Copy compiled output
+  COPY apps/device-service/package.json ./package.json
   COPY apps/device-service/dist ./dist
 
   CMD ["npm", "run", "start:prod"]

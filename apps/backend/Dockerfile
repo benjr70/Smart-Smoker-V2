@@ -1,19 +1,16 @@
   FROM node:20-bookworm-slim
 
-  # Install only runtime dependencies for the backend within the image.
-  # We intentionally do NOT copy any .env files into the image.
+  # Build context already contains workspace node_modules.
+  # We do NOT run npm install inside the image.
   WORKDIR /apps/backend
 
-  # Copy only the package manifest first for better layer caching
-  COPY apps/backend/package.json ./
+  # Hoisted workspace dependencies
+  COPY node_modules /node_modules
 
-  # Install production deps; avoid peer dep resolution issues in older packages
-  RUN npm install --omit=dev --legacy-peer-deps
-
-  # Copy the compiled application output (built in CI prebuild step)
+  # App files
+  COPY apps/backend/package.json ./package.json
   COPY apps/backend/dist ./dist
 
-  # Runtime configuration
   ENV NODE_ENV=prod
   ENV PORT=3001
 

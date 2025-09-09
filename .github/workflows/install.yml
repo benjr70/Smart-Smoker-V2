@@ -15,6 +15,11 @@ on:
         type: string
         required: false
         default: 'workspace'
+      include_node_modules:
+        description: 'Include node_modules in uploaded workspace artifact'
+        type: boolean
+        required: false
+        default: false
     outputs:
       cache-hit:
         description: 'Whether dependencies were restored from cache'
@@ -59,7 +64,8 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
         run: npm run bootstrap
 
-      - name: Upload workspace
+      - name: Upload workspace (exclude node_modules)
+        if: ${{ inputs.include_node_modules != true }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.artifact_name }}
@@ -68,4 +74,14 @@ jobs:
             !.git
             !node_modules
             !*/*/node_modules
+          retention-days: 1
+
+      - name: Upload workspace (include node_modules)
+        if: ${{ inputs.include_node_modules == true }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: |
+            .
+            !.git
           retention-days: 1

@@ -1,10 +1,6 @@
-  FROM node:20-bookworm-slim 
+  FROM nginx:alpine
 
-  ENV PORT 3000
-
-  COPY apps/frontend/dist /dist
-  COPY apps/frontend/package.json package.json
-
-  RUN npm install --global serve
-  CMD ["npm", "run", "serve:prod"]
+  COPY apps/frontend/dist /usr/share/nginx/html
+  COPY apps/frontend/nginx.conf /etc/nginx/conf.d/default.conf
   EXPOSE 3000
+  CMD ["nginx", "-g", "daemon off;"]

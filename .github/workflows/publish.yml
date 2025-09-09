@@ -51,6 +51,7 @@ jobs:
     with:
       ref: ${{ inputs.ref }}
       artifact_name: 'publish-workspace'
+      include_node_modules: true
 
   # Build and publish Docker images
   publish:

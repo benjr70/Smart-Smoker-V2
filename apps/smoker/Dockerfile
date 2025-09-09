@@ -1,10 +1,7 @@
-  FROM node:20-bookworm-slim 
+  FROM nginx:alpine
 
-  ENV PORT 8080
-
-  COPY apps/smoker/dist /dist
-  COPY apps/smoker/package.json package.json
-
-  RUN npm install --global serve
-  CMD ["npm", "run", "serve:prod"]
+  # Serve the prebuilt static assets with nginx
+  COPY apps/smoker/dist /usr/share/nginx/html
+  COPY apps/smoker/nginx.conf /etc/nginx/conf.d/default.conf
   EXPOSE 8080
+  CMD ["nginx", "-g", "daemon off;"]
