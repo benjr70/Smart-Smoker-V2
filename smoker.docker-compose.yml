@@ -14,13 +14,13 @@ services:
     volumes:
       - '/:/host'
       - '/var/run/dbus:/var/run/dbus'
-    image: 'benjr70/smart_smoker:device-service_V${VERSION}'
+    image: 'benjr70/smart-smoker-device-service:latest'
 
   frontend:
     container_name: frontend_smoker
     pull_policy: always
     restart: always
-    image: benjr70/smart_smoker:smoker_V${VERSION}
+    image: benjr70/smart-smoker-smoker:latest
     ports:
       - 8080:8080
     healthcheck:
@@ -50,7 +50,7 @@ services:
     devices:
       - /dev/snd
       - /dev/dri:/dev/dri
-    image: 'benjr70/smart_smoker:electron-shell_V${VERSION}'
+    image: 'benjr70/smart-smoker-electron-shell:latest'
 
   watchtower:
     container_name: watchtower
@@ -60,5 +60,5 @@ services:
       - REPO_PASS=${REPO_PASS}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-    command: --interval 30
+    command: --interval 300 --cleanup
     image: containrrr/watchtower:armhf-latest

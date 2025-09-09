@@ -102,5 +102,5 @@ jobs:
             }}
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/smart_smoker:${{ matrix.app }}_V${{ inputs.version }}
-            ${{ inputs.version != 'latest' && format('{0}/smart_smoker:{1}_latest', secrets.DOCKERHUB_USERNAME, matrix.app) || '' }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/smart-smoker-${{ matrix.app }}:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/smart-smoker-${{ matrix.app }}:v${{ inputs.version }}

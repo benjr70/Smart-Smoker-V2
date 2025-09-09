@@ -2,7 +2,7 @@
 
 ## Overview
 
-Phase 1 focuses on standardizing Docker image naming conventions and updating publishing workflows to make them compatible with Watchtower auto-updates while maintaining version control for manual deployments.
+Phase 1 focuses on standardizing Docker image naming conventions and updating publishing workflows to make them compatible with Watchtower auto-updates while maintaining version control for manual deployments. This phase also introduces a clear tag strategy for environments: dev deploys use a `nightly` tag, production releases update the `latest` tag (used by Watchtower on smoker devices), and all releases are also published with immutable `vX.Y.Z` tags for rollback.
 
 ## Goals & Objectives
 
@@ -11,6 +11,7 @@ Phase 1 focuses on standardizing Docker image naming conventions and updating pu
 - **Watchtower Compatibility**: Enable automatic updates on Raspberry Pi using `:latest` tags
 - **Version Control**: Maintain semantic versioning for manual deployments
 - **Workflow Updates**: Modify GitHub Actions publish workflows
+- **Environment Tag Strategy**: Adopt `nightly` for dev, `latest` for production, with immutable `vX.Y.Z`
 
 ### Success Criteria
 - ✅ All containers follow new naming convention
@@ -38,18 +39,23 @@ benjr70/smart_smoker:electron-shell_V1.2.3
 ```
 benjr70/smart-smoker-backend:latest
 benjr70/smart-smoker-backend:v1.2.3
+benjr70/smart-smoker-backend:nightly
 
 benjr70/smart-smoker-frontend:latest
 benjr70/smart-smoker-frontend:v1.2.3
+benjr70/smart-smoker-frontend:nightly
 
 benjr70/smart-smoker-device-service:latest
 benjr70/smart-smoker-device-service:v1.2.3
+benjr70/smart-smoker-device-service:nightly
 
 benjr70/smart-smoker-smoker:latest
 benjr70/smart-smoker-smoker:v1.2.3
+benjr70/smart-smoker-smoker:nightly
 
 benjr70/smart-smoker-electron-shell:latest
 benjr70/smart-smoker-electron-shell:v1.2.3
+benjr70/smart-smoker-electron-shell:nightly
 ```
 
 **Benefits:**
@@ -57,6 +63,23 @@ benjr70/smart-smoker-electron-shell:v1.2.3
 - ✅ Separate repository per service for clarity
 - ✅ Semantic versioning with `v` prefix
 - ✅ Consistent hyphen-separated naming
+- ✅ Clear environment strategy: `nightly` → dev, `latest` → prod smoker, `vX.Y.Z` → rollback
+
+### Tagging & Promotion Strategy (Best Practice)
+
+- **Floating tags**: `nightly` (dev), `latest` (production smoker via Watchtower)
+- **Immutable tags**: `vX.Y.Z` for every release (never re-used)
+- **Optional convenience tags**: `vX.Y` and `vX` for minor/major pinning
+- **Optional traceability tags**: `sha-<shortsha>` or OCI annotations
+- **Promotion flow (no rebuild)**:
+  1) Build once on master merge → push `:nightly`
+  2) When cutting a release, retag the same image digest to `:vX.Y.Z` and `:latest`
+  3) Verify `:vX.Y.Z` and `:latest` point to the same digest for that release
+
+Why this matters
+- **Rollback**: switch to `:vX.Y.Z` instantly; floating tags move
+- **Reproducibility**: exact artifacts for audits and bug reproduction
+- **Operational clarity**: dev uses `:nightly`, smoker uses `:latest`, cloud prod pins `:vX.Y.Z`
 
 ## User Stories
 
@@ -70,6 +93,7 @@ benjr70/smart-smoker-electron-shell:v1.2.3
 - Containers restart with new versions automatically
 - No manual intervention required for updates
 - Rollback possible using versioned tags
+ - Dev environment receives `nightly` images on master merges
 
 ### Story 2: Manual Version Deployment
 **As a** developer  
@@ -111,7 +135,7 @@ Docker Hub Organization: benjr70/
 
 ### GitHub Actions Workflow Changes
 
-#### Modified publish.yml
+#### Release publish (latest + version)
 ```yaml
 - name: Build and push ${{ matrix.app }} Docker image
   uses: docker/build-push-action@v5
@@ -131,6 +155,45 @@ Docker Hub Organization: benjr70/
     tags: |
       ${{ secrets.DOCKERHUB_USERNAME }}/smart-smoker-${{ matrix.app }}:latest
       ${{ secrets.DOCKERHUB_USERNAME }}/smart-smoker-${{ matrix.app }}:v${{ inputs.version }}
+```
+
+#### Nightly publish (on merge to master)
+On merges to `master`, build and push `nightly` tags for all services. This powers automatic dev deployments.
+
+```yaml
+- name: Build and push nightly ${{ matrix.app }} image
+  uses: docker/build-push-action@v5
+  with:
+    platforms: ${{ matrix.platform }}
+    context: .
+    file: |
+      ${{ 
+        matrix.app == 'backend' && 'apps/backend/Dockerfile' ||
+        matrix.app == 'device-service' && 'apps/device-service/Dockerfile' ||
+        matrix.app == 'frontend' && 'apps/frontend/Dockerfile' ||
+        matrix.app == 'smoker' && 'apps/smoker/Dockerfile' ||
+        matrix.app == 'electron-shell' && 'apps/smoker/shell.dockerfile' ||
+        ''
+      }}
+    push: true
+    tags: |
+      ${{ secrets.DOCKERHUB_USERNAME }}/smart-smoker-${{ matrix.app }}:nightly
+```
+
+#### Release tagging (promote nightly to version + latest)
+Promote the same multi-arch image (by digest) to `vX.Y.Z` and `latest` without rebuilding.
+
+```yaml
+- name: Tag release images without rebuild
+  run: |
+    for app in backend device-service frontend smoker electron-shell; do
+      docker pull ${{ secrets.DOCKERHUB_USERNAME }}/smart-smoker-$app:nightly
+      digest=$(docker inspect --format='{{index .RepoDigests 0}}' ${{ secrets.DOCKERHUB_USERNAME }}/smart-smoker-$app:nightly | cut -d'@' -f2)
+      docker buildx imagetools create \
+        -t ${{ secrets.DOCKERHUB_USERNAME }}/smart-smoker-$app:v${{ inputs.version }} \
+        -t ${{ secrets.DOCKERHUB_USERNAME }}/smart-smoker-$app:latest \
+        ${{ secrets.DOCKERHUB_USERNAME }}/smart-smoker-$app@${digest}
+    done
 ```
 
 ### Docker Compose Updates
@@ -155,6 +218,8 @@ services:
     # ... unchanged
 ```
 
+Dev deployment uses `VERSION=nightly` so the cloud dev environment always runs the latest nightly images. Production cloud deployments use `VERSION=vX.Y.Z` to pin a specific release.
+
 #### smoker.docker-compose.yml
 ```yaml
 version: '3.1'
@@ -177,6 +242,9 @@ services:
   watchtower:
     container_name: watchtower
     image: containrrr/watchtower:armhf-latest
+    command: --interval 300 --cleanup
+    # optional (scope updates to labeled containers only):
+    # command: --interval 300 --cleanup --label-enable
     # ... unchanged
 ```
 
@@ -206,18 +274,20 @@ services:
 1. **Update cloud.docker-compose.yml**
    - Change image names to new convention
    - Use `${VERSION:-latest}` for flexibility
-   - Test locally with both versioned and latest
+   - Dev: set `VERSION=nightly` for dev deploys
+   - Prod: set `VERSION=vX.Y.Z` for pinned releases
 
 2. **Update smoker.docker-compose.yml**
-   - Change all image names to `:latest` tags
-   - Ensure Watchtower configuration unchanged
+   - Change all image names to `:latest` tags (smoker auto-updates)
+   - Add Watchtower `--cleanup` to reclaim space
    - Test on development Pi if available
 
 ### Step 3: Gradual Migration (Week 1-2)
 1. **Dual Publishing Period**
    - Publish to both old and new naming temporarily
-   - Monitor Pi for successful Watchtower updates
-   - Verify cloud deployments work with new naming
+   - Begin pushing `nightly` on master merges for dev
+   - Monitor Pi for successful Watchtower updates (triggered by `latest`)
+   - Verify cloud deployments work with `VERSION=nightly` (dev) and `VERSION=vX.Y.Z` (prod)
 
 2. **Validation Phase**
    ```bash
@@ -227,7 +297,17 @@ services:
    
    # Test manual version deployment
    VERSION=v1.2.3 docker-compose -f cloud.docker-compose.yml up -d
-   ```
+
+   # Test dev deployment using nightly
+    VERSION=nightly docker-compose -f cloud.docker-compose.yml pull
+    VERSION=nightly docker-compose -f cloud.docker-compose.yml up -d --force-recreate
+   
+   # Verify release promotion points to same digest
+   docker buildx imagetools inspect benjr70/smart-smoker-backend:nightly | grep Digest
+   docker buildx imagetools inspect benjr70/smart-smoker-backend:v1.2.3 | grep Digest
+   docker buildx imagetools inspect benjr70/smart-smoker-backend:latest | grep Digest
+   # Expect: v1.2.3 and latest have the same digest for a release
+  ```
 
 ### Step 4: Documentation Updates (Week 2)
 1. **Update README files**
@@ -245,7 +325,9 @@ services:
 ### Integration Testing
 - **Watchtower Testing**: Deploy to test Pi and verify auto-updates
 - **Cloud Deployment**: Test manual versioned deployments
+- **Dev Nightly Flow**: Verify dev environment consumes `nightly` after master merges
 - **Rollback Testing**: Verify ability to rollback to previous versions
+- **Digest Consistency**: Verify a release’s `:vX.Y.Z` and `:latest` reference the same manifest digest
 
 ### End-to-End Testing
 - **Full Pipeline**: Test entire publish → deploy → update cycle
@@ -286,6 +368,8 @@ services:
 - **< 5 minutes** for Watchtower to detect and update containers
 - **Zero** failed deployments due to naming issues
 - **100%** of versioned tags successfully published
+ - **100%** of master merges publish `nightly` images consumed by dev
+- **100%** of releases have `:vX.Y.Z` and `:latest` pointing to the same digest
 
 ### Qualitative Metrics
 - Team confidence in new naming system
@@ -299,6 +383,7 @@ services:
 - [ ] Updated `.github/workflows/publish.yml`
 - [ ] Modified `cloud.docker-compose.yml`
 - [ ] Modified `smoker.docker-compose.yml`
+- [ ] Nightly publish workflow defined and documented
 - [ ] Updated documentation and README files
 - [ ] Tested and validated Watchtower functionality
 - [ ] Rollback procedures documented
