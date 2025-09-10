@@ -31,6 +31,20 @@ module.exports = env = {
         exclude: /node_modules/,
       },
       {
+        // Allow building our workspace package "temperaturechart" which ships TS/TSX sources
+        test: /\.tsx?$/,
+        include: [
+          path.resolve(__dirname, '../../packages/TemperatureChart/src'),
+          path.resolve(__dirname, '../../node_modules/temperaturechart/src'),
+        ],
+        use: {
+          loader: 'ts-loader',
+          options: {
+            transpileOnly: true,
+          },
+        },
+      },
+      {
         test: /\.css$/,
         use: ['style-loader', 'css-loader'],
       },
