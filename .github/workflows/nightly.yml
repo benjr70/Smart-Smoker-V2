@@ -5,7 +5,12 @@ name: Nightly Dev Build & Deploy
 on:
   push:
     branches: [ master ]
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Git ref (branch or SHA) to build'
+        required: false
+        default: 'master'
 
 jobs:
   publish-nightly:
@@ -13,7 +18,7 @@ jobs:
     with:
       apps: '["smoker", "device-service", "electron-shell", "backend", "frontend"]'
       version: nightly
-      ref: master
+      ref: ${{ inputs.ref || 'master' }}
       mode: nightly
       platforms: linux/amd64,linux/arm/v7
       prebuild: true

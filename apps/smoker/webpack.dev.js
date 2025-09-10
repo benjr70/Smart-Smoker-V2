@@ -25,6 +25,15 @@ module.exports = {
         exclude: [/node_modules/, /\.test\.(ts|tsx)$/, /\.spec\.(ts|tsx)$/],
       },
       {
+        // Build TS/TSX sources from the workspace package "temperaturechart"
+        test: /\.tsx?$/,
+        include: [
+          path.resolve(__dirname, '../../packages/TemperatureChart/src'),
+          path.resolve(__dirname, '../../node_modules/temperaturechart/src'),
+        ],
+        use: 'ts-loader',
+      },
+      {
         test: /\.css$/,
         use: ['style-loader', 'css-loader'],
       },
