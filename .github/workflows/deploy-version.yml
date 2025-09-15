@@ -1,0 +1,56 @@
+# Manual deploy of a specific version to cloud and/or smoker
+
+name: Deploy Version
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy (e.g., 1.2.3, v1.2.3, or nightly)'
+        type: string
+        required: true
+      deploy_cloud:
+        description: 'Deploy to cloud'
+        type: boolean
+        required: false
+        default: true
+      deploy_smoker:
+        description: 'Deploy to smoker devices'
+        type: boolean
+        required: false
+        default: false
+
+jobs:
+  set-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.norm.outputs.version }}
+    steps:
+      - name: Normalize version
+        id: norm
+        shell: bash
+        run: |
+          IN="${{ github.event.inputs.version }}"
+          if [[ "$IN" == "nightly" ]]; then
+            OUT="nightly"
+          elif [[ "$IN" == v* ]]; then
+            OUT="$IN"
+          else
+            OUT="v$IN"
+          fi
+          echo "Normalized: $OUT"
+          echo "version=$OUT" >> "$GITHUB_OUTPUT"
+
+  deploy-cloud:
+    if: ${{ github.event.inputs.deploy_cloud == 'true' }}
+    needs: set-version
+    uses: ./.github/workflows/cloud-deploy.yml
+    with:
+      version: ${{ needs.set-version.outputs.version }}
+    secrets: inherit
+
+  deploy-smoker:
+    if: ${{ github.event.inputs.deploy_smoker == 'true' }}
+    uses: ./.github/workflows/smoker-deploy.yml
+    secrets: inherit
+

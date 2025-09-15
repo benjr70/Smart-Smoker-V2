@@ -106,6 +106,8 @@ Why this matters
 - Version tags never change once published
 - Clear version history in Docker Hub
 
+See: [Manual Version Deployment](../CI-CD/manual-version-deployment.md) for the deployment runbook and rollback steps.
+
 ### Story 3: Development Workflow
 **As a** developer  
 **I want** the publishing workflow to be automatic  
