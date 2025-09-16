@@ -8,7 +8,7 @@ To create a new production deployment:
 
 1. **Update version** in `package.json`
 2. **Create a version tag** in GitHub for that commit
-3. **Run the `Install Smart Smoker v2` GitHub action** with the new version number
+3. **Create a GitHub Release** with tag `vX.Y.Z` (preferred) or run the `Release Smart Smoker v2` action manually
 
 ## Container Deployment
 
@@ -103,19 +103,19 @@ To set up the smoker pi, follow the [Portainer Agent Environment instructions](h
 ```bash
 # Build for ARM/v7 platform
 docker build -f apps/smoker/Dockerfile --platform linux/arm/v7 \
-  -t benjr70/smart_smoker:smokerTest .
+  -t benjr70/smart-smoker-smoker:smokerTest .
 
 # Push to Docker Hub
-docker push benjr70/smart_smoker:smokerTest
+docker push benjr70/smart-smoker-smoker:smokerTest
 ```
 
 #### Pull and Run Smoker Image on Pi
 ```bash
 # Pull latest image
-docker pull benjr70/smart_smoker:smokerTest
+docker pull benjr70/smart-smoker-smoker:smokerTest
 
 # Run container
-docker run -p 8080:8080 benjr70/smart_smoker:smokerTest
+docker run -p 8080:8080 benjr70/smart-smoker-smoker:smokerTest
 ```
 
 ### Device Service Commands
@@ -124,20 +124,20 @@ docker run -p 8080:8080 benjr70/smart_smoker:smokerTest
 ```bash
 # Build for ARM/v7 platform
 docker build -f apps/device-service/Dockerfile --platform linux/arm/v7 \
-  -t benjr70/smart_smoker:device-serviceTest .
+  -t benjr70/smart-smoker-device-service:device-serviceTest .
 
 # Push to Docker Hub
-docker push benjr70/smart_smoker:device-serviceTest
+docker push benjr70/smart-smoker-device-service:device-serviceTest
 ```
 
 #### Pull and Run Device Service on Pi
 ```bash
 # Pull latest image
-docker pull benjr70/smart_smoker:device-serviceTest
+docker pull benjr70/smart-smoker-device-service:device-serviceTest
 
 # Run container with USB device access
 docker run --privileged --device=/dev/ttyUSB0 -p 3000:3000 \
-  benjr70/smart_smoker:device-serviceTest
+  benjr70/smart-smoker-device-service:device-serviceTest
 ```
 
 ## Architecture Overview
