@@ -20,6 +20,13 @@ on:
         required: false
         default: false
 
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-version
+  cancel-in-progress: true
+
 jobs:
   set-version:
     runs-on: ubuntu-latest
@@ -31,7 +38,10 @@ jobs:
         shell: bash
         run: |
           IN="${{ github.event.inputs.version }}"
-          if [[ "$IN" == "nightly" ]]; then
+          # Trim whitespace, normalize leading V to v, and support case-insensitive nightly
+          IN="$(echo "$IN" | xargs)"
+          IN="${IN/#V/v}"
+          if [[ "${IN,,}" == "nightly" ]]; then
             OUT="nightly"
           elif [[ "$IN" == v* ]]; then
             OUT="$IN"
@@ -53,4 +63,3 @@ jobs:
     if: ${{ github.event.inputs.deploy_smoker == 'true' }}
     uses: ./.github/workflows/smoker-deploy.yml
     secrets: inherit
-

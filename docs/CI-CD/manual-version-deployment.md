@@ -9,13 +9,27 @@ Deploy a specific container version to the cloud environment using Docker Compos
 - Environment values for `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY`
 - Images published in Docker Hub with version tags (e.g., `v1.2.3`)
 
-## Option A: GitHub Actions (Deploy Version)
+## Option A: GitHub Release (Preferred)
+- Workflow: `.github/workflows/release.yml` (triggered by Release → Published)
+- Tag format: `vX.Y.Z` (e.g., `v1.2.3`)
+- Behavior: Builds from the tag, publishes Docker images with both `latest` and `vX.Y.Z`, and deploys cloud pinned to `vX.Y.Z`.
+
+Steps:
+1) GitHub → Releases → “Draft a new release”
+2) Set tag to `vX.Y.Z` and publish
+3) The workflow runs automatically and deploys cloud with `VERSION=vX.Y.Z`
+
+Notes:
+- Smoker devices auto-update from `latest` via Watchtower; the release also updates `latest`.
+- Use “Deploy Version” for redeploying an existing version without rebuilding.
+
+## Option B: GitHub Actions (Deploy Version)
 - Workflow: `.github/workflows/deploy-version.yml`
 - Inputs: `version` (accepts `1.2.3`, `v1.2.3`, or `nightly`), toggles for cloud/smoker
 - Runner: Cloud uses self-hosted `SmokeCloud`; smoker uses `Smoker`
 
 Steps:
-1) Open Actions → “Deploy Version” → Run workflow
+1) Actions → “Deploy Version” → Run workflow
 2) Enter the version (`1.2.3`, `v1.2.3`, or `nightly`). The workflow normalizes to `vX.Y.Z` when needed.
 3) Select deploy targets (cloud and/or smoker)
 4) The workflow calls existing deploy jobs and executes on the target runners:
@@ -27,6 +41,7 @@ Steps:
 Notes:
 - Secrets `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` are used by the workflow
 - Ensure the target version exists in Docker Hub for both backend and frontend images
+- Smoker deploys always use `latest` images (Watchtower), so the “Deploy Version” smoker option restarts services to pull `latest`.
 
 ## Option B: Local Shell on Cloud Host
 The compose file supports a `VERSION` env var. Set it to a specific version tag to pin the deployment:

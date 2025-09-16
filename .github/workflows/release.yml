@@ -24,6 +24,13 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   # Normalize version/ref from workflow_dispatch input or release tag
   set-version:
@@ -47,6 +54,9 @@ jobs:
             DEPLOY_CLOUD_DEFAULT=true
           else
             IN="${{ github.event.inputs.version }}"
+            # trim whitespace and normalize leading V to v
+            IN="$(echo "$IN" | xargs)"
+            IN="${IN/#V/v}"
             NUM="${IN#v}"
             VTAG="v${NUM}"
             # Use the tag ref when a tag exists; otherwise this will checkout the branch/commit if it matches
@@ -107,6 +117,7 @@ jobs:
     if: ${{ needs.set-version.outputs.deploy_smoker_default == 'true' }}
     needs: publish-smoker
     uses: ./.github/workflows/smoker-deploy.yml
+    secrets: inherit
 
   # Deploy to cloud infrastructure (pinned to version tag)
   deploy-cloud:
@@ -115,3 +126,4 @@ jobs:
     uses: ./.github/workflows/cloud-deploy.yml
     with:
       version: ${{ needs.set-version.outputs.version_tag }}
+    secrets: inherit
