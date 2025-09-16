@@ -1,0 +1,2486 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.20">
+    
+    
+      
+        <title>Phase 2: Proxmox Infrastructure Setup - Smart Smoker Docs</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.e53b48f4.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#phase-2-proxmox-infrastructure-setup" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Smart Smoker Docs" class="md-header__button md-logo" aria-label="Smart Smoker Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Smart Smoker Docs
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Phase 2: Proxmox Infrastructure Setup
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/benjr70/Smart-Smoker-V2" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.0.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    benjr70/Smart-Smoker-V2
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../.." class="md-tabs__link">
+          
+  
+  
+    
+  
+  Welcome
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../Frontend/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Apps
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../Packages/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Packages
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../CI-CD/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  CI/CD
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Smart Smoker Docs" class="md-nav__button md-logo" aria-label="Smart Smoker Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Smart Smoker Docs
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/benjr70/Smart-Smoker-V2" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.0.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    benjr70/Smart-Smoker-V2
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../.." class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    Welcome
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_1" id="__nav_1_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1">
+            <span class="md-nav__icon md-icon"></span>
+            Welcome
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../Documentation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Documentation
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../Hardware/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Hardware
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../piSoftware/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Pi Software
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_1_5" id="__nav_1_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Epics
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1_5">
+            <span class="md-nav__icon md-icon"></span>
+            Epics
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../Epics/pushNotifications/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Push Notifications
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../Epics/googleAssistant/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Google Assistant
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Apps
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Apps
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_1" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../Frontend/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    Frontend
+    
+  </span>
+  
+
+            </a>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_1">
+            <span class="md-nav__icon md-icon"></span>
+            Frontend
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../Backend/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    BackEnd
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2_2" id="__nav_2_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            BackEnd
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../Backend/backend-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Smart Smoker Backend Architecture
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../Smoker%20Frontend/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    Smoker Frontend
+    
+  </span>
+  
+
+            </a>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_3">
+            <span class="md-nav__icon md-icon"></span>
+            Smoker Frontend
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../Device%20Service/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    Device Service
+    
+  </span>
+  
+
+            </a>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_4">
+            <span class="md-nav__icon md-icon"></span>
+            Device Service
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../Packages/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    Packages
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Packages
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../Packages/testing-template/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Testing Template
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../CI-CD/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    CI/CD
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            CI/CD
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../CI-CD/github-actions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    GitHub Actions
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../CI-CD/test-coverage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Test Coverage
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../CI-CD/dependency-management/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Dependency Management
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../CI-CD/deployment-infrastructure/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Deployment & Infrastructure
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="phase-2-proxmox-infrastructure-setup">Phase 2: Proxmox Infrastructure Setup</h1>
+<h2 id="overview">Overview</h2>
+<p>Phase 2 establishes the foundational infrastructure on Proxmox using Terraform, sets up the self-hosted GitHub Actions runner, and creates the base environments for development and production cloud deployments.</p>
+<h2 id="goals-objectives">Goals &amp; Objectives</h2>
+<h3 id="primary-goals">Primary Goals</h3>
+<ul>
+<li><strong>Infrastructure as Code</strong>: Implement Terraform for complete infrastructure management</li>
+<li><strong>Self-Hosted Runner</strong>: Set up GitHub Actions runner with Proxmox access</li>
+<li><strong>Base Environments</strong>: Create LXC containers for cloud environments</li>
+<li><strong>Networking Setup</strong>: Configure bridge networking and Tailscale integration</li>
+<li><strong>Security</strong>: Implement proper authentication and access controls</li>
+</ul>
+<h3 id="success-criteria">Success Criteria</h3>
+<ul>
+<li>✅ Terraform successfully provisions all infrastructure</li>
+<li>✅ Self-hosted runner can deploy to Proxmox environments</li>
+<li>✅ All environments accessible via Tailscale network</li>
+<li>✅ Proper backup and monitoring in place</li>
+<li>✅ Documentation and runbooks completed</li>
+</ul>
+<h2 id="architecture-components">Architecture Components</h2>
+<h3 id="infrastructure-layout">Infrastructure Layout</h3>
+<div class="highlight"><pre><span></span><code>Proxmox Server
+├── github-runner (LXC Container)
+│   ├── Ubuntu 22.04 LTS
+│   ├── 2 CPU cores, 4GB RAM, 50GB storage
+│   ├── GitHub Actions runner service
+│   ├── Terraform with Proxmox provider
+│   ├── Docker CLI for deployments
+│   ├── Tailscale client
+│   └── Node.js/npm for builds
+│
+├── smart-smoker-dev-cloud (LXC Container)
+│   ├── Ubuntu 22.04 LTS
+│   ├── 2 CPU cores, 4GB RAM, 20GB storage
+│   ├── Docker Engine
+│   ├── Docker Compose
+│   ├── Git for deployments
+│   ├── Tailscale client
+│   └── Environment: Development
+│
+├── virtual-smoker-device (VM - ARM64)
+│   ├── Raspberry Pi OS Lite 64-bit
+│   ├── 2 CPU cores (ARM64), 2GB RAM, 32GB storage
+│   ├── VNC Server for GUI access
+│   ├── Mock hardware simulation services
+│   ├── Python serial communication simulators
+│   ├── Node.js device service environment
+│   ├── GPIO simulation libraries
+│   ├── Temperature sensor mock data generators
+│   ├── Wi-Fi configuration management
+│   ├── Tailscale client for network integration
+│   └── Environment: Virtual Device Testing
+│
+└── smart-smoker-cloud-prod (LXC Container)
+    ├── Ubuntu 22.04 LTS
+    ├── 4 CPU cores, 8GB RAM, 40GB storage
+    ├── Docker Engine
+    ├── Docker Compose
+    ├── Git for deployments
+    ├── Tailscale client with funnel
+    ├── Automated backup integration
+    └── Environment: Production
+</code></pre></div>
+<h2 id="user-stories">User Stories</h2>
+<h3 id="story-1-automated-infrastructure-provisioning">Story 1: Automated Infrastructure Provisioning</h3>
+<p><strong>As a</strong> DevOps engineer<br />
+<strong>I want</strong> to provision infrastructure using code<br />
+<strong>So that</strong> environments are consistent and reproducible</p>
+<p><strong>Acceptance Criteria:</strong>
+- Terraform creates all LXC containers from configuration
+- Infrastructure changes tracked in version control
+- Environments can be recreated from scratch
+- Resource allocation matches specifications</p>
+<h3 id="story-2-self-hosted-cicd">Story 2: Self-Hosted CI/CD</h3>
+<p><strong>As a</strong> developer<br />
+<strong>I want</strong> GitHub Actions to deploy to local infrastructure<br />
+<strong>So that</strong> I can automate deployments without exposing servers</p>
+<p><strong>Acceptance Criteria:</strong>
+- GitHub runner connects securely to repository
+- Runner can access Proxmox API for deployments
+- Terraform executions work from runner
+- Logs and status reported back to GitHub</p>
+<h3 id="story-3-secure-network-access">Story 3: Secure Network Access</h3>
+<p><strong>As a</strong> system administrator<br />
+<strong>I want</strong> all environments accessible via Tailscale<br />
+<strong>So that</strong> I have secure remote access for management</p>
+<p><strong>Acceptance Criteria:</strong>
+- All containers connected to Tailscale network
+- Internal communication between environments
+- Remote access for debugging and monitoring
+- Production funnel configuration automated</p>
+<h3 id="story-4-virtual-device-testing">Story 4: Virtual Device Testing</h3>
+<p><strong>As a</strong> developer<br />
+<strong>I want</strong> a virtual Raspberry Pi environment for testing<br />
+<strong>So that</strong> I can develop and test device functionality without physical hardware</p>
+<p><strong>Acceptance Criteria:</strong>
+- ARM64 VM running Raspberry Pi OS
+- VNC access for GUI interactions
+- Mock hardware services for sensor simulation
+- Device service can run and connect to backend
+- Serial communication simulation available</p>
+<h2 id="technical-requirements">Technical Requirements</h2>
+<h3 id="terraform-configuration-structure">Terraform Configuration Structure</h3>
+<div class="highlight"><pre><span></span><code>infra/
+├── terraform/
+│   ├── modules/
+│   │   ├── lxc-container/
+│   │   │   ├── main.tf
+│   │   │   ├── variables.tf
+│   │   │   └── outputs.tf
+│   │   ├── arm64-vm/
+│   │   │   ├── main.tf
+│   │   │   ├── variables.tf
+│   │   │   └── outputs.tf
+│   │   ├── networking/
+│   │   │   ├── main.tf
+│   │   │   ├── variables.tf
+│   │   │   └── outputs.tf
+│   │   └── storage/
+│   │       ├── main.tf
+│   │       ├── variables.tf
+│   │       └── outputs.tf
+│   ├── environments/
+│   │   ├── github-runner/
+│   │   │   ├── main.tf
+│   │   │   ├── variables.tf
+│   │   │   └── terraform.tfvars
+│   │   ├── dev-cloud/
+│   │   │   ├── main.tf
+│   │   │   ├── variables.tf
+│   │   │   └── terraform.tfvars
+│   │   ├── virtual-smoker/
+│   │   │   ├── main.tf
+│   │   │   ├── variables.tf
+│   │   │   ├── terraform.tfvars
+│   │   │   └── scripts/
+│   │   │       ├── setup-vnc.sh
+│   │   │       ├── install-mocks.sh
+│   │   │       └── configure-device.sh
+│   │   └── prod-cloud/
+│   │       ├── main.tf
+│   │       ├── variables.tf
+│   │       └── terraform.tfvars
+│   └── shared/
+│       ├── providers.tf
+│       ├── variables.tf
+│       └── backend.tf
+</code></pre></div>
+<h3 id="proxmox-provider-configuration">Proxmox Provider Configuration</h3>
+<div class="highlight"><pre><span></span><code><span class="nb">terraform</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nb">required_providers</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nb">proxmox</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="na">source</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;telmate/proxmox&quot;</span>
+<span class="w">      </span><span class="na">version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;~&gt; 2.9.14&quot;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kr">provider</span><span class="w"> </span><span class="nv">&quot;proxmox&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">pm_api_url</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="nv">var.proxmox_api_url</span>
+<span class="w">  </span><span class="na">pm_user</span><span class="w">         </span><span class="o">=</span><span class="w"> </span><span class="nv">var.proxmox_user</span>
+<span class="w">  </span><span class="na">pm_password</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="nv">var.proxmox_password</span>
+<span class="w">  </span><span class="na">pm_tls_insecure</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="no">true</span>
+<span class="p">}</span>
+</code></pre></div>
+<h3 id="lxc-container-module">LXC Container Module</h3>
+<div class="highlight"><pre><span></span><code><span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;proxmox_lxc&quot;</span><span class="w"> </span><span class="nv">&quot;container&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">target_node</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="nv">var.target_node</span>
+<span class="w">  </span><span class="na">hostname</span><span class="w">        </span><span class="o">=</span><span class="w"> </span><span class="nv">var.hostname</span>
+<span class="w">  </span><span class="na">ostemplate</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="nv">var.template</span>
+<span class="w">  </span><span class="na">password</span><span class="w">        </span><span class="o">=</span><span class="w"> </span><span class="nv">var.root_password</span>
+<span class="w">  </span><span class="na">unprivileged</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="no">true</span>
+<span class="w">  </span><span class="na">onboot</span><span class="w">          </span><span class="o">=</span><span class="w"> </span><span class="no">true</span>
+<span class="w">  </span><span class="na">start</span><span class="w">           </span><span class="o">=</span><span class="w"> </span><span class="no">true</span>
+
+<span class="w">  </span><span class="nb">rootfs</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="na">storage</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">var.storage</span>
+<span class="w">    </span><span class="na">size</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="nv">var.disk_size</span>
+<span class="w">  </span><span class="p">}</span>
+
+<span class="w">  </span><span class="nb">network</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="na">name</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;eth0&quot;</span>
+<span class="w">    </span><span class="na">bridge</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">var.network_bridge</span>
+<span class="w">    </span><span class="na">ip</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="nv">var.ip_address</span>
+<span class="w">    </span><span class="na">gw</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="nv">var.gateway</span>
+<span class="w">  </span><span class="p">}</span>
+
+<span class="w">  </span><span class="na">cores</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="nv">var.cpu_cores</span>
+<span class="w">  </span><span class="na">memory</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">var.memory_mb</span>
+<span class="w">  </span><span class="na">swap</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="nv">var.swap_mb</span>
+
+<span class="w">  </span><span class="na">ssh_public_keys</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">var.ssh_keys</span>
+
+<span class="w">  </span><span class="kr">provisioner</span><span class="w"> </span><span class="nv">&quot;remote-exec&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="na">inline</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+<span class="w">      </span><span class="s2">&quot;apt-get update&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="s2">&quot;apt-get install -y docker.io docker-compose git curl&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="s2">&quot;systemctl enable docker&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="s2">&quot;systemctl start docker&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="s2">&quot;usermod -aG docker root&quot;</span>
+<span class="w">    </span><span class="p">]</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+<h3 id="github-runner-setup">GitHub Runner Setup</h3>
+<div class="highlight"><pre><span></span><code><span class="ch">#!/bin/bash</span>
+<span class="c1"># GitHub Actions Runner Installation Script</span>
+
+<span class="c1"># Download and install runner</span>
+mkdir<span class="w"> </span>/opt/actions-runner<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">cd</span><span class="w"> </span>/opt/actions-runner
+curl<span class="w"> </span>-o<span class="w"> </span>actions-runner-linux-x64-2.311.0.tar.gz<span class="w"> </span>-L<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>https://github.com/actions/runner/releases/download/v2.311.0/actions-runner-linux-x64-2.311.0.tar.gz
+tar<span class="w"> </span>xzf<span class="w"> </span>./actions-runner-linux-x64-2.311.0.tar.gz
+
+<span class="c1"># Configure runner</span>
+./config.sh<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--url<span class="w"> </span>https://github.com/benjr70/Smart-Smoker-V2<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--token<span class="w"> </span><span class="si">${</span><span class="nv">GITHUB_RUNNER_TOKEN</span><span class="si">}</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--name<span class="w"> </span>proxmox-runner<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--labels<span class="w"> </span>self-hosted,linux,x64,proxmox<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--work<span class="w"> </span>/opt/actions-runner/_work
+
+<span class="c1"># Install as service</span>
+./svc.sh<span class="w"> </span>install
+./svc.sh<span class="w"> </span>start
+
+<span class="c1"># Install Terraform</span>
+wget<span class="w"> </span>-O-<span class="w"> </span>https://apt.releases.hashicorp.com/gpg<span class="w"> </span><span class="p">|</span><span class="w"> </span>sudo<span class="w"> </span>gpg<span class="w"> </span>--dearmor<span class="w"> </span>-o<span class="w"> </span>/usr/share/keyrings/hashicorp-archive-keyring.gpg
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com </span><span class="k">$(</span>lsb_release<span class="w"> </span>-cs<span class="k">)</span><span class="s2"> main&quot;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>sudo<span class="w"> </span>tee<span class="w"> </span>/etc/apt/sources.list.d/hashicorp.list
+apt<span class="w"> </span>update<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>terraform
+
+<span class="c1"># Install Tailscale</span>
+curl<span class="w"> </span>-fsSL<span class="w"> </span>https://tailscale.com/install.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>sh
+tailscale<span class="w"> </span>up<span class="w"> </span>--authkey<span class="o">=</span><span class="si">${</span><span class="nv">TAILSCALE_AUTH_KEY</span><span class="si">}</span>
+</code></pre></div>
+<h2 id="virtual-smoker-device-configuration">Virtual Smoker Device Configuration</h2>
+<h3 id="arm64-vm-module">ARM64 VM Module</h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># infra/terraform/modules/arm64-vm/main.tf</span>
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;proxmox_vm_qemu&quot;</span><span class="w"> </span><span class="nv">&quot;arm64_vm&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">name</span><span class="w">        </span><span class="o">=</span><span class="w"> </span><span class="nv">var.vm_name</span>
+<span class="w">  </span><span class="na">target_node</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">var.target_node</span>
+<span class="w">  </span><span class="na">desc</span><span class="w">        </span><span class="o">=</span><span class="w"> </span><span class="nv">var.vm_description</span>
+
+<span class="c1">  # ARM64 QEMU Configuration</span>
+<span class="w">  </span><span class="na">machine</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;virt&quot;</span>
+<span class="w">  </span><span class="na">bios</span><span class="w">        </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;ovmf&quot;</span>
+<span class="w">  </span><span class="na">cpu</span><span class="w">         </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;cortex-a72&quot;</span>
+<span class="w">  </span><span class="na">cores</span><span class="w">       </span><span class="o">=</span><span class="w"> </span><span class="nv">var.cpu_cores</span>
+<span class="w">  </span><span class="na">memory</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="nv">var.memory_mb</span>
+
+<span class="c1">  # EFI Configuration for ARM64</span>
+<span class="w">  </span><span class="nb">efidisk</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="na">storage</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">var.storage</span>
+<span class="w">    </span><span class="na">efitype</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;4m&quot;</span>
+<span class="w">  </span><span class="p">}</span>
+
+<span class="c1">  # Primary disk</span>
+<span class="w">  </span><span class="nb">disk</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="na">storage</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="nv">var.storage</span>
+<span class="w">    </span><span class="na">type</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;scsi&quot;</span>
+<span class="w">    </span><span class="na">size</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="nv">var.disk_size</span>
+<span class="w">    </span><span class="na">iothread</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="m">1</span>
+<span class="w">    </span><span class="na">discard</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;on&quot;</span>
+<span class="w">  </span><span class="p">}</span>
+
+<span class="c1">  # Network configuration</span>
+<span class="w">  </span><span class="nb">network</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="na">model</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;virtio&quot;</span>
+<span class="w">    </span><span class="na">bridge</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">var.network_bridge</span>
+<span class="w">  </span><span class="p">}</span>
+
+<span class="c1">  # Enable VNC for GUI access</span>
+<span class="w">  </span><span class="nb">vga</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="na">type</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;std&quot;</span>
+<span class="w">    </span><span class="na">memory</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="m">32</span>
+<span class="w">  </span><span class="p">}</span>
+
+<span class="c1">  # Enable QEMU Guest Agent</span>
+<span class="w">  </span><span class="na">agent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="m">1</span>
+
+<span class="c1">  # Boot configuration</span>
+<span class="w">  </span><span class="na">boot</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;order=scsi0&quot;</span>
+<span class="w">  </span><span class="na">onboot</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="no">true</span>
+
+<span class="c1">  # Cloud-init configuration</span>
+<span class="w">  </span><span class="na">os_type</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;cloud-init&quot;</span>
+<span class="w">  </span><span class="na">ciuser</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="nv">var.ci_user</span>
+<span class="w">  </span><span class="na">cipassword</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">var.ci_password</span>
+
+<span class="w">  </span><span class="na">ipconfig0</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;ip=${var.ip_address}/24,gw=${var.gateway}&quot;</span>
+
+<span class="c1">  # SSH keys</span>
+<span class="w">  </span><span class="na">sshkeys</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">var.ssh_keys</span>
+
+<span class="c1">  # Provisioning</span>
+<span class="w">  </span><span class="kr">provisioner</span><span class="w"> </span><span class="nv">&quot;remote-exec&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nb">connection</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="na">type</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;ssh&quot;</span>
+<span class="w">      </span><span class="na">user</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="nv">var.ci_user</span>
+<span class="w">      </span><span class="na">password</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">var.ci_password</span>
+<span class="w">      </span><span class="na">host</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="nv">var.ip_address</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="na">inline</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+<span class="w">      </span><span class="s2">&quot;sudo apt-get update&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="s2">&quot;sudo apt-get install -y curl wget git python3 python3-pip nodejs npm&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="s2">&quot;sudo systemctl enable ssh&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="s2">&quot;sudo systemctl start ssh&quot;</span>
+<span class="w">    </span><span class="p">]</span>
+<span class="w">  </span><span class="p">}</span>
+
+<span class="c1">  # Copy setup scripts</span>
+<span class="w">  </span><span class="kr">provisioner</span><span class="w"> </span><span class="nv">&quot;file&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="na">source</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;${path.module}/../../environments/virtual-smoker/scripts/&quot;</span>
+<span class="w">    </span><span class="na">destination</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;/tmp/scripts&quot;</span>
+
+<span class="w">    </span><span class="nb">connection</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="na">type</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;ssh&quot;</span>
+<span class="w">      </span><span class="na">user</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="nv">var.ci_user</span>
+<span class="w">      </span><span class="na">password</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">var.ci_password</span>
+<span class="w">      </span><span class="na">host</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="nv">var.ip_address</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+
+<span class="c1">  # Execute setup scripts</span>
+<span class="w">  </span><span class="kr">provisioner</span><span class="w"> </span><span class="nv">&quot;remote-exec&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nb">connection</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="na">type</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;ssh&quot;</span>
+<span class="w">      </span><span class="na">user</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="nv">var.ci_user</span>
+<span class="w">      </span><span class="na">password</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">var.ci_password</span>
+<span class="w">      </span><span class="na">host</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="nv">var.ip_address</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="na">inline</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+<span class="w">      </span><span class="s2">&quot;chmod +x /tmp/scripts/*.sh&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="s2">&quot;sudo /tmp/scripts/setup-vnc.sh&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="s2">&quot;sudo /tmp/scripts/install-mocks.sh&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="s2">&quot;sudo /tmp/scripts/configure-device.sh&quot;</span>
+<span class="w">    </span><span class="p">]</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+<h3 id="virtual-smoker-environment-configuration">Virtual Smoker Environment Configuration</h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># infra/terraform/environments/virtual-smoker/main.tf</span>
+<span class="kr">module</span><span class="w"> </span><span class="nv">&quot;virtual_smoker&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">source</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;../../modules/arm64-vm&quot;</span>
+
+<span class="w">  </span><span class="na">vm_name</span><span class="w">         </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;virtual-smoker-device&quot;</span>
+<span class="w">  </span><span class="na">target_node</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="nv">var.proxmox_node</span>
+<span class="w">  </span><span class="na">vm_description</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Virtual Raspberry Pi for Smart Smoker Development&quot;</span>
+
+<span class="w">  </span><span class="na">cpu_cores</span><span class="w">       </span><span class="o">=</span><span class="w"> </span><span class="m">2</span>
+<span class="w">  </span><span class="na">memory_mb</span><span class="w">       </span><span class="o">=</span><span class="w"> </span><span class="m">2048</span>
+<span class="w">  </span><span class="na">disk_size</span><span class="w">       </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;32G&quot;</span>
+<span class="w">  </span><span class="na">storage</span><span class="w">         </span><span class="o">=</span><span class="w"> </span><span class="nv">var.proxmox_storage</span>
+
+<span class="w">  </span><span class="na">network_bridge</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="nv">var.network_bridge</span>
+<span class="w">  </span><span class="na">ip_address</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="nv">var.vm_ip</span>
+<span class="w">  </span><span class="na">gateway</span><span class="w">         </span><span class="o">=</span><span class="w"> </span><span class="nv">var.network_gateway</span>
+
+<span class="w">  </span><span class="na">ci_user</span><span class="w">         </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;pi&quot;</span>
+<span class="w">  </span><span class="na">ci_password</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="nv">var.vm_password</span>
+<span class="w">  </span><span class="na">ssh_keys</span><span class="w">        </span><span class="o">=</span><span class="w"> </span><span class="nv">var.ssh_public_keys</span>
+<span class="p">}</span>
+
+<span class="c1"># Output VNC connection details</span>
+<span class="kr">output</span><span class="w"> </span><span class="nv">&quot;vnc_connection&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nb">value</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="na">host</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">var.vm_ip</span>
+<span class="w">    </span><span class="na">port</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="m">5900</span>
+<span class="w">    </span><span class="na">user</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;pi&quot;</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="c1"># Output SSH connection details</span>
+<span class="kr">output</span><span class="w"> </span><span class="nv">&quot;ssh_connection&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nb">value</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="na">host</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">var.vm_ip</span>
+<span class="w">    </span><span class="na">user</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;pi&quot;</span>
+<span class="w">    </span><span class="na">command</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;ssh pi@${var.vm_ip}&quot;</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+<h3 id="vnc-server-setup-script">VNC Server Setup Script</h3>
+<div class="highlight"><pre><span></span><code><span class="ch">#!/bin/bash</span>
+<span class="c1"># infra/terraform/environments/virtual-smoker/scripts/setup-vnc.sh</span>
+
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Setting up VNC Server for virtual smoker device...&quot;</span>
+
+<span class="c1"># Install VNC server and desktop environment</span>
+apt-get<span class="w"> </span>update
+apt-get<span class="w"> </span>install<span class="w"> </span>-y<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>tightvncserver<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>xfce4<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>xfce4-goodies<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>firefox-esr<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>nano<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>htop
+
+<span class="c1"># Create VNC service for pi user</span>
+cat<span class="w"> </span>&gt;<span class="w"> </span>/etc/systemd/system/vncserver@.service<span class="w"> </span><span class="s">&lt;&lt; &#39;EOF&#39;</span>
+<span class="s">[Unit]</span>
+<span class="s">Description=Start TightVNC server at startup</span>
+<span class="s">After=syslog.target network.target</span>
+
+<span class="s">[Service]</span>
+<span class="s">Type=forking</span>
+<span class="s">User=pi</span>
+<span class="s">Group=pi</span>
+<span class="s">WorkingDirectory=/home/pi</span>
+
+<span class="s">PIDFile=/home/pi/.vnc/%H:%i.pid</span>
+<span class="s">ExecStartPre=-/usr/bin/vncserver -kill :%i &gt; /dev/null 2&gt;&amp;1</span>
+<span class="s">ExecStart=/usr/bin/vncserver -depth 24 -geometry 1280x800 :%i</span>
+<span class="s">ExecStop=/usr/bin/vncserver -kill :%i</span>
+
+<span class="s">[Install]</span>
+<span class="s">WantedBy=multi-user.target</span>
+<span class="s">EOF</span>
+
+<span class="c1"># Set up VNC password for pi user</span>
+sudo<span class="w"> </span>-u<span class="w"> </span>pi<span class="w"> </span>mkdir<span class="w"> </span>-p<span class="w"> </span>/home/pi/.vnc
+<span class="nb">echo</span><span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;smoker123\nsmoker123\nn&quot;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>sudo<span class="w"> </span>-u<span class="w"> </span>pi<span class="w"> </span>vncpasswd
+
+<span class="c1"># Configure VNC startup</span>
+sudo<span class="w"> </span>-u<span class="w"> </span>pi<span class="w"> </span>cat<span class="w"> </span>&gt;<span class="w"> </span>/home/pi/.vnc/xstartup<span class="w"> </span><span class="s">&lt;&lt; &#39;EOF&#39;</span>
+<span class="s">#!/bin/bash</span>
+<span class="s">xrdb $HOME/.Xresources</span>
+<span class="s">startxfce4 &amp;</span>
+<span class="s">EOF</span>
+
+sudo<span class="w"> </span>-u<span class="w"> </span>pi<span class="w"> </span>chmod<span class="w"> </span>+x<span class="w"> </span>/home/pi/.vnc/xstartup
+
+<span class="c1"># Enable and start VNC service</span>
+systemctl<span class="w"> </span>daemon-reload
+systemctl<span class="w"> </span><span class="nb">enable</span><span class="w"> </span>vncserver@1.service
+systemctl<span class="w"> </span>start<span class="w"> </span>vncserver@1.service
+
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;VNC server setup complete. Connect to </span><span class="si">${</span><span class="nv">VM_IP</span><span class="si">}</span><span class="s2">:5901&quot;</span>
+</code></pre></div>
+<h3 id="mock-hardware-installation-script">Mock Hardware Installation Script</h3>
+<div class="highlight"><pre><span></span><code><span class="ch">#!/bin/bash</span>
+<span class="c1"># infra/terraform/environments/virtual-smoker/scripts/install-mocks.sh</span>
+
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Installing mock hardware simulation services...&quot;</span>
+
+<span class="c1"># Install Python dependencies for hardware simulation</span>
+pip3<span class="w"> </span>install<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>pyserial<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>RPi.GPIO<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>w1thermsensor<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>flask<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>websocket-client<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>adafruit-circuitpython-max31855
+
+<span class="c1"># Create mock services directory</span>
+mkdir<span class="w"> </span>-p<span class="w"> </span>/opt/smoker-mocks
+<span class="nb">cd</span><span class="w"> </span>/opt/smoker-mocks
+
+<span class="c1"># Create temperature sensor mock service</span>
+cat<span class="w"> </span>&gt;<span class="w"> </span>temperature_mock.py<span class="w"> </span><span class="s">&lt;&lt; &#39;EOF&#39;</span>
+<span class="s">#!/usr/bin/env python3</span>
+<span class="s">&quot;&quot;&quot;</span>
+<span class="s">Mock Temperature Sensor Service</span>
+<span class="s">Simulates DS18B20 temperature sensors for smoker development</span>
+<span class="s">&quot;&quot;&quot;</span>
+<span class="s">import time</span>
+<span class="s">import random</span>
+<span class="s">import json</span>
+<span class="s">import threading</span>
+<span class="s">from flask import Flask, jsonify</span>
+
+<span class="s">app = Flask(__name__)</span>
+
+<span class="s">class TemperatureMock:</span>
+<span class="s">    def __init__(self):</span>
+<span class="s">        self.sensors = {</span>
+<span class="s">            &#39;smoker_temp&#39;: {&#39;current&#39;: 225.0, &#39;target&#39;: 225.0},</span>
+<span class="s">            &#39;meat_temp&#39;: {&#39;current&#39;: 145.0, &#39;target&#39;: 165.0},</span>
+<span class="s">            &#39;ambient_temp&#39;: {&#39;current&#39;: 75.0, &#39;target&#39;: 75.0}</span>
+<span class="s">        }</span>
+<span class="s">        self.running = False</span>
+
+<span class="s">    def start_simulation(self):</span>
+<span class="s">        self.running = True</span>
+<span class="s">        thread = threading.Thread(target=self._simulate_temperatures)</span>
+<span class="s">        thread.daemon = True</span>
+<span class="s">        thread.start()</span>
+
+<span class="s">    def _simulate_temperatures(self):</span>
+<span class="s">        while self.running:</span>
+<span class="s">            for sensor_name, data in self.sensors.items():</span>
+<span class="s">                # Simulate temperature fluctuation</span>
+<span class="s">                variance = random.uniform(-2.0, 2.0)</span>
+<span class="s">                drift_to_target = (data[&#39;target&#39;] - data[&#39;current&#39;]) * 0.1</span>
+<span class="s">                data[&#39;current&#39;] += variance + drift_to_target</span>
+<span class="s">                data[&#39;current&#39;] = max(32.0, min(500.0, data[&#39;current&#39;]))</span>
+<span class="s">            time.sleep(2)</span>
+
+<span class="s">    def get_temperature(self, sensor_id):</span>
+<span class="s">        sensor_map = {</span>
+<span class="s">            &#39;28-000000000001&#39;: &#39;smoker_temp&#39;,</span>
+<span class="s">            &#39;28-000000000002&#39;: &#39;meat_temp&#39;, </span>
+<span class="s">            &#39;28-000000000003&#39;: &#39;ambient_temp&#39;</span>
+<span class="s">        }</span>
+<span class="s">        sensor_name = sensor_map.get(sensor_id, &#39;smoker_temp&#39;)</span>
+<span class="s">        return self.sensors[sensor_name][&#39;current&#39;]</span>
+
+<span class="s">    def set_target(self, sensor_id, target):</span>
+<span class="s">        sensor_map = {</span>
+<span class="s">            &#39;28-000000000001&#39;: &#39;smoker_temp&#39;,</span>
+<span class="s">            &#39;28-000000000002&#39;: &#39;meat_temp&#39;,</span>
+<span class="s">            &#39;28-000000000003&#39;: &#39;ambient_temp&#39;</span>
+<span class="s">        }</span>
+<span class="s">        sensor_name = sensor_map.get(sensor_id, &#39;smoker_temp&#39;)</span>
+<span class="s">        if sensor_name in self.sensors:</span>
+<span class="s">            self.sensors[sensor_name][&#39;target&#39;] = target</span>
+
+<span class="s">temp_mock = TemperatureMock()</span>
+<span class="s">temp_mock.start_simulation()</span>
+
+<span class="s">@app.route(&#39;/temperature/&lt;sensor_id&gt;&#39;)</span>
+<span class="s">def get_temperature(sensor_id):</span>
+<span class="s">    temp = temp_mock.get_temperature(sensor_id)</span>
+<span class="s">    return jsonify({&#39;sensor_id&#39;: sensor_id, &#39;temperature&#39;: temp})</span>
+
+<span class="s">@app.route(&#39;/temperature/&lt;sensor_id&gt;/target/&lt;float:target&gt;&#39;, methods=[&#39;POST&#39;])</span>
+<span class="s">def set_target_temperature(sensor_id, target):</span>
+<span class="s">    temp_mock.set_target(sensor_id, target)</span>
+<span class="s">    return jsonify({&#39;sensor_id&#39;: sensor_id, &#39;target&#39;: target})</span>
+
+<span class="s">@app.route(&#39;/status&#39;)</span>
+<span class="s">def get_status():</span>
+<span class="s">    return jsonify(temp_mock.sensors)</span>
+
+<span class="s">if __name__ == &#39;__main__&#39;:</span>
+<span class="s">    app.run(host=&#39;0.0.0.0&#39;, port=5000)</span>
+<span class="s">EOF</span>
+
+<span class="c1"># Create serial communication mock service</span>
+cat<span class="w"> </span>&gt;<span class="w"> </span>serial_mock.py<span class="w"> </span><span class="s">&lt;&lt; &#39;EOF&#39;</span>
+<span class="s">#!/usr/bin/env python3</span>
+<span class="s">&quot;&quot;&quot;</span>
+<span class="s">Mock Serial Communication Service</span>
+<span class="s">Simulates Arduino/microcontroller serial communication</span>
+<span class="s">&quot;&quot;&quot;</span>
+<span class="s">import serial</span>
+<span class="s">import threading</span>
+<span class="s">import time</span>
+<span class="s">import json</span>
+<span class="s">import socket</span>
+
+<span class="s">class SerialMock:</span>
+<span class="s">    def __init__(self, port=&#39;/dev/ttyUSB0&#39;, baudrate=9600):</span>
+<span class="s">        self.port = port</span>
+<span class="s">        self.baudrate = baudrate</span>
+<span class="s">        self.running = False</span>
+<span class="s">        self.commands = []</span>
+
+<span class="s">    def start_mock_serial(self):</span>
+<span class="s">        &quot;&quot;&quot;Start mock serial device using socat&quot;&quot;&quot;</span>
+<span class="s">        import subprocess</span>
+
+<span class="s">        # Create virtual serial port pair</span>
+<span class="s">        cmd = f&quot;socat -d -d pty,raw,echo=0 pty,raw,echo=0&quot;</span>
+<span class="s">        self.socat_process = subprocess.Popen(cmd.split())</span>
+<span class="s">        time.sleep(2)  # Allow ports to be created</span>
+
+<span class="s">        # Start command processor</span>
+<span class="s">        self.running = True</span>
+<span class="s">        thread = threading.Thread(target=self._process_commands)</span>
+<span class="s">        thread.daemon = True</span>
+<span class="s">        thread.start()</span>
+
+<span class="s">    def _process_commands(self):</span>
+<span class="s">        &quot;&quot;&quot;Process incoming serial commands&quot;&quot;&quot;</span>
+<span class="s">        while self.running:</span>
+<span class="s">            # Simulate receiving commands</span>
+<span class="s">            mock_commands = [</span>
+<span class="s">                &quot;GET_TEMP&quot;,</span>
+<span class="s">                &quot;SET_FAN_SPEED:50&quot;, </span>
+<span class="s">                &quot;GET_STATUS&quot;,</span>
+<span class="s">                &quot;SET_AUGER:ON&quot;</span>
+<span class="s">            ]</span>
+
+<span class="s">            for cmd in mock_commands:</span>
+<span class="s">                self.commands.append(cmd)</span>
+<span class="s">                time.sleep(5)</span>
+
+<span class="s">    def send_response(self, command):</span>
+<span class="s">        &quot;&quot;&quot;Send mock response based on command&quot;&quot;&quot;</span>
+<span class="s">        responses = {</span>
+<span class="s">            &quot;GET_TEMP&quot;: &quot;TEMP:225.5&quot;,</span>
+<span class="s">            &quot;GET_STATUS&quot;: &quot;STATUS:RUNNING&quot;,</span>
+<span class="s">            &quot;SET_FAN_SPEED&quot;: &quot;FAN:OK&quot;,</span>
+<span class="s">            &quot;SET_AUGER&quot;: &quot;AUGER:OK&quot;</span>
+<span class="s">        }</span>
+
+<span class="s">        base_cmd = command.split(&#39;:&#39;)[0]</span>
+<span class="s">        return responses.get(base_cmd, &quot;OK&quot;)</span>
+
+<span class="s"># Create WebSocket mock for device service</span>
+<span class="s">cat &gt; websocket_mock.py &lt;&lt; &#39;EOF</span><span class="s1">&#39;</span>
+<span class="s1">#!/usr/bin/env python3</span>
+<span class="s1">&quot;&quot;&quot;</span>
+<span class="s1">Mock WebSocket Service for Device Communication</span>
+<span class="s1">&quot;&quot;&quot;</span>
+<span class="s1">import asyncio</span>
+<span class="s1">import websockets</span>
+<span class="s1">import json</span>
+<span class="s1">import time</span>
+
+<span class="s1">class WebSocketMock:</span>
+<span class="s1">    def __init__(self):</span>
+<span class="s1">        self.clients = set()</span>
+
+<span class="s1">    async def register_client(self, websocket):</span>
+<span class="s1">        self.clients.add(websocket)</span>
+<span class="s1">        print(f&quot;Client connected: {websocket.remote_address}&quot;)</span>
+
+<span class="s1">    async def unregister_client(self, websocket):</span>
+<span class="s1">        self.clients.remove(websocket)</span>
+<span class="s1">        print(f&quot;Client disconnected: {websocket.remote_address}&quot;)</span>
+
+<span class="s1">    async def broadcast_data(self):</span>
+<span class="s1">        &quot;&quot;&quot;Broadcast mock sensor data to all connected clients&quot;&quot;&quot;</span>
+<span class="s1">        while True:</span>
+<span class="s1">            if self.clients:</span>
+<span class="s1">                message = {</span>
+<span class="s1">                    &#39;</span>type<span class="s1">&#39;: &#39;</span>sensor_data<span class="s1">&#39;,</span>
+<span class="s1">                    &#39;</span>timestamp<span class="s1">&#39;: time.time(),</span>
+<span class="s1">                    &#39;</span>data<span class="s1">&#39;: {</span>
+<span class="s1">                        &#39;</span>smoker_temp<span class="s1">&#39;: 225.0 + (time.time() % 10 - 5),</span>
+<span class="s1">                        &#39;</span>meat_temp<span class="s1">&#39;: 145.0 + (time.time() % 5 - 2.5),</span>
+<span class="s1">                        &#39;</span>fan_speed<span class="s1">&#39;: 50,</span>
+<span class="s1">                        &#39;</span>auger_status<span class="s1">&#39;: &#39;</span>ON<span class="s1">&#39;</span>
+<span class="s1">                    }</span>
+<span class="s1">                }</span>
+
+<span class="s1">                disconnected = set()</span>
+<span class="s1">                for client in self.clients:</span>
+<span class="s1">                    try:</span>
+<span class="s1">                        await client.send(json.dumps(message))</span>
+<span class="s1">                    except websockets.exceptions.ConnectionClosed:</span>
+<span class="s1">                        disconnected.add(client)</span>
+
+<span class="s1">                # Remove disconnected clients</span>
+<span class="s1">                for client in disconnected:</span>
+<span class="s1">                    await self.unregister_client(client)</span>
+
+<span class="s1">            await asyncio.sleep(2)</span>
+
+<span class="s1">    async def handle_client(self, websocket, path):</span>
+<span class="s1">        await self.register_client(websocket)</span>
+<span class="s1">        try:</span>
+<span class="s1">            async for message in websocket:</span>
+<span class="s1">                data = json.loads(message)</span>
+<span class="s1">                print(f&quot;Received: {data}&quot;)</span>
+
+<span class="s1">                # Echo back confirmation</span>
+<span class="s1">                response = {</span>
+<span class="s1">                    &#39;</span>type<span class="s1">&#39;: &#39;</span>command_ack<span class="s1">&#39;,</span>
+<span class="s1">                    &#39;</span>original<span class="s1">&#39;: data,</span>
+<span class="s1">                    &#39;</span>status<span class="s1">&#39;: &#39;</span>success<span class="s1">&#39;</span>
+<span class="s1">                }</span>
+<span class="s1">                await websocket.send(json.dumps(response))</span>
+
+<span class="s1">        except websockets.exceptions.ConnectionClosed:</span>
+<span class="s1">            pass</span>
+<span class="s1">        finally:</span>
+<span class="s1">            await self.unregister_client(websocket)</span>
+
+<span class="s1">mock = WebSocketMock()</span>
+
+<span class="s1"># Start WebSocket server</span>
+<span class="s1">start_server = websockets.serve(mock.handle_client, &quot;0.0.0.0&quot;, 8765)</span>
+
+<span class="s1"># Start broadcasting task</span>
+<span class="s1">async def main():</span>
+<span class="s1">    await asyncio.gather(</span>
+<span class="s1">        start_server,</span>
+<span class="s1">        mock.broadcast_data()</span>
+<span class="s1">    )</span>
+
+<span class="s1">if __name__ == &#39;</span>__main__<span class="s1">&#39;:</span>
+<span class="s1">    asyncio.run(main())</span>
+<span class="s1">EOF</span>
+
+<span class="s1"># Create systemd services for mock services</span>
+<span class="s1">cat &gt; /etc/systemd/system/temperature-mock.service &lt;&lt; &#39;</span>EOF<span class="s1">&#39;</span>
+<span class="s1">[Unit]</span>
+<span class="s1">Description=Temperature Mock Service</span>
+<span class="s1">After=network.target</span>
+
+<span class="s1">[Service]</span>
+<span class="s1">Type=simple</span>
+<span class="s1">User=pi</span>
+<span class="s1">WorkingDirectory=/opt/smoker-mocks</span>
+<span class="s1">ExecStart=/usr/bin/python3 temperature_mock.py</span>
+<span class="s1">Restart=always</span>
+
+<span class="s1">[Install]</span>
+<span class="s1">WantedBy=multi-user.target</span>
+<span class="s1">EOF</span>
+
+<span class="s1">cat &gt; /etc/systemd/system/websocket-mock.service &lt;&lt; &#39;</span>EOF<span class="err">&#39;</span>
+<span class="o">[</span>Unit<span class="o">]</span>
+<span class="nv">Description</span><span class="o">=</span>WebSocket<span class="w"> </span>Mock<span class="w"> </span>Service
+<span class="nv">After</span><span class="o">=</span>network.target
+
+<span class="o">[</span>Service<span class="o">]</span>
+<span class="nv">Type</span><span class="o">=</span>simple
+<span class="nv">User</span><span class="o">=</span>pi
+<span class="nv">WorkingDirectory</span><span class="o">=</span>/opt/smoker-mocks
+<span class="nv">ExecStart</span><span class="o">=</span>/usr/bin/python3<span class="w"> </span>websocket_mock.py
+<span class="nv">Restart</span><span class="o">=</span>always
+
+<span class="o">[</span>Install<span class="o">]</span>
+<span class="nv">WantedBy</span><span class="o">=</span>multi-user.target
+EOF
+
+<span class="c1"># Set permissions and enable services</span>
+chmod<span class="w"> </span>+x<span class="w"> </span>/opt/smoker-mocks/*.py
+chown<span class="w"> </span>-R<span class="w"> </span>pi:pi<span class="w"> </span>/opt/smoker-mocks
+
+systemctl<span class="w"> </span>daemon-reload
+systemctl<span class="w"> </span><span class="nb">enable</span><span class="w"> </span>temperature-mock.service
+systemctl<span class="w"> </span><span class="nb">enable</span><span class="w"> </span>websocket-mock.service
+systemctl<span class="w"> </span>start<span class="w"> </span>temperature-mock.service
+systemctl<span class="w"> </span>start<span class="w"> </span>websocket-mock.service
+
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Mock hardware services installed and started&quot;</span>
+</code></pre></div>
+<h3 id="device-configuration-script">Device Configuration Script</h3>
+<div class="highlight"><pre><span></span><code><span class="ch">#!/bin/bash</span>
+<span class="c1"># infra/terraform/environments/virtual-smoker/scripts/configure-device.sh</span>
+
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Configuring virtual smoker device environment...&quot;</span>
+
+<span class="c1"># Install Node.js environment for device service</span>
+curl<span class="w"> </span>-fsSL<span class="w"> </span>https://deb.nodesource.com/setup_18.x<span class="w"> </span><span class="p">|</span><span class="w"> </span>sudo<span class="w"> </span>-E<span class="w"> </span>bash<span class="w"> </span>-
+apt-get<span class="w"> </span>install<span class="w"> </span>-y<span class="w"> </span>nodejs
+
+<span class="c1"># Install global packages</span>
+npm<span class="w"> </span>install<span class="w"> </span>-g<span class="w"> </span>@nestjs/cli<span class="w"> </span>pm2
+
+<span class="c1"># Create device service directory</span>
+sudo<span class="w"> </span>-u<span class="w"> </span>pi<span class="w"> </span>mkdir<span class="w"> </span>-p<span class="w"> </span>/home/pi/smart-smoker-device
+<span class="nb">cd</span><span class="w"> </span>/home/pi/smart-smoker-device
+
+<span class="c1"># Clone and setup device service (in real implementation)</span>
+sudo<span class="w"> </span>-u<span class="w"> </span>pi<span class="w"> </span>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/benjr70/Smart-Smoker-V2.git<span class="w"> </span>.
+
+<span class="c1"># Install dependencies</span>
+sudo<span class="w"> </span>-u<span class="w"> </span>pi<span class="w"> </span>npm<span class="w"> </span>install
+
+<span class="c1"># Create device-specific environment configuration</span>
+sudo<span class="w"> </span>-u<span class="w"> </span>pi<span class="w"> </span>cat<span class="w"> </span>&gt;<span class="w"> </span>.env<span class="w"> </span><span class="s">&lt;&lt; &#39;EOF&#39;</span>
+<span class="s"># Virtual Device Configuration</span>
+<span class="s">NODE_ENV=development</span>
+<span class="s">DEVICE_TYPE=virtual</span>
+<span class="s">MOCK_HARDWARE=true</span>
+
+<span class="s"># Serial Configuration</span>
+<span class="s">SERIAL_PORT=/dev/ttyUSB0</span>
+<span class="s">SERIAL_BAUDRATE=9600</span>
+
+<span class="s"># WebSocket Configuration</span>
+<span class="s">WEBSOCKET_URL=ws://localhost:8765</span>
+<span class="s">BACKEND_URL=ws://smoker-dev-cloud:3001</span>
+
+<span class="s"># Temperature Sensors</span>
+<span class="s">SMOKER_TEMP_SENSOR=28-000000000001</span>
+<span class="s">MEAT_TEMP_SENSOR=28-000000000002</span>
+<span class="s">AMBIENT_TEMP_SENSOR=28-000000000003</span>
+
+<span class="s"># Mock Service URLs</span>
+<span class="s">TEMP_MOCK_URL=http://localhost:5000</span>
+<span class="s">SERIAL_MOCK_ENABLED=true</span>
+<span class="s">WEBSOCKET_MOCK_ENABLED=true</span>
+
+<span class="s"># GPIO Pin Configuration (for mock GPIO library)</span>
+<span class="s">FAN_PIN=18</span>
+<span class="s">AUGER_PIN=19</span>
+<span class="s">TEMP_ALERT_PIN=20</span>
+<span class="s">EOF</span>
+
+<span class="c1"># Create PM2 ecosystem file for device service</span>
+sudo<span class="w"> </span>-u<span class="w"> </span>pi<span class="w"> </span>cat<span class="w"> </span>&gt;<span class="w"> </span>ecosystem.config.js<span class="w"> </span><span class="s">&lt;&lt; &#39;EOF&#39;</span>
+<span class="s">module.exports = {</span>
+<span class="s">  apps: [{</span>
+<span class="s">    name: &#39;virtual-smoker-device&#39;,</span>
+<span class="s">    script: &#39;dist/main.js&#39;,</span>
+<span class="s">    instances: 1,</span>
+<span class="s">    autorestart: true,</span>
+<span class="s">    watch: false,</span>
+<span class="s">    max_memory_restart: &#39;1G&#39;,</span>
+<span class="s">    env: {</span>
+<span class="s">      NODE_ENV: &#39;development&#39;,</span>
+<span class="s">      PORT: 3002</span>
+<span class="s">    }</span>
+<span class="s">  }]</span>
+<span class="s">};</span>
+<span class="s">EOF</span>
+
+<span class="c1"># Install Tailscale for network integration</span>
+curl<span class="w"> </span>-fsSL<span class="w"> </span>https://tailscale.com/install.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>sh
+
+<span class="c1"># Configure automatic startup script</span>
+sudo<span class="w"> </span>-u<span class="w"> </span>pi<span class="w"> </span>cat<span class="w"> </span>&gt;<span class="w"> </span>/home/pi/start-virtual-smoker.sh<span class="w"> </span><span class="s">&lt;&lt; &#39;EOF&#39;</span>
+<span class="s">#!/bin/bash</span>
+<span class="s">echo &quot;Starting Virtual Smoker Device Services...&quot;</span>
+
+<span class="s"># Start Tailscale if not running</span>
+<span class="s">if ! pgrep -x &quot;tailscaled&quot; &gt; /dev/null; then</span>
+<span class="s">    sudo systemctl start tailscaled</span>
+<span class="s">    sleep 3</span>
+<span class="s">fi</span>
+
+<span class="s"># Connect to Tailscale network</span>
+<span class="s">if [ ! -z &quot;$TAILSCALE_AUTH_KEY&quot; ]; then</span>
+<span class="s">    sudo tailscale up --authkey=$TAILSCALE_AUTH_KEY --hostname=virtual-smoker</span>
+<span class="s">fi</span>
+
+<span class="s"># Build and start device service</span>
+<span class="s">cd /home/pi/smart-smoker-device</span>
+<span class="s">npm run build</span>
+<span class="s">pm2 start ecosystem.config.js</span>
+
+<span class="s">echo &quot;Virtual Smoker Device is ready!&quot;</span>
+<span class="s">echo &quot;VNC: Connect to $(hostname -I | awk &#39;{print $1}&#39;):5901&quot;</span>
+<span class="s">echo &quot;Device Service: http://$(hostname -I | awk &#39;{print $1}&#39;):3002&quot;</span>
+<span class="s">echo &quot;Mock Temperature API: http://$(hostname -I | awk &#39;{print $1}&#39;):5000&quot;</span>
+<span class="s">echo &quot;Mock WebSocket: ws://$(hostname -I | awk &#39;{print $1}&#39;):8765&quot;</span>
+<span class="s">EOF</span>
+
+chmod<span class="w"> </span>+x<span class="w"> </span>/home/pi/start-virtual-smoker.sh
+
+<span class="c1"># Create desktop shortcut for easy access</span>
+sudo<span class="w"> </span>-u<span class="w"> </span>pi<span class="w"> </span>mkdir<span class="w"> </span>-p<span class="w"> </span>/home/pi/Desktop
+sudo<span class="w"> </span>-u<span class="w"> </span>pi<span class="w"> </span>cat<span class="w"> </span>&gt;<span class="w"> </span>/home/pi/Desktop/SmartSmokerDev.desktop<span class="w"> </span><span class="s">&lt;&lt; &#39;EOF&#39;</span>
+<span class="s">[Desktop Entry]</span>
+<span class="s">Version=1.0</span>
+<span class="s">Type=Application</span>
+<span class="s">Name=Smart Smoker Development</span>
+<span class="s">Comment=Start Smart Smoker development environment</span>
+<span class="s">Exec=/home/pi/start-virtual-smoker.sh</span>
+<span class="s">Icon=applications-development</span>
+<span class="s">Terminal=true</span>
+<span class="s">Categories=Development;</span>
+<span class="s">EOF</span>
+
+chmod<span class="w"> </span>+x<span class="w"> </span>/home/pi/Desktop/SmartSmokerDev.desktop
+
+<span class="c1"># Set ownership</span>
+chown<span class="w"> </span>-R<span class="w"> </span>pi:pi<span class="w"> </span>/home/pi/
+
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Virtual smoker device configuration complete&quot;</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Reboot the system to complete setup&quot;</span>
+</code></pre></div>
+<h3 id="virtual-smoker-testing-guide">Virtual Smoker Testing Guide</h3>
+<div class="highlight"><pre><span></span><code><span class="gh"># Virtual Smoker Device Testing</span>
+
+<span class="gu">## Access Methods</span>
+
+<span class="gu">### VNC Access</span>
+<span class="k">-</span><span class="w"> </span><span class="gs">**Host**</span>: <span class="sb">`&lt;vm-ip-address&gt;`</span>
+<span class="k">-</span><span class="w"> </span><span class="gs">**Port**</span>: <span class="sb">`5901`</span>
+<span class="k">-</span><span class="w"> </span><span class="gs">**Password**</span>: <span class="sb">`smoker123`</span>
+<span class="k">-</span><span class="w"> </span><span class="gs">**Resolution**</span>: <span class="sb">`1280x800`</span>
+
+<span class="gu">### SSH Access</span>
+```bash
+ssh pi@&lt;vm-ip-address&gt;
+<span class="gh"># Password: configured during terraform apply</span>
+</code></pre></div>
+<h3 id="web-interfaces">Web Interfaces</h3>
+<ul>
+<li><strong>Mock Temperature API</strong>: <code>http://&lt;vm-ip&gt;:5000</code></li>
+<li><strong>Device Service</strong>: <code>http://&lt;vm-ip&gt;:3002</code> </li>
+<li><strong>WebSocket Mock</strong>: <code>ws://&lt;vm-ip&gt;:8765</code></li>
+</ul>
+<h2 id="testing-scenarios">Testing Scenarios</h2>
+<h3 id="1-temperature-sensor-testing">1. Temperature Sensor Testing</h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># Check mock temperature service</span>
+curl<span class="w"> </span>http://localhost:5000/status
+
+<span class="c1"># Get specific sensor reading</span>
+curl<span class="w"> </span>http://localhost:5000/temperature/28-000000000001
+
+<span class="c1"># Set target temperature</span>
+curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:5000/temperature/28-000000000001/target/250
+</code></pre></div>
+<h3 id="2-device-service-integration">2. Device Service Integration</h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># Check device service status</span>
+pm2<span class="w"> </span>status
+
+<span class="c1"># View device service logs</span>
+pm2<span class="w"> </span>logs<span class="w"> </span>virtual-smoker-device
+
+<span class="c1"># Restart device service</span>
+pm2<span class="w"> </span>restart<span class="w"> </span>virtual-smoker-device
+</code></pre></div>
+<h3 id="3-websocket-communication">3. WebSocket Communication</h3>
+<div class="highlight"><pre><span></span><code><span class="c1">// Test WebSocket connection</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">ws</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">WebSocket</span><span class="p">(</span><span class="s1">&#39;ws://localhost:8765&#39;</span><span class="p">);</span>
+<span class="nx">ws</span><span class="p">.</span><span class="nx">onmessage</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="nx">event</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;Received:&#39;</span><span class="p">,</span><span class="w"> </span><span class="nb">JSON</span><span class="p">.</span><span class="nx">parse</span><span class="p">(</span><span class="nx">event</span><span class="p">.</span><span class="nx">data</span><span class="p">));</span>
+<span class="p">};</span>
+
+<span class="c1">// Send test command</span>
+<span class="nx">ws</span><span class="p">.</span><span class="nx">send</span><span class="p">(</span><span class="nb">JSON</span><span class="p">.</span><span class="nx">stringify</span><span class="p">({</span>
+<span class="w">    </span><span class="nx">type</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;set_temperature&#39;</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">target</span><span class="o">:</span><span class="w"> </span><span class="mf">225</span>
+<span class="p">}));</span>
+</code></pre></div>
+<h2 id="development-workflow">Development Workflow</h2>
+<ol>
+<li><strong>Connect via VNC</strong> for GUI access</li>
+<li><strong>Open terminal</strong> and navigate to project</li>
+<li><strong>Make code changes</strong> using nano or vim</li>
+<li><strong>Test changes</strong> using mock services</li>
+<li><strong>Deploy to dev environment</strong> via CI/CD</li>
+<li><strong>Validate</strong> against real backend</li>
+</ol>
+<h2 id="mock-service-urls">Mock Service URLs</h2>
+<ul>
+<li>Temperature API: http://localhost:5000</li>
+<li>WebSocket Server: ws://localhost:8765</li>
+<li>Device Service: http://localhost:3002
+<div class="highlight"><pre><span></span><code>## Implementation Steps
+
+### Step 1: Terraform Setup (Week 1)
+1. **Create Terraform Configuration**
+   ```bash
+   mkdir -p infra/terraform/{modules,environments,shared}
+   cd infra/terraform
+   ```
+
+2. **Configure Proxmox Provider**
+   - Set up API credentials
+   - Test connection to Proxmox
+   - Create basic provider configuration
+
+3. **Create LXC Module**
+   - Parameterized container creation
+   - Network configuration
+   - Storage allocation
+   - Post-creation provisioning
+
+### Step 2: GitHub Runner Environment (Week 1-2)
+1. **Provision Runner LXC**
+   ```bash
+   cd infra/terraform/environments/github-runner
+   terraform init
+   terraform plan
+   terraform apply
+   ```
+
+2. **Install and Configure Runner**
+   - Download GitHub Actions runner
+   - Register with repository
+   - Install Terraform and dependencies
+   - Configure Tailscale access
+
+3. **Test Runner Functionality**
+   - Trigger test workflow
+   - Verify Proxmox API access
+   - Test Terraform execution
+
+### Step 3: Cloud Environments (Week 2)
+1. **Create Development Environment**
+   ```bash
+   cd infra/terraform/environments/dev-cloud
+   terraform init
+   terraform plan
+   terraform apply
+   ```
+
+2. **Create Production Environment**
+   ```bash
+   cd infra/terraform/environments/prod-cloud
+   terraform init
+   terraform plan
+   terraform apply
+   ```
+
+3. **Configure Networking**
+   - Set up Tailscale on all containers
+   - Configure internal communication
+   - Test connectivity between environments
+
+### Step 4: Integration Testing (Week 2-3)
+1. **End-to-End Testing**
+   - Deploy test application to dev environment
+   - Verify GitHub runner can manage infrastructure
+   - Test Tailscale connectivity and funnels
+
+2. **Backup and Monitoring Setup**
+   - Configure LXC container backups
+   - Set up basic monitoring
+   - Create alerting for critical services
+
+## Tailscale Integration
+
+### Network Configuration
+```bash
+# Development Environment Tailscale Setup
+tailscale up --authkey=${TAILSCALE_AUTH_KEY} --hostname=smoker-dev-cloud
+tailscale serve http:80 / 80
+tailscale serve http:3001 / 3001
+
+# Production Environment Tailscale Setup
+tailscale up --authkey=${TAILSCALE_AUTH_KEY} --hostname=smokecloud
+tailscale serve http:80 / 80
+tailscale serve http:3001 / 3001
+tailscale funnel 80 on
+tailscale funnel 3001 on
+</code></pre></div></li>
+</ul>
+<h3 id="automated-funnel-configuration">Automated Funnel Configuration</h3>
+<div class="highlight"><pre><span></span><code><span class="ch">#!/bin/bash</span>
+<span class="c1"># Production Tailscale Funnel Setup Script</span>
+
+configure_production_funnel<span class="o">()</span><span class="w"> </span><span class="o">{</span>
+<span class="w">  </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Configuring Tailscale funnel for production...&quot;</span>
+
+<span class="w">  </span><span class="c1"># Set up serves for existing endpoints</span>
+<span class="w">  </span>tailscale<span class="w"> </span>serve<span class="w"> </span>http:80<span class="w"> </span>/<span class="w"> </span><span class="m">80</span>
+<span class="w">  </span>tailscale<span class="w"> </span>serve<span class="w"> </span>http:8443<span class="w"> </span>/<span class="w"> </span><span class="m">3001</span>
+
+<span class="w">  </span><span class="c1"># Enable funnels for public access</span>
+<span class="w">  </span>tailscale<span class="w"> </span>funnel<span class="w"> </span><span class="m">80</span><span class="w"> </span>on
+<span class="w">  </span>tailscale<span class="w"> </span>funnel<span class="w"> </span><span class="m">8443</span><span class="w"> </span>on
+
+<span class="w">  </span><span class="c1"># Verify configuration matches current setup</span>
+<span class="w">  </span><span class="nv">expected_status</span><span class="o">=</span><span class="k">$(</span>cat<span class="w"> </span><span class="s">&lt;&lt; EOF</span>
+<span class="s">https://smokecloud.tail74646.ts.net (Funnel on)</span>
+<span class="s">|-- / proxy http://127.0.0.1:80</span>
+
+<span class="s">https://smokecloud.tail74646.ts.net:8443 (Funnel on)</span>
+<span class="s">|-- / proxy http://127.0.0.1:3001</span>
+<span class="s">EOF</span>
+<span class="k">)</span>
+
+<span class="w">  </span><span class="nv">current_status</span><span class="o">=</span><span class="k">$(</span>tailscale<span class="w"> </span>funnel<span class="w"> </span>status<span class="k">)</span>
+<span class="w">  </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Current Tailscale status:&quot;</span>
+<span class="w">  </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$current_status</span><span class="s2">&quot;</span>
+<span class="o">}</span>
+</code></pre></div>
+<h2 id="security-configuration">Security Configuration</h2>
+<h3 id="proxmox-api-access">Proxmox API Access</h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># Create dedicated Terraform user</span>
+pveum<span class="w"> </span>user<span class="w"> </span>add<span class="w"> </span>terraform@pve
+pveum<span class="w"> </span>passwd<span class="w"> </span>terraform@pve
+
+<span class="c1"># Create role with minimal required permissions</span>
+pveum<span class="w"> </span>role<span class="w"> </span>add<span class="w"> </span>TerraformRole<span class="w"> </span>-privs<span class="w"> </span><span class="s2">&quot;VM.Allocate VM.Clone VM.Config.CDROM VM.Config.CPU VM.Config.Cloudinit VM.Config.Disk VM.Config.HWType VM.Config.Memory VM.Config.Network VM.Config.Options VM.Monitor VM.Audit VM.PowerMgmt Datastore.AllocateSpace Datastore.Audit Pool.Allocate Sys.Audit Sys.Console Sys.Modify&quot;</span>
+
+<span class="c1"># Assign role to user</span>
+pveum<span class="w"> </span>aclmod<span class="w"> </span>/<span class="w"> </span>-user<span class="w"> </span>terraform@pve<span class="w"> </span>-role<span class="w"> </span>TerraformRole
+</code></pre></div>
+<h3 id="ssh-key-management">SSH Key Management</h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># Generate SSH key for automation</span>
+ssh-keygen<span class="w"> </span>-t<span class="w"> </span>ed25519<span class="w"> </span>-f<span class="w"> </span>~/.ssh/proxmox_automation<span class="w"> </span>-N<span class="w"> </span><span class="s2">&quot;&quot;</span>
+
+<span class="c1"># Add public key to Terraform configuration</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;ssh_public_keys = [\&quot;</span><span class="k">$(</span>cat<span class="w"> </span>~/.ssh/proxmox_automation.pub<span class="k">)</span><span class="s2">\&quot;]&quot;</span><span class="w"> </span>&gt;&gt;<span class="w"> </span>terraform.tfvars
+</code></pre></div>
+<h2 id="testing-strategy">Testing Strategy</h2>
+<h3 id="infrastructure-testing">Infrastructure Testing</h3>
+<ul>
+<li><strong>Terraform Validation</strong>: <code>terraform validate</code> on all configurations</li>
+<li><strong>Plan Verification</strong>: Review <code>terraform plan</code> output before apply</li>
+<li><strong>Connectivity Testing</strong>: Verify network access between containers</li>
+<li><strong>Resource Verification</strong>: Confirm CPU, memory, and storage allocation</li>
+</ul>
+<h3 id="integration-testing">Integration Testing</h3>
+<ul>
+<li><strong>GitHub Runner Testing</strong>: Execute test workflows from runner</li>
+<li><strong>Tailscale Testing</strong>: Verify internal and external network access</li>
+<li><strong>Application Deployment</strong>: Deploy test containers to verify functionality</li>
+<li><strong>Backup Testing</strong>: Test container backup and restore procedures</li>
+</ul>
+<h3 id="security-testing">Security Testing</h3>
+<ul>
+<li><strong>Access Control</strong>: Verify least-privilege access works</li>
+<li><strong>Network Isolation</strong>: Test container network boundaries</li>
+<li><strong>Authentication</strong>: Validate Tailscale and SSH key authentication</li>
+<li><strong>API Security</strong>: Confirm Proxmox API access restrictions</li>
+</ul>
+<h2 id="risk-assessment">Risk Assessment</h2>
+<h3 id="high-priority-risks">High Priority Risks</h3>
+<table>
+<thead>
+<tr>
+<th>Risk</th>
+<th>Impact</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Proxmox API authentication failure</td>
+<td>High</td>
+<td>Test credentials early, have backup access method</td>
+</tr>
+<tr>
+<td>GitHub runner token expiration</td>
+<td>Medium</td>
+<td>Implement token rotation process</td>
+</tr>
+<tr>
+<td>Network connectivity issues</td>
+<td>Medium</td>
+<td>Document network troubleshooting procedures</td>
+</tr>
+<tr>
+<td>Resource exhaustion on Proxmox</td>
+<td>Medium</td>
+<td>Monitor resource usage, implement alerts</td>
+</tr>
+</tbody>
+</table>
+<h3 id="rollback-plan">Rollback Plan</h3>
+<ol>
+<li><strong>Infrastructure Rollback</strong>: Use <code>terraform destroy</code> to remove environments</li>
+<li><strong>Manual Cleanup</strong>: Document manual removal procedures</li>
+<li><strong>Backup Restoration</strong>: Restore from LXC container backups if needed</li>
+<li><strong>Fallback Deployment</strong>: Maintain ability to deploy manually</li>
+</ol>
+<h2 id="dependencies">Dependencies</h2>
+<h3 id="external-dependencies">External Dependencies</h3>
+<ul>
+<li>Proxmox VE server with API access enabled</li>
+<li>GitHub repository with Actions enabled</li>
+<li>Tailscale account with sufficient device limit</li>
+<li>Ubuntu 22.04 LTS template available in Proxmox</li>
+</ul>
+<h3 id="internal-dependencies">Internal Dependencies</h3>
+<ul>
+<li>Phase 1 container standardization completed</li>
+<li>Docker Hub repositories with new naming convention</li>
+<li>Team access to Proxmox management interface</li>
+<li>SSH access to Proxmox host for troubleshooting</li>
+</ul>
+<h2 id="success-metrics">Success Metrics</h2>
+<h3 id="quantitative-metrics">Quantitative Metrics</h3>
+<ul>
+<li><strong>100%</strong> infrastructure provisioned via Terraform</li>
+<li><strong>&lt; 10 minutes</strong> for complete environment provisioning</li>
+<li><strong>99%</strong> uptime for GitHub Actions runner</li>
+<li><strong>&lt; 30 seconds</strong> for Tailscale connectivity establishment</li>
+</ul>
+<h3 id="qualitative-metrics">Qualitative Metrics</h3>
+<ul>
+<li>Infrastructure changes tracked in version control</li>
+<li>Team confidence in infrastructure automation</li>
+<li>Simplified environment management procedures</li>
+<li>Enhanced security through automated provisioning</li>
+</ul>
+<h2 id="deliverables">Deliverables</h2>
+<h3 id="phase-2-outputs">Phase 2 Outputs</h3>
+<ul>
+<li>[ ] Complete Terraform configuration for all environments</li>
+<li>[ ] Functional GitHub Actions self-hosted runner</li>
+<li>[ ] Development cloud environment (LXC)</li>
+<li>[ ] Production cloud environment (LXC)</li>
+<li>[ ] Tailscale network integration</li>
+<li>[ ] Backup and monitoring configuration</li>
+<li>[ ] Security hardening implementation</li>
+<li>[ ] Infrastructure documentation and runbooks</li>
+</ul>
+<h3 id="handoff-to-phase-3">Handoff to Phase 3</h3>
+<ul>
+<li>All infrastructure environments provisioned and accessible</li>
+<li>GitHub runner capable of executing Terraform deployments</li>
+<li>Tailscale networking functional for all environments</li>
+<li>Basic monitoring and backup procedures in place</li>
+<li>Team trained on infrastructure management</li>
+</ul>
+<h2 id="next-phase-preparation">Next Phase Preparation</h2>
+<h3 id="prerequisites-for-phase-3">Prerequisites for Phase 3</h3>
+<ul>
+<li>[ ] All infrastructure environments operational</li>
+<li>[ ] GitHub runner successfully executing workflows</li>
+<li>[ ] Tailscale networking functional</li>
+<li>[ ] Security and monitoring baselines established</li>
+<li>[ ] Team trained on infrastructure management</li>
+<li>[ ] Documentation complete and reviewed</li>
+</ul>
+<hr />
+<p><strong>Phase Owner</strong>: DevOps Team<br />
+<strong>Status</strong>: Ready for Implementation<br />
+<strong>Dependencies</strong>: Phase 1 completion<br />
+<strong>Risk Level</strong>: High</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://www.linkedin.com/in/ben-rolf-275368a4/" target="_blank" rel="noopener" title="www.linkedin.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.0.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M416 32H31.9C14.3 32 0 46.5 0 64.3v383.4C0 465.5 14.3 480 31.9 480H416c17.6 0 32-14.5 32-32.3V64.3c0-17.8-14.4-32.3-32-32.3M135.4 416H69V202.2h66.5V416zM102.2 96a38.5 38.5 0 1 1 0 77 38.5 38.5 0 1 1 0-77m282.1 320h-66.4V312c0-24.8-.5-56.7-34.5-56.7-34.6 0-39.9 27-39.9 54.9V416h-66.4V202.2h63.7v29.2h.9c8.9-16.8 30.6-34.5 62.9-34.5 67.2 0 79.7 44.3 79.7 101.9z"/></svg>
+    </a>
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/benjr70" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.0.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.instant", "navigation.tabs", "navigation.tabs.sticky", "navigation.footer", "navigation.sections", "navigation.indexes", "toc.follow", "toc.integrate"], "search": "../../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.f55a23d4.min.js"></script>
+      
+    
+  </body>
+</html>
