@@ -25,11 +25,13 @@ This directory contains GitHub Actions workflows for the Smart Smoker V2 project
 
 ### Other Workflows
 - `install.yml`: Installation and setup workflow
-- `build-publish-cloud.yml`: Cloud deployment build
-- `build-publish-smoker.yml`: Smoker app build
-- `cloud-deploy.yml`: Cloud environment deployment
-- `smoker-deploy.yml`: Smoker environment deployment  
+- `build.yml`: Application build validation (reusable)
+- `publish.yml`: Docker Hub publishing (reusable)
+- `cloud-deploy.yml`: Cloud environment deployment (reusable)
+- `smoker-deploy.yml`: Smoker environment deployment (reusable)  
 - `docs.yml`: Documentation deployment
+- `deploy-version.yml`: Manually deploy a specific version/tag to cloud and/or smoker
+- `release.yml`: Build, publish, and deploy. Supports manual version input and Release tag trigger
 
 ## Branch Protection
 

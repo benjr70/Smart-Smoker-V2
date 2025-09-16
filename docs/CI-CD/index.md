@@ -55,6 +55,9 @@ Production deployment processes and infrastructure management:
 - **Network Configuration**: Tailscale setup and SSL management
 - **Monitoring Setup**: Portainer installation and configuration
 
+### [Manual Version Deployment](manual-version-deployment.md)
+Runbook for deploying specific container versions to the cloud using GitHub Actions or local Docker Compose, including rollback and verification steps.
+
 ## Quick Reference
 
 ### CI Pipeline Status Checks

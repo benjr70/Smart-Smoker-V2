@@ -3,10 +3,11 @@
 name: Release Smart Smoker v2
 
 on:
+  # Manual release (existing behavior)
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release (e.g., 1.0.0)'
+        description: 'Version to release (e.g., 1.0.0 or v1.0.0)'
         type: string
         required: true
       deploy_smoker:
@@ -19,52 +20,110 @@ on:
         type: boolean
         required: false
         default: true
+  # New: auto-run on GitHub Release publish
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
+  # Normalize version/ref from workflow_dispatch input or release tag
+  set-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version_numeric: ${{ steps.norm.outputs.version_numeric }}
+      version_tag: ${{ steps.norm.outputs.version_tag }}
+      ref: ${{ steps.norm.outputs.ref }}
+      deploy_smoker_default: ${{ steps.norm.outputs.deploy_smoker_default }}
+      deploy_cloud_default: ${{ steps.norm.outputs.deploy_cloud_default }}
+    steps:
+      - id: norm
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            TAG="${{ github.event.release.tag_name }}"
+            NUM="${TAG#v}"
+            VTAG="v${NUM}"
+            REF="$VTAG"
+            DEPLOY_SMOKER_DEFAULT=true
+            DEPLOY_CLOUD_DEFAULT=true
+          else
+            IN="${{ github.event.inputs.version }}"
+            # trim whitespace and normalize leading V to v
+            IN="$(echo "$IN" | xargs)"
+            IN="${IN/#V/v}"
+            NUM="${IN#v}"
+            VTAG="v${NUM}"
+            # Use the tag ref when a tag exists; otherwise this will checkout the branch/commit if it matches
+            REF="$VTAG"
+            DEPLOY_SMOKER_DEFAULT=${{ github.event.inputs.deploy_smoker == 'true' && 'true' || 'false' }}
+            DEPLOY_CLOUD_DEFAULT=${{ github.event.inputs.deploy_cloud == 'true' && 'true' || 'false' }}
+          fi
+          echo "version_numeric=$NUM" >> "$GITHUB_OUTPUT"
+          echo "version_tag=$VTAG" >> "$GITHUB_OUTPUT"
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "deploy_smoker_default=$DEPLOY_SMOKER_DEFAULT" >> "$GITHUB_OUTPUT"
+          echo "deploy_cloud_default=$DEPLOY_CLOUD_DEFAULT" >> "$GITHUB_OUTPUT"
+
   # Build smoker applications (no Docker)
   build-smoker:
+    needs: set-version
     uses: ./.github/workflows/build.yml
     with:
       apps: '["smoker", "device-service", "electron-shell"]'
       mode: 'build'
-      ref: ${{ github.event.inputs.version }}
+      ref: ${{ needs.set-version.outputs.ref }}
 
   # Build cloud applications (no Docker)
   build-cloud:
+    needs: set-version
     uses: ./.github/workflows/build.yml
     with:
       apps: '["backend", "frontend"]'
       mode: 'build'
-      ref: ${{ github.event.inputs.version }}
+      ref: ${{ needs.set-version.outputs.ref }}
 
   # Build and publish smoker Docker images
   publish-smoker:
+    needs: [set-version, build-smoker]
     uses: ./.github/workflows/publish.yml
     with:
       apps: '["smoker", "device-service", "electron-shell"]'
-      version: ${{ github.event.inputs.version }}
-      ref: ${{ github.event.inputs.version }}
+      version: ${{ needs.set-version.outputs.version_numeric }}
+      ref: ${{ needs.set-version.outputs.ref }}
+      mode: 'release'
+      platforms: 'linux/amd64,linux/arm/v7'
     secrets: inherit
 
   # Build and publish cloud Docker images
   publish-cloud:
+    needs: [set-version, build-cloud]
     uses: ./.github/workflows/publish.yml
     with:
       apps: '["backend", "frontend"]'
-      version: ${{ github.event.inputs.version }}
-      ref: ${{ github.event.inputs.version }}
+      version: ${{ needs.set-version.outputs.version_numeric }}
+      ref: ${{ needs.set-version.outputs.ref }}
+      mode: 'release'
+      platforms: 'linux/amd64,linux/arm/v7'
     secrets: inherit
 
-  # Deploy to smoker devices
+  # Deploy to smoker devices (optional; Watchtower will also update :latest)
   deploy-smoker:
-    if: ${{ github.event.inputs.deploy_smoker == 'true' }}
+    if: ${{ needs.set-version.outputs.deploy_smoker_default == 'true' }}
     needs: publish-smoker
     uses: ./.github/workflows/smoker-deploy.yml
+    secrets: inherit
 
-  # Deploy to cloud infrastructure
+  # Deploy to cloud infrastructure (pinned to version tag)
   deploy-cloud:
-    if: ${{ github.event.inputs.deploy_cloud == 'true' }}
+    if: ${{ needs.set-version.outputs.deploy_cloud_default == 'true' }}
     needs: publish-cloud
     uses: ./.github/workflows/cloud-deploy.yml
     with:
-      version: v${{ github.event.inputs.version }}
+      version: ${{ needs.set-version.outputs.version_tag }}
+    secrets: inherit
