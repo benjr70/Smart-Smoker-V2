@@ -12,6 +12,13 @@ on:
         required: false
         default: 'master'
 
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly
+  cancel-in-progress: true
+
 jobs:
   publish-nightly:
     uses: ./.github/workflows/publish.yml

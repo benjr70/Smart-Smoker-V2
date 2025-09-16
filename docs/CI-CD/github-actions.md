@@ -30,6 +30,7 @@ This directory contains GitHub Actions workflows for the Smart Smoker V2 project
 - `cloud-deploy.yml`: Cloud environment deployment (reusable)
 - `smoker-deploy.yml`: Smoker environment deployment (reusable)  
 - `docs.yml`: Documentation deployment
+- `nightly.yml`: Nightly Dev Build & Deploy (publishes `:nightly` for testing)
 - `deploy-version.yml`: Manually deploy a specific version/tag to cloud and/or smoker
 - `release.yml`: Build, publish, and deploy. Supports manual version input and Release tag trigger
 

@@ -20,7 +20,10 @@ dimensions for the ui is build for 800 X 400
 To build electron shell use the `npm run forge:thin` cmd to build for you arch <br>
 use the `npm run forgeLinux64:thin` to build for pi 3 that is used on smoker (results may vary base on what you are building on)
 
-To run electron docker container on pi use this cdm <br>
+To run electron docker container on Pi use this cmd <br>
 ```
-sudo xhost local:root && sudo docker run --net=host -v /tmp/.X11-unix:/tmp/.X11-unix -e DISPLAY=unix$DISPLAY -v`pwd`/src:/app/src --rm -it --device /dev/snd benjr70/smart_smoker:electron-shell
+sudo xhost local:root && sudo docker run --net=host \
+  -v /tmp/.X11-unix:/tmp/.X11-unix -e DISPLAY=unix$DISPLAY \
+  -v "$(pwd)"/src:/app/src --rm -it --device /dev/snd \
+  benjr70/smart-smoker-electron-shell:latest
 ```
