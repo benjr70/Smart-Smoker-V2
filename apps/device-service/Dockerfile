@@ -19,4 +19,6 @@
 
   CMD ["npm", "run", "start:prod"]
 
-  # sudo docker run --privileged  --device=/dev/ttyUSB0 -p 3000:3000 --net host -it --volume /:/host -v /var/run/dbus:/var/run/dbus  benjr70/smart_smoker:device-serviceTest
+  # sudo docker run --privileged --device=/dev/ttyUSB0 -p 3000:3000 --net host -it \
+  #   --volume /:/host -v /var/run/dbus:/var/run/dbus \
+  #   benjr70/smart-smoker-device-service:device-serviceTest
