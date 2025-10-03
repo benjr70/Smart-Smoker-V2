@@ -107,3 +107,11 @@ out
 .vscode
 
 .webpack
+
+# Terraform state and local configuration
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+*.tfvars.json
+infra/proxmox/terraform/state/
