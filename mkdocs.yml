@@ -72,3 +72,14 @@ nav:
       - Test Coverage: CI-CD/test-coverage.md
       - Dependency Management: CI-CD/dependency-management.md
       - Deployment & Infrastructure: CI-CD/deployment-infrastructure.md
+  - Infrastructure:
+      - Infrastructure Plan: Infrastructure/proxmox-infrastructure-plan.md
+      - Phase 1 - Container Standardization: Infrastructure/phase-1-container-standardization.md
+      - Phase 2 - Proxmox Infrastructure:
+          - Overview: Infrastructure/phase-2-proxmox-infrastructure.md
+          - Terraform Setup Guide: Infrastructure/terraform-setup-guide.md
+          - Story 1 Completion: Infrastructure/phase-2-story-1-completion.md
+      - Phase 3 - Deployment Automation: Infrastructure/phase-3-deployment-automation.md
+      - Phase 4 - Testing & Documentation: Infrastructure/phase-4-testing-documentation.md
+      - Disaster Recovery Guide: Infrastructure/disaster-recovery-guide.md
+      - Secrets Management Guide: Infrastructure/secrets-management-guide.md

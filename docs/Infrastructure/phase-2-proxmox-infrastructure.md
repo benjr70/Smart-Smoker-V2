@@ -80,6 +80,21 @@ Proxmox Server
 - Environments can be recreated from scratch
 - Resource allocation matches specifications
 
+#### Implementation Notes (2025-09-28)
+- Terraform configuration lives at `infra/proxmox/terraform` with reusable modules for LXC containers and the ARM64 virtual device (`modules/lxc-container`, `modules/arm64-vm`).
+- Environment blueprints (`environments/*`) wrap the reusable modules to keep specs for the runner, dev cloud, prod cloud, and virtual smoker device readable.
+- A shared `terraform.tfvars.example` documents every required input; copy it to `terraform.tfvars` and replace placeholders before planning/applying.
+- State defaults to `infra/proxmox/terraform/state/terraform.tfstate`; switch to a remote backend before multiple engineers run Terraform.
+- A helper script at `infra/proxmox/scripts/create-cloud-init-template.sh` provisions the Ubuntu cloud-init VM template required for cloning the virtual smoker environment—run it on the Proxmox host and then reference the reported VMID in `clone_template`.
+
+#### Manual Validation Checklist
+1. From `infra/proxmox/terraform`, copy `terraform.tfvars.example` to `terraform.tfvars` and populate Proxmox API token, storage pools, and static IPs.
+2. Run `terraform init`.
+3. Validate `github-runner` first: `terraform plan -target=module.github_runner` and review the diff for resource sizing and networking.
+4. Apply the targeted plan with `terraform apply -target=module.github_runner` to create the container manually on the Proxmox host.
+5. Repeat for `module.dev_cloud`, `module.prod_cloud`, and `module.virtual_smoker` once the runner is verified.
+6. After testing, promote to full automation by running `terraform plan`/`terraform apply` without the `-target` flag.
+
 ### Story 2: Self-Hosted CI/CD
 **As a** developer  
 **I want** GitHub Actions to deploy to local infrastructure  

@@ -1,0 +1,139 @@
+# Rename this file to terraform.tfvars and update values with your environment specific details.
+# Never commit populated secrets. This example exists to document the expected inputs.
+
+proxmox = {
+  api_url          = "https://proxmox.example.local:8006/"
+
+  # API Token authentication (RECOMMENDED for production)
+  api_token_id     = "terraform@pve!iac"
+  api_token_secret = "CHANGE_ME"
+
+  # Password authentication (NOT RECOMMENDED - only for initial setup/testing)
+  # username         = "root@pam"
+  # password         = "CHANGE_ME"
+
+  # TLS verification (set to false only for self-signed certs in dev/test)
+  tls_insecure     = false
+
+  default_storage  = "local-lvm"
+  default_bridge   = "vmbr0"
+  ssh_public_keys  = ["ssh-ed25519 AAAA... team-key"]
+  dns_servers      = ["10.0.0.1", "10.0.0.2"]
+  search_domain    = "smoker.local"
+}
+
+network_bridges = {
+  vmbr1 = {
+    node_name = "pve-node-1"
+    name      = "vmbr1"
+    comment   = "Isolated network for virtual smoker testing"
+    autostart = true
+    ports     = []
+  }
+}
+
+github_runner = {
+  enabled          = true
+  target_node      = "pve-node-1"
+  hostname         = "github-runner"
+  description      = "Self-hosted GitHub Actions runner"
+  template         = "local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst"
+  storage          = "local-lvm"
+  disk_size        = 50
+  cpu_cores        = 2
+  memory_mb        = 4096
+  swap_mb          = 1024
+  network_bridge   = "vmbr0"
+  ipv4_cidr        = "10.20.0.10/24"
+  gateway          = "10.20.0.1"
+  dns_servers      = []
+  search_domain    = ""
+  ssh_public_keys  = []
+  initial_password = "CHANGE_ME"
+  resource_pool    = "smart-smoker"
+  features = {
+    nesting = true
+  }
+  tags             = ["github", "runner"]
+  start_after_create = true
+}
+
+dev_cloud = {
+  enabled          = true
+  target_node      = "pve-node-1"
+  hostname         = "smart-smoker-dev-cloud"
+  description      = "Development cloud environment"
+  template         = "local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst"
+  storage          = "local-lvm"
+  disk_size        = 20
+  cpu_cores        = 2
+  memory_mb        = 4096
+  swap_mb          = 1024
+  network_bridge   = "vmbr0"
+  ipv4_cidr        = "10.20.0.20/24"
+  gateway          = "10.20.0.1"
+  dns_servers      = []
+  search_domain    = ""
+  ssh_public_keys  = []
+  initial_password = "CHANGE_ME"
+  resource_pool    = "smart-smoker"
+  features = {
+    nesting = true
+  }
+  tags             = ["cloud", "dev"]
+  start_after_create = true
+}
+
+prod_cloud = {
+  enabled          = true
+  target_node      = "pve-node-2"
+  hostname         = "smart-smoker-cloud-prod"
+  description      = "Production cloud environment"
+  template         = "local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst"
+  storage          = "local-lvm"
+  disk_size        = 40
+  cpu_cores        = 4
+  memory_mb        = 8192
+  swap_mb          = 2048
+  network_bridge   = "vmbr0"
+  ipv4_cidr        = "10.20.0.30/24"
+  gateway          = "10.20.0.1"
+  dns_servers      = []
+  search_domain    = ""
+  ssh_public_keys  = []
+  initial_password = "CHANGE_ME"
+  resource_pool    = "smart-smoker"
+  features = {
+    nesting = true
+  }
+  tags               = ["cloud", "prod"]
+  start_after_create = true
+  # Note: To protect production from accidental deletion, manually add to modules/lxc-container/main.tf:
+  # lifecycle { prevent_destroy = true }
+}
+
+virtual_smoker = {
+  enabled             = true
+  target_node         = "pve-node-2"
+  vm_name             = "virtual-smoker-device"
+  description         = "ARM64 virtual smoker test device"
+  resource_pool       = "smart-smoker"
+  clone_template      = 9000
+  storage             = "local-lvm"
+  cpu_cores           = 2
+  cpu_sockets         = 1
+  cpu_type            = "host"
+  memory_mb           = 2048
+  network_bridge      = "vmbr1"
+  ipv4_cidr           = "10.30.0.40/24"
+  gateway             = "10.30.0.1"
+  dns_servers         = []
+  search_domain       = ""
+  ssh_public_keys     = []
+  cloud_init_user     = "smoker"
+  cloud_init_password = "CHANGE_ME"
+  mac_address         = ""
+  vlan_tag            = 0
+  tags                = ["device", "virtual"]
+  full_clone          = true
+}
