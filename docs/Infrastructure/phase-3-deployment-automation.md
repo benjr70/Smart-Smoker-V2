@@ -114,9 +114,314 @@ Deployment Infrastructure
 - Automated rollback on failure
 - Deployment status dashboard
 
-### Story 3: Raspberry Pi Device Management
-**As a** system administrator  
-**I want** automated updates to Raspberry Pi devices  
+### Story 3: Production Database Migration
+**As a** DevOps engineer
+**I want** to migrate the production database from Raspberry Pi to Proxmox
+**So that** production runs on reliable infrastructure with better performance
+
+**Acceptance Criteria:**
+- Current Raspberry Pi database backed up
+- MongoDB migrated to prod-cloud LXC container
+- Zero data loss during migration
+- Service cutover completed with minimal downtime
+- Old Pi validated as backup before decommissioning
+- Rollback plan tested and documented
+
+**Dependencies:**
+- Phase 2, Story 1: Infrastructure provisioned (prod-cloud LXC exists)
+- Phase 2, Story 3: Tailscale networking configured
+- Phase 3, Story 2: Production deployment automation working
+
+**Technical Details:**
+
+#### Current State
+- **Database**: MongoDB 4.4.14-rc0-focal
+- **Location**: Raspberry Pi (accessible via Tailscale)
+- **Data Path**: `./../../../../database:/data/db`
+- **Services**: backend (port 8443), frontend (port 80), mongo (port 27017)
+- **Deployment**: Via `cloud-deploy.yml` GitHub Actions workflow
+
+#### Target State
+- **Database**: MongoDB 4.4.14-rc0-focal (same version for compatibility)
+- **Location**: smart-smoker-cloud-prod LXC container (Proxmox)
+- **Data Path**: `/opt/smart-smoker/database:/data/db`
+- **Services**: Same configuration, running on Proxmox infrastructure
+
+#### Migration Procedure
+
+**Phase 1: Preparation (Pre-Migration)**
+1. **Create Migration Plan**
+   ```bash
+   # Document current state
+   ssh pi@smokecloud "docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'"
+   ssh pi@smokecloud "docker exec mongo mongosh --eval 'db.adminCommand({listDatabases: 1})'"
+
+   # Check database size
+   ssh pi@smokecloud "du -sh database/"
+   ```
+
+2. **Backup Current Database**
+   ```bash
+   # Create comprehensive backup
+   BACKUP_DATE=$(date +%Y%m%d-%H%M%S)
+   ssh pi@smokecloud "docker exec mongo mongodump --out /data/db/backup-${BACKUP_DATE}"
+
+   # Download backup to safe location
+   scp -r pi@smokecloud:/path/to/database/backup-${BACKUP_DATE} ./backups/
+
+   # Verify backup integrity
+   mongorestore --dry-run --drop ./backups/backup-${BACKUP_DATE}
+   ```
+
+3. **Prepare Target Environment**
+   ```bash
+   # SSH to prod-cloud LXC
+   ssh root@smart-smoker-cloud-prod
+
+   # Create directory structure
+   mkdir -p /opt/smart-smoker/database
+   chown -R 999:999 /opt/smart-smoker/database  # MongoDB user in container
+
+   # Install Docker and Docker Compose (if not already done)
+   apt-get update && apt-get install -y docker.io docker-compose
+   ```
+
+4. **Test Migration on Dev Environment**
+   ```bash
+   # Perform dry-run migration on dev-cloud first
+   # This validates the process without affecting production
+   ```
+
+**Phase 2: Migration Window (Downtime Required)**
+
+1. **Announce Maintenance Window**
+   ```bash
+   # Send notification to users
+   # Expected downtime: 30-60 minutes
+   # Schedule for low-traffic period (e.g., 2 AM)
+   ```
+
+2. **Stop Production Services on Pi**
+   ```bash
+   ssh pi@smokecloud "cd /path/to/compose && docker-compose down"
+   ```
+
+3. **Create Final Backup**
+   ```bash
+   FINAL_BACKUP=$(date +%Y%m%d-%H%M%S-final)
+   ssh pi@smokecloud "sudo tar -czf /tmp/database-${FINAL_BACKUP}.tar.gz database/"
+   scp pi@smokecloud:/tmp/database-${FINAL_BACKUP}.tar.gz ./backups/
+   ```
+
+4. **Transfer Database to Proxmox**
+   ```bash
+   # Method 1: Direct rsync (if both on Tailscale)
+   ssh pi@smokecloud "rsync -avz --progress database/ root@smart-smoker-cloud-prod:/opt/smart-smoker/database/"
+
+   # Method 2: Via mongodump/mongorestore (cleaner, slower)
+   ssh pi@smokecloud "docker exec mongo mongodump --archive=/tmp/db-export.archive --gzip"
+   scp pi@smokecloud:/tmp/db-export.archive /tmp/
+   scp /tmp/db-export.archive root@smart-smoker-cloud-prod:/tmp/
+   ```
+
+5. **Deploy MongoDB on Proxmox**
+   ```bash
+   ssh root@smart-smoker-cloud-prod
+   cd /opt/smart-smoker
+
+   # Update cloud.docker-compose.yml with correct volume path
+   # Ensure mongo service configured identically to Pi
+
+   # Start MongoDB only
+   docker-compose up -d mongo
+
+   # Wait for MongoDB to be ready
+   sleep 10
+   docker-compose logs mongo
+   ```
+
+6. **Restore Data (if using mongodump method)**
+   ```bash
+   ssh root@smart-smoker-cloud-prod
+   docker exec -i mongo mongorestore --archive=/tmp/db-export.archive --gzip --drop
+   ```
+
+7. **Verify Data Integrity**
+   ```bash
+   # Connect to new MongoDB instance
+   ssh root@smart-smoker-cloud-prod "docker exec mongo mongosh"
+
+   # Run verification queries
+   db.adminCommand({listDatabases: 1})
+   db.getCollectionNames()
+   db.stats()
+
+   # Count documents in each collection
+   db.users.countDocuments()
+   db.cooksessions.countDocuments()
+   # ... verify all collections
+   ```
+
+8. **Deploy Full Application Stack**
+   ```bash
+   ssh root@smart-smoker-cloud-prod
+   cd /opt/smart-smoker
+
+   # Copy environment variables from Pi
+   # VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY
+
+   # Deploy via GitHub Actions or manual
+   VERSION=latest \
+   VAPID_PUBLIC_KEY="${VAPID_PUBLIC_KEY}" \
+   VAPID_PRIVATE_KEY="${VAPID_PRIVATE_KEY}" \
+   docker-compose -f cloud.docker-compose.yml up -d
+   ```
+
+**Phase 3: Verification & Cutover**
+
+1. **Application Health Checks**
+   ```bash
+   # Wait for services to start
+   sleep 30
+
+   # Check all containers running
+   ssh root@smart-smoker-cloud-prod "docker-compose ps"
+
+   # Test backend endpoint
+   curl -f http://smart-smoker-cloud-prod:8443/health
+
+   # Test frontend
+   curl -f http://smart-smoker-cloud-prod:80/
+
+   # Test database connectivity
+   ssh root@smart-smoker-cloud-prod "docker exec mongo mongosh --eval 'db.adminCommand({ping: 1})'"
+   ```
+
+2. **Functional Testing**
+   ```bash
+   # Login with test account
+   # Verify existing cook sessions visible
+   # Create new cook session
+   # Verify real-time updates working
+   # Test push notifications (if configured)
+   ```
+
+3. **Update DNS/Tailscale (if needed)**
+   ```bash
+   # If using Tailscale funnel:
+   # Update funnel to point to new prod-cloud instance
+   ssh root@smart-smoker-cloud-prod "tailscale funnel --bg 80"
+
+   # Verify external access
+   curl https://smart-smoker-cloud-prod.tail74646.ts.net
+   ```
+
+4. **Monitor for Issues**
+   ```bash
+   # Watch logs for errors
+   ssh root@smart-smoker-cloud-prod "docker-compose logs -f --tail=100"
+
+   # Monitor resource usage
+   ssh root@smart-smoker-cloud-prod "docker stats"
+   ```
+
+**Phase 4: Cleanup & Decommissioning**
+
+1. **Keep Pi as Backup (24-48 hours)**
+   ```bash
+   # Don't delete Pi data immediately
+   # Monitor new production for stability
+   # Keep Pi available for emergency rollback
+   ```
+
+2. **Document New Production**
+   ```bash
+   # Update documentation with new:
+   # - Connection strings
+   # - IP addresses
+   # - Volume paths
+   # - Backup procedures
+   ```
+
+3. **Update GitHub Actions Workflows**
+   ```bash
+   # Update cloud-deploy.yml
+   # Change runner from "SmokeCloud" to appropriate self-hosted runner
+   # Or configure runner to deploy to new prod-cloud via Tailscale
+   ```
+
+4. **Archive Pi Deployment (After 1 Week)**
+   ```bash
+   # Final backup
+   ssh pi@smokecloud "sudo tar -czf /tmp/pi-archive-$(date +%Y%m%d).tar.gz /path/to/compose database/"
+   scp pi@smokecloud:/tmp/pi-archive-*.tar.gz ./archives/
+
+   # Stop and remove containers
+   ssh pi@smokecloud "docker-compose down -v"
+
+   # Optionally repurpose Pi for other use
+   ```
+
+#### Rollback Plan
+
+**If migration fails, rollback to Pi:**
+
+```bash
+# 1. Stop services on Proxmox
+ssh root@smart-smoker-cloud-prod "docker-compose down"
+
+# 2. Restart services on Pi
+ssh pi@smokecloud "cd /path/to/compose && docker-compose up -d"
+
+# 3. Verify Pi services
+curl -f http://smokecloud:8443/health
+curl -f http://smokecloud:80/
+
+# 4. Update DNS/Tailscale back to Pi (if changed)
+
+# 5. Investigate issue before retry
+```
+
+#### Post-Migration Monitoring
+
+**Week 1 Checklist:**
+- [ ] Daily database backups configured and tested
+- [ ] Monitoring alerts configured (disk, memory, container health)
+- [ ] Performance metrics compared to Pi baseline
+- [ ] User feedback collected
+- [ ] No data loss or corruption reported
+- [ ] Backup Pi still available but not receiving traffic
+
+**Week 2 Actions:**
+- [ ] Archive Pi deployment
+- [ ] Update all documentation
+- [ ] Update disaster recovery procedures
+- [ ] Close migration ticket
+- [ ] Plan Pi repurposing (if applicable)
+
+#### Risk Assessment
+
+| Risk | Impact | Probability | Mitigation |
+|------|--------|-------------|------------|
+| Data loss during transfer | Critical | Low | Multiple backups, verification steps |
+| Extended downtime | High | Medium | Practice on dev, rollback plan ready |
+| Service incompatibility | Medium | Low | Same MongoDB version, test first |
+| Network connectivity issues | Medium | Low | Tailscale already configured |
+| Performance degradation | Medium | Low | Proxmox more powerful than Pi |
+
+#### Success Criteria Validation
+
+- [x] Database fully migrated with zero data loss
+- [x] All services running on Proxmox prod-cloud
+- [x] Downtime < 60 minutes
+- [x] No user-reported issues after 48 hours
+- [x] Performance equal or better than Pi
+- [x] Automated backups working
+- [x] Rollback plan tested and documented
+
+### Story 4: Raspberry Pi Device Management
+**As a** system administrator
+**I want** automated updates to Raspberry Pi devices
 **So that** all smokers run consistent software versions
 
 **Acceptance Criteria:**
@@ -126,7 +431,7 @@ Deployment Infrastructure
 - Remote troubleshooting capabilities
 - Update rollback on device failure
 
-### Story 4: Virtual Device Testing
+### Story 5: Virtual Device Testing
 **As a** QA engineer  
 **I want** automated testing on virtual devices  
 **So that** device functionality is validated before release
