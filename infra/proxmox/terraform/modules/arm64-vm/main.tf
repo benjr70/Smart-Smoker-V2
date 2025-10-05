@@ -17,6 +17,9 @@ locals {
 }
 
 resource "proxmox_virtual_environment_vm" "this" {
+  timeout_create = var.timeout_create
+  timeout_clone  = var.timeout_create
+
   node_name   = var.target_node
   vm_id       = var.vm_id
   name        = var.vm_name

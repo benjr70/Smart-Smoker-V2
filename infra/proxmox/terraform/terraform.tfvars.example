@@ -3,11 +3,18 @@
 
 proxmox = {
   api_url          = "https://proxmox.example.local:8006/"
+
+  # API Token authentication (RECOMMENDED for production)
   api_token_id     = "terraform@pve!iac"
   api_token_secret = "CHANGE_ME"
-  username         = "root@pam"
-  password         = "CHANGE_ME"
+
+  # Password authentication (NOT RECOMMENDED - only for initial setup/testing)
+  # username         = "root@pam"
+  # password         = "CHANGE_ME"
+
+  # TLS verification (set to false only for self-signed certs in dev/test)
   tls_insecure     = false
+
   default_storage  = "local-lvm"
   default_bridge   = "vmbr0"
   ssh_public_keys  = ["ssh-ed25519 AAAA... team-key"]
@@ -99,8 +106,10 @@ prod_cloud = {
   features = {
     nesting = true
   }
-  tags             = ["cloud", "prod"]
+  tags               = ["cloud", "prod"]
   start_after_create = true
+  # Note: To protect production from accidental deletion, manually add to modules/lxc-container/main.tf:
+  # lifecycle { prevent_destroy = true }
 }
 
 virtual_smoker = {

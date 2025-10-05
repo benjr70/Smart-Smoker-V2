@@ -174,3 +174,9 @@ variable "tags" {
   type        = list(string)
   default     = []
 }
+
+variable "timeout_create" {
+  description = "Timeout (seconds) allowed for VM creation and cloning"
+  type        = number
+  default     = 1800
+}

@@ -69,6 +69,7 @@ typings/
 .yarn-integrity
 
 # dotenv environment variables file
+.env
 .env.test
 .env.local
 
@@ -112,6 +113,7 @@ out
 .terraform/
 *.tfstate
 *.tfstate.*
+*.tfplan
 terraform.tfvars
 *.tfvars.json
 infra/proxmox/terraform/state/

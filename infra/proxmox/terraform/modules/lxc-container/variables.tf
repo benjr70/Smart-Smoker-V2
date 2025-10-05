@@ -148,3 +148,15 @@ variable "start_after_create" {
   type        = bool
   default     = true
 }
+
+variable "timeout_create" {
+  description = "Timeout (seconds) allowed for container creation"
+  type        = number
+  default     = 600
+}
+
+variable "timeout_update" {
+  description = "Timeout (seconds) allowed for container updates"
+  type        = number
+  default     = 600
+}

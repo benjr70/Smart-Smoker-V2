@@ -17,6 +17,8 @@ locals {
 }
 
 resource "proxmox_virtual_environment_container" "this" {
+  timeout_create = var.timeout_create
+  timeout_update = var.timeout_update
   timeout_delete = var.timeout_delete
 
   node_name     = var.target_node

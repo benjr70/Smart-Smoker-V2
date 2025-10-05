@@ -81,3 +81,5 @@ nav:
           - Story 1 Completion: Infrastructure/phase-2-story-1-completion.md
       - Phase 3 - Deployment Automation: Infrastructure/phase-3-deployment-automation.md
       - Phase 4 - Testing & Documentation: Infrastructure/phase-4-testing-documentation.md
+      - Disaster Recovery Guide: Infrastructure/disaster-recovery-guide.md
+      - Secrets Management Guide: Infrastructure/secrets-management-guide.md
