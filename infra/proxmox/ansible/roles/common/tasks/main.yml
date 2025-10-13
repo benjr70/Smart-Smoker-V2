@@ -19,7 +19,7 @@
 - name: Set timezone
   community.general.timezone:
     name: "{{ timezone }}"
-  notify: restart cron
+  notify: Restart cron
 
 - name: Configure SSH - Update sshd_config
   ansible.builtin.template:
@@ -29,7 +29,7 @@
     group: root
     mode: '0644'
     validate: /usr/sbin/sshd -t -f %s
-  notify: restart sshd
+  notify: Restart sshd
 
 - name: Add SSH public keys for root
   ansible.posix.authorized_key:
@@ -47,7 +47,7 @@
     - { direction: incoming, policy: "{{ ufw_default_incoming_policy }}" }
     - { direction: outgoing, policy: "{{ ufw_default_outgoing_policy }}" }
     - { direction: routed, policy: "{{ ufw_default_forward_policy }}" }
-  notify: reload ufw
+  notify: Reload ufw
 
 - name: Configure UFW common rules
   community.general.ufw:
@@ -57,7 +57,7 @@
     from_ip: "{{ item.from_ip | default(omit) }}"
     comment: "{{ item.comment | default(omit) }}"
   loop: "{{ ufw_common_rules }}"
-  notify: reload ufw
+  notify: Reload ufw
 
 - name: Configure UFW host-specific rules
   community.general.ufw:
@@ -67,7 +67,7 @@
     from_ip: "{{ item.from_ip | default(omit) }}"
     comment: "{{ item.comment | default(omit) }}"
   loop: "{{ ufw_rules | default([]) }}"
-  notify: reload ufw
+  notify: Reload ufw
 
 - name: Enable UFW
   community.general.ufw:
@@ -80,7 +80,7 @@
     owner: root
     group: root
     mode: '0644'
-  notify: restart fail2ban
+  notify: Restart fail2ban
   when: fail2ban_enabled | default(false)
 
 - name: Ensure fail2ban is started and enabled

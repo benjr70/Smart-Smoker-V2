@@ -46,7 +46,7 @@
       - docker-buildx-plugin
     state: present
     update_cache: true
-  notify: restart docker
+  notify: Restart docker
 
 - name: Install Docker Compose plugin
   ansible.builtin.apt:
@@ -81,4 +81,4 @@
     owner: root
     group: root
     mode: '0644'
-  notify: restart docker
+  notify: Restart docker
