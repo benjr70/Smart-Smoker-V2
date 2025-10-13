@@ -1,0 +1,15 @@
+---
+# Host-specific variables for production cloud server
+
+# Environment
+environment: prod
+
+# Application Configuration
+app_base_dir: /opt/smart-smoker-prod
+app_compose_file: cloud.docker-compose.yml
+
+# MongoDB Configuration
+mongodb_data_dir: /opt/smart-smoker-prod/data/mongodb
+
+# Production-specific firewall restrictions
+# Note: Add more restrictive rules as needed

@@ -1,0 +1,43 @@
+---
+- name: Ensure device user exists
+  ansible.builtin.user:
+    name: "{{ device_user }}"
+    comment: "Virtual Smoker Device User"
+    shell: /bin/bash
+    create_home: true
+
+- name: Create device base directory
+  ansible.builtin.file:
+    path: "{{ device_base_dir }}"
+    state: directory
+    owner: "{{ device_user }}"
+    group: "{{ device_group }}"
+    mode: '0755'
+
+- name: Create device subdirectories
+  ansible.builtin.file:
+    path: "{{ device_base_dir }}/{{ item }}"
+    state: directory
+    owner: "{{ device_user }}"
+    group: "{{ device_group }}"
+    mode: '0755'
+  loop:
+    - logs
+    - config
+    - data
+
+- name: Install device-specific packages
+  ansible.builtin.apt:
+    name:
+      - python3-pip
+      - i2c-tools
+      - git
+    state: present
+
+- name: Display device setup complete message
+  ansible.builtin.debug:
+    msg:
+      - "Virtual smoker device environment configured"
+      - "Base directory: {{ device_base_dir }}"
+      - "Device ID: {{ device_id | default('not set') }}"
+      - "Device will be deployed via GitHub Actions workflow"

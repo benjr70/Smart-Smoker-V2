@@ -1,0 +1,57 @@
+name: Ansible Lint
+
+on:
+  push:
+    branches:
+      - master
+      - main
+      - 'feature/**'
+      - 'docs/**'
+    paths:
+      - 'infra/proxmox/ansible/**'
+      - '.github/workflows/ansible-lint.yml'
+  pull_request:
+    paths:
+      - 'infra/proxmox/ansible/**'
+      - '.github/workflows/ansible-lint.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ansible-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Ansible and dependencies
+        run: |
+          pip install ansible ansible-lint
+          ansible-galaxy collection install community.general
+          ansible-galaxy collection install ansible.posix
+
+      - name: Run ansible-lint
+        run: |
+          cd infra/proxmox/ansible
+          ansible-lint playbooks/*.yml roles/*/tasks/*.yml
+        continue-on-error: false
+
+      - name: Validate playbook syntax
+        run: |
+          cd infra/proxmox/ansible
+          ansible-playbook playbooks/site.yml --syntax-check
+
+      - name: Check inventory
+        run: |
+          cd infra/proxmox/ansible
+          ansible-inventory --list -i inventory/hosts.yml > /dev/null

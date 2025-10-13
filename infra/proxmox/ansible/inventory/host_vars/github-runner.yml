@@ -1,0 +1,19 @@
+---
+# Host-specific variables for GitHub Actions runner
+
+# Override runner labels if needed
+github_runner_labels:
+  - self-hosted
+  - linux
+  - x64
+  - proxmox
+  - smart-smoker
+
+# Runner name
+github_runner_name: "smart-smoker-runner-1"
+
+# Additional packages for CI/CD
+additional_packages:
+  - build-essential
+  - python3-pip
+  - jq

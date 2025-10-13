@@ -1,0 +1,50 @@
+---
+- name: Create application user
+  ansible.builtin.user:
+    name: "{{ app_user }}"
+    comment: "Smart Smoker Application User"
+    shell: /bin/bash
+    create_home: true
+
+- name: Create application base directory
+  ansible.builtin.file:
+    path: "{{ app_base_dir }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0755'
+
+- name: Create MongoDB data directory
+  ansible.builtin.file:
+    path: "{{ mongodb_data_dir }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0755'
+
+- name: Create application subdirectories
+  ansible.builtin.file:
+    path: "{{ app_base_dir }}/{{ item }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0755'
+  loop:
+    - logs
+    - backups
+    - config
+
+- name: Install application dependencies
+  ansible.builtin.apt:
+    name:
+      - git
+      - jq
+    state: present
+
+- name: Display setup complete message
+  ansible.builtin.debug:
+    msg:
+      - "Cloud application environment configured"
+      - "Base directory: {{ app_base_dir }}"
+      - "MongoDB data: {{ mongodb_data_dir }}"
+      - "Application will be deployed via GitHub Actions workflow"

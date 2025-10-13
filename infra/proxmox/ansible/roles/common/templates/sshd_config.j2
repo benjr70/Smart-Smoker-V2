@@ -1,0 +1,26 @@
+# SSH Configuration - Managed by Ansible
+# Do not edit manually - changes will be overwritten
+
+Port {{ ssh_port }}
+Protocol 2
+
+# Authentication
+PermitRootLogin {{ ssh_permit_root_login }}
+PubkeyAuthentication {{ 'yes' if ssh_pubkey_authentication else 'no' }}
+PasswordAuthentication {{ 'yes' if ssh_password_authentication else 'no' }}
+ChallengeResponseAuthentication no
+UsePAM yes
+
+# Security Settings
+MaxAuthTries {{ ssh_max_auth_tries }}
+MaxSessions {{ ssh_max_sessions }}
+LoginGraceTime 60
+StrictModes yes
+PermitEmptyPasswords no
+X11Forwarding no
+
+# Subsystems
+Subsystem sftp /usr/lib/openssh/sftp-server
+
+# Accept locale-related environment variables
+AcceptEnv LANG LC_*

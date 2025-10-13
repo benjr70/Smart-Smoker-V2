@@ -1,0 +1,24 @@
+---
+# Configure production cloud server
+# Usage: ansible-playbook playbooks/setup-prod-cloud.yml
+
+- name: Configure Production Cloud Server
+  hosts: prod_cloud
+  become: true
+
+  roles:
+    - common
+    - docker
+    - nodejs
+    - cloud-app
+
+  post_tasks:
+    - name: Display prod cloud setup summary
+      ansible.builtin.debug:
+        msg:
+          - "Production Cloud Server Configuration Complete"
+          - "Environment: {{ environment }}"
+          - "Application Base: {{ app_base_dir }}"
+          - "MongoDB Data: {{ mongodb_data_dir }}"
+          - "Deploy applications via GitHub Actions workflow"
+          - "IMPORTANT: Ensure backups are configured before deploying to production"

@@ -1,0 +1,12 @@
+# Fail2Ban configuration - Managed by Ansible
+# Do not edit manually - changes will be overwritten
+
+[DEFAULT]
+bantime = {{ fail2ban_ban_time }}
+findtime = {{ fail2ban_find_time }}
+maxretry = {{ fail2ban_max_retry }}
+
+[sshd]
+enabled = true
+port = {{ ssh_port }}
+logpath = /var/log/auth.log

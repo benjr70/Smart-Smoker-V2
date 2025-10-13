@@ -1,0 +1,91 @@
+---
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name: "{{ base_packages }}"
+    state: present
+    update_cache: false
+
+- name: Install additional packages if defined
+  ansible.builtin.apt:
+    name: "{{ additional_packages }}"
+    state: present
+  when: additional_packages is defined
+
+- name: Set timezone
+  community.general.timezone:
+    name: "{{ timezone }}"
+  notify: restart cron
+
+- name: Configure SSH - Update sshd_config
+  ansible.builtin.template:
+    src: sshd_config.j2
+    dest: /etc/ssh/sshd_config
+    owner: root
+    group: root
+    mode: '0644'
+    validate: /usr/sbin/sshd -t -f %s
+  notify: restart sshd
+
+- name: Add SSH public keys for root
+  ansible.posix.authorized_key:
+    user: root
+    key: "{{ item }}"
+    state: present
+  loop: "{{ ssh_public_keys }}"
+  when: ssh_public_keys | length > 0
+
+- name: Configure UFW defaults
+  community.general.ufw:
+    direction: "{{ item.direction }}"
+    policy: "{{ item.policy }}"
+  loop:
+    - { direction: incoming, policy: "{{ ufw_default_incoming_policy }}" }
+    - { direction: outgoing, policy: "{{ ufw_default_outgoing_policy }}" }
+    - { direction: routed, policy: "{{ ufw_default_forward_policy }}" }
+  notify: reload ufw
+
+- name: Configure UFW common rules
+  community.general.ufw:
+    rule: "{{ item.rule }}"
+    port: "{{ item.port | default(omit) }}"
+    proto: "{{ item.proto | default(omit) }}"
+    from_ip: "{{ item.from_ip | default(omit) }}"
+    comment: "{{ item.comment | default(omit) }}"
+  loop: "{{ ufw_common_rules }}"
+  notify: reload ufw
+
+- name: Configure UFW host-specific rules
+  community.general.ufw:
+    rule: "{{ item.rule }}"
+    port: "{{ item.port | default(omit) }}"
+    proto: "{{ item.proto | default(omit) }}"
+    from_ip: "{{ item.from_ip | default(omit) }}"
+    comment: "{{ item.comment | default(omit) }}"
+  loop: "{{ ufw_rules | default([]) }}"
+  notify: reload ufw
+
+- name: Enable UFW
+  community.general.ufw:
+    state: enabled
+
+- name: Configure fail2ban
+  ansible.builtin.template:
+    src: jail.local.j2
+    dest: /etc/fail2ban/jail.local
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart fail2ban
+  when: fail2ban_enabled | default(false)
+
+- name: Ensure fail2ban is started and enabled
+  ansible.builtin.service:
+    name: fail2ban
+    state: started
+    enabled: true
+  when: fail2ban_enabled | default(false)

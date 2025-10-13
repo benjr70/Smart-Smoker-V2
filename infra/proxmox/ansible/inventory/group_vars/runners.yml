@@ -1,0 +1,25 @@
+---
+# Variables specific to GitHub Actions runners
+
+# Firewall rules for GitHub runners
+ufw_rules:
+  - { rule: allow, port: 80, proto: tcp, comment: "HTTP" }
+  - { rule: allow, port: 443, proto: tcp, comment: "HTTPS" }
+
+# GitHub Runner Configuration
+github_runner_user: runner
+github_runner_home: /home/runner
+github_runner_work_directory: _work
+github_runner_labels:
+  - self-hosted
+  - linux
+  - x64
+  - proxmox
+
+# GitHub Repository (override in host_vars or runtime)
+github_repository: "benjr70/Smart-Smoker-V2"
+github_runner_token: ""  # Provided at runtime via --extra-vars or Vault
+
+# Runner settings
+github_runner_replace_existing: false
+github_runner_ephemeral: false

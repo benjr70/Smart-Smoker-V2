@@ -1,0 +1,12 @@
+---
+# Host-specific variables for development cloud server
+
+# Environment
+environment: dev
+
+# Application Configuration
+app_base_dir: /opt/smart-smoker-dev
+app_compose_file: cloud.docker-compose.yml
+
+# MongoDB Configuration
+mongodb_data_dir: /opt/smart-smoker-dev/data/mongodb

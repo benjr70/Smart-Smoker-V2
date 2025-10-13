@@ -1,0 +1,23 @@
+---
+# Configure development cloud server
+# Usage: ansible-playbook playbooks/setup-dev-cloud.yml
+
+- name: Configure Development Cloud Server
+  hosts: dev_cloud
+  become: true
+
+  roles:
+    - common
+    - docker
+    - nodejs
+    - cloud-app
+
+  post_tasks:
+    - name: Display dev cloud setup summary
+      ansible.builtin.debug:
+        msg:
+          - "Development Cloud Server Configuration Complete"
+          - "Environment: {{ environment }}"
+          - "Application Base: {{ app_base_dir }}"
+          - "MongoDB Data: {{ mongodb_data_dir }}"
+          - "Deploy applications via GitHub Actions workflow"

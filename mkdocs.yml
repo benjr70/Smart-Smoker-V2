@@ -79,6 +79,7 @@ nav:
           - Overview: Infrastructure/phase-2-proxmox-infrastructure.md
           - Terraform Setup Guide: Infrastructure/terraform-setup-guide.md
           - Story 1 Completion: Infrastructure/phase-2-story-1-completion.md
+          - Story 2 Completion: Infrastructure/phase-2-story-2-completion.md
       - Phase 3 - Deployment Automation: Infrastructure/phase-3-deployment-automation.md
       - Phase 4 - Testing & Documentation: Infrastructure/phase-4-testing-documentation.md
       - Disaster Recovery Guide: Infrastructure/disaster-recovery-guide.md

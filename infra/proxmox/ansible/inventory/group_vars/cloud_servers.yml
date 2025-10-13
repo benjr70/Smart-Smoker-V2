@@ -1,0 +1,24 @@
+---
+# Variables specific to cloud application servers
+
+# Firewall rules for cloud servers
+ufw_rules:
+  - { rule: allow, port: 80, proto: tcp, comment: "HTTP" }
+  - { rule: allow, port: 443, proto: tcp, comment: "HTTPS" }
+  - { rule: allow, port: 3000, proto: tcp, comment: "Backend API", from_ip: "10.20.0.0/24" }
+  - { rule: allow, port: 3001, proto: tcp, comment: "Frontend", from_ip: "10.20.0.0/24" }
+  - { rule: allow, port: 27017, proto: tcp, comment: "MongoDB", from_ip: "10.20.0.0/24" }
+
+# Application directories
+app_base_dir: /opt/smart-smoker
+app_user: smoker
+app_group: smoker
+
+# Docker users for cloud servers
+docker_users:
+  - "{{ app_user }}"
+  - root
+
+# MongoDB Configuration
+mongodb_data_dir: /opt/smart-smoker/data/mongodb
+mongodb_version: "4.4"

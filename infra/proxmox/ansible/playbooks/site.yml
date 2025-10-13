@@ -1,0 +1,8 @@
+---
+# Master playbook - Configure all Smart Smoker infrastructure
+# Usage: ansible-playbook playbooks/site.yml
+
+- import_playbook: setup-github-runner.yml
+- import_playbook: setup-dev-cloud.yml
+- import_playbook: setup-prod-cloud.yml
+- import_playbook: setup-virtual-smoker.yml

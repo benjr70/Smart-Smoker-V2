@@ -1,0 +1,19 @@
+---
+- name: restart sshd
+  ansible.builtin.service:
+    name: sshd
+    state: restarted
+
+- name: reload ufw
+  community.general.ufw:
+    state: reloaded
+
+- name: restart fail2ban
+  ansible.builtin.service:
+    name: fail2ban
+    state: restarted
+
+- name: restart cron
+  ansible.builtin.service:
+    name: cron
+    state: restarted

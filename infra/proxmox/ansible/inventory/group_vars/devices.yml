@@ -1,0 +1,18 @@
+---
+# Variables specific to virtual smoker devices
+
+# Firewall rules for devices (minimal - isolated network)
+ufw_rules:
+  - { rule: allow, port: 8080, proto: tcp, comment: "Device Service", from_ip: "10.30.0.0/24" }
+
+# Device Configuration
+device_user: smoker
+device_group: smoker
+device_base_dir: /opt/smoker-device
+
+# Docker users for device
+docker_users:
+  - "{{ device_user }}"
+
+# Device Service Configuration
+device_service_port: 8080

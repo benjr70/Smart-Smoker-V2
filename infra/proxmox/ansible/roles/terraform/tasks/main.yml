@@ -1,0 +1,35 @@
+---
+- name: Install prerequisites for Terraform
+  ansible.builtin.apt:
+    name:
+      - wget
+      - unzip
+      - gnupg
+      - software-properties-common
+    state: present
+
+- name: Add HashiCorp GPG key
+  ansible.builtin.apt_key:
+    url: https://apt.releases.hashicorp.com/gpg
+    state: present
+
+- name: Add HashiCorp repository
+  ansible.builtin.apt_repository:
+    repo: "deb [arch=amd64] https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
+    state: present
+    filename: hashicorp
+
+- name: Install Terraform
+  ansible.builtin.apt:
+    name: terraform
+    state: present
+    update_cache: true
+
+- name: Verify Terraform installation
+  ansible.builtin.command: terraform version
+  register: terraform_version
+  changed_when: false
+
+- name: Display Terraform version
+  ansible.builtin.debug:
+    msg: "{{ terraform_version.stdout }}"
