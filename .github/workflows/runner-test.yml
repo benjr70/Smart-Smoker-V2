@@ -19,7 +19,7 @@ permissions:
 jobs:
   test-runner:
     name: Test Self-Hosted Runner
-    runs-on: [self-hosted, linux]
+    runs-on: [self-hosted, linux, proxmox]
 
     steps:
       - name: Checkout code
