@@ -13,3 +13,7 @@ mongodb_data_dir: /opt/smart-smoker-prod/data/mongodb
 
 # Production-specific firewall restrictions
 # Note: Add more restrictive rules as needed
+
+# Stricter fail2ban for production
+fail2ban_ban_time: 7200    # 2 hours for production
+fail2ban_max_retry: 3      # Strict for production

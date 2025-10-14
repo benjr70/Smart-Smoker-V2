@@ -50,13 +50,24 @@ Edit group variables in `inventory/group_vars/`:
 - `cloud_servers.yml` - Cloud application settings
 - `devices.yml` - Device-specific settings
 
-### 3. Add SSH Keys
+### 3. Provide SSH Keys
 
-Update `inventory/group_vars/all.yml` with your SSH public keys:
+**IMPORTANT**: Do NOT commit SSH keys to the repository!
 
-```yaml
-ssh_public_keys:
-  - "ssh-ed25519 AAAA... your-key-here"
+Pass SSH keys via command line:
+
+```bash
+# Option 1: Pass keys directly
+ansible-playbook playbooks/site.yml \
+  --extra-vars "ssh_public_keys=['ssh-ed25519 AAAA... user@example.com']"
+
+# Option 2: Load from your local authorized_keys file
+ansible-playbook playbooks/site.yml \
+  --extra-vars "ssh_public_keys=$(cat ~/.ssh/id_ed25519.pub | jq -R -s -c 'split(\"\n\") | map(select(length > 0))')"
+
+# Option 3: For your current setup (temporary)
+ansible-playbook playbooks/site.yml \
+  --extra-vars "ssh_public_keys=['ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGVL60IcGPlVOKMXK9xuLWLBVmCu8HCQ/mN8LZ8gSFN4 benrolf70@gmail.com']"
 ```
 
 ### 4. Run Playbooks

@@ -2,8 +2,11 @@
 # Variables specific to cloud application servers
 
 # Firewall rules for cloud servers
+# SECURITY NOTE: HTTP port 80 is open for certificate validation and HTTP->HTTPS redirects.
+#                Configure reverse proxy (Caddy/nginx/Traefik) to redirect HTTP to HTTPS.
+#                After HTTPS is configured with valid certificates, consider closing port 80.
 ufw_rules:
-  - { rule: allow, port: 80, proto: tcp, comment: "HTTP" }
+  - { rule: allow, port: 80, proto: tcp, comment: "HTTP (redirect to HTTPS)" }
   - { rule: allow, port: 443, proto: tcp, comment: "HTTPS" }
   - { rule: allow, port: 3000, proto: tcp, comment: "Backend API", from_ip: "10.20.0.0/24" }
   - { rule: allow, port: 3001, proto: tcp, comment: "Frontend", from_ip: "10.20.0.0/24" }
@@ -21,4 +24,6 @@ docker_users:
 
 # MongoDB Configuration
 mongodb_data_dir: /opt/smart-smoker/data/mongodb
-mongodb_version: "4.4"
+# Note: MongoDB runs in Docker container. Version is specified in docker-compose.yml.
+#       This variable is for documentation/reference only.
+mongodb_version: "4.4"  # Reference only - actual version in compose file

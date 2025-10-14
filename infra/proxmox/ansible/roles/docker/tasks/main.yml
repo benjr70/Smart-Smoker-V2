@@ -75,7 +75,16 @@
         "log-opts": {
           "max-size": "10m",
           "max-file": "3"
-        }
+        },
+        "live-restore": true,
+        "userland-proxy": false,
+        "storage-driver": "overlay2",
+        "default-address-pools": [
+          {
+            "base": "172.17.0.0/16",
+            "size": 24
+          }
+        ]
       }
     dest: /etc/docker/daemon.json
     owner: root

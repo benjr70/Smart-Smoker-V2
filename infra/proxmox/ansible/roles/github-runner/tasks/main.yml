@@ -54,17 +54,19 @@
   register: runner_configured
 
 - name: Configure GitHub runner
-  ansible.builtin.command:
-    cmd: >
-      ./config.sh --url https://github.com/{{ github_repository }}
-      --token {{ github_runner_token }}
-      --name {{ github_runner_name }}
-      --labels {{ github_runner_labels | join(',') }}
-      --work {{ github_runner_work_directory }}
-      {{ '--replace' if github_runner_replace_existing else '' }}
-      {{ '--ephemeral' if github_runner_ephemeral else '' }}
-      --unattended
+  ansible.builtin.shell:
+    cmd: |
+      ./config.sh --url https://github.com/{{ github_repository }} \
+        --token "${RUNNER_TOKEN}" \
+        --name {{ github_runner_name }} \
+        --labels {{ github_runner_labels | join(',') }} \
+        --work {{ github_runner_work_directory }} \
+        {{ '--replace' if github_runner_replace_existing else '' }} \
+        {{ '--ephemeral' if github_runner_ephemeral else '' }} \
+        --unattended
     chdir: "{{ github_runner_home }}/actions-runner"
+  environment:
+    RUNNER_TOKEN: "{{ github_runner_token }}"
   become: true
   become_user: "{{ github_runner_user }}"
   when:

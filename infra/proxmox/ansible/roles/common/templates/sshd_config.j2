@@ -19,6 +19,14 @@ StrictModes yes
 PermitEmptyPasswords no
 X11Forwarding no
 
+# User Restrictions
+{% if ssh_allow_users is defined and ssh_allow_users | length > 0 %}
+AllowUsers {{ ssh_allow_users | join(' ') }}
+{% endif %}
+{% if ssh_allow_groups is defined and ssh_allow_groups | length > 0 %}
+AllowGroups {{ ssh_allow_groups | join(' ') }}
+{% endif %}
+
 # Subsystems
 Subsystem sftp /usr/lib/openssh/sftp-server
 
