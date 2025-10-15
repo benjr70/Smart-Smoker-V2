@@ -1,0 +1,99 @@
+---
+- name: Create GitHub runner user
+  ansible.builtin.user:
+    name: "{{ github_runner_user }}"
+    comment: "GitHub Actions Runner"
+    home: "{{ github_runner_home }}"
+    shell: /bin/bash
+    create_home: true
+
+- name: Create runner directory
+  ansible.builtin.file:
+    path: "{{ github_runner_home }}/actions-runner"
+    state: directory
+    owner: "{{ github_runner_user }}"
+    group: "{{ github_runner_user }}"
+    mode: '0755'
+
+- name: Check if runner is already installed
+  ansible.builtin.stat:
+    path: "{{ github_runner_home }}/actions-runner/config.sh"
+  register: runner_installed
+
+- name: Get latest runner version
+  ansible.builtin.uri:
+    url: https://api.github.com/repos/actions/runner/releases/latest
+    return_content: true
+  register: runner_release
+  when: not runner_installed.stat.exists
+
+- name: Set runner version fact
+  ansible.builtin.set_fact:
+    runner_version: "{{ runner_release.json.tag_name | regex_replace('^v', '') }}"
+  when: not runner_installed.stat.exists
+
+- name: Download GitHub Actions runner
+  ansible.builtin.get_url:
+    url: "https://github.com/actions/runner/releases/download/v{{ runner_version }}/actions-runner-linux-x64-{{ runner_version }}.tar.gz"
+    dest: "/tmp/actions-runner-linux-x64-{{ runner_version }}.tar.gz"
+    mode: '0644'
+  when: not runner_installed.stat.exists
+
+- name: Extract runner archive
+  ansible.builtin.unarchive:
+    src: "/tmp/actions-runner-linux-x64-{{ runner_version }}.tar.gz"
+    dest: "{{ github_runner_home }}/actions-runner"
+    remote_src: true
+    owner: "{{ github_runner_user }}"
+    group: "{{ github_runner_user }}"
+  when: not runner_installed.stat.exists
+
+- name: Check if runner is configured
+  ansible.builtin.stat:
+    path: "{{ github_runner_home }}/actions-runner/.runner"
+  register: runner_configured
+
+- name: Configure GitHub runner
+  ansible.builtin.shell:
+    cmd: |
+      ./config.sh --url https://github.com/{{ github_repository }} \
+        --token "${RUNNER_TOKEN}" \
+        --name {{ github_runner_name }} \
+        --labels {{ github_runner_labels | join(',') }} \
+        --work {{ github_runner_work_directory }} \
+        {{ '--replace' if github_runner_replace_existing else '' }} \
+        {{ '--ephemeral' if github_runner_ephemeral else '' }} \
+        --unattended
+    chdir: "{{ github_runner_home }}/actions-runner"
+  environment:
+    RUNNER_TOKEN: "{{ github_runner_token }}"
+  become: true
+  become_user: "{{ github_runner_user }}"
+  when:
+    - not runner_configured.stat.exists
+    - github_runner_token != ""
+  register: runner_config
+  changed_when: runner_config.rc == 0
+
+- name: Install runner service
+  ansible.builtin.command:
+    cmd: ./svc.sh install {{ github_runner_user }}
+    chdir: "{{ github_runner_home }}/actions-runner"
+  when:
+    - not runner_configured.stat.exists
+    - github_runner_token != ""
+  changed_when: true
+
+- name: Start and enable runner service
+  ansible.builtin.command:
+    cmd: ./svc.sh start
+    chdir: "{{ github_runner_home }}/actions-runner"
+  when:
+    - not runner_configured.stat.exists
+    - github_runner_token != ""
+  changed_when: true
+
+- name: Display runner configuration warning if token not provided
+  ansible.builtin.debug:
+    msg: "GitHub runner token not provided. Skipping runner configuration. Provide token via --extra-vars 'github_runner_token=YOUR_TOKEN'"
+  when: github_runner_token == ""

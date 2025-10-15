@@ -1,0 +1,106 @@
+---
+- name: Create application user
+  ansible.builtin.user:
+    name: "{{ app_user }}"
+    comment: "Smart Smoker Application User"
+    shell: /bin/bash
+    create_home: true
+
+- name: Create application base directory
+  ansible.builtin.file:
+    path: "{{ app_base_dir }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0755'
+
+- name: Create MongoDB data directory
+  ansible.builtin.file:
+    path: "{{ mongodb_data_dir }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0755'
+
+- name: Create application subdirectories
+  ansible.builtin.file:
+    path: "{{ app_base_dir }}/{{ item }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0755'
+  loop:
+    - logs
+    - backups
+    - config
+
+- name: Install application dependencies
+  ansible.builtin.apt:
+    name:
+      - git
+      - jq
+    state: present
+
+- name: Create backup README
+  ansible.builtin.copy:
+    dest: "{{ app_base_dir }}/backups/README.md"
+    content: |
+      # Backup Directory
+
+      This directory is designated for automated backups.
+
+      ## Planned Backup Strategy (Phase 3)
+
+      ### MongoDB Backups
+      - **Frequency**: Daily at 2 AM
+      - **Retention**: 7 daily, 4 weekly, 12 monthly
+      - **Method**: mongodump to this directory
+      - **Off-site**: Sync to Proxmox host /var/backups/smart-smoker
+
+      ### Application Backups
+      - **Config files**: Backed up with MongoDB
+      - **Docker volumes**: Not backed up (ephemeral)
+
+      ## Manual Backup
+
+      ```bash
+      # MongoDB backup
+      docker exec smart-smoker-mongodb mongodump --out /data/backups/manual-$(date +%Y%m%d)
+
+      # Restore
+      docker exec smart-smoker-mongodb mongorestore /data/backups/manual-YYYYMMDD
+      ```
+
+      ## TODO
+      - [ ] Implement automated backup cron job (Story 3)
+      - [ ] Configure off-site backup sync (Story 3)
+      - [ ] Test restore procedures (Story 3)
+    mode: '0644'
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+
+- name: Configure log rotation for application logs
+  ansible.builtin.copy:
+    dest: /etc/logrotate.d/smart-smoker
+    content: |
+      {{ app_base_dir }}/logs/*.log {
+          daily
+          rotate 14
+          compress
+          delaycompress
+          missingok
+          notifempty
+          create 0640 {{ app_user }} {{ app_group }}
+      }
+    mode: '0644'
+    owner: root
+    group: root
+
+- name: Display setup complete message
+  ansible.builtin.debug:
+    msg:
+      - "Cloud application environment configured"
+      - "Base directory: {{ app_base_dir }}"
+      - "MongoDB data: {{ mongodb_data_dir }}"
+      - "Log rotation: Configured (14 day retention)"
+      - "Application will be deployed via GitHub Actions workflow"

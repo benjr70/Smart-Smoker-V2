@@ -1,0 +1,73 @@
+---
+# Common variables applied to all hosts
+
+# SSH Configuration
+ssh_port: 22
+ssh_permit_root_login: "prohibit-password"
+ssh_password_authentication: false
+ssh_pubkey_authentication: true
+ssh_max_auth_tries: 3
+ssh_max_sessions: 10
+ssh_allow_users:
+  - root
+ssh_allow_groups:
+  - sshd-users
+
+# SSH Public Keys
+# SECURITY: Do not commit actual keys to repository!
+# Override this via command line or external file:
+#   --extra-vars "ssh_public_keys=['ssh-ed25519 AAAAC3... user@example.com']"
+# OR load from file:
+#   ssh_public_keys: "{{ lookup('file', '~/.ssh/authorized_keys').split('\n') | select() }}"
+ssh_public_keys: []  # MUST be overridden - no default keys
+
+# DNS Configuration
+dns_servers:
+  - 10.0.0.1
+  - 10.0.0.2
+dns_search_domain: "smoker.local"
+
+# Firewall Configuration
+ufw_default_incoming_policy: deny
+ufw_default_outgoing_policy: allow
+ufw_default_forward_policy: deny
+
+# Common firewall rules for all hosts
+ufw_common_rules:
+  - { rule: allow, port: "{{ ssh_port }}", proto: tcp, comment: "SSH Access" }
+
+# System Configuration
+timezone: "America/New_York"
+ntp_servers:
+  - 0.pool.ntp.org
+  - 1.pool.ntp.org
+
+# Package Configuration
+base_packages:
+  - curl
+  - wget
+  - git
+  - vim
+  - htop
+  - net-tools
+  - dnsutils
+  - ca-certificates
+  - gnupg
+  - lsb-release
+  - software-properties-common
+  - apt-transport-https
+  - fail2ban
+  - ufw
+
+# Security Configuration
+fail2ban_enabled: true
+fail2ban_max_retry: 3      # Max failed attempts before ban (stricter than default 5)
+fail2ban_ban_time: 3600    # Ban duration in seconds (1 hour)
+fail2ban_find_time: 600    # Time window to count failures (10 minutes)
+
+# Docker Configuration
+docker_compose_version: "2.24.0"
+docker_users: []
+
+# Node.js Configuration
+nodejs_version: "20"

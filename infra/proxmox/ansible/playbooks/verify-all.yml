@@ -1,0 +1,108 @@
+---
+# Verify all infrastructure configurations
+# Usage: ansible-playbook playbooks/verify-all.yml
+
+- name: Verify Infrastructure Configuration
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Check Docker is installed and running
+      ansible.builtin.service:
+        name: docker
+        state: started
+      check_mode: true
+      register: docker_status
+
+    - name: Check UFW is enabled
+      ansible.builtin.command: ufw status
+      register: ufw_status
+      changed_when: false
+
+    - name: Check fail2ban is running
+      ansible.builtin.service:
+        name: fail2ban
+        state: started
+      check_mode: true
+      register: fail2ban_status
+      when: fail2ban_enabled | default(false)
+
+    - name: Verify Docker version
+      ansible.builtin.command: docker --version
+      register: docker_version
+      changed_when: false
+
+    - name: Verify Node.js version (if installed)
+      ansible.builtin.command: node --version
+      register: node_version
+      changed_when: false
+      failed_when: false
+
+    - name: Display verification results
+      ansible.builtin.debug:
+        msg:
+          - "Host: {{ inventory_hostname }}"
+          - "Docker: {{ docker_version.stdout }}"
+          - "Node.js: {{ node_version.stdout if node_version.rc == 0 else 'Not installed' }}"
+          - "UFW Status: {{ 'Active' if 'Status: active' in ufw_status.stdout else 'Inactive' }}"
+          - "Fail2ban: {{ 'Running' if fail2ban_status is success else 'Not configured' }}"
+
+- name: Verify GitHub Runner
+  hosts: runners
+  become: true
+
+  tasks:
+    - name: Check if runner is configured
+      ansible.builtin.stat:
+        path: "{{ github_runner_home }}/actions-runner/.runner"
+      register: runner_config
+
+    - name: Check Terraform version
+      ansible.builtin.command: terraform version
+      register: terraform_version
+      changed_when: false
+
+    - name: Display runner verification
+      ansible.builtin.debug:
+        msg:
+          - "Runner configured: {{ runner_config.stat.exists }}"
+          - "Terraform: {{ terraform_version.stdout_lines[0] }}"
+
+- name: Verify Cloud Servers
+  hosts: cloud_servers
+  become: true
+
+  tasks:
+    - name: Check application directories exist
+      ansible.builtin.stat:
+        path: "{{ app_base_dir }}"
+      register: app_dir
+
+    - name: Check MongoDB data directory
+      ansible.builtin.stat:
+        path: "{{ mongodb_data_dir }}"
+      register: mongodb_dir
+
+    - name: Display cloud server verification
+      ansible.builtin.debug:
+        msg:
+          - "App directory: {{ 'Exists' if app_dir.stat.exists else 'Missing' }}"
+          - "MongoDB directory: {{ 'Exists' if mongodb_dir.stat.exists else 'Missing' }}"
+          - "Environment: {{ environment }}"
+
+- name: Verify Virtual Devices
+  hosts: devices
+  become: true
+
+  tasks:
+    - name: Check device directory exists
+      ansible.builtin.stat:
+        path: "{{ device_base_dir }}"
+      register: device_dir
+
+    - name: Display device verification
+      ansible.builtin.debug:
+        msg:
+          - "Device directory: {{ 'Exists' if device_dir.stat.exists else 'Missing' }}"
+          - "Device ID: {{ device_id | default('not set') }}"

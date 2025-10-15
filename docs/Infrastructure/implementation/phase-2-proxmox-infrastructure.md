@@ -96,8 +96,8 @@ Proxmox Server
 6. After testing, promote to full automation by running `terraform plan`/`terraform apply` without the `-target` flag.
 
 ### Story 2: Self-Hosted CI/CD
-**As a** developer  
-**I want** GitHub Actions to deploy to local infrastructure  
+**As a** developer
+**I want** GitHub Actions to deploy to local infrastructure
 **So that** I can automate deployments without exposing servers
 
 **Acceptance Criteria:**
@@ -105,6 +105,33 @@ Proxmox Server
 - Runner can access Proxmox API for deployments
 - Terraform executions work from runner
 - Logs and status reported back to GitHub
+
+#### Implementation Notes (2025-10-05)
+- Complete Ansible configuration for all infrastructure at `infra/proxmox/ansible/` using Infrastructure as Code principles
+- 7 Ansible roles implemented: `common` (SSH hardening, firewall, fail2ban), `docker` (Docker Engine + Compose), `terraform`, `nodejs`, `github-runner`, `cloud-app`, `virtual-device`
+- Automated configuration eliminates manual setup - all prerequisites installed via Ansible playbooks
+- Inventory configuration at `inventory/hosts.yml` with group-based variable management
+- Individual playbooks for each server type: `setup-github-runner.yml`, `setup-dev-cloud.yml`, `setup-prod-cloud.yml`, `setup-virtual-smoker.yml`
+- Master playbook `site.yml` configures all infrastructure in one command
+- Verification playbook `verify-all.yml` validates all configurations
+- GitHub Actions workflow `ansible-lint.yml` provides CI/CD validation for Ansible code
+- Comprehensive documentation in `infra/proxmox/ansible/README.md`
+- Security hardening: SSH key-only auth, UFW firewall with minimal ports, fail2ban protection
+- Note: Tailscale mesh networking configuration deferred to Story 3
+
+#### Ansible Quick Start
+```bash
+# Configure all infrastructure
+cd infra/proxmox/ansible
+ansible-playbook playbooks/site.yml
+
+# Configure GitHub runner with token
+ansible-playbook playbooks/setup-github-runner.yml \
+  --extra-vars "github_runner_token=YOUR_TOKEN"
+
+# Verify configuration
+ansible-playbook playbooks/verify-all.yml
+```
 
 ### Story 3: Secure Network Access
 **As a** system administrator  

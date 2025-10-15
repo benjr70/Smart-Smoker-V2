@@ -1,0 +1,10 @@
+---
+# Host-specific variables for virtual smoker device
+
+# Device Configuration
+device_base_dir: /opt/smoker-device
+device_compose_file: device.docker-compose.yml
+
+# Device-specific settings
+device_id: "virtual-smoker-001"
+device_type: "virtual"

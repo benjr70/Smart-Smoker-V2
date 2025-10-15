@@ -1,0 +1,21 @@
+---
+# Configure virtual smoker device
+# Usage: ansible-playbook playbooks/setup-virtual-smoker.yml
+
+- name: Configure Virtual Smoker Device
+  hosts: devices
+  become: true
+
+  roles:
+    - common
+    - docker
+    - virtual-device
+
+  post_tasks:
+    - name: Display virtual smoker setup summary
+      ansible.builtin.debug:
+        msg:
+          - "Virtual Smoker Device Configuration Complete"
+          - "Device ID: {{ device_id | default('not set') }}"
+          - "Device Base: {{ device_base_dir }}"
+          - "Deploy device software via GitHub Actions workflow"

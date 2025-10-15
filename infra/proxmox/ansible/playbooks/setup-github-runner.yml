@@ -1,0 +1,26 @@
+---
+# Configure GitHub Actions self-hosted runner
+# Usage: ansible-playbook playbooks/setup-github-runner.yml
+# With token: ansible-playbook playbooks/setup-github-runner.yml --extra-vars "github_runner_token=YOUR_TOKEN"
+
+- name: Configure GitHub Actions Runner
+  hosts: runners
+  become: true
+
+  roles:
+    - common
+    - docker
+    - terraform
+    - nodejs
+    - github-runner
+
+  post_tasks:
+    - name: Display runner setup summary
+      ansible.builtin.debug:
+        msg:
+          - "GitHub Actions Runner Configuration Complete"
+          - "Runner Name: {{ github_runner_name }}"
+          - "Repository: {{ github_repository }}"
+          - "Labels: {{ github_runner_labels | join(', ') }}"
+          - "If runner token was provided, service should be running"
+          - "Check status: sudo -u {{ github_runner_user }} {{ github_runner_home }}/actions-runner/run.sh --check"
