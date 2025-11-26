@@ -80,6 +80,7 @@ nav:
           - Testing & Verification: Infrastructure/infrastructure-testing-guide.md
           - Disaster Recovery: Infrastructure/disaster-recovery-guide.md
           - Secrets Management: Infrastructure/secrets-management-guide.md
+          - Tailscale Troubleshooting: Infrastructure/tailscale-troubleshooting-guide.md
       - Implementation Plans:
           - Phase 1 - Container Standardization: Infrastructure/implementation/phase-1-container-standardization.md
           - Phase 2 - Proxmox Infrastructure: Infrastructure/implementation/phase-2-proxmox-infrastructure.md
