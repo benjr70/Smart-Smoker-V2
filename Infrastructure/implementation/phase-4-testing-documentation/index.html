@@ -1,0 +1,3515 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../phase-3-deployment-automation/">
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
+    
+    
+      
+        <title>Phase 4 - Testing & Documentation - Smart Smoker Docs</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.618322db.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#phase-4-testing-documentation" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="Smart Smoker Docs" class="md-header__button md-logo" aria-label="Smart Smoker Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Smart Smoker Docs
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Phase 4 - Testing & Documentation
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/benjr70/Smart-Smoker-V2" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    benjr70/Smart-Smoker-V2
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../.." class="md-tabs__link">
+          
+  
+  
+    
+  
+  Welcome
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../Frontend/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Apps
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../Packages/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Packages
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../CI-CD/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  CI/CD
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../../proxmox-infrastructure-plan.md" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Infrastructure
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="Smart Smoker Docs" class="md-nav__button md-logo" aria-label="Smart Smoker Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Smart Smoker Docs
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/benjr70/Smart-Smoker-V2" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    benjr70/Smart-Smoker-V2
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../.." class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Welcome
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_1" id="__nav_1_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Welcome
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Documentation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Documentation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Hardware/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hardware
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../piSoftware/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pi Software
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_1_5" id="__nav_1_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Epics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Epics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Epics/pushNotifications/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Push Notifications
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Epics/googleAssistant/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Google Assistant
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Apps
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Apps
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_1" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../Frontend/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Frontend
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Frontend
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../Backend/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    BackEnd
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2_2" id="__nav_2_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    BackEnd
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Backend/backend-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Smart Smoker Backend Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../Smoker%20Frontend/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Smoker Frontend
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Smoker Frontend
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../Device%20Service/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Device Service
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Device Service
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../Packages/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Packages
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Packages
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Packages/testing-template/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing Template
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../CI-CD/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CI/CD
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    CI/CD
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../CI-CD/github-actions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GitHub Actions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../CI-CD/test-coverage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Test Coverage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../CI-CD/dependency-management/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependency Management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../CI-CD/deployment-infrastructure/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deployment & Infrastructure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Infrastructure
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Infrastructure
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../proxmox-infrastructure-plan.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_2" id="__nav_5_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operations Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Operations Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../terraform-setup-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Terraform Setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ansible-operations-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ansible Operations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../infrastructure-testing-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing & Verification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../disaster-recovery-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Disaster Recovery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../secrets-management-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Secrets Management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tailscale-troubleshooting-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tailscale Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5_3" id="__nav_5_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Implementation Plans
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Implementation Plans
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../phase-1-container-standardization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Phase 1 - Container Standardization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../phase-2-proxmox-infrastructure/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Phase 2 - Proxmox Infrastructure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../phase-3-deployment-automation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Phase 3 - Deployment Automation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Phase 4 - Testing & Documentation
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Phase 4 - Testing & Documentation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#goals-objectives" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Goals &amp; Objectives
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Goals &amp; Objectives">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#primary-goals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Primary Goals
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#success-criteria" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Success Criteria
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#architecture-components" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Architecture Components
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Architecture Components">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#testing-infrastructure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Testing Infrastructure
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentation-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation Structure
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#user-stories" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        User Stories
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="User Stories">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#story-0-virtual-smoker-device-setup-moved-from-phase-2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Story 0: Virtual Smoker Device Setup (Moved from Phase 2)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#story-1-infrastructure-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Story 1: Infrastructure Validation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#story-2-team-knowledge-transfer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Story 2: Team Knowledge Transfer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#story-3-operational-excellence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Story 3: Operational Excellence
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#story-4-disaster-recovery" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Story 4: Disaster Recovery
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#testing-strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Testing Strategy
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Testing Strategy">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#infrastructure-testing-suite" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Infrastructure Testing Suite
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#application-testing-framework" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Application Testing Framework
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance-testing-suite" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance Testing Suite
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#disaster-recovery-testing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Disaster Recovery Testing
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#documentation-framework" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation Framework
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Documentation Framework">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#technical-architecture-documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Technical Architecture Documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-tailscale-connectivity-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Tailscale Connectivity Issues
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-github-actions-runner-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. GitHub Actions Runner Issues
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-raspberry-pi-device-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Raspberry Pi Device Issues
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#alerting-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Alerting Rules
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#training-materials" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Training Materials
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Training Materials">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#infrastructure-training-program" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Infrastructure Training Program
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#video-tutorial-scripts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Video Tutorial Scripts
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#testing-automation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Testing Automation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Testing Automation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#continuous-testing-pipeline" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Continuous Testing Pipeline
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#success-metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Success Metrics
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Success Metrics">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#testing-metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Testing Metrics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentation-metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation Metrics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#training-metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Training Metrics
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#risk-assessment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Risk Assessment
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Risk Assessment">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#high-priority-risks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        High Priority Risks
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#deliverables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deliverables
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Deliverables">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#phase-4-outputs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 4 Outputs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#project-completion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Project Completion
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="phase-4-testing-documentation">Phase 4: Testing &amp; Documentation</h1>
+<h2 id="overview">Overview</h2>
+<p>Phase 4 focuses on comprehensive testing validation, documentation finalization, and knowledge transfer. This phase ensures the entire infrastructure as code solution is thoroughly tested, documented, and ready for long-term maintenance and operation.</p>
+<h2 id="goals-objectives">Goals &amp; Objectives</h2>
+<h3 id="primary-goals">Primary Goals</h3>
+<ul>
+<li><strong>Comprehensive Testing</strong>: Validate all infrastructure components and workflows</li>
+<li><strong>Documentation Excellence</strong>: Complete technical documentation and user guides</li>
+<li><strong>Knowledge Transfer</strong>: Train team members on infrastructure management</li>
+<li><strong>Monitoring &amp; Observability</strong>: Implement comprehensive monitoring solutions</li>
+<li><strong>Maintenance Planning</strong>: Establish ongoing maintenance procedures</li>
+</ul>
+<h3 id="success-criteria">Success Criteria</h3>
+<ul>
+<li>✅ All infrastructure components tested and validated</li>
+<li>✅ Complete documentation suite available</li>
+<li>✅ Team successfully trained on all procedures</li>
+<li>✅ Monitoring and alerting systems operational</li>
+<li>✅ Disaster recovery procedures tested</li>
+<li>✅ Performance benchmarks established</li>
+</ul>
+<h2 id="architecture-components">Architecture Components</h2>
+<h3 id="testing-infrastructure">Testing Infrastructure</h3>
+<div class="highlight"><pre><span></span><code>Testing Framework
+├── Infrastructure Testing
+│   ├── Terraform Validation
+│   ├── Proxmox Integration Tests
+│   ├── Network Connectivity Tests
+│   └── Security Compliance Scans
+│
+├── Application Testing
+│   ├── Unit Tests (GitHub Hosted)
+│   ├── Integration Tests (Virtual Smoker VM)
+│   ├── End-to-End Tests (Full Stack)
+│   └── Performance Tests (Load Testing)
+│
+├── Deployment Testing
+│   ├── Development Deployment Tests
+│   ├── Production Deployment Tests
+│   ├── Rollback Procedure Tests
+│   └── Disaster Recovery Tests
+│
+└── Device Testing
+    ├── Virtual Device Tests
+    ├── Raspberry Pi Integration Tests
+    ├── Hardware Mock Validation
+    └── Network Connectivity Tests
+</code></pre></div>
+<h3 id="documentation-structure">Documentation Structure</h3>
+<div class="highlight"><pre><span></span><code>Documentation Framework
+├── Technical Documentation
+│   ├── Architecture Overview
+│   ├── Infrastructure Components
+│   ├── Deployment Procedures
+│   ├── Troubleshooting Guides
+│   └── API Documentation
+│
+├── Operational Documentation
+│   ├── Runbooks and Procedures
+│   ├── Monitoring and Alerting
+│   ├── Backup and Recovery
+│   ├── Security Procedures
+│   └── Maintenance Schedules
+│
+├── User Documentation
+│   ├── Getting Started Guides
+│   ├── Development Workflows
+│   ├── Deployment Instructions
+│   ├── FAQ and Common Issues
+│   └── Video Tutorials
+│
+└── Training Materials
+    ├── Infrastructure Training
+    ├── Deployment Training
+    ├── Troubleshooting Training
+    └── Emergency Procedures
+</code></pre></div>
+<h2 id="user-stories">User Stories</h2>
+<h3 id="story-0-virtual-smoker-device-setup-moved-from-phase-2">Story 0: Virtual Smoker Device Setup (Moved from Phase 2)</h3>
+<p><strong>As a</strong> developer
+<strong>I want</strong> a virtual Raspberry Pi environment for testing
+<strong>So that</strong> I can develop and test device functionality without physical hardware</p>
+<p><strong>Context</strong>: This story was originally in Phase 2, Story 4, but has been moved to Phase 4 as it's a testing tool rather than core infrastructure required for deployment.</p>
+<p><strong>Acceptance Criteria:</strong>
+- ARM64 VM running Raspberry Pi OS provisioned via Terraform
+- VNC access for GUI interactions configured
+- Mock hardware services for sensor simulation installed
+- Device service can run and connect to backend
+- Serial communication simulation available
+- Tailscale configured for network access</p>
+<p><strong>Implementation Details:</strong>
+- <strong>Terraform Configuration</strong>: Use existing <code>infra/terraform/environments/virtual-smoker/</code> configuration
+- <strong>Provisioning</strong>: Run <code>terraform apply</code> for virtual-smoker module
+- <strong>Configuration</strong>: Use Ansible playbook <code>playbooks/setup-virtual-smoker.yml</code>
+- <strong>Networking</strong>: Configure on Tailscale as <code>virtual-smoker-device</code>
+- <strong>Access</strong>: VNC on port 5901, SSH via Tailscale</p>
+<p><strong>Technical Specifications:</strong>
+- <strong>OS</strong>: Raspberry Pi OS Lite 64-bit
+- <strong>Resources</strong>: 2 CPU cores (ARM64), 2GB RAM, 32GB storage
+- <strong>Services</strong>: VNC Server, mock hardware simulators, Node.js environment
+- <strong>Network</strong>: Tailscale integration for remote access
+- <strong>Expected IP</strong>: Configurable via Terraform (originally 10.30.0.40)</p>
+<p><strong>Reference Documentation:</strong>
+- See Phase 2 documentation (lines 306-1020) for complete virtual smoker setup scripts
+- Terraform module: <code>infra/terraform/modules/arm64-vm/</code>
+- Ansible role: <code>infra/ansible/roles/virtual-device/</code></p>
+<p><strong>Priority</strong>: Medium - Valuable for testing but not blocking other work</p>
+<h3 id="story-1-infrastructure-validation">Story 1: Infrastructure Validation</h3>
+<p><strong>As a</strong> DevOps engineer<br />
+<strong>I want</strong> comprehensive infrastructure testing<br />
+<strong>So that</strong> I can ensure system reliability and stability</p>
+<p><strong>Acceptance Criteria:</strong>
+- All Terraform configurations validated
+- Network connectivity between all components verified
+- Security compliance requirements met
+- Performance benchmarks established
+- Disaster recovery procedures tested</p>
+<h3 id="story-2-team-knowledge-transfer">Story 2: Team Knowledge Transfer</h3>
+<p><strong>As a</strong> team lead<br />
+<strong>I want</strong> comprehensive documentation and training<br />
+<strong>So that</strong> team members can manage infrastructure independently</p>
+<p><strong>Acceptance Criteria:</strong>
+- Technical documentation complete and accurate
+- Team training sessions completed
+- Runbooks available for common procedures
+- Emergency response procedures documented
+- Knowledge validation tests passed</p>
+<h3 id="story-3-operational-excellence">Story 3: Operational Excellence</h3>
+<p><strong>As a</strong> system administrator<br />
+<strong>I want</strong> monitoring and maintenance procedures<br />
+<strong>So that</strong> the infrastructure operates reliably long-term</p>
+<p><strong>Acceptance Criteria:</strong>
+- Comprehensive monitoring dashboards deployed
+- Alerting configured for critical issues
+- Maintenance schedules established
+- Performance baselines documented
+- Capacity planning procedures in place</p>
+<h3 id="story-4-disaster-recovery">Story 4: Disaster Recovery</h3>
+<p><strong>As a</strong> business stakeholder<br />
+<strong>I want</strong> tested disaster recovery procedures<br />
+<strong>So that</strong> business continuity is maintained during incidents</p>
+<p><strong>Acceptance Criteria:</strong>
+- Disaster recovery plan documented
+- Recovery procedures tested successfully
+- Recovery time objectives (RTO) met
+- Recovery point objectives (RPO) met
+- Communication procedures established</p>
+<h2 id="testing-strategy">Testing Strategy</h2>
+<h3 id="infrastructure-testing-suite">Infrastructure Testing Suite</h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># tests/infrastructure/terraform-validation.yml</span>
+<span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Infrastructure Validation Tests</span>
+
+<span class="nt">test_suites</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">terraform_validation</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Syntax</span><span class="nv"> </span><span class="s">Validation&quot;</span>
+<span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;terraform</span><span class="nv"> </span><span class="s">validate&quot;</span>
+<span class="w">      </span><span class="nt">directories</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;infra/terraform/**/*.tf&quot;</span><span class="p p-Indicator">]</span>
+
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Security</span><span class="nv"> </span><span class="s">Scan&quot;</span>
+<span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;tfsec</span><span class="nv"> </span><span class="s">.&quot;</span>
+<span class="w">      </span><span class="nt">directories</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;infra/terraform/&quot;</span><span class="p p-Indicator">]</span>
+
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Plan</span><span class="nv"> </span><span class="s">Validation&quot;</span>
+<span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;terraform</span><span class="nv"> </span><span class="s">plan</span><span class="nv"> </span><span class="s">-detailed-exitcode&quot;</span>
+<span class="w">      </span><span class="nt">environments</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;dev&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;staging&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;prod&quot;</span><span class="p p-Indicator">]</span>
+
+<span class="w">  </span><span class="nt">proxmox_integration</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;API</span><span class="nv"> </span><span class="s">Connectivity&quot;</span>
+<span class="w">      </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;curl</span><span class="nv"> </span><span class="s">-k</span><span class="nv"> </span><span class="s">${PROXMOX_URL}/api2/json/version&quot;</span>
+<span class="w">      </span><span class="nt">expected</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;HTTP</span><span class="nv"> </span><span class="s">200&quot;</span>
+
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Authentication&quot;</span>
+<span class="w">      </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;pveum</span><span class="nv"> </span><span class="s">list&quot;</span>
+<span class="w">      </span><span class="nt">user</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;terraform@pve&quot;</span>
+
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Resource</span><span class="nv"> </span><span class="s">Availability&quot;</span>
+<span class="w">      </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;pvesh</span><span class="nv"> </span><span class="s">get</span><span class="nv"> </span><span class="s">/nodes/${NODE}/status&quot;</span>
+<span class="w">      </span><span class="nt">validate</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;memory&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;cpu&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;storage&quot;</span><span class="p p-Indicator">]</span>
+
+<span class="w">  </span><span class="nt">network_testing</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Tailscale</span><span class="nv"> </span><span class="s">Connectivity&quot;</span>
+<span class="w">      </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;tailscale</span><span class="nv"> </span><span class="s">ping&quot;</span>
+<span class="w">      </span><span class="nt">targets</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;smoker-dev-cloud&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;smokecloud&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;virtual-smoker-device&quot;</span><span class="p p-Indicator">]</span>
+
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Service</span><span class="nv"> </span><span class="s">Connectivity&quot;</span>
+<span class="w">      </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;nc</span><span class="nv"> </span><span class="s">-zv&quot;</span>
+<span class="w">      </span><span class="nt">ports</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">80</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">443</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">3001</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">3002</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">5900</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">8765</span><span class="p p-Indicator">]</span>
+
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;DNS</span><span class="nv"> </span><span class="s">Resolution&quot;</span>
+<span class="w">      </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;nslookup&quot;</span>
+<span class="w">      </span><span class="nt">domains</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;smokecloud.tail74646.ts.net&quot;</span><span class="p p-Indicator">]</span>
+
+<span class="w">  </span><span class="nt">security_compliance</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;SSL</span><span class="nv"> </span><span class="s">Certificate</span><span class="nv"> </span><span class="s">Validation&quot;</span>
+<span class="w">      </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;openssl</span><span class="nv"> </span><span class="s">s_client</span><span class="nv"> </span><span class="s">-connect&quot;</span>
+<span class="w">      </span><span class="nt">targets</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;smokecloud.tail74646.ts.net:443&quot;</span><span class="p p-Indicator">]</span>
+
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;SSH</span><span class="nv"> </span><span class="s">Key</span><span class="nv"> </span><span class="s">Validation&quot;</span>
+<span class="w">      </span><span class="nt">test</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;ssh-keygen</span><span class="nv"> </span><span class="s">-l&quot;</span>
+<span class="w">      </span><span class="nt">keys</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;proxmox_automation.pub&quot;</span><span class="p p-Indicator">]</span>
+
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Container</span><span class="nv"> </span><span class="s">Security</span><span class="nv"> </span><span class="s">Scan&quot;</span>
+<span class="w">      </span><span class="nt">tool</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;trivy&quot;</span>
+<span class="w">      </span><span class="nt">images</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;benjr70/smart-smoker-*:latest&quot;</span><span class="p p-Indicator">]</span>
+</code></pre></div>
+<h3 id="application-testing-framework">Application Testing Framework</h3>
+<div class="highlight"><pre><span></span><code><span class="c1">// tests/integration/full-stack.test.js</span>
+<span class="nx">describe</span><span class="p">(</span><span class="s1">&#39;Full Stack Integration Tests&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="kd">let</span><span class="w"> </span><span class="nx">testEnvironment</span><span class="p">;</span>
+
+<span class="w">  </span><span class="nx">beforeAll</span><span class="p">(</span><span class="k">async</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">testEnvironment</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">setupTestEnvironment</span><span class="p">();</span>
+<span class="w">  </span><span class="p">});</span>
+
+<span class="w">  </span><span class="nx">afterAll</span><span class="p">(</span><span class="k">async</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">await</span><span class="w"> </span><span class="nx">teardownTestEnvironment</span><span class="p">(</span><span class="nx">testEnvironment</span><span class="p">);</span>
+<span class="w">  </span><span class="p">});</span>
+
+<span class="w">  </span><span class="nx">describe</span><span class="p">(</span><span class="s1">&#39;Backend Service Tests&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">test</span><span class="p">(</span><span class="s1">&#39;Health endpoint responds correctly&#39;</span><span class="p">,</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="kd">const</span><span class="w"> </span><span class="nx">response</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">fetch</span><span class="p">(</span><span class="sb">`</span><span class="si">${</span><span class="nx">testEnvironment</span><span class="p">.</span><span class="nx">backend</span><span class="si">}</span><span class="sb">/health`</span><span class="p">);</span>
+<span class="w">      </span><span class="nx">expect</span><span class="p">(</span><span class="nx">response</span><span class="p">.</span><span class="nx">status</span><span class="p">).</span><span class="nx">toBe</span><span class="p">(</span><span class="mf">200</span><span class="p">);</span>
+
+<span class="w">      </span><span class="kd">const</span><span class="w"> </span><span class="nx">health</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">response</span><span class="p">.</span><span class="nx">json</span><span class="p">();</span>
+<span class="w">      </span><span class="nx">expect</span><span class="p">(</span><span class="nx">health</span><span class="p">.</span><span class="nx">status</span><span class="p">).</span><span class="nx">toBe</span><span class="p">(</span><span class="s1">&#39;healthy&#39;</span><span class="p">);</span>
+<span class="w">      </span><span class="nx">expect</span><span class="p">(</span><span class="nx">health</span><span class="p">.</span><span class="nx">database</span><span class="p">).</span><span class="nx">toBe</span><span class="p">(</span><span class="s1">&#39;connected&#39;</span><span class="p">);</span>
+<span class="w">    </span><span class="p">});</span>
+
+<span class="w">    </span><span class="nx">test</span><span class="p">(</span><span class="s1">&#39;Temperature API functionality&#39;</span><span class="p">,</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="kd">const</span><span class="w"> </span><span class="nx">tempData</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">smoker_temp</span><span class="o">:</span><span class="w"> </span><span class="mf">225</span><span class="p">,</span>
+<span class="w">        </span><span class="nx">meat_temp</span><span class="o">:</span><span class="w"> </span><span class="mf">165</span><span class="p">,</span>
+<span class="w">        </span><span class="nx">timestamp</span><span class="o">:</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nb">Date</span><span class="p">().</span><span class="nx">toISOString</span><span class="p">()</span>
+<span class="w">      </span><span class="p">};</span>
+
+<span class="w">      </span><span class="kd">const</span><span class="w"> </span><span class="nx">response</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">fetch</span><span class="p">(</span><span class="sb">`</span><span class="si">${</span><span class="nx">testEnvironment</span><span class="p">.</span><span class="nx">backend</span><span class="si">}</span><span class="sb">/api/temperatures`</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">method</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;POST&#39;</span><span class="p">,</span>
+<span class="w">        </span><span class="nx">headers</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="s1">&#39;Content-Type&#39;</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;application/json&#39;</span><span class="w"> </span><span class="p">},</span>
+<span class="w">        </span><span class="nx">body</span><span class="o">:</span><span class="w"> </span><span class="nb">JSON</span><span class="p">.</span><span class="nx">stringify</span><span class="p">(</span><span class="nx">tempData</span><span class="p">)</span>
+<span class="w">      </span><span class="p">});</span>
+
+<span class="w">      </span><span class="nx">expect</span><span class="p">(</span><span class="nx">response</span><span class="p">.</span><span class="nx">status</span><span class="p">).</span><span class="nx">toBe</span><span class="p">(</span><span class="mf">201</span><span class="p">);</span>
+<span class="w">    </span><span class="p">});</span>
+
+<span class="w">    </span><span class="nx">test</span><span class="p">(</span><span class="s1">&#39;WebSocket connectivity&#39;</span><span class="p">,</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="kd">const</span><span class="w"> </span><span class="nx">ws</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">WebSocket</span><span class="p">(</span><span class="sb">`ws://</span><span class="si">${</span><span class="nx">testEnvironment</span><span class="p">.</span><span class="nx">backend</span><span class="si">}</span><span class="sb">/ws`</span><span class="p">);</span>
+
+<span class="w">      </span><span class="k">await</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nb">Promise</span><span class="p">((</span><span class="nx">resolve</span><span class="p">,</span><span class="w"> </span><span class="nx">reject</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">ws</span><span class="p">.</span><span class="nx">onopen</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">resolve</span><span class="p">();</span>
+<span class="w">        </span><span class="nx">ws</span><span class="p">.</span><span class="nx">onerror</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">reject</span><span class="p">;</span>
+<span class="w">        </span><span class="nx">setTimeout</span><span class="p">(</span><span class="nx">reject</span><span class="p">,</span><span class="w"> </span><span class="mf">5000</span><span class="p">);</span>
+<span class="w">      </span><span class="p">});</span>
+
+<span class="w">      </span><span class="nx">ws</span><span class="p">.</span><span class="nx">close</span><span class="p">();</span>
+<span class="w">    </span><span class="p">});</span>
+<span class="w">  </span><span class="p">});</span>
+
+<span class="w">  </span><span class="nx">describe</span><span class="p">(</span><span class="s1">&#39;Frontend Application Tests&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">test</span><span class="p">(</span><span class="s1">&#39;Application loads correctly&#39;</span><span class="p">,</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="kd">const</span><span class="w"> </span><span class="nx">response</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">fetch</span><span class="p">(</span><span class="nx">testEnvironment</span><span class="p">.</span><span class="nx">frontend</span><span class="p">);</span>
+<span class="w">      </span><span class="nx">expect</span><span class="p">(</span><span class="nx">response</span><span class="p">.</span><span class="nx">status</span><span class="p">).</span><span class="nx">toBe</span><span class="p">(</span><span class="mf">200</span><span class="p">);</span>
+
+<span class="w">      </span><span class="kd">const</span><span class="w"> </span><span class="nx">html</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">response</span><span class="p">.</span><span class="nx">text</span><span class="p">();</span>
+<span class="w">      </span><span class="nx">expect</span><span class="p">(</span><span class="nx">html</span><span class="p">).</span><span class="nx">toContain</span><span class="p">(</span><span class="s1">&#39;&lt;title&gt;Smart Smoker&lt;/title&gt;&#39;</span><span class="p">);</span>
+<span class="w">    </span><span class="p">});</span>
+
+<span class="w">    </span><span class="nx">test</span><span class="p">(</span><span class="s1">&#39;API integration working&#39;</span><span class="p">,</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="c1">// Test frontend can communicate with backend</span>
+<span class="w">      </span><span class="kd">const</span><span class="w"> </span><span class="nx">page</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">setupBrowserTest</span><span class="p">(</span><span class="nx">testEnvironment</span><span class="p">.</span><span class="nx">frontend</span><span class="p">);</span>
+
+<span class="w">      </span><span class="k">await</span><span class="w"> </span><span class="nx">page</span><span class="p">.</span><span class="kr">goto</span><span class="p">(</span><span class="nx">testEnvironment</span><span class="p">.</span><span class="nx">frontend</span><span class="p">);</span>
+<span class="w">      </span><span class="k">await</span><span class="w"> </span><span class="nx">page</span><span class="p">.</span><span class="nx">waitForSelector</span><span class="p">(</span><span class="s1">&#39;[data-testid=&quot;temperature-display&quot;]&#39;</span><span class="p">);</span>
+
+<span class="w">      </span><span class="kd">const</span><span class="w"> </span><span class="nx">temperature</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">page</span><span class="p">.</span><span class="nx">textContent</span><span class="p">(</span><span class="s1">&#39;[data-testid=&quot;smoker-temp&quot;]&#39;</span><span class="p">);</span>
+<span class="w">      </span><span class="nx">expect</span><span class="p">(</span><span class="nx">temperature</span><span class="p">).</span><span class="nx">toMatch</span><span class="p">(</span><span class="sr">/\d+°F/</span><span class="p">);</span>
+<span class="w">    </span><span class="p">});</span>
+<span class="w">  </span><span class="p">});</span>
+
+<span class="w">  </span><span class="nx">describe</span><span class="p">(</span><span class="s1">&#39;Device Service Tests&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">test</span><span class="p">(</span><span class="s1">&#39;Virtual device connectivity&#39;</span><span class="p">,</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="kd">const</span><span class="w"> </span><span class="nx">response</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">fetch</span><span class="p">(</span><span class="sb">`</span><span class="si">${</span><span class="nx">testEnvironment</span><span class="p">.</span><span class="nx">deviceService</span><span class="si">}</span><span class="sb">/health`</span><span class="p">);</span>
+<span class="w">      </span><span class="nx">expect</span><span class="p">(</span><span class="nx">response</span><span class="p">.</span><span class="nx">status</span><span class="p">).</span><span class="nx">toBe</span><span class="p">(</span><span class="mf">200</span><span class="p">);</span>
+<span class="w">    </span><span class="p">});</span>
+
+<span class="w">    </span><span class="nx">test</span><span class="p">(</span><span class="s1">&#39;Mock hardware integration&#39;</span><span class="p">,</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="kd">const</span><span class="w"> </span><span class="nx">tempResponse</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">fetch</span><span class="p">(</span><span class="sb">`</span><span class="si">${</span><span class="nx">testEnvironment</span><span class="p">.</span><span class="nx">mockHardware</span><span class="si">}</span><span class="sb">/status`</span><span class="p">);</span>
+<span class="w">      </span><span class="kd">const</span><span class="w"> </span><span class="nx">mockData</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">tempResponse</span><span class="p">.</span><span class="nx">json</span><span class="p">();</span>
+
+<span class="w">      </span><span class="nx">expect</span><span class="p">(</span><span class="nx">mockData</span><span class="p">.</span><span class="nx">sensors</span><span class="p">).</span><span class="nx">toHaveProperty</span><span class="p">(</span><span class="s1">&#39;smoker_temp&#39;</span><span class="p">);</span>
+<span class="w">      </span><span class="nx">expect</span><span class="p">(</span><span class="nx">mockData</span><span class="p">.</span><span class="nx">sensors</span><span class="p">).</span><span class="nx">toHaveProperty</span><span class="p">(</span><span class="s1">&#39;meat_temp&#39;</span><span class="p">);</span>
+<span class="w">    </span><span class="p">});</span>
+
+<span class="w">    </span><span class="nx">test</span><span class="p">(</span><span class="s1">&#39;Serial communication simulation&#39;</span><span class="p">,</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="kd">const</span><span class="w"> </span><span class="nx">ws</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">WebSocket</span><span class="p">(</span><span class="sb">`ws://</span><span class="si">${</span><span class="nx">testEnvironment</span><span class="p">.</span><span class="nx">mockHardware</span><span class="si">}</span><span class="sb">:8765`</span><span class="p">);</span>
+
+<span class="w">      </span><span class="k">await</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nb">Promise</span><span class="p">((</span><span class="nx">resolve</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">ws</span><span class="p">.</span><span class="nx">onmessage</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="nx">event</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="kd">const</span><span class="w"> </span><span class="nx">data</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">JSON</span><span class="p">.</span><span class="nx">parse</span><span class="p">(</span><span class="nx">event</span><span class="p">.</span><span class="nx">data</span><span class="p">);</span>
+<span class="w">          </span><span class="nx">expect</span><span class="p">(</span><span class="nx">data</span><span class="p">.</span><span class="nx">type</span><span class="p">).</span><span class="nx">toBe</span><span class="p">(</span><span class="s1">&#39;sensor_data&#39;</span><span class="p">);</span>
+<span class="w">          </span><span class="nx">resolve</span><span class="p">();</span>
+<span class="w">        </span><span class="p">};</span>
+<span class="w">      </span><span class="p">});</span>
+<span class="w">    </span><span class="p">});</span>
+<span class="w">  </span><span class="p">});</span>
+<span class="p">});</span>
+</code></pre></div>
+<h3 id="performance-testing-suite">Performance Testing Suite</h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># tests/performance/load-testing.yml</span>
+<span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Performance and Load Tests</span>
+
+<span class="nt">scenarios</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">backend_load_test</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">tool</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;artillery&quot;</span>
+<span class="w">    </span><span class="nt">config</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;http://smoker-dev-cloud:3001&quot;</span>
+<span class="w">      </span><span class="nt">phases</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">duration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">60</span>
+<span class="w">          </span><span class="nt">arrivalRate</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">duration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">120</span>
+<span class="w">          </span><span class="nt">arrivalRate</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">duration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">60</span>
+<span class="w">          </span><span class="nt">arrivalRate</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
+<span class="w">      </span><span class="nt">scenarios</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Temperature</span><span class="nv"> </span><span class="s">API</span><span class="nv"> </span><span class="s">Load&quot;</span>
+<span class="w">          </span><span class="nt">requests</span><span class="p">:</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">get</span><span class="p">:</span>
+<span class="w">                </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/api/temperatures&quot;</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">post</span><span class="p">:</span>
+<span class="w">                </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/api/temperatures&quot;</span>
+<span class="w">                </span><span class="nt">json</span><span class="p">:</span>
+<span class="w">                  </span><span class="nt">smoker_temp</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">225</span>
+<span class="w">                  </span><span class="nt">meat_temp</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">165</span>
+
+<span class="w">  </span><span class="nt">websocket_load_test</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">tool</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;artillery&quot;</span>
+<span class="w">    </span><span class="nt">config</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;ws://smoker-dev-cloud:3001&quot;</span>
+<span class="w">      </span><span class="nt">phases</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">duration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">120</span>
+<span class="w">          </span><span class="nt">arrivalRate</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">25</span>
+<span class="w">      </span><span class="nt">scenarios</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;WebSocket</span><span class="nv"> </span><span class="s">Connections&quot;</span>
+<span class="w">          </span><span class="nt">engine</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;ws&quot;</span>
+
+<span class="w">  </span><span class="nt">database_performance</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">tool</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;pgbench&quot;</span>
+<span class="w">    </span><span class="nt">config</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">database</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;smart_smoker&quot;</span>
+<span class="w">      </span><span class="nt">clients</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50</span>
+<span class="w">      </span><span class="nt">threads</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
+<span class="w">      </span><span class="nt">transactions</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1000</span>
+
+<span class="w">  </span><span class="nt">frontend_performance</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">tool</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;lighthouse&quot;</span>
+<span class="w">    </span><span class="nt">config</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;http://smoker-dev-cloud&quot;</span>
+<span class="w">      </span><span class="nt">metrics</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">performance</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;&gt;</span><span class="nv"> </span><span class="s">90&quot;</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">accessibility</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;&gt;</span><span class="nv"> </span><span class="s">95&quot;</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">best-practices</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;&gt;</span><span class="nv"> </span><span class="s">90&quot;</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">seo</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;&gt;</span><span class="nv"> </span><span class="s">80&quot;</span>
+</code></pre></div>
+<h3 id="disaster-recovery-testing">Disaster Recovery Testing</h3>
+<div class="highlight"><pre><span></span><code><span class="ch">#!/bin/bash</span>
+<span class="c1"># tests/disaster-recovery/full-system-recovery.sh</span>
+
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Starting Disaster Recovery Test...&quot;</span>
+
+<span class="c1"># Test Scenario: Complete infrastructure failure</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;=== Disaster Recovery Test Scenario ===&quot;</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Simulating complete infrastructure failure&quot;</span>
+
+<span class="c1"># Backup current state</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;1. Creating system backups...&quot;</span>
+<span class="nv">backup_timestamp</span><span class="o">=</span><span class="k">$(</span>date<span class="w"> </span>+%Y%m%d_%H%M%S<span class="k">)</span>
+mkdir<span class="w"> </span>-p<span class="w"> </span>/tmp/disaster-recovery-test-<span class="si">${</span><span class="nv">backup_timestamp</span><span class="si">}</span>
+
+<span class="c1"># Backup Proxmox containers</span>
+ssh<span class="w"> </span>root@proxmox<span class="w"> </span><span class="s2">&quot;vzdump --mode snapshot --compress gzip --storage local-zfs&quot;</span>
+
+<span class="c1"># Backup database</span>
+ssh<span class="w"> </span>root@smokecloud<span class="w"> </span><span class="s2">&quot;cd /opt/smart-smoker &amp;&amp; docker-compose exec -T postgres pg_dump -U postgres smart_smoker &gt; /tmp/db_backup_</span><span class="si">${</span><span class="nv">backup_timestamp</span><span class="si">}</span><span class="s2">.sql&quot;</span>
+
+<span class="c1"># Backup configuration files</span>
+rsync<span class="w"> </span>-av<span class="w"> </span>infra/<span class="w"> </span>/tmp/disaster-recovery-test-<span class="si">${</span><span class="nv">backup_timestamp</span><span class="si">}</span>/infra/
+
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;2. Simulating infrastructure failure...&quot;</span>
+<span class="c1"># Stop all services (reversible simulation)</span>
+ssh<span class="w"> </span>root@smokecloud<span class="w"> </span><span class="s2">&quot;cd /opt/smart-smoker &amp;&amp; docker-compose down&quot;</span>
+ssh<span class="w"> </span>root@smoker-dev-cloud<span class="w"> </span><span class="s2">&quot;cd /opt/smart-smoker &amp;&amp; docker-compose down&quot;</span>
+
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;3. Initiating recovery procedures...&quot;</span>
+<span class="nv">start_time</span><span class="o">=</span><span class="k">$(</span>date<span class="w"> </span>+%s<span class="k">)</span>
+
+<span class="c1"># Recovery Step 1: Verify infrastructure</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;  - Verifying Proxmox infrastructure...&quot;</span>
+<span class="k">if</span><span class="w"> </span>!<span class="w"> </span>ssh<span class="w"> </span>root@proxmox<span class="w"> </span><span class="s2">&quot;pct list&quot;</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
+<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;ERROR: Cannot connect to Proxmox&quot;</span>
+<span class="w">    </span><span class="nb">exit</span><span class="w"> </span><span class="m">1</span>
+<span class="k">fi</span>
+
+<span class="c1"># Recovery Step 2: Restart services</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;  - Restarting production services...&quot;</span>
+ssh<span class="w"> </span>root@smokecloud<span class="w"> </span><span class="s2">&quot;cd /opt/smart-smoker &amp;&amp; docker-compose up -d&quot;</span>
+
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;  - Restarting development services...&quot;</span>
+ssh<span class="w"> </span>root@smoker-dev-cloud<span class="w"> </span><span class="s2">&quot;cd /opt/smart-smoker &amp;&amp; docker-compose up -d&quot;</span>
+
+<span class="c1"># Recovery Step 3: Verify service health</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;  - Waiting for services to start...&quot;</span>
+sleep<span class="w"> </span><span class="m">60</span>
+
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;  - Running health checks...&quot;</span>
+<span class="k">if</span><span class="w"> </span>!<span class="w"> </span>./scripts/health-check.sh<span class="w"> </span>smokecloud<span class="p">;</span><span class="w"> </span><span class="k">then</span>
+<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;ERROR: Production health check failed&quot;</span>
+<span class="w">    </span><span class="nb">exit</span><span class="w"> </span><span class="m">1</span>
+<span class="k">fi</span>
+
+<span class="k">if</span><span class="w"> </span>!<span class="w"> </span>./scripts/health-check.sh<span class="w"> </span>smoker-dev-cloud<span class="p">;</span><span class="w"> </span><span class="k">then</span>
+<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;ERROR: Development health check failed&quot;</span>
+<span class="w">    </span><span class="nb">exit</span><span class="w"> </span><span class="m">1</span>
+<span class="k">fi</span>
+
+<span class="c1"># Recovery Step 4: Data integrity verification</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;  - Verifying data integrity...&quot;</span>
+ssh<span class="w"> </span>root@smokecloud<span class="w"> </span><span class="s2">&quot;cd /opt/smart-smoker &amp;&amp; docker-compose exec -T postgres psql -U postgres -d smart_smoker -c &#39;SELECT COUNT(*) FROM smoke_sessions;&#39;&quot;</span>
+
+<span class="c1"># Recovery Step 5: End-to-end functionality test</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;  - Running end-to-end functionality tests...&quot;</span>
+./tests/integration/post-recovery-validation.sh
+
+<span class="nv">end_time</span><span class="o">=</span><span class="k">$(</span>date<span class="w"> </span>+%s<span class="k">)</span>
+<span class="nv">recovery_time</span><span class="o">=</span><span class="k">$((</span><span class="nv">end_time</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="nv">start_time</span><span class="k">))</span>
+
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;=== Disaster Recovery Test Results ===&quot;</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Recovery Time: </span><span class="si">${</span><span class="nv">recovery_time</span><span class="si">}</span><span class="s2"> seconds&quot;</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Target RTO: 1800 seconds (30 minutes)&quot;</span>
+
+<span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span><span class="nv">$recovery_time</span><span class="w"> </span>-lt<span class="w"> </span><span class="m">1800</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
+<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;✅ Recovery time objective (RTO) met&quot;</span>
+<span class="k">else</span>
+<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;❌ Recovery time objective (RTO) exceeded&quot;</span>
+<span class="w">    </span><span class="nb">exit</span><span class="w"> </span><span class="m">1</span>
+<span class="k">fi</span>
+
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;✅ Disaster recovery test completed successfully&quot;</span>
+
+<span class="c1"># Cleanup</span>
+rm<span class="w"> </span>-rf<span class="w"> </span>/tmp/disaster-recovery-test-<span class="si">${</span><span class="nv">backup_timestamp</span><span class="si">}</span>
+</code></pre></div>
+<h2 id="documentation-framework">Documentation Framework</h2>
+<h3 id="technical-architecture-documentation">Technical Architecture Documentation</h3>
+<p><div class="highlight"><pre><span></span><code><span class="gh"># Technical Architecture Guide</span>
+
+<span class="gu">## Infrastructure Overview</span>
+
+<span class="gu">### Components Architecture</span>
+<span class="k">-</span><span class="w"> </span><span class="gs">**Proxmox Infrastructure**</span>: Hypervisor platform hosting all virtualized components
+<span class="k">-</span><span class="w"> </span><span class="gs">**GitHub Actions**</span>: CI/CD automation with self-hosted runners
+<span class="k">-</span><span class="w"> </span><span class="gs">**Tailscale Network**</span>: Secure networking layer connecting all components
+<span class="k">-</span><span class="w"> </span><span class="gs">**Docker Containers**</span>: Standardized application deployment
+
+<span class="gu">### Network Architecture</span>
+</code></pre></div>
+Internet
+    ↓
+Tailscale Funnel (smokecloud.tail74646.ts.net)
+    ↓
+Tailscale Network (Private Mesh)
+    ↓
+┌─────────────────────────────────────────┐
+│            Proxmox Server               │
+├─────────────────────────────────────────┤
+│  ┌─────────────┐  ┌─────────────────────┐│
+│  │   GitHub    │  │  Development Cloud  ││
+│  │   Runner    │  │  (smoker-dev-cloud) ││
+│  │   (LXC)     │  │      (LXC)          ││
+│  └─────────────┘  └─────────────────────┘│
+│  ┌─────────────┐  ┌─────────────────────┐│
+│  │ Production  │  │   Virtual Smoker    ││
+│  │   Cloud     │  │     Device          ││
+│  │(smokecloud) │  │    (ARM64 VM)       ││
+│  │   (LXC)     │  │                     ││
+│  └─────────────┘  └─────────────────────┘│
+└─────────────────────────────────────────┘
+<div class="highlight"><pre><span></span><code>### Data Flow Architecture
+</code></pre></div>
+User Interface (Frontend)
+        ↓ HTTP/WebSocket
+Backend Services (API + WebSocket)
+        ↓ Database Queries
+PostgreSQL Database
+        ↓ Device Communication
+Device Service (on Raspberry Pi/Virtual Device)
+        ↓ Hardware Interface
+Temperature Sensors / Controllers
+<div class="highlight"><pre><span></span><code>## Operational Runbooks
+
+### Deployment Procedures
+```markdown
+# Production Deployment Runbook
+
+## Pre-Deployment Checklist
+- [ ] Version tag created and tested in development
+- [ ] All tests passing in CI/CD pipeline
+- [ ] Security scans completed with no high-severity issues
+- [ ] Deployment approval obtained from stakeholders
+- [ ] Maintenance window scheduled (if required)
+- [ ] Rollback plan prepared and validated
+
+## Deployment Steps
+1. **Initiate Deployment**
+   ```bash
+   # Navigate to GitHub Actions
+   # Go to &quot;Production Deployment&quot; workflow
+   # Click &quot;Run workflow&quot;
+   # Select version tag and environment
+   # Confirm deployment
+   ```
+
+2. **Monitor Deployment Progress**
+   - Watch GitHub Actions workflow execution
+   - Monitor Slack #deployments channel for updates
+   - Check deployment dashboard for metrics
+
+3. **Post-Deployment Validation**
+   ```bash
+   # Run health checks
+   ./scripts/health-check.sh smokecloud
+
+   # Verify Tailscale funnel
+   curl -I https://smokecloud.tail74646.ts.net
+
+   # Test critical user journeys
+   ./tests/smoke/critical-path.sh
+   ```
+
+4. **Raspberry Pi Updates**
+   - Watchtower will automatically update devices
+   - Monitor device status in dashboard
+   - Verify updates completed successfully
+
+## Rollback Procedures
+If issues are detected:
+1. Identify the issue severity
+2. Execute rollback if critical
+3. Investigate root cause
+4. Plan remediation
+
+```bash
+# Emergency rollback
+ssh root@smokecloud &quot;cd /opt/smart-smoker &amp;&amp; cp cloud.docker-compose.yml.backup cloud.docker-compose.yml &amp;&amp; docker-compose up -d&quot;
+</code></pre></div>
+<div class="highlight"><pre><span></span><code>### Troubleshooting Guide
+```markdown
+# Troubleshooting Guide
+
+## Common Issues and Solutions
+
+### 1. Service Health Check Failures
+
+**Symptoms:**
+- Health check scripts report failures
+- Services appear down in monitoring
+
+**Diagnosis:**
+```bash
+# Check container status
+ssh root@smokecloud &quot;docker-compose ps&quot;
+
+# Check container logs
+ssh root@smokecloud &quot;docker-compose logs backend&quot;
+
+# Check system resources
+ssh root@smokecloud &quot;free -h &amp;&amp; df -h&quot;
+</code></pre></div></p>
+<p><strong>Solutions:</strong>
+- Restart affected services: <code>docker-compose restart &lt;service&gt;</code>
+- Check for resource exhaustion
+- Verify database connectivity
+- Review application logs for errors</p>
+<h3 id="2-tailscale-connectivity-issues">2. Tailscale Connectivity Issues</h3>
+<p><strong>Symptoms:</strong>
+- Cannot access services via Tailscale hostnames
+- Devices appear offline in Tailscale admin</p>
+<p><strong>Diagnosis:</strong>
+<div class="highlight"><pre><span></span><code><span class="c1"># Check Tailscale status</span>
+tailscale<span class="w"> </span>status
+
+<span class="c1"># Test connectivity</span>
+tailscale<span class="w"> </span>ping<span class="w"> </span>smokecloud
+
+<span class="c1"># Check funnel status</span>
+ssh<span class="w"> </span>root@smokecloud<span class="w"> </span><span class="s2">&quot;tailscale funnel status&quot;</span>
+</code></pre></div></p>
+<p><strong>Solutions:</strong>
+- Restart Tailscale service: <code>systemctl restart tailscaled</code>
+- Re-authenticate device: <code>tailscale up --authkey=&lt;new-key&gt;</code>
+- Check firewall rules
+- Verify network configuration</p>
+<h3 id="3-github-actions-runner-issues">3. GitHub Actions Runner Issues</h3>
+<p><strong>Symptoms:</strong>
+- Workflows stuck in queued state
+- Runner appears offline
+- Deployment failures</p>
+<p><strong>Diagnosis:</strong>
+<div class="highlight"><pre><span></span><code><span class="c1"># Check runner status</span>
+ssh<span class="w"> </span>root@github-runner<span class="w"> </span><span class="s2">&quot;systemctl status actions.runner.Smart-Smoker-V2.proxmox-runner&quot;</span>
+
+<span class="c1"># Check runner logs</span>
+ssh<span class="w"> </span>root@github-runner<span class="w"> </span><span class="s2">&quot;journalctl -u actions.runner.Smart-Smoker-V2.proxmox-runner -f&quot;</span>
+
+<span class="c1"># Verify Proxmox connectivity</span>
+ssh<span class="w"> </span>root@github-runner<span class="w"> </span><span class="s2">&quot;pvesh get /version&quot;</span>
+</code></pre></div></p>
+<p><strong>Solutions:</strong>
+- Restart runner service
+- Update runner token
+- Check Proxmox API credentials
+- Verify network connectivity</p>
+<h3 id="4-raspberry-pi-device-issues">4. Raspberry Pi Device Issues</h3>
+<p><strong>Symptoms:</strong>
+- Device appears offline
+- Services not updating
+- Health checks failing</p>
+<p><strong>Diagnosis:</strong>
+<div class="highlight"><pre><span></span><code><span class="c1"># Check device connectivity</span>
+tailscale<span class="w"> </span>ping<span class="w"> </span>smoker-pi-prod-01
+
+<span class="c1"># SSH to device and check status</span>
+ssh<span class="w"> </span>pi@smoker-pi-prod-01<span class="w"> </span><span class="s2">&quot;docker-compose ps&quot;</span>
+
+<span class="c1"># Check Watchtower logs</span>
+ssh<span class="w"> </span>pi@smoker-pi-prod-01<span class="w"> </span><span class="s2">&quot;docker logs watchtower&quot;</span>
+</code></pre></div></p>
+<p><strong>Solutions:</strong>
+- Restart Docker service
+- Manual image pull and restart
+- Check SD card health
+- Verify network connectivity
+<div class="highlight"><pre><span></span><code>## Monitoring &amp; Observability
+
+### Monitoring Dashboard Configuration
+```yaml
+# monitoring/grafana-dashboard.json
+{
+  &quot;dashboard&quot;: {
+    &quot;title&quot;: &quot;Smart Smoker Infrastructure&quot;,
+    &quot;panels&quot;: [
+      {
+        &quot;title&quot;: &quot;Infrastructure Health&quot;,
+        &quot;type&quot;: &quot;stat&quot;,
+        &quot;targets&quot;: [
+          {
+            &quot;expr&quot;: &quot;up{job=\&quot;node_exporter\&quot;}&quot;,
+            &quot;legendFormat&quot;: &quot;{{instance}}&quot;
+          }
+        ]
+      },
+      {
+        &quot;title&quot;: &quot;Service Response Times&quot;,
+        &quot;type&quot;: &quot;graph&quot;,
+        &quot;targets&quot;: [
+          {
+            &quot;expr&quot;: &quot;http_request_duration_seconds{job=\&quot;smart-smoker\&quot;}&quot;,
+            &quot;legendFormat&quot;: &quot;{{service}}&quot;
+          }
+        ]
+      },
+      {
+        &quot;title&quot;: &quot;Container Resource Usage&quot;,
+        &quot;type&quot;: &quot;table&quot;,
+        &quot;targets&quot;: [
+          {
+            &quot;expr&quot;: &quot;container_memory_usage_bytes{name=~\&quot;smart-smoker-.*\&quot;}&quot;,
+            &quot;legendFormat&quot;: &quot;{{name}}&quot;
+          }
+        ]
+      },
+      {
+        &quot;title&quot;: &quot;Deployment Success Rate&quot;,
+        &quot;type&quot;: &quot;stat&quot;,
+        &quot;targets&quot;: [
+          {
+            &quot;expr&quot;: &quot;rate(github_actions_workflow_runs_total{conclusion=\&quot;success\&quot;}[7d])&quot;,
+            &quot;legendFormat&quot;: &quot;Success Rate&quot;
+          }
+        ]
+      }
+    ]
+  }
+}
+</code></pre></div></p>
+<h3 id="alerting-rules">Alerting Rules</h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># monitoring/alerting-rules.yml</span>
+<span class="nt">groups</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">infrastructure</span>
+<span class="w">    </span><span class="nt">rules</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">alert</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ServiceDown</span>
+<span class="w">        </span><span class="nt">expr</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">up == 0</span>
+<span class="w">        </span><span class="nt">for</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5m</span>
+<span class="w">        </span><span class="nt">labels</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">severity</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">critical</span>
+<span class="w">        </span><span class="nt">annotations</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">summary</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Service</span><span class="nv"> </span><span class="s">{{</span><span class="nv"> </span><span class="s">$labels.instance</span><span class="nv"> </span><span class="s">}}</span><span class="nv"> </span><span class="s">is</span><span class="nv"> </span><span class="s">down&quot;</span>
+
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">alert</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">HighMemoryUsage</span>
+<span class="w">        </span><span class="nt">expr</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 &gt; 90</span>
+<span class="w">        </span><span class="nt">for</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10m</span>
+<span class="w">        </span><span class="nt">labels</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">severity</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">warning</span>
+<span class="w">        </span><span class="nt">annotations</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">summary</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;High</span><span class="nv"> </span><span class="s">memory</span><span class="nv"> </span><span class="s">usage</span><span class="nv"> </span><span class="s">on</span><span class="nv"> </span><span class="s">{{</span><span class="nv"> </span><span class="s">$labels.instance</span><span class="nv"> </span><span class="s">}}&quot;</span>
+
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">alert</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DeploymentFailure</span>
+<span class="w">        </span><span class="nt">expr</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">github_actions_workflow_runs_total{conclusion=&quot;failure&quot;} &gt; 0</span>
+<span class="w">        </span><span class="nt">for</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0m</span>
+<span class="w">        </span><span class="nt">labels</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">severity</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">critical</span>
+<span class="w">        </span><span class="nt">annotations</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">summary</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Deployment</span><span class="nv"> </span><span class="s">failed</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">{{</span><span class="nv"> </span><span class="s">$labels.workflow</span><span class="nv"> </span><span class="s">}}&quot;</span>
+
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">alert</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">TailscaleDeviceOffline</span>
+<span class="w">        </span><span class="nt">expr</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tailscale_device_online == 0</span>
+<span class="w">        </span><span class="nt">for</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">15m</span>
+<span class="w">        </span><span class="nt">labels</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">severity</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">warning</span>
+<span class="w">        </span><span class="nt">annotations</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">summary</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Tailscale</span><span class="nv"> </span><span class="s">device</span><span class="nv"> </span><span class="s">{{</span><span class="nv"> </span><span class="s">$labels.hostname</span><span class="nv"> </span><span class="s">}}</span><span class="nv"> </span><span class="s">is</span><span class="nv"> </span><span class="s">offline&quot;</span>
+</code></pre></div>
+<h2 id="training-materials">Training Materials</h2>
+<h3 id="infrastructure-training-program">Infrastructure Training Program</h3>
+<div class="highlight"><pre><span></span><code><span class="gh"># Infrastructure Training Program</span>
+
+<span class="gu">## Module 1: Infrastructure Overview (2 hours)</span>
+<span class="k">-</span><span class="w"> </span>Architecture components and relationships
+<span class="k">-</span><span class="w"> </span>Proxmox basics and container management
+<span class="k">-</span><span class="w"> </span>Tailscale networking concepts
+<span class="k">-</span><span class="w"> </span>Security and access control
+
+<span class="gs">**Hands-on Labs:**</span>
+<span class="k">-</span><span class="w"> </span>Connect to Proxmox web interface
+<span class="k">-</span><span class="w"> </span>Navigate Tailscale admin console
+<span class="k">-</span><span class="w"> </span>SSH to different environment components
+
+<span class="gu">## Module 2: Deployment Workflows (3 hours)</span>
+<span class="k">-</span><span class="w"> </span>GitHub Actions workflows understanding
+<span class="k">-</span><span class="w"> </span>Development vs production deployment processes
+<span class="k">-</span><span class="w"> </span>Rollback procedures and disaster recovery
+<span class="k">-</span><span class="w"> </span>Monitoring and alerting systems
+
+<span class="gs">**Hands-on Labs:**</span>
+<span class="k">-</span><span class="w"> </span>Trigger development deployment
+<span class="k">-</span><span class="w"> </span>Execute production deployment with approval
+<span class="k">-</span><span class="w"> </span>Practice rollback procedures
+<span class="k">-</span><span class="w"> </span>Configure monitoring alerts
+
+<span class="gu">## Module 3: Troubleshooting and Maintenance (2 hours)</span>
+<span class="k">-</span><span class="w"> </span>Common issues and diagnostic procedures
+<span class="k">-</span><span class="w"> </span>Log analysis and debugging techniques
+<span class="k">-</span><span class="w"> </span>Preventive maintenance tasks
+<span class="k">-</span><span class="w"> </span>Emergency response procedures
+
+<span class="gs">**Hands-on Labs:**</span>
+<span class="k">-</span><span class="w"> </span>Diagnose simulated service failures
+<span class="k">-</span><span class="w"> </span>Practice log analysis
+<span class="k">-</span><span class="w"> </span>Execute maintenance procedures
+
+<span class="gu">## Module 4: Advanced Topics (1 hour)</span>
+<span class="k">-</span><span class="w"> </span>Infrastructure scaling considerations
+<span class="k">-</span><span class="w"> </span>Security best practices
+<span class="k">-</span><span class="w"> </span>Performance optimization
+<span class="k">-</span><span class="w"> </span>Future enhancement planning
+
+<span class="gs">**Assessment:**</span>
+<span class="k">-</span><span class="w"> </span>Practical troubleshooting scenario
+<span class="k">-</span><span class="w"> </span>Infrastructure modification exercise
+<span class="k">-</span><span class="w"> </span>Emergency response simulation
+</code></pre></div>
+<h3 id="video-tutorial-scripts">Video Tutorial Scripts</h3>
+<div class="highlight"><pre><span></span><code><span class="gh"># Video Tutorial: &quot;Deploying to Production&quot;</span>
+
+<span class="gu">## Script Outline (15 minutes)</span>
+
+<span class="gs">**Introduction (2 minutes)**</span>
+<span class="k">-</span><span class="w"> </span>Welcome and overview
+<span class="k">-</span><span class="w"> </span>What we&#39;ll accomplish
+<span class="k">-</span><span class="w"> </span>Prerequisites check
+
+<span class="gs">**GitHub Actions Setup (5 minutes)**</span>
+<span class="k">-</span><span class="w"> </span>Navigate to repository
+<span class="k">-</span><span class="w"> </span>Access Actions tab
+<span class="k">-</span><span class="w"> </span>Locate Production Deployment workflow
+<span class="k">-</span><span class="w"> </span>Explain input parameters
+
+<span class="gs">**Deployment Execution (5 minutes)**</span>
+<span class="k">-</span><span class="w"> </span>Select version to deploy
+<span class="k">-</span><span class="w"> </span>Trigger deployment
+<span class="k">-</span><span class="w"> </span>Monitor progress
+<span class="k">-</span><span class="w"> </span>Explain approval gates
+
+<span class="gs">**Validation and Monitoring (3 minutes)**</span>
+<span class="k">-</span><span class="w"> </span>Check deployment status
+<span class="k">-</span><span class="w"> </span>Verify health checks
+<span class="k">-</span><span class="w"> </span>Monitor Raspberry Pi updates
+<span class="k">-</span><span class="w"> </span>Review deployment dashboard
+
+<span class="gs">**Conclusion and Resources**</span>
+<span class="k">-</span><span class="w"> </span>Summary of key points
+<span class="k">-</span><span class="w"> </span>Links to documentation
+<span class="k">-</span><span class="w"> </span>Next steps and support contacts
+</code></pre></div>
+<h2 id="testing-automation">Testing Automation</h2>
+<h3 id="continuous-testing-pipeline">Continuous Testing Pipeline</h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># .github/workflows/comprehensive-testing.yml</span>
+<span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Comprehensive Infrastructure Testing</span>
+
+<span class="nt">on</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">schedule</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">cron</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;0</span><span class="nv"> </span><span class="s">2</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">*&#39;</span><span class="w">  </span><span class="c1"># Daily at 2 AM</span>
+<span class="w">  </span><span class="nt">workflow_dispatch</span><span class="p">:</span>
+
+<span class="nt">jobs</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">infrastructure-tests</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">runs-on</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">self-hosted</span>
+<span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">actions/checkout@v4</span>
+
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Terraform Validation</span>
+<span class="w">        </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">          </span><span class="no">cd infra/terraform</span>
+<span class="w">          </span><span class="no">find . -name &quot;*.tf&quot; -exec terraform fmt -check {} \;</span>
+<span class="w">          </span><span class="no">find . -name &quot;*.tf&quot; -exec terraform validate {} \;</span>
+
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Security Scanning</span>
+<span class="w">        </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">          </span><span class="no"># Container image security scan</span>
+<span class="w">          </span><span class="no">for image in backend frontend device-service smoker; do</span>
+<span class="w">            </span><span class="no">docker pull benjr70/smart-smoker-$image:latest</span>
+<span class="w">            </span><span class="no">trivy image benjr70/smart-smoker-$image:latest</span>
+<span class="w">          </span><span class="no">done</span>
+
+<span class="w">          </span><span class="no"># Infrastructure security scan</span>
+<span class="w">          </span><span class="no">tfsec infra/terraform/</span>
+
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Network Connectivity Tests</span>
+<span class="w">        </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">          </span><span class="no">./tests/infrastructure/network-tests.sh</span>
+
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Performance Baseline Tests</span>
+<span class="w">        </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">          </span><span class="no">./tests/performance/baseline-tests.sh</span>
+
+<span class="w">  </span><span class="nt">application-tests</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">runs-on</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">self-hosted</span>
+<span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">actions/checkout@v4</span>
+
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Full Stack Integration Tests</span>
+<span class="w">        </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">          </span><span class="no">npm run test:integration</span>
+
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Virtual Device Tests</span>
+<span class="w">        </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">          </span><span class="no">./scripts/run-integration-tests.sh virtual-smoker-device</span>
+
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Load Testing</span>
+<span class="w">        </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">          </span><span class="no">artillery run tests/performance/load-testing.yml</span>
+
+<span class="w">  </span><span class="nt">disaster-recovery-tests</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">runs-on</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">self-hosted</span>
+<span class="w">    </span><span class="nt">if</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">github.event.schedule</span><span class="w">  </span><span class="c1"># Only run on schedule</span>
+<span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">actions/checkout@v4</span>
+
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Backup Validation</span>
+<span class="w">        </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">          </span><span class="no">./tests/disaster-recovery/backup-validation.sh</span>
+
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Recovery Procedures Test</span>
+<span class="w">        </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">          </span><span class="no">./tests/disaster-recovery/recovery-test.sh</span>
+
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">RTO/RPO Validation</span>
+<span class="w">        </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">          </span><span class="no">./tests/disaster-recovery/rto-rpo-validation.sh</span>
+
+<span class="w">  </span><span class="nt">notify-results</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">needs</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">infrastructure-tests</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">application-tests</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">disaster-recovery-tests</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">runs-on</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu-latest</span>
+<span class="w">    </span><span class="nt">if</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">always()</span>
+<span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Notify test results</span>
+<span class="w">        </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8398a7/action-slack@v3</span>
+<span class="w">        </span><span class="nt">with</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">status</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${{ needs.infrastructure-tests.result == &#39;success&#39; &amp;&amp; needs.application-tests.result == &#39;success&#39; &amp;&amp; (needs.disaster-recovery-tests.result == &#39;success&#39; || needs.disaster-recovery-tests.result == &#39;skipped&#39;) }}</span>
+<span class="w">          </span><span class="nt">channel</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;#infrastructure&#39;</span>
+<span class="w">          </span><span class="nt">webhook_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${{ secrets.SLACK_WEBHOOK }}</span>
+</code></pre></div>
+<h2 id="success-metrics">Success Metrics</h2>
+<h3 id="testing-metrics">Testing Metrics</h3>
+<ul>
+<li><strong>100%</strong> infrastructure components tested</li>
+<li><strong>95%</strong> test automation coverage</li>
+<li><strong>&lt; 30 seconds</strong> average test execution time</li>
+<li><strong>99.9%</strong> test reliability (non-flaky tests)</li>
+</ul>
+<h3 id="documentation-metrics">Documentation Metrics</h3>
+<ul>
+<li><strong>100%</strong> procedures documented</li>
+<li><strong>95%</strong> team satisfaction with documentation quality</li>
+<li><strong>&lt; 5 minutes</strong> average time to find information</li>
+<li><strong>90%</strong> documentation accuracy validation</li>
+</ul>
+<h3 id="training-metrics">Training Metrics</h3>
+<ul>
+<li><strong>100%</strong> team members trained</li>
+<li><strong>90%</strong> knowledge retention rate</li>
+<li><strong>95%</strong> confidence in performing procedures</li>
+<li><strong>&lt; 2 hours</strong> time to resolution for common issues</li>
+</ul>
+<h2 id="risk-assessment">Risk Assessment</h2>
+<h3 id="high-priority-risks">High Priority Risks</h3>
+<table>
+<thead>
+<tr>
+<th>Risk</th>
+<th>Impact</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Incomplete testing coverage</td>
+<td>High</td>
+<td>Comprehensive test matrix validation</td>
+</tr>
+<tr>
+<td>Documentation gaps</td>
+<td>Medium</td>
+<td>Peer review and validation process</td>
+</tr>
+<tr>
+<td>Training ineffectiveness</td>
+<td>Medium</td>
+<td>Hands-on practice and assessment</td>
+</tr>
+<tr>
+<td>Monitoring blind spots</td>
+<td>High</td>
+<td>Regular monitoring review and updates</td>
+</tr>
+</tbody>
+</table>
+<h2 id="deliverables">Deliverables</h2>
+<h3 id="phase-4-outputs">Phase 4 Outputs</h3>
+<ul>
+<li>[ ] Comprehensive testing automation suite</li>
+<li>[ ] Complete technical documentation</li>
+<li>[ ] Operational runbooks and procedures</li>
+<li>[ ] Team training materials and sessions</li>
+<li>[ ] Monitoring and alerting systems</li>
+<li>[ ] Disaster recovery procedures</li>
+<li>[ ] Performance benchmarks and baselines</li>
+<li>[ ] Knowledge transfer completion</li>
+</ul>
+<h3 id="project-completion">Project Completion</h3>
+<ul>
+<li>All infrastructure components operational and tested</li>
+<li>Team fully trained and confident in procedures</li>
+<li>Documentation complete and accessible</li>
+<li>Monitoring providing full observability</li>
+<li>Disaster recovery procedures validated</li>
+<li>Project handoff to operations team</li>
+</ul>
+<hr />
+<p><strong>Phase Owner</strong>: DevOps Team + Documentation Team<br />
+<strong>Status</strong>: Ready for Implementation<br />
+<strong>Dependencies</strong>: Phase 3 completion<br />
+<strong>Risk Level</strong>: Low</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../phase-3-deployment-automation/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Phase 3 - Deployment Automation">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Phase 3 - Deployment Automation
+              </div>
+            </div>
+          </a>
+        
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://www.linkedin.com/in/ben-rolf-275368a4/" target="_blank" rel="noopener" title="www.linkedin.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M416 32H31.9C14.3 32 0 46.5 0 64.3v383.4C0 465.5 14.3 480 31.9 480H416c17.6 0 32-14.5 32-32.3V64.3c0-17.8-14.4-32.3-32-32.3M135.4 416H69V202.2h66.5V416zM102.2 96a38.5 38.5 0 1 1 0 77 38.5 38.5 0 1 1 0-77m282.1 320h-66.4V312c0-24.8-.5-56.7-34.5-56.7-34.6 0-39.9 27-39.9 54.9V416h-66.4V202.2h63.7v29.2h.9c8.9-16.8 30.6-34.5 62.9-34.5 67.2 0 79.7 44.3 79.7 101.9z"/></svg>
+    </a>
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/benjr70" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.instant", "navigation.tabs", "navigation.tabs.sticky", "navigation.footer", "navigation.sections", "navigation.indexes", "toc.follow", "toc.integrate"], "search": "../../../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.e71a0d61.min.js"></script>
+      
+    
+  </body>
+</html>
