@@ -1,0 +1,123 @@
+---
+# Tailscale installation and configuration tasks
+
+- name: Check if Tailscale is already installed
+  ansible.builtin.command: which tailscale
+  register: tailscale_installed
+  changed_when: false
+  failed_when: false
+
+- name: Download Tailscale GPG key
+  ansible.builtin.get_url:
+    url: "https://pkgs.tailscale.com/stable/ubuntu/{{ ansible_distribution_release }}.noarmor.gpg"
+    dest: /usr/share/keyrings/tailscale-archive-keyring.gpg
+    mode: '0644'
+    owner: root
+    group: root
+  when: tailscale_installed.rc != 0
+
+- name: Add Tailscale repository
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg] https://pkgs.tailscale.com/stable/ubuntu {{ ansible_distribution_release }} main"
+    state: present
+    filename: tailscale
+  when: tailscale_installed.rc != 0
+
+- name: Install Tailscale
+  ansible.builtin.apt:
+    name: tailscale
+    state: present
+    update_cache: true
+  when: tailscale_installed.rc != 0
+
+- name: Ensure Tailscale service is enabled and started
+  ansible.builtin.service:
+    name: tailscaled
+    enabled: "{{ tailscale_service_enabled }}"
+    state: "{{ tailscale_service_state }}"
+
+- name: Check if Tailscale is already connected
+  ansible.builtin.command: tailscale status --json
+  register: tailscale_status
+  changed_when: false
+  failed_when: false
+
+- name: Parse Tailscale status
+  ansible.builtin.set_fact:
+    tailscale_connected: "{{ (tailscale_status.stdout | from_json).BackendState == 'Running' if tailscale_status.rc == 0 else false }}"
+  when: tailscale_status.rc == 0
+
+- name: Set tailscale_connected to false if status check failed
+  ansible.builtin.set_fact:
+    tailscale_connected: false
+  when: tailscale_status.rc != 0
+
+- name: Build Tailscale up command
+  ansible.builtin.set_fact:
+    tailscale_up_command: >-
+      tailscale up
+      {% if tailscale_auth_key | length > 0 %}--authkey={{ tailscale_auth_key }}{% endif %}
+      --hostname={{ tailscale_hostname }}
+      {% if tailscale_tags | length > 0 %}--advertise-tags={{ tailscale_tags | join(',') }}{% endif %}
+      {% if tailscale_ssh_enabled %}--ssh{% endif %}
+      {% if tailscale_accept_routes %}--accept-routes{% else %}--accept-routes=false{% endif %}
+      {% if tailscale_accept_dns %}--accept-dns{% else %}--accept-dns=false{% endif %}
+      {% if tailscale_advertise_exit_node %}--advertise-exit-node{% endif %}
+      {% if tailscale_advertise_routes | length > 0 %}--advertise-routes={{ tailscale_advertise_routes | join(',') }}{% endif %}
+  when: not tailscale_connected
+  no_log: true
+
+- name: Connect to Tailscale network
+  ansible.builtin.command: "{{ tailscale_up_command }}"
+  register: tailscale_up_result
+  changed_when: "'Success' in tailscale_up_result.stdout or tailscale_up_result.rc == 0"
+  failed_when: "tailscale_up_result.rc != 0 and 'already' not in tailscale_up_result.stderr"
+  when: not tailscale_connected and tailscale_auth_key | length > 0
+  notify: Restart tailscaled
+  no_log: true
+
+- name: Warn if auth key not provided
+  ansible.builtin.debug:
+    msg:
+      - "WARNING: Tailscale auth key not provided!"
+      - "Tailscale is installed but not connected to the network."
+      - "To connect manually, run: sudo tailscale up --hostname={{ tailscale_hostname }}"
+      - "Or provide auth key via --extra-vars 'tailscale_auth_key=YOUR_KEY'"
+  when: not tailscale_connected and tailscale_auth_key | length == 0
+
+- name: Configure UFW to allow Tailscale
+  community.general.ufw:
+    rule: allow
+    interface: tailscale0
+    direction: in
+    comment: "Allow all traffic on Tailscale interface"
+  when: tailscale_ufw_allow
+  notify: Reload ufw
+
+- name: Allow Tailscale port 41641/UDP through UFW
+  community.general.ufw:
+    rule: allow
+    port: '41641'
+    proto: udp
+    comment: "Tailscale VPN"
+  when: tailscale_ufw_allow
+  notify: Reload ufw
+
+- name: Configure Tailscale Serve
+  ansible.builtin.include_tasks: serve.yml
+  when: tailscale_serve_enabled and tailscale_serve_config | length > 0
+
+- name: Configure Tailscale Funnel
+  ansible.builtin.include_tasks: funnel.yml
+  when: tailscale_funnel_enabled and tailscale_funnel_config | length > 0
+
+- name: Get Tailscale status
+  ansible.builtin.command: tailscale status
+  register: tailscale_final_status
+  changed_when: false
+  failed_when: false
+
+- name: Display Tailscale connection status
+  ansible.builtin.debug:
+    msg: "{{ tailscale_final_status.stdout_lines }}"
+  when: tailscale_final_status.rc == 0

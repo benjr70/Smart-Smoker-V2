@@ -1,6 +1,7 @@
 ---
 # Configure development cloud server
 # Usage: ansible-playbook playbooks/setup-dev-cloud.yml
+# With Tailscale: ansible-playbook playbooks/setup-dev-cloud.yml --extra-vars "tailscale_auth_key=YOUR_KEY"
 
 - name: Configure Development Cloud Server
   hosts: dev_cloud
@@ -11,6 +12,7 @@
     - docker
     - nodejs
     - cloud-app
+    - tailscale
 
   post_tasks:
     - name: Display dev cloud setup summary
@@ -21,3 +23,5 @@
           - "Application Base: {{ app_base_dir }}"
           - "MongoDB Data: {{ mongodb_data_dir }}"
           - "Deploy applications via GitHub Actions workflow"
+          - "Tailscale hostname: {{ tailscale_hostname }}"
+          - "Tailscale Serve enabled: {{ tailscale_serve_enabled }}"

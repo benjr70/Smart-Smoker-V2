@@ -1,0 +1,67 @@
+---
+# Tailscale role default variables
+
+# Tailscale authentication
+# Must be provided via host_vars, group_vars, or --extra-vars
+# Generate at: https://login.tailscale.com/admin/settings/keys
+tailscale_auth_key: ""
+
+# Tailscale hostname (defaults to inventory_hostname if not set)
+tailscale_hostname: "{{ inventory_hostname }}"
+
+# Tailscale domain (your tailnet domain)
+tailscale_domain: "tail74646.ts.net"
+
+# Tailscale tags for ACL-based access control
+# Example: ["tag:server", "tag:production"]
+tailscale_tags: []
+
+# Enable/disable Tailscale SSH
+tailscale_ssh_enabled: false
+
+# Accept routes advertised by other nodes
+tailscale_accept_routes: true
+
+# Accept DNS settings from Tailscale
+tailscale_accept_dns: true
+
+# Advertise this node as an exit node (usually false)
+tailscale_advertise_exit_node: false
+
+# Routes to advertise (e.g., ["192.168.1.0/24"])
+tailscale_advertise_routes: []
+
+# Tailscale Serve configuration
+# Enables Tailscale Serve to expose local services on the tailnet
+tailscale_serve_enabled: false
+tailscale_serve_config: []
+# Example:
+# tailscale_serve_config:
+#   - port: 80
+#     target_port: 80
+#     protocol: http
+#   - port: 3001
+#     target_port: 3001
+#     protocol: http
+
+# Tailscale Funnel configuration
+# Enables Tailscale Funnel to expose services publicly on the internet
+tailscale_funnel_enabled: false
+tailscale_funnel_config: []
+# Example:
+# tailscale_funnel_config:
+#   - port: 443
+#     target_port: 80
+#   - port: 8443
+#     target_port: 3001
+
+# Firewall configuration
+# Allow Tailscale through UFW
+tailscale_ufw_allow: true
+
+# Tailscale state directory
+tailscale_state_dir: /var/lib/tailscale
+
+# Service management
+tailscale_service_enabled: true
+tailscale_service_state: started

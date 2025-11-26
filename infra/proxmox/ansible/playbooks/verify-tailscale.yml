@@ -1,0 +1,138 @@
+---
+# Verify Tailscale mesh network configuration
+# Usage: ansible-playbook playbooks/verify-tailscale.yml
+
+- name: Verify Tailscale Configuration
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Check if Tailscale is installed
+      ansible.builtin.command: which tailscale
+      register: tailscale_binary
+      changed_when: false
+      failed_when: false
+
+    - name: Verify Tailscale binary exists
+      ansible.builtin.assert:
+        that:
+          - tailscale_binary.rc == 0
+        fail_msg: "Tailscale is not installed on {{ inventory_hostname }}"
+        success_msg: "Tailscale is installed on {{ inventory_hostname }}"
+
+    - name: Check Tailscale daemon status
+      ansible.builtin.service:
+        name: tailscaled
+      register: tailscaled_status
+      failed_when: false
+
+    - name: Verify Tailscale daemon is running
+      ansible.builtin.assert:
+        that:
+          - tailscaled_status.status.ActiveState == 'active'
+        fail_msg: "Tailscale daemon is not running on {{ inventory_hostname }}"
+        success_msg: "Tailscale daemon is running on {{ inventory_hostname }}"
+
+    - name: Get Tailscale connection status
+      ansible.builtin.command: tailscale status --json
+      register: tailscale_status_json
+      changed_when: false
+      failed_when: false
+
+    - name: Parse Tailscale status
+      ansible.builtin.set_fact:
+        ts_status: "{{ tailscale_status_json.stdout | from_json }}"
+      when: tailscale_status_json.rc == 0
+
+    - name: Verify Tailscale is connected
+      ansible.builtin.assert:
+        that:
+          - ts_status.BackendState == 'Running'
+        fail_msg: "Tailscale is not connected on {{ inventory_hostname }}"
+        success_msg: "Tailscale is connected on {{ inventory_hostname }}"
+      when: tailscale_status_json.rc == 0
+
+    - name: Get Tailscale IP address
+      ansible.builtin.command: tailscale ip -4
+      register: tailscale_ip
+      changed_when: false
+      failed_when: false
+
+    - name: Display Tailscale IP
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} Tailscale IP: {{ tailscale_ip.stdout }}"
+      when: tailscale_ip.rc == 0
+
+    - name: Check UFW status for Tailscale
+      ansible.builtin.command: ufw status
+      register: ufw_status
+      changed_when: false
+      failed_when: false
+
+    - name: Verify UFW allows Tailscale
+      ansible.builtin.assert:
+        that:
+          - "'tailscale0' in ufw_status.stdout or '41641/udp' in ufw_status.stdout"
+        fail_msg: "UFW does not allow Tailscale on {{ inventory_hostname }}"
+        success_msg: "UFW allows Tailscale on {{ inventory_hostname }}"
+      when: ufw_status.rc == 0
+
+    - name: Get Tailscale serve/funnel status
+      ansible.builtin.command: tailscale serve status
+      register: serve_status
+      changed_when: false
+      failed_when: false
+
+    - name: Display serve/funnel configuration
+      ansible.builtin.debug:
+        msg: "{{ serve_status.stdout_lines }}"
+      when: serve_status.rc == 0 and serve_status.stdout | length > 0
+
+- name: Test Tailscale Mesh Connectivity
+  hosts: all
+  become: true
+  serial: 1
+
+  tasks:
+    - name: Get all Tailscale IPs from other hosts
+      ansible.builtin.set_fact:
+        other_hosts: "{{ groups['all'] | difference([inventory_hostname]) }}"
+
+    - name: Get Tailscale IP for current host
+      ansible.builtin.command: tailscale ip -4
+      register: my_tailscale_ip
+      changed_when: false
+
+    - name: Test connectivity to other Tailscale nodes
+      ansible.builtin.command: "ping -c 3 -W 2 {{ hostvars[item].tailscale_hostname }}"
+      loop: "{{ other_hosts }}"
+      register: ping_results
+      changed_when: false
+      failed_when: false
+      when: other_hosts | length > 0
+
+    - name: Display connectivity results
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} can reach {{ item.item }}: {{ 'YES' if item.rc == 0 else 'NO' }}"
+      loop: "{{ ping_results.results }}"
+      when: ping_results is defined and ping_results.results | length > 0
+
+- name: Summary Report
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Display verification summary
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "Tailscale Mesh Network Verification Complete"
+          - "=========================================="
+          - "All hosts should be connected to Tailscale"
+          - "Connectivity tests completed"
+          - ""
+          - "Next steps:"
+          - "1. Verify production funnel: tailscale funnel status"
+          - "2. Test public access: https://smokecloud.tail74646.ts.net"
+          - "3. Run full mesh test: infra/proxmox/scripts/test-tailscale-mesh.sh"

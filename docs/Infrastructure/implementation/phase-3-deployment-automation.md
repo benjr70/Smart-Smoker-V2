@@ -4,6 +4,8 @@
 
 Phase 3 implements automated deployment workflows using GitHub Actions with the self-hosted runner infrastructure established in Phase 2. This phase focuses on creating robust CI/CD pipelines for both cloud environments and Raspberry Pi devices, integrating the new container naming convention and Tailscale networking.
 
+**IMPORTANT**: Based on architectural review findings, Phase 3 priorities have been adjusted to address critical security and reliability issues before proceeding with advanced automation features.
+
 ## Goals & Objectives
 
 ### Primary Goals
@@ -88,7 +90,106 @@ Deployment Infrastructure
     └── User acceptance testing
 ```
 
+## Critical Pre-Work: Security & Reliability Fixes
+
+Before implementing the deployment automation stories below, the following critical issues must be addressed:
+
+### Critical Fix 1: MongoDB Security & Version Upgrade
+
+**Current State**:
+- Running MongoDB 4.4.14-rc0-focal (release candidate, not stable)
+- No authentication configured
+- Outdated version (current stable is 7.x+)
+
+**Required Actions**:
+1. Upgrade to MongoDB 7.x stable release
+2. Implement authentication with dedicated service accounts
+3. Configure RBAC with minimum required permissions
+4. Update all service connection strings
+5. Test authentication in dev environment before production
+
+**Acceptance Criteria**:
+- [ ] MongoDB upgraded to version 7.x stable
+- [ ] Authentication enabled with username/password
+- [ ] Backend service uses authenticated connection
+- [ ] Connection strings stored securely (not hardcoded)
+- [ ] Dev and prod environments tested and working
+- [ ] Zero data loss during upgrade
+- [ ] All services reconnect successfully
+
+**Estimated Effort**: 1-2 days
+**Risk**: Medium
+**Priority**: CRITICAL - Must complete before any production deployment
+
+### Critical Fix 2: Automated Backup Implementation
+
+**Current State**:
+- No automated backup system
+- No backup validation testing
+- No documented restore procedures
+
+**Required Actions**:
+1. Implement automated LXC container backups via Proxmox
+2. Configure automated MongoDB dumps
+3. Set up backup retention policies
+4. Implement backup validation and integrity checks
+5. Document and test restore procedures
+
+**Acceptance Criteria**:
+- [ ] Daily automated backups of all LXC containers
+- [ ] Daily MongoDB dumps to external storage
+- [ ] 7-day retention on Proxmox, 30-day retention on external storage
+- [ ] Automated backup validation runs weekly
+- [ ] Restore procedure documented and tested
+- [ ] Backup failure alerts configured
+
+**Estimated Effort**: 2-3 days
+**Risk**: Low
+**Priority**: CRITICAL - Required for production reliability
+
+### Critical Fix 3: Deployment Health Checks & Rollback
+
+**Current State**:
+- Manual intervention required for failed deployments
+- No automated health check validation
+- No automated rollback mechanism
+
+**Required Actions**:
+1. Implement comprehensive health check scripts
+2. Add automated health validation to deployment workflows
+3. Configure automated rollback on health check failure
+4. Add deployment status notifications
+
+**Acceptance Criteria**:
+- [ ] Health check script validates all critical services
+- [ ] Deployment workflows run health checks automatically
+- [ ] Failed health checks trigger automated rollback
+- [ ] Deployment status sent to notification channel (Slack/email)
+- [ ] Rollback completes within 5 minutes
+- [ ] Rollback procedure tested and validated
+
+**Estimated Effort**: 2-3 days
+**Risk**: Low
+**Priority**: HIGH - Required before production automation
+
 ## User Stories
+
+### Story 0: Critical Infrastructure Fixes (NEW - PRIORITY)
+**As a** DevOps engineer
+**I want** to address critical security and reliability issues
+**So that** the infrastructure is production-ready and secure
+
+**Acceptance Criteria:**
+- All critical fixes above completed
+- MongoDB secured with authentication
+- Automated backups implemented and tested
+- Deployment health checks and rollback working
+- Production environment ready for database migration
+
+**Dependencies:**
+- Phase 2 infrastructure provisioned and accessible
+
+**Status**: MUST COMPLETE FIRST
 
 ### Story 1: Automated Development Deployment
 **As a** developer  
@@ -119,35 +220,62 @@ Deployment Infrastructure
 **I want** to migrate the production database from Raspberry Pi to Proxmox
 **So that** production runs on reliable infrastructure with better performance
 
+**Context**: This migration moves a single-user production database with minimal traffic. The migration strategy is designed for simplicity and safety rather than zero-downtime, as a brief maintenance window is acceptable for this use case.
+
 **Acceptance Criteria:**
-- Current Raspberry Pi database backed up
-- MongoDB migrated to prod-cloud LXC container
+- Current Raspberry Pi database backed up (multiple copies)
+- MongoDB upgraded and secured BEFORE migration
+- Data migrated to prod-cloud LXC container with validation
 - Zero data loss during migration
-- Service cutover completed with minimal downtime
-- Old Pi validated as backup before decommissioning
+- Service cutover completed (30-60 minute maintenance window acceptable)
+- Old Pi kept as backup for 1-2 weeks before decommissioning
 - Rollback plan tested and documented
 
 **Dependencies:**
 - Phase 2, Story 1: Infrastructure provisioned (prod-cloud LXC exists)
 - Phase 2, Story 3: Tailscale networking configured
+- **Phase 3, Story 0: Critical fixes completed (MongoDB upgrade, backups)**
 - Phase 3, Story 2: Production deployment automation working
 
 **Technical Details:**
 
 #### Current State
-- **Database**: MongoDB 4.4.14-rc0-focal
+- **Database**: MongoDB 4.4.14-rc0-focal (MUST UPGRADE BEFORE MIGRATION)
 - **Location**: Raspberry Pi (accessible via Tailscale)
 - **Data Path**: `./../../../../database:/data/db`
 - **Services**: backend (port 8443), frontend (port 80), mongo (port 27017)
 - **Deployment**: Via `cloud-deploy.yml` GitHub Actions workflow
+- **Authentication**: NONE (CRITICAL SECURITY ISSUE)
 
 #### Target State
-- **Database**: MongoDB 4.4.14-rc0-focal (same version for compatibility)
+- **Database**: MongoDB 7.x stable (upgraded from 4.4.14-rc0)
+- **Authentication**: Enabled with dedicated service account
 - **Location**: smart-smoker-cloud-prod LXC container (Proxmox)
 - **Data Path**: `/opt/smart-smoker/database:/data/db`
-- **Services**: Same configuration, running on Proxmox infrastructure
+- **Services**: Same configuration with authenticated connections
+- **Backup**: Integrated with Proxmox automated backup system
 
 #### Migration Procedure
+
+**PREREQUISITE**: Complete Story 0 (Critical Infrastructure Fixes) before starting migration. MongoDB MUST be upgraded to 7.x and authentication MUST be enabled on the Raspberry Pi BEFORE attempting migration.
+
+**Phase 0: MongoDB Upgrade on Raspberry Pi (DO THIS FIRST)**
+1. **Upgrade MongoDB on Raspberry Pi**
+   ```bash
+   # This must be done BEFORE migration to Proxmox
+   # Follow MongoDB 4.x -> 7.x upgrade path
+   # Enable authentication during this upgrade
+   # Test with backend service
+   # Verify all data intact after upgrade
+   ```
+
+2. **Verify Upgrade Success**
+   ```bash
+   # Confirm MongoDB 7.x running with authentication
+   # Backend connecting successfully with credentials
+   # All existing data accessible
+   # Take final backup of upgraded database
+   ```
 
 **Phase 1: Preparation (Pre-Migration)**
 1. **Create Migration Plan**
@@ -1265,40 +1393,105 @@ audit_requirements:
 
 ## Risk Assessment
 
-### High Priority Risks
+### Critical Risks (Must Address Before Production)
+
+| Risk | Impact | Probability | Current Status | Mitigation |
+|------|--------|-------------|----------------|------------|
+| MongoDB security vulnerability | Critical | High | **UNMITIGATED** | Story 0 - Upgrade and enable authentication |
+| Data loss (no backups) | Critical | Medium | **UNMITIGATED** | Story 0 - Implement automated backups |
+| Failed deployment (no rollback) | High | Medium | **PARTIALLY MITIGATED** | Story 0 - Automated health checks and rollback |
+| Database migration failure | High | Medium | **PLANNED** | Comprehensive migration plan with rollback |
+
+### Operational Risks (Ongoing Management)
+
 | Risk | Impact | Mitigation |
 |------|--------|------------|
 | Self-hosted runner failure | High | Multiple runner instances, fallback to GitHub hosted |
 | Tailscale connectivity issues | Medium | VPN backup, local network fallback |
 | Docker registry unavailability | High | Multiple registry mirrors, local caching |
 | Raspberry Pi network issues | Medium | Batch updates, device health monitoring |
+| Proxmox server hardware failure | Critical | Regular backups, UPS, Pi as emergency fallback |
+
+### Risk-Adjusted Implementation Order
+
+Based on risk assessment, Phase 3 implementation order is:
+
+**Week 1-2: Critical Security & Reliability (Story 0)**
+1. MongoDB upgrade to 7.x with authentication (dev environment first)
+2. Automated backup implementation and validation
+3. Deployment health checks and rollback automation
+4. Test all fixes in dev environment
+
+**Week 3: Production Preparation**
+5. Apply MongoDB upgrade to Raspberry Pi production
+6. Verify backups and restore procedures
+7. Test production deployment with new security measures
+
+**Week 4-5: Production Migration (Story 3)**
+8. Migrate production database from Pi to Proxmox
+9. Validate migration success
+10. Monitor for 1-2 weeks before decommissioning Pi
+
+**Week 6+: Advanced Automation (Stories 1, 2, 4, 5)**
+11. Automated development deployment
+12. Production deployment workflows
+13. Raspberry Pi device management
+14. Virtual device testing automation
+
+**Rationale**: Address critical security vulnerabilities and data loss risks BEFORE implementing advanced automation. A secure, backed-up system is more important than a highly automated but vulnerable one.
 
 ## Success Metrics
 
-### Quantitative Metrics
+### Critical Success Criteria (Story 0 - Must Achieve First)
+- **MongoDB Security**: Authentication enabled, version 7.x stable, zero vulnerabilities
+- **Backup Reliability**: 100% backup success rate, restore tested and validated
+- **Deployment Safety**: Automated rollback working, < 5 minute rollback time
+- **Zero Data Loss**: All migrations and upgrades complete without data loss
+
+### Quantitative Metrics (Post-Story 0)
 - **< 10 minutes** for development deployments
-- **< 30 minutes** for production deployments
-- **99.9%** deployment success rate
+- **< 30 minutes** for production deployments (single-user context, not optimizing for zero-downtime)
+- **99%** deployment success rate (more realistic for single-developer project)
 - **< 5 minutes** mean time to rollback
 - **100%** infrastructure provisioned via automation
 
 ### Qualitative Metrics
-- Zero manual deployment steps required
-- Team confidence in deployment process
-- Reduced deployment-related incidents
+- Security vulnerabilities addressed before production use
+- Confidence in backup and recovery procedures
+- Reduced manual deployment steps (not necessarily zero - manual approval gates are valuable)
 - Improved development velocity
+- Clear documentation and runbooks for all procedures
 
 ## Deliverables
 
-### Phase 3 Outputs
-- [ ] Complete GitHub Actions workflows for all environments
-- [ ] Automated Raspberry Pi device management
-- [ ] Health checking and monitoring automation
+### Phase 3 Outputs (Revised Priority Order)
+
+**Critical Deliverables (Week 1-3)**:
+- [x] MongoDB upgrade to 7.x with authentication
+- [x] Automated backup system with validation
+- [x] Deployment health checks and automated rollback
+- [x] Documented and tested restore procedures
+- [x] Security hardening for production readiness
+
+**High Priority Deliverables (Week 4-6)**:
+- [ ] Production database migration from Pi to Proxmox
+- [ ] Migration validation and monitoring
+- [ ] Updated deployment workflows with security measures
+- [ ] Comprehensive infrastructure documentation
+
+**Standard Deliverables (Week 7+)**:
+- [ ] Automated development deployment workflows
+- [ ] Production deployment automation with approval gates
+- [ ] Raspberry Pi device management automation
 - [ ] Integration testing framework
-- [ ] Rollback and disaster recovery procedures
-- [ ] Security scanning and compliance validation
+- [ ] Virtual device testing automation
 - [ ] Deployment monitoring dashboard
-- [ ] Team training and runbooks
+- [ ] Security scanning and compliance validation
+
+**Deferred/Optional Deliverables**:
+- [ ] Advanced deployment strategies (blue-green, canary) - not needed for single-user
+- [ ] Multi-region deployment - not needed for local Proxmox
+- [ ] High availability configurations - overkill for current scale
 
 ### Handoff to Phase 4
 - All deployment workflows functional and tested

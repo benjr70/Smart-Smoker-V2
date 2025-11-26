@@ -17,3 +17,12 @@ additional_packages:
   - build-essential
   - python3-pip
   - jq
+
+# Tailscale Configuration
+tailscale_hostname: "smoker-runner"
+tailscale_tags:
+  - tag:runner
+  - tag:ci-cd
+tailscale_accept_routes: true
+tailscale_accept_dns: true
+tailscale_ssh_enabled: false

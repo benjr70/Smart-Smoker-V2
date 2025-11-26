@@ -1,0 +1,11 @@
+---
+# Tailscale service handlers
+
+- name: Restart tailscaled
+  ansible.builtin.service:
+    name: tailscaled
+    state: restarted
+
+- name: Reload ufw
+  community.general.ufw:
+    state: reloaded
