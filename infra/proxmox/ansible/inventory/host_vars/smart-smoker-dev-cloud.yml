@@ -10,3 +10,21 @@ app_compose_file: cloud.docker-compose.yml
 
 # MongoDB Configuration
 mongodb_data_dir: /opt/smart-smoker-dev/data/mongodb
+
+# Tailscale Configuration
+tailscale_hostname: "smoker-dev-cloud"
+tailscale_tags:
+  - tag:server
+  - tag:development
+tailscale_accept_routes: true
+tailscale_accept_dns: true
+
+# Tailscale Serve - expose services on tailnet only (no public funnel)
+tailscale_serve_enabled: true
+tailscale_serve_config:
+  - port: 80
+    target_port: 80
+    protocol: http
+  - port: 3001
+    target_port: 3001
+    protocol: http

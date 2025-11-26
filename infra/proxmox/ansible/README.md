@@ -111,6 +111,7 @@ ansible-playbook playbooks/verify-all.yml
 | `github-runner` | GitHub Actions self-hosted runner | GitHub Runner |
 | `cloud-app` | Cloud application dependencies | Cloud Servers |
 | `virtual-device` | Virtual device dependencies | Virtual Devices |
+| `tailscale` | Tailscale VPN mesh network with Serve/Funnel | All servers |
 
 ### Playbooks
 
@@ -120,6 +121,238 @@ ansible-playbook playbooks/verify-all.yml
 - `setup-prod-cloud.yml` - Configure production cloud
 - `setup-virtual-smoker.yml` - Configure virtual device
 - `verify-all.yml` - Verify all configurations
+- `verify-tailscale.yml` - Verify Tailscale mesh network
+
+## Tailscale Mesh Network
+
+All infrastructure is connected via Tailscale VPN, creating a secure mesh network for internal communication and enabling public access to production services via Tailscale Funnel.
+
+### Network Topology
+
+```
+Tailscale Mesh Network
+├─ smoker-runner (GitHub Actions runner)
+│  └─ Tags: runner, ci-cd
+├─ smoker-dev-cloud (Development environment)
+│  ├─ Tags: server, development
+│  └─ Serve: HTTP (80), WebSocket (3001) - Tailnet only
+├─ smokecloud (Production environment)
+│  ├─ Tags: server, production
+│  └─ Funnel: HTTPS (443→80), HTTPS (8443→3001) - Public access
+└─ virtual-smoker (Virtual test device)
+   └─ Tags: device, virtual
+```
+
+### Prerequisites
+
+1. **Create Tailscale Account**: https://login.tailscale.com/start
+2. **Generate Auth Key**: https://login.tailscale.com/admin/settings/keys
+   - Enable "Reusable" for infrastructure automation
+   - Set expiration to "90 days" or longer
+   - Add tags if using ACLs: `tag:server`, `tag:runner`, `tag:device`, `tag:production`, `tag:development`
+
+### Setup Tailscale Network
+
+#### Option 1: Configure with Ansible (Recommended)
+
+Pass the Tailscale auth key when running playbooks:
+
+```bash
+# Configure all infrastructure with Tailscale
+ansible-playbook playbooks/site.yml \
+  --extra-vars "tailscale_auth_key=tskey-auth-XXXXX"
+
+# Configure individual servers
+ansible-playbook playbooks/setup-github-runner.yml \
+  --extra-vars "github_runner_token=YOUR_GITHUB_TOKEN tailscale_auth_key=tskey-auth-XXXXX"
+
+ansible-playbook playbooks/setup-dev-cloud.yml \
+  --extra-vars "tailscale_auth_key=tskey-auth-XXXXX"
+
+ansible-playbook playbooks/setup-prod-cloud.yml \
+  --extra-vars "tailscale_auth_key=tskey-auth-XXXXX"
+
+ansible-playbook playbooks/setup-virtual-smoker.yml \
+  --extra-vars "tailscale_auth_key=tskey-auth-XXXXX"
+```
+
+#### Option 2: Manual Configuration
+
+If Ansible runs without an auth key, Tailscale will be installed but not connected. Connect manually:
+
+```bash
+# SSH to each server
+ssh root@<server-ip>
+
+# Connect to Tailscale network
+tailscale up --hostname=<hostname>
+
+# Follow the authentication URL in your browser
+```
+
+### Tailscale Configuration
+
+#### Development Environment (Tailscale Serve)
+
+The dev environment exposes services on the Tailscale network only (not publicly accessible):
+
+```bash
+# Services accessible on tailnet
+http://smoker-dev-cloud        # Main HTTP service (port 80)
+http://smoker-dev-cloud:3001   # WebSocket service (port 3001)
+```
+
+#### Production Environment (Tailscale Funnel)
+
+Production services are publicly accessible via HTTPS using Tailscale Funnel:
+
+```bash
+# Public URLs (accessible from anywhere on the internet)
+https://smokecloud.tail74646.ts.net        # Main HTTPS endpoint
+https://smokecloud.tail74646.ts.net:8443   # WebSocket endpoint
+```
+
+**Note**: The public domain suffix (`tail74646.ts.net`) is unique to your Tailscale account. Check your actual domain:
+
+```bash
+ssh root@smokecloud
+tailscale funnel status
+```
+
+### Verify Tailscale Configuration
+
+#### Automated Verification
+
+```bash
+# Run Tailscale verification playbook
+ansible-playbook playbooks/verify-tailscale.yml
+
+# Run comprehensive mesh network tests
+../scripts/test-tailscale-mesh.sh
+```
+
+#### Manual Verification
+
+```bash
+# Check status on each host
+ssh root@<host>
+tailscale status
+
+# Get Tailscale IP
+tailscale ip -4
+
+# Check serve/funnel configuration
+tailscale serve status
+tailscale funnel status  # Production only
+```
+
+### Testing Connectivity
+
+```bash
+# From any machine on the Tailscale network
+ping smoker-runner
+ping smoker-dev-cloud
+ping smokecloud
+ping virtual-smoker
+
+# Test HTTP endpoints (from tailnet)
+curl http://smoker-dev-cloud
+curl http://smokecloud
+
+# Test public endpoints (from anywhere)
+curl https://smokecloud.tail74646.ts.net
+```
+
+### Reconfigure Tailscale Serve/Funnel
+
+If you need to reconfigure Tailscale Serve or Funnel after initial setup:
+
+```bash
+# Production: Run the generated configuration script
+ssh root@smokecloud
+/usr/local/bin/configure-tailscale-funnel.sh
+
+# Or re-run the Ansible playbook
+ansible-playbook playbooks/setup-prod-cloud.yml \
+  --extra-vars "tailscale_auth_key=tskey-auth-XXXXX"
+```
+
+### Tailscale Security
+
+- **Firewall Integration**: UFW automatically allows Tailscale interface and port 41641/UDP
+- **SSH Over Tailscale**: Optional (disabled by default). Enable with `tailscale_ssh_enabled: true`
+- **Access Control**: Use Tailscale ACLs to restrict access between nodes
+- **Tagging**: Hosts are tagged for ACL-based access control
+
+### Troubleshooting Tailscale
+
+#### Tailscale Not Connected
+
+```bash
+# Check service status
+systemctl status tailscaled
+
+# Check logs
+journalctl -u tailscaled -f
+
+# Reconnect manually
+tailscale up --authkey=tskey-auth-XXXXX --hostname=<hostname>
+```
+
+#### Cannot Reach Other Nodes
+
+```bash
+# Check Tailscale status
+tailscale status
+
+# Verify UFW allows Tailscale
+ufw status | grep tailscale
+
+# Check routes
+tailscale status --json | jq '.Peer'
+```
+
+#### Funnel Not Working
+
+```bash
+# Check funnel status on production
+ssh root@smokecloud
+tailscale funnel status
+
+# Verify serve is configured first
+tailscale serve status
+
+# Reconfigure funnel
+/usr/local/bin/configure-tailscale-funnel.sh
+```
+
+#### Reset Tailscale Configuration
+
+```bash
+# Reset serve/funnel configuration
+tailscale serve reset
+
+# Disconnect from network
+tailscale down
+
+# Reconnect
+tailscale up --authkey=tskey-auth-XXXXX --hostname=<hostname>
+```
+
+### Tailscale Variables Reference
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `tailscale_auth_key` | `""` | Tailscale authentication key (required) |
+| `tailscale_hostname` | `{{ inventory_hostname }}` | Hostname on Tailscale network |
+| `tailscale_tags` | `[]` | Tailscale tags for ACLs |
+| `tailscale_ssh_enabled` | `false` | Enable Tailscale SSH |
+| `tailscale_accept_routes` | `true` | Accept subnet routes from other nodes |
+| `tailscale_accept_dns` | `true` | Accept DNS settings from Tailscale |
+| `tailscale_serve_enabled` | `false` | Enable Tailscale Serve (tailnet only) |
+| `tailscale_serve_config` | `[]` | List of ports to serve |
+| `tailscale_funnel_enabled` | `false` | Enable Tailscale Funnel (public access) |
+| `tailscale_funnel_config` | `[]` | List of ports to expose publicly |
 
 ## GitHub Runner Setup
 
@@ -299,7 +532,7 @@ After Ansible configuration:
 
 1. ✅ Infrastructure provisioned (Terraform)
 2. ✅ Servers configured (Ansible)
-3. ⏭️ Configure Tailscale mesh network (Phase 2 Story 3)
+3. ✅ Tailscale mesh network configured (Phase 2 Story 3)
 4. ⏭️ Deploy applications via GitHub Actions
 5. ⏭️ Migrate production database
 

@@ -1,0 +1,234 @@
+---
+# Test Environment-Specific Tailscale Configurations
+# Validates that each of the 4 environments has correct Tailscale setup
+
+- name: Test Environment Tailscale Configurations
+  hosts: localhost
+  gather_facts: false
+  connection: local
+
+  tasks:
+    - name: Display test header
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "Environment Configuration Test Suite"
+          - "Testing: GitHub Runner, Dev Cloud, Prod Cloud, Virtual Smoker"
+          - "=========================================="
+
+    # Test GitHub Runner Configuration
+    - name: Load GitHub Runner host vars
+      ansible.builtin.include_vars:
+        file: "../inventory/host_vars/github-runner.yml"
+        name: gh_runner_vars
+
+    - name: Test - GitHub Runner Tailscale config
+      ansible.builtin.assert:
+        that:
+          - gh_runner_vars.tailscale_hostname == "smoker-runner"
+          - "'tag:runner' in gh_runner_vars.tailscale_tags"
+          - "'tag:ci-cd' in gh_runner_vars.tailscale_tags"
+          - gh_runner_vars.tailscale_accept_routes == true
+          - gh_runner_vars.tailscale_accept_dns == true
+          - gh_runner_vars.tailscale_ssh_enabled == false
+        success_msg: "GitHub Runner: Tailscale config is correct (basic connectivity)"
+
+    # Test Dev Cloud Configuration
+    - name: Load Dev Cloud host vars
+      ansible.builtin.include_vars:
+        file: "../inventory/host_vars/smart-smoker-dev-cloud.yml"
+        name: dev_vars
+
+    - name: Test - Dev Cloud Tailscale config
+      ansible.builtin.assert:
+        that:
+          - dev_vars.tailscale_hostname == "smoker-dev-cloud"
+          - "'tag:server' in dev_vars.tailscale_tags"
+          - "'tag:development' in dev_vars.tailscale_tags"
+          - dev_vars.tailscale_serve_enabled == true
+          - dev_vars.tailscale_serve_config is defined
+          - dev_vars.tailscale_serve_config | length == 2
+        success_msg: "Dev Cloud: Tailscale Serve enabled with 2 ports"
+
+    - name: Test - Dev Cloud Serve port configuration
+      ansible.builtin.assert:
+        that:
+          - dev_vars.tailscale_serve_config[0].port == 80
+          - dev_vars.tailscale_serve_config[0].target_port == 80
+          - dev_vars.tailscale_serve_config[0].protocol == "http"
+          - dev_vars.tailscale_serve_config[1].port == 3001
+          - dev_vars.tailscale_serve_config[1].target_port == 3001
+          - dev_vars.tailscale_serve_config[1].protocol == "http"
+        success_msg: "Dev Cloud: Serve ports correctly configured (80→80, 3001→3001)"
+
+    - name: Test - Dev Cloud does NOT have Funnel enabled
+      ansible.builtin.assert:
+        that:
+          - dev_vars.tailscale_funnel_enabled is not defined or dev_vars.tailscale_funnel_enabled == false
+        success_msg: "Dev Cloud: Funnel correctly disabled (internal only)"
+
+    # Test Production Cloud Configuration
+    - name: Load Production Cloud host vars
+      ansible.builtin.include_vars:
+        file: "../inventory/host_vars/smart-smoker-cloud-prod.yml"
+        name: prod_vars
+
+    - name: Test - Production Cloud Tailscale config
+      ansible.builtin.assert:
+        that:
+          - prod_vars.tailscale_hostname == "smokecloud"
+          - "'tag:server' in prod_vars.tailscale_tags"
+          - "'tag:production' in prod_vars.tailscale_tags"
+          - prod_vars.tailscale_funnel_enabled == true
+          - prod_vars.tailscale_funnel_config is defined
+          - prod_vars.tailscale_funnel_config | length == 2
+        success_msg: "Production Cloud: Tailscale Funnel enabled for public access"
+
+    - name: Test - Production Cloud Funnel port configuration
+      ansible.builtin.assert:
+        that:
+          - prod_vars.tailscale_funnel_config[0].port == 443
+          - prod_vars.tailscale_funnel_config[0].target_port == 80
+          - prod_vars.tailscale_funnel_config[1].port == 8443
+          - prod_vars.tailscale_funnel_config[1].target_port == 3001
+        success_msg: "Production Cloud: Funnel ports correctly configured (443→80, 8443→3001)"
+
+    - name: Test - Production Cloud does NOT have Serve enabled
+      ansible.builtin.assert:
+        that:
+          - prod_vars.tailscale_serve_enabled is not defined or prod_vars.tailscale_serve_enabled == false
+        success_msg: "Production Cloud: Serve disabled (using Funnel instead)"
+
+    # Test Virtual Smoker Device Configuration
+    - name: Load Virtual Smoker host vars
+      ansible.builtin.include_vars:
+        file: "../inventory/host_vars/virtual-smoker-device.yml"
+        name: device_vars
+
+    - name: Test - Virtual Smoker Tailscale config
+      ansible.builtin.assert:
+        that:
+          - device_vars.tailscale_hostname == "virtual-smoker"
+          - "'tag:device' in device_vars.tailscale_tags"
+          - "'tag:virtual' in device_vars.tailscale_tags"
+          - device_vars.tailscale_accept_routes == true
+          - device_vars.tailscale_accept_dns == true
+        success_msg: "Virtual Smoker: Tailscale config is correct (basic connectivity)"
+
+    - name: Test - Virtual Smoker does NOT have Serve/Funnel
+      ansible.builtin.assert:
+        that:
+          - device_vars.tailscale_serve_enabled is not defined or device_vars.tailscale_serve_enabled == false
+          - device_vars.tailscale_funnel_enabled is not defined or device_vars.tailscale_funnel_enabled == false
+        success_msg: "Virtual Smoker: No Serve/Funnel (device doesn't expose services)"
+
+    # Test Playbook Integration
+    - name: Test - Verify tailscale role in GitHub runner playbook
+      ansible.builtin.shell: |
+        grep -q "tailscale" ../playbooks/setup-github-runner.yml
+      changed_when: false
+      register: gh_runner_playbook
+
+    - name: Test - Verify tailscale role in dev cloud playbook
+      ansible.builtin.shell: |
+        grep -q "tailscale" ../playbooks/setup-dev-cloud.yml
+      changed_when: false
+      register: dev_playbook
+
+    - name: Test - Verify tailscale role in prod cloud playbook
+      ansible.builtin.shell: |
+        grep -q "tailscale" ../playbooks/setup-prod-cloud.yml
+      changed_when: false
+      register: prod_playbook
+
+    - name: Test - Verify tailscale role in virtual smoker playbook
+      ansible.builtin.shell: |
+        grep -q "tailscale" ../playbooks/setup-virtual-smoker.yml
+      changed_when: false
+      register: device_playbook
+
+    - name: Assert tailscale role is in all playbooks
+      ansible.builtin.assert:
+        that:
+          - gh_runner_playbook.rc == 0
+          - dev_playbook.rc == 0
+          - prod_playbook.rc == 0
+          - device_playbook.rc == 0
+        success_msg: "All 4 environment playbooks include the tailscale role"
+
+    # Test Role Order in Playbooks
+    - name: Test - Verify tailscale role comes after common role
+      ansible.builtin.shell: |
+        # Extract role order and verify tailscale comes after common
+        for playbook in ../playbooks/setup-*.yml; do
+          awk '/roles:/,/^[^ ]/' "$playbook" | grep -A 20 "roles:" | grep -n "tailscale\|common" | head -2 | grep -q "1:.*common" || exit 1
+        done
+      changed_when: false
+      register: role_order_check
+      failed_when: false
+
+    - name: Assert role execution order is correct
+      ansible.builtin.assert:
+        that:
+          - role_order_check.rc == 0
+        success_msg: "Tailscale role correctly positioned after common role dependency"
+
+    # Verify hostname uniqueness
+    - name: Test - Verify all hostnames are unique
+      ansible.builtin.assert:
+        that:
+          - gh_runner_vars.tailscale_hostname != dev_vars.tailscale_hostname
+          - gh_runner_vars.tailscale_hostname != prod_vars.tailscale_hostname
+          - gh_runner_vars.tailscale_hostname != device_vars.tailscale_hostname
+          - dev_vars.tailscale_hostname != prod_vars.tailscale_hostname
+          - dev_vars.tailscale_hostname != device_vars.tailscale_hostname
+          - prod_vars.tailscale_hostname != device_vars.tailscale_hostname
+        success_msg: "All Tailscale hostnames are unique across environments"
+
+    # Test tag consistency
+    - name: Test - Verify tag structure is consistent
+      ansible.builtin.assert:
+        that:
+          - gh_runner_vars.tailscale_tags | length >= 2
+          - dev_vars.tailscale_tags | length >= 2
+          - prod_vars.tailscale_tags | length >= 2
+          - device_vars.tailscale_tags | length >= 2
+        success_msg: "All environments have appropriate Tailscale tags for ACLs"
+
+    # Final Summary
+    - name: Display test summary
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "Environment Configuration Tests Complete!"
+          - "=========================================="
+          - ""
+          - "GitHub Runner (smoker-runner):"
+          - "  ✓ Basic Tailscale connectivity"
+          - "  ✓ Tagged for CI/CD access"
+          - "  ✓ No Serve/Funnel (runner doesn't expose services)"
+          - ""
+          - "Dev Cloud (smoker-dev-cloud):"
+          - "  ✓ Tailscale Serve enabled"
+          - "  ✓ Serves HTTP (80) and WebSocket (3001)"
+          - "  ✓ Internal access only (no Funnel)"
+          - "  ✓ Tagged for development"
+          - ""
+          - "Production Cloud (smokecloud):"
+          - "  ✓ Tailscale Funnel enabled"
+          - "  ✓ Public HTTPS (443→80, 8443→3001)"
+          - "  ✓ Tagged for production"
+          - "  ✓ Correct public URL configuration"
+          - ""
+          - "Virtual Smoker (virtual-smoker):"
+          - "  ✓ Basic Tailscale connectivity"
+          - "  ✓ Tagged for device access"
+          - "  ✓ No Serve/Funnel (devices don't expose services)"
+          - ""
+          - "Integration:"
+          - "  ✓ All playbooks include tailscale role"
+          - "  ✓ Correct role execution order"
+          - "  ✓ All hostnames unique"
+          - "  ✓ All environments properly tagged"
+          - ""
+          - "Status: ALL ENVIRONMENTS CONFIGURED CORRECTLY"

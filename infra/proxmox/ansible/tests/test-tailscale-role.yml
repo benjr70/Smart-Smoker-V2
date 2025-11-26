@@ -1,0 +1,278 @@
+---
+# Comprehensive Tailscale Role Testing Playbook
+# This playbook performs automated testing of the Tailscale role
+# without requiring actual deployment or Tailscale auth keys
+
+- name: Test Tailscale Role Configuration
+  hosts: localhost
+  gather_facts: false
+  connection: local
+
+  vars:
+    test_results: []
+    test_passed: 0
+    test_failed: 0
+
+  tasks:
+    - name: Display test header
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "Tailscale Role Automated Test Suite"
+          - "Phase 2 Story 3 QA Testing"
+          - "=========================================="
+
+    # Test 1: Role Structure
+    - name: Test - Verify role directory structure
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/{{ item }}"
+      register: role_structure
+      loop:
+        - "{{ playbook_dir }}/../roles/tailscale/defaults/main.yml"
+        - "{{ playbook_dir }}/../roles/tailscale/tasks/main.yml"
+        - "{{ playbook_dir }}/../roles/tailscale/tasks/serve.yml"
+        - "{{ playbook_dir }}/../roles/tailscale/tasks/funnel.yml"
+        - "{{ playbook_dir }}/../roles/tailscale/handlers/main.yml"
+        - "{{ playbook_dir }}/../roles/tailscale/meta/main.yml"
+        - "{{ playbook_dir }}/../roles/tailscale/templates/tailscale-funnel.sh.j2"
+      failed_when: false
+
+    - name: Assert role structure is complete
+      ansible.builtin.assert:
+        that:
+          - role_structure.results | selectattr('stat.exists') | list | length == 7
+        fail_msg: "Some required files are missing"
+        success_msg: "All 7 required role files exist"
+
+    # Test 2: YAML Syntax Validation
+    - name: Test - Load and validate defaults/main.yml
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../roles/tailscale/defaults/main.yml"
+        name: tailscale_defaults
+      register: defaults_load
+
+    - name: Assert defaults loaded successfully
+      ansible.builtin.assert:
+        that:
+          - tailscale_defaults is defined
+          - tailscale_defaults.tailscale_auth_key is defined
+        success_msg: "defaults/main.yml is valid YAML with required variables"
+
+    # Test 3: Variable Validation
+    - name: Test - Verify required default variables exist
+      ansible.builtin.assert:
+        that:
+          - tailscale_defaults.tailscale_auth_key is defined
+          - tailscale_defaults.tailscale_hostname is defined
+          - tailscale_defaults.tailscale_tags is defined
+          - tailscale_defaults.tailscale_serve_enabled is defined
+          - tailscale_defaults.tailscale_funnel_enabled is defined
+          - tailscale_defaults.tailscale_ufw_allow is defined
+        success_msg: "All required default variables are defined"
+
+    # Test 4: Default Values Validation
+    - name: Test - Verify secure defaults
+      ansible.builtin.assert:
+        that:
+          - tailscale_defaults.tailscale_auth_key == ""
+          - tailscale_defaults.tailscale_ssh_enabled == false
+          - tailscale_defaults.tailscale_serve_enabled == false
+          - tailscale_defaults.tailscale_funnel_enabled == false
+          - tailscale_defaults.tailscale_service_enabled == true
+        success_msg: "Default values are secure (no secrets, conservative settings)"
+
+    # Test 5: Meta Dependencies
+    - name: Test - Load and validate meta/main.yml
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../roles/tailscale/meta/main.yml"
+        name: tailscale_meta
+
+    - name: Assert meta configuration is valid
+      ansible.builtin.assert:
+        that:
+          - tailscale_meta.galaxy_info is defined
+          - tailscale_meta.galaxy_info.role_name == "tailscale"
+          - tailscale_meta.dependencies is defined
+          - "'common' in (tailscale_meta.dependencies | map(attribute='role') | list)"
+        success_msg: "Role metadata is valid and has correct dependencies"
+
+    # Test 6: Template Validation
+    - name: Test - Check funnel script template exists
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/../roles/tailscale/templates/tailscale-funnel.sh.j2"
+      register: template_check
+
+    - name: Assert template exists and is readable
+      ansible.builtin.assert:
+        that:
+          - template_check.stat.exists
+          - template_check.stat.readable
+        success_msg: "Funnel script template exists and is readable"
+
+    # Test 7: Handler Validation
+    - name: Test - Verify handlers are defined
+      ansible.builtin.shell: |
+        grep -q "name: Restart tailscaled" {{ playbook_dir }}/../roles/tailscale/handlers/main.yml &&
+        grep -q "name: Reload ufw" {{ playbook_dir }}/../roles/tailscale/handlers/main.yml
+      changed_when: false
+      register: handler_check
+
+    - name: Assert handlers are properly defined
+      ansible.builtin.assert:
+        that:
+          - handler_check.rc == 0
+        success_msg: "Required handlers (Restart tailscaled, Reload ufw) are defined"
+
+    # Test 8: Security - No Hardcoded Secrets
+    - name: Test - Search for hardcoded auth keys in role
+      ansible.builtin.shell: |
+        ! grep -r "tskey-auth-[a-zA-Z0-9]\{20,\}" {{ playbook_dir }}/../roles/tailscale/ || exit 1
+      changed_when: false
+      register: secret_check
+      failed_when: false
+
+    - name: Assert no hardcoded secrets found
+      ansible.builtin.assert:
+        that:
+          - secret_check.rc == 0
+        fail_msg: "WARNING: Hardcoded Tailscale auth keys detected!"
+        success_msg: "No hardcoded secrets found in role files"
+
+    # Test 9: Security - Verify no_log Usage
+    - name: Test - Verify sensitive tasks have no_log
+      ansible.builtin.shell: |
+        grep -A 10 "tailscale_up_command" {{ playbook_dir }}/../roles/tailscale/tasks/main.yml | grep -q "no_log: true" &&
+        grep -A 5 "Connect to Tailscale network" {{ playbook_dir }}/../roles/tailscale/tasks/main.yml | grep -q "no_log: true"
+      changed_when: false
+      register: nolog_check
+
+    - name: Assert sensitive tasks use no_log
+      ansible.builtin.assert:
+        that:
+          - nolog_check.rc == 0
+        success_msg: "Sensitive tasks properly use no_log: true"
+
+    # Test 10: Task Conditional Logic
+    - name: Test - Verify serve/funnel conditional includes
+      ansible.builtin.shell: |
+        grep -q "when: tailscale_serve_enabled and tailscale_serve_config | length > 0" {{ playbook_dir }}/../roles/tailscale/tasks/main.yml &&
+        grep -q "when: tailscale_funnel_enabled and tailscale_funnel_config | length > 0" {{ playbook_dir }}/../roles/tailscale/tasks/main.yml
+      changed_when: false
+      register: conditional_check
+
+    - name: Assert conditional logic is correct
+      ansible.builtin.assert:
+        that:
+          - conditional_check.rc == 0
+        success_msg: "Serve/Funnel tasks have proper conditional logic"
+
+    # Test 11: UFW Firewall Rules
+    - name: Test - Verify UFW rules are defined
+      ansible.builtin.shell: |
+        grep -q "interface: tailscale0" {{ playbook_dir }}/../roles/tailscale/tasks/main.yml &&
+        grep -q "port: '41641'" {{ playbook_dir }}/../roles/tailscale/tasks/main.yml
+      changed_when: false
+      register: ufw_check
+
+    - name: Assert UFW rules are properly configured
+      ansible.builtin.assert:
+        that:
+          - ufw_check.rc == 0
+        success_msg: "UFW rules correctly allow Tailscale interface and port"
+
+    # Test 12: Module Usage
+    - name: Test - Verify no deprecated modules
+      ansible.builtin.shell: |
+        ! grep -r "action:" {{ playbook_dir }}/../roles/tailscale/tasks/ &&
+        ! grep -r "include:" {{ playbook_dir }}/../roles/tailscale/tasks/ &&
+        grep -q "ansible.builtin" {{ playbook_dir }}/../roles/tailscale/tasks/main.yml &&
+        grep -q "community.general.ufw" {{ playbook_dir }}/../roles/tailscale/tasks/main.yml
+      changed_when: false
+      register: module_check
+
+    - name: Assert modern Ansible modules are used
+      ansible.builtin.assert:
+        that:
+          - module_check.rc == 0
+        success_msg: "Role uses modern Ansible FQCN module names"
+
+    # Test 13: Idempotency Checks
+    - name: Test - Verify idempotent task patterns
+      ansible.builtin.shell: |
+        grep -q "changed_when: false" {{ playbook_dir }}/../roles/tailscale/tasks/main.yml &&
+        grep -q "Check if Tailscale is already installed" {{ playbook_dir }}/../roles/tailscale/tasks/main.yml &&
+        grep -q "Check if Tailscale is already connected" {{ playbook_dir }}/../roles/tailscale/tasks/main.yml
+      changed_when: false
+      register: idempotent_check
+
+    - name: Assert tasks follow idempotency patterns
+      ansible.builtin.assert:
+        that:
+          - idempotent_check.rc == 0
+        success_msg: "Tasks follow idempotency best practices"
+
+    # Test 14: Template Rendering Test
+    - name: Test - Render funnel template with test data
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../roles/tailscale/templates/tailscale-funnel.sh.j2"
+        dest: "/tmp/test-tailscale-funnel.sh"
+      vars:
+        inventory_hostname: "test-host"
+        tailscale_hostname: "test-smokecloud"
+        tailscale_domain: "tail74646.ts.net"
+        tailscale_funnel_config:
+          - port: 443
+            target_port: 80
+          - port: 8443
+            target_port: 3001
+
+    - name: Verify rendered template is valid bash
+      ansible.builtin.command: bash -n /tmp/test-tailscale-funnel.sh
+      changed_when: false
+
+    - name: Assert template renders to valid script
+      ansible.builtin.assert:
+        that: true
+        success_msg: "Funnel script template renders to valid bash"
+
+    # Test 15: File Permissions Template
+    - name: Test - Verify template sets correct permissions
+      ansible.builtin.shell: |
+        grep -q "mode: '0755'" {{ playbook_dir }}/../roles/tailscale/tasks/funnel.yml &&
+        grep -q "owner: root" {{ playbook_dir }}/../roles/tailscale/tasks/funnel.yml
+      changed_when: false
+      register: permissions_check
+
+    - name: Assert template creates files with correct permissions
+      ansible.builtin.assert:
+        that:
+          - permissions_check.rc == 0
+        success_msg: "Generated scripts have correct permissions (0755, root:root)"
+
+    # Final Results
+    - name: Display test summary
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "Test Suite Complete!"
+          - "=========================================="
+          - "All 15 automated tests passed successfully"
+          - ""
+          - "Tests Executed:"
+          - "  1. Role directory structure"
+          - "  2. YAML syntax validation"
+          - "  3. Required variables existence"
+          - "  4. Secure default values"
+          - "  5. Role metadata and dependencies"
+          - "  6. Template file validation"
+          - "  7. Handler definitions"
+          - "  8. No hardcoded secrets"
+          - "  9. Sensitive task protection (no_log)"
+          - " 10. Conditional logic correctness"
+          - " 11. UFW firewall rules"
+          - " 12. Modern module usage"
+          - " 13. Idempotency patterns"
+          - " 14. Template rendering"
+          - " 15. File permissions"
+          - ""
+          - "Status: READY FOR DEPLOYMENT"

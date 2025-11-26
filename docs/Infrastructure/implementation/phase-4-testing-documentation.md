@@ -84,6 +84,42 @@ Documentation Framework
 
 ## User Stories
 
+### Story 0: Virtual Smoker Device Setup (Moved from Phase 2)
+**As a** developer
+**I want** a virtual Raspberry Pi environment for testing
+**So that** I can develop and test device functionality without physical hardware
+
+**Context**: This story was originally in Phase 2, Story 4, but has been moved to Phase 4 as it's a testing tool rather than core infrastructure required for deployment.
+
+**Acceptance Criteria:**
+- ARM64 VM running Raspberry Pi OS provisioned via Terraform
+- VNC access for GUI interactions configured
+- Mock hardware services for sensor simulation installed
+- Device service can run and connect to backend
+- Serial communication simulation available
+- Tailscale configured for network access
+
+**Implementation Details:**
+- **Terraform Configuration**: Use existing `infra/terraform/environments/virtual-smoker/` configuration
+- **Provisioning**: Run `terraform apply` for virtual-smoker module
+- **Configuration**: Use Ansible playbook `playbooks/setup-virtual-smoker.yml`
+- **Networking**: Configure on Tailscale as `virtual-smoker-device`
+- **Access**: VNC on port 5901, SSH via Tailscale
+
+**Technical Specifications:**
+- **OS**: Raspberry Pi OS Lite 64-bit
+- **Resources**: 2 CPU cores (ARM64), 2GB RAM, 32GB storage
+- **Services**: VNC Server, mock hardware simulators, Node.js environment
+- **Network**: Tailscale integration for remote access
+- **Expected IP**: Configurable via Terraform (originally 10.30.0.40)
+
+**Reference Documentation:**
+- See Phase 2 documentation (lines 306-1020) for complete virtual smoker setup scripts
+- Terraform module: `infra/terraform/modules/arm64-vm/`
+- Ansible role: `infra/ansible/roles/virtual-device/`
+
+**Priority**: Medium - Valuable for testing but not blocking other work
+
 ### Story 1: Infrastructure Validation
 **As a** DevOps engineer  
 **I want** comprehensive infrastructure testing  

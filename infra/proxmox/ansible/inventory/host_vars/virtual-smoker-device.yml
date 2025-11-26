@@ -8,3 +8,11 @@ device_compose_file: device.docker-compose.yml
 # Device-specific settings
 device_id: "virtual-smoker-001"
 device_type: "virtual"
+
+# Tailscale Configuration
+tailscale_hostname: "virtual-smoker"
+tailscale_tags:
+  - tag:device
+  - tag:virtual
+tailscale_accept_routes: true
+tailscale_accept_dns: true

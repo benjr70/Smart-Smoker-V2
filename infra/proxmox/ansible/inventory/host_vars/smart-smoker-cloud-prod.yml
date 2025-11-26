@@ -17,3 +17,23 @@ mongodb_data_dir: /opt/smart-smoker-prod/data/mongodb
 # Stricter fail2ban for production
 fail2ban_ban_time: 7200    # 2 hours for production
 fail2ban_max_retry: 3      # Strict for production
+
+# Tailscale Configuration
+tailscale_hostname: "smoke-prod-cloud"
+tailscale_tags:
+  - tag:server
+  - tag:production
+tailscale_accept_routes: true
+tailscale_accept_dns: true
+
+# Tailscale Funnel - publicly expose production services
+tailscale_funnel_enabled: true
+tailscale_funnel_config:
+  - port: 443
+    target_port: 80
+  - port: 8443
+    target_port: 3001
+
+# Note: This maintains the existing public URL structure:
+# https://smoke-prod-cloud.tail74646.ts.net (port 443)
+# https://smoke-prod-cloud.tail74646.ts.net:8443 (WebSocket port)

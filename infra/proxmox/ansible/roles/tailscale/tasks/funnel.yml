@@ -1,0 +1,44 @@
+---
+# Configure Tailscale Funnel for public internet access
+
+- name: Verify Tailscale Serve is configured before enabling Funnel
+  ansible.builtin.command: tailscale serve status
+  register: tailscale_serve_check
+  changed_when: false
+  failed_when: tailscale_serve_check.rc != 0
+
+- name: Configure Tailscale Serve for Funnel ports
+  ansible.builtin.command: >-
+    tailscale serve
+    https:{{ item.port }}
+    /
+    {{ item.target_port }}
+  loop: "{{ tailscale_funnel_config }}"
+  register: tailscale_funnel_serve_result
+  changed_when: tailscale_funnel_serve_result.rc == 0
+
+- name: Enable Tailscale Funnel for each configured port
+  ansible.builtin.command: tailscale funnel {{ item.port }} on
+  loop: "{{ tailscale_funnel_config }}"
+  register: tailscale_funnel_result
+  changed_when: "'Funnel started' in tailscale_funnel_result.stdout or tailscale_funnel_result.rc == 0"
+  failed_when: tailscale_funnel_result.rc != 0
+
+- name: Create Tailscale Funnel configuration script
+  ansible.builtin.template:
+    src: tailscale-funnel.sh.j2
+    dest: /usr/local/bin/configure-tailscale-funnel.sh
+    mode: '0755'
+    owner: root
+    group: root
+
+- name: Get Tailscale Funnel status
+  ansible.builtin.command: tailscale funnel status
+  register: tailscale_funnel_status
+  changed_when: false
+  failed_when: false
+
+- name: Display Tailscale Funnel configuration
+  ansible.builtin.debug:
+    msg: "{{ tailscale_funnel_status.stdout_lines }}"
+  when: tailscale_funnel_status.rc == 0

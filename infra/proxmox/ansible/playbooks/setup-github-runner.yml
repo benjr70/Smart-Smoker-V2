@@ -2,6 +2,7 @@
 # Configure GitHub Actions self-hosted runner
 # Usage: ansible-playbook playbooks/setup-github-runner.yml
 # With token: ansible-playbook playbooks/setup-github-runner.yml --extra-vars "github_runner_token=YOUR_TOKEN"
+# With Tailscale: ansible-playbook playbooks/setup-github-runner.yml --extra-vars "github_runner_token=YOUR_TOKEN tailscale_auth_key=YOUR_TS_KEY"
 
 - name: Configure GitHub Actions Runner
   hosts: runners
@@ -13,6 +14,7 @@
     - terraform
     - nodejs
     - github-runner
+    - tailscale
 
   post_tasks:
     - name: Display runner setup summary
@@ -24,3 +26,4 @@
           - "Labels: {{ github_runner_labels | join(', ') }}"
           - "If runner token was provided, service should be running"
           - "Check status: sudo -u {{ github_runner_user }} {{ github_runner_home }}/actions-runner/run.sh --check"
+          - "Tailscale hostname: {{ tailscale_hostname }}"

@@ -1,0 +1,24 @@
+---
+# Tailscale role metadata
+
+galaxy_info:
+  role_name: tailscale
+  author: Smart Smoker DevOps Team
+  description: Install and configure Tailscale VPN with Serve and Funnel support
+  license: MIT
+  min_ansible_version: '2.9'
+
+  platforms:
+    - name: Ubuntu
+      versions:
+        - jammy
+        - focal
+
+  galaxy_tags:
+    - networking
+    - vpn
+    - tailscale
+    - security
+
+dependencies:
+  - role: common

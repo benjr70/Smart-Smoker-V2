@@ -1,6 +1,7 @@
 ---
 # Configure virtual smoker device
 # Usage: ansible-playbook playbooks/setup-virtual-smoker.yml
+# With Tailscale: ansible-playbook playbooks/setup-virtual-smoker.yml --extra-vars "tailscale_auth_key=YOUR_KEY"
 
 - name: Configure Virtual Smoker Device
   hosts: devices
@@ -10,6 +11,7 @@
     - common
     - docker
     - virtual-device
+    - tailscale
 
   post_tasks:
     - name: Display virtual smoker setup summary
@@ -19,3 +21,4 @@
           - "Device ID: {{ device_id | default('not set') }}"
           - "Device Base: {{ device_base_dir }}"
           - "Deploy device software via GitHub Actions workflow"
+          - "Tailscale hostname: {{ tailscale_hostname }}"

@@ -1,6 +1,7 @@
 ---
 # Configure production cloud server
 # Usage: ansible-playbook playbooks/setup-prod-cloud.yml
+# With Tailscale: ansible-playbook playbooks/setup-prod-cloud.yml --extra-vars "tailscale_auth_key=YOUR_KEY"
 
 - name: Configure Production Cloud Server
   hosts: prod_cloud
@@ -11,6 +12,7 @@
     - docker
     - nodejs
     - cloud-app
+    - tailscale
 
   post_tasks:
     - name: Display prod cloud setup summary
@@ -22,3 +24,5 @@
           - "MongoDB Data: {{ mongodb_data_dir }}"
           - "Deploy applications via GitHub Actions workflow"
           - "IMPORTANT: Ensure backups are configured before deploying to production"
+          - "Tailscale hostname: {{ tailscale_hostname }}"
+          - "Tailscale Funnel enabled: {{ tailscale_funnel_enabled }}"
