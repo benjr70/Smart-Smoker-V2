@@ -10,8 +10,8 @@
     group: "{{ app_group }}"
     mode: '0755'
   loop:
-    - "{{ backup_base_dir }}"
-    - "{{ backup_mongodb_dir }}"
+    - "{{ backups_base_dir }}"
+    - "{{ backups_mongodb_dir }}"
   tags:
     - backups
 
@@ -58,9 +58,9 @@
 - name: Configure cron job for MongoDB backups
   ansible.builtin.cron:
     name: "MongoDB daily backup"
-    minute: "{{ backup_schedule_minute }}"
-    hour: "{{ backup_schedule_hour }}"
-    job: "{{ app_base_dir }}/scripts/backup-mongodb.sh >> {{ backup_log_file }} 2>&1"
+    minute: "{{ backups_schedule_minute }}"
+    hour: "{{ backups_schedule_hour }}"
+    job: "{{ app_base_dir }}/scripts/backup-mongodb.sh >> {{ backups_log_file }} 2>&1"
     user: root
     state: present
   tags:
@@ -70,8 +70,8 @@
   ansible.builtin.cron:
     name: "Backup retention cleanup"
     minute: "30"
-    hour: "{{ backup_schedule_hour }}"
-    job: "{{ app_base_dir }}/scripts/backup-retention.sh >> {{ backup_log_file }} 2>&1"
+    hour: "{{ backups_schedule_hour }}"
+    job: "{{ app_base_dir }}/scripts/backup-retention.sh >> {{ backups_log_file }} 2>&1"
     user: root
     state: present
   tags:
@@ -83,7 +83,7 @@
     minute: "0"
     hour: "3"
     weekday: "0"
-    job: "{{ app_base_dir }}/scripts/backup-validation.sh >> {{ backup_log_file }} 2>&1"
+    job: "{{ app_base_dir }}/scripts/backup-validation.sh >> {{ backups_log_file }} 2>&1"
     user: root
     state: present
   tags:
@@ -93,9 +93,9 @@
   ansible.builtin.debug:
     msg:
       - "Backup configuration complete:"
-      - "  - Backup directory: {{ backup_mongodb_dir }}"
-      - "  - Schedule: Daily at {{ backup_schedule_hour }}:{{ backup_schedule_minute }}"
-      - "  - Retention: {{ backup_retention_daily }}d / {{ backup_retention_weekly }}w / {{ backup_retention_monthly }}m"
+      - "  - Backup directory: {{ backups_mongodb_dir }}"
+      - "  - Schedule: Daily at {{ backups_schedule_hour }}:{{ backups_schedule_minute }}"
+      - "  - Retention: {{ backups_retention_daily }}d / {{ backups_retention_weekly }}w / {{ backups_retention_monthly }}m"
       - "  - Validation: Weekly on Sundays at 3 AM"
       - ""
       - "Manual backup: {{ app_base_dir }}/scripts/backup-mongodb.sh"

@@ -6,11 +6,11 @@
 set -euo pipefail
 
 # Configuration from Ansible
-BACKUP_DIR="{{ backup_mongodb_dir }}"
-MONGODB_CONTAINER="{{ mongodb_container_name }}"
-DB_USER="{{ mongodb_backup_user }}"
-DB_PASSWORD="{{ mongodb_backup_password }}"
-DB_NAME="{{ mongodb_backup_database }}"
+BACKUP_DIR="{{ backups_mongodb_dir }}"
+MONGODB_CONTAINER="{{ backups_mongodb_container_name }}"
+DB_USER="{{ backups_mongodb_user }}"
+DB_PASSWORD="{{ backups_mongodb_password }}"
+DB_NAME="{{ backups_mongodb_database }}"
 
 # Timestamp and backup type determination
 DATE=$(date +%Y%m%d-%H%M%S)

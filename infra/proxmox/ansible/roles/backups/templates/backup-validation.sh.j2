@@ -6,10 +6,10 @@
 set -euo pipefail
 
 # Configuration from Ansible
-BACKUP_DIR="{{ backup_mongodb_dir }}"
-MONGODB_CONTAINER="{{ mongodb_container_name }}"
-DB_USER="{{ mongodb_backup_user }}"
-DB_PASSWORD="{{ mongodb_backup_password }}"
+BACKUP_DIR="{{ backups_mongodb_dir }}"
+MONGODB_CONTAINER="{{ backups_mongodb_container_name }}"
+DB_USER="{{ backups_mongodb_user }}"
+DB_PASSWORD="{{ backups_mongodb_password }}"
 
 echo "=========================================="
 echo "Backup Validation Starting"

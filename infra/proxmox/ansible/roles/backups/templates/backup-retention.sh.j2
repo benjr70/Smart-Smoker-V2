@@ -6,10 +6,10 @@
 set -euo pipefail
 
 # Configuration from Ansible
-BACKUP_DIR="{{ backup_mongodb_dir }}"
-DAILY_RETENTION={{ backup_retention_daily }}
-WEEKLY_RETENTION={{ backup_retention_weekly }}
-MONTHLY_RETENTION={{ backup_retention_monthly }}
+BACKUP_DIR="{{ backups_mongodb_dir }}"
+DAILY_RETENTION={{ backups_retention_daily }}
+WEEKLY_RETENTION={{ backups_retention_weekly }}
+MONTHLY_RETENTION={{ backups_retention_monthly }}
 
 echo "=========================================="
 echo "Backup Retention Cleanup Starting"
