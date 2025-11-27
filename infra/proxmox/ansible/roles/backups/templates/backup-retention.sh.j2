@@ -1,0 +1,56 @@
+#!/bin/bash
+# Backup Retention Cleanup Script
+# Removes old backups according to retention policy
+# Managed by Ansible - DO NOT EDIT MANUALLY
+
+set -euo pipefail
+
+# Configuration from Ansible
+BACKUP_DIR="{{ backup_mongodb_dir }}"
+DAILY_RETENTION={{ backup_retention_daily }}
+WEEKLY_RETENTION={{ backup_retention_weekly }}
+MONTHLY_RETENTION={{ backup_retention_monthly }}
+
+echo "=========================================="
+echo "Backup Retention Cleanup Starting"
+echo "Daily retention: ${DAILY_RETENTION} days"
+echo "Weekly retention: ${WEEKLY_RETENTION} weeks"
+echo "Monthly retention: ${MONTHLY_RETENTION} months"
+echo "=========================================="
+
+# Count backups before cleanup
+DAILY_BEFORE=$(find "${BACKUP_DIR}" -name "backup-daily-*" -type d 2>/dev/null | wc -l)
+WEEKLY_BEFORE=$(find "${BACKUP_DIR}" -name "backup-weekly-*" -type d 2>/dev/null | wc -l)
+MONTHLY_BEFORE=$(find "${BACKUP_DIR}" -name "backup-monthly-*" -type d 2>/dev/null | wc -l)
+
+echo "Current backup counts:"
+echo "  Daily: ${DAILY_BEFORE}"
+echo "  Weekly: ${WEEKLY_BEFORE}"
+echo "  Monthly: ${MONTHLY_BEFORE}"
+
+# Remove old daily backups (older than DAILY_RETENTION days)
+echo "Removing daily backups older than ${DAILY_RETENTION} days..."
+find "${BACKUP_DIR}" -name "backup-daily-*" -type d -mtime +${DAILY_RETENTION} -exec rm -rf {} \; 2>/dev/null || true
+
+# Remove old weekly backups (older than WEEKLY_RETENTION weeks)
+echo "Removing weekly backups older than ${WEEKLY_RETENTION} weeks..."
+WEEKLY_DAYS=$((WEEKLY_RETENTION * 7))
+find "${BACKUP_DIR}" -name "backup-weekly-*" -type d -mtime +${WEEKLY_DAYS} -exec rm -rf {} \; 2>/dev/null || true
+
+# Remove old monthly backups (older than MONTHLY_RETENTION months)
+echo "Removing monthly backups older than ${MONTHLY_RETENTION} months..."
+MONTHLY_DAYS=$((MONTHLY_RETENTION * 30))
+find "${BACKUP_DIR}" -name "backup-monthly-*" -type d -mtime +${MONTHLY_DAYS} -exec rm -rf {} \; 2>/dev/null || true
+
+# Count backups after cleanup
+DAILY_AFTER=$(find "${BACKUP_DIR}" -name "backup-daily-*" -type d 2>/dev/null | wc -l)
+WEEKLY_AFTER=$(find "${BACKUP_DIR}" -name "backup-weekly-*" -type d 2>/dev/null | wc -l)
+MONTHLY_AFTER=$(find "${BACKUP_DIR}" -name "backup-monthly-*" -type d 2>/dev/null | wc -l)
+
+echo "Backups after cleanup:"
+echo "  Daily: ${DAILY_AFTER} (removed $((DAILY_BEFORE - DAILY_AFTER)))"
+echo "  Weekly: ${WEEKLY_AFTER} (removed $((WEEKLY_BEFORE - WEEKLY_AFTER)))"
+echo "  Monthly: ${MONTHLY_AFTER} (removed $((MONTHLY_BEFORE - MONTHLY_AFTER)))"
+
+echo "✅ Retention cleanup completed"
+logger -t mongodb-backup "Retention cleanup: removed $((DAILY_BEFORE - DAILY_AFTER + WEEKLY_BEFORE - WEEKLY_AFTER + MONTHLY_BEFORE - MONTHLY_AFTER)) old backups"

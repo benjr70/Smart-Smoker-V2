@@ -1,0 +1,104 @@
+---
+# Backup Role Tasks
+# Configures automated MongoDB backups with retention policies
+
+- name: Create backup directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0755'
+  loop:
+    - "{{ backup_base_dir }}"
+    - "{{ backup_mongodb_dir }}"
+  tags:
+    - backups
+
+- name: Create scripts directory if not exists
+  ansible.builtin.file:
+    path: "{{ app_base_dir }}/scripts"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  tags:
+    - backups
+
+- name: Install MongoDB backup script
+  ansible.builtin.template:
+    src: backup-mongodb.sh.j2
+    dest: "{{ app_base_dir }}/scripts/backup-mongodb.sh"
+    owner: root
+    group: root
+    mode: '0755'
+  tags:
+    - backups
+
+- name: Install retention cleanup script
+  ansible.builtin.template:
+    src: backup-retention.sh.j2
+    dest: "{{ app_base_dir }}/scripts/backup-retention.sh"
+    owner: root
+    group: root
+    mode: '0755'
+  tags:
+    - backups
+
+- name: Install backup validation script
+  ansible.builtin.template:
+    src: backup-validation.sh.j2
+    dest: "{{ app_base_dir }}/scripts/backup-validation.sh"
+    owner: root
+    group: root
+    mode: '0755'
+  tags:
+    - backups
+
+- name: Configure cron job for MongoDB backups
+  ansible.builtin.cron:
+    name: "MongoDB daily backup"
+    minute: "{{ backup_schedule_minute }}"
+    hour: "{{ backup_schedule_hour }}"
+    job: "{{ app_base_dir }}/scripts/backup-mongodb.sh >> {{ backup_log_file }} 2>&1"
+    user: root
+    state: present
+  tags:
+    - backups
+
+- name: Configure cron job for retention cleanup
+  ansible.builtin.cron:
+    name: "Backup retention cleanup"
+    minute: "30"
+    hour: "{{ backup_schedule_hour }}"
+    job: "{{ app_base_dir }}/scripts/backup-retention.sh >> {{ backup_log_file }} 2>&1"
+    user: root
+    state: present
+  tags:
+    - backups
+
+- name: Configure cron job for backup validation (weekly)
+  ansible.builtin.cron:
+    name: "Weekly backup validation"
+    minute: "0"
+    hour: "3"
+    weekday: "0"
+    job: "{{ app_base_dir }}/scripts/backup-validation.sh >> {{ backup_log_file }} 2>&1"
+    user: root
+    state: present
+  tags:
+    - backups
+
+- name: Display backup configuration summary
+  ansible.builtin.debug:
+    msg:
+      - "Backup configuration complete:"
+      - "  - Backup directory: {{ backup_mongodb_dir }}"
+      - "  - Schedule: Daily at {{ backup_schedule_hour }}:{{ backup_schedule_minute }}"
+      - "  - Retention: {{ backup_retention_daily }}d / {{ backup_retention_weekly }}w / {{ backup_retention_monthly }}m"
+      - "  - Validation: Weekly on Sundays at 3 AM"
+      - ""
+      - "Manual backup: {{ app_base_dir }}/scripts/backup-mongodb.sh"
+      - "Manual validation: {{ app_base_dir }}/scripts/backup-validation.sh"
+  tags:
+    - backups

@@ -12,6 +12,7 @@
     - docker
     - nodejs
     - cloud-app
+    - backups
     - tailscale
 
   post_tasks:

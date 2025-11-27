@@ -1,0 +1,75 @@
+#!/bin/bash
+# MongoDB Backup Script
+# Performs automated MongoDB dumps with timestamp and type classification
+# Managed by Ansible - DO NOT EDIT MANUALLY
+
+set -euo pipefail
+
+# Configuration from Ansible
+BACKUP_DIR="{{ backup_mongodb_dir }}"
+MONGODB_CONTAINER="{{ mongodb_container_name }}"
+DB_USER="{{ mongodb_backup_user }}"
+DB_PASSWORD="{{ mongodb_backup_password }}"
+DB_NAME="{{ mongodb_backup_database }}"
+
+# Timestamp and backup type determination
+DATE=$(date +%Y%m%d-%H%M%S)
+DAY_OF_WEEK=$(date +%u)
+DAY_OF_MONTH=$(date +%d)
+
+# Determine backup type (daily, weekly on Sunday, monthly on 1st)
+if [ "$DAY_OF_MONTH" = "01" ]; then
+    BACKUP_TYPE="monthly"
+elif [ "$DAY_OF_WEEK" = "7" ]; then
+    BACKUP_TYPE="weekly"
+else
+    BACKUP_TYPE="daily"
+fi
+
+BACKUP_NAME="backup-${BACKUP_TYPE}-${DATE}"
+BACKUP_PATH="${BACKUP_DIR}/${BACKUP_NAME}"
+
+echo "=========================================="
+echo "MongoDB Backup Starting"
+echo "Type: ${BACKUP_TYPE}"
+echo "Timestamp: ${DATE}"
+echo "Target: ${BACKUP_PATH}"
+echo "=========================================="
+
+# Create backup directory
+mkdir -p "${BACKUP_PATH}"
+
+# Perform mongodump with authentication
+if docker exec "${MONGODB_CONTAINER}" mongodump \
+    --username="${DB_USER}" \
+    --password="${DB_PASSWORD}" \
+    --authenticationDatabase=admin \
+    --db="${DB_NAME}" \
+    --out="/data/db/backups/mongodb/${BACKUP_NAME}" \
+    --gzip; then
+
+    # Verify backup created and not empty
+    if [ -d "${BACKUP_PATH}" ] && [ "$(ls -A ${BACKUP_PATH})" ]; then
+        echo "✅ Backup completed successfully: ${BACKUP_PATH}"
+
+        # Create/update latest symlink for easy restore access
+        ln -sfn "${BACKUP_NAME}" "${BACKUP_DIR}/latest"
+
+        # Log success
+        logger -t mongodb-backup "SUCCESS: ${BACKUP_NAME}"
+
+        # Output backup size
+        BACKUP_SIZE=$(du -sh "${BACKUP_PATH}" | cut -f1)
+        echo "Backup size: ${BACKUP_SIZE}"
+
+        exit 0
+    else
+        echo "❌ Backup verification failed: directory is empty or missing"
+        logger -t mongodb-backup "FAILED: ${BACKUP_NAME} - Empty backup"
+        exit 1
+    fi
+else
+    echo "❌ Backup failed: mongodump command returned error"
+    logger -t mongodb-backup "FAILED: ${BACKUP_NAME} - mongodump error"
+    exit 1
+fi

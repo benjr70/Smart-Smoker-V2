@@ -1,0 +1,28 @@
+---
+# Backup Role Default Variables
+# These can be overridden in inventory host_vars or group_vars
+
+# Backup directory configuration
+backup_base_dir: "{{ app_base_dir }}/backups"
+backup_mongodb_dir: "{{ backup_base_dir }}/mongodb"
+
+# Backup schedule (cron format)
+backup_schedule_hour: "2"           # 2 AM daily
+backup_schedule_minute: "0"
+
+# Retention policies (conservative: 7 daily, 4 weekly, 12 monthly)
+backup_retention_daily: 7
+backup_retention_weekly: 4
+backup_retention_monthly: 12
+
+# MongoDB backup configuration
+mongodb_backup_user: "smartsmoker"
+mongodb_backup_password: "{{ mongo_app_password }}"
+mongodb_backup_database: "smartsmoker"
+mongodb_container_name: "mongo"
+
+# Compression settings
+backup_compression: "gzip"
+
+# Logging
+backup_log_file: "/var/log/mongodb-backup.log"

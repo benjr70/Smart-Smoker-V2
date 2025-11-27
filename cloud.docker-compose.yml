@@ -17,19 +17,40 @@ services:
       - 8443:3001
 
     depends_on:
-      - mongo
+      mongo:
+        condition: service_healthy
 
     links:
       - mongo
 
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
   mongo:
     container_name: mongo
-    image: mongo:4.4.14-rc0-focal
+    image: mongo:7.0
     restart: always
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USER:-admin}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
+      - MONGO_INITDB_DATABASE=smartsmoker
+      - MONGO_APP_PASSWORD=${MONGO_APP_PASSWORD}
     volumes:
       - ./../../../../database:/data/db:z
+      - ./infra/mongodb-init:/docker-entrypoint-initdb.d:ro
     ports:
       - 27017:27017
+
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   frontend:
     container_name: frontend_cloud
@@ -39,3 +60,14 @@ services:
       - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
     ports:
       - 80:3000
+
+    depends_on:
+      backend:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
