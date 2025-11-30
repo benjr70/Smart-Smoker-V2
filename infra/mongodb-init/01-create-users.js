@@ -1,17 +1,11 @@
 // MongoDB User Initialization Script
 // This script runs automatically when MongoDB container starts for the first time
-// It creates the admin user and application user with appropriate permissions
+// Note: MongoDB automatically creates the admin user from MONGO_INITDB_ROOT_USERNAME/PASSWORD
+// This script only creates the application user with limited permissions
 
 db = db.getSiblingDB('admin');
 
-// Create admin user with root privileges
-db.createUser({
-  user: process.env.MONGO_INITDB_ROOT_USERNAME,
-  pwd: process.env.MONGO_INITDB_ROOT_PASSWORD,
-  roles: ['root']
-});
-
-print('✅ Admin user created successfully');
+print('ℹ️  Admin user already created by MongoDB from environment variables');
 
 // Create application user with limited permissions (readWrite only on smartsmoker database)
 db.createUser({
@@ -26,4 +20,4 @@ db.createUser({
 });
 
 print('✅ Application user "smartsmoker" created successfully');
-print('MongoDB initialization complete');
+print('✅ MongoDB initialization complete');
