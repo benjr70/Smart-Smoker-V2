@@ -1,17 +1,18 @@
-  FROM node:20-bookworm-slim
+FROM node:20-bookworm-slim
 
-  # Build context already contains workspace node_modules.
-  # We do NOT run npm install inside the image.
-  WORKDIR /apps/backend
+# Build context is the repository root
+# We do NOT run npm install inside the image - use workspace node_modules
+WORKDIR /apps/backend
 
-  # Hoisted workspace dependencies
-  COPY node_modules /node_modules
+# Hoisted workspace dependencies from root
+COPY node_modules /node_modules
 
-  # App files
-  COPY apps/backend/package.json ./package.json
-  COPY apps/backend/dist ./dist
+# App files
+COPY apps/backend/package.json ./package.json
+COPY apps/backend/dist ./dist
+COPY apps/backend/healthcheck.js ./healthcheck.js
 
-  ENV NODE_ENV=prod
-  ENV PORT=3001
+ENV NODE_ENV=prod
+ENV PORT=3001
 
-  CMD ["npm", "run", "start:production"]
+CMD ["npm", "run", "start:production"]
