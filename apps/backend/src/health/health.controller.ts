@@ -2,7 +2,7 @@ import { Controller, Get } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection } from 'mongoose';
 
-@Controller('health')
+@Controller('api/health')
 export class HealthController {
   constructor(@InjectConnection() private connection: Connection) {}
 
