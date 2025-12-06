@@ -24,7 +24,7 @@ docker images --format "{{.Repository}}:{{.Tag}}" | grep "benjr70/smart-smoker" 
 
 # Save current compose state
 echo "Saving Docker Compose state..."
-docker-compose ps > "${BACKUP_DIR}/compose-state.txt" 2>/dev/null || echo "No containers running"
+docker compose ps > "${BACKUP_DIR}/compose-state.txt" 2>/dev/null || echo "No containers running"
 
 # Save current environment (if exists)
 echo "Saving environment files..."

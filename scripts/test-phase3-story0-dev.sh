@@ -47,10 +47,15 @@ section() {
 cleanup() {
     section "CLEANUP: Removing all test resources"
 
-    cd /root/Smart-Smoker-V2 2>/dev/null || true
+    # Find the test directory (could be Smart-Smoker-V2 or Smart-Smoker-V2-test)
+    if [ -n "${TEST_DIR:-}" ] && [ -d "$TEST_DIR" ]; then
+        cd "$TEST_DIR" 2>/dev/null || true
+    else
+        cd /root/Smart-Smoker-V2 2>/dev/null || cd /root/Smart-Smoker-V2-test 2>/dev/null || true
+    fi
 
     log "Stopping all Docker containers..."
-    docker-compose -f cloud.docker-compose.yml down -v 2>/dev/null || true
+    docker compose -f cloud.docker-compose.yml down -v 2>/dev/null || true
 
     log "Removing test database directory..."
     rm -rf database/ 2>/dev/null || true
@@ -58,6 +63,7 @@ cleanup() {
     log "Removing test repository..."
     cd /root
     rm -rf Smart-Smoker-V2 2>/dev/null || true
+    rm -rf Smart-Smoker-V2-test 2>/dev/null || true
 
     log "Pruning Docker resources..."
     docker system prune -f 2>/dev/null || true
@@ -72,29 +78,40 @@ trap cleanup EXIT
 section "PHASE 3 STORY 0 - DEV CLOUD TESTING"
 log "Test log: $TEST_LOG"
 
-# Test 1: Clone repository
-section "TEST 1: Clone Repository"
-cd /root
-if [ -d "Smart-Smoker-V2" ]; then
-    rm -rf Smart-Smoker-V2
-fi
+# Test 1: Setup repository
+section "TEST 1: Setup Repository"
 
-log "Cloning repository..."
-if git clone https://github.com/benjr70/Smart-Smoker-V2.git &>> "$TEST_LOG"; then
-    success "Repository cloned"
+# Check if we're already in a synced repository
+if [ -f "cloud.docker-compose.yml" ] && [ -d "infra" ]; then
+    log "Using pre-synced repository in current directory"
+    TEST_DIR=$(pwd)
+    success "Repository ready (pre-synced)"
 else
-    error "Failed to clone repository"
-    exit 1
-fi
+    # Need to clone from GitHub
+    cd /root
+    if [ -d "Smart-Smoker-V2" ]; then
+        rm -rf Smart-Smoker-V2
+    fi
 
-cd Smart-Smoker-V2
+    log "Cloning repository from GitHub..."
+    if git clone https://github.com/benjr70/Smart-Smoker-V2.git &>> "$TEST_LOG"; then
+        success "Repository cloned"
+    else
+        error "Failed to clone repository"
+        error "Tip: If GitHub is unreachable, sync the repo using: ./scripts/sync-to-dev-cloud.sh"
+        exit 1
+    fi
 
-log "Checking out feat/infra-phase3-story0 branch..."
-if git checkout feat/infra-phase3-story-0 &>> "$TEST_LOG"; then
-    success "Branch checked out"
-else
-    error "Failed to checkout branch"
-    exit 1
+    cd Smart-Smoker-V2
+    TEST_DIR=$(pwd)
+
+    log "Checking out feat/infra-phase3-story0 branch..."
+    if git checkout feat/infra-phase3-story-0 &>> "$TEST_LOG"; then
+        success "Branch checked out"
+    else
+        error "Failed to checkout branch"
+        exit 1
+    fi
 fi
 
 # Test 2: Verify new files exist
@@ -141,11 +158,11 @@ success "Credentials generated and exported"
 section "TEST 4: Start MongoDB 7.0 with Authentication"
 
 log "Starting MongoDB container..."
-if docker-compose -f cloud.docker-compose.yml up -d mongo &>> "$TEST_LOG"; then
+if docker compose -f cloud.docker-compose.yml up -d mongo &>> "$TEST_LOG"; then
     success "MongoDB container started"
 else
     error "Failed to start MongoDB"
-    docker-compose logs mongo | tail -20 >> "$TEST_LOG"
+    docker compose logs mongo | tail -20 >> "$TEST_LOG"
     exit 1
 fi
 
@@ -189,11 +206,11 @@ fi
 section "TEST 6: Start All Services"
 
 log "Starting backend and frontend..."
-if docker-compose -f cloud.docker-compose.yml up -d &>> "$TEST_LOG"; then
+if docker compose -f cloud.docker-compose.yml up -d &>> "$TEST_LOG"; then
     success "All services started"
 else
     error "Failed to start services"
-    docker-compose logs >> "$TEST_LOG"
+    docker compose logs >> "$TEST_LOG"
     exit 1
 fi
 

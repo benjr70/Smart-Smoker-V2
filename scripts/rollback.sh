@@ -32,7 +32,7 @@ echo ""
 
 # Stop current containers
 echo "Stopping current containers..."
-docker-compose down || echo "Warning: Some containers may not have stopped cleanly"
+docker compose down || echo "Warning: Some containers may not have stopped cleanly"
 
 # Attempt to restore previous state
 echo "Restarting services..."
@@ -41,7 +41,7 @@ echo "Restarting services..."
 # In a more sophisticated setup, we could restore previous image versions
 # from the backup, but that requires version pinning strategy
 
-docker-compose up -d
+docker compose up -d
 
 echo ""
 echo "✅ Rollback initiated - containers restarted"
