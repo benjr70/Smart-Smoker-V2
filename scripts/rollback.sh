@@ -2,8 +2,11 @@
 # Deployment Rollback Script
 # Restores previous deployment state after failed health checks
 # Usage: ./scripts/rollback.sh
+# Environment: COMPOSE_FILE (default: cloud.docker-compose.yml)
 
 set -euo pipefail
+
+COMPOSE_FILE="${COMPOSE_FILE:-cloud.docker-compose.yml}"
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -51,7 +54,7 @@ fi
 
 # Stop current containers (preserve volumes for data safety)
 echo "Stopping current containers..."
-if docker compose -f cloud.docker-compose.yml down; then
+if docker compose -f "$COMPOSE_FILE" down; then
     echo -e "${GREEN}✅ Containers stopped${NC}"
 else
     echo -e "${YELLOW}⚠️  Warning: Some containers may not have stopped cleanly${NC}"
@@ -72,8 +75,8 @@ fi
 
 # Restore docker-compose file
 echo "Restoring docker-compose file..."
-if [ -f "${BACKUP_DIR}/cloud.docker-compose.yml.backup" ]; then
-    cp "${BACKUP_DIR}/cloud.docker-compose.yml.backup" cloud.docker-compose.yml
+if [ -f "${BACKUP_DIR}/${COMPOSE_FILE}.backup" ]; then
+    cp "${BACKUP_DIR}/${COMPOSE_FILE}.backup" "$COMPOSE_FILE"
     echo -e "${GREEN}✅ Docker Compose file restored${NC}"
 else
     echo -e "${YELLOW}⚠️  No docker-compose backup found, using current file${NC}"
@@ -114,7 +117,7 @@ fi
 
 # Start services with restored configuration
 echo "Starting services with restored configuration..."
-if docker compose -f cloud.docker-compose.yml up -d; then
+if docker compose -f "$COMPOSE_FILE" up -d; then
     echo -e "${GREEN}✅ Services started${NC}"
 else
     echo -e "${RED}❌ Failed to start services${NC}"

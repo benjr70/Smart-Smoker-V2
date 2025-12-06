@@ -55,7 +55,7 @@ cleanup() {
     fi
 
     log "Stopping all Docker containers..."
-    docker compose -f cloud.docker-compose.yml down -v 2>/dev/null || true
+    docker compose -f cloud.docker-compose.dev.yml down -v 2>/dev/null || true
 
     log "Removing test database directory..."
     rm -rf database/ 2>/dev/null || true
@@ -82,7 +82,7 @@ log "Test log: $TEST_LOG"
 section "TEST 1: Setup Repository"
 
 # Check if we're already in a synced repository
-if [ -f "cloud.docker-compose.yml" ] && [ -d "infra" ]; then
+if [ -f "cloud.docker-compose.dev.yml" ] && [ -d "infra" ]; then
     log "Using pre-synced repository in current directory"
     TEST_DIR=$(pwd)
     success "Repository ready (pre-synced)"
@@ -158,11 +158,11 @@ success "Credentials generated and exported"
 section "TEST 4: Start MongoDB 7.0 with Authentication"
 
 log "Starting MongoDB container..."
-if docker compose -f cloud.docker-compose.yml up -d mongo &>> "$TEST_LOG"; then
+if docker compose -f cloud.docker-compose.dev.yml up -d mongo &>> "$TEST_LOG"; then
     success "MongoDB container started"
 else
     error "Failed to start MongoDB"
-    docker compose logs mongo | tail -20 >> "$TEST_LOG"
+    docker compose -f cloud.docker-compose.dev.yml logs mongo | tail -20 >> "$TEST_LOG"
     exit 1
 fi
 
@@ -206,11 +206,11 @@ fi
 section "TEST 6: Start All Services"
 
 log "Starting backend and frontend..."
-if docker compose -f cloud.docker-compose.yml up -d &>> "$TEST_LOG"; then
+if docker compose -f cloud.docker-compose.dev.yml up -d &>> "$TEST_LOG"; then
     success "All services started"
 else
     error "Failed to start services"
-    docker compose logs >> "$TEST_LOG"
+    docker compose -f cloud.docker-compose.dev.yml logs >> "$TEST_LOG"
     exit 1
 fi
 
@@ -288,6 +288,7 @@ success "Backup directory created"
 # Test 10C: Execute Full Deployment Backup
 log "Executing deployment backup..."
 chmod +x scripts/deployment-backup.sh
+export COMPOSE_FILE="cloud.docker-compose.dev.yml"
 if ./scripts/deployment-backup.sh &>> "$TEST_LOG"; then
     success "Deployment backup executed successfully"
 
@@ -311,7 +312,7 @@ if [ -n "$BACKUP_DIR" ] && [ -d "$BACKUP_DIR" ]; then
     REQUIRED_FILES=(
         "manifest.txt"
         "docker-images.tar.gz"
-        "cloud.docker-compose.yml.backup"
+        "cloud.docker-compose.dev.yml.backup"
         "mongodb-data.tar.gz"
     )
 

@@ -2,9 +2,11 @@
 # Pre-Deployment Backup Script
 # Creates a comprehensive backup of current deployment state before updating
 # Usage: ./scripts/deployment-backup.sh
+# Environment: COMPOSE_FILE (default: cloud.docker-compose.yml)
 
 set -euo pipefail
 
+COMPOSE_FILE="${COMPOSE_FILE:-cloud.docker-compose.yml}"
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 BACKUP_BASE_DIR="/opt/smart-smoker/backups/deployments"
 BACKUP_DIR="${BACKUP_BASE_DIR}/backup-${TIMESTAMP}"
@@ -40,8 +42,8 @@ docker compose ps > "${BACKUP_DIR}/compose-state.txt" 2>/dev/null || echo "No co
 
 # Backup docker-compose file
 echo "Backing up docker-compose file..."
-if [ -f "cloud.docker-compose.yml" ]; then
-    cp cloud.docker-compose.yml "${BACKUP_DIR}/cloud.docker-compose.yml.backup"
+if [ -f "$COMPOSE_FILE" ]; then
+    cp "$COMPOSE_FILE" "${BACKUP_DIR}/${COMPOSE_FILE}.backup"
 fi
 
 # Save current environment (if exists)
