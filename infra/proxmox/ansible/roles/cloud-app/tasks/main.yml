@@ -34,6 +34,14 @@
     - backups
     - config
 
+- name: Create deployment backup subdirectory
+  ansible.builtin.file:
+    path: "{{ app_base_dir }}/backups/deployments"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0755'
+
 - name: Install application dependencies
   ansible.builtin.apt:
     name:
