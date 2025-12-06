@@ -263,11 +263,9 @@ else
 fi
 
 # Test 10: Test Backup Scripts
-section "TEST 10: Test Backup Scripts (Simulated)"
+section "TEST 10: Test Backup and Rollback Functionality"
 
-log "Creating backup directory structure..."
-mkdir -p /opt/smart-smoker-dev/backups/mongodb
-
+# Test 10A: Syntax Validation
 log "Testing backup script syntax..."
 if bash -n scripts/deployment-backup.sh; then
     success "Deployment backup script syntax valid"
@@ -280,6 +278,133 @@ if bash -n scripts/rollback.sh; then
     success "Rollback script syntax valid"
 else
     error "Rollback script has syntax errors"
+fi
+
+# Test 10B: Create backup directory structure
+log "Creating backup directory structure..."
+mkdir -p /opt/smart-smoker/backups/deployments
+success "Backup directory created"
+
+# Test 10C: Execute Full Deployment Backup
+log "Executing deployment backup..."
+chmod +x scripts/deployment-backup.sh
+if ./scripts/deployment-backup.sh &>> "$TEST_LOG"; then
+    success "Deployment backup executed successfully"
+
+    # Verify backup location file was created
+    if [ -f "/opt/smart-smoker/backups/deployments/last-deployment-backup.txt" ]; then
+        BACKUP_DIR=$(cat /opt/smart-smoker/backups/deployments/last-deployment-backup.txt)
+        success "Backup location recorded: $BACKUP_DIR"
+    else
+        error "Backup location file not created"
+        BACKUP_DIR=""
+    fi
+else
+    error "Deployment backup failed"
+    BACKUP_DIR=""
+fi
+
+# Test 10D: Verify Backup Contents
+if [ -n "$BACKUP_DIR" ] && [ -d "$BACKUP_DIR" ]; then
+    log "Verifying backup contents..."
+
+    REQUIRED_FILES=(
+        "manifest.txt"
+        "docker-images.tar.gz"
+        "cloud.docker-compose.yml.backup"
+        "mongodb-data.tar.gz"
+    )
+
+    for file in "${REQUIRED_FILES[@]}"; do
+        if [ -f "${BACKUP_DIR}/${file}" ]; then
+            FILE_SIZE=$(du -sh "${BACKUP_DIR}/${file}" | cut -f1)
+            success "Backup contains: $file (${FILE_SIZE})"
+        else
+            error "Missing from backup: $file"
+        fi
+    done
+
+    # Verify manifest contents
+    if [ -f "${BACKUP_DIR}/manifest.txt" ]; then
+        log "Backup manifest:"
+        cat "${BACKUP_DIR}/manifest.txt" | tee -a "$TEST_LOG"
+    fi
+else
+    warning "Skipping backup verification (backup directory not found)"
+fi
+
+# Test 10E: Insert Test Data for Rollback Verification
+log "Inserting test data that should disappear after rollback..."
+if docker exec mongo mongosh -u smartsmoker -p "${MONGO_APP_PASSWORD}" smartsmoker \
+    --eval "db.rollbacktest.insertOne({data: 'should_disappear_after_rollback', timestamp: new Date()})" &>> "$TEST_LOG"; then
+    success "Inserted rollback test data"
+
+    # Verify the data exists
+    COUNT=$(docker exec mongo mongosh -u smartsmoker -p "${MONGO_APP_PASSWORD}" smartsmoker \
+        --quiet --eval "db.rollbacktest.countDocuments({})" 2>/dev/null | tr -d '\n' || echo "0")
+    log "Rollback test collection has $COUNT document(s)"
+else
+    error "Failed to insert rollback test data"
+fi
+
+# Test 10F: Execute Rollback
+if [ -n "$BACKUP_DIR" ] && [ -d "$BACKUP_DIR" ]; then
+    log "Executing rollback to previous deployment state..."
+    chmod +x scripts/rollback.sh
+
+    if ./scripts/rollback.sh &>> "$TEST_LOG"; then
+        success "Rollback executed successfully"
+
+        # Wait for services to restart
+        log "Waiting for services to restart after rollback (60 seconds)..."
+        sleep 60
+    else
+        error "Rollback execution failed"
+    fi
+
+    # Test 10G: Verify Rollback Restored Previous State
+    log "Verifying rollback restored previous database state..."
+    COUNT=$(docker exec mongo mongosh -u smartsmoker -p "${MONGO_APP_PASSWORD}" smartsmoker \
+        --quiet --eval "db.rollbacktest.countDocuments({})" 2>/dev/null | tr -d '\n' || echo "error")
+
+    if [ "$COUNT" = "0" ]; then
+        success "Rollback successfully removed post-backup data"
+    elif [ "$COUNT" = "error" ]; then
+        warning "Could not verify rollback (database connection issue)"
+    else
+        error "Rollback did not restore previous state (found $COUNT documents, expected 0)"
+    fi
+
+    # Verify services are running after rollback
+    log "Verifying services restarted after rollback..."
+    if docker ps | grep -q "mongo"; then
+        success "MongoDB running after rollback"
+    else
+        error "MongoDB not running after rollback"
+    fi
+
+    if docker ps | grep -q "backend_cloud"; then
+        success "Backend running after rollback"
+    else
+        error "Backend not running after rollback"
+    fi
+
+    if docker ps | grep -q "frontend_cloud"; then
+        success "Frontend running after rollback"
+    else
+        error "Frontend not running after rollback"
+    fi
+
+    # Verify rollback report was created
+    if [ -f "${BACKUP_DIR}/rollback-report.txt" ]; then
+        success "Rollback report created"
+        log "Rollback report:"
+        cat "${BACKUP_DIR}/rollback-report.txt" | tee -a "$TEST_LOG"
+    else
+        warning "Rollback report not found"
+    fi
+else
+    warning "Skipping rollback tests (no backup available)"
 fi
 
 # Test 11: Verify MongoDB Data Persistence
