@@ -19,11 +19,11 @@ jobs:
       - run: sudo chmod -R 777 ./
       - uses: actions/checkout@v4
 
-      # NEW: Pre-deployment backup
+      # Pre-deployment backup
       - name: Backup current deployment
         run: |
+          sudo mkdir -p /opt/smart-smoker/backups/deployments
           sudo ./scripts/deployment-backup.sh
-          sudo docker-compose ps > deployment-state-backup.txt || true
 
       # URL-encode MongoDB password for connection string
       - name: URL-encode MongoDB password
@@ -33,19 +33,51 @@ jobs:
           echo "ENCODED_MONGO_APP_PASSWORD=$ENCODED_PASSWORD" >> $GITHUB_ENV
 
       - name: docker pull
-        run: sudo VERSION=${{ inputs.version }} VAPID_PRIVATE_KEY=${{ secrets.VAPID_PRIVATE_KEY }} VAPID_PUBLIC_KEY=${{ secrets.VAPID_PUBLIC_KEY }} MONGO_ROOT_USER=admin MONGO_ROOT_PASSWORD=${{ secrets.MONGO_ROOT_PASSWORD }} MONGO_APP_PASSWORD=${{ secrets.MONGO_APP_PASSWORD }} ENCODED_MONGO_APP_PASSWORD=${{ env.ENCODED_MONGO_APP_PASSWORD }} docker compose -f cloud.docker-compose.yml pull
+        env:
+          VERSION: ${{ inputs.version }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          MONGO_ROOT_USER: admin
+          MONGO_ROOT_PASSWORD: ${{ secrets.MONGO_ROOT_PASSWORD }}
+          MONGO_APP_PASSWORD: ${{ secrets.MONGO_APP_PASSWORD }}
+          ENCODED_MONGO_APP_PASSWORD: ${{ env.ENCODED_MONGO_APP_PASSWORD }}
+        run: sudo -E docker compose -f cloud.docker-compose.yml pull
 
       - name: docker build
-        run: sudo VERSION=${{ inputs.version }} VAPID_PRIVATE_KEY=${{ secrets.VAPID_PRIVATE_KEY }} VAPID_PUBLIC_KEY=${{ secrets.VAPID_PUBLIC_KEY }} MONGO_ROOT_USER=admin MONGO_ROOT_PASSWORD=${{ secrets.MONGO_ROOT_PASSWORD }} MONGO_APP_PASSWORD=${{ secrets.MONGO_APP_PASSWORD }} ENCODED_MONGO_APP_PASSWORD=${{ env.ENCODED_MONGO_APP_PASSWORD }} docker compose -f cloud.docker-compose.yml build
+        env:
+          VERSION: ${{ inputs.version }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          MONGO_ROOT_USER: admin
+          MONGO_ROOT_PASSWORD: ${{ secrets.MONGO_ROOT_PASSWORD }}
+          MONGO_APP_PASSWORD: ${{ secrets.MONGO_APP_PASSWORD }}
+          ENCODED_MONGO_APP_PASSWORD: ${{ env.ENCODED_MONGO_APP_PASSWORD }}
+        run: sudo -E docker compose -f cloud.docker-compose.yml build
 
       - name: docker compose down
-        run: sudo VERSION=${{ inputs.version }} VAPID_PRIVATE_KEY=${{ secrets.VAPID_PRIVATE_KEY }} VAPID_PUBLIC_KEY=${{ secrets.VAPID_PUBLIC_KEY }} MONGO_ROOT_USER=admin MONGO_ROOT_PASSWORD=${{ secrets.MONGO_ROOT_PASSWORD }} MONGO_APP_PASSWORD=${{ secrets.MONGO_APP_PASSWORD }} ENCODED_MONGO_APP_PASSWORD=${{ env.ENCODED_MONGO_APP_PASSWORD }} docker compose -f cloud.docker-compose.yml down
+        env:
+          VERSION: ${{ inputs.version }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          MONGO_ROOT_USER: admin
+          MONGO_ROOT_PASSWORD: ${{ secrets.MONGO_ROOT_PASSWORD }}
+          MONGO_APP_PASSWORD: ${{ secrets.MONGO_APP_PASSWORD }}
+          ENCODED_MONGO_APP_PASSWORD: ${{ env.ENCODED_MONGO_APP_PASSWORD }}
+        run: sudo -E docker compose -f cloud.docker-compose.yml down
 
       - name: kill tailscale
         run: sudo systemctl stop tailscaled
 
       - name: docker compose up
-        run: sudo VERSION=${{ inputs.version }} VAPID_PRIVATE_KEY=${{ secrets.VAPID_PRIVATE_KEY }} VAPID_PUBLIC_KEY=${{ secrets.VAPID_PUBLIC_KEY }} MONGO_ROOT_USER=admin MONGO_ROOT_PASSWORD=${{ secrets.MONGO_ROOT_PASSWORD }} MONGO_APP_PASSWORD=${{ secrets.MONGO_APP_PASSWORD }} ENCODED_MONGO_APP_PASSWORD=${{ env.ENCODED_MONGO_APP_PASSWORD }} docker compose -f cloud.docker-compose.yml up -d --force-recreate
+        env:
+          VERSION: ${{ inputs.version }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          MONGO_ROOT_USER: admin
+          MONGO_ROOT_PASSWORD: ${{ secrets.MONGO_ROOT_PASSWORD }}
+          MONGO_APP_PASSWORD: ${{ secrets.MONGO_APP_PASSWORD }}
+          ENCODED_MONGO_APP_PASSWORD: ${{ env.ENCODED_MONGO_APP_PASSWORD }}
+        run: sudo -E docker compose -f cloud.docker-compose.yml up -d --force-recreate
 
       - name: start tailscale
         run: sudo systemctl start tailscaled
