@@ -60,10 +60,14 @@ cleanup() {
     log "Removing test database directory..."
     rm -rf database/ 2>/dev/null || true
 
-    log "Removing test repository..."
-    cd /root
-    rm -rf Smart-Smoker-V2 2>/dev/null || true
-    rm -rf Smart-Smoker-V2-test 2>/dev/null || true
+    # Only remove repository if we cloned it (not if using pre-synced)
+    if [ "${CLONED_REPO:-false}" = "true" ]; then
+        log "Removing cloned test repository..."
+        cd /root
+        rm -rf Smart-Smoker-V2 2>/dev/null || true
+    else
+        log "Skipping repository removal (using pre-synced directory)"
+    fi
 
     log "Pruning Docker resources..."
     docker system prune -f 2>/dev/null || true
@@ -85,6 +89,7 @@ section "TEST 1: Setup Repository"
 if [ -f "cloud.docker-compose.dev.yml" ] && [ -d "infra" ]; then
     log "Using pre-synced repository in current directory"
     TEST_DIR=$(pwd)
+    CLONED_REPO=false
     success "Repository ready (pre-synced)"
 else
     # Need to clone from GitHub
@@ -96,6 +101,7 @@ else
     log "Cloning repository from GitHub..."
     if git clone https://github.com/benjr70/Smart-Smoker-V2.git &>> "$TEST_LOG"; then
         success "Repository cloned"
+        CLONED_REPO=true
     else
         error "Failed to clone repository"
         error "Tip: If GitHub is unreachable, sync the repo using: ./scripts/sync-to-dev-cloud.sh"
