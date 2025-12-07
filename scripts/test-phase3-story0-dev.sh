@@ -195,14 +195,14 @@ else
 fi
 
 log "Testing application user authentication..."
-if docker exec mongo mongosh -u smartsmoker -p "${MONGO_APP_PASSWORD}" smartsmoker --eval "db.test.insertOne({test: 'data', timestamp: new Date()})" &>> "$TEST_LOG"; then
+if docker exec mongo mongosh -u smartsmoker -p "${MONGO_APP_PASSWORD}" --authenticationDatabase admin smartsmoker --eval "db.test.insertOne({test: 'data', timestamp: new Date()})" &>> "$TEST_LOG"; then
     success "Application user authentication works"
 else
     error "Application user authentication failed"
 fi
 
 log "Verifying application user CANNOT access admin database..."
-if docker exec mongo mongosh -u smartsmoker -p "${MONGO_APP_PASSWORD}" admin --eval "db.adminCommand({listDatabases: 1})" &>> "$TEST_LOG" 2>&1; then
+if docker exec mongo mongosh -u smartsmoker -p "${MONGO_APP_PASSWORD}" --authenticationDatabase admin admin --eval "db.adminCommand({listDatabases: 1})" &>> "$TEST_LOG" 2>&1; then
     error "Application user has too many permissions (security risk!)"
 else
     success "Application user properly restricted (expected failure)"
@@ -342,12 +342,12 @@ fi
 
 # Test 10E: Insert Test Data for Rollback Verification
 log "Inserting test data that should disappear after rollback..."
-if docker exec mongo mongosh -u smartsmoker -p "${MONGO_APP_PASSWORD}" smartsmoker \
+if docker exec mongo mongosh -u smartsmoker -p "${MONGO_APP_PASSWORD}" --authenticationDatabase admin smartsmoker \
     --eval "db.rollbacktest.insertOne({data: 'should_disappear_after_rollback', timestamp: new Date()})" &>> "$TEST_LOG"; then
     success "Inserted rollback test data"
 
     # Verify the data exists
-    COUNT=$(docker exec mongo mongosh -u smartsmoker -p "${MONGO_APP_PASSWORD}" smartsmoker \
+    COUNT=$(docker exec mongo mongosh -u smartsmoker -p "${MONGO_APP_PASSWORD}" --authenticationDatabase admin smartsmoker \
         --quiet --eval "db.rollbacktest.countDocuments({})" 2>/dev/null | tr -d '\n' || echo "0")
     log "Rollback test collection has $COUNT document(s)"
 else
@@ -371,7 +371,7 @@ if [ -n "$BACKUP_DIR" ] && [ -d "$BACKUP_DIR" ]; then
 
     # Test 10G: Verify Rollback Restored Previous State
     log "Verifying rollback restored previous database state..."
-    COUNT=$(docker exec mongo mongosh -u smartsmoker -p "${MONGO_APP_PASSWORD}" smartsmoker \
+    COUNT=$(docker exec mongo mongosh -u smartsmoker -p "${MONGO_APP_PASSWORD}" --authenticationDatabase admin smartsmoker \
         --quiet --eval "db.rollbacktest.countDocuments({})" 2>/dev/null | tr -d '\n' || echo "error")
 
     if [ "$COUNT" = "0" ]; then
@@ -418,14 +418,14 @@ fi
 section "TEST 11: Verify Data Operations"
 
 log "Creating test data..."
-if docker exec mongo mongosh -u smartsmoker -p "${MONGO_APP_PASSWORD}" smartsmoker --eval "db.testcollection.insertOne({testData: 'Phase 3 Story 0 Test', timestamp: new Date(), version: '7.0'})" &>> "$TEST_LOG"; then
+if docker exec mongo mongosh -u smartsmoker -p "${MONGO_APP_PASSWORD}" --authenticationDatabase admin smartsmoker --eval "db.testcollection.insertOne({testData: 'Phase 3 Story 0 Test', timestamp: new Date(), version: '7.0'})" &>> "$TEST_LOG"; then
     success "Created test data"
 else
     error "Failed to create test data"
 fi
 
 log "Reading test data..."
-if docker exec mongo mongosh -u smartsmoker -p "${MONGO_APP_PASSWORD}" smartsmoker --eval "db.testcollection.find()" &>> "$TEST_LOG"; then
+if docker exec mongo mongosh -u smartsmoker -p "${MONGO_APP_PASSWORD}" --authenticationDatabase admin smartsmoker --eval "db.testcollection.find()" &>> "$TEST_LOG"; then
     success "Retrieved test data"
 else
     error "Failed to retrieve test data"
