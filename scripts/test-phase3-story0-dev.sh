@@ -141,6 +141,18 @@ for file in "${FILES_TO_CHECK[@]}"; do
     fi
 done
 
+# Test 2.5: Verify Required Tools
+section "TEST 2.5: Verify Required Tools"
+
+log "Checking for jq (required for password encoding)..."
+if command -v jq &> /dev/null; then
+    success "jq is installed"
+else
+    error "jq is not installed"
+    error "Install with: sudo apt-get install jq (Debian/Ubuntu) or sudo yum install jq (RHEL/CentOS)"
+    exit 1
+fi
+
 # Test 3: Generate test passwords
 section "TEST 3: Generate Test Credentials"
 
@@ -155,10 +167,18 @@ log "  MONGO_APP_PASSWORD: ${MONGO_APP_PASSWORD:0:10}... (32 chars)"
 export MONGO_ROOT_USER=admin
 export MONGO_ROOT_PASSWORD
 export MONGO_APP_PASSWORD
+
+# URL-encode the app password for MongoDB connection string
+log "Encoding MongoDB app password for connection string..."
+ENCODED_MONGO_APP_PASSWORD=$(printf %s "$MONGO_APP_PASSWORD" | jq -sRr @uri)
+log "  ENCODED_MONGO_APP_PASSWORD: ${ENCODED_MONGO_APP_PASSWORD:0:10}... (encoded)"
+
+export ENCODED_MONGO_APP_PASSWORD
+
 export VAPID_PUBLIC_KEY=BDb95f2IXgHf2pwHegV4DGNvyKoHSzp0tPOqhpB7WOgjAt8GmGuGK9RyE7-Ltzprdlp3ftq1xR94ff7j3EXYsEs
 export VAPID_PRIVATE_KEY=056QmHxzfE9zNL93Ewtdxa_p3CYQVnojTD738X36gGY
 
-success "Credentials generated and exported"
+success "Credentials generated, encoded, and exported"
 
 # Test 4: Start MongoDB 7.0
 section "TEST 4: Start MongoDB 7.0 with Authentication"
