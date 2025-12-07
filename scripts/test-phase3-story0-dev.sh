@@ -24,12 +24,12 @@ log() {
 
 success() {
     echo -e "${GREEN}✅ $1${NC}" | tee -a "$TEST_LOG"
-    ((TESTS_PASSED++))
+    ((TESTS_PASSED++)) || true
 }
 
 error() {
     echo -e "${RED}❌ $1${NC}" | tee -a "$TEST_LOG"
-    ((TESTS_FAILED++))
+    ((TESTS_FAILED++)) || true
 }
 
 warning() {
