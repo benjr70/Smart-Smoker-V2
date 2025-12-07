@@ -20,9 +20,43 @@ Before proceeding, ensure:
 
 ## STEP 6: Testing in Dev-Cloud Environment
 
-**Duration**: 2-3 hours
+**Duration**: 1-2 hours (automated) or 2-3 hours (manual)
 **Environment**: dev-cloud (VMID 104) - smoker-dev-cloud
 **Goal**: Validate MongoDB 7.0 upgrade, health checks, and rollback mechanisms
+
+### 6.0 Automated Testing (Recommended)
+
+For a fully automated test run, use the comprehensive test script:
+
+```bash
+# Sync code to dev-cloud
+./scripts/sync-to-dev-cloud.sh
+
+# SSH to dev-cloud
+ssh root@100.106.181.103
+
+# Navigate to test directory
+cd /root/Smart-Smoker-V2-test
+
+# Run comprehensive automated tests
+bash scripts/test-phase3-story0-dev.sh
+```
+
+The automated test script performs:
+- ✅ Repository setup and file verification
+- ✅ Tool dependency checks (jq)
+- ✅ MongoDB 7.0 startup with authentication
+- ✅ User authentication verification
+- ✅ Backend/Frontend service startup
+- ✅ Docker health check validation
+- ✅ API health endpoint testing
+- ✅ Deployment backup creation
+- ✅ Database rollback testing
+- ✅ Data persistence verification
+
+**Test Results**: Check the test log at `/tmp/phase3-story0-test-*.log`
+
+If you prefer to test manually step-by-step, continue with sections 6.1-6.14 below.
 
 ### 6.1 Generate MongoDB Passwords
 
@@ -37,10 +71,18 @@ echo "MONGO_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}"
 MONGO_APP_PASSWORD=$(openssl rand -base64 32)
 echo "MONGO_APP_PASSWORD: ${MONGO_APP_PASSWORD}"
 
+# URL-encode the app password for MongoDB connection string
+# Required: Install jq if not present (sudo apt-get install jq)
+ENCODED_MONGO_APP_PASSWORD=$(printf %s "$MONGO_APP_PASSWORD" | jq -sRr @uri)
+echo "ENCODED_MONGO_APP_PASSWORD: ${ENCODED_MONGO_APP_PASSWORD}"
+
 # Save these temporarily - you'll need them for testing
 ```
 
-**Important**: Save these passwords in a secure location (password manager).
+**Important**:
+- Save these passwords in a secure location (password manager)
+- The ENCODED_MONGO_APP_PASSWORD is required for the Docker Compose connection string
+- Base64 passwords contain special characters (+, /, =) that must be URL-encoded for MongoDB connection strings
 
 ### 6.2 SSH to Dev-Cloud
 
@@ -90,6 +132,7 @@ cat > .env.mongo-credentials <<EOF
 MONGO_ROOT_USER=admin
 MONGO_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
 MONGO_APP_PASSWORD=${MONGO_APP_PASSWORD}
+ENCODED_MONGO_APP_PASSWORD=${ENCODED_MONGO_APP_PASSWORD}
 EOF
 
 # Set file permissions (owner read-only)
@@ -98,6 +141,10 @@ chmod 600 .env.mongo-credentials
 # Source the credentials
 source .env.mongo-credentials
 ```
+
+**Note**: Both `MONGO_APP_PASSWORD` (plain) and `ENCODED_MONGO_APP_PASSWORD` (URL-encoded) are required:
+- `MONGO_APP_PASSWORD` is used for MongoDB user creation in init scripts
+- `ENCODED_MONGO_APP_PASSWORD` is used in the Docker Compose connection string
 
 ### 6.6 Stop Existing Services
 
@@ -129,17 +176,22 @@ docker logs -f mongo
 
 ```bash
 # Test admin authentication
-docker exec mongo mongosh -u admin -p "${MONGO_ROOT_PASSWORD}" --eval "db.adminCommand({listDatabases: 1})"
+docker exec mongo mongosh -u admin -p "${MONGO_ROOT_PASSWORD}" --authenticationDatabase admin --eval "db.adminCommand({listDatabases: 1})"
 # Should show list of databases
 
 # Test application user authentication
-docker exec mongo mongosh -u smartsmoker -p "${MONGO_APP_PASSWORD}" smartsmoker --eval "db.test.insertOne({test: 'data'})"
+docker exec mongo mongosh -u smartsmoker -p "${MONGO_APP_PASSWORD}" --authenticationDatabase admin smartsmoker --eval "db.test.insertOne({test: 'data'})"
 # Should return: { acknowledged: true, insertedId: ObjectId(...) }
 
-# Verify application user CANNOT access admin database
-docker exec mongo mongosh -u smartsmoker -p "${MONGO_APP_PASSWORD}" admin --eval "db.adminCommand({listDatabases: 1})"
-# Should fail with authentication error - this is correct!
+# Verify application user has limited permissions
+docker exec mongo mongosh -u smartsmoker -p "${MONGO_APP_PASSWORD}" --authenticationDatabase admin smartsmoker --eval "db.stats()"
+# Should succeed - user can read smartsmoker database
+
+docker exec mongo mongosh -u smartsmoker -p "${MONGO_APP_PASSWORD}" --authenticationDatabase admin admin --eval "db.adminCommand({listUsers: 1})"
+# Should fail with permission error - user cannot access admin functions
 ```
+
+**Note**: All MongoDB users are created in the `admin` database, so `--authenticationDatabase admin` is required for all authentication attempts.
 
 ### 6.9 Start Backend and Frontend
 
@@ -311,15 +363,21 @@ Questions? Contact: [YOUR-EMAIL]
 PROD_MONGO_ROOT_PASSWORD=$(openssl rand -base64 32)
 PROD_MONGO_APP_PASSWORD=$(openssl rand -base64 32)
 
+# URL-encode the app password (required for connection string)
+PROD_ENCODED_MONGO_APP_PASSWORD=$(printf %s "$PROD_MONGO_APP_PASSWORD" | jq -sRr @uri)
+
 # Display passwords (save to password manager immediately!)
 echo "Production MongoDB Root Password: ${PROD_MONGO_ROOT_PASSWORD}"
 echo "Production MongoDB App Password: ${PROD_MONGO_APP_PASSWORD}"
+echo "Production MongoDB App Password (Encoded): ${PROD_ENCODED_MONGO_APP_PASSWORD}"
 
 # Add these to GitHub Secrets:
 # 1. Go to GitHub repo → Settings → Secrets and variables → Actions
 # 2. Update MONGO_ROOT_PASSWORD with ${PROD_MONGO_ROOT_PASSWORD}
 # 3. Update MONGO_APP_PASSWORD with ${PROD_MONGO_APP_PASSWORD}
 ```
+
+**Important**: The GitHub Actions workflow automatically URL-encodes MONGO_APP_PASSWORD during deployment, so you only need to add the plain password to GitHub Secrets.
 
 ### 7.4 Connect to Raspberry Pi
 
@@ -688,21 +746,39 @@ docker inspect mongo | grep -A 10 "Env"
 
 ### Issue: Backend can't connect to MongoDB
 
-**Symptoms**: "MongoServerError: Authentication failed"
+**Symptoms**:
+- "MongoServerError: Authentication failed"
+- "SCRAM authentication failed, storedKey mismatch"
+- Backend logs: "The 'ENCODED_MONGO_APP_PASSWORD' variable is not set"
+
+**Common Causes**:
+1. Missing or incorrect ENCODED_MONGO_APP_PASSWORD environment variable
+2. Password not URL-encoded properly
+3. Wrong authenticationDatabase
 
 **Solution**:
 ```bash
-# Verify connection string in .env.prod
-cat apps/backend/.env.prod
+# Check if ENCODED_MONGO_APP_PASSWORD is set
+docker exec backend_cloud env | grep ENCODED_MONGO_APP_PASSWORD
+# Should show the URL-encoded password
 
-# Should be: mongodb://smartsmoker:${MONGO_APP_PASSWORD}@mongo:27017/smartsmoker?authSource=admin
+# If missing, generate it
+ENCODED_MONGO_APP_PASSWORD=$(printf %s "$MONGO_APP_PASSWORD" | jq -sRr @uri)
+export ENCODED_MONGO_APP_PASSWORD
 
-# Verify MONGO_APP_PASSWORD environment variable
-docker exec backend_cloud env | grep MONGO
+# Verify connection string uses encoded password
+docker inspect backend_cloud | grep DB_URL
+# Should show: mongodb://smartsmoker:${ENCODED_MONGO_APP_PASSWORD}@mongo:27017/smartsmoker?authSource=admin
 
-# Test MongoDB connection manually
-docker exec mongo mongosh -u smartsmoker -p "${MONGO_APP_PASSWORD}" smartsmoker
+# Test MongoDB connection manually with plain password
+docker exec mongo mongosh -u smartsmoker -p "${MONGO_APP_PASSWORD}" --authenticationDatabase admin smartsmoker --eval "db.stats()"
+# Should succeed
+
+# Restart backend with correct environment variables
+docker-compose -f cloud.docker-compose.yml restart backend
 ```
+
+**Prevention**: Always use both MONGO_APP_PASSWORD (plain) and ENCODED_MONGO_APP_PASSWORD (URL-encoded) environment variables.
 
 ### Issue: Health checks failing
 
@@ -804,6 +880,23 @@ Phase 3 Story 0 is **COMPLETE** when:
 
 **Next Phase**: Phase 3 Story 1 - Automated Development Deployment
 
-**Document Version**: 1.0
-**Last Updated**: 2025-11-27
+---
+
+## Changelog
+
+### Version 1.1 (2025-12-07)
+- Added automated testing script documentation (test-phase3-story0-dev.sh)
+- Documented MongoDB password URL encoding requirement
+- Added ENCODED_MONGO_APP_PASSWORD environment variable throughout
+- Updated MongoDB authentication commands with --authenticationDatabase admin
+- Enhanced troubleshooting section with password encoding issues
+- Added jq dependency requirement
+
+### Version 1.0 (2025-11-27)
+- Initial documentation for Phase 3 Story 0 testing and deployment
+
+---
+
+**Document Version**: 1.1
+**Last Updated**: 2025-12-07
 **Author**: Generated via Claude Code
