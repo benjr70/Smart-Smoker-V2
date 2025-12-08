@@ -79,6 +79,7 @@ nav:
       - Implementation Plans:
           - Infrastructure Plan: Infrastructure/implementation/proxmox-infrastructure-plan.md
           - Phase 3 Deployment: Infrastructure/implementation/phase-3-deployment-automation.md
+          - Phase 4 Testing: Infrastructure/implementation/phase-4-testing-documentation.md
       - Features:
           - Database:
               - MongoDB: Infrastructure/features/database/mongodb.md
