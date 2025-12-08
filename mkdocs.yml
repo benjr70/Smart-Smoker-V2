@@ -73,16 +73,32 @@ nav:
       - Dependency Management: CI-CD/dependency-management.md
       - Deployment & Infrastructure: CI-CD/deployment-infrastructure.md
   - Infrastructure:
-      - Overview: Infrastructure/proxmox-infrastructure-plan.md
-      - Operations Guides:
-          - Terraform Setup: Infrastructure/terraform-setup-guide.md
-          - Ansible Operations: Infrastructure/ansible-operations-guide.md
-          - Testing & Verification: Infrastructure/infrastructure-testing-guide.md
-          - Disaster Recovery: Infrastructure/disaster-recovery-guide.md
-          - Secrets Management: Infrastructure/secrets-management-guide.md
-          - Tailscale Troubleshooting: Infrastructure/tailscale-troubleshooting-guide.md
-      - Implementation Plans:
-          - Phase 1 - Container Standardization: Infrastructure/implementation/phase-1-container-standardization.md
-          - Phase 2 - Proxmox Infrastructure: Infrastructure/implementation/phase-2-proxmox-infrastructure.md
-          - Phase 3 - Deployment Automation: Infrastructure/implementation/phase-3-deployment-automation.md
-          - Phase 4 - Testing & Documentation: Infrastructure/implementation/phase-4-testing-documentation.md
+      - Overview: Infrastructure/README.md
+      - Getting Started: Infrastructure/guides/getting-started.md
+      - Architecture: Infrastructure/guides/architecture.md
+      - Features:
+          - Database:
+              - MongoDB: Infrastructure/features/database/mongodb.md
+              - Backups: Infrastructure/features/database/backups.md
+          - Deployment:
+              - Automation: Infrastructure/features/deployment/automation.md
+              - Health Checks: Infrastructure/features/deployment/health-checks.md
+              - Rollback: Infrastructure/features/deployment/rollback.md
+              - Environments: Infrastructure/features/deployment/environments.md
+          - Infrastructure:
+              - Terraform: Infrastructure/features/infrastructure/terraform.md
+              - Proxmox: Infrastructure/features/infrastructure/proxmox.md
+              - Containers: Infrastructure/features/infrastructure/containers.md
+          - Configuration:
+              - Ansible: Infrastructure/features/configuration/ansible.md
+              - System Setup: Infrastructure/features/configuration/system-setup.md
+          - Networking:
+              - Tailscale: Infrastructure/features/networking/tailscale.md
+              - Network Config: Infrastructure/features/networking/network-config.md
+          - Security:
+              - Secrets Management: Infrastructure/features/security/secrets-management.md
+              - Authentication: Infrastructure/features/security/authentication.md
+          - Operations:
+              - Testing: Infrastructure/features/operations/testing.md
+              - Disaster Recovery: Infrastructure/features/operations/disaster-recovery.md
+              - Monitoring: Infrastructure/features/operations/monitoring.md

@@ -482,7 +482,7 @@ ssh -J root@192.168.1.151 root@10.20.0.10 \
 
 ## References
 
-- [Ansible Operations Guide](./ansible-operations-guide.md)
-- [Terraform Setup Guide](./terraform-setup-guide.md)
+- [Ansible Configuration](../configuration/ansible.md)
+- [Terraform Configuration](../infrastructure/terraform.md)
 - [Disaster Recovery Guide](./disaster-recovery-guide.md)
 - [Secrets Management Guide](./secrets-management-guide.md)

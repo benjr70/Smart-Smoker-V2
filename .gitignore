@@ -117,3 +117,5 @@ out
 terraform.tfvars
 *.tfvars.json
 infra/proxmox/terraform/state/
+.venv/
+.venv

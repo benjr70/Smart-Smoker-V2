@@ -321,6 +321,33 @@ vault read proxmox/creds/terraform
 ### Store Secrets in GitHub
 
 **Repository Secrets** (Settings > Secrets and variables > Actions):
+
+**MongoDB Secrets** (Required for Phase 3 Story 0):
+```yaml
+MONGO_ROOT_USER: admin
+MONGO_ROOT_PASSWORD: <strong-random-password>  # Base64-encoded 32-byte
+MONGO_APP_PASSWORD: <strong-random-password>    # Base64-encoded 32-byte
+```
+
+**How to Add MongoDB Secrets**:
+1. Navigate to repository: `https://github.com/YOUR_USERNAME/Smart-Smoker-V2`
+2. Click **Settings** → **Secrets and variables** → **Actions**
+3. Click **New repository secret** for each secret
+4. Enter name and value
+5. Click **Add secret**
+
+**Generate Secure MongoDB Passwords**:
+```bash
+# Generate MongoDB root password
+openssl rand -base64 32
+
+# Generate MongoDB app password
+openssl rand -base64 32
+
+# URL-encode for connection strings (done automatically in workflow)
+```
+
+**Other Secrets**:
 ```yaml
 # Required for Terraform workflows
 VAULT_ADDR: http://10.20.0.50:8200
@@ -330,6 +357,10 @@ VAULT_TOKEN: s.xxxxxxxxxxxx  # AppRole token with limited permissions
 PROXMOX_API_URL: https://192.168.1.151:8006/
 PROXMOX_TOKEN_ID: terraform@pve!SmartSmoker
 PROXMOX_TOKEN_SECRET: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+
+# Existing secrets
+VAPID_PUBLIC_KEY: <existing>
+VAPID_PRIVATE_KEY: <existing>
 ```
 
 ### Use in Workflows
@@ -483,9 +514,9 @@ grep "smart-smoker/data/proxmox" /var/log/vault_audit.log | jq '.auth.display_na
 
 ## Related Documentation
 
-- [Terraform Setup Guide](./terraform-setup-guide.md)
-- [Disaster Recovery Guide](./disaster-recovery-guide.md)
-- [Phase 2 Infrastructure Plan](./phase-2-proxmox-infrastructure.md)
+- [Terraform Configuration](../infrastructure/terraform.md)
+- [Disaster Recovery](../operations/disaster-recovery.md)
+- [Proxmox Infrastructure](../infrastructure/proxmox.md)
 
 ---
 

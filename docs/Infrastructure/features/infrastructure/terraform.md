@@ -393,4 +393,4 @@ After completing Phase 2 Story 1, proceed to:
 
 - [Terraform Documentation](https://www.terraform.io/docs)
 - [Proxmox Provider Documentation](https://registry.terraform.io/providers/bpg/proxmox/latest/docs)
-- [Phase 2 Infrastructure Plan](./phase-2-proxmox-infrastructure.md)
+- [Proxmox Infrastructure](./proxmox.md)
