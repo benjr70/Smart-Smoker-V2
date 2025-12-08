@@ -76,6 +76,9 @@ nav:
       - Overview: Infrastructure/README.md
       - Getting Started: Infrastructure/guides/getting-started.md
       - Architecture: Infrastructure/guides/architecture.md
+      - Implementation Plans:
+          - Infrastructure Plan: Infrastructure/implementation/proxmox-infrastructure-plan.md
+          - Phase 3 Deployment: Infrastructure/implementation/phase-3-deployment-automation.md
       - Features:
           - Database:
               - MongoDB: Infrastructure/features/database/mongodb.md
