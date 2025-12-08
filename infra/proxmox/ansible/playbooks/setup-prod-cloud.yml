@@ -12,6 +12,7 @@
     - docker
     - nodejs
     - cloud-app
+    - backups
     - tailscale
 
   post_tasks:
@@ -23,6 +24,6 @@
           - "Application Base: {{ app_base_dir }}"
           - "MongoDB Data: {{ mongodb_data_dir }}"
           - "Deploy applications via GitHub Actions workflow"
-          - "IMPORTANT: Ensure backups are configured before deploying to production"
+          - "✅ Automated backups configured (MongoDB dumps + retention)"
           - "Tailscale hostname: {{ tailscale_hostname }}"
           - "Tailscale Funnel enabled: {{ tailscale_funnel_enabled }}"

@@ -333,5 +333,5 @@ infra/proxmox/ansible/
 
 - [Ansible Best Practices](https://docs.ansible.com/ansible/latest/user_guide/playbooks_best_practices.html)
 - [Infrastructure Testing Guide](./infrastructure-testing-guide.md)
-- [Terraform Setup Guide](./terraform-setup-guide.md)
+- [Terraform Configuration](../infrastructure/terraform.md)
 - [Secrets Management Guide](./secrets-management-guide.md)

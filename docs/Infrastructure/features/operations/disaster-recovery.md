@@ -455,8 +455,8 @@ After any recovery operation:
 
 ## Related Documentation
 
-- [Terraform Setup Guide](./terraform-setup-guide.md)
-- [Phase 2 Infrastructure Plan](./phase-2-proxmox-infrastructure.md)
+- [Terraform Configuration](../infrastructure/terraform.md)
+- [Proxmox Infrastructure](../infrastructure/proxmox.md)
 - [Proxmox Infrastructure README](../../infra/proxmox/README.md)
 - [Secrets Management Guide](./secrets-management-guide.md)
 

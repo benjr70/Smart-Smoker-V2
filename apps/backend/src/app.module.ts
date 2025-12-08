@@ -20,6 +20,7 @@ import { RatingsModel } from './ratings/ratings.module';
 import { HistoryModule } from './history/history.module';
 import { LoggerMiddleware } from './logger.middleware';
 import { NotificationsModule } from './notifications/notifications.module';
+import { HealthModule } from './health/health.module';
 
 const ENV = process.env.NODE_ENV;
 console.log(process.env.NODE_ENV);
@@ -36,6 +37,7 @@ console.log(process.env.NODE_ENV);
     RatingsModel,
     HistoryModule,
     NotificationsModule,
+    HealthModule,
     ConfigModule.forRoot({
       envFilePath: !ENV ? '.env' : `.env.${ENV}`,
     }),

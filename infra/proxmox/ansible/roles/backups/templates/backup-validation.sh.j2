@@ -1,0 +1,87 @@
+#!/bin/bash
+# Backup Validation Script
+# Verifies backup integrity and completeness
+# Managed by Ansible - DO NOT EDIT MANUALLY
+
+set -euo pipefail
+
+# Configuration from Ansible
+BACKUP_DIR="{{ backups_mongodb_dir }}"
+MONGODB_CONTAINER="{{ backups_mongodb_container_name }}"
+DB_USER="{{ backups_mongodb_user }}"
+DB_PASSWORD="{{ backups_mongodb_password }}"
+
+echo "=========================================="
+echo "Backup Validation Starting"
+echo "Checking latest backup..."
+echo "=========================================="
+
+# Check if latest symlink exists
+if [ ! -L "${BACKUP_DIR}/latest" ]; then
+    echo "❌ No latest backup found (symlink missing)"
+    logger -t mongodb-backup "VALIDATION FAILED: No latest backup symlink"
+    exit 1
+fi
+
+LATEST_BACKUP=$(readlink -f "${BACKUP_DIR}/latest")
+
+# Check if backup directory exists and is not empty
+if [ ! -d "${LATEST_BACKUP}" ]; then
+    echo "❌ Latest backup directory does not exist: ${LATEST_BACKUP}"
+    logger -t mongodb-backup "VALIDATION FAILED: Backup directory missing"
+    exit 1
+fi
+
+if [ ! "$(ls -A ${LATEST_BACKUP})" ]; then
+    echo "❌ Latest backup directory is empty: ${LATEST_BACKUP}"
+    logger -t mongodb-backup "VALIDATION FAILED: Empty backup directory"
+    exit 1
+fi
+
+echo "✅ Backup directory exists and contains files"
+
+# Check backup size (should be > 0 bytes)
+BACKUP_SIZE=$(du -sb "${LATEST_BACKUP}" | cut -f1)
+if [ "${BACKUP_SIZE}" -eq 0 ]; then
+    echo "❌ Backup is 0 bytes"
+    logger -t mongodb-backup "VALIDATION FAILED: Zero-byte backup"
+    exit 1
+fi
+
+BACKUP_SIZE_MB=$((BACKUP_SIZE / 1024 / 1024))
+echo "✅ Backup size: ${BACKUP_SIZE_MB} MB"
+
+# Check backup age (should be < 48 hours)
+BACKUP_AGE=$(find "${LATEST_BACKUP}" -type d -mmin +2880 | wc -l)
+if [ "${BACKUP_AGE}" -gt 0 ]; then
+    echo "⚠️ Warning: Backup is older than 48 hours"
+    logger -t mongodb-backup "VALIDATION WARNING: Backup older than 48 hours"
+else
+    echo "✅ Backup age is acceptable (< 48 hours)"
+fi
+
+# Test restore capability (dry-run only, doesn't modify database)
+echo "Testing restore capability (dry-run)..."
+if docker exec "${MONGODB_CONTAINER}" mongorestore \
+    --dry-run \
+    --username="${DB_USER}" \
+    --password="${DB_PASSWORD}" \
+    --authenticationDatabase=admin \
+    --gzip \
+    "/data/db/backups/mongodb/latest" > /dev/null 2>&1; then
+    echo "✅ Backup can be restored successfully (dry-run test passed)"
+else
+    echo "❌ Backup restore test failed"
+    logger -t mongodb-backup "VALIDATION FAILED: Restore dry-run failed"
+    exit 1
+fi
+
+# Count files in backup
+FILE_COUNT=$(find "${LATEST_BACKUP}" -type f | wc -l)
+echo "✅ Backup contains ${FILE_COUNT} files"
+
+echo "=========================================="
+echo "✅ All validation checks passed"
+echo "=========================================="
+logger -t mongodb-backup "VALIDATION SUCCESS: ${LATEST_BACKUP}"
+exit 0
