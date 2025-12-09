@@ -116,7 +116,7 @@ Proxmox Server
 - **Story 3 (UPDATED)**: Production database migration - requires Story 0 completion
 - Risk-adjusted implementation order focusing on security and reliability before advanced automation
 
-### [Phase 4: Testing & Documentation](phase-4-testing-and-documentation.md)
+### [Phase 4: Testing & Documentation]()
 **Duration**: 1-2 weeks
 **Focus**: Validation, monitoring, documentation, and virtual device testing
 **Status**: Planned

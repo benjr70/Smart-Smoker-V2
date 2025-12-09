@@ -28,30 +28,34 @@ Phase 3 implements automated deployment workflows using GitHub Actions with the 
 ### Deployment Pipeline Overview
 ```
 GitHub Repository
-├── Feature Branch Push
-│   ├── Lint & Test (GitHub Hosted)
-│   ├── Build Docker Images (GitHub Hosted)
-│   └── Push to Development Registry
+├── Feature Branch Push (PR)
+│   ├── Lint & Test (GitHub Hosted) ✅ Already implemented
+│   └── PR checks must pass before merge
 │
 ├── Master Branch Merge
-│   ├── Run Full Test Suite (Self-hosted Runner)
-│   ├── Build Production Images (Self-hosted Runner)
-│   ├── Deploy to Dev Cloud (Proxmox LXC)
-│   ├── Integration Tests (Virtual Smoker VM)
-│   └── Tag Release Candidate
+│   ├── nightly.yml (builds :nightly images)
+│   ├── dev-deploy.yml (triggered)
+│   │   ├── Deploy to dev-cloud (Proxmox LXC)
+│   │   │   └── Backend, Frontend, MongoDB
+│   │   ├── Deploy to virtual-smoker-device (Proxmox VM)
+│   │   │   └── Device-service, Smoker, Electron-shell
+│   │   ├── Health checks
+│   │   └── Discord notifications
+│   └── E2E Testing (DEFERRED - Story 7)
 │
-├── Production Release
-│   ├── Manual Approval Required
-│   ├── Deploy to Production Cloud (Proxmox LXC)
-│   ├── Update Raspberry Pi Devices
+├── Production Release (Manual)
+│   ├── Manual Approval Required (workflow_dispatch)
+│   ├── Validate dev environment
+│   ├── Build production images (versioned tags)
+│   ├── Deploy to prod-cloud (Proxmox LXC)
+│   │   ├── Tailscale funnel setup (public access)
+│   │   └── Health checks
+│   ├── Deploy to production Raspberry Pi
 │   ├── Verify Deployment Health
 │   └── Send Notifications
 │
-└── Rollback Process
-    ├── Detect Deployment Issues
-    ├── Automatic/Manual Rollback
-    ├── Restore Previous Version
-    └── Alert Team
+└── Production Pi Updates
+    └── Watchtower (automatic updates when Pi comes online)
 ```
 
 ### Deployment Targets
@@ -172,6 +176,21 @@ Before implementing the deployment automation stories below, the following criti
 **Risk**: Low
 **Priority**: HIGH - Required before production automation
 
+## CI/CD Vision
+
+The deployment automation follows this flow:
+
+1. **PR Checks** - Every PR runs automated checks (✅ already implemented)
+2. **Master Merge** - Automatically deploys to:
+   - `dev-cloud` (LXC container on Proxmox) - Backend, Frontend, MongoDB
+   - `virtual-smoker-device` (VM on Proxmox) - Smoker code (device-service, smoker, electron-shell)
+3. **E2E Testing** - Full end-to-end tests run against both dev-cloud and virtual smoker device (DEFERRED - will add later)
+4. **Production Release** - Manual workflow that:
+   - Takes what's in dev environment
+   - Deploys to `prod-cloud` (LXC on Proxmox)
+   - Deploys to actual Raspberry Pi smoker device
+5. **Production Pi Updates** - Uses Watchtower container for automatic updates (Pi is often offline, can't rely on GitHub Actions runner)
+
 ## User Stories
 
 ### Story 0: Critical Infrastructure Fixes (NEW - PRIORITY)
@@ -213,34 +232,137 @@ Before implementing the deployment automation stories below, the following criti
 **Production Deployment**: Deferred to Story 2/3 (automated deployment workflow)
 **Next Steps**: Merge to main, proceed to Story 1 or Story 2
 
-### Story 1: Automated Development Deployment
+### Story 1: Automated Development Deployment (Dev-Cloud)
 **As a** developer  
-**I want** my code automatically deployed to dev when merged to master  
+**I want** my code automatically deployed to dev-cloud when merged to master  
 **So that** I can quickly test integration changes
 
 **Acceptance Criteria:**
-- Master merge triggers automatic deployment
-- Dev environment updated within 10 minutes
-- Integration tests run against new deployment
-- Slack notification sent on success/failure
+- Master merge triggers automatic deployment to `dev-cloud` LXC container
+- Backend, Frontend, and MongoDB deployed via Docker Compose
+- Uses `:nightly` images from Docker Hub (built by existing `nightly.yml` workflow)
+- Health checks run automatically after deployment
 - Rollback triggered on health check failure
+- Discord notification sent on success/failure
+- Deployment completes within reasonable time (10-15 minutes)
 
-### Story 2: Controlled Production Deployment
+**Implementation:**
+- **Leverage existing `nightly.yml` workflow** - This already builds `:nightly` images on master push
+- Create `.github/workflows/dev-deploy.yml` workflow that:
+  - Triggers on master merge (or waits for `nightly.yml` to complete)
+  - Deploys to `smart-smoker-dev-cloud` via `cloud-deploy.yml` with `version=nightly`
+- Deploy to `smart-smoker-dev-cloud` hostname via Tailscale SSH
+- Use `cloud.docker-compose.yml` with `VERSION=nightly`
+- Integrate existing health check and rollback scripts
+
+**Note**: The `nightly.yml` workflow already exists and builds `:nightly` images on master push. Story 1 should leverage this existing workflow rather than duplicating build logic. We can either:
+- Option A: Have `dev-deploy.yml` depend on `nightly.yml` completion
+- Option B: Have `dev-deploy.yml` trigger `nightly.yml` if not already running
+- Option C: Merge deployment into `nightly.yml` workflow
+
+**Dependencies:**
+- Story 0 complete (health checks, rollback, backups)
+- Existing `nightly.yml` workflow (already in place)
+
+### Story 2: Virtual Smoker Device Infrastructure Setup
+**As a** DevOps engineer
+**I want** the virtual smoker device infrastructure working and accessible
+**So that** I can deploy and test smoker code in a controlled environment
+
+**Acceptance Criteria:**
+- Virtual smoker device VM provisioned and accessible via Tailscale
+- Device can be reached via SSH from GitHub runner
+- Docker and Docker Compose installed on virtual device
+- Device-specific docker-compose file configured
+- Health check script works for virtual device
+- Device ready to receive deployments
+
+**Implementation:**
+- Verify/complete Terraform provisioning of `virtual-smoker-device` VM
+- Verify/complete Ansible configuration via `setup-virtual-smoker.yml`
+- Ensure Tailscale connectivity from GitHub runner to virtual device
+- Test SSH access from runner to device
+- Create/verify device-specific docker-compose configuration
+- Create device health check script
+- Document virtual device setup and access
+
+**Dependencies:**
+- Phase 2 infrastructure (Terraform/Ansible)
+- Tailscale networking configured
+
+### Story 3: Virtual Smoker Device Deployment
+**As a** developer  
+**I want** the smoker code automatically deployed to virtual-smoker-device when merged to master  
+**So that** I can test device functionality in a controlled environment
+
+**Acceptance Criteria:**
+- Master merge triggers automatic deployment to `virtual-smoker-device` VM
+- Device-service, smoker, and electron-shell deployed via Docker Compose
+- Uses `:nightly` images from Docker Hub (built by `nightly.yml` workflow)
+- Device health checks run automatically
+- Deployment completes within reasonable time
+- Virtual device accessible via Tailscale for testing
+
+**Implementation:**
+- Extend `dev-deploy.yml` workflow to include virtual device deployment
+- Create reusable `.github/workflows/smoker-deploy-dev.yml` for virtual device
+- Deploy to `virtual-smoker-device` hostname via Tailscale SSH
+- Use device-specific docker-compose file
+- Add device health check script
+
+**Dependencies:**
+- Story 1 (dev-cloud deployment working)
+- Story 2 (virtual smoker infrastructure ready)
+
+### Story 4: Production Deployment Workflow
 **As a** product owner  
 **I want** manual control over production deployments  
 **So that** releases are coordinated and verified
 
 **Acceptance Criteria:**
-- Production deployment requires manual approval
-- Approval workflow with multiple reviewers
-- Pre-deployment health checks
+- Manual workflow trigger (workflow_dispatch) for production deployment
+- Deploys to `prod-cloud` LXC container (Backend, Frontend, MongoDB)
+- Deploys to actual Raspberry Pi smoker device
+- Tailscale funnel configured for public web app access
+- Pre-deployment validation (dev environment must be healthy)
+- Health checks run after deployment
 - Automated rollback on failure
-- Deployment status dashboard
+- Discord notifications for deployment status
 
-### Story 3: Production Database Migration
+**Implementation:**
+- Create `.github/workflows/prod-deploy.yml` workflow
+- Reuse `cloud-deploy.yml` for prod-cloud (with version tags instead of nightly)
+- Create `.github/workflows/smoker-deploy-prod.yml` for Pi deployment
+- Configure Tailscale funnel on prod-cloud for public access:
+  - Set up funnel for frontend (port 80) to allow external access
+  - Configure funnel for backend API (port 8443) if needed
+  - Verify funnel URL is accessible from outside Tailscale network
+  - Document funnel configuration and URL
+  - Add funnel setup step to deployment workflow
+- Add manual approval step
+- Tag releases with version numbers
+- Deploy from dev environment state (promote dev → prod)
+
+**Tailscale Funnel Setup:**
+- Run `tailscale funnel` command on prod-cloud container after deployment
+- Configure funnel to expose frontend service (port 80)
+- Optionally expose backend API (port 8443) if public access needed
+- Test funnel URL from external network
+- Document funnel URL in deployment workflow output
+- Verify funnel persists across container restarts
+
+**Dependencies:**
+- Story 1 (dev-cloud deployment)
+- Story 3 (virtual smoker deployment) - for testing before prod
+- Story 0 (production infrastructure ready)
+- Tailscale configured on prod-cloud (from Phase 2)
+
+### Story 5: Production Database Migration
 **As a** DevOps engineer
 **I want** to migrate the production database from Raspberry Pi to Proxmox
 **So that** production runs on reliable infrastructure with better performance
+
+**Note**: This story may be completed before Story 4 if needed, as it's infrastructure preparation.
 
 **Context**: This migration moves a single-user production database with minimal traffic. The migration strategy is designed for simplicity and safety rather than zero-downtime, as a brief maintenance window is acceptable for this use case.
 
@@ -253,23 +375,19 @@ Before implementing the deployment automation stories below, the following criti
 - Old Pi kept as backup for 1-2 weeks before decommissioning
 - Rollback plan tested and documented
 
+**Implementation:**
+- Follow detailed migration procedure documented below
+- Migrate database from Pi to prod-cloud
+- Update connection strings and configurations
+- Test migration in dev environment first
+
 **Dependencies:**
-- Phase 2, Story 1: Infrastructure provisioned (prod-cloud LXC exists)
-- Phase 2, Story 3: Tailscale networking configured
-- **Phase 3, Story 0: Critical fixes completed (MongoDB upgrade, backups)**
-- Phase 3, Story 2: Production deployment automation working
+- Story 0 complete (MongoDB upgrade, backups)
+- prod-cloud LXC provisioned
 
 **Technical Details:**
 
 #### Current State
-- **Database**: MongoDB 4.4.14-rc0-focal (MUST UPGRADE BEFORE MIGRATION)
-- **Location**: Raspberry Pi (accessible via Tailscale)
-- **Data Path**: `./../../../../database:/data/db`
-- **Services**: backend (port 8443), frontend (port 80), mongo (port 27017)
-- **Deployment**: Via `cloud-deploy.yml` GitHub Actions workflow
-- **Authentication**: NONE (CRITICAL SECURITY ISSUE)
-
-#### Target State
 - **Database**: MongoDB 7.x stable (upgraded from 4.4.14-rc0)
 - **Authentication**: Enabled with dedicated service account
 - **Location**: smart-smoker-cloud-prod LXC container (Proxmox)
@@ -569,29 +687,129 @@ curl -f http://smokecloud:80/
 - [x] Automated backups working
 - [x] Rollback plan tested and documented
 
-### Story 4: Raspberry Pi Device Management
+### Story 6: Watchtower Integration for Production Pi
 **As a** system administrator
-**I want** automated updates to Raspberry Pi devices
-**So that** all smokers run consistent software versions
+**I want** the production Raspberry Pi to automatically update via Watchtower
+**So that** the device stays up-to-date even when offline
 
 **Acceptance Criteria:**
-- Watchtower automatically pulls new images
-- Standardized container naming works
-- Device health monitoring active
-- Remote troubleshooting capabilities
-- Update rollback on device failure
+- Watchtower container running on production Pi
+- Watchtower configured to monitor `benjr70/smart-smoker-*:latest` images
+- Automatic updates when Pi comes online
+- Standardized container naming works with Watchtower
+- Device health monitoring after updates
+- Update rollback capability if device fails
 
-### Story 5: Virtual Device Testing
+**Implementation:**
+- Configure Watchtower on production Pi
+- Ensure container names match Watchtower expectations
+- Set up health checks for Watchtower to validate updates
+- Document Watchtower configuration
+- Test update process on dev/virtual device first
+
+**Dependencies:**
+- Story 4 (production deployment workflow)
+- Production Pi accessible and configured
+
+### Story 7: End-to-End Testing Framework (DEFERRED)
 **As a** QA engineer  
-**I want** automated testing on virtual devices  
-**So that** device functionality is validated before release
+**I want** full end-to-end tests to run automatically after dev deployment  
+**So that** integration issues are caught before production
+
+**Status**: DEFERRED - Will be implemented after core deployment workflows are stable
 
 **Acceptance Criteria:**
-- Virtual smoker VM tests run automatically
-- Mock hardware integration testing
-- Device service validation
-- Performance benchmarking
-- Test results integrated in pipeline
+- E2E tests run automatically after both dev-cloud and virtual-smoker deployments
+- Tests validate communication between dev-cloud backend and virtual device
+- Tests include: API endpoints, WebSocket communication, device service integration
+- Test results reported in workflow and Discord notifications
+- Failed tests don't block deployment but are reported
+
+**Implementation:**
+- Create `scripts/run-e2e-tests.sh` script
+- Tests connect to dev-cloud backend and virtual-smoker device
+- Validate full user workflows (create cook session, monitor temps, etc.)
+- Add test job to `dev-deploy.yml` workflow
+- Integrate test results into Discord notifications
+
+**Dependencies:**
+- Story 1 (dev-cloud deployment)
+- Story 3 (virtual smoker deployment)
+- Core deployment workflows stable
+
+## Updated Workflow Architecture
+
+### Development Pipeline (Master Merge)
+```
+Master Branch Merge
+    ↓
+nightly.yml (existing - builds :nightly images)
+    ↓
+dev-deploy.yml (triggered)
+    ↓
+┌─────────────────────────────────┐
+│ deploy-dev-cloud                │
+│ (cloud-deploy.yml with nightly)  │
+│ - Deploy to smart-smoker-dev-cloud│
+│ - Backend, Frontend, MongoDB    │
+│ - Health checks                 │
+└─────────────────────────────────┘
+    ↓
+┌─────────────────────────────────┐
+│ deploy-virtual-smoker           │
+│ (smoker-deploy-dev.yml)         │
+│ - Deploy to virtual-smoker-device│
+│ - Device-service, Smoker, Shell │
+│ - Health checks                 │
+└─────────────────────────────────┘
+    ↓
+┌─────────────────────────────────┐
+│ notify-discord                  │
+│ - Deployment status             │
+└─────────────────────────────────┘
+```
+
+### Production Pipeline (Manual Trigger)
+```
+Manual Production Release
+    ↓
+prod-deploy.yml (workflow_dispatch)
+    ↓
+┌─────────────────────────────────┐
+│ validate-dev-environment        │
+│ - Check dev-cloud health        │
+│ - Verify dev deployment stable  │
+└─────────────────────────────────┘
+    ↓
+┌─────────────────────────────────┐
+│ build-production-images         │
+│ - Build from dev state          │
+│ - Tag with version (vX.Y.Z)     │
+│ - Push to Docker Hub            │
+└─────────────────────────────────┘
+    ↓
+┌─────────────────────────────────┐
+│ deploy-prod-cloud               │
+│ (cloud-deploy.yml with version) │
+│ - Deploy to prod-cloud LXC      │
+│ - Health checks                 │
+│ - Tailscale funnel setup        │
+│ - Rollback on failure           │
+└─────────────────────────────────┘
+    ↓
+┌─────────────────────────────────┐
+│ deploy-production-pi            │
+│ (smoker-deploy-prod.yml)        │
+│ - Deploy to actual Raspberry Pi │
+│ - Health checks                 │
+│ - Watchtower will auto-update   │
+└─────────────────────────────────┘
+    ↓
+┌─────────────────────────────────┐
+│ notify-discord                  │
+│ - Production deployment status   │
+└─────────────────────────────────┘
+```
 
 ## GitHub Actions Workflows
 
@@ -1436,31 +1654,36 @@ audit_requirements:
 
 ### Risk-Adjusted Implementation Order
 
-Based on risk assessment, Phase 3 implementation order is:
+Based on risk assessment and CI/CD vision, Phase 3 implementation order is:
 
-**Week 1-2: Critical Security & Reliability (Story 0)**
-1. MongoDB upgrade to 7.x with authentication (dev environment first)
-2. Automated backup implementation and validation
-3. Deployment health checks and rollback automation
-4. Test all fixes in dev environment
+**✅ Week 1-2: Critical Security & Reliability (Story 0) - COMPLETE**
+1. ✅ MongoDB upgrade to 7.x with authentication (dev environment first)
+2. ✅ Automated backup implementation and validation
+3. ✅ Deployment health checks and rollback automation
+4. ✅ Test all fixes in dev environment
 
-**Week 3: Production Preparation**
-5. Apply MongoDB upgrade to Raspberry Pi production
-6. Verify backups and restore procedures
-7. Test production deployment with new security measures
+**Week 3-4: Development Pipeline (Stories 1, 2, 3)**
+5. Story 1: Automated development deployment to dev-cloud (uses existing nightly.yml)
+6. Story 2: Virtual smoker device infrastructure setup (must be done before Story 3)
+7. Story 3: Virtual smoker device deployment
 
-**Week 4-5: Production Migration (Story 3)**
-8. Migrate production database from Pi to Proxmox
-9. Validate migration success
-10. Monitor for 1-2 weeks before decommissioning Pi
+**Week 5: Production Infrastructure (Story 5)**
+8. Story 5: Production database migration (can happen in parallel with dev pipeline)
 
-**Week 6+: Advanced Automation (Stories 1, 2, 4, 5)**
-11. Automated development deployment
-12. Production deployment workflows
-13. Raspberry Pi device management
-14. Virtual device testing automation
+**Week 6+: Production Automation (Stories 4, 6)**
+9. Story 4: Production deployment workflow (with Tailscale funnel)
+10. Story 6: Watchtower integration for production Pi
 
-**Rationale**: Address critical security vulnerabilities and data loss risks BEFORE implementing advanced automation. A secure, backed-up system is more important than a highly automated but vulnerable one.
+**Future: Testing Enhancement (Story 7)**
+11. Story 7: E2E testing framework (DEFERRED - add after core workflows stable)
+
+**Rationale**: 
+- Stories 1-3 build the dev pipeline incrementally
+- Story 2 is critical infrastructure that must be done before Story 3
+- Story 5 can happen in parallel as it's infrastructure prep
+- Story 4 depends on dev pipeline being stable
+- Story 6 is the final piece for production Pi automation
+- Story 7 is deferred to focus on getting core workflows working first
 
 **✅ Story 0 Status Update**: 
 - **Implementation**: ✅ Complete
