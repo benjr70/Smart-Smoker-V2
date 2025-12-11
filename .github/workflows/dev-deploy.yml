@@ -1,0 +1,252 @@
+# Automated Development Deployment
+# Deploys to dev-cloud environment after nightly images are built
+
+name: Dev Deploy
+
+on:
+  workflow_run:
+    workflows: ['Nightly Dev Build & Deploy']
+    types:
+      - completed
+    branches:
+      - master
+  workflow_dispatch: # Manual trigger for testing
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dev-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy-dev:
+    # Only run if nightly workflow succeeded (or manual trigger)
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'master') }}
+    runs-on: [self-hosted, linux, proxmox]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set deployment variables
+        id: vars
+        run: |
+          DEV_HOST="smoker-dev-cloud"
+          DEPLOY_DIR="/opt/smart-smoker-dev"
+          COMPOSE_FILE="cloud.docker-compose.yml"
+          VERSION="nightly"
+
+          echo "DEV_HOST=${DEV_HOST}" >> $GITHUB_ENV
+          echo "DEPLOY_DIR=${DEPLOY_DIR}" >> $GITHUB_ENV
+          echo "COMPOSE_FILE=${COMPOSE_FILE}" >> $GITHUB_ENV
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+
+          echo "Deployment target: ${DEV_HOST}"
+          echo "Deployment directory: ${DEPLOY_DIR}"
+          echo "Version: ${VERSION}"
+
+      - name: Verify SSH connectivity
+        run: |
+          echo "Testing SSH connectivity to ${DEV_HOST}..."
+          ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 root@${DEV_HOST} "echo 'SSH connection successful'"
+          if [ $? -ne 0 ]; then
+            echo "❌ SSH connection failed"
+            exit 1
+          fi
+          echo "✅ SSH connectivity verified"
+
+      - name: URL-encode MongoDB password
+        id: encode_password
+        run: |
+          ENCODED_PASSWORD=$(printf %s "${{ secrets.MONGO_APP_PASSWORD }}" | jq -sRr @uri)
+          echo "ENCODED_MONGO_APP_PASSWORD=${ENCODED_PASSWORD}" >> $GITHUB_ENV
+
+      - name: Pre-deployment backup
+        run: |
+          echo "Creating pre-deployment backup on ${DEV_HOST}..."
+          ssh root@${DEV_HOST} bash << 'REMOTE_SCRIPT'
+            set -e
+            DEPLOY_DIR="${{ env.DEPLOY_DIR }}"
+            COMPOSE_FILE="${{ env.COMPOSE_FILE }}"
+            
+            cd "${DEPLOY_DIR}" || { echo "❌ Deployment directory not found: ${DEPLOY_DIR}"; exit 1; }
+            
+            # Create backup directory if it doesn't exist
+            sudo mkdir -p /opt/smart-smoker-dev/backups/deployments
+            
+            # Run backup script
+            if [ -f "./scripts/deployment-backup.sh" ]; then
+              COMPOSE_FILE="${COMPOSE_FILE}" ./scripts/deployment-backup.sh
+            else
+              echo "⚠️  Backup script not found, creating minimal backup..."
+              TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+              BACKUP_DIR="/opt/smart-smoker-dev/backups/deployments/backup-${TIMESTAMP}"
+              mkdir -p "${BACKUP_DIR}"
+              if [ -f "${COMPOSE_FILE}" ]; then
+                cp "${COMPOSE_FILE}" "${BACKUP_DIR}/${COMPOSE_FILE}.backup"
+              fi
+              docker compose ps > "${BACKUP_DIR}/compose-state.txt" 2>/dev/null || true
+              echo "${BACKUP_DIR}" > /opt/smart-smoker-dev/backups/deployments/last-deployment-backup.txt
+            fi
+            echo "✅ Backup completed"
+          REMOTE_SCRIPT
+        env:
+          DEV_HOST: ${{ env.DEV_HOST }}
+
+      - name: Copy docker-compose file
+        run: |
+          echo "Copying docker-compose file to ${DEV_HOST}..."
+          scp cloud.docker-compose.yml root@${DEV_HOST}:${DEPLOY_DIR}/${COMPOSE_FILE}
+          echo "✅ Docker Compose file copied"
+
+      - name: Deploy to dev-cloud
+        id: deploy
+        run: |
+          echo "Deploying to ${DEV_HOST}..."
+          ssh root@${DEV_HOST} bash << 'REMOTE_SCRIPT'
+            set -e
+            DEPLOY_DIR="${{ env.DEPLOY_DIR }}"
+            COMPOSE_FILE="${{ env.COMPOSE_FILE }}"
+            VERSION="${{ env.VERSION }}"
+            
+            cd "${DEPLOY_DIR}" || { echo "❌ Deployment directory not found: ${DEPLOY_DIR}"; exit 1; }
+            
+            export VERSION="${VERSION}"
+            export VAPID_PRIVATE_KEY='${{ secrets.VAPID_PRIVATE_KEY }}'
+            export VAPID_PUBLIC_KEY='${{ secrets.VAPID_PUBLIC_KEY }}'
+            export MONGO_ROOT_USER=admin
+            export MONGO_ROOT_PASSWORD='${{ secrets.MONGO_ROOT_PASSWORD }}'
+            export MONGO_APP_PASSWORD='${{ secrets.MONGO_APP_PASSWORD }}'
+            export ENCODED_MONGO_APP_PASSWORD='${{ env.ENCODED_MONGO_APP_PASSWORD }}'
+            
+            echo "Pulling Docker images with version: ${VERSION}..."
+            docker compose -f "${COMPOSE_FILE}" pull
+            
+            echo "Stopping existing containers..."
+            docker compose -f "${COMPOSE_FILE}" down || true
+            
+            echo "Starting containers..."
+            docker compose -f "${COMPOSE_FILE}" up -d --force-recreate
+            
+            echo "✅ Deployment initiated"
+          REMOTE_SCRIPT
+        env:
+          DEV_HOST: ${{ env.DEV_HOST }}
+
+      - name: Wait for services to start
+        run: |
+          echo "Waiting for services to initialize (60 seconds)..."
+          sleep 60
+
+      - name: Verify deployment health
+        id: health_check
+        run: |
+          echo "Running health checks on ${DEV_HOST}..."
+          if ./scripts/deployment-health-check.sh ${DEV_HOST} 3; then
+            echo "✅ All health checks passed"
+            echo "health_status=success" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Health checks failed"
+            echo "health_status=failed" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+        continue-on-error: true
+
+      - name: Rollback on failure
+        if: steps.health_check.outcome == 'failure'
+        id: rollback
+        run: |
+          echo "🚨 Deployment failed health check, initiating rollback..."
+          ssh root@${DEV_HOST} bash << 'REMOTE_SCRIPT'
+            set -e
+            DEPLOY_DIR="${{ env.DEPLOY_DIR }}"
+            COMPOSE_FILE="${{ env.COMPOSE_FILE }}"
+            
+            cd "${DEPLOY_DIR}" || { echo "❌ Deployment directory not found: ${DEPLOY_DIR}"; exit 1; }
+            
+            if [ -f "./scripts/rollback.sh" ]; then
+              COMPOSE_FILE="${COMPOSE_FILE}" ./scripts/rollback.sh
+            else
+              echo "⚠️  Rollback script not found, attempting manual rollback..."
+              # Try to restore from backup
+              BACKUP_FILE="/opt/smart-smoker-dev/backups/deployments/last-deployment-backup.txt"
+              if [ -f "${BACKUP_FILE}" ]; then
+                BACKUP_DIR=$(cat "${BACKUP_FILE}")
+                if [ -f "${BACKUP_DIR}/${COMPOSE_FILE}.backup" ]; then
+                  cp "${BACKUP_DIR}/${COMPOSE_FILE}.backup" "${COMPOSE_FILE}"
+                  docker compose -f "${COMPOSE_FILE}" up -d --force-recreate
+                fi
+              fi
+            fi
+            
+            echo "Waiting for rollback to complete (30 seconds)..."
+            sleep 30
+          REMOTE_SCRIPT
+
+          # Verify rollback success
+          echo "Verifying rollback..."
+          if ./scripts/deployment-health-check.sh ${DEV_HOST} 1; then
+            echo "✅ Rollback successful, system restored"
+            echo "rollback_status=success" >> $GITHUB_OUTPUT
+          else
+            echo "💥 Rollback failed - MANUAL INTERVENTION REQUIRED"
+            echo "rollback_status=failed" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+        env:
+          DEV_HOST: ${{ env.DEV_HOST }}
+
+      - name: Send Discord notification
+        if: always()
+        run: |
+          if [ -n "${{ secrets.DISCORD_WEBHOOK_URL }}" ]; then
+            STATUS="${{ job.status }}"
+            HEALTH_STATUS="${{ steps.health_check.outputs.health_status || 'N/A' }}"
+            ROLLBACK_STATUS="${{ steps.rollback.outputs.rollback_status || '' }}"
+            
+            if [ "$STATUS" = "success" ]; then
+              COLOR="3066993"  # Green
+              TITLE="✅ Dev Deployment Success"
+              DESCRIPTION="Deployment to dev-cloud completed successfully"
+            else
+              COLOR="15158332"  # Red
+              TITLE="❌ Dev Deployment Failed"
+              DESCRIPTION="Deployment to dev-cloud failed"
+            fi
+            
+            # Build fields array
+            FIELDS="[
+              {\"name\": \"Environment\", \"value\": \"dev-cloud (smoker-dev-cloud)\", \"inline\": true},
+              {\"name\": \"Version\", \"value\": \"nightly\", \"inline\": true},
+              {\"name\": \"Status\", \"value\": \"${STATUS}\", \"inline\": true},
+              {\"name\": \"Health Check\", \"value\": \"${HEALTH_STATUS}\", \"inline\": true}"
+            
+            if [ -n "${ROLLBACK_STATUS}" ]; then
+              FIELDS="${FIELDS},
+              {\"name\": \"Rollback\", \"value\": \"${ROLLBACK_STATUS}\", \"inline\": true}"
+            fi
+            
+            FIELDS="${FIELDS},
+              {\"name\": \"Workflow Run\", \"value\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\", \"inline\": false}
+            ]"
+            
+            PAYLOAD=$(cat <<PAYLOAD_EOF
+            {
+              "embeds": [{
+                "title": "${TITLE}",
+                "description": "${DESCRIPTION}",
+                "color": ${COLOR},
+                "fields": ${FIELDS},
+                "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+              }]
+            }
+            PAYLOAD_EOF
+            )
+            
+            curl -X POST "${{ secrets.DISCORD_WEBHOOK_URL }}" \
+              -H "Content-Type: application/json" \
+              -d "${PAYLOAD}" || echo "⚠️  Failed to send Discord notification (webhook may not be configured)"
+          else
+            echo "ℹ️  Discord webhook not configured, skipping notification"
+          fi
