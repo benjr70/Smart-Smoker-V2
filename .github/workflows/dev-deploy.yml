@@ -111,6 +111,14 @@ jobs:
           scp -r infra/mongodb-init/* root@${DEV_HOST}:${DEPLOY_DIR}/infra/mongodb-init/
           echo "✅ Deployment files copied"
 
+      - name: Reset Tailscale Serve before deployment
+        run: |
+          echo "Resetting Tailscale Serve to free up ports..."
+          ssh root@${DEV_HOST} "tailscale serve reset || true"
+          echo "✅ Tailscale Serve reset"
+        env:
+          DEV_HOST: ${{ env.DEV_HOST }}
+
       - name: Deploy to dev-cloud
         id: deploy
         run: |
