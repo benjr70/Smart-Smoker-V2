@@ -36,6 +36,19 @@ jobs:
           REPO_PASS: ${{ secrets.DOCKERHUB_TOKEN }}
         run: sudo -E docker compose -f smoker.docker-compose.yml down
 
+      - name: Pre-deployment Docker cleanup
+        run: |
+          echo "Cleaning up old Docker resources before deployment..."
+          # Prune unused images (not volumes - those contain persistent data)
+          sudo docker image prune -af || true
+          # Prune unused build cache
+          sudo docker builder prune -af || true
+          # Prune stopped containers
+          sudo docker container prune -f || true
+          # Show disk space after cleanup
+          echo "Disk usage after cleanup:"
+          df -h /var/lib/docker || df -h /
+
       - name: docker compose up
         env:
           REPO_USER: ${{ secrets.DOCKERHUB_USERNAME }}

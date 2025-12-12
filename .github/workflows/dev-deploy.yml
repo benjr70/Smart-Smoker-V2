@@ -145,6 +145,17 @@ jobs:
             echo "Stopping existing containers..."
             docker compose -f "${COMPOSE_FILE}" down || true
             
+            echo "Cleaning up old Docker resources..."
+            # Prune unused images (not volumes - those contain persistent data)
+            docker image prune -af || true
+            # Prune unused build cache
+            docker builder prune -af || true
+            # Prune stopped containers
+            docker container prune -f || true
+            # Show disk space after cleanup
+            echo "Disk usage after cleanup:"
+            df -h /var/lib/docker || df -h /
+            
             echo "Starting containers..."
             docker compose -f "${COMPOSE_FILE}" up -d --force-recreate
             
