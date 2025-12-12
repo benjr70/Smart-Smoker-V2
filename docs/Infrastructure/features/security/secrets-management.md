@@ -347,6 +347,28 @@ openssl rand -base64 32
 # URL-encode for connection strings (done automatically in workflow)
 ```
 
+**SSH Secrets** (Required for dev-deploy.yml workflow):
+```yaml
+SSH_PRIVATE_KEY: <ed25519-private-key>  # SSH key for deployment to dev-cloud
+```
+
+**How to Set Up SSH_PRIVATE_KEY**:
+1. Generate an SSH key pair (if not already done):
+   ```bash
+   ssh-keygen -t ed25519 -C "github-actions-deploy" -f ~/.ssh/github_deploy_key -N ""
+   ```
+2. Add the public key to the target server:
+   ```bash
+   ssh-copy-id -i ~/.ssh/github_deploy_key.pub root@smoker-dev-cloud
+   ```
+3. Add the private key as a GitHub secret:
+   - Go to repository **Settings > Secrets and variables > Actions**
+   - Click **New repository secret**
+   - Name: `SSH_PRIVATE_KEY`
+   - Value: Contents of `~/.ssh/github_deploy_key` (the private key file, including the `-----BEGIN` and `-----END` lines)
+   - Click **Add secret**
+4. Test SSH connectivity from the runner to verify setup
+
 **Other Secrets**:
 ```yaml
 # Required for Terraform workflows
@@ -357,6 +379,9 @@ VAULT_TOKEN: s.xxxxxxxxxxxx  # AppRole token with limited permissions
 PROXMOX_API_URL: https://192.168.1.151:8006/
 PROXMOX_TOKEN_ID: terraform@pve!SmartSmoker
 PROXMOX_TOKEN_SECRET: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+
+# Discord notifications
+DISCORD_WEBHOOK_URL: <discord-webhook-url>  # For deployment notifications
 
 # Existing secrets
 VAPID_PUBLIC_KEY: <existing>

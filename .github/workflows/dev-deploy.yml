@@ -46,6 +46,13 @@ jobs:
           echo "Deployment directory: ${DEPLOY_DIR}"
           echo "Version: ${VERSION}"
 
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H ${DEV_HOST} >> ~/.ssh/known_hosts 2>/dev/null || true
+
       - name: Verify SSH connectivity
         run: |
           echo "Testing SSH connectivity to ${DEV_HOST}..."
@@ -206,47 +213,47 @@ jobs:
             ROLLBACK_STATUS="${{ steps.rollback.outputs.rollback_status || '' }}"
             
             if [ "$STATUS" = "success" ]; then
-              COLOR="3066993"  # Green
-              TITLE="✅ Dev Deployment Success"
+              COLOR=3066993  # Green
+              TITLE="Dev Deployment Success"
               DESCRIPTION="Deployment to dev-cloud completed successfully"
             else
-              COLOR="15158332"  # Red
-              TITLE="❌ Dev Deployment Failed"
+              COLOR=15158332  # Red
+              TITLE="Dev Deployment Failed"
               DESCRIPTION="Deployment to dev-cloud failed"
             fi
             
-            # Build fields array
-            FIELDS="[
-              {\"name\": \"Environment\", \"value\": \"dev-cloud (smoker-dev-cloud)\", \"inline\": true},
-              {\"name\": \"Version\", \"value\": \"nightly\", \"inline\": true},
-              {\"name\": \"Status\", \"value\": \"${STATUS}\", \"inline\": true},
-              {\"name\": \"Health Check\", \"value\": \"${HEALTH_STATUS}\", \"inline\": true}"
+            # Build fields array using jq
+            WORKFLOW_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            FIELDS=$(jq -n \
+              --arg status "${STATUS}" \
+              --arg health "${HEALTH_STATUS}" \
+              --arg workflow_url "${WORKFLOW_URL}" \
+              '[
+                {"name": "Environment", "value": "dev-cloud (smoker-dev-cloud)", "inline": true},
+                {"name": "Version", "value": "nightly", "inline": true},
+                {"name": "Status", "value": $status, "inline": true},
+                {"name": "Health Check", "value": $health, "inline": true},
+                {"name": "Workflow Run", "value": $workflow_url, "inline": false}
+              ]')
             
+            # Add rollback field if present
             if [ -n "${ROLLBACK_STATUS}" ]; then
-              FIELDS="${FIELDS},
-              {\"name\": \"Rollback\", \"value\": \"${ROLLBACK_STATUS}\", \"inline\": true}"
+              FIELDS=$(echo "${FIELDS}" | jq --arg rollback "${ROLLBACK_STATUS}" \
+                '. + [{"name": "Rollback", "value": $rollback, "inline": true}]')
             fi
             
-            FIELDS="${FIELDS},
-              {\"name\": \"Workflow Run\", \"value\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\", \"inline\": false}
-            ]"
-            
-            PAYLOAD=$(cat <<PAYLOAD_EOF
-            {
-              "embeds": [{
-                "title": "${TITLE}",
-                "description": "${DESCRIPTION}",
-                "color": ${COLOR},
-                "fields": ${FIELDS},
-                "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-              }]
-            }
-            PAYLOAD_EOF
-            )
+            # Build payload using jq
+            PAYLOAD=$(jq -n \
+              --arg title "${TITLE}" \
+              --arg desc "${DESCRIPTION}" \
+              --argjson color "${COLOR}" \
+              --argjson fields "${FIELDS}" \
+              --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              '{embeds: [{title: $title, description: $desc, color: $color, fields: $fields, timestamp: $ts}]}')
             
             curl -X POST "${{ secrets.DISCORD_WEBHOOK_URL }}" \
               -H "Content-Type: application/json" \
-              -d "${PAYLOAD}" || echo "⚠️  Failed to send Discord notification (webhook may not be configured)"
+              -d "${PAYLOAD}" || echo "Failed to send Discord notification (webhook may not be configured)"
           else
-            echo "ℹ️  Discord webhook not configured, skipping notification"
+            echo "Discord webhook not configured, skipping notification"
           fi
