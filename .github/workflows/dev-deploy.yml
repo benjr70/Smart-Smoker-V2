@@ -150,6 +150,27 @@ jobs:
           echo "Waiting for services to initialize (60 seconds)..."
           sleep 60
 
+      - name: Configure Tailscale Serve
+        run: |
+          echo "Configuring Tailscale Serve on ${DEV_HOST}..."
+          ssh root@${DEV_HOST} bash << 'REMOTE_SCRIPT'
+            set -e
+            echo "Resetting existing Tailscale Serve configuration..."
+            tailscale serve reset || true
+            
+            echo "Configuring Tailscale Serve for frontend (port 80 -> HTTPS 443)..."
+            tailscale serve --bg 80
+            
+            echo "Configuring Tailscale Serve for backend (port 3001 -> HTTPS 8443)..."
+            tailscale serve --bg --https=8443 3001
+            
+            echo "Current Tailscale Serve configuration:"
+            tailscale serve status
+            echo "✅ Tailscale Serve configured"
+          REMOTE_SCRIPT
+        env:
+          DEV_HOST: ${{ env.DEV_HOST }}
+
       - name: Verify deployment health
         id: health_check
         run: |

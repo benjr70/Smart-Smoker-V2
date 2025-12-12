@@ -32,17 +32,17 @@ tailscale_advertise_exit_node: false
 tailscale_advertise_routes: []
 
 # Tailscale Serve configuration
-# Enables Tailscale Serve to expose local services on the tailnet
+# Enables Tailscale Serve to expose local services on the tailnet via HTTPS
+# https_port: The HTTPS port to expose on the tailnet (443 is default)
+# target_port: The local port to proxy traffic to
 tailscale_serve_enabled: false
 tailscale_serve_config: []
 # Example:
 # tailscale_serve_config:
-#   - port: 80
-#     target_port: 80
-#     protocol: http
-#   - port: 3001
-#     target_port: 3001
-#     protocol: http
+#   - https_port: 443      # Exposes on https://hostname.ts.net/
+#     target_port: 80      # Proxies to http://localhost:80
+#   - https_port: 8443     # Exposes on https://hostname.ts.net:8443/
+#     target_port: 3001    # Proxies to http://localhost:3001
 
 # Tailscale Funnel configuration
 # Enables Tailscale Funnel to expose services publicly on the internet
