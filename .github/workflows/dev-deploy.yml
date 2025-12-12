@@ -101,11 +101,15 @@ jobs:
         env:
           DEV_HOST: ${{ env.DEV_HOST }}
 
-      - name: Copy docker-compose file
+      - name: Copy deployment files
         run: |
-          echo "Copying docker-compose file to ${DEV_HOST}..."
+          echo "Copying deployment files to ${DEV_HOST}..."
+          # Copy docker-compose file
           scp cloud.docker-compose.yml root@${DEV_HOST}:${DEPLOY_DIR}/${COMPOSE_FILE}
-          echo "✅ Docker Compose file copied"
+          # Create infra directory structure and copy MongoDB init scripts
+          ssh root@${DEV_HOST} "mkdir -p ${DEPLOY_DIR}/infra/mongodb-init"
+          scp -r infra/mongodb-init/* root@${DEV_HOST}:${DEPLOY_DIR}/infra/mongodb-init/
+          echo "✅ Deployment files copied"
 
       - name: Deploy to dev-cloud
         id: deploy
