@@ -17,7 +17,7 @@ services:
       - DB_URL=mongodb://smartsmoker:${ENCODED_MONGO_APP_PASSWORD}@mongo:27017/smartsmoker?authSource=admin
 
     ports:
-      - 8443:3001
+      - 127.0.0.1:3001:3001
 
     depends_on:
       mongo:
@@ -62,7 +62,7 @@ services:
     environment:
       - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
     ports:
-      - 80:3000
+      - 127.0.0.1:80:3000
 
     depends_on:
       backend:
