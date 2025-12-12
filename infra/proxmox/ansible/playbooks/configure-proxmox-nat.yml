@@ -1,0 +1,132 @@
+---
+# Configure NAT and IP forwarding on Proxmox host
+# This enables LXC containers to access the internet through the Proxmox gateway
+#
+# Prerequisites:
+# - Access to Proxmox host (typically via SSH to 192.168.1.151 or via Tailscale)
+# - Proxmox host must have internet connectivity
+#
+# Usage:
+#   ansible-playbook playbooks/configure-proxmox-nat.yml \
+#     --extra-vars "proxmox_host=192.168.1.151 proxmox_user=root"
+
+- name: Configure Proxmox NAT for LXC containers
+  hosts: localhost
+  become: false
+  vars:
+    proxmox_host_default: "192.168.1.151"
+    proxmox_user_default: "root"
+    container_network_default: "10.20.0.0/24"
+    proxmox_interface_default: "vmbr0"
+
+  tasks:
+    - name: Set variables with defaults
+      ansible.builtin.set_fact:
+        proxmox_host: "{{ proxmox_host | default(proxmox_host_default) }}"
+        proxmox_user: "{{ proxmox_user | default(proxmox_user_default) }}"
+        container_network: "{{ container_network | default(container_network_default) }}"
+        proxmox_interface: "{{ proxmox_interface | default(proxmox_interface_default) }}"
+
+    - name: Check if Proxmox host is reachable
+      ansible.builtin.command: ping -c 1 -W 2 {{ proxmox_host }}
+      register: proxmox_ping
+      failed_when: false
+      changed_when: false
+
+    - name: Fail if Proxmox host is not reachable
+      ansible.builtin.fail:
+        msg: "Cannot reach Proxmox host at {{ proxmox_host }}. Ensure host is accessible via SSH."
+      when: proxmox_ping.rc != 0
+
+    - name: Detect external network interface on Proxmox host
+      ansible.builtin.shell: |
+        ip route show default | awk '/default/ {print $5}' | head -1
+      register: detected_interface
+      delegate_to: "{{ proxmox_host }}"
+      vars:
+        ansible_user: "{{ proxmox_user }}"
+      become: true
+      when: external_interface is not defined or external_interface == ""
+
+    - name: Set external interface
+      ansible.builtin.set_fact:
+        external_interface: "{{ external_interface if (external_interface is defined and external_interface != '') else (detected_interface.stdout | default('eth0')) }}"
+
+    - name: Check current IP forwarding status
+      ansible.builtin.stat:
+        path: /proc/sys/net/ipv4/ip_forward
+        get_checksum: false
+      register: ip_forward_file
+      delegate_to: "{{ proxmox_host }}"
+      become: true
+
+    - name: Read current IP forwarding value
+      ansible.builtin.shell: cat /proc/sys/net/ipv4/ip_forward
+      register: ip_forward_current
+      delegate_to: "{{ proxmox_host }}"
+      vars:
+        ansible_user: "{{ proxmox_user }}"
+      become: true
+      changed_when: false
+
+    - name: Enable IP forwarding
+      ansible.builtin.sysctl:
+        name: net.ipv4.ip_forward
+        value: '1'
+        state: present
+        sysctl_set: true
+        sysctl_file: /etc/sysctl.d/99-proxmox-nat.conf
+        reload: true
+      delegate_to: "{{ proxmox_host }}"
+      vars:
+        ansible_user: "{{ proxmox_user }}"
+      become: true
+      when: ip_forward_current.stdout != "1"
+
+    - name: Check if NAT rule exists
+      ansible.builtin.shell: |
+        iptables -t nat -C POSTROUTING -s {{ container_network }} -o {{ external_interface }} -j MASQUERADE 2>&1 || echo "NOT_FOUND"
+      register: nat_rule_check
+      delegate_to: "{{ proxmox_host }}"
+      vars:
+        ansible_user: "{{ proxmox_user }}"
+      become: true
+      changed_when: false
+      failed_when: false
+
+    - name: Add NAT masquerade rule
+      ansible.builtin.shell: |
+        iptables -t nat -A POSTROUTING -s {{ container_network }} -o {{ external_interface }} -j MASQUERADE
+      delegate_to: "{{ proxmox_host }}"
+      vars:
+        ansible_user: "{{ proxmox_user }}"
+      become: true
+      when: "nat_rule_check.stdout == 'NOT_FOUND'"
+
+    - name: Save iptables rules (Debian/Ubuntu)
+      ansible.builtin.shell: |
+        if command -v netfilter-persistent > /dev/null; then
+          netfilter-persistent save
+        elif command -v iptables-save > /dev/null; then
+          iptables-save > /etc/iptables/rules.v4
+        fi
+      delegate_to: "{{ proxmox_host }}"
+      vars:
+        ansible_user: "{{ proxmox_user }}"
+      become: true
+      when: nat_rule_check.stdout == "NOT_FOUND"
+      changed_when: false
+      failed_when: false
+
+    - name: Display configuration summary
+      ansible.builtin.debug:
+        msg:
+          - "✅ NAT configuration complete"
+          - "Container network: {{ container_network }}"
+          - "External interface: {{ external_interface }}"
+          - "IP forwarding: Enabled"
+          - "NAT masquerade: Configured"
+          - ""
+          - "Test connectivity from a container:"
+          - "  curl -s https://github.com"
+
