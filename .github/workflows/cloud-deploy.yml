@@ -65,6 +65,19 @@ jobs:
           ENCODED_MONGO_APP_PASSWORD: ${{ env.ENCODED_MONGO_APP_PASSWORD }}
         run: sudo -E docker compose -f cloud.docker-compose.yml down
 
+      - name: Pre-deployment Docker cleanup
+        run: |
+          echo "Cleaning up old Docker resources before deployment..."
+          # Prune unused images (not volumes - those contain persistent data)
+          sudo docker image prune -af || true
+          # Prune unused build cache
+          sudo docker builder prune -af || true
+          # Prune stopped containers
+          sudo docker container prune -f || true
+          # Show disk space after cleanup
+          echo "Disk usage after cleanup:"
+          df -h /var/lib/docker || df -h /
+
       - name: kill tailscale
         run: sudo systemctl stop tailscaled
 
