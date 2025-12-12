@@ -15,9 +15,8 @@
 
 - name: Configure Tailscale Serve for each port
   ansible.builtin.command: >-
-    tailscale serve
-    {% if item.protocol | default('http') == 'https' %}https{% else %}http{% endif %}:{{ item.port }}
-    /
+    tailscale serve --bg
+    {% if item.https_port | default(443) != 443 %}--https={{ item.https_port }}{% endif %}
     {{ item.target_port }}
   loop: "{{ tailscale_serve_config }}"
   register: tailscale_serve_result

@@ -20,11 +20,11 @@ tailscale_accept_routes: true
 tailscale_accept_dns: true
 
 # Tailscale Serve - expose services on tailnet only (no public funnel)
+# https_port: The HTTPS port to expose on the tailnet (443 is default)
+# target_port: The local port to proxy traffic to
 tailscale_serve_enabled: true
 tailscale_serve_config:
-  - port: 80
+  - https_port: 443
     target_port: 80
-    protocol: http
-  - port: 3001
+  - https_port: 8443
     target_port: 3001
-    protocol: http
