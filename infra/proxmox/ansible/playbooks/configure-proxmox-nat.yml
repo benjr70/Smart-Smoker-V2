@@ -40,17 +40,23 @@
 
     - name: Detect external network interface on Proxmox host
       ansible.builtin.shell: |
+        set -o pipefail
         ip route show default | awk '/default/ {print $5}' | head -1
+      args:
+        executable: /bin/bash
       register: detected_interface
       delegate_to: "{{ proxmox_host }}"
       vars:
         ansible_user: "{{ proxmox_user }}"
       become: true
+      changed_when: false
       when: external_interface is not defined or external_interface == ""
 
     - name: Set external interface
       ansible.builtin.set_fact:
-        external_interface: "{{ external_interface if (external_interface is defined and external_interface != '') else (detected_interface.stdout | default('eth0')) }}"
+        external_interface: >-
+          {{ external_interface if (external_interface is defined and external_interface != '')
+             else (detected_interface.stdout | default('eth0')) }}
 
     - name: Check current IP forwarding status
       ansible.builtin.stat:
@@ -61,7 +67,7 @@
       become: true
 
     - name: Read current IP forwarding value
-      ansible.builtin.shell: cat /proc/sys/net/ipv4/ip_forward
+      ansible.builtin.command: cat /proc/sys/net/ipv4/ip_forward
       register: ip_forward_current
       delegate_to: "{{ proxmox_host }}"
       vars:
@@ -70,7 +76,7 @@
       changed_when: false
 
     - name: Enable IP forwarding
-      ansible.builtin.sysctl:
+      ansible.posix.sysctl:
         name: net.ipv4.ip_forward
         value: '1'
         state: present
@@ -101,6 +107,7 @@
       vars:
         ansible_user: "{{ proxmox_user }}"
       become: true
+      changed_when: true
       when: "nat_rule_check.stdout == 'NOT_FOUND'"
 
     - name: Save iptables rules (Debian/Ubuntu)
@@ -121,7 +128,7 @@
     - name: Display configuration summary
       ansible.builtin.debug:
         msg:
-          - "✅ NAT configuration complete"
+          - "NAT configuration complete"
           - "Container network: {{ container_network }}"
           - "External interface: {{ external_interface }}"
           - "IP forwarding: Enabled"
@@ -129,4 +136,3 @@
           - ""
           - "Test connectivity from a container:"
           - "  curl -s https://github.com"
-

@@ -72,7 +72,3 @@ echo "Full log saved to: $LOG_FILE" | tee -a "$LOG_FILE"
 
 
 
-
-
-
-
