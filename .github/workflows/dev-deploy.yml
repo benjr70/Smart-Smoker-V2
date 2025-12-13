@@ -33,7 +33,7 @@ jobs:
           if [ "${DISK_USAGE}" -gt 80 ]; then
             echo "Disk usage exceeds 80%, running cleanup..."
             if [ -x /usr/local/bin/runner-cleanup.sh ]; then
-              sudo /usr/local/bin/runner-cleanup.sh
+              sudo /usr/local/bin/runner-cleanup.sh || echo "Cleanup script had issues, continuing..."
             else
               docker system prune -af --filter "until=24h" || true
               docker builder prune -af || true
@@ -325,10 +325,10 @@ jobs:
         run: |
           echo "Cleaning up runner disk space after deployment..."
           if [ -x /usr/local/bin/runner-cleanup.sh ]; then
-            sudo /usr/local/bin/runner-cleanup.sh
+            sudo /usr/local/bin/runner-cleanup.sh || echo "Cleanup script had issues, continuing..."
           else
             docker system prune -af --filter "until=24h" || true
             docker builder prune -af || true
           fi
           echo "Disk usage after cleanup:"
-          df -h /
+          df -h / || true
