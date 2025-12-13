@@ -26,6 +26,24 @@ jobs:
     runs-on: [self-hosted, linux, proxmox]
 
     steps:
+      - name: Pre-deploy runner cleanup (if needed)
+        run: |
+          DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | tr -d '%')
+          echo "Current disk usage: ${DISK_USAGE}%"
+          if [ "${DISK_USAGE}" -gt 80 ]; then
+            echo "Disk usage exceeds 80%, running cleanup..."
+            if [ -x /usr/local/bin/runner-cleanup.sh ]; then
+              sudo /usr/local/bin/runner-cleanup.sh
+            else
+              docker system prune -af --filter "until=24h" || true
+              docker builder prune -af || true
+            fi
+            echo "Disk usage after cleanup:"
+            df -h /
+          else
+            echo "Disk usage OK (${DISK_USAGE}%), skipping pre-deploy cleanup"
+          fi
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -301,3 +319,16 @@ jobs:
           else
             echo "Discord webhook not configured, skipping notification"
           fi
+
+      - name: Post-deploy runner cleanup
+        if: always()
+        run: |
+          echo "Cleaning up runner disk space after deployment..."
+          if [ -x /usr/local/bin/runner-cleanup.sh ]; then
+            sudo /usr/local/bin/runner-cleanup.sh
+          else
+            docker system prune -af --filter "until=24h" || true
+            docker builder prune -af || true
+          fi
+          echo "Disk usage after cleanup:"
+          df -h /
