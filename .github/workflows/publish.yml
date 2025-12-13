@@ -102,6 +102,8 @@ jobs:
               npm run build --prefix apps/device-service
               ;;
             "frontend")
+              # Create .env.prod for frontend build (configures API path prefix)
+              echo "REACT_APP_CLOUD_URL=/api/" > apps/frontend/.env.prod
               npm run build --prefix apps/frontend
               ;;
             "smoker")
