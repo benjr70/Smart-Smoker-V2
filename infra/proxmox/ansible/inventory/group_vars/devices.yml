@@ -1,9 +1,11 @@
 ---
 # Variables specific to virtual smoker devices
+# Phase 3 Story 2 - Virtual Smoker Device Infrastructure
 
-# Firewall rules for devices (minimal - isolated network)
+# Firewall rules for devices
 ufw_rules:
-  - { rule: allow, port: 8080, proto: tcp, comment: "Device Service", from_ip: "10.30.0.0/24" }
+  - { rule: allow, port: 8080, proto: tcp, comment: "Smoker Frontend" }
+  - { rule: allow, port: 3003, proto: tcp, comment: "Device Service" }
 
 # Device Configuration
 device_user: smoker
@@ -14,5 +16,19 @@ device_base_dir: /opt/smoker-device
 docker_users:
   - "{{ device_user }}"
 
+# Docker version pinning for production parity
+# Matches Raspberry Pi production Docker version (24.0.5)
+docker_version: "5:24.0*"
+
+# Override docker_compose_version to use latest (all.yml sets a specific version that may not exist)
+docker_compose_version: ""
+
 # Device Service Configuration
-device_service_port: 8080
+device_service_port: 3003
+device_frontend_port: 8080
+
+# Swap configuration (match production Pi ~100MB)
+swap_size_mb: 100
+
+# VNC for remote GUI access during testing
+vnc_enabled: false

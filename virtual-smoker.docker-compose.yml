@@ -1,0 +1,81 @@
+# Virtual Smoker Device Docker Compose
+# Phase 3 Story 2 - Mirrors production Raspberry Pi configuration
+# 
+# Key differences from production (smoker.docker-compose.yml):
+#   - Uses NODE_ENV=local for device-service emulator mode
+#   - Uses amd64/latest images instead of armhf
+#   - No physical USB serial device (/dev/ttyUSB0)
+#   - VNC display instead of physical touchscreen
+#
+# Usage:
+#   docker compose -f virtual-smoker.docker-compose.yml up -d
+#
+# Environment variables (from .env or exported):
+#   - VERSION: Image tag (default: nightly)
+#   - REPO_USER: Docker Hub username for Watchtower (optional)
+#   - REPO_PASS: Docker Hub token for Watchtower (optional)
+
+services:
+  deviceService:
+    container_name: device_service
+    image: 'benjr70/smart-smoker-device-service:${VERSION:-nightly}'
+    pull_policy: always
+    restart: always
+    network_mode: host
+    environment:
+      - NODE_ENV=local  # Enable emulator mode for temperature simulation
+    volumes:
+      - '/var/run/dbus:/var/run/dbus'
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:3003/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  frontend:
+    container_name: frontend_smoker
+    image: 'benjr70/smart-smoker-smoker:${VERSION:-nightly}'
+    pull_policy: always
+    restart: always
+    ports:
+      - '8080:8080'
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:8080']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Electron shell is optional for virtual device
+  # Uncomment if GUI testing is needed with VNC
+  # electronShell:
+  #   container_name: electron_shell
+  #   image: 'benjr70/smart-smoker-electron-shell:${VERSION:-nightly}'
+  #   pull_policy: always
+  #   restart: always
+  #   network_mode: host
+  #   depends_on:
+  #     frontend:
+  #       condition: service_healthy
+  #   volumes:
+  #     - '/tmp/.X11-unix:/tmp/.X11-unix'
+  #     - '/run/dbus/system_bus_socket:/run/dbus/system_bus_socket'
+  #     - '/etc/localtime:/etc/localtime:ro'
+  #   environment:
+  #     - DISPLAY=:1  # VNC display
+  #     - DBUS_SESSION_BUS_ADDRESS=unix:path=/run/dbus/system_bus_socket
+
+  watchtower:
+    container_name: watchtower
+    image: containrrr/watchtower:latest  # Use amd64 image, not armhf
+    restart: always
+    environment:
+      - REPO_USER=${REPO_USER:-}
+      - REPO_PASS=${REPO_PASS:-}
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_POLL_INTERVAL=300
+      - WATCHTOWER_LABEL_ENABLE=false
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --interval 300 --cleanup device_service frontend_smoker

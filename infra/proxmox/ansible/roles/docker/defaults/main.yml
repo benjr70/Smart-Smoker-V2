@@ -1,0 +1,18 @@
+---
+# Docker role default variables
+
+# Docker users to add to the docker group
+docker_users: []
+
+# Docker version pinning (optional)
+# Set to a specific version pattern to pin Docker to that version
+# Examples:
+#   - "5:24.0*" - Pin to Docker 24.0.x (for production parity with Raspberry Pi)
+#   - "5:25.0*" - Pin to Docker 25.0.x
+#   - "" (empty) - Install latest available version
+# Format follows apt package versioning: "5:MAJOR.MINOR*"
+docker_version: ""
+
+# Docker Compose plugin version (optional)
+# Leave empty for latest
+docker_compose_version: ""
