@@ -26,23 +26,12 @@ jobs:
     runs-on: [self-hosted, linux, proxmox]
 
     steps:
-      - name: Pre-deploy runner cleanup (if needed)
+      - name: Pre-deploy runner cleanup
         run: |
-          DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | tr -d '%')
-          echo "Current disk usage: ${DISK_USAGE}%"
-          if [ "${DISK_USAGE}" -gt 80 ]; then
-            echo "Disk usage exceeds 80%, running cleanup..."
-            if [ -x /usr/local/bin/runner-cleanup.sh ]; then
-              sudo /usr/local/bin/runner-cleanup.sh || echo "Cleanup script had issues, continuing..."
-            else
-              docker system prune -af --filter "until=24h" || true
-              docker builder prune -af || true
-            fi
-            echo "Disk usage after cleanup:"
-            df -h /
-          else
-            echo "Disk usage OK (${DISK_USAGE}%), skipping pre-deploy cleanup"
-          fi
+          echo "Runner disk usage:"
+          df -h /
+          # Light cleanup on runner (it's not the bottleneck)
+          docker system prune -f --filter "until=24h" || true
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -137,6 +126,50 @@ jobs:
         env:
           DEV_HOST: ${{ env.DEV_HOST }}
 
+      - name: Pre-deploy target cleanup
+        run: |
+          echo "Running aggressive cleanup on ${DEV_HOST} before deployment..."
+          ssh root@${DEV_HOST} bash << 'REMOTE_SCRIPT'
+            echo "=== DISK USAGE BEFORE CLEANUP ==="
+            df -h /
+            
+            echo ""
+            echo "=== DOCKER DISK USAGE ==="
+            docker system df || true
+            
+            echo ""
+            echo "=== RUNNING AGGRESSIVE CLEANUP ==="
+            # Prune ALL unused images (not just dangling)
+            docker image prune -af || true
+            # Prune build cache
+            docker builder prune -af || true
+            # Prune stopped containers
+            docker container prune -f || true
+            # Prune unused networks
+            docker network prune -f || true
+            # Prune unused volumes (IMPORTANT: only anonymous/unused ones)
+            docker volume prune -f || true
+            
+            echo ""
+            echo "=== DISK USAGE AFTER CLEANUP ==="
+            df -h /
+            
+            # Check if we have enough space (at least 2GB free)
+            AVAIL_KB=$(df / | tail -1 | awk '{print $4}')
+            AVAIL_MB=$((AVAIL_KB / 1024))
+            echo "Available space: ${AVAIL_MB}MB"
+            
+            if [ "${AVAIL_MB}" -lt 2048 ]; then
+              echo "❌ ERROR: Less than 2GB available after cleanup!"
+              echo "Manual intervention required."
+              exit 1
+            fi
+            
+            echo "✅ Sufficient disk space available"
+          REMOTE_SCRIPT
+        env:
+          DEV_HOST: ${{ env.DEV_HOST }}
+
       - name: Deploy to dev-cloud
         id: deploy
         run: |
@@ -162,17 +195,6 @@ jobs:
             
             echo "Stopping existing containers..."
             docker compose -f "${COMPOSE_FILE}" down || true
-            
-            echo "Cleaning up old Docker resources..."
-            # Prune unused images (not volumes - those contain persistent data)
-            docker image prune -af || true
-            # Prune unused build cache
-            docker builder prune -af || true
-            # Prune stopped containers
-            docker container prune -f || true
-            # Show disk space after cleanup
-            echo "Disk usage after cleanup:"
-            df -h /var/lib/docker || df -h /
             
             echo "Starting containers..."
             docker compose -f "${COMPOSE_FILE}" up -d --force-recreate
@@ -320,15 +342,30 @@ jobs:
             echo "Discord webhook not configured, skipping notification"
           fi
 
+      - name: Post-deploy target cleanup
+        if: always()
+        run: |
+          echo "Cleaning up target disk space after deployment..."
+          ssh root@${DEV_HOST} bash << 'REMOTE_SCRIPT' || echo "Target cleanup had issues, continuing..."
+            # Prune unused images
+            docker image prune -af || true
+            # Prune build cache
+            docker builder prune -af || true
+            # Prune stopped containers
+            docker container prune -f || true
+            # Prune unused volumes
+            docker volume prune -f || true
+            echo "Target disk usage after cleanup:"
+            df -h /
+          REMOTE_SCRIPT
+        env:
+          DEV_HOST: ${{ env.DEV_HOST }}
+
       - name: Post-deploy runner cleanup
         if: always()
         run: |
           echo "Cleaning up runner disk space after deployment..."
-          if [ -x /usr/local/bin/runner-cleanup.sh ]; then
-            sudo /usr/local/bin/runner-cleanup.sh || echo "Cleanup script had issues, continuing..."
-          else
-            docker system prune -af --filter "until=24h" || true
-            docker builder prune -af || true
-          fi
-          echo "Disk usage after cleanup:"
+          docker system prune -af --filter "until=24h" || true
+          docker builder prune -af || true
+          echo "Runner disk usage after cleanup:"
           df -h / || true
