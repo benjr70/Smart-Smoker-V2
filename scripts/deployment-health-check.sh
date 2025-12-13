@@ -51,11 +51,25 @@ main() {
     echo "=========================================="
     echo ""
 
+    # For remote hosts, get the full Tailscale FQDN for HTTPS requests
+    # Tailscale Serve requires the full FQDN for TLS SNI matching
+    if [ "${TARGET_HOST}" != "localhost" ] && [ "${TARGET_HOST}" != "127.0.0.1" ]; then
+        echo -e "${YELLOW}Resolving Tailscale FQDN for ${TARGET_HOST}...${NC}"
+        TAILSCALE_FQDN=$(ssh "root@${TARGET_HOST}" "tailscale status --self --json | jq -r '.Self.DNSName' | sed 's/\.$//'")
+        if [ -z "${TAILSCALE_FQDN}" ] || [ "${TAILSCALE_FQDN}" = "null" ]; then
+            echo -e "${RED}❌ Failed to resolve Tailscale FQDN${NC}"
+            exit 1
+        fi
+        echo -e "${GREEN}✅ Resolved to: ${TAILSCALE_FQDN}${NC}"
+    else
+        TAILSCALE_FQDN="${TARGET_HOST}"
+    fi
+
     # Check Backend API (via Tailscale Serve HTTPS on port 8443)
-    check_service "Backend API" "https://${TARGET_HOST}:8443/api/health" || exit 1
+    check_service "Backend API" "https://${TAILSCALE_FQDN}:8443/api/health" || exit 1
 
     # Check Frontend (via Tailscale Serve HTTPS on port 443)
-    check_service "Frontend" "https://${TARGET_HOST}" || exit 1
+    check_service "Frontend" "https://${TAILSCALE_FQDN}" || exit 1
 
     # Check Docker container health status (if running locally)
     if [ "${TARGET_HOST}" = "localhost" ] || [ "${TARGET_HOST}" = "127.0.0.1" ]; then
