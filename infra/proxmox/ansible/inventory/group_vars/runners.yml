@@ -23,3 +23,11 @@ github_runner_token: ""  # Provided at runtime via --extra-vars or Vault
 # Runner settings
 github_runner_replace_existing: false
 github_runner_ephemeral: false
+
+# Disk Space Management
+# Number of days to retain diagnostic logs and work directories
+github_runner_log_retention_days: 7
+# Disk usage percentage threshold for warnings (logs warning if exceeded)
+github_runner_disk_warn_percent: 80
+# Run initial cleanup immediately when deploying (useful for first-time setup)
+github_runner_run_initial_cleanup: false

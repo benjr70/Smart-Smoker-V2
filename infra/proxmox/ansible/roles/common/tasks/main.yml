@@ -21,6 +21,22 @@
     name: "{{ timezone }}"
   notify: Restart cron
 
+- name: Create sshd-users group for SSH access control
+  ansible.builtin.group:
+    name: sshd-users
+    state: present
+  when: ssh_allow_groups is defined and 'sshd-users' in ssh_allow_groups
+
+- name: Add allowed users to sshd-users group
+  ansible.builtin.user:
+    name: "{{ item }}"
+    groups: sshd-users
+    append: true
+  loop: "{{ ssh_allow_users | default([]) }}"
+  when:
+    - ssh_allow_groups is defined and 'sshd-users' in ssh_allow_groups
+    - ssh_allow_users is defined
+
 - name: Configure SSH - Update sshd_config
   ansible.builtin.template:
     src: sshd_config.j2

@@ -1,0 +1,16 @@
+[Unit]
+Description=Daily GitHub Actions Runner Cleanup
+Documentation=https://github.com/benjr70/Smart-Smoker-V2
+
+[Timer]
+# Run daily at 3 AM with random delay up to 1 hour
+OnCalendar=*-*-* 03:00:00
+RandomizedDelaySec=1h
+# Run immediately if last scheduled run was missed
+Persistent=true
+# Run shortly after boot if timer was missed
+OnBootSec=15min
+
+[Install]
+WantedBy=timers.target
+

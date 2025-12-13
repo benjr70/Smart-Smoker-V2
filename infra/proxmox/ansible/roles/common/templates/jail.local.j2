@@ -6,6 +6,11 @@ bantime = {{ fail2ban_ban_time }}
 findtime = {{ fail2ban_find_time }}
 maxretry = {{ fail2ban_max_retry }}
 
+# Whitelist trusted networks
+# 127.0.0.1/8 - localhost
+# 100.64.0.0/10 - Tailscale CGNAT range (all Tailscale IPs)
+ignoreip = 127.0.0.1/8 ::1 100.64.0.0/10 {{ fail2ban_ignore_ips | default([]) | join(' ') }}
+
 [sshd]
 enabled = true
 port = {{ ssh_port }}

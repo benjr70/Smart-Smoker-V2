@@ -1,0 +1,58 @@
+#!/bin/bash
+# GitHub Actions Runner Disk Space Cleanup Script
+# Managed by Ansible - Do not edit manually
+#
+# This script runs daily via systemd timer to prevent disk exhaustion
+# by cleaning up old diagnostic logs, work directories, and Docker resources.
+
+set -euo pipefail
+
+RUNNER_HOME="{{ github_runner_home }}"
+DIAG_DIR="${RUNNER_HOME}/actions-runner/_diag"
+WORK_DIR="${RUNNER_HOME}/actions-runner/_work"
+LOG_RETENTION_DAYS="{{ github_runner_log_retention_days }}"
+DISK_WARN_THRESHOLD="{{ github_runner_disk_warn_percent }}"
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
+}
+
+log "Starting GitHub Actions runner cleanup..."
+
+# Clean old diagnostic logs
+if [ -d "${DIAG_DIR}" ]; then
+    DELETED_COUNT=$(find "${DIAG_DIR}" -type f -mtime +${LOG_RETENTION_DAYS} -delete -print 2>/dev/null | wc -l)
+    log "Deleted ${DELETED_COUNT} diagnostic log files older than ${LOG_RETENTION_DAYS} days"
+else
+    log "Diagnostic directory not found: ${DIAG_DIR}"
+fi
+
+# Clean old work directories (completed job artifacts)
+if [ -d "${WORK_DIR}" ]; then
+    DELETED_DIRS=$(find "${WORK_DIR}" -mindepth 2 -maxdepth 2 -type d -mtime +${LOG_RETENTION_DAYS} -exec rm -rf {} \; -print 2>/dev/null | wc -l)
+    log "Deleted ${DELETED_DIRS} old work directories older than ${LOG_RETENTION_DAYS} days"
+else
+    log "Work directory not found: ${WORK_DIR}"
+fi
+
+# Prune Docker resources (images, containers, networks older than 24h)
+if command -v docker &> /dev/null; then
+    log "Pruning Docker resources..."
+    docker system prune -af --filter "until=24h" 2>/dev/null || log "Docker prune completed with warnings"
+else
+    log "Docker not installed, skipping Docker cleanup"
+fi
+
+# Check disk usage and warn if above threshold
+DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | tr -d '%')
+DISK_AVAIL=$(df -h / | tail -1 | awk '{print $4}')
+
+if [ "${DISK_USAGE}" -gt "${DISK_WARN_THRESHOLD}" ]; then
+    log "WARNING: Disk usage at ${DISK_USAGE}% exceeds threshold of ${DISK_WARN_THRESHOLD}%"
+    log "Available space: ${DISK_AVAIL}"
+else
+    log "Disk usage: ${DISK_USAGE}% (threshold: ${DISK_WARN_THRESHOLD}%), available: ${DISK_AVAIL}"
+fi
+
+log "GitHub Actions runner cleanup completed"
+
