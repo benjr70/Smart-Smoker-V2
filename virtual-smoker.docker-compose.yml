@@ -15,16 +15,12 @@
 #   - REPO_USER: Docker Hub username for Watchtower (optional)
 #   - REPO_PASS: Docker Hub token for Watchtower (optional)
 
-version: '3.8'
-
 services:
   deviceService:
     container_name: device_service
     image: 'benjr70/smart-smoker-device-service:${VERSION:-nightly}'
     pull_policy: always
     restart: always
-    ports:
-      - '3003:3003'
     network_mode: host
     environment:
       - NODE_ENV=local  # Enable emulator mode for temperature simulation
@@ -83,4 +79,3 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     command: --interval 300 --cleanup device_service frontend_smoker
-
