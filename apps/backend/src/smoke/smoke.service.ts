@@ -38,14 +38,20 @@ export class SmokeService {
     return this.smokeModule.deleteOne({ _id: id });
   }
 
-  async getCurrentSmoke(): Promise<Smoke> {
+  async getCurrentSmoke(): Promise<Smoke | null> {
     return this.stateService.GetState().then((state) => {
+      if (!state || !state.smokeId || state.smokeId.length === 0) {
+        return null;
+      }
       return this.GetById(state.smokeId);
     });
   }
 
-  async FinishSmoke(): Promise<Smoke> {
+  async FinishSmoke(): Promise<Smoke | null> {
     return await this.getCurrentSmoke().then(async (smoke) => {
+      if (!smoke) {
+        return null;
+      }
       const smokeDto: SmokeDto = {
         smokeProfileId: smoke.smokeProfileId,
         preSmokeId: smoke.preSmokeId,

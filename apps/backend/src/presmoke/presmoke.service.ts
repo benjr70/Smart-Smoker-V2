@@ -17,9 +17,16 @@ export class PreSmokeService {
   ) {}
 
   async save(preSmokeDto: PreSmokeDto): Promise<PreSmoke> {
-    return this.stateService.GetState().then((state) => {
-      if (state.smokeId.length > 0) {
+    return this.stateService.GetState().then(async (state) => {
+      // If no state exists, create one
+      if (!state) {
+        state = await this.stateService.create({ smokeId: '', smoking: false });
+      }
+      if (state.smokeId && state.smokeId.length > 0) {
         return this.smokeService.GetById(state.smokeId).then((smoke) => {
+          if (!smoke) {
+            return this.createNewSmokeWithPreSmoke(preSmokeDto, state);
+          }
           if (smoke.preSmokeId) {
             return this.Update(smoke.preSmokeId, preSmokeDto);
           } else {
@@ -34,18 +41,22 @@ export class PreSmokeService {
           }
         });
       } else {
-        return this.create(preSmokeDto).then((preSmoke) => {
-          const smokeDto: SmokeDto = {
-            preSmokeId: preSmoke['_id'].toString(),
-            status: SmokeStatus.InProgress,
-          };
-          this.smokeService.create(smokeDto).then((smoke) => {
-            state.smokeId = smoke['_id'].toString();
-            this.stateService.update(state);
-          });
-          return preSmoke;
-        });
+        return this.createNewSmokeWithPreSmoke(preSmokeDto, state);
       }
+    });
+  }
+
+  private async createNewSmokeWithPreSmoke(preSmokeDto: PreSmokeDto, state: any): Promise<PreSmoke> {
+    return this.create(preSmokeDto).then((preSmoke) => {
+      const smokeDto: SmokeDto = {
+        preSmokeId: preSmoke['_id'].toString(),
+        status: SmokeStatus.InProgress,
+      };
+      this.smokeService.create(smokeDto).then((smoke) => {
+        state.smokeId = smoke['_id'].toString();
+        this.stateService.update(state);
+      });
+      return preSmoke;
     });
   }
 
@@ -62,12 +73,19 @@ export class PreSmokeService {
     return await this.preSmokeModel.findById(id);
   }
 
-  async GetByCurrent(): Promise<PreSmoke> {
+  async GetByCurrent(): Promise<PreSmoke | null> {
     return this.stateService.GetState().then(async (state) => {
       if (!state) {
         await this.stateService.create({ smokeId: '', smoking: false });
+        return null;
+      }
+      if (!state.smokeId || state.smokeId.length === 0) {
+        return null;
       }
       return this.smokeService.GetById(state.smokeId).then((smoke) => {
+        if (!smoke || !smoke.preSmokeId) {
+          return null;
+        }
         return this.preSmokeModel.findById(smoke.preSmokeId);
       });
     });
