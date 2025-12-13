@@ -5,7 +5,7 @@ const options = {
   port: 3001,
   path: '/api/health',
   method: 'GET',
-  timeout: 5000
+  timeout: 5000,
 };
 
 const req = http.request(options, (res) => {

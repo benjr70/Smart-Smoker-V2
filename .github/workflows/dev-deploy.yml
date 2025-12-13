@@ -1,5 +1,6 @@
 # Automated Development Deployment
-# Deploys to dev-cloud environment after nightly images are built
+# Deploys to dev-cloud environment and virtual-smoker device after nightly images are built
+# Phase 3 Story 3 - Extended to include virtual smoker device deployment
 
 name: Dev Deploy
 
@@ -20,10 +21,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deploy-dev:
+  deploy-dev-cloud:
     # Only run if nightly workflow succeeded (or manual trigger)
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'master') }}
     runs-on: [self-hosted, linux, proxmox]
+    outputs:
+      health_status: ${{ steps.health_check.outputs.health_status }}
+      rollback_status: ${{ steps.rollback.outputs.rollback_status }}
 
     steps:
       - name: Pre-deploy runner cleanup
@@ -288,59 +292,7 @@ jobs:
         env:
           DEV_HOST: ${{ env.DEV_HOST }}
 
-      - name: Send Discord notification
-        if: always()
-        run: |
-          if [ -n "${{ secrets.DISCORD_WEBHOOK_URL }}" ]; then
-            STATUS="${{ job.status }}"
-            HEALTH_STATUS="${{ steps.health_check.outputs.health_status || 'N/A' }}"
-            ROLLBACK_STATUS="${{ steps.rollback.outputs.rollback_status || '' }}"
-            
-            if [ "$STATUS" = "success" ]; then
-              COLOR=3066993  # Green
-              TITLE="Dev Deployment Success"
-              DESCRIPTION="Deployment to dev-cloud completed successfully"
-            else
-              COLOR=15158332  # Red
-              TITLE="Dev Deployment Failed"
-              DESCRIPTION="Deployment to dev-cloud failed"
-            fi
-            
-            # Build fields array using jq
-            WORKFLOW_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-            FIELDS=$(jq -n \
-              --arg status "${STATUS}" \
-              --arg health "${HEALTH_STATUS}" \
-              --arg workflow_url "${WORKFLOW_URL}" \
-              '[
-                {"name": "Environment", "value": "dev-cloud (smoker-dev-cloud)", "inline": true},
-                {"name": "Version", "value": "nightly", "inline": true},
-                {"name": "Status", "value": $status, "inline": true},
-                {"name": "Health Check", "value": $health, "inline": true},
-                {"name": "Workflow Run", "value": $workflow_url, "inline": false}
-              ]')
-            
-            # Add rollback field if present
-            if [ -n "${ROLLBACK_STATUS}" ]; then
-              FIELDS=$(echo "${FIELDS}" | jq --arg rollback "${ROLLBACK_STATUS}" \
-                '. + [{"name": "Rollback", "value": $rollback, "inline": true}]')
-            fi
-            
-            # Build payload using jq
-            PAYLOAD=$(jq -n \
-              --arg title "${TITLE}" \
-              --arg desc "${DESCRIPTION}" \
-              --argjson color "${COLOR}" \
-              --argjson fields "${FIELDS}" \
-              --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-              '{embeds: [{title: $title, description: $desc, color: $color, fields: $fields, timestamp: $ts}]}')
-            
-            curl -X POST "${{ secrets.DISCORD_WEBHOOK_URL }}" \
-              -H "Content-Type: application/json" \
-              -d "${PAYLOAD}" || echo "Failed to send Discord notification (webhook may not be configured)"
-          else
-            echo "Discord webhook not configured, skipping notification"
-          fi
+      # Discord notification moved to combined 'notify' job at the end
 
       - name: Post-deploy target cleanup
         if: always()
@@ -369,3 +321,75 @@ jobs:
           docker builder prune -af || true
           echo "Runner disk usage after cleanup:"
           df -h / || true
+
+  # Deploy to virtual smoker device after dev-cloud deployment succeeds
+  deploy-virtual-smoker:
+    needs: deploy-dev-cloud
+    if: success()
+    uses: ./.github/workflows/device-deploy.yml
+    with:
+      device_host: 'virtual-smoker'
+      version: 'nightly'
+      compose_file: 'virtual-smoker.docker-compose.yml'
+      ssh_user: 'smoker'
+      deploy_dir: '/opt/smoker-device'
+      environment: 'dev'
+      cloud_backend_url: 'https://smoker-dev-cloud.tail74646.ts.net:8443'
+    secrets: inherit
+
+  # Send combined notification for both deployments
+  notify:
+    needs: [deploy-dev-cloud, deploy-virtual-smoker]
+    if: always()
+    runs-on: [self-hosted, linux, proxmox]
+
+    steps:
+      - name: Send Discord notification
+        run: |
+          if [ -n "${{ secrets.DISCORD_WEBHOOK_URL }}" ]; then
+            DEV_CLOUD_STATUS="${{ needs.deploy-dev-cloud.result }}"
+            VIRTUAL_SMOKER_STATUS="${{ needs.deploy-virtual-smoker.result }}"
+            
+            # Determine overall status
+            if [ "$DEV_CLOUD_STATUS" = "success" ] && [ "$VIRTUAL_SMOKER_STATUS" = "success" ]; then
+              COLOR=3066993  # Green
+              TITLE="Dev Deployment Success"
+              DESCRIPTION="Both dev-cloud and virtual-smoker deployments completed successfully"
+            elif [ "$DEV_CLOUD_STATUS" = "success" ] && [ "$VIRTUAL_SMOKER_STATUS" = "skipped" ]; then
+              COLOR=16776960  # Yellow
+              TITLE="Dev Deployment Partial"
+              DESCRIPTION="Dev-cloud deployed successfully, virtual-smoker was skipped"
+            else
+              COLOR=15158332  # Red
+              TITLE="Dev Deployment Failed"
+              DESCRIPTION="One or more deployments failed"
+            fi
+            
+            # Build fields array using jq
+            WORKFLOW_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            FIELDS=$(jq -n \
+              --arg dev_cloud "${DEV_CLOUD_STATUS}" \
+              --arg virtual_smoker "${VIRTUAL_SMOKER_STATUS}" \
+              --arg workflow_url "${WORKFLOW_URL}" \
+              '[
+                {"name": "Dev Cloud", "value": $dev_cloud, "inline": true},
+                {"name": "Virtual Smoker", "value": $virtual_smoker, "inline": true},
+                {"name": "Version", "value": "nightly", "inline": true},
+                {"name": "Workflow Run", "value": $workflow_url, "inline": false}
+              ]')
+            
+            # Build payload using jq
+            PAYLOAD=$(jq -n \
+              --arg title "${TITLE}" \
+              --arg desc "${DESCRIPTION}" \
+              --argjson color "${COLOR}" \
+              --argjson fields "${FIELDS}" \
+              --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              '{embeds: [{title: $title, description: $desc, color: $color, fields: $fields, timestamp: $ts}]}')
+            
+            curl -X POST "${{ secrets.DISCORD_WEBHOOK_URL }}" \
+              -H "Content-Type: application/json" \
+              -d "${PAYLOAD}" || echo "Failed to send Discord notification (webhook may not be configured)"
+          else
+            echo "Discord webhook not configured, skipping notification"
+          fi

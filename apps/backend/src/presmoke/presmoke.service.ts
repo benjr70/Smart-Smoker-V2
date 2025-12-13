@@ -46,7 +46,10 @@ export class PreSmokeService {
     });
   }
 
-  private async createNewSmokeWithPreSmoke(preSmokeDto: PreSmokeDto, state: any): Promise<PreSmoke> {
+  private async createNewSmokeWithPreSmoke(
+    preSmokeDto: PreSmokeDto,
+    state: any,
+  ): Promise<PreSmoke> {
     return this.create(preSmokeDto).then((preSmoke) => {
       const smokeDto: SmokeDto = {
         preSmokeId: preSmoke['_id'].toString(),

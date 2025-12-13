@@ -1,6 +1,6 @@
 # Virtual Smoker Device Docker Compose
 # Phase 3 Story 2 - Mirrors production Raspberry Pi configuration
-# 
+#
 # Key differences from production (smoker.docker-compose.yml):
 #   - Uses NODE_ENV=local for device-service emulator mode
 #   - Uses amd64/latest images instead of armhf
@@ -23,7 +23,7 @@ services:
     restart: always
     network_mode: host
     environment:
-      - NODE_ENV=local  # Enable emulator mode for temperature simulation
+      - NODE_ENV=local # Enable emulator mode for temperature simulation
     volumes:
       - '/var/run/dbus:/var/run/dbus'
     healthcheck:
@@ -68,7 +68,7 @@ services:
 
   watchtower:
     container_name: watchtower
-    image: containrrr/watchtower:latest  # Use amd64 image, not armhf
+    image: containrrr/watchtower:latest # Use amd64 image, not armhf
     restart: always
     environment:
       - REPO_USER=${REPO_USER:-}
