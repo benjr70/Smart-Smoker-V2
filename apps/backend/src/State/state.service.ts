@@ -21,6 +21,10 @@ export class StateService {
 
   async update(stateDto: State): Promise<State> {
     const state = await this.GetState();
+    if (!state) {
+      // Create a new state if none exists
+      return this.create(stateDto);
+    }
     return this.stateModel
       .findOneAndUpdate({ _id: state['_id'].toString() }, stateDto)
       .then(() => {
@@ -28,15 +32,12 @@ export class StateService {
       });
   }
 
-  async toggleSmoking(): Promise<State> {
+  async toggleSmoking(): Promise<State | null> {
     const state = await this.GetState();
-    if (state.smokeId.length > 0) {
-      if (state.smoking) {
-        state.smoking = false;
-      } else {
-        state.smoking = true;
-      }
+    if (!state || !state.smokeId || state.smokeId.length <= 0) {
+      return null;
     }
+    state.smoking = !state.smoking;
     return this.update(state);
   }
 

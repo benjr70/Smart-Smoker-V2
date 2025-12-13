@@ -20,54 +20,66 @@ export class SmokeProfileService {
 
   async getCurrentSmokeProfile(): Promise<SmokeProfile> {
     return this.stateService.GetState().then(async (state) => {
+      const defaultProfile = {
+        notes: '',
+        woodType: '',
+        chamberName: 'Chamber',
+        probe1Name: 'Probe1',
+        probe2Name: 'Probe2',
+        probe3Name: 'Probe3',
+      };
       if (!state) {
         await this.stateService.create({ smokeId: '', smoking: false });
+        return defaultProfile;
+      }
+      if (!state.smokeId || state.smokeId.length === 0) {
+        return defaultProfile;
       }
       return this.smokeService.GetById(state.smokeId).then((smoke) => {
+        if (!smoke) {
+          return defaultProfile;
+        }
         if (smoke.smokeProfileId) {
           return this.smokeProfileModel.findById(smoke.smokeProfileId);
         } else {
-          return {
-            notes: '',
-            woodType: '',
-            chamberName: 'Chamber',
-            probe1Name: 'Probe1',
-            probe2Name: 'Probe2',
-            probe3Name: 'Probe3',
-          };
+          return defaultProfile;
         }
       });
     });
   }
 
-  async saveCurrentSmokeProfile(dto: SmokeProFileDto): Promise<SmokeProfile> {
+  async saveCurrentSmokeProfile(dto: SmokeProFileDto): Promise<SmokeProfile | null> {
     const state = await this.stateService.GetState();
-    if (state.smokeId.length > 0) {
-      const smoke = await this.smokeService.GetById(state.smokeId);
-      if (!smoke.ratingId) {
-        await this.ratingsService.saveCurrentRatings({
-          smokeFlavor: 0,
-          seasoning: 0,
-          tenderness: 0,
-          overallTaste: 0,
-          notes: '',
-        });
-      }
-      if (smoke.smokeProfileId) {
-        await this.update(smoke.smokeProfileId, dto);
-      } else {
-        const smokeProfile = await this.create(dto);
-        const smokeDto: SmokeDto = {
-          smokeProfileId: smokeProfile['_id'].toString(),
-          preSmokeId: smoke.preSmokeId,
-          postSmokeId: smoke.postSmokeId,
-          tempsId: smoke.tempsId,
-          status: smoke.status,
-        };
-        await this.smokeService.Update(smoke['_id'].toString(), smokeDto);
-        return smokeProfile;
-      }
+    if (!state || !state.smokeId || state.smokeId.length === 0) {
+      return null;
+    }
+    const smoke = await this.smokeService.GetById(state.smokeId);
+    if (!smoke) {
+      return null;
+    }
+    if (!smoke.ratingId) {
+      await this.ratingsService.saveCurrentRatings({
+        smokeFlavor: 0,
+        seasoning: 0,
+        tenderness: 0,
+        overallTaste: 0,
+        notes: '',
+      });
+    }
+    if (smoke.smokeProfileId) {
+      await this.update(smoke.smokeProfileId, dto);
+      return this.getById(smoke.smokeProfileId);
     } else {
+      const smokeProfile = await this.create(dto);
+      const smokeDto: SmokeDto = {
+        smokeProfileId: smokeProfile['_id'].toString(),
+        preSmokeId: smoke.preSmokeId,
+        postSmokeId: smoke.postSmokeId,
+        tempsId: smoke.tempsId,
+        status: smoke.status,
+      };
+      await this.smokeService.Update(smoke['_id'].toString(), smokeDto);
+      return smokeProfile;
     }
   }
 

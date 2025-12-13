@@ -16,39 +16,51 @@ export class PostSmokeService {
   ) {}
 
   getCurrentPostSmoke(): Promise<PostSmoke> {
+    const defaultPostSmoke = { notes: '', restTime: '', steps: [''] };
     return this.stateService.GetState().then(async (state) => {
       if (!state) {
         await this.stateService.create({ smokeId: '', smoking: false });
+        return defaultPostSmoke;
+      }
+      if (!state.smokeId || state.smokeId.length === 0) {
+        return defaultPostSmoke;
       }
       return this.smokeService.GetById(state.smokeId).then((smoke) => {
+        if (!smoke) {
+          return defaultPostSmoke;
+        }
         if (smoke.postSmokeId) {
           return this.postSmokeModel.findById(smoke.postSmokeId);
         } else {
-          return { notes: '', restTime: '', steps: [''] };
+          return defaultPostSmoke;
         }
       });
     });
   }
 
-  async saveCurrentPostSmoke(dto: PostSmokeDto): Promise<PostSmoke> {
+  async saveCurrentPostSmoke(dto: PostSmokeDto): Promise<PostSmoke | null> {
     const state = await this.stateService.GetState();
-    if (state.smokeId.length > 0) {
-      const smoke = await this.smokeService.GetById(state.smokeId);
-      if (smoke.postSmokeId) {
-        await this.update(smoke.postSmokeId, dto);
-      } else {
-        const postSmoke = await this.create(dto);
-        const smokeDto: SmokeDto = {
-          smokeProfileId: smoke.smokeProfileId,
-          preSmokeId: smoke.preSmokeId,
-          postSmokeId: postSmoke['_id'].toString(),
-          tempsId: smoke.tempsId,
-          status: smoke.status,
-        };
-        await this.smokeService.Update(smoke['_id'].toString(), smokeDto);
-        return postSmoke;
-      }
+    if (!state || !state.smokeId || state.smokeId.length === 0) {
+      return null;
+    }
+    const smoke = await this.smokeService.GetById(state.smokeId);
+    if (!smoke) {
+      return null;
+    }
+    if (smoke.postSmokeId) {
+      await this.update(smoke.postSmokeId, dto);
+      return this.getById(smoke.postSmokeId);
     } else {
+      const postSmoke = await this.create(dto);
+      const smokeDto: SmokeDto = {
+        smokeProfileId: smoke.smokeProfileId,
+        preSmokeId: smoke.preSmokeId,
+        postSmokeId: postSmoke['_id'].toString(),
+        tempsId: smoke.tempsId,
+        status: smoke.status,
+      };
+      await this.smokeService.Update(smoke['_id'].toString(), smokeDto);
+      return postSmoke;
     }
   }
 

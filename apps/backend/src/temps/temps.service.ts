@@ -17,10 +17,13 @@ export class TempsService {
 
   async saveNewTemp(tempDto: TempDto) {
     return this.stateService.GetState().then((state) => {
-      if (state.smokeId.length < 0) {
+      if (!state || !state.smokeId || state.smokeId.length <= 0) {
         return;
       }
       this.smokeService.GetById(state.smokeId).then((smoke) => {
+        if (!smoke) {
+          return;
+        }
         if (smoke.tempsId) {
           tempDto.tempsId = smoke.tempsId;
           return this.create(tempDto);
@@ -52,17 +55,16 @@ export class TempsService {
 
   async getAllTempsCurrent(): Promise<Temp[]> {
     return this.stateService.GetState().then((state) => {
-      if (state.smokeId.length > 0) {
-        return this.smokeService.GetById(state.smokeId).then((smoke) => {
-          if (smoke.tempsId && smoke.tempsId.length > 0) {
-            return this.tempModel.find({ tempsId: smoke.tempsId });
-          } else {
-            return [];
-          }
-        });
-      } else {
+      if (!state || !state.smokeId || state.smokeId.length <= 0) {
         return [];
       }
+      return this.smokeService.GetById(state.smokeId).then((smoke) => {
+        if (smoke?.tempsId && smoke.tempsId.length > 0) {
+          return this.tempModel.find({ tempsId: smoke.tempsId });
+        } else {
+          return [];
+        }
+      });
     });
   }
 
@@ -75,13 +77,13 @@ export class TempsService {
     return Temp.save();
   }
 
-  async GetTempID(): Promise<string> {
+  async GetTempID(): Promise<string | undefined> {
     return this.stateService.GetState().then((state) => {
-      if (state.smokeId.length < 0) {
+      if (!state || !state.smokeId || state.smokeId.length <= 0) {
         return undefined;
       }
       return this.smokeService.GetById(state.smokeId).then((smoke) => {
-        return smoke.tempsId;
+        return smoke?.tempsId;
       });
     });
   }
