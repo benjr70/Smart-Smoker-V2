@@ -17,6 +17,7 @@ async function bootstrap() {
   app.enableCors({
     origin: [
       'https://smokecloud.tail74646.ts.net',
+      'https://smoker-dev-cloud.tail74646.ts.net',
       'https://smokecloud.tail74646.ts.net:8443/api',
       'http://localhost:8080',
       'http://localhost:3000',
