@@ -12,7 +12,7 @@ module.exports = env = {
   target: 'web',
   output: {
     path: path.join(__dirname, '/dist'),
-    filename: 'bundle.js',
+    filename: 'bundle.[contenthash].js',
   },
   devtool: 'inline-source-map',
   devServer: {
