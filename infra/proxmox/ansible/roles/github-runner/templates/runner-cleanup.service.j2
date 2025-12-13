@@ -1,0 +1,17 @@
+[Unit]
+Description=GitHub Actions Runner Cleanup
+Documentation=https://github.com/benjr70/Smart-Smoker-V2
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/runner-cleanup.sh
+User=root
+StandardOutput=journal
+StandardError=journal
+
+# Security hardening
+NoNewPrivileges=false
+ProtectSystem=false
+ProtectHome=false
+

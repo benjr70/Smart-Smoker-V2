@@ -13,13 +13,13 @@ ssh_allow_users:
 ssh_allow_groups:
   - sshd-users
 
-# SSH Public Keys
-# SECURITY: Do not commit actual keys to repository!
-# Override this via command line or external file:
-#   --extra-vars "ssh_public_keys=['ssh-ed25519 AAAAC3... user@example.com']"
-# OR load from file:
-#   ssh_public_keys: "{{ lookup('file', '~/.ssh/authorized_keys').split('\n') | select() }}"
-ssh_public_keys: []  # MUST be overridden - no default keys
+# SSH Public Keys for infrastructure management
+# These are public keys (safe to commit) that allow SSH access for Ansible management
+ssh_public_keys:
+  # Workstation key (benjr70's development machine)
+  - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP6bDlBwE7k79yRe1WJqwhJyPXwA2olaKPnG6Exsyjd9 benjr70@youremail.com"
+  # GitHub runner provisioning key (used by Terraform)
+  - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGVL60IcGPlVOKMXK9xuLWLBVmCu8HCQ/mN8LZ8gSFN4 benrolf70@gmail.com"
 
 # DNS Configuration
 dns_servers:

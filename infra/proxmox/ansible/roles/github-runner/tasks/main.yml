@@ -97,3 +97,57 @@
   ansible.builtin.debug:
     msg: "GitHub runner token not provided. Skipping runner configuration. Provide token via --extra-vars 'github_runner_token=YOUR_TOKEN'"
   when: github_runner_token == ""
+
+# =============================================================================
+# Disk Space Management - Cleanup Tasks
+# =============================================================================
+
+- name: Deploy runner cleanup script
+  ansible.builtin.template:
+    src: runner-cleanup.sh.j2
+    dest: /usr/local/bin/runner-cleanup.sh
+    owner: root
+    group: root
+    mode: '0755'
+  tags:
+    - cleanup
+
+- name: Deploy runner cleanup systemd service
+  ansible.builtin.template:
+    src: runner-cleanup.service.j2
+    dest: /etc/systemd/system/runner-cleanup.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Reload systemd daemon
+  tags:
+    - cleanup
+
+- name: Deploy runner cleanup systemd timer
+  ansible.builtin.template:
+    src: runner-cleanup.timer.j2
+    dest: /etc/systemd/system/runner-cleanup.timer
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Reload systemd daemon
+  tags:
+    - cleanup
+
+- name: Enable and start runner cleanup timer
+  ansible.builtin.systemd:
+    name: runner-cleanup.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  tags:
+    - cleanup
+
+- name: Run initial cleanup if disk usage is high
+  ansible.builtin.command:
+    cmd: /usr/local/bin/runner-cleanup.sh
+  register: initial_cleanup
+  changed_when: initial_cleanup.rc == 0
+  when: github_runner_run_initial_cleanup | default(false)
+  tags:
+    - cleanup
