@@ -1,0 +1,34 @@
+---
+# Virtual device role default variables
+
+# Device user and group
+device_user: smoker
+device_group: smoker
+
+# Base directory for device files
+device_base_dir: /opt/smoker-device
+
+# Device identification
+device_id: "virtual-smoker-001"
+device_type: "virtual"
+
+# Swap configuration (in MB)
+# Set to match production Raspberry Pi (~100MB)
+swap_size_mb: 100
+
+# Docker Compose file for device deployment
+device_compose_file: virtual-smoker.docker-compose.yml
+
+# Device service ports
+device_service_port: 3003
+device_frontend_port: 8080
+
+# VNC server configuration (for remote GUI access)
+vnc_enabled: false
+vnc_display: ":1"
+vnc_geometry: "800x480"  # Match production 7" touchscreen resolution
+
+# Docker version pinning for production parity
+# Set to match production Raspberry Pi Docker version
+docker_version: "5:24.0*"
+

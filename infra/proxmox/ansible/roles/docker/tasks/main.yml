@@ -37,7 +37,7 @@
     state: present
     filename: docker
 
-- name: Install Docker Engine
+- name: Install Docker Engine (latest)
   ansible.builtin.apt:
     name:
       - docker-ce
@@ -47,11 +47,42 @@
     state: present
     update_cache: true
   notify: Restart docker
+  when: docker_version | length == 0
 
-- name: Install Docker Compose plugin
+- name: Install Docker Engine (pinned version)
+  ansible.builtin.apt:
+    name:
+      - "docker-ce={{ docker_version }}"
+      - "docker-ce-cli={{ docker_version }}"
+      - containerd.io
+      - docker-buildx-plugin
+    state: present
+    update_cache: true
+    force: true
+  notify: Restart docker
+  when: docker_version | length > 0
+
+- name: Hold Docker packages at pinned version
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop:
+    - docker-ce
+    - docker-ce-cli
+  when: docker_version | length > 0
+
+- name: Install Docker Compose plugin (latest)
   ansible.builtin.apt:
     name: docker-compose-plugin
     state: present
+  when: docker_compose_version | length == 0
+
+- name: Install Docker Compose plugin (pinned version)
+  ansible.builtin.apt:
+    name: "docker-compose-plugin={{ docker_compose_version }}"
+    state: present
+    force: true
+  when: docker_compose_version | length > 0
 
 - name: Ensure Docker service is started and enabled
   ansible.builtin.service:

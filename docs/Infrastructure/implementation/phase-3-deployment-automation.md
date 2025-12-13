@@ -269,7 +269,48 @@ The deployment automation follows this flow:
 **I want** the virtual smoker device infrastructure working and accessible
 **So that** I can deploy and test smoker code in a controlled environment
 
+**Status**: 🔄 **IN PROGRESS** - Infrastructure code complete, awaiting VM provisioning
+
+**Branch**: `feat/infra-phase3-story-2`
+
+**Implementation Complete:**
+- [x] Terraform configuration updated (`terraform.tfvars` - VM enabled with 4 cores, 1024MB RAM)
+- [x] Docker role enhanced with version pinning (`roles/docker/defaults/main.yml`)
+- [x] Virtual-device role enhanced with swap config (`roles/virtual-device/tasks/main.yml`)
+- [x] Device docker-compose file created (`virtual-smoker.docker-compose.yml`)
+- [x] Device health check script created (`scripts/device-health-check.sh`)
+- [x] Validation script created (`scripts/validate-virtual-smoker.sh`)
+- [x] Ansible inventory updated with Tailscale hostname notes
+
+**Next Steps:**
+1. Create VM template (ID 9000) in Proxmox with cloud-init
+2. Run `terraform apply` to provision VM
+3. Run `ansible-playbook playbooks/setup-virtual-smoker.yml --extra-vars "tailscale_auth_key=YOUR_KEY"`
+4. Run `./scripts/validate-virtual-smoker.sh virtual-smoker` to verify setup
+5. Deploy containers with `docker compose -f virtual-smoker.docker-compose.yml up -d`
+
+#### Production Smoker Device Reference
+
+The virtual smoker device should match the production Raspberry Pi as closely as possible. Below are the production device specifications obtained via SSH inspection:
+
+| Attribute | Production Value |
+|-----------|------------------|
+| **Model** | Raspberry Pi 3 Model B Rev 1.2 |
+| **Architecture** | armv7l (32-bit ARM) |
+| **CPU** | 4x Cortex-A53 @ 1.2GHz |
+| **Memory** | 921Mi (~1GB) |
+| **Swap** | 99Mi |
+| **Disk** | 117GB total |
+| **OS** | Raspbian GNU/Linux 11 (bullseye) |
+| **Kernel** | 6.1.21-v7+ |
+| **Docker** | 24.0.5 |
+| **Tailscale Hostname** | `smoker` (DNSName: `smoker.tail74646.ts.net`) |
+| **Display** | Element 14 7" Touchscreen |
+| **Microcontroller** | Arduino Nano (USB serial at `/dev/ttyUSB0`) |
+
 **Acceptance Criteria:**
+
+*Core Infrastructure:*
 - Virtual smoker device VM provisioned and accessible via Tailscale
 - Device can be reached via SSH from GitHub runner
 - Docker and Docker Compose installed on virtual device
@@ -277,18 +318,103 @@ The deployment automation follows this flow:
 - Health check script works for virtual device
 - Device ready to receive deployments
 
+*Hardware Parity:*
+- CPU: 4 cores (matching Pi 3's quad-core Cortex-A53)
+- Memory: 1024MB (~1GB, matching production)
+- Swap: 100MB configured
+- Architecture: ARM-based (ARM64 acceptable with documented differences)
+
+*Software Parity:*
+- OS: Raspberry Pi OS / Raspbian 11 (bullseye) or compatible Debian-based
+- Docker: Version 24.x (pinned to match production)
+- Directory structure: `/opt/smoker-device` base path
+- Node.js runs in containers only (not installed on host)
+
+*Tailscale Configuration:*
+- Hostname: `virtual-smoker` (following naming pattern)
+- Tags: `tag:device`, `tag:virtual`
+- Accept routes and DNS enabled
+- Accessible from GitHub runner via Tailscale mesh
+
+*Docker Compose Parity:*
+- Container names match production: `device_service`, `frontend_smoker`, `electron_shell`, `watchtower`
+- Port mappings: 8080 (frontend), 3003 (device service)
+- Host networking for `device_service` and `electron_shell`
+- Watchtower configured for automatic updates
+- Health checks matching production configuration
+
+#### Documented Differences (Virtual vs Production)
+
+| Aspect | Production | Virtual | Notes |
+|--------|------------|---------|-------|
+| **Architecture** | armv7l (32-bit) | ARM64 (64-bit) | 64-bit has better Proxmox support; containers still compatible |
+| **Display** | Physical 7" touchscreen | VNC server | VNC provides remote GUI access for testing |
+| **USB Serial** | Physical Arduino at `/dev/ttyUSB0` | Mock serial device | Python simulator for temperature sensor data |
+| **Kiosk Mode** | Auto-hide taskbar, no cursor | Standard desktop | Can be configured if needed for UI testing |
+| **Network** | WiFi/Ethernet | Virtual bridge | Tailscale provides consistent access pattern |
+
 **Implementation:**
-- Verify/complete Terraform provisioning of `virtual-smoker-device` VM
-- Verify/complete Ansible configuration via `setup-virtual-smoker.yml`
-- Ensure Tailscale connectivity from GitHub runner to virtual device
-- Test SSH access from runner to device
-- Create/verify device-specific docker-compose configuration
-- Create device health check script
-- Document virtual device setup and access
+
+*Terraform (Complete):*
+- `infra/proxmox/terraform/terraform.tfvars` - VM enabled with correct specs
+  - 4 CPU cores (matching Pi 3 quad-core)
+  - 1024MB RAM (matching Pi 3 ~1GB)
+  - Network bridge vmbr0 for Tailscale connectivity
+  - IP: 10.20.0.40/24
+
+*Ansible Roles (Complete):*
+- `roles/docker/defaults/main.yml` - Docker version pinning support
+- `roles/docker/tasks/main.yml` - Version pinning logic (5:24.0*)
+- `roles/virtual-device/defaults/main.yml` - Default variables
+- `roles/virtual-device/tasks/main.yml` - Swap config (100MB), directory structure
+- `inventory/group_vars/devices.yml` - Device-specific variables
+- `inventory/hosts.yml` - Updated with Tailscale hostname notes
+
+*Docker Compose (Complete):*
+- `virtual-smoker.docker-compose.yml` - Device container stack
+  - NODE_ENV=local for device-service emulator mode
+  - Container names match production (device_service, frontend_smoker, watchtower)
+  - Health checks on all services
+  - Uses amd64 images (not armhf)
+
+*Scripts (Complete):*
+- `scripts/device-health-check.sh` - Device service health validation
+- `scripts/validate-virtual-smoker.sh` - Infrastructure validation checklist
+
+*Manual Steps Required:*
+- Create Proxmox VM template (ID 9000) with cloud-init support
+- Run terraform apply to provision VM
+- Run Ansible playbook with Tailscale auth key
+- Mock hardware simulation deferred (device-service has built-in emulator mode)
+
+#### Validation Checklist
+
+After implementation, verify parity with production using `./scripts/validate-virtual-smoker.sh`:
+
+- [ ] `free -h` shows ~1GB RAM configured (automated)
+- [ ] `nproc` shows 4 CPU cores (automated)
+- [ ] `cat /etc/os-release` shows bullseye or compatible
+- [ ] `docker --version` shows 24.x (automated)
+- [ ] `tailscale status` shows hostname `virtual-smoker` (automated)
+- [ ] Swap configured (~100MB via `swapon --show`) (automated)
+- [ ] Docker containers match production names (`docker ps`) (via device-health-check.sh)
+- [ ] Health checks pass for all services (via device-health-check.sh)
+- [ ] VNC access shows GUI environment (optional - vnc_enabled=false by default)
+- [ ] Mock serial device responds (not needed - device-service has built-in emulator mode)
+
+**Validation Commands:**
+```bash
+# Run full infrastructure validation
+./scripts/validate-virtual-smoker.sh virtual-smoker
+
+# Run device health check after container deployment
+./scripts/device-health-check.sh virtual-smoker
+```
 
 **Dependencies:**
 - Phase 2 infrastructure (Terraform/Ansible)
 - Tailscale networking configured
+- Proxmox VM template (ID 9000) with cloud-init
 
 ### Story 3: Virtual Smoker Device Deployment
 **As a** developer  
