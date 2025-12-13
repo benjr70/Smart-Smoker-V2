@@ -1,0 +1,352 @@
+# Reusable workflow for deploying to smoker devices (virtual or production Pi)
+# Phase 3 Story 3 - Virtual Smoker Device Deployment
+#
+# This workflow is designed to work for both:
+#   - Virtual smoker (dev): virtual-smoker hostname, nightly images
+#   - Production Pi: smoker hostname, latest/versioned images
+#
+# Usage:
+#   uses: ./.github/workflows/device-deploy.yml
+#   with:
+#     device_host: 'virtual-smoker'
+#     version: 'nightly'
+#     compose_file: 'virtual-smoker.docker-compose.yml'
+
+name: Device Deploy
+
+on:
+  workflow_call:
+    inputs:
+      device_host:
+        type: string
+        required: true
+        description: 'Tailscale hostname of target device (virtual-smoker or smoker)'
+      version:
+        type: string
+        required: true
+        default: 'nightly'
+        description: 'Docker image version tag to deploy'
+      compose_file:
+        type: string
+        required: true
+        description: 'Docker compose file to deploy'
+      ssh_user:
+        type: string
+        default: 'smoker'
+        description: 'SSH user for device connection'
+      deploy_dir:
+        type: string
+        default: '/opt/smoker-device'
+        description: 'Deployment directory on target device'
+      environment:
+        type: string
+        default: 'dev'
+        description: 'Environment name (dev or prod) for notifications'
+      cloud_backend_url:
+        type: string
+        default: 'https://smoker-dev-cloud.tail74646.ts.net:8443'
+        description: 'Cloud backend URL for connectivity verification'
+  workflow_dispatch:
+    inputs:
+      device_host:
+        type: string
+        required: true
+        description: 'Tailscale hostname of target device'
+      version:
+        type: string
+        required: true
+        default: 'nightly'
+      compose_file:
+        type: string
+        required: true
+        default: 'virtual-smoker.docker-compose.yml'
+      ssh_user:
+        type: string
+        default: 'smoker'
+      deploy_dir:
+        type: string
+        default: '/opt/smoker-device'
+      environment:
+        type: string
+        default: 'dev'
+      cloud_backend_url:
+        type: string
+        default: 'https://smoker-dev-cloud.tail74646.ts.net:8443'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: device-deploy-${{ inputs.device_host }}
+  cancel-in-progress: true
+
+jobs:
+  deploy-device:
+    runs-on: [self-hosted, linux, proxmox]
+    outputs:
+      health_status: ${{ steps.health_check.outputs.health_status }}
+      rollback_status: ${{ steps.rollback.outputs.rollback_status }}
+
+    steps:
+      # CLEANUP: Pre-deploy runner cleanup
+      - name: Pre-deploy runner cleanup
+        run: |
+          echo "Runner disk usage before cleanup:"
+          df -h /
+          docker system prune -f --filter "until=24h" || true
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set deployment variables
+        id: vars
+        run: |
+          echo "DEVICE_HOST=${{ inputs.device_host }}" >> $GITHUB_ENV
+          echo "SSH_USER=${{ inputs.ssh_user }}" >> $GITHUB_ENV
+          echo "DEPLOY_DIR=${{ inputs.deploy_dir }}" >> $GITHUB_ENV
+          echo "COMPOSE_FILE=${{ inputs.compose_file }}" >> $GITHUB_ENV
+          echo "VERSION=${{ inputs.version }}" >> $GITHUB_ENV
+          echo "CLOUD_BACKEND_URL=${{ inputs.cloud_backend_url }}" >> $GITHUB_ENV
+
+          echo "Deployment configuration:"
+          echo "  Device Host: ${{ inputs.device_host }}"
+          echo "  SSH User: ${{ inputs.ssh_user }}"
+          echo "  Deploy Directory: ${{ inputs.deploy_dir }}"
+          echo "  Compose File: ${{ inputs.compose_file }}"
+          echo "  Version: ${{ inputs.version }}"
+          echo "  Environment: ${{ inputs.environment }}"
+          echo "  Cloud Backend: ${{ inputs.cloud_backend_url }}"
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H ${DEVICE_HOST} >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Verify SSH connectivity
+        run: |
+          echo "Testing SSH connectivity to ${DEVICE_HOST}..."
+          ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
+            ${SSH_USER}@${DEVICE_HOST} "echo 'SSH connection successful'"
+          if [ $? -ne 0 ]; then
+            echo "❌ SSH connection failed"
+            exit 1
+          fi
+          echo "✅ SSH connectivity verified"
+
+      # CLEANUP: Pre-deploy target cleanup (aggressive - device has limited disk)
+      - name: Pre-deploy target cleanup
+        run: |
+          echo "Running aggressive cleanup on ${DEVICE_HOST}..."
+          ssh ${SSH_USER}@${DEVICE_HOST} bash << 'REMOTE_SCRIPT'
+            echo "=== DISK USAGE BEFORE CLEANUP ==="
+            df -h /
+            
+            echo ""
+            echo "=== DOCKER DISK USAGE ==="
+            sudo docker system df || true
+            
+            echo ""
+            echo "=== RUNNING AGGRESSIVE CLEANUP ==="
+            # Prune ALL unused images (not just dangling)
+            sudo docker image prune -af || true
+            # Prune build cache
+            sudo docker builder prune -af || true
+            # Prune stopped containers
+            sudo docker container prune -f || true
+            # Prune unused networks
+            sudo docker network prune -f || true
+            # Prune unused volumes (only anonymous/unused ones)
+            sudo docker volume prune -f || true
+            
+            echo ""
+            echo "=== DISK USAGE AFTER CLEANUP ==="
+            df -h /
+            
+            # Check if we have enough space (at least 1GB free)
+            AVAIL_KB=$(df / | tail -1 | awk '{print $4}')
+            AVAIL_MB=$((AVAIL_KB / 1024))
+            echo "Available space: ${AVAIL_MB}MB"
+            
+            if [ "${AVAIL_MB}" -lt 1024 ]; then
+              echo "❌ ERROR: Less than 1GB available after cleanup!"
+              echo "Manual intervention may be required."
+              exit 1
+            fi
+            
+            echo "✅ Sufficient disk space available"
+          REMOTE_SCRIPT
+
+      - name: Create pre-deployment backup
+        run: |
+          echo "Creating pre-deployment backup on ${DEVICE_HOST}..."
+          ssh ${SSH_USER}@${DEVICE_HOST} bash << REMOTE_SCRIPT
+            set -e
+            DEPLOY_DIR="${DEPLOY_DIR}"
+            COMPOSE_FILE="${COMPOSE_FILE}"
+            TIMESTAMP=\$(date +%Y%m%d-%H%M%S)
+            BACKUP_DIR="\${DEPLOY_DIR}/backups/backup-\${TIMESTAMP}"
+            
+            # Create backup directory
+            sudo mkdir -p "\${BACKUP_DIR}"
+            
+            # Backup compose file if it exists
+            if [ -f "\${DEPLOY_DIR}/\${COMPOSE_FILE}" ]; then
+              sudo cp "\${DEPLOY_DIR}/\${COMPOSE_FILE}" "\${BACKUP_DIR}/\${COMPOSE_FILE}.backup"
+            fi
+            
+            # Save current container state
+            sudo docker compose -f "\${DEPLOY_DIR}/\${COMPOSE_FILE}" ps > "\${BACKUP_DIR}/compose-state.txt" 2>/dev/null || true
+            
+            # Record this as the last backup
+            echo "\${BACKUP_DIR}" | sudo tee "\${DEPLOY_DIR}/backups/last-deployment-backup.txt"
+            
+            echo "✅ Backup created: \${BACKUP_DIR}"
+          REMOTE_SCRIPT
+
+      - name: Copy deployment files
+        run: |
+          echo "Copying deployment files to ${DEVICE_HOST}..."
+
+          # Ensure deployment directory exists
+          ssh ${SSH_USER}@${DEVICE_HOST} "sudo mkdir -p ${DEPLOY_DIR}"
+
+          # Copy docker-compose file
+          scp ${COMPOSE_FILE} ${SSH_USER}@${DEVICE_HOST}:/tmp/${COMPOSE_FILE}
+          ssh ${SSH_USER}@${DEVICE_HOST} "sudo mv /tmp/${COMPOSE_FILE} ${DEPLOY_DIR}/${COMPOSE_FILE}"
+
+          echo "✅ Deployment files copied"
+
+      - name: Deploy containers
+        id: deploy
+        run: |
+          echo "Deploying to ${DEVICE_HOST}..."
+          ssh ${SSH_USER}@${DEVICE_HOST} bash << REMOTE_SCRIPT
+            set -e
+            DEPLOY_DIR="${DEPLOY_DIR}"
+            COMPOSE_FILE="${COMPOSE_FILE}"
+            VERSION="${VERSION}"
+            
+            cd "\${DEPLOY_DIR}" || { echo "❌ Deployment directory not found: \${DEPLOY_DIR}"; exit 1; }
+            
+            export VERSION="\${VERSION}"
+            
+            echo "Pulling Docker images with version: \${VERSION}..."
+            sudo -E docker compose -f "\${COMPOSE_FILE}" pull
+            
+            echo "Stopping existing containers..."
+            sudo docker compose -f "\${COMPOSE_FILE}" down || true
+            
+            echo "Starting containers..."
+            sudo -E docker compose -f "\${COMPOSE_FILE}" up -d --force-recreate
+            
+            echo "✅ Deployment initiated"
+          REMOTE_SCRIPT
+
+      - name: Wait for services to start
+        run: |
+          echo "Waiting for services to initialize (45 seconds)..."
+          sleep 45
+
+      - name: Verify deployment health
+        id: health_check
+        run: |
+          echo "Running health checks on ${DEVICE_HOST}..."
+          export SSH_USER="${SSH_USER}"
+          export CLOUD_BACKEND_URL="${CLOUD_BACKEND_URL}"
+          if ./scripts/device-health-check.sh ${DEVICE_HOST} 3; then
+            echo "✅ All health checks passed"
+            echo "health_status=success" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Health checks failed"
+            echo "health_status=failed" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+        continue-on-error: true
+
+      - name: Rollback on failure
+        id: rollback
+        if: steps.health_check.outcome == 'failure'
+        run: |
+          echo "🚨 Deployment failed health check, initiating rollback..."
+          ssh ${SSH_USER}@${DEVICE_HOST} bash << REMOTE_SCRIPT
+            set -e
+            DEPLOY_DIR="${DEPLOY_DIR}"
+            COMPOSE_FILE="${COMPOSE_FILE}"
+            
+            cd "\${DEPLOY_DIR}" || { echo "❌ Deployment directory not found: \${DEPLOY_DIR}"; exit 1; }
+            
+            BACKUP_FILE="\${DEPLOY_DIR}/backups/last-deployment-backup.txt"
+            if [ -f "\${BACKUP_FILE}" ]; then
+              BACKUP_DIR=\$(cat "\${BACKUP_FILE}")
+              if [ -f "\${BACKUP_DIR}/\${COMPOSE_FILE}.backup" ]; then
+                echo "Restoring from backup: \${BACKUP_DIR}"
+                sudo cp "\${BACKUP_DIR}/\${COMPOSE_FILE}.backup" "\${DEPLOY_DIR}/\${COMPOSE_FILE}"
+                sudo docker compose -f "\${COMPOSE_FILE}" up -d --force-recreate
+              else
+                echo "⚠️ Backup compose file not found"
+              fi
+            else
+              echo "⚠️ No backup file found"
+            fi
+            
+            echo "Waiting for rollback to complete (30 seconds)..."
+            sleep 30
+          REMOTE_SCRIPT
+
+          # Verify rollback success
+          echo "Verifying rollback..."
+          export SSH_USER="${SSH_USER}"
+          export CLOUD_BACKEND_URL="${CLOUD_BACKEND_URL}"
+          if ./scripts/device-health-check.sh ${DEVICE_HOST} 1; then
+            echo "✅ Rollback successful, system restored"
+            echo "rollback_status=success" >> $GITHUB_OUTPUT
+          else
+            echo "💥 Rollback failed - MANUAL INTERVENTION REQUIRED"
+            echo "rollback_status=failed" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      # CLEANUP: Post-deploy target cleanup (always runs)
+      - name: Post-deploy target cleanup
+        if: always()
+        run: |
+          echo "Cleaning up target disk space after deployment..."
+          ssh ${SSH_USER}@${DEVICE_HOST} bash << 'REMOTE_SCRIPT' || echo "Target cleanup had issues, continuing..."
+            # Prune unused images
+            sudo docker image prune -af || true
+            # Prune build cache
+            sudo docker builder prune -af || true
+            # Prune stopped containers
+            sudo docker container prune -f || true
+            # Prune unused volumes
+            sudo docker volume prune -f || true
+            echo "Target disk usage after cleanup:"
+            df -h /
+          REMOTE_SCRIPT
+
+      # CLEANUP: Post-deploy runner cleanup (always runs)
+      - name: Post-deploy runner cleanup
+        if: always()
+        run: |
+          echo "Cleaning up runner disk space after deployment..."
+          docker system prune -af --filter "until=24h" || true
+          docker builder prune -af || true
+          echo "Runner disk usage after cleanup:"
+          df -h / || true
+
+      - name: Deployment summary
+        if: always()
+        run: |
+          echo "=========================================="
+          echo "Device Deployment Summary"
+          echo "=========================================="
+          echo "Device: ${DEVICE_HOST}"
+          echo "Version: ${VERSION}"
+          echo "Environment: ${{ inputs.environment }}"
+          echo "Health Status: ${{ steps.health_check.outputs.health_status || 'N/A' }}"
+          if [ "${{ steps.rollback.outputs.rollback_status }}" != "" ]; then
+            echo "Rollback Status: ${{ steps.rollback.outputs.rollback_status }}"
+          fi
+          echo "=========================================="

@@ -131,8 +131,9 @@ describe('SmokeProfileController', () => {
         mockSmokeProfile,
       );
 
-      const result =
-        await controller.saveCurrentSmokeProfile(mockSmokeProfileDto);
+      const result = await controller.saveCurrentSmokeProfile(
+        mockSmokeProfileDto,
+      );
 
       expect(service.saveCurrentSmokeProfile).toHaveBeenCalledWith(
         mockSmokeProfileDto,
@@ -163,8 +164,9 @@ describe('SmokeProfileController', () => {
         undefined,
       );
 
-      const result =
-        await controller.saveCurrentSmokeProfile(mockSmokeProfileDto);
+      const result = await controller.saveCurrentSmokeProfile(
+        mockSmokeProfileDto,
+      );
 
       expect(service.saveCurrentSmokeProfile).toHaveBeenCalledWith(
         mockSmokeProfileDto,

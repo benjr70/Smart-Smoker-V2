@@ -1,7 +1,7 @@
 name: Self-Hosted Runner Test
 
 on:
-  workflow_dispatch:  # Manual trigger for testing
+  workflow_dispatch: # Manual trigger for testing
   push:
     branches:
       - master

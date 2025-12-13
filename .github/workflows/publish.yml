@@ -107,6 +107,15 @@ jobs:
               npm run build --prefix apps/frontend
               ;;
             "smoker")
+              # Create .env.prod for smoker build with cloud backend URLs
+              # For nightly builds, use dev-cloud; for release builds, use production
+              if [ "${{ inputs.mode }}" = "nightly" ]; then
+                echo "REACT_APP_CLOUD_URL=https://smoker-dev-cloud.tail74646.ts.net" > apps/smoker/.env.prod
+                echo "REACT_APP_CLOUD_URL_API=https://smoker-dev-cloud.tail74646.ts.net:8443/api/" >> apps/smoker/.env.prod
+              else
+                echo "REACT_APP_CLOUD_URL=https://smokecloud.tail74646.ts.net" > apps/smoker/.env.prod
+                echo "REACT_APP_CLOUD_URL_API=https://smokecloud.tail74646.ts.net:8443/api/" >> apps/smoker/.env.prod
+              fi
               npm run build:prod --prefix apps/smoker
               ;;
             "electron-shell")

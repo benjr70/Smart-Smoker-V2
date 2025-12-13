@@ -1,13 +1,18 @@
 #!/bin/bash
 # Device Health Check Script
 # Verifies all services are healthy on virtual smoker device
-# Phase 3 Story 2 - Virtual Smoker Device Infrastructure
+# Phase 3 Story 2/3 - Virtual Smoker Device Infrastructure & Deployment
 #
 # Usage: ./scripts/device-health-check.sh [target_host] [retry_count]
 # Examples:
 #   ./scripts/device-health-check.sh                    # Check localhost
 #   ./scripts/device-health-check.sh virtual-smoker     # Check via Tailscale
 #   ./scripts/device-health-check.sh 10.20.0.40 5       # Check IP with 5 retries
+#
+# Environment Variables:
+#   SSH_USER - SSH user for remote connections (default: smoker)
+#   CLOUD_BACKEND_URL - Cloud backend URL for connectivity test
+#                       (default: https://smoker-dev-cloud.tail74646.ts.net:8443)
 
 set -euo pipefail
 
@@ -155,6 +160,38 @@ check_tailscale() {
     fi
 }
 
+# Function to check cloud backend connectivity
+# This verifies the device can communicate with the cloud backend
+check_cloud_connectivity() {
+    local host=$1
+    
+    # Cloud backend URL - can be overridden via environment variable
+    local cloud_backend_url=${CLOUD_BACKEND_URL:-"https://smoker-dev-cloud.tail74646.ts.net:8443"}
+    
+    echo -e "${YELLOW}Checking cloud backend connectivity...${NC}"
+    echo -e "${BLUE}  Target: ${cloud_backend_url}/api/health${NC}"
+
+    local result
+    if [ "$host" = "localhost" ] || [ "$host" = "127.0.0.1" ]; then
+        # Local check - test directly
+        result=$(curl -f -s -k --max-time 10 "${cloud_backend_url}/api/health" 2>&1 || echo "failed")
+    else
+        # Remote check - run curl from the device
+        result=$(ssh "${SSH_USER}@${host}" "curl -f -s -k --max-time 10 '${cloud_backend_url}/api/health'" 2>&1 || echo "failed")
+    fi
+
+    if [ "$result" != "failed" ] && [ -n "$result" ]; then
+        echo -e "${GREEN}✅ Cloud backend reachable${NC}"
+        return 0
+    else
+        echo -e "${YELLOW}⚠️  Cloud backend not reachable (non-critical)${NC}"
+        echo -e "${YELLOW}   Device can operate offline, will sync when cloud is available${NC}"
+        # Return 0 (success) because cloud connectivity is not strictly required
+        # The device can operate offline and sync when connectivity is restored
+        return 0
+    fi
+}
+
 # Main health check logic
 main() {
     echo "=========================================="
@@ -200,6 +237,11 @@ main() {
     if ! check_tailscale "${TARGET_HOST}"; then
         ((failed++)) || true
     fi
+    echo ""
+
+    # Check cloud backend connectivity
+    # This is a non-critical check - device can operate offline
+    check_cloud_connectivity "${TARGET_HOST}"
     echo ""
 
     # Check system resources

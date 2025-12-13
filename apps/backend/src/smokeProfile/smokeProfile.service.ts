@@ -48,7 +48,9 @@ export class SmokeProfileService {
     });
   }
 
-  async saveCurrentSmokeProfile(dto: SmokeProFileDto): Promise<SmokeProfile | null> {
+  async saveCurrentSmokeProfile(
+    dto: SmokeProFileDto,
+  ): Promise<SmokeProfile | null> {
     const state = await this.stateService.GetState();
     if (!state || !state.smokeId || state.smokeId.length === 0) {
       return null;

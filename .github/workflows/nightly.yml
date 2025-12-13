@@ -4,7 +4,7 @@ name: Nightly Dev Build & Deploy
 
 on:
   push:
-    branches: [ master ]
+    branches: [master]
   workflow_dispatch:
     inputs:
       ref:
