@@ -16,4 +16,3 @@ docker_version: ""
 # Docker Compose plugin version (optional)
 # Leave empty for latest
 docker_compose_version: ""
-

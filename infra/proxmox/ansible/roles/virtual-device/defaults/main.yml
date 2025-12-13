@@ -31,4 +31,3 @@ vnc_geometry: "800x480"  # Match production 7" touchscreen resolution
 # Docker version pinning for production parity
 # Set to match production Raspberry Pi Docker version
 docker_version: "5:24.0*"
-
