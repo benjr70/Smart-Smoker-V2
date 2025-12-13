@@ -25,7 +25,8 @@ check_service() {
     echo -e "${YELLOW}Checking ${service}...${NC}"
 
     for i in $(seq 1 $retries); do
-        if curl -f -s --max-time 10 "$url" > /dev/null 2>&1; then
+        # Use -k to allow self-signed/Tailscale certificates for HTTPS
+        if curl -f -s -k --max-time 10 "$url" > /dev/null 2>&1; then
             echo -e "${GREEN}✅ ${service} is healthy${NC}"
             return 0
         fi
@@ -50,11 +51,11 @@ main() {
     echo "=========================================="
     echo ""
 
-    # Check Backend API
-    check_service "Backend API" "http://${TARGET_HOST}:8443/api/health" || exit 1
+    # Check Backend API (via Tailscale Serve HTTPS on port 8443)
+    check_service "Backend API" "https://${TARGET_HOST}:8443/api/health" || exit 1
 
-    # Check Frontend
-    check_service "Frontend" "http://${TARGET_HOST}:80" || exit 1
+    # Check Frontend (via Tailscale Serve HTTPS on port 443)
+    check_service "Frontend" "https://${TARGET_HOST}" || exit 1
 
     # Check Docker container health status (if running locally)
     if [ "${TARGET_HOST}" = "localhost" ] || [ "${TARGET_HOST}" = "127.0.0.1" ]; then
