@@ -17,6 +17,15 @@
       - dialout  # For serial port access (mock)
     append: true
 
+# SSH Key Authorization for deployment (enables GitHub Actions workflow)
+- name: Add SSH public keys for device user
+  ansible.posix.authorized_key:
+    user: "{{ device_user }}"
+    key: "{{ item }}"
+    state: present
+  loop: "{{ ssh_public_keys }}"
+  when: ssh_public_keys | length > 0
+
 # Swap Configuration (match production Pi ~100MB)
 - name: Check if swap file exists
   ansible.builtin.stat:
