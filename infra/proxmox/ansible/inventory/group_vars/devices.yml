@@ -12,6 +12,12 @@ device_user: smoker
 device_group: smoker
 device_base_dir: /opt/smoker-device
 
+# SSH Configuration override for devices
+# Device user needs SSH access for GitHub Actions deployments
+ssh_allow_users:
+  - root
+  - "{{ device_user }}"
+
 # Docker users for device
 docker_users:
   - "{{ device_user }}"

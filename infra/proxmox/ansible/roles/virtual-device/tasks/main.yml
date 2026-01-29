@@ -15,6 +15,7 @@
     groups:
       - docker
       - dialout  # For serial port access (mock)
+      - sshd-users  # For SSH access (required by AllowGroups in sshd_config)
     append: true
 
 # Swap Configuration (match production Pi ~100MB)
