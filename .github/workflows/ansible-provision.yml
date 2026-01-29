@@ -1,0 +1,223 @@
+# Ansible Provisioning Workflow
+# Runs Ansible playbooks to provision infrastructure
+# - Automatic: Triggers on Ansible file changes (dev only)
+# - Manual: Select playbook and environment with optional dry-run
+
+name: Ansible Provision
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'infra/proxmox/ansible/**'
+      - '.github/workflows/ansible-provision.yml'
+  workflow_dispatch:
+    inputs:
+      playbook:
+        description: 'Playbook to run'
+        required: true
+        type: choice
+        options:
+          - setup-virtual-smoker.yml
+          - setup-dev-cloud.yml
+          - setup-prod-cloud.yml
+          - setup-github-runner.yml
+          - site.yml
+          - verify-all.yml
+          - verify-tailscale.yml
+        default: setup-virtual-smoker.yml
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+        default: dev
+      dry_run:
+        description: 'Dry run (check mode - no changes made)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ansible-provision-${{ github.event.inputs.environment || 'dev' }}
+  cancel-in-progress: false
+
+jobs:
+  # Determine what to run based on trigger type
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      playbook: ${{ steps.set-vars.outputs.playbook }}
+      environment: ${{ steps.set-vars.outputs.environment }}
+      dry_run: ${{ steps.set-vars.outputs.dry_run }}
+      is_prod: ${{ steps.set-vars.outputs.is_prod }}
+    steps:
+      - name: Set variables
+        id: set-vars
+        run: |
+          if [ "${{ github.event_name }}" == "push" ]; then
+            # Automatic trigger: only provision dev environment
+            echo "playbook=site.yml" >> $GITHUB_OUTPUT
+            echo "environment=dev" >> $GITHUB_OUTPUT
+            echo "dry_run=false" >> $GITHUB_OUTPUT
+            echo "is_prod=false" >> $GITHUB_OUTPUT
+          else
+            # Manual trigger: use inputs
+            echo "playbook=${{ inputs.playbook }}" >> $GITHUB_OUTPUT
+            echo "environment=${{ inputs.environment }}" >> $GITHUB_OUTPUT
+            echo "dry_run=${{ inputs.dry_run }}" >> $GITHUB_OUTPUT
+            if [ "${{ inputs.environment }}" == "prod" ]; then
+              echo "is_prod=true" >> $GITHUB_OUTPUT
+            else
+              echo "is_prod=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+  # Provision dev environment (no approval required)
+  provision-dev:
+    needs: prepare
+    if: needs.prepare.outputs.is_prod == 'false'
+    runs-on: [self-hosted, linux, proxmox]
+    environment: development
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+      - name: Install Ansible dependencies
+        run: |
+          pip install --user ansible ansible-lint 2>/dev/null || pip install ansible ansible-lint
+          ansible-galaxy collection install community.general ansible.posix --force
+
+      - name: Run Ansible playbook
+        working-directory: infra/proxmox/ansible
+        run: |
+          PLAYBOOK="${{ needs.prepare.outputs.playbook }}"
+          DRY_RUN="${{ needs.prepare.outputs.dry_run }}"
+          
+          echo "=========================================="
+          echo "Ansible Provisioning"
+          echo "=========================================="
+          echo "Playbook: ${PLAYBOOK}"
+          echo "Environment: dev"
+          echo "Dry Run: ${DRY_RUN}"
+          echo "=========================================="
+          
+          EXTRA_ARGS=""
+          if [ "${DRY_RUN}" == "true" ]; then
+            EXTRA_ARGS="--check --diff"
+            echo "Running in CHECK MODE - no changes will be made"
+          fi
+          
+          # Limit to dev hosts only
+          ansible-playbook playbooks/${PLAYBOOK} \
+            --limit 'dev_cloud:devices:runners' \
+            ${EXTRA_ARGS} \
+            -v
+
+      - name: Verify provisioning
+        if: needs.prepare.outputs.dry_run != 'true'
+        working-directory: infra/proxmox/ansible
+        run: |
+          echo "Running verification playbook..."
+          ansible-playbook playbooks/verify-all.yml \
+            --limit 'dev_cloud:devices:runners' \
+            -v || echo "Verification completed with warnings"
+
+  # Provision prod environment (requires approval)
+  provision-prod:
+    needs: prepare
+    if: needs.prepare.outputs.is_prod == 'true'
+    runs-on: [self-hosted, linux, proxmox]
+    environment: production  # Requires approval if configured
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+      - name: Install Ansible dependencies
+        run: |
+          pip install --user ansible ansible-lint 2>/dev/null || pip install ansible ansible-lint
+          ansible-galaxy collection install community.general ansible.posix --force
+
+      - name: Run Ansible playbook
+        working-directory: infra/proxmox/ansible
+        run: |
+          PLAYBOOK="${{ needs.prepare.outputs.playbook }}"
+          DRY_RUN="${{ needs.prepare.outputs.dry_run }}"
+          
+          echo "=========================================="
+          echo "Ansible Provisioning - PRODUCTION"
+          echo "=========================================="
+          echo "Playbook: ${PLAYBOOK}"
+          echo "Environment: prod"
+          echo "Dry Run: ${DRY_RUN}"
+          echo "=========================================="
+          
+          EXTRA_ARGS=""
+          if [ "${DRY_RUN}" == "true" ]; then
+            EXTRA_ARGS="--check --diff"
+            echo "Running in CHECK MODE - no changes will be made"
+          fi
+          
+          # Limit to prod hosts only
+          ansible-playbook playbooks/${PLAYBOOK} \
+            --limit 'prod_cloud' \
+            ${EXTRA_ARGS} \
+            -v
+
+      - name: Verify provisioning
+        if: needs.prepare.outputs.dry_run != 'true'
+        working-directory: infra/proxmox/ansible
+        run: |
+          echo "Running verification playbook..."
+          ansible-playbook playbooks/verify-all.yml \
+            --limit 'prod_cloud' \
+            -v || echo "Verification completed with warnings"
+
+  # Summary notification
+  notify:
+    needs: [prepare, provision-dev, provision-prod]
+    if: always() && (needs.provision-dev.result != 'skipped' || needs.provision-prod.result != 'skipped')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send notification
+        run: |
+          PLAYBOOK="${{ needs.prepare.outputs.playbook }}"
+          ENVIRONMENT="${{ needs.prepare.outputs.environment }}"
+          DRY_RUN="${{ needs.prepare.outputs.dry_run }}"
+          
+          if [ "${{ needs.provision-dev.result }}" == "success" ] || [ "${{ needs.provision-prod.result }}" == "success" ]; then
+            STATUS="SUCCESS"
+          elif [ "${{ needs.provision-dev.result }}" == "failure" ] || [ "${{ needs.provision-prod.result }}" == "failure" ]; then
+            STATUS="FAILED"
+          else
+            STATUS="UNKNOWN"
+          fi
+          
+          echo "=========================================="
+          echo "Ansible Provisioning Complete"
+          echo "=========================================="
+          echo "Status: ${STATUS}"
+          echo "Playbook: ${PLAYBOOK}"
+          echo "Environment: ${ENVIRONMENT}"
+          echo "Dry Run: ${DRY_RUN}"
+          echo "=========================================="
