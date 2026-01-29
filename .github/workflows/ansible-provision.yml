@@ -84,6 +84,7 @@ jobs:
     if: needs.prepare.outputs.is_prod == 'false'
     runs-on: [self-hosted, linux, proxmox]
     environment: development
+    timeout-minutes: 30
 
     steps:
       - name: Checkout code
@@ -97,7 +98,7 @@ jobs:
 
       - name: Install Ansible dependencies
         run: |
-          pip install --user ansible ansible-lint 2>/dev/null || pip install ansible ansible-lint
+          pip install --user ansible
           ansible-galaxy collection install community.general ansible.posix --force
 
       - name: Run Ansible playbook
@@ -105,7 +106,7 @@ jobs:
         run: |
           PLAYBOOK="${{ needs.prepare.outputs.playbook }}"
           DRY_RUN="${{ needs.prepare.outputs.dry_run }}"
-          
+
           echo "=========================================="
           echo "Ansible Provisioning"
           echo "=========================================="
@@ -113,13 +114,13 @@ jobs:
           echo "Environment: dev"
           echo "Dry Run: ${DRY_RUN}"
           echo "=========================================="
-          
+
           EXTRA_ARGS=""
           if [ "${DRY_RUN}" == "true" ]; then
             EXTRA_ARGS="--check --diff"
             echo "Running in CHECK MODE - no changes will be made"
           fi
-          
+
           # Limit to dev hosts only
           ansible-playbook playbooks/${PLAYBOOK} \
             --limit 'dev_cloud:devices:runners' \
@@ -135,12 +136,17 @@ jobs:
             --limit 'dev_cloud:devices:runners' \
             -v || echo "Verification completed with warnings"
 
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/id_ed25519
+
   # Provision prod environment (requires approval)
   provision-prod:
     needs: prepare
     if: needs.prepare.outputs.is_prod == 'true'
     runs-on: [self-hosted, linux, proxmox]
-    environment: production  # Requires approval if configured
+    environment: production # Requires approval if configured
+    timeout-minutes: 30
 
     steps:
       - name: Checkout code
@@ -154,7 +160,7 @@ jobs:
 
       - name: Install Ansible dependencies
         run: |
-          pip install --user ansible ansible-lint 2>/dev/null || pip install ansible ansible-lint
+          pip install --user ansible
           ansible-galaxy collection install community.general ansible.posix --force
 
       - name: Run Ansible playbook
@@ -162,7 +168,7 @@ jobs:
         run: |
           PLAYBOOK="${{ needs.prepare.outputs.playbook }}"
           DRY_RUN="${{ needs.prepare.outputs.dry_run }}"
-          
+
           echo "=========================================="
           echo "Ansible Provisioning - PRODUCTION"
           echo "=========================================="
@@ -170,13 +176,13 @@ jobs:
           echo "Environment: prod"
           echo "Dry Run: ${DRY_RUN}"
           echo "=========================================="
-          
+
           EXTRA_ARGS=""
           if [ "${DRY_RUN}" == "true" ]; then
             EXTRA_ARGS="--check --diff"
             echo "Running in CHECK MODE - no changes will be made"
           fi
-          
+
           # Limit to prod hosts only
           ansible-playbook playbooks/${PLAYBOOK} \
             --limit 'prod_cloud' \
@@ -192,6 +198,10 @@ jobs:
             --limit 'prod_cloud' \
             -v || echo "Verification completed with warnings"
 
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/id_ed25519
+
   # Summary notification
   notify:
     needs: [prepare, provision-dev, provision-prod]
@@ -204,7 +214,7 @@ jobs:
           PLAYBOOK="${{ needs.prepare.outputs.playbook }}"
           ENVIRONMENT="${{ needs.prepare.outputs.environment }}"
           DRY_RUN="${{ needs.prepare.outputs.dry_run }}"
-          
+
           if [ "${{ needs.provision-dev.result }}" == "success" ] || [ "${{ needs.provision-prod.result }}" == "success" ]; then
             STATUS="SUCCESS"
           elif [ "${{ needs.provision-dev.result }}" == "failure" ] || [ "${{ needs.provision-prod.result }}" == "failure" ]; then
@@ -212,7 +222,7 @@ jobs:
           else
             STATUS="UNKNOWN"
           fi
-          
+
           echo "=========================================="
           echo "Ansible Provisioning Complete"
           echo "=========================================="
