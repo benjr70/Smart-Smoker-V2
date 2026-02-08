@@ -55,6 +55,49 @@ infra/proxmox
 
 Each environment module wraps the generic modules and exposes only the inputs relevant to that component. The root module composes them based on the configuration in `terraform.tfvars`.
 
+## Networking
+
+All LXC containers use a private `10.20.0.0/24` network behind NAT on the Proxmox host. Two things must be configured for networking to survive reboots:
+
+### 1. Container OS Type
+
+The Terraform `lxc-container` module sets `os_type = "ubuntu"` by default. This tells Proxmox to automatically configure the network interface (`veth0`) inside the container on boot. Without this, the interface stays DOWN and the container has no connectivity.
+
+For **existing containers** that were created before this fix, update them manually from the Proxmox host shell:
+
+```bash
+pct set 106 --ostype ubuntu   # github-runner
+pct set 104 --ostype ubuntu   # smart-smoker-cloud-prod
+pct set 108 --ostype ubuntu   # smart-smoker-dev-cloud
+```
+
+### 2. NAT Persistence
+
+The Proxmox host must have NAT masquerade rules that persist across reboots. Add these lines to the `vmbr0` block in `/etc/network/interfaces` on the Proxmox host:
+
+```
+auto vmbr0
+iface vmbr0 inet static
+    ... existing config ...
+    post-up   echo 1 > /proc/sys/net/ipv4/ip_forward
+    post-up   iptables -t nat -A POSTROUTING -s 10.20.0.0/24 -o vmbr0 -j MASQUERADE
+    post-down iptables -t nat -D POSTROUTING -s 10.20.0.0/24 -o vmbr0 -j MASQUERADE
+```
+
+This is the standard Proxmox-recommended approach for NAT. The `configure-nat-manual.sh` script in `scripts/` can also be used for one-time setup but does not guarantee persistence without `netfilter-persistent` installed.
+
+### Verification
+
+After applying both fixes, reboot a container and verify:
+
+```bash
+pct reboot 106
+pct enter 106
+ip addr          # veth0 should be UP with 10.20.0.10/24
+ping -c 3 8.8.8.8   # Should succeed
+tailscale status     # Should show connected
+```
+
 ## Next Steps
 
 - Configure a remote backend (S3, PostgreSQL, etc.) before multiple engineers run Terraform concurrently.

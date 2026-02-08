@@ -55,6 +55,7 @@ resource "proxmox_virtual_environment_container" "this" {
 
   operating_system {
     template_file_id = var.template
+    type             = var.os_type
   }
 
   network_interface {

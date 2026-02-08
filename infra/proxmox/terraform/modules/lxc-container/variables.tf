@@ -127,6 +127,12 @@ variable "tags" {
   default     = []
 }
 
+variable "os_type" {
+  description = "Container OS type (alpine, debian, ubuntu, etc.) - controls network config on boot"
+  type        = string
+  default     = "ubuntu"
+}
+
 variable "timeout_delete" {
   description = "Timeout (seconds) allowed for container deletion"
   type        = number
