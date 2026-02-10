@@ -55,7 +55,7 @@
   tasks:
     - name: Check if runner is configured
       ansible.builtin.stat:
-        path: "{{ github_runner_home }}/actions-runner/.runner"
+        path: "{{ github_runner_install_dir | default(github_runner_home + '/actions-runner') }}/.runner"
       register: runner_config
 
     - name: Check Terraform version

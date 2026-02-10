@@ -7,9 +7,9 @@
 
 set -euo pipefail
 
-RUNNER_HOME="{{ github_runner_home }}"
-DIAG_DIR="${RUNNER_HOME}/actions-runner/_diag"
-WORK_DIR="${RUNNER_HOME}/actions-runner/_work"
+RUNNER_HOME="{{ github_runner_install_dir }}"
+DIAG_DIR="${RUNNER_HOME}/_diag"
+WORK_DIR="${RUNNER_HOME}/_work"
 LOG_RETENTION_DAYS="{{ github_runner_log_retention_days }}"
 DISK_WARN_THRESHOLD="{{ github_runner_disk_warn_percent }}"
 

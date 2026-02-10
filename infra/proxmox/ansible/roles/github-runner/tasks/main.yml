@@ -1,4 +1,8 @@
 ---
+- name: Set runner install directory
+  ansible.builtin.set_fact:
+    github_runner_install_dir: "{{ github_runner_install_dir | default(github_runner_home + '/actions-runner') }}"
+
 - name: Create GitHub runner user
   ansible.builtin.user:
     name: "{{ github_runner_user }}"
@@ -9,7 +13,7 @@
 
 - name: Create runner directory
   ansible.builtin.file:
-    path: "{{ github_runner_home }}/actions-runner"
+    path: "{{ github_runner_install_dir }}"
     state: directory
     owner: "{{ github_runner_user }}"
     group: "{{ github_runner_user }}"
@@ -17,7 +21,7 @@
 
 - name: Check if runner is already installed
   ansible.builtin.stat:
-    path: "{{ github_runner_home }}/actions-runner/config.sh"
+    path: "{{ github_runner_install_dir }}/config.sh"
   register: runner_installed
 
 - name: Get latest runner version
@@ -42,7 +46,7 @@
 - name: Extract runner archive
   ansible.builtin.unarchive:
     src: "/tmp/actions-runner-linux-x64-{{ runner_version }}.tar.gz"
-    dest: "{{ github_runner_home }}/actions-runner"
+    dest: "{{ github_runner_install_dir }}"
     remote_src: true
     owner: "{{ github_runner_user }}"
     group: "{{ github_runner_user }}"
@@ -50,53 +54,206 @@
 
 - name: Check if runner is configured
   ansible.builtin.stat:
-    path: "{{ github_runner_home }}/actions-runner/.runner"
+    path: "{{ github_runner_install_dir }}/.runner"
   register: runner_configured
 
-- name: Configure GitHub runner
+# =============================================================================
+# Auto-Generate Registration Token via PAT
+# =============================================================================
+
+- name: Auto-generate runner registration token from PAT
+  ansible.builtin.uri:
+    url: "https://api.github.com/repos/{{ github_repository }}/actions/runners/registration-token"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ github_runner_pat }}"
+      Accept: "application/vnd.github+json"
+      X-GitHub-Api-Version: "2022-11-28"
+    status_code: 201
+    return_content: true
+  register: registration_token_response
+  when:
+    - github_runner_pat != ""
+    - github_runner_token == ""
+  no_log: true
+
+- name: Set runner token from API response
+  ansible.builtin.set_fact:
+    github_runner_token: "{{ registration_token_response.json.token }}"
+  when:
+    - registration_token_response is defined
+    - registration_token_response is not skipped
+    - registration_token_response.status == 201
+  no_log: true
+
+# =============================================================================
+# Stale Runner Detection and Re-registration
+# =============================================================================
+
+- name: Check runner service health
   ansible.builtin.shell:
     cmd: |
-      ./config.sh --url https://github.com/{{ github_repository }} \
-        --token "${RUNNER_TOKEN}" \
-        --name {{ github_runner_name }} \
-        --labels {{ github_runner_labels | join(',') }} \
-        --work {{ github_runner_work_directory }} \
-        {{ '--replace' if github_runner_replace_existing else '' }} \
-        {{ '--ephemeral' if github_runner_ephemeral else '' }} \
-        --unattended
-    chdir: "{{ github_runner_home }}/actions-runner"
-  environment:
-    RUNNER_TOKEN: "{{ github_runner_token }}"
-  become: true
-  become_user: "{{ github_runner_user }}"
-  when:
-    - not runner_configured.stat.exists
-    - github_runner_token != ""
-  register: runner_config
-  changed_when: runner_config.rc == 0
+      SERVICE_FILE=$(find /etc/systemd/system -name "actions.runner.*.service" -print -quit 2>/dev/null)
+      if [ -z "$SERVICE_FILE" ]; then
+        echo "no_service"
+        exit 0
+      fi
+      SERVICE_NAME=$(basename "$SERVICE_FILE")
+      STATUS=$(systemctl is-active "$SERVICE_NAME" 2>/dev/null || true)
+      if [ "$STATUS" = "active" ]; then
+        RECENT_ERRORS=$(journalctl -u "$SERVICE_NAME" --since "5 min ago" --no-pager 2>/dev/null | grep -c "retryable error\|configuredSettings\|exit with error") || RECENT_ERRORS=0
+        if [ "$RECENT_ERRORS" -gt "3" ]; then
+          echo "unhealthy"
+        else
+          echo "healthy"
+        fi
+      else
+        echo "unhealthy"
+      fi
+  register: runner_health
+  changed_when: false
+  failed_when: false
+  when: runner_configured.stat.exists
 
-- name: Install runner service
-  ansible.builtin.command:
-    cmd: ./svc.sh install {{ github_runner_user }}
-    chdir: "{{ github_runner_home }}/actions-runner"
+- name: Pre-flight DNS check for GitHub API
+  ansible.builtin.shell:
+    cmd: |
+      if nslookup api.github.com > /dev/null 2>&1; then
+        echo "dns_ok"
+      elif nslookup api.github.com 8.8.8.8 > /dev/null 2>&1; then
+        echo "dns_fallback_needed"
+      else
+        echo "dns_failed"
+      fi
+  register: dns_check
+  changed_when: false
+  failed_when: dns_check.stdout == "dns_failed"
   when:
-    - not runner_configured.stat.exists
+    - runner_configured.stat.exists
+    - runner_health.stdout | default('healthy') == 'unhealthy'
     - github_runner_token != ""
-  changed_when: true
 
-- name: Start and enable runner service
-  ansible.builtin.command:
-    cmd: ./svc.sh start
-    chdir: "{{ github_runner_home }}/actions-runner"
-  when:
-    - not runner_configured.stat.exists
-    - github_runner_token != ""
-  changed_when: true
+- name: Stale runner remediation with DNS safety
+  block:
+    - name: Apply DNS fallback for GitHub API resolution
+      ansible.builtin.shell:
+        cmd: |
+          cp /etc/resolv.conf /etc/resolv.conf.pre-runner-fix
+          echo -e "nameserver 8.8.8.8\nnameserver 8.8.4.4" > /etc/resolv.conf
+      when:
+        - dns_check is defined
+        - dns_check.stdout | default('') == 'dns_fallback_needed'
+      register: dns_fallback_applied
 
-- name: Display runner configuration warning if token not provided
-  ansible.builtin.debug:
-    msg: "GitHub runner token not provided. Skipping runner configuration. Provide token via --extra-vars 'github_runner_token=YOUR_TOKEN'"
-  when: github_runner_token == ""
+    - name: Stop and uninstall stale runner service
+      ansible.builtin.shell:
+        cmd: |
+          SERVICE_FILE=$(find /etc/systemd/system -name "actions.runner.*.service" -print -quit 2>/dev/null)
+          if [ -n "$SERVICE_FILE" ]; then
+            SERVICE_NAME=$(basename "$SERVICE_FILE" .service)
+            systemctl stop "$SERVICE_NAME" || true
+          fi
+          cd {{ github_runner_install_dir }}
+          ./svc.sh stop 2>/dev/null || true
+          ./svc.sh uninstall 2>/dev/null || true
+      when:
+        - runner_configured.stat.exists
+        - runner_health.stdout | default('healthy') == 'unhealthy'
+        - github_runner_token != ""
+      register: runner_svc_removed
+
+    - name: Remove stale runner configuration files
+      ansible.builtin.shell:
+        cmd: |
+          cd {{ github_runner_install_dir }}
+          ./config.sh remove --token "${RUNNER_TOKEN}" 2>/dev/null || true
+          rm -f .runner .credentials .credentials_rsaparams
+      environment:
+        RUNNER_TOKEN: "{{ github_runner_token }}"
+      become: true
+      become_user: "{{ github_runner_user }}"
+      when:
+        - runner_configured.stat.exists
+        - runner_health.stdout | default('healthy') == 'unhealthy'
+        - github_runner_token != ""
+      register: runner_removed
+      changed_when: true
+
+    # =============================================================================
+    # Configure and Start Runner
+    # =============================================================================
+
+    - name: Configure GitHub runner
+      ansible.builtin.shell:
+        cmd: |
+          ./config.sh --url "https://github.com/{{ github_repository }}" \
+            --token "${RUNNER_TOKEN}" \
+            --name "{{ github_runner_name }}" \
+            --labels "{{ github_runner_labels | join(',') }}" \
+            --work "{{ github_runner_work_directory }}" \
+            {{ '--replace' if github_runner_replace_existing else '' }} \
+            {{ '--ephemeral' if github_runner_ephemeral else '' }} \
+            --unattended
+        chdir: "{{ github_runner_install_dir }}"
+      environment:
+        RUNNER_TOKEN: "{{ github_runner_token }}"
+      become: true
+      become_user: "{{ github_runner_user }}"
+      when:
+        - (not runner_configured.stat.exists) or (runner_removed is defined and runner_removed.changed)
+        - github_runner_token != ""
+      register: runner_config
+      changed_when: runner_config.rc == 0
+
+    - name: Install runner service
+      ansible.builtin.command:
+        cmd: "./svc.sh install {{ github_runner_user }}"
+        chdir: "{{ github_runner_install_dir }}"
+      when:
+        - (not runner_configured.stat.exists) or (runner_removed is defined and runner_removed.changed)
+        - github_runner_token != ""
+      changed_when: true
+
+    - name: Start and enable runner service
+      ansible.builtin.command:
+        cmd: ./svc.sh start
+        chdir: "{{ github_runner_install_dir }}"
+      when:
+        - (not runner_configured.stat.exists) or (runner_removed is defined and runner_removed.changed)
+        - github_runner_token != ""
+      changed_when: true
+
+    - name: Display runner configuration warning if no credentials provided
+      ansible.builtin.debug:
+        msg: "No runner credentials available. Provide github_runner_pat (recommended) or github_runner_token via --extra-vars"
+      when: github_runner_token == "" and github_runner_pat == ""
+
+    # =============================================================================
+    # Ensure Runner is Running
+    # =============================================================================
+
+    - name: Ensure runner service is running
+      ansible.builtin.shell:
+        cmd: |
+          SERVICE_FILE=$(find /etc/systemd/system -name "actions.runner.*.service" -print -quit 2>/dev/null)
+          if [ -n "$SERVICE_FILE" ]; then
+            SERVICE_NAME=$(basename "$SERVICE_FILE" .service)
+            systemctl is-active "$SERVICE_NAME" > /dev/null 2>&1 || systemctl start "$SERVICE_NAME"
+          fi
+      changed_when: false
+      failed_when: false
+      when: runner_configured.stat.exists or (runner_removed is defined and runner_removed.changed)
+
+  always:
+    - name: Restore original DNS configuration
+      ansible.builtin.shell:
+        cmd: |
+          if [ -f /etc/resolv.conf.pre-runner-fix ]; then
+            mv /etc/resolv.conf.pre-runner-fix /etc/resolv.conf
+          fi
+      when: dns_fallback_applied is defined and dns_fallback_applied.changed
+      changed_when: false
+      failed_when: false
 
 # =============================================================================
 # Disk Space Management - Cleanup Tasks
@@ -151,3 +308,75 @@
   when: github_runner_run_initial_cleanup | default(false)
   tags:
     - cleanup
+
+# =============================================================================
+# Self-Healing - Auto Re-registration
+# =============================================================================
+
+- name: Create PAT directory
+  ansible.builtin.file:
+    path: /etc/github-runner
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when: github_runner_pat != ""
+  tags:
+    - self-healing
+
+- name: Deploy GitHub PAT for self-healing
+  ansible.builtin.copy:
+    content: "{{ github_runner_pat }}"
+    dest: /etc/github-runner/pat
+    owner: root
+    group: root
+    mode: "0600"
+  when: github_runner_pat != ""
+  no_log: true
+  tags:
+    - self-healing
+
+- name: Deploy runner health check script
+  ansible.builtin.template:
+    src: runner-health-check.sh.j2
+    dest: /usr/local/bin/runner-health-check.sh
+    owner: root
+    group: root
+    mode: "0755"
+  when: github_runner_pat != ""
+  tags:
+    - self-healing
+
+- name: Deploy runner health check systemd service
+  ansible.builtin.template:
+    src: runner-health-check.service.j2
+    dest: /etc/systemd/system/runner-health-check.service
+    owner: root
+    group: root
+    mode: "0644"
+  when: github_runner_pat != ""
+  notify: Reload systemd daemon
+  tags:
+    - self-healing
+
+- name: Deploy runner health check systemd timer
+  ansible.builtin.template:
+    src: runner-health-check.timer.j2
+    dest: /etc/systemd/system/runner-health-check.timer
+    owner: root
+    group: root
+    mode: "0644"
+  when: github_runner_pat != ""
+  notify: Reload systemd daemon
+  tags:
+    - self-healing
+
+- name: Enable and start runner health check timer
+  ansible.builtin.systemd:
+    name: runner-health-check.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: github_runner_pat != ""
+  tags:
+    - self-healing

@@ -17,6 +17,8 @@ additional_packages:
   - build-essential
   - python3-pip
   - jq
+  - curl
+  - dnsutils
 
 # Tailscale Configuration
 tailscale_hostname: "smoker-runner"

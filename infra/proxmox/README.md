@@ -98,6 +98,55 @@ ping -c 3 8.8.8.8   # Should succeed
 tailscale status     # Should show connected
 ```
 
+## GitHub Runner Self-Healing
+
+The GitHub Actions self-hosted runner (container 106) has a self-healing mechanism that automatically detects stale registrations and re-registers without manual intervention.
+
+### How It Works
+
+A systemd timer (`runner-health-check.timer`) runs every 5 minutes on the runner container and checks:
+
+1. The `.runner` config file exists at `/opt/actions-runner/.runner`
+2. The runner systemd service is active
+3. No error loops in recent service logs (>3 errors in 5 min = unhealthy)
+
+If the runner is unhealthy, the script:
+
+1. Checks DNS resolution for `api.github.com` (falls back to `8.8.8.8` if needed)
+2. Auto-generates a registration token using a stored GitHub PAT
+3. Stops and removes the stale runner service
+4. Re-registers with `--replace --unattended`
+5. Installs and starts the new service
+
+### One-Time Setup: Create GitHub PAT
+
+1. Go to **GitHub** > **Settings** > **Developer settings** > **Fine-grained tokens** > **Generate new token**
+2. Configure:
+   - **Token name:** `smart-smoker-runner-autoregister`
+   - **Expiration:** No expiration (or 1 year max)
+   - **Repository access:** Only select `benjr70/Smart-Smoker-V2`
+   - **Permissions:** Repository permissions > **Administration: Read and write**
+3. Copy the token (starts with `github_pat_...`)
+4. Add it as a GitHub Secret named `RUNNER_PAT` in repo **Settings > Secrets and variables > Actions**
+
+The Ansible provisioning workflow passes this secret to the runner role automatically. The role also deploys the PAT to `/etc/github-runner/pat` (root-only, mode 0600) for the self-healing script.
+
+### Monitoring
+
+```bash
+# Check timer status
+systemctl status runner-health-check.timer
+
+# View recent health check logs
+journalctl -u runner-health-check --since "1 hour ago"
+
+# Manually trigger a health check
+systemctl start runner-health-check.service
+
+# Check runner service directly
+systemctl status actions.runner.*
+```
+
 ## Next Steps
 
 - Configure a remote backend (S3, PostgreSQL, etc.) before multiple engineers run Terraform concurrently.

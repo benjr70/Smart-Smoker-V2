@@ -1,0 +1,149 @@
+#!/bin/bash
+# GitHub Actions Runner Self-Healing Script
+# Managed by Ansible - Do not edit manually
+#
+# Checks runner health every 5 minutes via systemd timer.
+# If the runner is stale/unhealthy, auto-generates a registration token
+# using a stored PAT and re-registers.
+
+set -euo pipefail
+
+RUNNER_DIR="{{ github_runner_install_dir }}"
+RUNNER_USER="{{ github_runner_user }}"
+GITHUB_REPO="{{ github_repository }}"
+PAT_FILE="/etc/github-runner/pat"
+LOG_TAG="runner-health-check"
+DNS_FIXED=false
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
+}
+
+cleanup() {
+    if [ "$DNS_FIXED" = true ] && [ -f /etc/resolv.conf.pre-health-check ]; then
+        mv /etc/resolv.conf.pre-health-check /etc/resolv.conf
+        log "Restored original DNS configuration"
+    fi
+}
+trap cleanup EXIT
+
+# --- Pre-flight checks ---
+
+if [ ! -f "$RUNNER_DIR/config.sh" ]; then
+    log "Runner not installed at $RUNNER_DIR, skipping"
+    exit 0
+fi
+
+if [ ! -f "$PAT_FILE" ]; then
+    log "PAT file not found at $PAT_FILE, cannot auto-register"
+    exit 0
+fi
+
+PAT=$(cat "$PAT_FILE")
+if [ -z "$PAT" ]; then
+    log "PAT file is empty, cannot auto-register"
+    exit 0
+fi
+
+# --- Health check ---
+
+HEALTHY=true
+
+# Check if .runner config exists
+if [ ! -f "$RUNNER_DIR/.runner" ]; then
+    log "Runner not configured (.runner missing)"
+    HEALTHY=false
+fi
+
+# Check systemd service status
+if [ "$HEALTHY" = true ]; then
+    SERVICE_FILE=$(find /etc/systemd/system -name "actions.runner.*.service" -print -quit 2>/dev/null || true)
+    if [ -z "$SERVICE_FILE" ]; then
+        log "No runner systemd service found"
+        HEALTHY=false
+    else
+        SERVICE_NAME=$(basename "$SERVICE_FILE")
+        if ! systemctl is-active "$SERVICE_NAME" > /dev/null 2>&1; then
+            log "Runner service $SERVICE_NAME is not active"
+            HEALTHY=false
+        else
+            # Check for error loops in recent logs
+            RECENT_ERRORS=$(journalctl -u "$SERVICE_NAME" --since "5 min ago" --no-pager 2>/dev/null | grep -c "retryable error\|configuredSettings\|exit with error") || RECENT_ERRORS=0
+            if [ "$RECENT_ERRORS" -gt "3" ]; then
+                log "Runner service has $RECENT_ERRORS recent errors, treating as unhealthy"
+                HEALTHY=false
+            fi
+        fi
+    fi
+fi
+
+if [ "$HEALTHY" = true ]; then
+    exit 0
+fi
+
+log "Runner is unhealthy, starting re-registration..."
+
+# --- DNS check ---
+
+if ! timeout 5 nslookup api.github.com > /dev/null 2>&1; then
+    log "DNS cannot resolve api.github.com, applying fallback..."
+    cp /etc/resolv.conf /etc/resolv.conf.pre-health-check
+    echo -e "nameserver 8.8.8.8\nnameserver 8.8.4.4" > /etc/resolv.conf
+    DNS_FIXED=true
+fi
+
+# --- Get registration token ---
+
+log "Requesting registration token from GitHub API..."
+RESPONSE=$(curl -sf -X POST \
+    -H "Authorization: Bearer $PAT" \
+    -H "Accept: application/vnd.github+json" \
+    -H "X-GitHub-Api-Version: 2022-11-28" \
+    "https://api.github.com/repos/$GITHUB_REPO/actions/runners/registration-token" 2>&1) || {
+    log "ERROR: Failed to get registration token: $RESPONSE"
+    exit 1
+}
+
+TOKEN=$(echo "$RESPONSE" | jq -r '.token')
+if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+    log "ERROR: Could not parse token from API response"
+    exit 1
+fi
+
+log "Got registration token, proceeding with re-registration..."
+
+# --- Stop and remove old runner ---
+
+SERVICE_FILE=$(find /etc/systemd/system -name "actions.runner.*.service" -print -quit 2>/dev/null || true)
+if [ -n "$SERVICE_FILE" ]; then
+    SERVICE_NAME=$(basename "$SERVICE_FILE" .service)
+    systemctl stop "$SERVICE_NAME" 2>/dev/null || true
+fi
+
+cd "$RUNNER_DIR"
+./svc.sh stop 2>/dev/null || true
+./svc.sh uninstall 2>/dev/null || true
+
+# Try graceful remove, then force
+sudo -u "$RUNNER_USER" ./config.sh remove --token "$TOKEN" 2>/dev/null || true
+rm -f .runner .credentials .credentials_rsaparams
+
+# --- Re-register ---
+
+log "Configuring runner..."
+sudo -u "$RUNNER_USER" ./config.sh \
+    --url "https://github.com/$GITHUB_REPO" \
+    --token "$TOKEN" \
+    --name "{{ github_runner_name }}" \
+    --labels "{{ github_runner_labels | join(',') }}" \
+    --work "{{ github_runner_work_directory }}" \
+    --replace \
+    --unattended
+
+log "Installing and starting service..."
+./svc.sh install "$RUNNER_USER"
+./svc.sh start
+
+# DNS restore handled by EXIT trap
+
+log "Runner re-registration complete!"

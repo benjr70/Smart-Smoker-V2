@@ -16,12 +16,19 @@ github_runner_labels:
   - x64
   - proxmox
 
+# Runner install directory (overrides default of {{ github_runner_home }}/actions-runner)
+github_runner_install_dir: /opt/actions-runner
+
 # GitHub Repository (override in host_vars or runtime)
 github_repository: "benjr70/Smart-Smoker-V2"
-github_runner_token: ""  # Provided at runtime via --extra-vars or Vault
+github_runner_token: ""  # Provided at runtime via --extra-vars
+
+# GitHub PAT for auto-generating registration tokens
+# Passed via GitHub Secret (RUNNER_PAT) in CI, or --extra-vars locally
+github_runner_pat: ""
 
 # Runner settings
-github_runner_replace_existing: false
+github_runner_replace_existing: true
 github_runner_ephemeral: false
 
 # Disk Space Management

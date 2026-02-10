@@ -110,6 +110,38 @@ systemctl status tailscaled
 docker ps -a
 ```
 
+### Runner Health Monitoring
+
+The GitHub Actions runner has a self-healing systemd timer that auto-detects and fixes stale registrations every 5 minutes.
+
+```bash
+# Check timer status
+systemctl status runner-health-check.timer
+
+# View recent health check logs
+journalctl -u runner-health-check --since "1 hour ago"
+
+# Manually trigger a health check
+systemctl start runner-health-check.service
+
+# Check runner service directly
+systemctl status actions.runner.*
+```
+
+**What the health check monitors:**
+
+- Runner `.runner` config file exists
+- Runner systemd service is active
+- No error loops in recent service logs (>3 errors in 5 min = unhealthy)
+
+**What it does when unhealthy:**
+
+- Checks DNS resolution for `api.github.com` (falls back to 8.8.8.8 if needed)
+- Auto-generates a registration token from stored PAT
+- Stops and uninstalls the stale runner service
+- Re-registers with `--replace --unattended`
+- Installs and starts the new service
+
 ## Alerting
 
 ### Health Check Alerts
