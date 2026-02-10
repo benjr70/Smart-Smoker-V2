@@ -1,0 +1,39 @@
+---
+# Default variables for the github-runner role
+# Override these in inventory group_vars, host_vars, or via --extra-vars
+
+# Runner user and home directory
+github_runner_user: runner
+github_runner_home: /home/runner
+
+# Runner install directory (set_fact in tasks/main.yml falls back to
+# {{ github_runner_home }}/actions-runner if not explicitly set)
+# github_runner_install_dir: /opt/actions-runner
+
+# Work directory (relative to runner install dir)
+github_runner_work_directory: _work
+
+# Runner labels applied during registration
+github_runner_labels:
+  - self-hosted
+  - linux
+  - x64
+
+# GitHub repository in owner/repo format
+github_repository: ""
+
+# Short-lived registration token (provide at runtime via --extra-vars)
+github_runner_token: ""
+
+# GitHub PAT for auto-generating registration tokens
+# Passed via GitHub Secret (RUNNER_PAT) in CI, or --extra-vars locally
+github_runner_pat: ""
+
+# Runner registration settings
+github_runner_replace_existing: true
+github_runner_ephemeral: false
+
+# Disk Space Management
+github_runner_log_retention_days: 7
+github_runner_disk_warn_percent: 80
+github_runner_run_initial_cleanup: false

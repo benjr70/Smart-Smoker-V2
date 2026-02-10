@@ -369,6 +369,23 @@ SSH_PRIVATE_KEY: <ed25519-private-key>  # SSH key for deployment to dev-cloud
    - Click **Add secret**
 4. Test SSH connectivity from the runner to verify setup
 
+**Runner Auto-Registration** (Required for runner self-healing):
+
+```yaml
+RUNNER_PAT: <fine-grained-pat>  # GitHub PAT for auto-registering runners
+```
+
+**How to Set Up RUNNER_PAT**:
+
+1. Go to GitHub > Settings > Developer settings > Fine-grained tokens > Generate new token
+2. Token name: `smart-smoker-runner-autoregister`
+3. Expiration: No expiration (or 1 year max)
+4. Repository access: Only `benjr70/Smart-Smoker-V2`
+5. Permissions: Repository > Administration: Read and write
+6. Copy the token and add as a GitHub Secret named `RUNNER_PAT`
+
+**On-Runner Storage**: The Ansible role also deploys the PAT to `/etc/github-runner/pat` (0600, root-only) for the self-healing timer script that auto-re-registers stale runners.
+
 **Other Secrets**:
 ```yaml
 # Required for Terraform workflows

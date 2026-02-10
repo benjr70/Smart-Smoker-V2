@@ -125,6 +125,7 @@ jobs:
           ansible-playbook playbooks/${PLAYBOOK} \
             --limit 'dev_cloud:devices:runners' \
             ${EXTRA_ARGS} \
+            --extra-vars "github_runner_pat=${{ secrets.RUNNER_PAT }}" \
             -v
 
       - name: Verify provisioning
@@ -187,6 +188,7 @@ jobs:
           ansible-playbook playbooks/${PLAYBOOK} \
             --limit 'prod_cloud' \
             ${EXTRA_ARGS} \
+            --extra-vars "github_runner_pat=${{ secrets.RUNNER_PAT }}" \
             -v
 
       - name: Verify provisioning

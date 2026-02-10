@@ -1,0 +1,10 @@
+[Unit]
+Description=GitHub Actions Runner Health Check
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/runner-health-check.sh
+User=root
+StandardOutput=journal
+StandardError=journal

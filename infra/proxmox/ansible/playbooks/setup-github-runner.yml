@@ -25,5 +25,5 @@
           - "Repository: {{ github_repository }}"
           - "Labels: {{ github_runner_labels | join(', ') }}"
           - "If runner token was provided, service should be running"
-          - "Check status: sudo -u {{ github_runner_user }} {{ github_runner_home }}/actions-runner/run.sh --check"
+          - "Check status: sudo -u {{ github_runner_user }} {{ github_runner_install_dir | default(github_runner_home + '/actions-runner') }}/run.sh --check"
           - "Tailscale hostname: {{ tailscale_hostname }}"

@@ -152,18 +152,55 @@ ansible all -m shell -a "free -h"
 
 ## GitHub Runner Management
 
-### Registering a New Runner
+### Registering a Runner (Automatic)
 
-1. Generate a runner token from GitHub:
-   - Navigate to: https://github.com/benjr70/Smart-Smoker-V2/settings/actions/runners/new
-   - Click "New self-hosted runner"
-   - Copy the registration token (valid for 1 hour)
+Runner registration is now fully automated via a GitHub PAT (Personal Access Token). The Ansible role auto-generates short-lived registration tokens from the PAT -- no manual token generation is needed.
 
-2. Run the GitHub runner playbook:
+**In CI (recommended):** The `ansible-provision.yml` workflow automatically passes the `RUNNER_PAT` GitHub Secret to the role.
+
+**Local runs:** Pass the PAT via `--extra-vars`:
 
 ```bash
 ansible-playbook playbooks/setup-github-runner.yml \
-  --extra-vars "github_runner_token=YOUR_NEW_TOKEN"
+  --extra-vars "github_runner_pat=github_pat_YOUR_TOKEN"
+```
+
+**Fallback (manual token):** You can still pass a manually generated token if needed:
+
+```bash
+ansible-playbook playbooks/setup-github-runner.yml \
+  --extra-vars "github_runner_token=YOUR_SHORT_LIVED_TOKEN"
+```
+
+### Runner Self-Healing
+
+The runner has a self-healing systemd timer (`runner-health-check.timer`) that runs every 5 minutes and automatically detects and fixes stale registrations without requiring Ansible or GitHub Actions.
+
+**What it checks:**
+
+- Runner `.runner` config file exists
+- Runner systemd service is active
+- No error loops in recent service logs (>3 errors in 5 min = unhealthy)
+
+**What it does when unhealthy:**
+
+- Checks DNS resolution for `api.github.com` (falls back to `8.8.8.8` if needed)
+- Auto-generates a registration token from a stored PAT (`/etc/github-runner/pat`)
+- Stops and uninstalls the stale runner service
+- Re-registers with `--replace --unattended`
+- Installs and starts the new service
+
+**How to monitor:**
+
+```bash
+# Check timer status
+systemctl status runner-health-check.timer
+
+# View recent health check logs
+journalctl -u runner-health-check --since "1 hour ago"
+
+# Manually trigger a health check
+systemctl start runner-health-check.service
 ```
 
 ### Checking Runner Status
@@ -177,6 +214,10 @@ ssh -J root@192.168.1.151 root@10.20.0.10 \
 ssh -J root@192.168.1.151 root@10.20.0.10 \
   'journalctl -u actions.runner.* -n 50'
 
+# Check self-healing timer status
+ssh -J root@192.168.1.151 root@10.20.0.10 \
+  'systemctl status runner-health-check.timer'
+
 # Check runner status via GitHub API
 gh api repos/benjr70/Smart-Smoker-V2/actions/runners \
   --jq '.runners[] | select(.name=="smart-smoker-runner-1")'
@@ -184,12 +225,17 @@ gh api repos/benjr70/Smart-Smoker-V2/actions/runners \
 
 ### Removing a Runner
 
+**Note:** The self-healing timer will automatically re-register the runner unless you also remove the PAT file at `/etc/github-runner/pat`.
+
 ```bash
 # Stop the runner service
 ansible runners -m systemd -a "name=actions.runner.* state=stopped" --become
 
 # Remove runner from GitHub (via web UI or API)
 gh api -X DELETE repos/benjr70/Smart-Smoker-V2/actions/runners/RUNNER_ID
+
+# To prevent auto-re-registration, also remove the PAT file:
+ssh -J root@192.168.1.151 root@10.20.0.10 'rm -f /etc/github-runner/pat'
 ```
 
 ## Security Best Practices
