@@ -19,6 +19,13 @@
     group: "{{ github_runner_user }}"
     mode: '0755'
 
+- name: Fix runner directory ownership
+  ansible.builtin.command:
+    cmd: "chown -R {{ github_runner_user }}:{{ github_runner_user }} {{ github_runner_install_dir }}"
+  changed_when: true
+  tags:
+    - permissions
+
 - name: Check if runner is already installed
   ansible.builtin.stat:
     path: "{{ github_runner_install_dir }}/config.sh"
@@ -218,6 +225,16 @@
         - (not runner_configured.stat.exists) or (runner_removed is defined and runner_removed.changed)
         - github_runner_token != ""
       changed_when: true
+
+    - name: Fix runner directory ownership after configuration
+      ansible.builtin.command:
+        cmd: "chown -R {{ github_runner_user }}:{{ github_runner_user }} {{ github_runner_install_dir }}"
+      when:
+        - (not runner_configured.stat.exists) or (runner_removed is defined and runner_removed.changed)
+        - github_runner_token != ""
+      changed_when: true
+      tags:
+        - permissions
 
     - name: Start and enable runner service
       ansible.builtin.command:
