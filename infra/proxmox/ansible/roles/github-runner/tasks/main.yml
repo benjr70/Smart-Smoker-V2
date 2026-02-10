@@ -93,6 +93,7 @@
 - name: Check runner service health
   ansible.builtin.shell:
     cmd: |
+      set -o pipefail
       SERVICE_FILE=$(find /etc/systemd/system -name "actions.runner.*.service" -print -quit 2>/dev/null)
       if [ -z "$SERVICE_FILE" ]; then
         echo "no_service"
@@ -101,7 +102,8 @@
       SERVICE_NAME=$(basename "$SERVICE_FILE")
       STATUS=$(systemctl is-active "$SERVICE_NAME" 2>/dev/null || true)
       if [ "$STATUS" = "active" ]; then
-        RECENT_ERRORS=$(journalctl -u "$SERVICE_NAME" --since "5 min ago" --no-pager 2>/dev/null | grep -c "retryable error\|configuredSettings\|exit with error") || RECENT_ERRORS=0
+        RECENT_ERRORS=$(journalctl -u "$SERVICE_NAME" --since "5 min ago" --no-pager 2>/dev/null \
+          | grep -c "retryable error\|configuredSettings\|exit with error") || RECENT_ERRORS=0
         if [ "$RECENT_ERRORS" -gt "3" ]; then
           echo "unhealthy"
         else
@@ -110,6 +112,7 @@
       else
         echo "unhealthy"
       fi
+    executable: /bin/bash
   register: runner_health
   changed_when: false
   failed_when: false
@@ -144,6 +147,7 @@
         - dns_check is defined
         - dns_check.stdout | default('') == 'dns_fallback_needed'
       register: dns_fallback_applied
+      changed_when: dns_fallback_applied.rc == 0
 
     - name: Stop and uninstall stale runner service
       ansible.builtin.shell:
@@ -161,6 +165,7 @@
         - runner_health.stdout | default('healthy') == 'unhealthy'
         - github_runner_token != ""
       register: runner_svc_removed
+      changed_when: true
 
     - name: Remove stale runner configuration files
       ansible.builtin.shell:
