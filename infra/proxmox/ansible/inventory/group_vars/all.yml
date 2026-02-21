@@ -20,6 +20,8 @@ ssh_public_keys:
   - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP6bDlBwE7k79yRe1WJqwhJyPXwA2olaKPnG6Exsyjd9 benjr70@youremail.com"
   # GitHub runner provisioning key (used by Terraform)
   - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGVL60IcGPlVOKMXK9xuLWLBVmCu8HCQ/mN8LZ8gSFN4 benrolf70@gmail.com"
+  # GitHub Actions deployment key (SSH_PRIVATE_KEY secret)
+  - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJASuKpE7uEtiQTEM4IeU/WqMabn614ppz8a7AMTaHZT github-runner"
 
 # DNS Configuration
 dns_servers:

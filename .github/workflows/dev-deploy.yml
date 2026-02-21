@@ -60,19 +60,39 @@ jobs:
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
+          unset SSH_AUTH_SOCK || true
           ssh-keyscan -H ${DEV_HOST} >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Verify SSH key setup
+        run: |
+          echo "=== SSH Key Diagnostics ==="
+          echo "Key file exists: $(test -f ~/.ssh/id_ed25519 && echo 'yes' || echo 'NO')"
+          echo "Key file permissions: $(ls -la ~/.ssh/id_ed25519 2>/dev/null || echo 'FILE NOT FOUND')"
+          echo "Key fingerprint:"
+          ssh-keygen -lf ~/.ssh/id_ed25519 2>&1 || echo "Failed to read key fingerprint"
+          echo "Public key:"
+          ssh-keygen -y -f ~/.ssh/id_ed25519 2>&1 || echo "Failed to extract public key"
+          echo ""
+          echo "Expected authorized key fingerprints on ${DEV_HOST}:"
+          echo "  Workstation: $(echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP6bDlBwE7k79yRe1WJqwhJyPXwA2olaKPnG6Exsyjd9' | ssh-keygen -lf - 2>/dev/null || echo 'N/A')"
+          echo "  Runner: $(echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGVL60IcGPlVOKMXK9xuLWLBVmCu8HCQ/mN8LZ8gSFN4' | ssh-keygen -lf - 2>/dev/null || echo 'N/A')"
+          echo ""
+          echo "Running user: $(whoami)"
+          echo "Home directory: $HOME"
+          echo "SSH directory: $(ls -la ~/.ssh/ 2>&1)"
 
       - name: Verify SSH connectivity
         run: |
           echo "Testing SSH connectivity to ${DEV_HOST}..."
-          ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 root@${DEV_HOST} "echo 'SSH connection successful'"
-          if [ $? -ne 0 ]; then
-            echo "❌ SSH connection failed"
+          if ! ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o PasswordAuthentication=no root@${DEV_HOST} "echo 'SSH connection successful'"; then
+            echo "SSH connection failed. Capturing verbose output for diagnostics..."
+            ssh -vvv -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o PasswordAuthentication=no root@${DEV_HOST} "echo 'test'" 2>&1 || true
             exit 1
           fi
-          echo "✅ SSH connectivity verified"
+          echo "SSH connectivity verified"
 
       - name: URL-encode MongoDB password
         id: encode_password
@@ -83,7 +103,7 @@ jobs:
       - name: Pre-deployment backup
         run: |
           echo "Creating pre-deployment backup on ${DEV_HOST}..."
-          ssh root@${DEV_HOST} bash << 'REMOTE_SCRIPT'
+          ssh -i ~/.ssh/id_ed25519 -o PasswordAuthentication=no root@${DEV_HOST} bash << 'REMOTE_SCRIPT'
             set -e
             DEPLOY_DIR="${{ env.DEPLOY_DIR }}"
             COMPOSE_FILE="${{ env.COMPOSE_FILE }}"
@@ -116,16 +136,16 @@ jobs:
         run: |
           echo "Copying deployment files to ${DEV_HOST}..."
           # Copy docker-compose file
-          scp cloud.docker-compose.yml root@${DEV_HOST}:${DEPLOY_DIR}/${COMPOSE_FILE}
+          scp -i ~/.ssh/id_ed25519 -o PasswordAuthentication=no cloud.docker-compose.yml root@${DEV_HOST}:${DEPLOY_DIR}/${COMPOSE_FILE}
           # Create infra directory structure and copy MongoDB init scripts
-          ssh root@${DEV_HOST} "mkdir -p ${DEPLOY_DIR}/infra/mongodb-init"
-          scp -r infra/mongodb-init/* root@${DEV_HOST}:${DEPLOY_DIR}/infra/mongodb-init/
+          ssh -i ~/.ssh/id_ed25519 -o PasswordAuthentication=no root@${DEV_HOST} "mkdir -p ${DEPLOY_DIR}/infra/mongodb-init"
+          scp -i ~/.ssh/id_ed25519 -o PasswordAuthentication=no -r infra/mongodb-init/* root@${DEV_HOST}:${DEPLOY_DIR}/infra/mongodb-init/
           echo "✅ Deployment files copied"
 
       - name: Reset Tailscale Serve before deployment
         run: |
           echo "Resetting Tailscale Serve to free up ports..."
-          ssh root@${DEV_HOST} "tailscale serve reset || true"
+          ssh -i ~/.ssh/id_ed25519 -o PasswordAuthentication=no root@${DEV_HOST} "tailscale serve reset || true"
           echo "✅ Tailscale Serve reset"
         env:
           DEV_HOST: ${{ env.DEV_HOST }}
@@ -133,7 +153,7 @@ jobs:
       - name: Pre-deploy target cleanup
         run: |
           echo "Running aggressive cleanup on ${DEV_HOST} before deployment..."
-          ssh root@${DEV_HOST} bash << 'REMOTE_SCRIPT'
+          ssh -i ~/.ssh/id_ed25519 -o PasswordAuthentication=no root@${DEV_HOST} bash << 'REMOTE_SCRIPT'
             echo "=== DISK USAGE BEFORE CLEANUP ==="
             df -h /
             
@@ -178,7 +198,7 @@ jobs:
         id: deploy
         run: |
           echo "Deploying to ${DEV_HOST}..."
-          ssh root@${DEV_HOST} bash << 'REMOTE_SCRIPT'
+          ssh -i ~/.ssh/id_ed25519 -o PasswordAuthentication=no root@${DEV_HOST} bash << 'REMOTE_SCRIPT'
             set -e
             DEPLOY_DIR="${{ env.DEPLOY_DIR }}"
             COMPOSE_FILE="${{ env.COMPOSE_FILE }}"
@@ -216,7 +236,7 @@ jobs:
       - name: Configure Tailscale Serve
         run: |
           echo "Configuring Tailscale Serve on ${DEV_HOST}..."
-          ssh root@${DEV_HOST} bash << 'REMOTE_SCRIPT'
+          ssh -i ~/.ssh/id_ed25519 -o PasswordAuthentication=no root@${DEV_HOST} bash << 'REMOTE_SCRIPT'
             set -e
             echo "Resetting existing Tailscale Serve configuration..."
             tailscale serve reset || true
@@ -253,7 +273,7 @@ jobs:
         id: rollback
         run: |
           echo "🚨 Deployment failed health check, initiating rollback..."
-          ssh root@${DEV_HOST} bash << 'REMOTE_SCRIPT'
+          ssh -i ~/.ssh/id_ed25519 -o PasswordAuthentication=no root@${DEV_HOST} bash << 'REMOTE_SCRIPT'
             set -e
             DEPLOY_DIR="${{ env.DEPLOY_DIR }}"
             COMPOSE_FILE="${{ env.COMPOSE_FILE }}"
@@ -298,7 +318,7 @@ jobs:
         if: always()
         run: |
           echo "Cleaning up target disk space after deployment..."
-          ssh root@${DEV_HOST} bash << 'REMOTE_SCRIPT' || echo "Target cleanup had issues, continuing..."
+          ssh -i ~/.ssh/id_ed25519 -o PasswordAuthentication=no root@${DEV_HOST} bash << 'REMOTE_SCRIPT' || echo "Target cleanup had issues, continuing..."
             # Prune unused images
             docker image prune -af || true
             # Prune build cache

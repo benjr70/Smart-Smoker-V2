@@ -1879,6 +1879,123 @@ Based on risk assessment and CI/CD vision, Phase 3 implementation order is:
 - Team trained on deployment procedures
 - Documentation complete and accessible
 
+## Troubleshooting & Operational Reference
+
+Lessons learned from deployment pipeline debugging and container provisioning.
+
+### SSH Authentication in CI/CD
+
+The `SSH_PRIVATE_KEY` GitHub secret is used by the self-hosted runner to SSH into deployment targets (e.g., `smoker-dev-cloud`). For this to work:
+
+1. The **public key** corresponding to `SSH_PRIVATE_KEY` must be present in `/root/.ssh/authorized_keys` on every target host
+2. The same public key must be listed in `infra/proxmox/ansible/inventory/group_vars/all.yml` under `ssh_public_keys` so future Ansible provisioning keeps it authorized
+3. All `ssh` and `scp` commands in workflows should explicitly specify the key and disable password fallback:
+   ```bash
+   ssh -i ~/.ssh/id_ed25519 -o PasswordAuthentication=no root@${HOST} "command"
+   scp -i ~/.ssh/id_ed25519 -o PasswordAuthentication=no file root@${HOST}:/path
+   ```
+
+**Diagnosing key mismatches:** The `Verify SSH key setup` step in `dev-deploy.yml` logs the key fingerprint and public key extracted from the secret. Compare these against the server's `authorized_keys` to confirm alignment.
+
+### Docker in Unprivileged LXC Containers (Proxmox)
+
+Docker Engine 27+ (runc 1.2+) fails to start containers inside unprivileged Proxmox LXC containers with:
+```
+OCI runtime create failed: unable to start container process: error during container init:
+open sysctl net.ipv4.ip_unprivileged_port_start file: permission denied
+```
+
+**Root cause:** runc tries to write to `/proc/sys/net/ipv4/ip_unprivileged_port_start` in the container namespace, which is blocked in unprivileged LXC.
+
+**Fix:** Use `crun` as the Docker container runtime instead of `runc`:
+
+```bash
+# Install crun 1.19+ (apt version is too old)
+curl -sL https://github.com/containers/crun/releases/download/1.19.1/crun-1.19.1-linux-amd64 \
+  -o /usr/local/bin/crun && chmod +x /usr/local/bin/crun
+
+# Configure Docker to use crun
+cat > /etc/docker/daemon.json << 'EOF'
+{
+  "default-runtime": "crun",
+  "runtimes": {
+    "crun": {
+      "path": "/usr/local/bin/crun"
+    }
+  }
+}
+EOF
+systemctl restart docker
+```
+
+**Required LXC container features** (in `/etc/pve/lxc/<vmid>.conf`):
+```
+features: keyctl=1,nesting=1
+lxc.cgroup2.devices.allow: c 10:200 rwm
+lxc.mount.entry: /dev/net dev/net none bind,create=dir
+lxc.mount.auto: proc:rw sys:rw
+lxc.apparmor.profile: unconfined
+```
+
+**Warning:** Never switch an LXC container between `unprivileged: 1` and `unprivileged: 0` with data on disk. The UID mapping changes (root inside unprivileged = UID 100000 on host) and all file ownership breaks. If it happens, fix from the Proxmox host:
+```bash
+# From Proxmox host, fix files created while in wrong mode
+pct mount <vmid>
+find /var/lib/lxc/<vmid>/rootfs -uid 0 -exec chown 100000:100000 {} +
+pct unmount <vmid>
+```
+
+### Tailscale DNS (MagicDNS) Configuration
+
+Tailscale's MagicDNS server (`100.100.100.100`) resolves Tailscale FQDNs (e.g., `smoker-dev-cloud-1.tail74646.ts.net`) but may return `SERVFAIL` for public domains if the Tailscale admin DNS configuration has no upstream resolvers set.
+
+**Symptoms:**
+- `nslookup archive.ubuntu.com` fails (can't install packages, pull Docker images)
+- `nslookup smoker-dev-cloud-1.tail74646.ts.net` succeeds (Tailscale names work)
+
+**Best configuration:** Set `tailscale set --accept-dns=true` on all containers so Tailscale manages `/etc/resolv.conf`. If MagicDNS fails to forward public DNS, the `resolv.conf` will need manual fallback entries:
+```
+nameserver 100.100.100.100
+nameserver 8.8.8.8
+nameserver 8.8.4.4
+search tail74646.ts.net smoker.local
+```
+
+The health check script (`scripts/deployment-health-check.sh`) resolves the Tailscale FQDN via SSH and uses it for HTTPS health checks through Tailscale Serve. The runner must be able to resolve Tailscale FQDNs for this to work.
+
+### Emergency Access via Proxmox API
+
+When SSH to a container is broken (e.g., `authorized_keys` missing or corrupted), use the Proxmox API from the runner to execute commands inside the container:
+
+```bash
+# From the runner, SSH to Proxmox host using the API token password
+sshpass -p "<password>" ssh root@192.168.1.151 \
+  'pct exec <vmid> -- bash -c "mkdir -p /root/.ssh && echo <pubkey> >> /root/.ssh/authorized_keys"'
+```
+
+**Proxmox API token** (stored in `infra/proxmox/terraform/terraform.tfvars`):
+- Token ID: `root@pam!SmartSmoker`
+- Can be used to reset the `root@pam` password via the API if web UI login fails:
+  ```bash
+  curl -s -k -X PUT \
+    -H "Authorization: PVEAPIToken=root@pam!SmartSmoker=<secret>" \
+    -d "userid=root@pam" -d "password=<new-password>" \
+    "https://192.168.1.151:8006/api2/json/access/password"
+  ```
+
+### Dev-Cloud Container Provisioning Checklist
+
+When the `smoker-dev-cloud` container is freshly created or rebuilt, the following must be in place before the Dev Deploy workflow will succeed:
+
+| Requirement | How to verify | How to fix |
+|------------|---------------|------------|
+| SSH authorized keys | `ssh root@smoker-dev-cloud-1 echo ok` | Add keys via `pct exec` (see above) |
+| Docker + Compose | `docker compose version` | Install from Docker's apt repo |
+| crun runtime | `docker info \| grep Runtime` | Install binary + daemon.json (see above) |
+| Deployment directory | `ls /opt/smart-smoker-dev` | `mkdir -p /opt/smart-smoker-dev/{scripts,backups/deployments,infra/mongodb-init}` |
+| DNS resolution | `nslookup archive.ubuntu.com` | Verify `tailscale set --accept-dns=true` or add fallback DNS |
+| Tailscale Serve | `tailscale serve status` | `tailscale serve --bg --https=8443 http://127.0.0.1:3001` and `tailscale serve --bg --https=443 http://127.0.0.1:80` |
+
 ---
 
 **Phase Owner**: DevOps Team  
