@@ -1,0 +1,213 @@
+# Virtual Smoker VM Infrastructure Provisioning
+# Automates: Terraform apply → Wait for VM → Ansible provisioning → Validation
+#
+# Triggers:
+#   - Manual: workflow_dispatch for on-demand provisioning
+#   - Automatic: on push to master when infra files change
+
+name: Provision Virtual Smoker VM
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - 'infra/proxmox/terraform/**'
+      - 'infra/proxmox/ansible/roles/virtual-device/**'
+      - 'infra/proxmox/ansible/playbooks/setup-virtual-smoker.yml'
+      - 'infra/proxmox/ansible/inventory/**'
+      - 'virtual-smoker.docker-compose.yml'
+      - '.github/workflows/infra-provision-vm.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ansible-provision-dev
+  cancel-in-progress: false  # Don't cancel in-progress provisioning; queues behind ansible-provision.yml
+
+jobs:
+  # Step 1: Terraform apply to create/update the VM
+  terraform-apply:
+    name: Terraform Apply
+    runs-on: [self-hosted, linux, proxmox]
+    environment: development
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Terraform Init
+        working-directory: infra/proxmox/terraform
+        run: |
+          echo "=== Terraform Init ==="
+          terraform init
+
+      - name: Terraform Plan
+        working-directory: infra/proxmox/terraform
+        run: |
+          echo "=== Terraform Plan ==="
+          terraform plan -out=tfplan
+
+      - name: Terraform Apply
+        working-directory: infra/proxmox/terraform
+        run: |
+          echo "=== Terraform Apply ==="
+          terraform apply tfplan
+          echo "✅ Terraform apply completed"
+
+      - name: Cleanup plan file
+        if: always()
+        working-directory: infra/proxmox/terraform
+        run: rm -f tfplan
+
+  # Step 2: Wait for VM to become SSH-reachable
+  wait-for-vm:
+    name: Wait for VM Boot
+    needs: terraform-apply
+    runs-on: [self-hosted, linux, proxmox]
+    environment: development
+    timeout-minutes: 10
+
+    steps:
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+      - name: Wait for VM to be SSH-reachable
+        run: |
+          VM_IP="10.20.0.40"
+          SSH_USER="smoker"
+          MAX_ATTEMPTS=30
+          DELAY=10
+
+          echo "Waiting for VM at ${VM_IP} to become SSH-reachable..."
+          echo "Max wait: $((MAX_ATTEMPTS * DELAY)) seconds"
+
+          for i in $(seq 1 $MAX_ATTEMPTS); do
+            if ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -o BatchMode=yes \
+              ${SSH_USER}@${VM_IP} "echo 'VM is ready'" 2>/dev/null; then
+              echo "✅ VM is SSH-reachable after $((i * DELAY)) seconds"
+
+              echo "Waiting for cloud-init to finish..."
+              ssh -o StrictHostKeyChecking=no -o BatchMode=yes \
+                ${SSH_USER}@${VM_IP} "cloud-init status --wait" 2>/dev/null || true
+              echo "✅ Cloud-init complete, VM is fully ready"
+              exit 0
+            fi
+            echo "Attempt $i/$MAX_ATTEMPTS: VM not ready yet, waiting ${DELAY}s..."
+            sleep $DELAY
+          done
+
+          echo "❌ VM did not become reachable within $((MAX_ATTEMPTS * DELAY)) seconds"
+          exit 1
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/id_ed25519
+
+  # Step 3: Run Ansible to configure the VM
+  ansible-provision:
+    name: Ansible Provision
+    needs: wait-for-vm
+    runs-on: [self-hosted, linux, proxmox]
+    environment: development
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H 10.20.0.40 >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Install Ansible dependencies
+        run: |
+          pip install --user ansible
+          ansible-galaxy collection install community.general ansible.posix --force
+
+      - name: Run Ansible playbook
+        working-directory: infra/proxmox/ansible
+        run: |
+          echo "=========================================="
+          echo "Provisioning Virtual Smoker Device"
+          echo "=========================================="
+          echo "Playbook: setup-virtual-smoker.yml"
+          echo "Target: devices (10.20.0.40)"
+          echo "=========================================="
+
+          ansible-playbook playbooks/setup-virtual-smoker.yml \
+            --limit 'devices' \
+            --extra-vars "tailscale_auth_key=${{ secrets.TAILSCALE_AUTH_KEY }}" \
+            -v
+
+          echo "✅ Ansible provisioning completed"
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/id_ed25519
+
+  # Step 4: Validate the provisioned VM
+  validate:
+    name: Validate Infrastructure
+    needs: ansible-provision
+    runs-on: [self-hosted, linux, proxmox]
+    environment: development
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H 10.20.0.40 >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Run infrastructure validation
+        run: |
+          echo "Running virtual smoker infrastructure validation..."
+          # Try Tailscale hostname first, fall back to IP
+          if ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -o BatchMode=yes smoker@virtual-smoker "echo ok" 2>/dev/null; then
+            echo "Using Tailscale hostname: virtual-smoker"
+            ./scripts/validate-virtual-smoker.sh virtual-smoker
+          else
+            echo "Tailscale not reachable yet, using IP: 10.20.0.40"
+            ./scripts/validate-virtual-smoker.sh 10.20.0.40
+          fi
+        env:
+          SSH_USER: smoker
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/id_ed25519
+
+      - name: Provisioning summary
+        if: always()
+        run: |
+          echo "=========================================="
+          echo "Virtual Smoker VM Provisioning Summary"
+          echo "=========================================="
+          echo "Terraform: ${{ needs.terraform-apply.result }}"
+          echo "VM Boot: ${{ needs.wait-for-vm.result }}"
+          echo "Ansible: ${{ needs.ansible-provision.result }}"
+          echo "Validation: ${{ job.status }}"
+          echo "=========================================="
+          echo ""
+          echo "Next steps:"
+          echo "  1. Trigger dev-deploy workflow to deploy containers"
+          echo "  2. Access UI at https://virtual-smoker.tail74646.ts.net"
+          echo "=========================================="

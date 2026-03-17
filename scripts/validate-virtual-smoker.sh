@@ -39,7 +39,7 @@ run_cmd() {
     if [ "${TARGET_HOST}" = "localhost" ] || [ "${TARGET_HOST}" = "127.0.0.1" ]; then
         eval "$1"
     else
-        ssh "${SSH_USER}@${TARGET_HOST}" "$1"
+        ssh -o StrictHostKeyChecking=no "${SSH_USER}@${TARGET_HOST}" "$1"
     fi
 }
 
@@ -109,7 +109,7 @@ main() {
         echo -e "${GREEN}✅ PASS: Local execution (no SSH needed)${NC}"
         ((PASSED++)) || true
     else
-        if ssh -o ConnectTimeout=10 -o BatchMode=yes "${SSH_USER}@${TARGET_HOST}" "echo 'SSH OK'" > /dev/null 2>&1; then
+        if ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o BatchMode=yes "${SSH_USER}@${TARGET_HOST}" "echo 'SSH OK'" > /dev/null 2>&1; then
             echo -e "${GREEN}✅ PASS: SSH connectivity${NC}"
             echo -e "   Host: ${TARGET_HOST}"
             echo -e "   User: ${SSH_USER}"

@@ -308,6 +308,11 @@ jobs:
             exit 1
           fi
 
+      # Tailscale Serve is configured by Ansible during provisioning
+      # (see infra/proxmox/ansible/roles/tailscale/tasks/serve.yml
+      #  and host_vars/virtual-smoker-device.yml for port mappings).
+      # The config persists across deploys -- no need to reset/reconfigure here.
+
       # CLEANUP: Post-deploy target cleanup (always runs)
       - name: Post-deploy target cleanup
         if: always()

@@ -16,3 +16,13 @@ tailscale_tags:
   - tag:virtual
 tailscale_accept_routes: true
 tailscale_accept_dns: true
+
+# Tailscale Serve - expose smoker UI and device-service via HTTPS
+# Frontend: https://virtual-smoker.tail74646.ts.net/
+# Device Service API: https://virtual-smoker.tail74646.ts.net:3003/
+tailscale_serve_enabled: true
+tailscale_serve_config:
+  - https_port: 443
+    target_port: 8080      # Smoker frontend
+  - https_port: 3003
+    target_port: 3003      # Device service API

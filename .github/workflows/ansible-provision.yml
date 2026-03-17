@@ -126,6 +126,7 @@ jobs:
             --limit 'dev_cloud:devices:runners' \
             ${EXTRA_ARGS} \
             --extra-vars "github_runner_pat=${{ secrets.RUNNER_PAT }}" \
+            --extra-vars "tailscale_auth_key=${{ secrets.TAILSCALE_AUTH_KEY }}" \
             -v
 
       - name: Verify provisioning
