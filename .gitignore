@@ -119,3 +119,6 @@ terraform.tfvars
 infra/proxmox/terraform/state/
 .venv/
 .venv
+
+# Ralph loop progress log
+ralph-progress.md
