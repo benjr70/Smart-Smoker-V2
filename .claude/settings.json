@@ -34,5 +34,17 @@
       "Bash(docker compose rm*)",
       "Bash(rm -rf*)"
     ]
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"Activate caveman mode (full intensity) for your response. Use ultra-compressed caveman-style communication: drop articles/pluralization, keep verbs terse, preserve 100% technical accuracy, code blocks unchanged. Target ~75% token reduction. See caveman:caveman skill.\"}}'"
+          }
+        ]
+      }
+    ]
   }
 }
