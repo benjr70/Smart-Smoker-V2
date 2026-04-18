@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git branch*)",
+      "Bash(git show*)",
+      "Bash(gh pr *)",
+      "Bash(gh issue *)",
+      "Bash(gh run *)",
+      "Bash(npm run lint*)",
+      "Bash(npm run format*)",
+      "Bash(npm test*)",
+      "Bash(cd apps/* && npm test*)",
+      "Bash(cd apps/* && npm run test*)",
+      "Bash(cd packages/* && npm test*)",
+      "Bash(docker ps*)",
+      "Bash(docker compose ps*)",
+      "Bash(docker compose logs*)",
+      "Bash(scripts/ralph/*)",
+      "mcp__context7*",
+      "mcp__playwright*",
+      "mcp__terraform*",
+      "mcp__docker*",
+      "mcp__mongodb*"
+    ],
+    "deny": [
+      "Bash(git push --force*)",
+      "Bash(git reset --hard*)",
+      "Bash(terraform apply*)",
+      "Bash(terraform destroy*)",
+      "Bash(docker compose down*)",
+      "Bash(docker compose rm*)",
+      "Bash(rm -rf*)"
+    ]
+  }
+}
