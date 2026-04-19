@@ -65,7 +65,34 @@ npm run lint:fix
 npm run format
 ```
 
-### 5. Commit
+### 5. Self-validation smoke (PRD #183)
+
+Before committing, run the smoke script against localhost so the commit message
+can carry a `smoke: PASS|FAIL|SKIPPED` line — reviewers + downstream gates rely
+on it. Steps:
+
+1. Best-effort start the relevant services (backend, frontend, device-service)
+   if they aren't already running. If you can't start them in this sandbox
+   (e.g., no docker, missing env), record `SKIPPED` and skip to step 4.
+2. Install smoke deps once per workspace if missing:
+   ```bash
+   cd scripts/smoke && npm install --legacy-peer-deps && npx playwright install --with-deps chromium
+   ```
+3. Run the smoke script:
+   ```bash
+   cd scripts/smoke && npm run smoke
+   # or with a device probe:
+   # npx tsx run.ts --backend http://localhost:3001 --frontend http://localhost:3000 --device http://localhost:3003
+   ```
+   Capture the final `smoke: ...` line from stdout.
+4. Decide the smoke outcome:
+   - Exit code `0` → `smoke: PASS`
+   - Exit code `1` → `smoke: FAIL` — investigate; if the failure is in code you
+     just wrote, fix it and re-run before committing.
+   - Couldn't run (no services up, sandbox lacks chromium, etc.) →
+     `smoke: SKIPPED — <one-line reason>`
+
+### 6. Commit
 
 - Stage only the files you changed (do not use `git add .` or `git add -A`).
 - Commit message format:
@@ -73,11 +100,14 @@ npm run format
   feat(<scope>): <short description>
 
   Closes #{{ISSUE_NUMBER}}
+  smoke: PASS|FAIL|SKIPPED — <one-line detail>
   ```
 - Scope should match the app(s) changed (e.g., `backend`, `frontend`, `device-service`).
 - If multiple apps changed, use the primary one or `monorepo`.
+- The `smoke:` trailer is REQUIRED — never omit it. PRD #183 graders + the
+  ralph PR opener look for that line.
 
-### 6. Update the GitHub issue
+### 7. Update the GitHub issue
 
 ```bash
 gh issue comment {{ISSUE_NUMBER}} --body "Implemented in $(git rev-parse --short HEAD). Summary: <what you did>"
@@ -85,7 +115,7 @@ gh issue edit {{ISSUE_NUMBER}} --remove-label "ralph:in-progress" --add-label "r
 gh issue close {{ISSUE_NUMBER}}
 ```
 
-### 7. Report status
+### 8. Report status
 
 After completing all steps, output exactly ONE of these signals:
 

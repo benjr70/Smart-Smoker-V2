@@ -18,6 +18,8 @@ describe('Bootstrap', () => {
       enableCors: jest.fn(),
       listen: jest.fn().mockResolvedValue(undefined),
       close: jest.fn().mockResolvedValue(undefined),
+      get: jest.fn().mockReturnValue({ log: jest.fn(), error: jest.fn() }),
+      useLogger: jest.fn(),
     };
 
     (NestFactory.create as jest.Mock).mockResolvedValue(mockApp);
@@ -38,7 +40,9 @@ describe('Bootstrap', () => {
 
     await actualBootstrap();
 
-    expect(NestFactory.create).toHaveBeenCalledWith(AppModule);
+    expect(NestFactory.create).toHaveBeenCalledWith(AppModule, {
+      bufferLogs: true,
+    });
     expect(mockApp.enableCors).toHaveBeenCalledWith({
       origin: true,
       methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',

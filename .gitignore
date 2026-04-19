@@ -122,3 +122,7 @@ infra/proxmox/terraform/state/
 
 # Ralph loop progress log
 ralph-progress.md
+
+# Smoke test artifacts (PRD #183)
+smoke-artifacts/
+scripts/smoke/smoke-artifacts/
