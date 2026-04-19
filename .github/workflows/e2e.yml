@@ -1,0 +1,95 @@
+# Reusable E2E test workflow for Smart Smoker v2 applications.
+#
+# Runs `npm run test:e2e` per app (uses each app's existing jest-e2e.json).
+# Currently ADVISORY (continue-on-error: true) per PRD #183 (Level 6 harness).
+# Flip to blocking after the 2-week bake window by passing `blocking: true`.
+
+name: E2E
+
+on:
+  workflow_call:
+    inputs:
+      apps:
+        description: 'JSON array of apps with a jest-e2e.json (e.g., ["device-service"])'
+        type: string
+        required: true
+      ref:
+        description: 'Git ref to checkout'
+        type: string
+        required: false
+        default: 'master'
+      blocking:
+        description: 'Set to true to fail the job on E2E errors (flip after advisory bake window).'
+        type: boolean
+        required: false
+        default: false
+
+jobs:
+  install:
+    uses: ./.github/workflows/install.yml
+    with:
+      ref: ${{ inputs.ref }}
+      artifact_name: 'e2e-workspace'
+
+  e2e:
+    needs: install
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJson(inputs.apps) }}
+
+    steps:
+      - name: Download workspace
+        uses: actions/download-artifact@v4
+        with:
+          name: e2e-workspace
+          path: .
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.7.0'
+
+      - name: Use npm 10
+        run: npm i -g npm@10
+
+      - name: Cache Node Modules
+        uses: actions/cache@v4
+        env:
+          cache-name: cache-node-modules
+        with:
+          path: |
+            node_modules
+            */*/node_modules
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+            ${{ runner.os }}-build-
+            ${{ runner.os }}-
+
+      - name: Verify e2e config exists
+        id: check
+        working-directory: apps/${{ matrix.app }}
+        run: |
+          if [ -f test/jest-e2e.json ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "::warning title=E2E (${{ matrix.app }})::No test/jest-e2e.json found — skipping."
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run E2E for ${{ matrix.app }} (advisory)
+        id: e2e
+        if: steps.check.outputs.exists == 'true'
+        continue-on-error: ${{ !inputs.blocking }}
+        working-directory: apps/${{ matrix.app }}
+        run: |
+          echo "::group::npm run test:e2e for ${{ matrix.app }}"
+          npm run test:e2e
+          echo "::endgroup::"
+
+      - name: Advisory notice
+        if: ${{ steps.check.outputs.exists == 'true' && !inputs.blocking && steps.e2e.outcome == 'failure' }}
+        run: |
+          echo "::warning title=E2E (${{ matrix.app }})::Advisory E2E errors detected. This will become blocking in ~2 weeks per PRD #183."

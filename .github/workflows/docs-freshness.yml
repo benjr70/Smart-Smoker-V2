@@ -1,0 +1,124 @@
+# Docs freshness check — flags PRs that change controllers, DTOs, or infra
+# without updating the matching docs section. ADVISORY per PRD #183 (Level 6
+# harness); the workflow currently only emits ::warning + a sticky PR comment
+# and exits 0. Flip the `BLOCKING` env to "true" after the bake window.
+
+name: Docs Freshness
+
+on:
+  pull_request:
+    branches: [master]
+
+env:
+  BLOCKING: 'false'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute changed files
+        id: diff
+        run: |
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+          git fetch --no-tags origin "$base" "$head" 2>/dev/null || true
+          changed=$(git diff --name-only "$base" "$head")
+          echo "$changed" > /tmp/changed.txt
+          echo "Changed files:"
+          cat /tmp/changed.txt
+
+      - name: Evaluate freshness rules
+        id: rules
+        run: |
+          changed=$(cat /tmp/changed.txt)
+
+          violations=()
+
+          check_pair() {
+            local label="$1" code_pattern="$2" docs_pattern="$3"
+            if echo "$changed" | grep -qE "$code_pattern"; then
+              if ! echo "$changed" | grep -qE "$docs_pattern"; then
+                violations+=("$label: changed code matches '$code_pattern' but no docs updated under '$docs_pattern'")
+              fi
+            fi
+          }
+
+          # Backend controllers / DTOs → docs/Backend/
+          check_pair "backend-api" \
+            '^apps/backend/src/.*\.(controller|dto)\.ts$' \
+            '^docs/Backend/'
+
+          # Device-service controllers / DTOs → docs/Device Service/
+          check_pair "device-service-api" \
+            '^apps/device-service/src/.*\.(controller|dto)\.ts$' \
+            '^docs/Device Service/'
+
+          # Terraform → docs/Infrastructure/
+          check_pair "terraform" \
+            '^infra/proxmox/terraform/' \
+            '^docs/Infrastructure/'
+
+          # Ansible → docs/Infrastructure/
+          check_pair "ansible" \
+            '^infra/ansible/' \
+            '^docs/Infrastructure/'
+
+          if [ ${#violations[@]} -eq 0 ]; then
+            echo "result=ok" >> $GITHUB_OUTPUT
+            {
+              echo 'comment<<MD'
+              echo '✅ **Docs freshness:** all touched code paths have matching docs updates.'
+              echo 'MD'
+            } >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "result=violations" >> $GITHUB_OUTPUT
+          {
+            echo 'comment<<MD'
+            echo '⚠️ **Docs freshness (advisory):** the following code changes lack a matching docs update.'
+            echo ''
+            for v in "${violations[@]}"; do
+              echo "- $v"
+            done
+            echo ''
+            echo 'Update the relevant `docs/` section so future agents read accurate contracts. Will become blocking in ~2 weeks per PRD #183.'
+            echo 'MD'
+          } >> $GITHUB_OUTPUT
+
+          for v in "${violations[@]}"; do
+            echo "::warning title=Docs freshness::$v"
+          done
+
+      - name: Find existing comment
+        if: github.event_name == 'pull_request'
+        id: find
+        uses: peter-evans/find-comment@v3
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: 'github-actions[bot]'
+          body-includes: 'Docs freshness'
+
+      - name: Upsert PR comment
+        if: github.event_name == 'pull_request'
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          comment-id: ${{ steps.find.outputs.comment-id }}
+          issue-number: ${{ github.event.pull_request.number }}
+          body: ${{ steps.rules.outputs.comment }}
+          edit-mode: replace
+
+      - name: Fail if blocking + violations
+        if: steps.rules.outputs.result == 'violations' && env.BLOCKING == 'true'
+        run: |
+          echo "Docs freshness violations and BLOCKING=true — failing job."
+          exit 1

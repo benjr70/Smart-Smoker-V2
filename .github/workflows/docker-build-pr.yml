@@ -1,0 +1,52 @@
+# PR Docker build gate. Builds every Dockerfile (no push) so a broken image
+# fails the PR instead of slipping through to publish/deploy. ADVISORY for the
+# initial bake window per PRD #183 (Level 6 harness).
+#
+# Build context: repo root (matches publish.yml). Single platform (linux/amd64)
+# to save CI minutes — multi-arch (arm/v7) is reserved for publish.yml.
+
+name: Docker Build (PR)
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'apps/*/Dockerfile'
+      - '*.docker-compose.yml'
+      - '.github/workflows/docker-build-pr.yml'
+      - 'apps/*/healthcheck.js'
+      - 'apps/*/package.json'
+      - 'apps/*/package-lock.json'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [backend, device-service, frontend, smoker]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.app }} (advisory, no push)
+        id: build
+        continue-on-error: true
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: false
+          cache-from: type=gha,scope=docker-build-pr-${{ matrix.app }}
+          cache-to: type=gha,scope=docker-build-pr-${{ matrix.app }},mode=max
+
+      - name: Advisory notice
+        if: steps.build.outcome == 'failure'
+        run: |
+          echo "::warning title=Docker build (${{ matrix.app }})::Advisory Docker build failure. This will become blocking in ~2 weeks per PRD #183."
