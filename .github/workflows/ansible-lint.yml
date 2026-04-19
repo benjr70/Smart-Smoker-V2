@@ -55,3 +55,67 @@ jobs:
         run: |
           cd infra/proxmox/ansible
           ansible-inventory --list -i inventory/hosts.yml > /dev/null
+
+  # Advisory dry-run gate (PRD #183, Level 6 harness). Catches config-intent
+  # regressions that pure syntax/lint won't surface (e.g., a renamed handler
+  # reference, a wrong file path). continue-on-error until the bake window
+  # ends — flip after ~2 weeks.
+  ansible-check:
+    runs-on: ubuntu-latest
+    needs: ansible-lint
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Ansible and dependencies
+        run: |
+          pip install ansible ansible-lint
+          ansible-galaxy collection install community.general
+          ansible-galaxy collection install ansible.posix
+
+      - name: Build localhost fixture inventory
+        run: |
+          mkdir -p /tmp/ansible-check
+          cat > /tmp/ansible-check/inventory.yml <<'YAML'
+          all:
+            hosts:
+              localhost:
+                ansible_connection: local
+                ansible_python_interpreter: /usr/bin/python3
+            children:
+              cloud:
+                hosts: { localhost: {} }
+              devices:
+                hosts: { localhost: {} }
+              github_runners:
+                hosts: { localhost: {} }
+          YAML
+
+      - name: Ansible dry-run (--check --diff, advisory)
+        id: check
+        continue-on-error: true
+        working-directory: infra/proxmox/ansible
+        run: |
+          set +e
+          shopt -s nullglob
+          rc=0
+          for pb in playbooks/*.yml; do
+            echo "::group::ansible-playbook --check --diff $pb"
+            ansible-playbook "$pb" \
+              -i /tmp/ansible-check/inventory.yml \
+              --check --diff \
+              --extra-vars "tailscale_auth_key=dummy ansible_user=runner" \
+              || rc=$?
+            echo "::endgroup::"
+          done
+          exit $rc
+
+      - name: Advisory notice
+        if: steps.check.outcome == 'failure'
+        run: |
+          echo "::warning title=Ansible --check::Advisory dry-run failure. This will become blocking in ~2 weeks per PRD #183."

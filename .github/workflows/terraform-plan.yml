@@ -1,0 +1,124 @@
+# Terraform PR plan (PRD #183, Level 6 harness).
+#
+# Runs `terraform plan` on every PR that touches the Proxmox terraform tree
+# and posts a sticky summary comment so reviewers + agents can see exact
+# state delta before approving. Currently ADVISORY (the workflow always
+# exits 0); flip the BLOCKING env to "true" after the bake window.
+#
+# Layout note: this repo uses ONE root terraform module with sub-modules
+# under environments/{dev-cloud,prod-cloud,github-runner,virtual-smoker}.
+# A single plan therefore covers all envs.
+
+name: Terraform Plan (PR)
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'infra/proxmox/terraform/**'
+      - '.github/workflows/terraform-plan.yml'
+
+env:
+  BLOCKING: 'false'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    runs-on: [self-hosted, linux, proxmox]
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: infra/proxmox/terraform
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Terraform Init
+        id: init
+        run: terraform init -input=false
+
+      - name: Terraform Plan
+        id: plan
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          terraform plan -no-color -input=false -out=tfplan.binary 2>&1 | tee plan.txt
+          terraform show -no-color tfplan.binary > plan-show.txt 2>&1 || true
+
+      - name: Truncate plan for PR comment
+        id: truncate
+        run: |
+          src=plan-show.txt
+          [ -s "$src" ] || src=plan.txt
+          head -c 60000 "$src" > plan-trim.txt
+          bytes=$(wc -c < "$src")
+          if [ "$bytes" -gt 60000 ]; then
+            echo "" >> plan-trim.txt
+            echo "... (truncated — full plan in workflow logs, $bytes bytes total)" >> plan-trim.txt
+          fi
+
+      - name: Upsert PR comment
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          PLAN_OUTCOME: ${{ steps.plan.outcome }}
+          INIT_OUTCOME: ${{ steps.init.outcome }}
+        with:
+          script: |
+            const fs = require('fs');
+            const plan = fs.readFileSync('infra/proxmox/terraform/plan-trim.txt', 'utf8');
+            const marker = '<!-- terraform-plan-pr -->';
+            const body = [
+              marker,
+              '#### Terraform Plan (advisory)',
+              '',
+              `- init: \`${process.env.INIT_OUTCOME}\``,
+              `- plan: \`${process.env.PLAN_OUTCOME}\``,
+              '',
+              '<details><summary>Plan output</summary>',
+              '',
+              '```hcl',
+              plan,
+              '```',
+              '',
+              '</details>',
+              '',
+              '_Posted by `.github/workflows/terraform-plan.yml` — PRD #183._',
+            ].join('\n');
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const { data: comments } = await github.rest.issues.listComments({
+              owner, repo, issue_number, per_page: 100,
+            });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner, repo, comment_id: existing.id, body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number, body,
+              });
+            }
+
+      - name: Cleanup plan artifact
+        if: always()
+        run: rm -f tfplan.binary plan.txt plan-show.txt plan-trim.txt
+
+      - name: Fail if blocking + plan failed
+        if: env.BLOCKING == 'true' && steps.plan.outcome == 'failure'
+        run: exit 1
+
+      - name: Advisory notice
+        if: env.BLOCKING != 'true' && steps.plan.outcome == 'failure'
+        run: |
+          echo "::warning title=Terraform plan::Advisory plan failure. This will become blocking in ~2 weeks per PRD #183."
