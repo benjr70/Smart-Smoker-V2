@@ -1,0 +1,12 @@
+# Smart Smoker V2 pre-commit hook (advisory mode)
+# Runs prettier + eslint on staged files via lint-staged.
+# Advisory mode: issues are printed but the commit is NOT blocked.
+# Flip to blocking mode by removing the trailing `|| true` (planned Week 3 per PRD #183).
+
+npx lint-staged || {
+  echo ""
+  echo "⚠️  lint-staged reported issues above (advisory mode — commit NOT blocked)."
+  echo "   Fix with: npm run fix"
+  echo "   This hook will become blocking in ~2 weeks."
+  exit 0
+}

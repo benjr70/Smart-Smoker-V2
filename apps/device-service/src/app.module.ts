@@ -6,13 +6,14 @@ import {
 } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { HealthModule } from './health/health.module';
 import { SerialModule } from './serial/serial.module';
 import { EventsModule } from './websocket/events.module';
 import { WifiManagerModule } from './wifiManager/wifiManager.module';
 import { LoggerMiddleware } from './logger.middleware';
 
 @Module({
-  imports: [SerialModule, EventsModule, WifiManagerModule],
+  imports: [SerialModule, EventsModule, WifiManagerModule, HealthModule],
   controllers: [AppController],
   providers: [AppService],
 })

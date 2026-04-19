@@ -1,24 +1,16 @@
 import { Controller, Get, HttpStatus, Res } from '@nestjs/common';
-import { InjectConnection } from '@nestjs/mongoose';
 import { Response } from 'express';
-import { Connection } from 'mongoose';
+import { SerialService } from '../serial/serial.serivce';
 
 @Controller('api')
 export class HealthController {
-  constructor(@InjectConnection() private connection: Connection) {}
+  constructor(private readonly serialService: SerialService) {}
 
   @Get('health')
   check() {
-    const dbStatus =
-      this.connection.readyState === 1 ? 'connected' : 'disconnected';
-
     return {
       status: 'ok',
       timestamp: new Date().toISOString(),
-      database: {
-        status: dbStatus,
-        name: this.connection.name,
-      },
       uptime: process.uptime(),
       environment: process.env.NODE_ENV || 'production',
     };
@@ -26,16 +18,21 @@ export class HealthController {
 
   @Get('ready')
   ready(@Res() res: Response) {
-    const dbConnected = this.connection.readyState === 1;
-    const httpStatus = dbConnected
+    const env = process.env.NODE_ENV ? process.env.NODE_ENV.trim() : '';
+    const emulatorMode = env === 'local';
+    const serialOpen = emulatorMode
+      ? true
+      : Boolean(this.serialService?.port?.isOpen);
+
+    const httpStatus = serialOpen
       ? HttpStatus.OK
       : HttpStatus.SERVICE_UNAVAILABLE;
 
     res.status(httpStatus).json({
-      status: dbConnected ? 'ready' : 'not_ready',
+      status: serialOpen ? 'ready' : 'not_ready',
       timestamp: new Date().toISOString(),
       checks: {
-        database: dbConnected ? 'up' : 'down',
+        serial: emulatorMode ? 'emulator' : serialOpen ? 'up' : 'down',
       },
     });
   }

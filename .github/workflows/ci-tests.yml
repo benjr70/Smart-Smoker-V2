@@ -19,6 +19,15 @@ jobs:
       apps: '["backend", "device-service", "frontend", "smoker", "TemperatureChart"]'
       ref: ${{ github.ref }}
 
+  # Advisory typecheck gate (PRD #183, Level 6 harness). Flip `blocking: true`
+  # after the 2-week bake window.
+  typecheck:
+    uses: ./.github/workflows/typecheck.yml
+    with:
+      apps: '["backend", "device-service", "frontend", "smoker", "TemperatureChart"]'
+      ref: ${{ github.ref }}
+      blocking: false
+
   # Build validation - ensure all apps can build
   build-validation:
     uses: ./.github/workflows/build.yml
