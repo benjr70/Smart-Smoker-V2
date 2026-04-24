@@ -1,9 +1,22 @@
-# Skills Reference
+# AI Tooling Reference
 
-This document lists all custom skills available in this project. Skills extend
-what Claude can do by providing domain-specific instructions, checklists, and
-workflows. Claude loads them automatically when relevant, or you can invoke one
-directly with `/skill-name`.
+Full index of AI-facing surfaces wired into this repo: skills, subagent
+definitions, hooks, autonomous loops, and the Agent Teams orchestration layer.
+Skills extend what Claude can do via domain-specific instructions, checklists,
+and workflows. Claude loads them automatically when relevant, or invoke directly
+with `/skill-name`.
+
+| Surface                        | Path                    | Purpose                                                 |
+| ------------------------------ | ----------------------- | ------------------------------------------------------- |
+| Skills                         | `.claude/skills/`       | Slash commands + auto-loaded playbooks                  |
+| Subagent definitions (Level 7) | `.claude/agents/`       | Teammate roles for Agent Teams (impl/rev/ver/research)  |
+| Hooks (Level 6 + 7)            | `.claude/hooks/`        | TaskCompleted + TeammateIdle quality gates              |
+| Settings + permissions         | `.claude/settings.json` | Env flags, allow/deny rules, hook registration          |
+| Ralph loop (Level 6)           | `scripts/ralph/`        | Single-agent autonomous issue implementation            |
+| Smoke harness                  | `scripts/smoke/run.ts`  | Playwright probes — verifier invokes after diff approve |
+
+Agent Teams (Level 7) has **no bootstrap script** — `/team-dispatch`
+self-bootstraps labels + pre-flight on every run.
 
 ---
 
@@ -157,6 +170,68 @@ Aggregates findings into a structured review with risk level
 
 ---
 
+## Orchestration Skills
+
+### `/team-dispatch` -- Agent Teams Orchestration (Level 7)
+
+**When to use:** You have a PRD with open issues labeled `team` and want
+autonomous parallel implementation via the Claude Code Agent Teams feature
+(implementer/reviewer/verifier/researcher coordinating through a shared task
+list). Invoke with `/team-dispatch <prd-issue-number>` (add `--dry-run` to
+preview the roster + task list without spawning).
+
+**What it does:** Primes the running Claude session as the team lead. Reads the
+PRD, enumerates `team`-labeled issues via `gh`, populates a shared task list
+with `blocked_by` edges from issue bodies, spawns the four teammate roles, and
+coordinates the per-issue flow: researcher memo → implementer claims + codes +
+stages → reviewer approves → verifier smokes + commits with `smoke:` trailer →
+labels advance `team` → `team:in-progress` → `team:done` → issue closed. Handles
+`BLOCKED` and `smoke FAIL` states; cleans up on empty queue.
+
+**Source:** Custom (project-specific). Full playbook at
+[`.claude/skills/team-dispatch/SKILL.md`](team-dispatch/SKILL.md). Companion
+docs at [`docs/Teams/`](../../docs/Teams/index.md).
+
+---
+
+---
+
+## Subagent Definitions (Level 7)
+
+Teammate roles spawned by the `/team-dispatch` lead. Each lives as a markdown
+file in `.claude/agents/` with frontmatter (`name`, `description`, `tools`,
+`model`) and a body appended to the teammate's system prompt. Claude Code
+resolves definitions by `name` when the lead spawns a teammate. **All four run
+on Opus** — implementer/reviewer separation is enforced by the tool allowlist +
+prompt scoping, not by model choice.
+
+| Role        | File                            | Tools                                    | Spawned                                                | Purpose                                                                         |
+| ----------- | ------------------------------- | ---------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| implementer | `.claude/agents/implementer.md` | `Read, Edit, Write, Bash, Glob, Grep`    | up front, persistent                                   | TDD red-green-refactor; claims tasks, writes failing tests, implements, stages  |
+| reviewer    | `.claude/agents/reviewer.md`    | `Read, Grep, Glob, Bash` (read-only git) | up front, persistent                                   | Reads staged diff, applies `/review-pr` checklist, posts approve/change-request |
+| verifier    | `.claude/agents/verifier.md`    | `Read, Bash`                             | up front, persistent                                   | Runs `scripts/smoke/run.ts`, appends `smoke:` trailer, lands commit             |
+| researcher  | `.claude/agents/researcher.md`  | `Read, Grep, Glob, WebFetch`             | on-demand per issue with non-trivial Interface Changes | Read-only memo into task description before implementer codes                   |
+
+Reviewer has **no Edit/Write** — must not fix what it flags. Researcher has **no
+Bash, no Edit/Write** — only mutates task description via task list.
+
+---
+
+## Hooks (Levels 6 + 7)
+
+Shell scripts registered in `.claude/settings.json` under the `hooks` key. Both
+exit `0` on pass / `2` on block-with-feedback. Graceful fallback: if a
+dependency fails (e.g. `jq` missing, `git` unavailable), exit `0` rather than
+block legit work.
+
+| Hook                                    | Event           | Purpose                                                                                                                                          |
+| --------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `.claude/hooks/task-completed-smoke.sh` | `TaskCompleted` | Reads HEAD commit body. If team-shaped (`feat(...)/fix(...)/...:` + `Closes #N`) but missing `smoke: PASS\|FAIL\|SKIPPED` trailer, exit 2.       |
+| `.claude/hooks/teammate-idle-review.sh` | `TeammateIdle`  | Implementer-only: scans `~/.claude/tasks/<team>/*.json` via `jq` for unresolved reviewer change-requests addressed to it. Exit 2 if any pending. |
+
+The `caveman` plugin auto-activation also wires through `UserPromptSubmit` in
+`.claude/settings.json` (intensity-aware compressed responses).
+
 ---
 
 ## External Plugin Skills
@@ -185,20 +260,45 @@ efficiency is requested.
 
 ## Full Pipeline
 
-These skills compose into a complete feature development pipeline:
+These skills compose into a complete feature development pipeline. Two
+implementation paths diverge at the issue-pickup step: **Ralph** (Level 6,
+single-agent loop, `ralph` label) or **Agent Teams** (Level 7, parallel
+multi-agent dispatch, `team` label). Pick one per PRD — do not mix labels on the
+same issue.
 
 ```
 /grill-me          Stress-test the idea
     |
 /write-a-prd       Formalize as a GitHub issue PRD
     |
-/prd-to-issues     Break into vertical-slice issues (AFK slices get `ralph` label)
+/prd-to-issues     Break into vertical-slice issues
+                   (AFK slices labeled `ralph` OR `team`)
     |
 git checkout -b feat/<name>
     |
-ralph-afk.sh       Autonomously implement issues using /tdd
+    +─── Path A: Level 6 (Ralph)
+    |        |
+    |    ralph-afk.sh        Single-agent autonomous loop using /tdd
+    |        |
+    |    /review-pr          Review completed work (manual)
+    |        |
+    |    ralph-pr.sh         Open PR
     |
-/review-pr          Review the completed work
-    |
-ralph-pr.sh         Open a PR
+    +─── Path B: Level 7 (Agent Teams)
+             |
+         /team-dispatch <prd>          Self-bootstraps labels + pre-flight,
+             |                          then spawns impl/rev/ver/research.
+             |                          Parallel impl with built-in peer review
+             |                          + smoke-trailer commits.
+             |
+         gh pr create                  Open PR (Teams writes commits already)
 ```
+
+Selection guide:
+
+- **Ralph** — small slice, one agent's context fits the whole change, no
+  cross-cutting review needed. Faster bootstrap, simpler mental model.
+- **Agent Teams** — multiple slices that benefit from parallel execution,
+  high-blast-radius changes (backend services, device-service, infra,
+  docker-compose) where plan-mode review matters, or PRDs where independent
+  reviewer signal is worth the extra concurrency cost.

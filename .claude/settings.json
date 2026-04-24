@@ -1,4 +1,7 @@
 {
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
   "permissions": {
     "allow": [
       "Bash(git status*)",
@@ -9,6 +12,7 @@
       "Bash(gh pr *)",
       "Bash(gh issue *)",
       "Bash(gh run *)",
+      "Bash(gh label *)",
       "Bash(npm run lint*)",
       "Bash(npm run format*)",
       "Bash(npm test*)",
@@ -42,6 +46,26 @@
           {
             "type": "command",
             "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"Activate caveman mode (full intensity) for your response. Use ultra-compressed caveman-style communication: drop articles/pluralization, keep verbs terse, preserve 100% technical accuracy, code blocks unchanged. Target ~75% token reduction. See caveman:caveman skill.\"}}'"
+          }
+        ]
+      }
+    ],
+    "TaskCompleted": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/task-completed-smoke.sh"
+          }
+        ]
+      }
+    ],
+    "TeammateIdle": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/teammate-idle-review.sh"
           }
         ]
       }

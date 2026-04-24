@@ -126,3 +126,6 @@ ralph-progress.md
 # Smoke test artifacts (PRD #183)
 smoke-artifacts/
 scripts/smoke/smoke-artifacts/
+
+# MkDocs build output
+site/
