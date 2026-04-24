@@ -1,0 +1,23 @@
+# Smart Smoker V2 pre-commit hook (advisory mode)
+# Runs prettier + eslint on staged files via lint-staged.
+# Advisory mode: issues are printed but the commit is NOT blocked.
+# Flip to blocking mode by removing the trailing `exit 0` (planned Week 3 per PRD #183).
+
+# Ensure node/npx is discoverable when invoked from GUI git clients or terminals
+# without mise shell activation. mise shim dir is checked first; fall back to
+# common install paths.
+export PATH="$HOME/.local/share/mise/shims:$HOME/.local/bin:/usr/local/bin:$PATH"
+
+if ! command -v npx >/dev/null 2>&1; then
+  echo "⚠️  npx not on PATH — skipping lint-staged (advisory, commit NOT blocked)."
+  echo "   Ensure node is installed (mise install) so pre-commit formatting runs."
+  exit 0
+fi
+
+npx lint-staged || {
+  echo ""
+  echo "⚠️  lint-staged reported issues above (advisory mode — commit NOT blocked)."
+  echo "   Fix with: npm run fix"
+  echo "   This hook will become blocking in ~2 weeks."
+  exit 0
+}

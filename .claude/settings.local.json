@@ -1,0 +1,9 @@
+{
+  "enabledMcpjsonServers": [
+    "context7",
+    "playwright",
+    "terraform",
+    "docker",
+    "mongodb"
+  ]
+}

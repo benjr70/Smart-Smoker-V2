@@ -72,6 +72,15 @@ nav:
       - Test Coverage: CI-CD/test-coverage.md
       - Dependency Management: CI-CD/dependency-management.md
       - Deployment & Infrastructure: CI-CD/deployment-infrastructure.md
+  - Harness:
+      - Overview: Harness/index.md
+      - Backpressure: Harness/backpressure.md
+      - Self-Validation: Harness/self-validation.md
+      - Infrastructure: Harness/infra.md
+  - Agent Teams:
+      - Overview: Teams/index.md
+      - Roles: Teams/roles.md
+      - Dispatch: Teams/dispatch.md
   - Infrastructure:
       - Overview: Infrastructure/README.md
       - Getting Started: Infrastructure/guides/getting-started.md

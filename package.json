@@ -48,7 +48,17 @@
     "lint:device-service:safe": "cd apps/device-service && npm run lint",
     "lint:device-service:fix": "cd apps/device-service && npm run lint",
     "lint:packages:safe": "cd packages/TemperatureChart && npm run lint || echo 'Package linting completed'",
-    "lint:packages:fix": "cd packages/TemperatureChart && npm run lint || echo 'Package linting completed'"
+    "lint:packages:fix": "cd packages/TemperatureChart && npm run lint || echo 'Package linting completed'",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": [
+      "prettier --write",
+      "eslint --fix --no-error-on-unmatched-pattern"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
+    ]
   },
   "repository": {
     "type": "git",
@@ -69,6 +79,8 @@
     "eslint-plugin-prettier": "^5.1.3",
     "eslint-plugin-react": "^7.33.2",
     "eslint-plugin-react-hooks": "^4.6.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
     "npm-run-all": "^4.1.5",
     "prettier": "^3.2.5",
     "rimraf": "^5.0.5"

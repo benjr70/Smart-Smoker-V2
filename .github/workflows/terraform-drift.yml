@@ -1,0 +1,159 @@
+# Terraform drift detection (PRD #183, Level 6 harness).
+#
+# Runs `terraform plan` nightly against the real Proxmox state. If the plan
+# is non-empty (drift detected), opens or updates a single sticky GitHub
+# issue labeled `infra:drift` so console-side edits don't rot silently.
+#
+# Skipped if no recent dev/prod deploy is in flight (avoids racing with
+# infra-provision-vm.yml). Manually triggerable via workflow_dispatch.
+
+name: Terraform Drift
+
+on:
+  schedule:
+    # 02:00 UTC nightly
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  # Don't race with the provisioner workflow
+  group: ansible-provision-dev
+  cancel-in-progress: false
+
+jobs:
+  drift:
+    runs-on: [self-hosted, linux, proxmox]
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: infra/proxmox/terraform
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Terraform Init
+        run: terraform init -input=false
+
+      - name: Terraform Plan (drift check)
+        id: plan
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          # Exit codes: 0=no changes, 1=error, 2=drift detected
+          terraform plan -detailed-exitcode -no-color -input=false -out=tfplan.binary 2>&1 | tee plan.txt
+          ec=${PIPESTATUS[0]}
+          echo "exitcode=$ec" >> $GITHUB_OUTPUT
+          terraform show -no-color tfplan.binary > plan-show.txt 2>&1 || true
+          # Always succeed this step so we can branch on the exit code
+          exit 0
+
+      - name: Truncate drift plan
+        if: steps.plan.outputs.exitcode == '2'
+        run: |
+          src=plan-show.txt
+          [ -s "$src" ] || src=plan.txt
+          head -c 50000 "$src" > drift-trim.txt
+          bytes=$(wc -c < "$src")
+          if [ "$bytes" -gt 50000 ]; then
+            echo "" >> drift-trim.txt
+            echo "... (truncated — full plan in workflow logs, $bytes bytes total)" >> drift-trim.txt
+          fi
+
+      - name: Open or update drift issue
+        if: steps.plan.outputs.exitcode == '2'
+        uses: actions/github-script@v7
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          script: |
+            const fs = require('fs');
+            const plan = fs.readFileSync('infra/proxmox/terraform/drift-trim.txt', 'utf8');
+            const marker = '<!-- terraform-drift -->';
+            const title = 'infra:drift — Terraform state diverges from real Proxmox state';
+            const body = [
+              marker,
+              '## Drift detected',
+              '',
+              `Last detected: \`${new Date().toISOString()}\``,
+              `Workflow run: ${process.env.RUN_URL}`,
+              '',
+              'The nightly `terraform plan` against the real Proxmox state is non-empty.',
+              'This usually means someone edited a VM in the Proxmox console without going',
+              'through Terraform. Either:',
+              '',
+              '- Reverse the manual change in Proxmox, OR',
+              '- Update the Terraform config to match reality and run `terraform apply`.',
+              '',
+              '<details><summary>Plan diff</summary>',
+              '',
+              '```hcl',
+              plan,
+              '```',
+              '',
+              '</details>',
+            ].join('\n');
+
+            const { owner, repo } = context.repo;
+            // Ensure label exists
+            try {
+              await github.rest.issues.getLabel({ owner, repo, name: 'infra:drift' });
+            } catch {
+              await github.rest.issues.createLabel({
+                owner, repo, name: 'infra:drift', color: 'b60205',
+                description: 'Terraform state diverges from real infra (auto-managed)',
+              });
+            }
+
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner, repo, state: 'open', labels: 'infra:drift', per_page: 50,
+            });
+            const existing = issues.find(i => i.body && i.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.update({
+                owner, repo, issue_number: existing.number, body, state: 'open',
+              });
+              console.log(`Updated drift issue #${existing.number}`);
+            } else {
+              const { data: created } = await github.rest.issues.create({
+                owner, repo, title, body, labels: ['infra:drift'],
+              });
+              console.log(`Opened drift issue #${created.number}`);
+            }
+
+      - name: Close drift issue if state is clean
+        if: steps.plan.outputs.exitcode == '0'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const marker = '<!-- terraform-drift -->';
+            const { owner, repo } = context.repo;
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner, repo, state: 'open', labels: 'infra:drift', per_page: 50,
+            });
+            for (const issue of issues) {
+              if (issue.body && issue.body.includes(marker)) {
+                await github.rest.issues.createComment({
+                  owner, repo, issue_number: issue.number,
+                  body: `Drift cleared as of \`${new Date().toISOString()}\` — auto-closing.`,
+                });
+                await github.rest.issues.update({
+                  owner, repo, issue_number: issue.number, state: 'closed',
+                });
+                console.log(`Closed drift issue #${issue.number}`);
+              }
+            }
+
+      - name: Fail job on plan error
+        if: steps.plan.outputs.exitcode == '1'
+        run: |
+          echo "Terraform plan errored — see logs."
+          exit 1
+
+      - name: Cleanup
+        if: always()
+        run: rm -f tfplan.binary plan.txt plan-show.txt drift-trim.txt

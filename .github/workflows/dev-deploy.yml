@@ -254,6 +254,42 @@ jobs:
         env:
           DEV_HOST: ${{ env.DEV_HOST }}
 
+      # Post-deploy smoke (PRD #183, Level 6 harness). Runs against the
+      # dev-cloud via Tailscale — the runner is already on the tailnet.
+      # Advisory during the 2-week bake window; flip `continue-on-error: false`
+      # after ~2 weeks so a broken dev-cloud deploy fails the pipeline.
+      - name: Setup Node for smoke
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install smoke deps
+        id: smoke_install
+        continue-on-error: true
+        run: |
+          npm --prefix scripts/smoke ci
+          npm --prefix scripts/smoke run smoke:install
+
+      - name: Run post-deploy smoke
+        id: smoke
+        continue-on-error: true
+        run: |
+          npm --prefix scripts/smoke run smoke -- \
+            --frontend "https://${DEV_HOST}.tail74646.ts.net" \
+            --backend "https://${DEV_HOST}.tail74646.ts.net:8443" \
+            --artifacts /tmp/smoke-artifacts
+        env:
+          DEV_HOST: ${{ env.DEV_HOST }}
+
+      - name: Upload smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-deploy-smoke-artifacts
+          path: /tmp/smoke-artifacts/
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Verify deployment health
         id: health_check
         run: |

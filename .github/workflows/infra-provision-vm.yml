@@ -211,3 +211,70 @@ jobs:
           echo "  1. Trigger dev-deploy workflow to deploy containers"
           echo "  2. Access UI at https://virtual-smoker.tail74646.ts.net"
           echo "=========================================="
+
+  # Step 5: Post-provision smoke (PRD #183, Level 6 harness).
+  # Provisioning succeeding != VM is usable. SSH in, verify Tailscale is up,
+  # and probe service health endpoints. Advisory for the bake window — flip
+  # `continue-on-error: false` after ~2 weeks to make this a hard gate.
+  post-provision-smoke:
+    name: Post-provision Smoke
+    needs: validate
+    runs-on: [self-hosted, linux, proxmox]
+    environment: development
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H 10.20.0.40 >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: SSH reachable
+        id: ssh
+        continue-on-error: true
+        run: |
+          ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o BatchMode=yes \
+            smoker@10.20.0.40 "uname -a"
+
+      - name: Tailscale up
+        id: tailscale
+        continue-on-error: true
+        run: |
+          ssh -o StrictHostKeyChecking=no -o BatchMode=yes smoker@10.20.0.40 \
+            "tailscale status --self=true --peers=false || true"
+          ssh -o StrictHostKeyChecking=no -o BatchMode=yes smoker@10.20.0.40 \
+            "tailscale status --json | jq -e '.BackendState == \"Running\"'"
+
+      - name: Service health probes (deviceService + frontend)
+        id: services
+        continue-on-error: true
+        run: |
+          ssh -o StrictHostKeyChecking=no -o BatchMode=yes smoker@10.20.0.40 \
+            "curl -fsS --max-time 5 http://localhost:3003/api/health" || echo "device-service /api/health failed"
+          ssh -o StrictHostKeyChecking=no -o BatchMode=yes smoker@10.20.0.40 \
+            "curl -fsS --max-time 5 http://localhost:8080" >/dev/null || echo "frontend :8080 failed"
+
+      - name: Smoke summary
+        if: always()
+        run: |
+          echo "=========================================="
+          echo "Post-provision Smoke (advisory)"
+          echo "=========================================="
+          echo "SSH:       ${{ steps.ssh.outcome }}"
+          echo "Tailscale: ${{ steps.tailscale.outcome }}"
+          echo "Services:  ${{ steps.services.outcome }}"
+          echo "=========================================="
+          if [ "${{ steps.ssh.outcome }}" = "failure" ] || \
+             [ "${{ steps.tailscale.outcome }}" = "failure" ] || \
+             [ "${{ steps.services.outcome }}" = "failure" ]; then
+            echo "::warning title=Post-provision smoke::Advisory smoke failure. This will become blocking in ~2 weeks per PRD #183."
+          fi
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/id_ed25519

@@ -21,11 +21,21 @@ import { HistoryModule } from './history/history.module';
 import { LoggerMiddleware } from './logger.middleware';
 import { NotificationsModule } from './notifications/notifications.module';
 import { HealthModule } from './health/health.module';
+import { LoggerModule } from 'nestjs-pino';
 
 const ENV = process.env.NODE_ENV;
 console.log(process.env.NODE_ENV);
 @Module({
   imports: [
+    LoggerModule.forRoot({
+      pinoHttp: {
+        level: process.env.LOG_LEVEL || 'info',
+        autoLogging: true,
+        ...(process.env.NODE_ENV === 'local' && {
+          transport: { target: 'pino-pretty', options: { colorize: true } },
+        }),
+      },
+    }),
     SettingsModule,
     PreSmokeModule,
     StateModule,

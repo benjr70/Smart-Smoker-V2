@@ -55,5 +55,41 @@ jobs:
           REPO_PASS: ${{ secrets.DOCKERHUB_TOKEN }}
         run: sudo -E docker compose -f smoker.docker-compose.yml up -d
 
+      # Post-deploy smoke (PRD #183, Level 6 harness). Advisory during the
+      # 2-week bake window — flip `continue-on-error: false` after ~2 weeks.
+      # Frontend check skipped: Electron shell, not HTTP-addressable from
+      # the runner.
+      - name: Wait for services to stabilize
+        run: sleep 30
+
+      - name: Setup Node for smoke
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install smoke deps
+        id: smoke_install
+        continue-on-error: true
+        run: |
+          npm --prefix scripts/smoke ci
+          npm --prefix scripts/smoke run smoke:install
+
+      - name: Run post-deploy smoke
+        id: smoke
+        continue-on-error: true
+        run: |
+          npm --prefix scripts/smoke run smoke -- \
+            --backend http://localhost:3003 \
+            --artifacts smoke-artifacts
+
+      - name: Upload smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoker-device-smoke-artifacts
+          path: smoke-artifacts/
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: docker compose remove old containers
         run: sudo docker system prune -a --volumes --force

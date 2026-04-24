@@ -99,6 +99,34 @@ jobs:
       - name: Wait for startup
         run: sleep 60
 
+      # Post-deploy smoke (PRD #183, Level 6 harness). Advisory during the
+      # 2-week bake window — flip `continue-on-error: false` after ~2 weeks
+      # so a broken frontend fails the deploy instead of shipping silently.
+      - name: Install smoke deps
+        id: smoke_install
+        continue-on-error: true
+        run: |
+          npm --prefix scripts/smoke ci
+          npm --prefix scripts/smoke run smoke:install
+
+      - name: Run post-deploy smoke
+        id: smoke
+        continue-on-error: true
+        run: |
+          npm --prefix scripts/smoke run smoke -- \
+            --frontend http://localhost:3000 \
+            --backend http://localhost:3001 \
+            --artifacts smoke-artifacts
+
+      - name: Upload smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-deploy-smoke-artifacts
+          path: smoke-artifacts/
+          if-no-files-found: ignore
+          retention-days: 14
+
       # NEW: Health check with retry (3x per user preference)
       - name: Verify deployment health
         id: health_check

@@ -1,19 +1,17 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, HttpStatus, Res } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
+import { Response } from 'express';
 import { Connection } from 'mongoose';
 
-@Controller('api/health')
+@Controller('api')
 export class HealthController {
   constructor(@InjectConnection() private connection: Connection) {}
 
-  @Get()
-  async check() {
-    // Check MongoDB connection status
-    // readyState values: 0=disconnected, 1=connected, 2=connecting, 3=disconnecting
+  @Get('health')
+  check() {
     const dbStatus =
       this.connection.readyState === 1 ? 'connected' : 'disconnected';
 
-    // Return health status with database connection info
     return {
       status: 'ok',
       timestamp: new Date().toISOString(),
@@ -24,5 +22,21 @@ export class HealthController {
       uptime: process.uptime(),
       environment: process.env.NODE_ENV || 'production',
     };
+  }
+
+  @Get('ready')
+  ready(@Res() res: Response) {
+    const dbConnected = this.connection.readyState === 1;
+    const httpStatus = dbConnected
+      ? HttpStatus.OK
+      : HttpStatus.SERVICE_UNAVAILABLE;
+
+    res.status(httpStatus).json({
+      status: dbConnected ? 'ready' : 'not_ready',
+      timestamp: new Date().toISOString(),
+      checks: {
+        database: dbConnected ? 'up' : 'down',
+      },
+    });
   }
 }

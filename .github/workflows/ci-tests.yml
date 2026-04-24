@@ -19,6 +19,24 @@ jobs:
       apps: '["backend", "device-service", "frontend", "smoker", "TemperatureChart"]'
       ref: ${{ github.ref }}
 
+  # Advisory typecheck gate (PRD #183, Level 6 harness). Flip `blocking: true`
+  # after the 2-week bake window.
+  typecheck:
+    uses: ./.github/workflows/typecheck.yml
+    with:
+      apps: '["backend", "device-service", "frontend", "smoker", "TemperatureChart"]'
+      ref: ${{ github.ref }}
+      blocking: false
+
+  # Advisory E2E gate (PRD #183, Level 6 harness). Apps listed here must have
+  # a test/jest-e2e.json. Flip `blocking: true` after the 2-week bake window.
+  e2e:
+    uses: ./.github/workflows/e2e.yml
+    with:
+      apps: '["device-service"]'
+      ref: ${{ github.ref }}
+      blocking: false
+
   # Build validation - ensure all apps can build
   build-validation:
     uses: ./.github/workflows/build.yml

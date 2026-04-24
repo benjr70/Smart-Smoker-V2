@@ -1,0 +1,95 @@
+# Reusable TypeScript typecheck workflow for Smart Smoker v2 applications.
+#
+# Runs `tsc --noEmit` per app. Currently ADVISORY (continue-on-error: true)
+# per PRD #183 (Level 6 harness). Flip to blocking after the 2-week bake
+# window by removing `continue-on-error` below.
+
+name: Typecheck
+
+on:
+  workflow_call:
+    inputs:
+      apps:
+        description: 'JSON array of apps to typecheck (e.g., ["backend", "device-service", "frontend", "smoker", "TemperatureChart"])'
+        type: string
+        required: true
+      ref:
+        description: 'Git ref to checkout'
+        type: string
+        required: false
+        default: 'master'
+      blocking:
+        description: 'Set to true to fail the job on typecheck errors (flip after advisory bake window).'
+        type: boolean
+        required: false
+        default: false
+
+jobs:
+  install:
+    uses: ./.github/workflows/install.yml
+    with:
+      ref: ${{ inputs.ref }}
+      artifact_name: 'typecheck-workspace'
+
+  typecheck:
+    needs: install
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJson(inputs.apps) }}
+
+    steps:
+      - name: Download workspace
+        uses: actions/download-artifact@v4
+        with:
+          name: typecheck-workspace
+          path: .
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.7.0'
+
+      - name: Use npm 10
+        run: npm i -g npm@10
+
+      - name: Cache Node Modules
+        uses: actions/cache@v4
+        env:
+          cache-name: cache-node-modules
+        with:
+          path: |
+            node_modules
+            */*/node_modules
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+            ${{ runner.os }}-build-
+            ${{ runner.os }}-
+
+      - name: Resolve app path
+        id: app-path
+        run: |
+          case "${{ matrix.app }}" in
+            "TemperatureChart")
+              echo "path=packages/TemperatureChart" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "path=apps/${{ matrix.app }}" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+      - name: Typecheck ${{ matrix.app }} (advisory)
+        id: tsc
+        continue-on-error: ${{ !inputs.blocking }}
+        working-directory: ${{ steps.app-path.outputs.path }}
+        run: |
+          echo "::group::tsc --noEmit for ${{ matrix.app }}"
+          npx tsc --noEmit
+          echo "::endgroup::"
+
+      - name: Advisory notice
+        if: ${{ !inputs.blocking && steps.tsc.outcome == 'failure' }}
+        run: |
+          echo "::warning title=Typecheck (${{ matrix.app }})::Advisory typecheck errors detected. This will become blocking in ~2 weeks per PRD #183."
