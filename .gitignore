@@ -127,5 +127,8 @@ ralph-progress.md
 smoke-artifacts/
 scripts/smoke/smoke-artifacts/
 
+# Operator-local Claude Code overrides (per-host permissions, MCP enable list)
+.claude/settings.local.json
+
 # MkDocs build output
 site/
