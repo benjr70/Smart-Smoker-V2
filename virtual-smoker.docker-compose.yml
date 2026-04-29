@@ -3,7 +3,9 @@
 #
 # Key differences from production (smoker.docker-compose.yml):
 #   - Uses NODE_ENV=local for device-service emulator mode
-#   - Uses amd64/latest images instead of armhf
+#   - device-service runs the arm/v7 image under qemu-user-static emulation
+#     (host is x86_64; binfmt_misc registered by the virtual-device Ansible
+#     role). frontend + watchtower run native amd64.
 #   - No physical USB serial device (/dev/ttyUSB0)
 #   - VNC display instead of physical touchscreen
 #
@@ -19,6 +21,7 @@ services:
   deviceService:
     container_name: device_service
     image: 'benjr70/smart-smoker-device-service:${VERSION:-nightly}'
+    platform: linux/arm/v7 # Image is published arm/v7 only; host runs it via qemu-user-static
     pull_policy: always
     restart: always
     network_mode: host

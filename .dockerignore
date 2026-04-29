@@ -1,2 +1,9 @@
 npm-debug.log
 database
+
+# Per-app node_modules are always wrong-platform leakage in the build context.
+# device-service installs node_modules inside the image (multi-stage); backend
+# uses the hoisted root node_modules. Host-installed apps/*/node_modules
+# would shadow both and break the arm/v7 image silently.
+apps/*/node_modules/
+packages/*/node_modules/

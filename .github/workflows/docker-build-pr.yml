@@ -4,6 +4,10 @@
 #
 # Build context: repo root (matches publish.yml). Single platform (linux/amd64)
 # to save CI minutes — multi-arch (arm/v7) is reserved for publish.yml.
+#
+# Exception: device-service is published arm/v7 ONLY. Its arm/v7 build is gated
+# by a dedicated BLOCKING job (`device-service-armv7`) per PRD #184, since the
+# advisory amd64 build does not exercise the platform we actually deploy.
 
 name: Docker Build (PR)
 
@@ -13,10 +17,17 @@ on:
     paths:
       - 'apps/*/Dockerfile'
       - '*.docker-compose.yml'
+      - '.dockerignore'
       - '.github/workflows/docker-build-pr.yml'
+      - '.github/workflows/publish.yml'
       - 'apps/*/healthcheck.js'
       - 'apps/*/package.json'
       - 'apps/*/package-lock.json'
+      - 'packages/*/package.json'
+      # Root manifests gate device-service arm/v7 build (npm ci -w resolves
+      # from the workspace lockfile; drift here breaks the image silently).
+      - 'package.json'
+      - 'package-lock.json'
 
 jobs:
   build:
@@ -50,3 +61,43 @@ jobs:
         if: steps.build.outcome == 'failure'
         run: |
           echo "::warning title=Docker build (${{ matrix.app }})::Advisory Docker build failure. This will become blocking in ~2 weeks per PRD #183."
+
+  # BLOCKING: device-service must build cleanly for arm/v7 (its only published
+  # platform). Catches Dockerfile or publish.yml regressions before they reach
+  # nightly publish + virtual-smoker deploy. Per PRD #184 / issue #186.
+  device-service-armv7:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.7.0'
+
+      - name: Use npm 10
+        run: npm i -g npm@10
+
+      - name: Bootstrap workspace (needed for nest build)
+        run: npm run bootstrap
+
+      - name: Build device-service dist
+        run: npm run build --prefix apps/device-service
+
+      - name: Set up QEMU (arm/v7 emulation)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build device-service for linux/arm/v7 (blocking)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/device-service/Dockerfile
+          platforms: linux/arm/v7
+          push: false
+          load: false
+          cache-from: type=gha,scope=docker-build-pr-device-service-armv7
+          cache-to: type=gha,scope=docker-build-pr-device-service-armv7,mode=max
