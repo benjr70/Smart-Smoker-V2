@@ -28,12 +28,14 @@ COPY apps/frontend/package.json apps/frontend/package.json
 COPY apps/smoker/package.json apps/smoker/package.json
 COPY packages/TemperatureChart/package.json packages/TemperatureChart/package.json
 
-# Root prepare script runs husky (devDep). --omit=dev skips it, so the install
-# trips on `husky: not found`. HUSKY=0 makes husky's hook no-op without
-# disabling all install scripts (native-binding builds still run).
-ENV HUSKY=0
-
-RUN npm ci -w device-service --omit=dev --legacy-peer-deps
+# Root `prepare` script invokes the husky binary, which lives in
+# devDependencies. With --omit=dev the binary is absent and `prepare`
+# fails (exit 127). Strip the prepare hook from the copied root manifest
+# before install — does not touch the host repo, only the image layer.
+# We can't use --ignore-scripts because native bindings (serialport,
+# node-wifi) need their build scripts to run under qemu.
+RUN npm pkg delete scripts.prepare \
+    && npm ci -w device-service --omit=dev --legacy-peer-deps
 
 
 FROM node:20-bookworm-slim AS runtime
