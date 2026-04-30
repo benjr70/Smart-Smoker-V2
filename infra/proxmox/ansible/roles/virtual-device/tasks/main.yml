@@ -90,6 +90,37 @@
     state: present
     update_cache: true
 
+# arm/v7 emulation for device-service (PRD #184 / issue #186).
+#
+# device-service is published as linux/arm/v7 only (real Pi parity). This VM
+# is x86_64, so we register binfmt_misc + qemu-user-static so docker can run
+# the arm/v7 image transparently. virtual-smoker is a Proxmox VM, not an LXC
+# (see infra/proxmox/terraform/environments/virtual-smoker/variables.tf), so
+# binfmt_misc registration works unconditionally — no privileged-CT toggle.
+- name: Install qemu-user-static + binfmt-support for arm/v7 emulation
+  ansible.builtin.apt:
+    name:
+      - qemu-user-static
+      - binfmt-support
+    state: present
+    update_cache: true
+
+- name: Enable qemu-arm binfmt_misc handler (idempotent)
+  ansible.builtin.command:
+    cmd: update-binfmts --enable qemu-arm
+  register: binfmt_enable
+  changed_when: "'already enabled' not in (binfmt_enable.stderr | default(''))"
+  failed_when:
+    - binfmt_enable.rc != 0
+    - "'already enabled' not in (binfmt_enable.stderr | default(''))"
+
+- name: Verify arm/v7 docker emulation works (fails loud on missing binfmt)
+  ansible.builtin.command:
+    cmd: docker run --platform linux/arm/v7 --rm alpine uname -m
+  register: armv7_check
+  changed_when: false
+  failed_when: (armv7_check.stdout | trim) != 'armv7l'
+
 # VNC Server for remote GUI access (optional)
 - name: Install VNC server packages
   ansible.builtin.apt:
