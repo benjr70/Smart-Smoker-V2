@@ -28,6 +28,11 @@ COPY apps/frontend/package.json apps/frontend/package.json
 COPY apps/smoker/package.json apps/smoker/package.json
 COPY packages/TemperatureChart/package.json packages/TemperatureChart/package.json
 
+# Root prepare script runs husky (devDep). --omit=dev skips it, so the install
+# trips on `husky: not found`. HUSKY=0 makes husky's hook no-op without
+# disabling all install scripts (native-binding builds still run).
+ENV HUSKY=0
+
 RUN npm ci -w device-service --omit=dev --legacy-peer-deps
 
 
