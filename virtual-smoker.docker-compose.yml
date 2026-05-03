@@ -71,12 +71,16 @@ services:
 
   watchtower:
     container_name: watchtower
-    # Pinned: watchtower 1.6.0+ bundles a Docker SDK that requires daemon
-    # API >= 1.44 (Docker Engine 25+). virtual-smoker runs an older
-    # daemon, so :latest crashloops with "client version 1.25 too old".
-    # 1.5.3 (Jan 2023) is the last release whose SDK negotiates against
-    # the host's daemon API. Bump only when the daemon is upgraded.
-    image: containrrr/watchtower:1.5.3 # amd64; do not use armhf
+    # Released `containrrr/watchtower` builds (incl. 1.5.3 and 1.7.1) ship
+    # a Docker SDK whose default negotiated API is ~1.25. virtual-smoker's
+    # daemon (Docker 26+) refuses to speak older than 1.44 and the
+    # container crashloops with "client version 1.25 too old". The
+    # `latest-dev` build (Jan 2024) carries the upstream API-negotiation
+    # patch. Belt + suspenders: also pin DOCKER_API_VERSION in env so the
+    # SDK is forced onto a daemon-compatible version even if the patch
+    # regresses. Move back to a stable tag once a published release with
+    # API negotiation lands.
+    image: containrrr/watchtower:latest-dev # amd64; do not use armhf
     restart: always
     environment:
       - REPO_USER=${REPO_USER:-}
@@ -84,6 +88,7 @@ services:
       - WATCHTOWER_CLEANUP=true
       - WATCHTOWER_POLL_INTERVAL=300
       - WATCHTOWER_LABEL_ENABLE=false
+      - DOCKER_API_VERSION=1.44
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     command: --interval 300 --cleanup device_service frontend_smoker
