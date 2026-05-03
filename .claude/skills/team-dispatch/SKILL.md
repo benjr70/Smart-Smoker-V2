@@ -21,9 +21,14 @@ verification — so a fresh clone can dispatch a team without touching bash firs
 
 ```
 /team-dispatch <prd-issue-number> [--dry-run]
+/team-dispatch --issue <issue-number> [--dry-run]
 ```
 
-- `<prd-issue-number>` — the parent PRD GitHub issue (e.g. 183).
+- `<prd-issue-number>` — the parent PRD GitHub issue (e.g. 183). Discovers every
+  open child issue labeled `team` and processes them as a batch.
+- `--issue <N>` — single-issue mode. Skip PRD discovery; populate the task list
+  with exactly one task (issue #N). Used by `/team-pickup` for cron-driven
+  autonomous pickup.
 - `--dry-run` — print the planned roster + task list and exit, do NOT spawn
   teammates.
 
@@ -58,6 +63,7 @@ set in the project-scoped settings.
 gh label create "team"             --description "Issue eligible for Level 7 agent team implementation" --color "1D76DB" --force
 gh label create "team:in-progress" --description "Currently being implemented by an agent team"          --color "FBCA04" --force
 gh label create "team:done"        --description "Completed by an agent team"                            --color "0E8A16" --force
+gh label create "team:failed"      --description "Agent team attempt failed; needs human triage"         --color "B60205" --force
 ```
 
 `--force` is idempotent: creates the label if absent, updates the metadata if
@@ -65,7 +71,8 @@ present, never errors. Skip if
 `gh label list --json name | jq -r '.[].name' | grep -qx team` already shows all
 three.
 
-**Stale `team:in-progress`** — sweep before claiming new work:
+**Stale `team:in-progress`** — sweep before claiming new work, **only in PRD
+mode**:
 
 ```bash
 gh issue list --label team:in-progress --state open --json number | jq -r '.[].number' | \
@@ -74,6 +81,25 @@ gh issue list --label team:in-progress --state open --json number | jq -r '.[].n
 
 (The shared task list will re-apply the label when an implementer claims an
 issue.)
+
+In `--issue <N>` mode, **skip this sweep**. The `/team-pickup` wrapper applies
+`team:in-progress` as its distributed lock _before_ invoking this skill;
+sweeping would clobber that lock and break concurrency control. The wrapper's
+failure path handles its own crash recovery.
+
+### 1a. Mode dispatch
+
+If invoked with `--issue <N>`:
+
+- Skip PRD fetch + work-queue scan + topological sort.
+- Set the work queue to a single entry:
+  `gh issue view <N> --json number,title,body,labels`.
+- Skip the on-demand researcher heuristic (single issues rarely need an upfront
+  research memo; if the implementer needs research mid-task, spawn a researcher
+  then).
+- Proceed directly to step 2.
+
+Otherwise (PRD mode), continue with step 1 below.
 
 ### 1. Read the PRD + work queue
 
