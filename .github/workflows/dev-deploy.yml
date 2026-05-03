@@ -391,6 +391,7 @@ jobs:
       deploy_dir: '/opt/smoker-device'
       environment: 'dev'
       cloud_backend_url: 'https://smoker-dev-cloud.tail74646.ts.net:8443'
+      requires_arm_emulation: true
     secrets: inherit
 
   # Send combined notification for both deployments

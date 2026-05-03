@@ -10,6 +10,14 @@ This Ansible configuration manages all server configuration for the Smart Smoker
 - **Production Cloud** - Production environment for cloud applications
 - **Virtual Smoker Device** - Virtual test device for development
 
+> **Note on virtual-smoker arm/v7 emulation**: `dev-deploy.yml` self-heals the
+> qemu/binfmt prereq when targeting `virtual-smoker` (via the
+> `requires_arm_emulation: true` input on the `device-deploy.yml` reusable
+> workflow), installing `qemu-user-static` + `binfmt-support` and registering
+> `qemu-arm` if missing. This is a deploy-time guard — a strict subset of the
+> Ansible `virtual-device` role, which remains canonical for fresh
+> provisioning and runbook procedures.
+
 ## Prerequisites
 
 ### Control Machine (Your Local Machine)
