@@ -215,8 +215,10 @@ main() {
         URL_BASE="http://${TARGET_HOST}"
     fi
 
-    # Check Device Service
-    if ! check_service "Device Service" "${URL_BASE}:${DEVICE_SERVICE_PORT}/health"; then
+    # Check Device Service. NestJS app uses globalPrefix 'api', so the
+    # health controller is mounted under /api/health (matches the cloud
+    # backend probe path below).
+    if ! check_service "Device Service" "${URL_BASE}:${DEVICE_SERVICE_PORT}/api/health"; then
         ((failed++)) || true
     fi
     echo ""
