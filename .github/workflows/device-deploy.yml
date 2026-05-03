@@ -46,6 +46,10 @@ on:
         type: string
         default: 'https://smoker-dev-cloud.tail74646.ts.net:8443'
         description: 'Cloud backend URL for connectivity verification'
+      requires_arm_emulation:
+        type: boolean
+        default: false
+        description: 'Install qemu-user-static + binfmt registration on target before deploy (for amd64 hosts running arm/v7 images)'
   workflow_dispatch:
     inputs:
       device_host:
@@ -72,6 +76,10 @@ on:
       cloud_backend_url:
         type: string
         default: 'https://smoker-dev-cloud.tail74646.ts.net:8443'
+      requires_arm_emulation:
+        type: boolean
+        default: false
+        description: 'Install qemu-user-static + binfmt registration on target before deploy (for amd64 hosts running arm/v7 images)'
 
 permissions:
   contents: read
@@ -178,8 +186,37 @@ jobs:
             echo "✅ Sufficient disk space available"
           REMOTE_SCRIPT
 
+      - name: Ensure ARM emulation runtime
+        if: ${{ inputs.requires_arm_emulation }}
+        run: |
+          echo "Ensuring ARM emulation runtime on ${DEVICE_HOST}..."
+          if ssh ${SSH_USER}@${DEVICE_HOST} "update-binfmts --display qemu-arm 2>/dev/null | grep -q 'enabled = yes'"; then
+            echo "qemu-arm binfmt already registered"
+          else
+            echo "Installing qemu-user-static + binfmt-support and registering qemu-arm..."
+            ssh ${SSH_USER}@${DEVICE_HOST} "sudo DEBIAN_FRONTEND=noninteractive apt-get update && \
+              sudo DEBIAN_FRONTEND=noninteractive apt-get install -y qemu-user-static binfmt-support && \
+              sudo update-binfmts --enable qemu-arm"
+          fi
+
+          echo "Verifying arm/v7 emulation end-to-end..."
+          UNAME_OUT=$(ssh ${SSH_USER}@${DEVICE_HOST} "sudo docker run --rm --platform linux/arm/v7 alpine uname -m")
+          echo "uname -m under arm/v7 emulation: ${UNAME_OUT}"
+          if [ "${UNAME_OUT}" != "armv7l" ]; then
+            echo "❌ arm/v7 emulation verification failed: expected 'armv7l', got '${UNAME_OUT}'"
+            exit 1
+          fi
+          echo "✅ arm/v7 emulation runtime verified"
+
       - name: Create pre-deployment backup
         run: |
+          echo "Staging new compose on ${DEVICE_HOST} for backup overlay..."
+          # Push the new compose (about to be deployed) to a known temp path so the
+          # backup heredoc can overlay it onto the backup file. The rollback then
+          # restores a runnable compose (with current platform pin), not a stale
+          # pre-deploy compose that may pull a non-existent manifest.
+          scp ${COMPOSE_FILE} ${SSH_USER}@${DEVICE_HOST}:/tmp/${COMPOSE_FILE}.new
+
           echo "Creating pre-deployment backup on ${DEVICE_HOST}..."
           ssh ${SSH_USER}@${DEVICE_HOST} bash << REMOTE_SCRIPT
             set -e
@@ -187,21 +224,30 @@ jobs:
             COMPOSE_FILE="${COMPOSE_FILE}"
             TIMESTAMP=\$(date +%Y%m%d-%H%M%S)
             BACKUP_DIR="\${DEPLOY_DIR}/backups/backup-\${TIMESTAMP}"
-            
+
             # Create backup directory
             sudo mkdir -p "\${BACKUP_DIR}"
-            
+
             # Backup compose file if it exists
             if [ -f "\${DEPLOY_DIR}/\${COMPOSE_FILE}" ]; then
               sudo cp "\${DEPLOY_DIR}/\${COMPOSE_FILE}" "\${BACKUP_DIR}/\${COMPOSE_FILE}.backup"
             fi
-            
+
+            # Overlay backup with the NEW compose content (the one this deploy
+            # will install). Ensures rollback restores a compose with the current
+            # platform pin, not a stale pre-deploy compose pulling a missing
+            # manifest. See issue #193.
+            if [ -f "/tmp/\${COMPOSE_FILE}.new" ]; then
+              sudo cp "/tmp/\${COMPOSE_FILE}.new" "\${BACKUP_DIR}/\${COMPOSE_FILE}.backup"
+              rm -f "/tmp/\${COMPOSE_FILE}.new"
+            fi
+
             # Save current container state
             sudo docker compose -f "\${DEPLOY_DIR}/\${COMPOSE_FILE}" ps > "\${BACKUP_DIR}/compose-state.txt" 2>/dev/null || true
-            
+
             # Record this as the last backup
             echo "\${BACKUP_DIR}" | sudo tee "\${DEPLOY_DIR}/backups/last-deployment-backup.txt"
-            
+
             echo "✅ Backup created: \${BACKUP_DIR}"
           REMOTE_SCRIPT
 
