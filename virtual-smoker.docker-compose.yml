@@ -71,7 +71,12 @@ services:
 
   watchtower:
     container_name: watchtower
-    image: containrrr/watchtower:latest # Use amd64 image, not armhf
+    # Pinned: watchtower 1.6.0+ bundles a Docker SDK that requires daemon
+    # API >= 1.44 (Docker Engine 25+). virtual-smoker runs an older
+    # daemon, so :latest crashloops with "client version 1.25 too old".
+    # 1.5.3 (Jan 2023) is the last release whose SDK negotiates against
+    # the host's daemon API. Bump only when the daemon is upgraded.
+    image: containrrr/watchtower:1.5.3 # amd64; do not use armhf
     restart: always
     environment:
       - REPO_USER=${REPO_USER:-}
