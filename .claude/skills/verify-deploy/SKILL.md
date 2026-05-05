@@ -32,13 +32,34 @@ Optional positional arg:
 
 ## Targets
 
-- **dev-cloud**: host `smoker-dev-cloud-1`, FQDN
-  `smoker-dev-cloud-1.tail74646.ts.net`, Tailscale Serve on 443 (frontend) +
-  8443 (backend). Containers: `backend_cloud`, `frontend_cloud`, `mongo`. (Peer
-  renamed from `smoker-dev-cloud` after re-provisioning; confirm with
-  `tailscale status | grep smoker-dev-cloud` if probes 404 unexpectedly.)
+- **dev-cloud**: host `smoker-dev-cloud-1`, FQDN resolved via
+  `scripts/smoke/resolve-host-cli.ts` (see **FQDN Resolution** below).
+  Tailscale Serve on 443 (frontend) + 8443 (backend). Containers:
+  `backend_cloud`, `frontend_cloud`, `mongo`.
 - **virtual-smoker**: host `virtual-smoker`, SSH user `smoker`. Containers:
   `device_service`, `frontend_smoker`, `watchtower`.
+
+## FQDN Resolution
+
+All Tailscale peer FQDNs **must** be computed via the resolver — never hardcode
+FQDNs or inline `tailscale status --self --json | jq` pipes.
+
+```bash
+# Resolve any short name or FQDN → canonical ts.net FQDN
+node --import tsx/esm scripts/smoke/resolve-host-cli.ts smoker-dev-cloud-1
+# → smoker-dev-cloud-1.tail74646.ts.net
+```
+
+The resolver (`scripts/smoke/resolve-host.ts`) handles:
+- Short hostname → peer lookup via `tailscale status --json`
+- Exact FQDN passthrough (strips trailing `.`)
+- Suffix drift (`smoker-dev-cloud` → `smoker-dev-cloud-1`)
+- Multi-suffix ambiguity: picks highest numeric suffix, emits a warning
+- No-match: throws with actionable message (exits non-zero)
+
+`scripts/deployment-health-check.sh` already calls the resolver for all
+non-localhost targets. When referencing the dev-cloud FQDN in step 3 below,
+obtain it from the resolver rather than hardcoding it.
 
 ## Steps (run sequentially, fail-fast)
 
