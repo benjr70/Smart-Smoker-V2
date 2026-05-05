@@ -52,12 +52,18 @@ main() {
     echo ""
 
     # For remote hosts, get the full Tailscale FQDN for HTTPS requests
-    # Tailscale Serve requires the full FQDN for TLS SNI matching
+    # Tailscale Serve requires the full FQDN for TLS SNI matching.
+    # Resolution is delegated to scripts/smoke/resolve-host-cli.ts which
+    # handles short names, FQDNs, suffix drift, and multi-peer disambiguation.
     if [ "${TARGET_HOST}" != "localhost" ] && [ "${TARGET_HOST}" != "127.0.0.1" ]; then
         echo -e "${YELLOW}Resolving Tailscale FQDN for ${TARGET_HOST}...${NC}"
-        TAILSCALE_FQDN=$(ssh "root@${TARGET_HOST}" "tailscale status --self --json | jq -r '.Self.DNSName' | sed 's/\.$//'")
-        if [ -z "${TAILSCALE_FQDN}" ] || [ "${TAILSCALE_FQDN}" = "null" ]; then
-            echo -e "${RED}❌ Failed to resolve Tailscale FQDN${NC}"
+        SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        if ! TAILSCALE_FQDN=$(node --import tsx/esm "${SCRIPT_DIR}/smoke/resolve-host-cli.ts" "${TARGET_HOST}" 2>&1); then
+            echo -e "${RED}❌ Failed to resolve Tailscale FQDN: ${TAILSCALE_FQDN}${NC}"
+            exit 1
+        fi
+        if [ -z "${TAILSCALE_FQDN}" ]; then
+            echo -e "${RED}❌ Tailscale FQDN resolved to empty string${NC}"
             exit 1
         fi
         echo -e "${GREEN}✅ Resolved to: ${TAILSCALE_FQDN}${NC}"

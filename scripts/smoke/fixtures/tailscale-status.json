@@ -1,0 +1,20 @@
+{
+  "Self": {
+    "HostName": "my-local-machine",
+    "DNSName": "my-local-machine.tail74646.ts.net."
+  },
+  "Peer": {
+    "abc123": {
+      "HostName": "smoker-dev-cloud-1",
+      "DNSName": "smoker-dev-cloud-1.tail74646.ts.net."
+    },
+    "def456": {
+      "HostName": "smoker-dev-cloud-2",
+      "DNSName": "smoker-dev-cloud-2.tail74646.ts.net."
+    },
+    "ghi789": {
+      "HostName": "virtual-smoker",
+      "DNSName": "virtual-smoker.tail74646.ts.net."
+    }
+  }
+}

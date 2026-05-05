@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "smoke": "tsx run.ts",
-    "smoke:install": "playwright install --with-deps chromium"
+    "smoke:install": "playwright install --with-deps chromium",
+    "test": "tsx --test *.test.ts"
   },
   "dependencies": {
     "playwright": "^1.49.0"
