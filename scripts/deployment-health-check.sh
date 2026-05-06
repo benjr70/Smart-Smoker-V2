@@ -58,7 +58,16 @@ main() {
     if [ "${TARGET_HOST}" != "localhost" ] && [ "${TARGET_HOST}" != "127.0.0.1" ]; then
         echo -e "${YELLOW}Resolving Tailscale FQDN for ${TARGET_HOST}...${NC}"
         SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-        if ! TAILSCALE_FQDN=$(node --import tsx/esm "${SCRIPT_DIR}/smoke/resolve-host-cli.ts" "${TARGET_HOST}" 2>&1); then
+        # Invoke the locally-installed tsx binary directly. `node --import tsx/esm`
+        # would resolve the `tsx` package from the process CWD, which is not the
+        # repo root in CI and therefore fails with ERR_MODULE_NOT_FOUND. The tsx
+        # binary is installed by `npm --prefix scripts/smoke ci`.
+        TSX_BIN="${SCRIPT_DIR}/smoke/node_modules/.bin/tsx"
+        if [ ! -x "${TSX_BIN}" ]; then
+            echo -e "${RED}❌ tsx not found at ${TSX_BIN}. Run 'npm --prefix scripts/smoke ci' first.${NC}"
+            exit 1
+        fi
+        if ! TAILSCALE_FQDN=$("${TSX_BIN}" "${SCRIPT_DIR}/smoke/resolve-host-cli.ts" "${TARGET_HOST}" 2>&1); then
             echo -e "${RED}❌ Failed to resolve Tailscale FQDN: ${TAILSCALE_FQDN}${NC}"
             exit 1
         fi
