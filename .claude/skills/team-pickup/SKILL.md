@@ -1,10 +1,11 @@
 ---
 name: team-pickup
 description:
-  Pick the next eligible `team`-labeled GitHub issue (oldest first, blockers
-  resolved, no other team in flight), invoke `/team-dispatch --issue <N>`, then
-  open a PR on success or apply `team:failed` on failure. Designed to be fired
-  by a Claude routine on cron. No arguments (besides optional --dry-run).
+  Pick the next eligible `team`-labeled GitHub issue from the Smart Smoker V2
+  GitHub Project (highest Priority field then oldest, blockers resolved, no
+  other team in flight), invoke `/team-dispatch --issue <N>`, then open a PR on
+  success or apply `team:failed` on failure. Designed to be fired by a Claude
+  routine on cron. No arguments (besides optional --dry-run).
 ---
 
 # Team Pickup — Autonomous Single-Issue Picker + PR Wrapper
@@ -30,10 +31,29 @@ issue. Idempotent and silent when nothing is eligible.
 Verify only what the picker itself needs before §1:
 
 ```bash
-gh auth status >/dev/null || { echo "team-pickup: gh not authenticated"; exit 1; }
+gh auth status >/dev/null || { echo "team-pickup: gh not authenticated — §2 will use GitHub MCP fallback"; USE_MCP_FOR_PROJECT=1; }
+if ! gh auth status 2>&1 | grep -q "'project'"; then
+  echo "team-pickup: gh token missing 'project' scope — §2 will use GitHub MCP fallback"
+  USE_MCP_FOR_PROJECT=1
+fi
 grep -q '"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"\s*:\s*"1"' .claude/settings.json \
   || { echo "team-pickup: CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 missing in .claude/settings.json"; exit 1; }
 ```
+
+> **Routine env note.** When fired by a remote/cron routine, the routine's `gh`
+> token may not have the `project` scope. Refreshing the local token does not
+> propagate. Either re-issue the routine's token with `project` scope **or**
+> rely on the GitHub MCP fallback below — both are supported.
+
+### 0.5. GitHub access strategy: gh first, MCP fallback
+
+All GitHub operations in this skill default to `gh` / `gh api graphql`. If `gh`
+is unavailable, unauthenticated, or missing a required scope (most commonly
+`project` for §2's project-field query), fall back to the equivalent **GitHub
+MCP** server tool (the `mcp__github__*`-style functions exposed in the available
+toolset). The shapes are equivalent — issue listing, GraphQL, issue editing,
+label management, PR creation. Pick whichever works in the current env; do
+**not** abort the pickup just because `gh` is missing or under-scoped.
 
 ### 1. Concurrency lock check (repo-wide)
 
@@ -48,23 +68,70 @@ if [ "$INFLIGHT" -gt 0 ]; then
 fi
 ```
 
-### 2. Pick next eligible issue (oldest first)
+### 2. Pick next eligible issue (highest Priority field, then oldest)
+
+The pick set is: open issues with the `team` label, present in the **Smart
+Smoker V2** GitHub Project (number `1`), and not carrying `team:in-progress`,
+`team:done`, or `team:failed`. The `Priority` field on the project item drives
+the sort (`P0` > `P1` > `P2`); a missing or null `Priority` defaults to `P2`.
+Within the same Priority, oldest `createdAt` wins.
+
+Issues that carry the `team` label but are **not in the project** are skipped
+silently — project membership is the explicit triage signal. Add them to the
+project (and set Priority) before the picker will consider them.
+
+> If `USE_MCP_FOR_PROJECT=1` from §0 (or `gh` rejects the GraphQL call below),
+> invoke the equivalent GitHub MCP GraphQL tool with the same query string and
+> parse the same JSON shape downstream.
 
 ```bash
-gh issue list --label team --state open \
-  --json number,title,body,labels,createdAt --limit 100 \
-| jq -r '[.[] | select(
-    (.labels | map(.name)) as $lbls
-    | ($lbls | index("team:in-progress") | not)
-      and ($lbls | index("team:done") | not)
-      and ($lbls | index("team:failed") | not)
-  )] | sort_by(.createdAt) | .[] | @base64'
+gh api graphql -f query='
+query {
+  repository(owner: "benjr70", name: "Smart-Smoker-V2") {
+    issues(first: 100, labels: ["team"], states: OPEN) {
+      nodes {
+        number
+        title
+        body
+        createdAt
+        labels(first: 30) { nodes { name } }
+        projectItems(first: 10) {
+          nodes {
+            project { number }
+            fieldValueByName(name: "Priority") {
+              ... on ProjectV2ItemFieldSingleSelectValue { name }
+            }
+          }
+        }
+      }
+    }
+  }
+}' \
+| jq -r '
+    def prio_rank:
+      if   . == "P0" then 0
+      elif . == "P1" then 1
+      elif . == "P2" then 2
+      else 2 end;
+    [.data.repository.issues.nodes[]
+      | . as $i
+      | ($i.labels.nodes | map(.name)) as $lbls
+      | select(($lbls | index("team:in-progress") | not)
+            and ($lbls | index("team:done") | not)
+            and ($lbls | index("team:failed") | not))
+      | ($i.projectItems.nodes | map(select(.project.number == 1)) | first) as $pi
+      | select($pi != null)
+      | ($pi.fieldValueByName.name // "P2") as $prio
+      | . + {priority: $prio, prio_rank: ($prio | prio_rank)}]
+    | sort_by([.prio_rank, .createdAt])
+    | .[] | @base64'
 ```
 
-For each candidate row (oldest first), parse `Blocked by\s+#(\d+)` from the body
-— same regex `team-dispatch` §1 uses. For every blocker number, run
-`gh issue view <blocker> --json state --jq .state`; if any is `OPEN`, skip this
-candidate. The first candidate with no open blockers is the pick.
+For each candidate row (highest Priority first, oldest first within ties), parse
+`Blocked by\s+#(\d+)` from the body — same regex `team-dispatch` §1 uses. For
+every blocker number, run `gh issue view <blocker> --json state --jq .state`; if
+any is `OPEN`, skip this candidate. The first candidate with no open blockers is
+the pick.
 
 If no candidate survives:
 
