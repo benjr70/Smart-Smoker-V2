@@ -121,3 +121,23 @@
   ansible.builtin.debug:
     msg: "{{ tailscale_final_status.stdout_lines }}"
   when: tailscale_final_status.rc == 0
+
+- name: Check Tailscale DNS resolver status
+  ansible.builtin.command: tailscale dns status
+  register: tailscale_dns_status
+  changed_when: false
+  failed_when: false
+
+- name: Assert Tailscale admin DNS global nameservers are configured
+  ansible.builtin.assert:
+    that:
+      - tailscale_dns_status.rc == 0
+      - tailscale_dns_status.stdout | regex_search('[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
+    fail_msg: >-
+      Tailscale admin DNS global nameservers are not configured on {{ inventory_hostname }}.
+      DNS resolution will fail after tailscaled restarts or LXC reboots.
+      Fix: go to https://login.tailscale.com/admin/dns and add global nameservers
+      1.1.1.1 and 8.8.8.8. Note: chattr +i /etc/resolv.conf is blocked inside
+      Proxmox LXCs, so the admin console fix is mandatory — local /etc/resolv.conf
+      edits will not persist.
+    success_msg: "Tailscale DNS resolvers are configured on {{ inventory_hostname }}"

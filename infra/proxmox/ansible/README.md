@@ -159,6 +159,25 @@ Tailscale Mesh Network
    - Set expiration to "90 days" or longer
    - Add tags if using ACLs: `tag:server`, `tag:runner`, `tag:device`, `tag:production`, `tag:development`
 
+### Tailscale Admin DNS Configuration (Required)
+
+Before running any playbook, configure global nameservers in the Tailscale admin console:
+
+1. Go to <https://login.tailscale.com/admin/dns>
+2. Under **Global nameservers**, add:
+   - `1.1.1.1` (Cloudflare)
+   - `8.8.8.8` (Google)
+3. Ensure **Override local DNS** is enabled so `accept-dns=true` forwards unknown queries upstream
+
+**Why this is mandatory for Proxmox LXCs**: `chattr +i /etc/resolv.conf` is blocked
+inside unprivileged LXC containers, so DNS cannot be locked in-container. Without
+global nameservers set in the admin console, Docker image pulls (`registry-1.docker.io`)
+and other public DNS queries will break after `tailscaled` restarts or LXC reboots.
+
+The tailscale Ansible role asserts this is configured (`tailscale dns status` must
+show at least one resolver). The playbook will fail with an actionable error message
+if the admin console DNS is not set up.
+
 ### Setup Tailscale Network
 
 #### Option 1: Configure with Ansible (Recommended)
