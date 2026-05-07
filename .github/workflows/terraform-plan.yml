@@ -43,9 +43,19 @@ jobs:
 
       - name: Install unzip (self-hosted runner)
         run: |
-          if ! command -v unzip >/dev/null 2>&1; then
+          if command -v unzip >/dev/null 2>&1; then
+            echo "unzip already present"
+            exit 0
+          fi
+          if [ "$(id -u)" -eq 0 ]; then
+            DEBIAN_FRONTEND=noninteractive apt-get update -qq
+            DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends unzip
+          elif sudo -n true 2>/dev/null; then
             sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq
             sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends unzip
+          else
+            echo "::error::unzip is missing and the runner has no passwordless sudo. Install unzip on the runner: 'apt-get install -y unzip'."
+            exit 1
           fi
 
       - name: Setup Terraform
