@@ -14,11 +14,13 @@ the next.
 Re-confirm anytime:
 
 ```bash
-tailscale status | grep -E 'smoker-dev-cloud|virtual-smoker'
+tailscale status | grep -E 'smoker-dev-cloud-1|virtual-smoker'
 ```
 
-If a name drifts, patch the three hardcodes in `SKILL.md` (search
-`smoker-dev-cloud`) **and** the two allowlist entries in
+If a name drifts, update the GitHub repo variables (`DEV_CLOUD_HOST`,
+`DEV_CLOUD_FQDN`, `DEVICE_HOST`, `CLOUD_BACKEND_URL`) — those are the single
+source of truth (issue #189). Then patch the three hardcodes in `SKILL.md`
+(search `smoker-dev-cloud-1`) **and** the two allowlist entries in
 `.claude/settings.json`.
 
 ---
@@ -131,5 +133,5 @@ To avoid rediscovering peer-name drift:
 - Add `tailscale status | grep -q smoker-dev-cloud-1` as the first command in
   the skill (already documented in §Steps).
 - Or pin Tailscale node names in
-  `infra/proxmox/ansible/inventory/host_vars/smart-smoker-dev-cloud.yml` so
+  `infra/proxmox/ansible/inventory/host_vars/smart-smoker-dev-cloud-1.yml` so
   re-provisions stop appending `-1`, `-2`, etc.

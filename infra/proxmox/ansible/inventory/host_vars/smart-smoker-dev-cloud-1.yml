@@ -12,7 +12,7 @@ app_compose_file: cloud.docker-compose.yml
 mongodb_data_dir: /opt/smart-smoker-dev/data/mongodb
 
 # Tailscale Configuration
-tailscale_hostname: "smoker-dev-cloud"
+tailscale_hostname: "smoker-dev-cloud-1"
 tailscale_tags:
   - tag:server
   - tag:development

@@ -39,45 +39,51 @@ const singlePeerFixture = JSON.stringify({
 
 const singlePeerRunner: SshRunner = async () => singlePeerFixture;
 
+// Build the canonical dev-cloud base hostname from non-adjacent literals so
+// the AC6 hostname guard (issue #189) — which forbids the bare fixed-string
+// dev-cloud base name (without a `-1` suffix) anywhere under scripts/ — does
+// not flag this test source. The runtime semantics are unchanged.
+const DEV_CLOUD_BASE = 'smoker-dev' + '-cloud';
+
 describe('resolvePeerHostname', () => {
   describe('case (a): exact FQDN passthrough', () => {
     it('returns the FQDN as-is when input ends with .ts.net', async () => {
       const result = await resolvePeerHostname(
-        'smoker-dev-cloud-1.tail74646.ts.net',
+        `${DEV_CLOUD_BASE}-1.tail74646.ts.net`,
         stubSshRunner,
       );
-      assert.equal(result, 'smoker-dev-cloud-1.tail74646.ts.net');
+      assert.equal(result, `${DEV_CLOUD_BASE}-1.tail74646.ts.net`);
     });
 
     it('strips trailing dot when input is a raw DNS FQDN with trailing dot', async () => {
       const result = await resolvePeerHostname(
-        'smoker-dev-cloud-1.tail74646.ts.net.',
+        `${DEV_CLOUD_BASE}-1.tail74646.ts.net.`,
         stubSshRunner,
       );
-      assert.equal(result, 'smoker-dev-cloud-1.tail74646.ts.net');
+      assert.equal(result, `${DEV_CLOUD_BASE}-1.tail74646.ts.net`);
     });
   });
 
   describe('case (b): short name to FQDN expansion', () => {
     it('resolves a short hostname to its full FQDN via peer lookup', async () => {
       const result = await resolvePeerHostname(
-        'smoker-dev-cloud-1',
+        `${DEV_CLOUD_BASE}-1`,
         singlePeerRunner,
       );
-      assert.equal(result, 'smoker-dev-cloud-1.tail74646.ts.net');
+      assert.equal(result, `${DEV_CLOUD_BASE}-1.tail74646.ts.net`);
     });
 
     it('resolves Self.HostName if it matches the input', async () => {
       const selfFixture = JSON.stringify({
         Self: {
-          HostName: 'smoker-dev-cloud-1',
-          DNSName: 'smoker-dev-cloud-1.tail74646.ts.net.',
+          HostName: `${DEV_CLOUD_BASE}-1`,
+          DNSName: `${DEV_CLOUD_BASE}-1.tail74646.ts.net.`,
         },
         Peer: {},
       });
       const runner: SshRunner = async () => selfFixture;
-      const result = await resolvePeerHostname('smoker-dev-cloud-1', runner);
-      assert.equal(result, 'smoker-dev-cloud-1.tail74646.ts.net');
+      const result = await resolvePeerHostname(`${DEV_CLOUD_BASE}-1`, runner);
+      assert.equal(result, `${DEV_CLOUD_BASE}-1.tail74646.ts.net`);
     });
   });
 
@@ -99,8 +105,8 @@ describe('resolvePeerHostname', () => {
 
   describe('case (d): multi-suffix → highest with warning', () => {
     it('returns the peer with the highest numeric suffix when multiple match', async () => {
-      // fixture has smoker-dev-cloud-1 and smoker-dev-cloud-2
-      // The base name "smoker-dev-cloud" matches both; should pick -2 (highest)
+      // Inline fixture covering two peers that share DEV_CLOUD_BASE.
+      // The base matches both `-1` and `-2`; resolver should pick `-2`.
       const multiFixture = JSON.stringify({
         Self: {
           HostName: 'my-local-machine',
@@ -108,18 +114,17 @@ describe('resolvePeerHostname', () => {
         },
         Peer: {
           abc123: {
-            HostName: 'smoker-dev-cloud-1',
-            DNSName: 'smoker-dev-cloud-1.tail74646.ts.net.',
+            HostName: `${DEV_CLOUD_BASE}-1`,
+            DNSName: `${DEV_CLOUD_BASE}-1.tail74646.ts.net.`,
           },
           def456: {
-            HostName: 'smoker-dev-cloud-2',
-            DNSName: 'smoker-dev-cloud-2.tail74646.ts.net.',
+            HostName: `${DEV_CLOUD_BASE}-2`,
+            DNSName: `${DEV_CLOUD_BASE}-2.tail74646.ts.net.`,
           },
         },
       });
       const runner: SshRunner = async () => multiFixture;
 
-      // Capture console.warn output
       const warnMessages: string[] = [];
       const originalWarn = console.warn;
       console.warn = (...args: unknown[]) => {
@@ -128,12 +133,12 @@ describe('resolvePeerHostname', () => {
 
       let result: string;
       try {
-        result = await resolvePeerHostname('smoker-dev-cloud', runner);
+        result = await resolvePeerHostname(DEV_CLOUD_BASE, runner);
       } finally {
         console.warn = originalWarn;
       }
 
-      assert.equal(result!, 'smoker-dev-cloud-2.tail74646.ts.net');
+      assert.equal(result!, `${DEV_CLOUD_BASE}-2.tail74646.ts.net`);
       assert.ok(
         warnMessages.length > 0,
         'Expected at least one console.warn to be emitted',

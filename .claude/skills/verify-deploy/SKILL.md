@@ -33,11 +33,31 @@ Optional positional arg:
 ## Targets
 
 - **dev-cloud**: host `smoker-dev-cloud-1`, FQDN resolved via
-  `scripts/smoke/resolve-host-cli.ts` (see **FQDN Resolution** below).
-  Tailscale Serve on 443 (frontend) + 8443 (backend). Containers:
-  `backend_cloud`, `frontend_cloud`, `mongo`.
+  `scripts/smoke/resolve-host-cli.ts` (see **FQDN Resolution** below). Tailscale
+  Serve on 443 (frontend) + 8443 (backend). Containers: `backend_cloud`,
+  `frontend_cloud`, `mongo`.
 - **virtual-smoker**: host `virtual-smoker`, SSH user `smoker`. Containers:
   `device_service`, `frontend_smoker`, `watchtower`.
+
+## Source of truth — GitHub repo variables
+
+Peer names are **not** hardcoded in workflows or this skill. They live in four
+GitHub Actions repository variables (Settings → Secrets and variables → Actions
+→ Variables) and are consumed by the deploy workflows + scripts (issue #189):
+
+| Variable            | Example                                            | Read by                                                                 |
+| ------------------- | -------------------------------------------------- | ----------------------------------------------------------------------- |
+| `DEV_CLOUD_HOST`    | `smoker-dev-cloud-1`                               | `.github/workflows/dev-deploy.yml`                                      |
+| `DEV_CLOUD_FQDN`    | `smoker-dev-cloud-1.tail74646.ts.net`              | `.github/workflows/publish.yml` (nightly smoker `.env.prod`)            |
+| `DEVICE_HOST`       | `virtual-smoker`                                   | `.github/workflows/device-deploy.yml`                                   |
+| `CLOUD_BACKEND_URL` | `https://smoker-dev-cloud-1.tail74646.ts.net:8443` | `dev-deploy.yml`, `device-deploy.yml`, `scripts/device-health-check.sh` |
+
+The runtime fallback when these are missing or drift after re-provisioning is
+`scripts/smoke/resolve-host.ts` (issue #187), which walks
+`tailscale status --json` to map a short name (or stale FQDN) to the canonical
+FQDN. It is invoked transparently by `scripts/deployment-health-check.sh` and
+the smoke runner. **Hardcoded peer names in workflows / infra / scripts are
+forbidden by the `scripts/smoke/hostname-guard.test.ts` guard.**
 
 ## FQDN Resolution
 
@@ -51,6 +71,7 @@ node --import tsx/esm scripts/smoke/resolve-host-cli.ts smoker-dev-cloud-1
 ```
 
 The resolver (`scripts/smoke/resolve-host.ts`) handles:
+
 - Short hostname → peer lookup via `tailscale status --json`
 - Exact FQDN passthrough (strips trailing `.`)
 - Suffix drift (`smoker-dev-cloud` → `smoker-dev-cloud-1`)

@@ -14,7 +14,7 @@ NC='\033[0m' # No Color
 # Configuration
 HOSTS=(
   "smoker-runner"
-  "smoker-dev-cloud"
+  "smoker-dev-cloud-1"
   "smokecloud"
   "virtual-smoker"
 )
@@ -132,14 +132,14 @@ test_dev_serve() {
   print_info "Checking if dev cloud serve is accessible on tailnet..."
 
   # Test HTTP endpoint
-  if curl -s -m 5 "http://smoker-dev-cloud" &> /dev/null; then
+  if curl -s -m 5 "http://smoker-dev-cloud-1" &> /dev/null; then
     print_success "Dev cloud HTTP (port 80) is accessible via Tailscale Serve"
   else
     print_warning "Dev cloud HTTP not responding (may not be deployed yet)"
   fi
 
   # Test WebSocket endpoint
-  if curl -s -m 5 "http://smoker-dev-cloud:3001" &> /dev/null; then
+  if curl -s -m 5 "http://smoker-dev-cloud-1:3001" &> /dev/null; then
     print_success "Dev cloud WebSocket (port 3001) is accessible via Tailscale Serve"
   else
     print_warning "Dev cloud WebSocket not responding (may not be deployed yet)"
@@ -204,7 +204,7 @@ test_virtual_device() {
 check_firewall_rules() {
   print_header "Checking Firewall Rules (on accessible hosts)"
 
-  for host in "smoker-runner" "smoker-dev-cloud" "smokecloud"; do
+  for host in "smoker-runner" "smoker-dev-cloud-1" "smokecloud"; do
     print_info "Checking UFW on ${host}..."
 
     if timeout 5 ssh -o ConnectTimeout=3 -o StrictHostKeyChecking=no "root@${host}" "ufw status | grep -E '(tailscale0|41641)'" &> /dev/null; then
@@ -239,7 +239,7 @@ generate_summary() {
 
   print_info "Network topology:"
   print_info "  ├─ smoker-runner (GitHub Actions runner)"
-  print_info "  ├─ smoker-dev-cloud (Development environment)"
+  print_info "  ├─ smoker-dev-cloud-1 (Development environment)"
   print_info "  ├─ smokecloud (Production environment with Funnel)"
   print_info "  └─ virtual-smoker (Virtual device)"
 
@@ -250,8 +250,8 @@ generate_summary() {
 
   echo ""
   print_info "Internal access (Tailscale network only):"
-  print_info "  Dev HTTP:   http://smoker-dev-cloud"
-  print_info "  Dev WS:     http://smoker-dev-cloud:3001"
+  print_info "  Dev HTTP:   http://smoker-dev-cloud-1"
+  print_info "  Dev WS:     http://smoker-dev-cloud-1:3001"
   print_info "  Device:     http://virtual-smoker:3002"
 
   echo ""
