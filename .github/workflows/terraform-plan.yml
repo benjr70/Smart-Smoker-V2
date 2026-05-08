@@ -41,27 +41,32 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install unzip (self-hosted runner)
+      - name: Setup Terraform
+        # Self-hosted proxmox runner lacks unzip and passwordless sudo, so
+        # hashicorp/setup-terraform@v3 cannot extract its release zip. Install
+        # terraform manually using python's stdlib zipfile module instead
+        # (python3 is already required by the ansible workflows on this runner).
         run: |
-          if command -v unzip >/dev/null 2>&1; then
-            echo "unzip already present"
+          if command -v terraform >/dev/null 2>&1; then
+            echo "terraform already present: $(terraform version | head -n1)"
             exit 0
           fi
-          if [ "$(id -u)" -eq 0 ]; then
-            DEBIAN_FRONTEND=noninteractive apt-get update -qq
-            DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends unzip
-          elif sudo -n true 2>/dev/null; then
-            sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends unzip
-          else
-            echo "::error::unzip is missing and the runner has no passwordless sudo. Install unzip on the runner: 'apt-get install -y unzip'."
-            exit 1
-          fi
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ~1.5
+          TF_VERSION=1.5.7
+          ARCH=$(uname -m)
+          case "$ARCH" in
+            x86_64) TF_ARCH=amd64 ;;
+            aarch64|arm64) TF_ARCH=arm64 ;;
+            armv7l) TF_ARCH=arm ;;
+            *) echo "::error::Unsupported arch $ARCH" ; exit 1 ;;
+          esac
+          TMP=$(mktemp -d)
+          curl -fsSL "https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_${TF_ARCH}.zip" -o "$TMP/tf.zip"
+          python3 -c "import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$TMP/tf.zip" "$TMP"
+          chmod +x "$TMP/terraform"
+          mkdir -p "$HOME/.local/bin"
+          mv "$TMP/terraform" "$HOME/.local/bin/terraform"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/terraform" version
 
       - name: Terraform Init
         id: init
