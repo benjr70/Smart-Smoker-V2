@@ -48,7 +48,7 @@ This document outlines the comprehensive testing strategy for validating the Tai
 - **Tailscale Config**: Basic connectivity, no Serve/Funnel
 - **Tags**: `tag:runner`, `tag:ci-cd`
 
-### 2. Development Cloud (smoker-dev-cloud)
+### 2. Development Cloud (smoker-dev-cloud-1)
 - **Purpose**: Development environment
 - **Tailscale Config**: Serve enabled (ports 80, 3001)
 - **Access**: Tailnet only (internal)

@@ -68,7 +68,7 @@ For **existing containers** that were created before this fix, update them manua
 ```bash
 pct set 106 --ostype ubuntu   # github-runner
 pct set 104 --ostype ubuntu   # smart-smoker-cloud-prod
-pct set 108 --ostype ubuntu   # smart-smoker-dev-cloud
+pct set 108 --ostype ubuntu   # smart-smoker-dev-cloud-1
 ```
 
 ### 2. NAT Persistence

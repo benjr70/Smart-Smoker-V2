@@ -43,7 +43,7 @@ jobs:
       - name: Set deployment variables
         id: vars
         run: |
-          DEV_HOST="smoker-dev-cloud"
+          DEV_HOST="${{ vars.DEV_CLOUD_HOST || 'smoker-dev-cloud-1' }}"
           DEPLOY_DIR="/opt/smart-smoker-dev"
           COMPOSE_FILE="cloud.docker-compose.yml"
           VERSION="nightly"
@@ -384,13 +384,13 @@ jobs:
     if: success()
     uses: ./.github/workflows/device-deploy.yml
     with:
-      device_host: 'virtual-smoker'
+      device_host: ${{ vars.DEVICE_HOST || 'virtual-smoker' }}
       version: 'nightly'
       compose_file: 'virtual-smoker.docker-compose.yml'
       ssh_user: 'smoker'
       deploy_dir: '/opt/smoker-device'
       environment: 'dev'
-      cloud_backend_url: 'https://smoker-dev-cloud.tail74646.ts.net:8443'
+      cloud_backend_url: ${{ vars.CLOUD_BACKEND_URL || 'https://smoker-dev-cloud-1.tail74646.ts.net:8443' }}
       requires_arm_emulation: true
     secrets: inherit
 

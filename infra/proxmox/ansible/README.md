@@ -37,6 +37,30 @@ Ensure all infrastructure is provisioned via Terraform (Phase 2 Story 1) before 
 
 ## Quick Start
 
+### Repo variables (single source of truth for hostnames)
+
+Hostnames live in **GitHub Actions repository variables** (Settings → Secrets and
+variables → Actions → Variables). The Ansible inventory must agree with these
+values so a re-provision can rename the peer without breaking deploys
+(issue #189):
+
+| Variable            | Example value                                  | Consumed by                                                                |
+| ------------------- | ---------------------------------------------- | -------------------------------------------------------------------------- |
+| `DEV_CLOUD_HOST`    | `smoker-dev-cloud-1`                           | `dev-deploy.yml`, this inventory's `dev_cloud` key + `ansible_host`        |
+| `DEV_CLOUD_FQDN`    | `smoker-dev-cloud-1.tail74646.ts.net`          | `publish.yml` (`REACT_APP_CLOUD_URL` for nightly smoker builds)            |
+| `DEVICE_HOST`       | `virtual-smoker`                               | `device-deploy.yml`, this inventory's `virtual-smoker-device` group        |
+| `CLOUD_BACKEND_URL` | `https://smoker-dev-cloud-1.tail74646.ts.net:8443` | `dev-deploy.yml`, `device-deploy.yml`, `scripts/device-health-check.sh` |
+
+The runtime fallback is `scripts/smoke/resolve-host.ts` (issue #187), which
+resolves a short name to the canonical Tailscale FQDN by walking
+`tailscale status --json`. It tolerates numeric suffix drift after a
+re-provision (e.g. peer `-1` becomes `-2`) and is invoked transparently by
+`scripts/deployment-health-check.sh`.
+
+The inventory key in `inventory/hosts.yml` (`smart-smoker-dev-cloud-1`) and the
+host_vars filename (`smart-smoker-dev-cloud-1.yml`) must match the same `-1`
+hostname so Ansible host_vars autodiscovery works.
+
 ### 1. Configure Inventory
 
 Update `inventory/hosts.yml` with your server IP addresses (if different from Terraform defaults):
@@ -141,7 +165,7 @@ All infrastructure is connected via Tailscale VPN, creating a secure mesh networ
 Tailscale Mesh Network
 ├─ smoker-runner (GitHub Actions runner)
 │  └─ Tags: runner, ci-cd
-├─ smoker-dev-cloud (Development environment)
+├─ smoker-dev-cloud-1 (Development environment)
 │  ├─ Tags: server, development
 │  └─ Serve: HTTP (80), WebSocket (3001) - Tailnet only
 ├─ smokecloud (Production environment)
@@ -225,8 +249,8 @@ The dev environment exposes services on the Tailscale network only (not publicly
 
 ```bash
 # Services accessible on tailnet
-http://smoker-dev-cloud        # Main HTTP service (port 80)
-http://smoker-dev-cloud:3001   # WebSocket service (port 3001)
+http://smoker-dev-cloud-1        # Main HTTP service (port 80)
+http://smoker-dev-cloud-1:3001   # WebSocket service (port 3001)
 ```
 
 #### Production Environment (Tailscale Funnel)
@@ -278,12 +302,12 @@ tailscale funnel status  # Production only
 ```bash
 # From any machine on the Tailscale network
 ping smoker-runner
-ping smoker-dev-cloud
+ping smoker-dev-cloud-1
 ping smokecloud
 ping virtual-smoker
 
 # Test HTTP endpoints (from tailnet)
-curl http://smoker-dev-cloud
+curl http://smoker-dev-cloud-1
 curl http://smokecloud
 
 # Test public endpoints (from anywhere)
