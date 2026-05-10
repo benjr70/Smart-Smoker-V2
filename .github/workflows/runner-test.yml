@@ -35,15 +35,6 @@ jobs:
           echo "Memory: $(free -h | grep Mem | awk '{print $2}')"
           echo "Disk: $(df -h / | tail -1 | awk '{print $2}')"
 
-      - name: Verify Docker installation
-        run: |
-          echo "=== Docker Version ==="
-          docker --version
-          docker compose version
-          echo ""
-          echo "=== Docker Status ==="
-          systemctl status docker --no-pager || true
-
       - name: Verify Terraform installation
         run: |
           echo "=== Terraform Version ==="
@@ -80,7 +71,6 @@ jobs:
           echo ""
           echo "Verified:"
           echo "  - Runner is online and accepting jobs"
-          echo "  - Docker is installed and operational"
           echo "  - Terraform is installed and functional"
           echo "  - Node.js/npm are available"
           echo "  - Terraform can initialize and validate"
