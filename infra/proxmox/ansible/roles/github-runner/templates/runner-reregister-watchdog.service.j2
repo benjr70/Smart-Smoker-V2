@@ -1,0 +1,11 @@
+[Unit]
+Description=GitHub Actions Runner Re-registration Watchdog
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/runner-reregister-watchdog.sh
+User=root
+StandardOutput=journal
+StandardError=journal
+RemainAfterExit=no

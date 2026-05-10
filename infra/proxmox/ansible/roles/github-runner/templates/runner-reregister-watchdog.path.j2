@@ -1,0 +1,9 @@
+[Unit]
+Description=GitHub Actions Runner Re-registration Watchdog Path Monitor
+
+[Path]
+PathModified={{ github_runner_install_dir }}/_diag
+Unit=runner-reregister-watchdog.service
+
+[Install]
+WantedBy=multi-user.target

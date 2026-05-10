@@ -37,3 +37,9 @@ github_runner_ephemeral: false
 github_runner_log_retention_days: 7
 github_runner_disk_warn_percent: 80
 github_runner_run_initial_cleanup: false
+
+# DNS guardrail — host to probe before runner starts
+github_runner_dns_probe_host: pipelinesghubeus5.actions.githubusercontent.com
+
+# PAT file path on disk for self-healing units (mode 0600, owned by runner user)
+github_runner_pat_file: /etc/actions-runner/.token

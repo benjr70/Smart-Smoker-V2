@@ -1,0 +1,56 @@
+#!/bin/bash
+# GitHub Actions Runner DNS Guardrail
+# Managed by Ansible - Do not edit manually
+#
+# Verifies pipelinesghubeus5.actions.githubusercontent.com resolves before
+# the runner service starts. If DNS is broken, restarts tailscaled and
+# rewrites /etc/resolv.conf from the known-good template, then re-checks.
+# Exits non-zero if DNS is still broken after remediation.
+
+set -euo pipefail
+
+LOG_TAG="runner-dns-guard"
+DNS_PROBE_HOST="{{ github_runner_dns_probe_host }}"
+RESOLV_TEMPLATE="/etc/resolv.conf.template"
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$LOG_TAG] $*" | tee -a /var/log/runner-dns-guard.log
+}
+
+check_dns() {
+    timeout 5 getent hosts "$DNS_PROBE_HOST" > /dev/null 2>&1
+}
+
+if check_dns; then
+    log "DNS OK: $DNS_PROBE_HOST resolves"
+    exit 0
+fi
+
+log "DNS FAIL: $DNS_PROBE_HOST does not resolve — starting remediation"
+
+# Step 1: restart tailscaled
+if systemctl is-active tailscaled > /dev/null 2>&1; then
+    log "Restarting tailscaled..."
+    systemctl restart tailscaled
+    sleep 5
+fi
+
+# Step 2: rewrite resolv.conf from known-good template
+if [ -f "$RESOLV_TEMPLATE" ]; then
+    log "Rewriting /etc/resolv.conf from $RESOLV_TEMPLATE"
+    cp "$RESOLV_TEMPLATE" /etc/resolv.conf
+else
+    log "Template $RESOLV_TEMPLATE missing — writing fallback nameservers"
+    printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > /etc/resolv.conf
+fi
+
+sleep 3
+
+# Step 3: re-check
+if check_dns; then
+    log "DNS OK after remediation: $DNS_PROBE_HOST resolves"
+    exit 0
+fi
+
+log "ERROR: DNS still broken after remediation — runner will not start"
+exit 1
