@@ -587,6 +587,110 @@ After Ansible configuration:
 4. ⏭️ Deploy applications via GitHub Actions
 5. ⏭️ Migrate production database
 
+## Self-Healing: DNS Guardrail
+
+The `github-runner` role deploys a DNS guardrail that blocks the runner service
+from starting when DNS is broken, and repairs it automatically.
+
+**How it works:**
+
+1. A drop-in `dns-guard.conf` is installed under the runner's systemd service
+   drop-in directory (e.g. `actions.runner.<name>.service.d/`). It adds
+   `ExecStartPre=/usr/local/bin/runner-dns-guard.sh`.
+2. On every start attempt, `runner-dns-guard.sh` probes
+   `pipelinesghubeus5.actions.githubusercontent.com` via `getent hosts`.
+3. If the probe fails, it restarts `tailscaled`, rewrites `/etc/resolv.conf`
+   from `/etc/resolv.conf.template` (1.1.1.1 + 8.8.8.8), then re-checks.
+4. If DNS is still broken, the script exits non-zero and the runner service
+   does not start.
+5. A `runner-dns-guard.timer` also runs the script every 10 minutes
+   independently, so DNS is repaired even if the runner is not actively
+   restarting.
+
+**Key files:**
+- `/usr/local/bin/runner-dns-guard.sh` — probe + remediation script
+- `/etc/resolv.conf.template` — known-good nameservers (1.1.1.1, 8.8.8.8, 8.8.4.4)
+- `/var/log/runner-dns-guard.log` — guard log
+
+## Self-Healing: Re-registration Watchdog
+
+When a GitHub Actions runner's registration is revoked (e.g. after a long
+offline period), the runner log contains "registration deleted from server".
+The watchdog detects this and re-registers automatically using a stored PAT.
+
+**How it works:**
+
+1. A systemd path unit `runner-reregister-watchdog.path` monitors
+   `<install_dir>/_diag/` for changes (new log files written by the runner).
+2. When the path changes, `runner-reregister-watchdog.service` fires.
+3. `runner-reregister-watchdog.sh` checks the latest `Runner_*.log` for
+   "registration deleted from server".
+4. If found, it reads the PAT from `/etc/actions-runner/.token`, POSTs to
+   `https://api.github.com/repos/<repo>/actions/runners/registration-token`
+   to get a fresh token, then runs `./config.sh --replace`.
+5. The runner service is restarted automatically.
+
+**Key files:**
+- `/usr/local/bin/runner-reregister-watchdog.sh` — watchdog script
+- `/etc/actions-runner/.token` — PAT file (mode 0600, owned by runner user)
+- `/var/log/runner-reregister-watchdog.log` — watchdog log
+
+## PAT Rotation Procedure
+
+The GitHub PAT stored at `/etc/actions-runner/.token` grants the runner the
+ability to generate fresh registration tokens. It must be rotated when it
+expires or is compromised.
+
+**Storage:**
+- Path: `/etc/actions-runner/.token`
+- Mode: `0600`
+- Owner: `{{ github_runner_user }}` (default: `runner`)
+
+**Rotation steps:**
+1. Generate a new PAT in GitHub → Settings → Developer settings → Personal
+   access tokens. Required scope: `repo` (for `actions/runners` API).
+2. Update the secret in your inventory/vault:
+   ```
+   github_runner_pat: "<new-pat>"
+   ```
+3. Re-run the playbook with the `self-healing` tag:
+   ```bash
+   ansible-playbook playbooks/github-runner.yml --tags self-healing -e "github_runner_pat=<new-pat>"
+   ```
+   This overwrites `/etc/actions-runner/.token` with mode 0600 (`no_log: true`).
+4. Verify the file on the runner host:
+   ```bash
+   ssh root@<runner-host> "ls -la /etc/actions-runner/.token && wc -c /etc/actions-runner/.token"
+   ```
+5. Revoke the old PAT in GitHub settings.
+
+**Note:** The file `/etc/github-runner/pat` (used by the older
+`runner-health-check.sh`) is a separate artifact. If both self-healing
+mechanisms are active, rotate both files.
+
+## Zombie Service Cleanup Runbook
+
+If the runner fails to re-register or the role re-apply fails with "unit
+already loaded", stale systemd service files from old runner registrations
+may be present. The role cleans these up idempotently on every run.
+
+**Known zombie service names:**
+- `smart-smoker-runner-1.service`
+- `smoker-runner-1.service`
+
+**Known blocker:**
+- `.runner_migrated` marker in the runner install directory blocks `./svc.sh
+  install` from creating a new service. The role removes it automatically.
+
+**Manual cleanup (if role re-apply is not possible):**
+```bash
+systemctl stop smart-smoker-runner-1.service smoker-runner-1.service 2>/dev/null || true
+rm -f /etc/systemd/system/smart-smoker-runner-1.service
+rm -f /etc/systemd/system/smoker-runner-1.service
+rm -f <install_dir>/.runner_migrated
+systemctl daemon-reload
+```
+
 ## Support
 
 For issues or questions:

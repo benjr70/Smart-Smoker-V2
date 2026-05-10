@@ -1,0 +1,12 @@
+[Unit]
+Description=GitHub Actions Runner DNS Guardrail
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/runner-dns-guard.sh
+User=root
+StandardOutput=journal
+StandardError=journal
+RemainAfterExit=no

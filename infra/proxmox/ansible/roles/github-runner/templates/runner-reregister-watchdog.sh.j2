@@ -1,0 +1,116 @@
+#!/bin/bash
+# GitHub Actions Runner Re-registration Watchdog
+# Managed by Ansible - Do not edit manually
+#
+# Triggered by systemd path unit when _diag/ changes.
+# Checks runner log for "registration deleted from server" and,
+# if found, fetches a fresh registration token via GitHub API and
+# runs config.sh --replace to re-register without operator intervention.
+
+set -euo pipefail
+
+RUNNER_DIR="{{ github_runner_install_dir }}"
+RUNNER_USER="{{ github_runner_user }}"
+GITHUB_REPO="{{ github_repository }}"
+PAT_FILE="/etc/actions-runner/.token"
+LOG_TAG="runner-reregister-watchdog"
+LOCK_FILE="/tmp/runner-reregister.lock"
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$LOG_TAG] $*" | tee -a /var/log/runner-reregister-watchdog.log
+}
+
+# Guard: only one instance at a time
+if [ -f "$LOCK_FILE" ]; then
+    log "Lock $LOCK_FILE exists — another instance running, exiting"
+    exit 0
+fi
+touch "$LOCK_FILE"
+trap 'rm -f "$LOCK_FILE"' EXIT
+
+# Pre-flight
+if [ ! -f "$RUNNER_DIR/config.sh" ]; then
+    log "Runner not installed at $RUNNER_DIR, skipping"
+    exit 0
+fi
+
+if [ ! -f "$PAT_FILE" ]; then
+    log "PAT file not found at $PAT_FILE, cannot auto-register"
+    exit 0
+fi
+
+PAT=$(cat "$PAT_FILE")
+if [ -z "$PAT" ]; then
+    log "PAT file is empty, cannot auto-register"
+    exit 0
+fi
+
+# Check recent runner logs for "registration deleted from server"
+DIAG_DIR="$RUNNER_DIR/_diag"
+if [ ! -d "$DIAG_DIR" ]; then
+    log "Diag directory $DIAG_DIR not found, skipping"
+    exit 0
+fi
+
+LATEST_LOG=$(find "$DIAG_DIR" -name 'Runner_*.log' -newer "$LOCK_FILE" -print 2>/dev/null | sort | tail -1)
+if [ -z "$LATEST_LOG" ]; then
+    LATEST_LOG=$(find "$DIAG_DIR" -name 'Runner_*.log' -print 2>/dev/null | sort | tail -1)
+fi
+
+if [ -z "$LATEST_LOG" ]; then
+    log "No Runner_*.log found in $DIAG_DIR, skipping"
+    exit 0
+fi
+
+if ! grep -q "registration deleted from server" "$LATEST_LOG" 2>/dev/null; then
+    log "No 'registration deleted' in $LATEST_LOG, skipping"
+    exit 0
+fi
+
+log "Detected 'registration deleted from server' — starting re-registration"
+
+# Fetch fresh token
+log "Requesting registration token from GitHub API..."
+RESPONSE=$(curl -sf -X POST \
+    -H "Authorization: Bearer $PAT" \
+    -H "Accept: application/vnd.github+json" \
+    -H "X-GitHub-Api-Version: 2022-11-28" \
+    "https://api.github.com/repos/$GITHUB_REPO/actions/runners/registration-token" 2>&1) || {
+    log "ERROR: Failed to get registration token: $RESPONSE"
+    exit 1
+}
+
+TOKEN=$(echo "$RESPONSE" | jq -r '.token')
+if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+    log "ERROR: Could not parse token from API response"
+    exit 1
+fi
+
+log "Got token — running config.sh --replace"
+
+# Stop service temporarily
+SERVICE_FILE=$(find /etc/systemd/system -name "actions.runner.*.service" -print -quit 2>/dev/null || true)
+if [ -n "$SERVICE_FILE" ]; then
+    SERVICE_NAME=$(basename "$SERVICE_FILE" .service)
+    systemctl stop "$SERVICE_NAME" 2>/dev/null || true
+fi
+
+# Re-configure
+cd "$RUNNER_DIR"
+sudo -u "$RUNNER_USER" ./config.sh \
+    --url "https://github.com/$GITHUB_REPO" \
+    --token "$TOKEN" \
+    --name "{{ github_runner_name }}" \
+    --labels "{{ github_runner_labels | join(',') }}" \
+    --work "{{ github_runner_work_directory }}" \
+    --replace \
+    --unattended
+
+chown -R "$RUNNER_USER:$RUNNER_USER" "$RUNNER_DIR"
+
+# Restart service
+if [ -n "$SERVICE_FILE" ]; then
+    systemctl start "$SERVICE_NAME" || true
+fi
+
+log "Re-registration complete"

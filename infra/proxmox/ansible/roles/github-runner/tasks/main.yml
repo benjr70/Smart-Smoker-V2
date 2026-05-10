@@ -402,3 +402,203 @@
   when: github_runner_pat != ""
   tags:
     - self-healing
+
+# =============================================================================
+# Zombie Service Cleanup
+# =============================================================================
+
+- name: Remove stale zombie runner service files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/systemd/system/smart-smoker-runner-1.service
+    - /etc/systemd/system/smoker-runner-1.service
+  notify: Reload systemd daemon
+  tags:
+    - self-healing
+    - cleanup
+
+- name: Remove .runner_migrated marker that blocks re-config
+  ansible.builtin.file:
+    path: "{{ github_runner_install_dir }}/.runner_migrated"
+    state: absent
+  tags:
+    - self-healing
+    - cleanup
+
+# =============================================================================
+# DNS Guardrail
+# =============================================================================
+
+- name: Deploy known-good resolv.conf template
+  ansible.builtin.template:
+    src: resolv.conf.j2
+    dest: /etc/resolv.conf.template
+    owner: root
+    group: root
+    mode: "0644"
+  tags:
+    - self-healing
+    - dns-guard
+
+- name: Deploy DNS guardrail script
+  ansible.builtin.template:
+    src: runner-dns-guard.sh.j2
+    dest: /usr/local/bin/runner-dns-guard.sh
+    owner: root
+    group: root
+    mode: "0755"
+  tags:
+    - self-healing
+    - dns-guard
+
+- name: Deploy DNS guardrail systemd service
+  ansible.builtin.template:
+    src: runner-dns-guard.service.j2
+    dest: /etc/systemd/system/runner-dns-guard.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd daemon
+  tags:
+    - self-healing
+    - dns-guard
+
+- name: Deploy DNS guardrail systemd timer
+  ansible.builtin.template:
+    src: runner-dns-guard.timer.j2
+    dest: /etc/systemd/system/runner-dns-guard.timer
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd daemon
+  tags:
+    - self-healing
+    - dns-guard
+
+- name: Find runner systemd service name for drop-in
+  ansible.builtin.find:
+    paths: /etc/systemd/system
+    patterns: "actions.runner.*.service"
+    file_type: file
+  register: runner_service_files
+  tags:
+    - self-healing
+    - dns-guard
+
+- name: Create drop-in directory for runner service DNS guard
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ item.path | basename }}.d"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop: "{{ runner_service_files.files }}"
+  when: runner_service_files.files | length > 0
+  notify: Reload systemd daemon
+  tags:
+    - self-healing
+    - dns-guard
+
+- name: Deploy DNS guard drop-in for runner service
+  ansible.builtin.template:
+    src: runner-dns-guard-dropin.conf.j2
+    dest: "/etc/systemd/system/{{ item.path | basename }}.d/dns-guard.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ runner_service_files.files }}"
+  when: runner_service_files.files | length > 0
+  notify: Reload systemd daemon
+  tags:
+    - self-healing
+    - dns-guard
+
+- name: Enable and start DNS guardrail timer
+  ansible.builtin.systemd:
+    name: runner-dns-guard.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  tags:
+    - self-healing
+    - dns-guard
+
+# =============================================================================
+# Re-registration Watchdog
+# =============================================================================
+
+- name: Create /etc/actions-runner directory for PAT
+  ansible.builtin.file:
+    path: /etc/actions-runner
+    state: directory
+    owner: "{{ github_runner_user }}"
+    group: "{{ github_runner_user }}"
+    mode: "0700"
+  when: github_runner_pat != ""
+  tags:
+    - self-healing
+    - reregister
+
+- name: Deploy PAT to /etc/actions-runner/.token
+  ansible.builtin.copy:
+    content: "{{ github_runner_pat }}"
+    dest: "{{ github_runner_pat_file }}"
+    owner: "{{ github_runner_user }}"
+    group: "{{ github_runner_user }}"
+    mode: "0600"
+  when: github_runner_pat != ""
+  no_log: true
+  tags:
+    - self-healing
+    - reregister
+
+- name: Deploy re-registration watchdog script
+  ansible.builtin.template:
+    src: runner-reregister-watchdog.sh.j2
+    dest: /usr/local/bin/runner-reregister-watchdog.sh
+    owner: root
+    group: root
+    mode: "0755"
+  when: github_runner_pat != ""
+  tags:
+    - self-healing
+    - reregister
+
+- name: Deploy re-registration watchdog systemd service
+  ansible.builtin.template:
+    src: runner-reregister-watchdog.service.j2
+    dest: /etc/systemd/system/runner-reregister-watchdog.service
+    owner: root
+    group: root
+    mode: "0644"
+  when: github_runner_pat != ""
+  notify: Reload systemd daemon
+  tags:
+    - self-healing
+    - reregister
+
+- name: Deploy re-registration watchdog systemd path unit
+  ansible.builtin.template:
+    src: runner-reregister-watchdog.path.j2
+    dest: /etc/systemd/system/runner-reregister-watchdog.path
+    owner: root
+    group: root
+    mode: "0644"
+  when: github_runner_pat != ""
+  notify: Reload systemd daemon
+  tags:
+    - self-healing
+    - reregister
+
+- name: Enable and start re-registration watchdog path unit
+  ansible.builtin.systemd:
+    name: runner-reregister-watchdog.path
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: github_runner_pat != ""
+  tags:
+    - self-healing
+    - reregister
