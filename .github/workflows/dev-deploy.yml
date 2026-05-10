@@ -44,16 +44,19 @@ jobs:
         id: vars
         run: |
           DEV_HOST="${{ vars.DEV_CLOUD_HOST || 'smoker-dev-cloud-1' }}"
+          DEV_FQDN="${{ vars.DEV_CLOUD_FQDN || 'smoker-dev-cloud-1.tail74646.ts.net' }}"
           DEPLOY_DIR="/opt/smart-smoker-dev"
           COMPOSE_FILE="cloud.docker-compose.yml"
           VERSION="nightly"
 
           echo "DEV_HOST=${DEV_HOST}" >> $GITHUB_ENV
+          echo "DEV_FQDN=${DEV_FQDN}" >> $GITHUB_ENV
           echo "DEPLOY_DIR=${DEPLOY_DIR}" >> $GITHUB_ENV
           echo "COMPOSE_FILE=${COMPOSE_FILE}" >> $GITHUB_ENV
           echo "VERSION=${VERSION}" >> $GITHUB_ENV
 
           echo "Deployment target: ${DEV_HOST}"
+          echo "FQDN target: ${DEV_FQDN}"
           echo "Deployment directory: ${DEPLOY_DIR}"
           echo "Version: ${VERSION}"
 
@@ -293,8 +296,8 @@ jobs:
       - name: Verify deployment health
         id: health_check
         run: |
-          echo "Running health checks on ${DEV_HOST}..."
-          if ./scripts/deployment-health-check.sh ${DEV_HOST} 3; then
+          echo "Running health checks on ${DEV_FQDN}..."
+          if ./scripts/deployment-health-check.sh "${DEV_FQDN}" 3; then
             echo "✅ All health checks passed"
             echo "health_status=success" >> $GITHUB_OUTPUT
           else
@@ -345,7 +348,7 @@ jobs:
 
           # Verify rollback success
           echo "Verifying rollback..."
-          if ./scripts/deployment-health-check.sh ${DEV_HOST} 1; then
+          if ./scripts/deployment-health-check.sh "${DEV_FQDN}" 1; then
             echo "✅ Rollback successful, system restored"
             echo "rollback_status=success" >> $GITHUB_OUTPUT
           else
