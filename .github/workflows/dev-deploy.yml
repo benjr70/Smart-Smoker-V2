@@ -68,6 +68,7 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           unset SSH_AUTH_SOCK || true
           ssh-keyscan -H ${DEV_HOST} >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh-keyscan -H ${DEV_FQDN} >> ~/.ssh/known_hosts 2>/dev/null || true
 
       - name: Verify SSH key setup
         run: |
