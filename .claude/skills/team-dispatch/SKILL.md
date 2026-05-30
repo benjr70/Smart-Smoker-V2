@@ -64,6 +64,7 @@ gh label create "team"             --description "Issue eligible for Level 7 age
 gh label create "team:in-progress" --description "Currently being implemented by an agent team"          --color "FBCA04" --force
 gh label create "team:done"        --description "Completed by an agent team"                            --color "0E8A16" --force
 gh label create "team:failed"      --description "Agent team attempt failed; needs human triage"         --color "B60205" --force
+gh label create "team:checks-failed" --description "PR opened by agent team but CI checks failed after auto-fix loop exhausted" --color "D93F0B" --force
 ```
 
 `--force` is idempotent: creates the label if absent, updates the metadata if
@@ -184,7 +185,9 @@ self-claim unblocked tasks. Expected flow per issue:
 3. **Reviewer** reads the staged diff (`git diff --staged`), applies the
    `.claude/skills/review-pr/` checklist, messages the implementer either
    `approved for task <id>` or `change-request for task <id>: <asks>`. On
-   change-request, the implementer iterates and re-signals.
+   change-request, the implementer iterates and re-signals. Cap at **10 reviewer
+   rounds per task**; if the 10th round still produces a change-request, the
+   lead marks the task failed (see §7).
 4. **Verifier** sees the `approved` message (implementer forwards it to `ver`),
    runs `scripts/smoke/run.ts`, appends the `smoke:` trailer to the commit
    message, commits.
@@ -220,8 +223,12 @@ plan mode until you approve.
   `gh issue view <blocker> --json state`. If open, release the task back to
   pending and tell the implementer to pick a different unblocked task.
 - If the verifier messages `smoke FAIL on task <id>`, the task stays
-  in-progress. Tell the implementer to investigate and re-signal when ready. Do
-  not skip.
+  in-progress. Tell the implementer to investigate and re-signal when ready. Cap
+  at **10 smoke-retry rounds per task** (shared counter with reviewer rounds —
+  one round = one reviewer cycle OR one smoke cycle, whichever came last). On
+  exhaustion, mark the task failed: add `team:failed` to the issue, remove
+  `team:in-progress`, comment with the last failure reason, and continue to the
+  next task. Do not skip mid-loop; the cap only triggers after 10 rounds.
 
 ### 8. Completion + cleanup
 

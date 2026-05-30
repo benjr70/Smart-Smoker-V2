@@ -3,47 +3,40 @@
     "context7": {
       "type": "stdio",
       "command": "npx",
-      "args": [
-        "-y",
-        "@upstash/context7-mcp"
-      ],
+      "args": ["-y", "@upstash/context7-mcp"],
       "env": {}
     },
     "playwright": {
       "type": "stdio",
       "command": "npx",
-      "args": [
-        "-y",
-        "@playwright/mcp@latest"
-      ],
+      "args": ["-y", "@playwright/mcp@latest"],
       "env": {}
     },
     "terraform": {
       "type": "stdio",
       "command": "npx",
-      "args": [
-        "-y",
-        "@hashicorp/terraform-mcp-server"
-      ],
+      "args": ["-y", "@hashicorp/terraform-mcp-server"],
       "env": {}
     },
     "docker": {
       "type": "stdio",
       "command": "npx",
-      "args": [
-        "-y",
-        "@quantgeekdev/docker-mcp"
-      ],
+      "args": ["-y", "@quantgeekdev/docker-mcp"],
       "env": {}
     },
     "mongodb": {
       "type": "stdio",
       "command": "npx",
-      "args": [
-        "-y",
-        "mongodb-mcp-server"
-      ],
+      "args": ["-y", "mongodb-mcp-server"],
       "env": {}
+    },
+    "github": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+      }
     }
   }
 }

@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# agent-run — VM wrapper that fires `/team-pickup` autonomously, no human prompts.
+#
+# One fire = one issue picked, implemented, PR opened, CI watched to verdict.
+# Designed to run on the claude-agent-1 Proxmox VM (see docs/CI-CD/claude-agent-vm.md).
+# Cron / scheduler invokes this; output goes to a timestamped log under
+# ~/claude-agent/logs/ AND stdout so cron mailers can capture summaries.
+#
+# Usage:
+#   agent-run                     # fire once, exit with /team-pickup's exit code
+#   agent-run --dry-run           # forward --dry-run to /team-pickup
+#
+# Exit codes:
+#   0   — /team-pickup completed cleanly (PR opened + pr-watch verdict captured,
+#         OR no eligible issue, OR another fire in flight)
+#   non-0 — /team-pickup failed (§6b path); cron mailer should escalate.
+
+set -euo pipefail
+
+REPO_DIR="${REPO_DIR:-$HOME/Smart-Smoker-V2}"
+LOG_DIR="${LOG_DIR:-$HOME/claude-agent/logs}"
+TS="$(date -u +%Y%m%dT%H%M%SZ)"
+LOG_FILE="$LOG_DIR/team-pickup-$TS.log"
+
+mkdir -p "$LOG_DIR"
+
+if [ ! -d "$REPO_DIR/.git" ]; then
+  echo "agent-run: ERROR — $REPO_DIR is not a git checkout" >&2
+  exit 2
+fi
+
+if ! command -v claude >/dev/null 2>&1; then
+  echo "agent-run: ERROR — claude CLI not on PATH" >&2
+  exit 2
+fi
+
+cd "$REPO_DIR"
+
+# Refresh master so /team-pickup §4 branches from up-to-date origin/master.
+git fetch --quiet origin master || {
+  echo "agent-run: WARN — git fetch failed, continuing with cached refs" | tee -a "$LOG_FILE"
+}
+
+DRY_RUN_FLAG=""
+if [ "${1:-}" = "--dry-run" ]; then
+  DRY_RUN_FLAG=" --dry-run"
+fi
+
+echo "=== agent-run $TS ===" | tee -a "$LOG_FILE"
+echo "repo:   $REPO_DIR"      | tee -a "$LOG_FILE"
+echo "log:    $LOG_FILE"      | tee -a "$LOG_FILE"
+echo "prompt: /team-pickup$DRY_RUN_FLAG" | tee -a "$LOG_FILE"
+echo                          | tee -a "$LOG_FILE"
+
+set +e
+claude \
+  --permission-mode bypassPermissions \
+  --print \
+  "/team-pickup$DRY_RUN_FLAG" \
+  2>&1 | tee -a "$LOG_FILE"
+EXIT_CODE=${PIPESTATUS[0]}
+set -e
+
+echo                                       | tee -a "$LOG_FILE"
+echo "=== agent-run exit $EXIT_CODE ===" | tee -a "$LOG_FILE"
+
+exit "$EXIT_CODE"
