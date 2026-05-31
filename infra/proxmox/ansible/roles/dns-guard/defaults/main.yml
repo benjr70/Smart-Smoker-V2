@@ -1,0 +1,16 @@
+---
+# DNS guardrail role — probes a known-good host and remediates broken DNS.
+# Generic version of the github-runner role's guardrail; used by hosts that
+# depend on outbound DNS (e.g., dev-cloud pulling Docker images).
+
+# Host to probe before declaring DNS healthy.
+dns_guard_probe_host: registry-1.docker.io
+
+# Systemd unit name (without .service / .timer suffix).
+dns_guard_service_name: dns-guard
+
+# Path where the known-good resolv.conf fallback is stored.
+dns_guard_resolv_template_path: /etc/resolv.conf.template
+
+# Log tag used in /var/log/{{ dns_guard_service_name }}.log
+dns_guard_log_tag: dns-guard

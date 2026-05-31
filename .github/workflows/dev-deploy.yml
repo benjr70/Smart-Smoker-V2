@@ -219,8 +219,40 @@ jobs:
             export ENCODED_MONGO_APP_PASSWORD='${{ env.ENCODED_MONGO_APP_PASSWORD }}'
             
             echo "Pulling Docker images with version: ${VERSION}..."
-            docker compose -f "${COMPOSE_FILE}" pull
-            
+            DNS_PROBE_HOST="registry-1.docker.io"
+            MAX_ATTEMPTS=3
+            ATTEMPT=1
+            PULL_OK=0
+            while [ "${ATTEMPT}" -le "${MAX_ATTEMPTS}" ]; do
+              echo "[deploy] pull attempt ${ATTEMPT}/${MAX_ATTEMPTS}"
+              if ! timeout 5 getent hosts "${DNS_PROBE_HOST}" > /dev/null 2>&1; then
+                echo "[deploy] DNS probe failed for ${DNS_PROBE_HOST}, remediating..."
+                if systemctl is-active tailscaled > /dev/null 2>&1; then
+                  echo "[deploy] restarting tailscaled"
+                  systemctl restart tailscaled || true
+                  sleep 5
+                fi
+                if [ ! -L /etc/resolv.conf ] && [ -w /etc/resolv.conf ]; then
+                  echo "[deploy] writing fallback nameservers to /etc/resolv.conf"
+                  printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > /etc/resolv.conf
+                else
+                  echo "[deploy] /etc/resolv.conf is a symlink or not writable, skipping rewrite"
+                fi
+                sleep 3
+              fi
+              if docker compose -f "${COMPOSE_FILE}" pull; then
+                PULL_OK=1
+                break
+              fi
+              echo "[deploy] pull attempt ${ATTEMPT} failed"
+              ATTEMPT=$((ATTEMPT + 1))
+              [ "${ATTEMPT}" -le "${MAX_ATTEMPTS}" ] && sleep 15
+            done
+            if [ "${PULL_OK}" -ne 1 ]; then
+              echo "❌ docker compose pull failed after ${MAX_ATTEMPTS} attempts"
+              exit 1
+            fi
+
             echo "Stopping existing containers..."
             docker compose -f "${COMPOSE_FILE}" down || true
             

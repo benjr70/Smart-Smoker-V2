@@ -14,6 +14,7 @@
     - cloud-app
     - backups
     - tailscale
+    - dns-guard
 
   post_tasks:
     - name: Display dev cloud setup summary
