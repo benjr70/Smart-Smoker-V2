@@ -1,0 +1,12 @@
+[Unit]
+Description=DNS Guardrail ({{ dns_guard_probe_host }})
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/{{ dns_guard_service_name }}.sh
+User=root
+StandardOutput=journal
+StandardError=journal
+RemainAfterExit=no
