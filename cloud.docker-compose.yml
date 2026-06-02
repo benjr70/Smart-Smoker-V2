@@ -46,7 +46,7 @@ services:
       - ./../../../../database:/data/db:z
       - ./infra/mongodb-init:/docker-entrypoint-initdb.d:ro
     ports:
-      - 27017:27017
+      - 127.0.0.1:27017:27017
 
     healthcheck:
       test: ['CMD', 'mongosh', '--eval', "db.adminCommand('ping')"]
