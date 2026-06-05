@@ -8,6 +8,10 @@ environment: prod
 app_base_dir: /opt/smart-smoker-prod
 app_compose_file: cloud.docker-compose.yml
 
+# Use latest docker-compose-plugin: all.yml pins 2.24.0 which has aged out of
+# Docker's apt repo (now 5.x). Empty = install latest (already bundled w/ docker-ce).
+docker_compose_version: ""
+
 # MongoDB Configuration
 mongodb_data_dir: /opt/smart-smoker-prod/data/mongodb
 
@@ -19,12 +23,14 @@ fail2ban_ban_time: 7200    # 2 hours for production
 fail2ban_max_retry: 3      # Strict for production
 
 # Tailscale Configuration
-tailscale_hostname: "smoke-prod-cloud"
+tailscale_hostname: "smokecloud-2"
 tailscale_tags:
   - tag:server
   - tag:production
 tailscale_accept_routes: true
-tailscale_accept_dns: true
+# accept_dns disabled: MagicDNS (100.100.100.100) does not forward public lookups on
+# this isolated 10.20.0.0/24 bridge, breaking apt. Box uses /etc/resolv.conf (1.1.1.1).
+tailscale_accept_dns: false
 
 # Tailscale Funnel - publicly expose production services
 tailscale_funnel_enabled: true
@@ -34,6 +40,6 @@ tailscale_funnel_config:
   - port: 8443
     target_port: 3001
 
-# Note: This maintains the existing public URL structure:
-# https://smoke-prod-cloud.tail74646.ts.net (port 443)
-# https://smoke-prod-cloud.tail74646.ts.net:8443 (WebSocket port)
+# Note: Public URL structure for the new prod box:
+# https://smokecloud-2.tail74646.ts.net (port 443)
+# https://smokecloud-2.tail74646.ts.net:8443 (WebSocket port)

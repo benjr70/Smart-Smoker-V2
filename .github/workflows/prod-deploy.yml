@@ -1,0 +1,181 @@
+name: Production Deploy
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag to deploy (e.g. v1.2.3 or 1.2.3)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prod-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: [self-hosted, linux, proxmox]
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            TAG="${{ github.event.release.tag_name }}"
+          else
+            TAG="${{ inputs.version }}"
+          fi
+          # Strip leading v/V then normalize to vX.Y.Z
+          NUM="${TAG#[vV]}"
+          echo "tag=v${NUM}" >> "$GITHUB_OUTPUT"
+          echo "num=${NUM}"  >> "$GITHUB_OUTPUT"
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          unset SSH_AUTH_SOCK || true
+          ssh-keyscan -H "${{ vars.PROD_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Promote nightly images to release tag
+        run: scripts/promote-images.sh "${{ steps.version.outputs.tag }}"
+
+      - name: Copy deployment files to prod host
+        run: |
+          scp -i ~/.ssh/id_ed25519 -o PasswordAuthentication=no \
+            cloud.docker-compose.yml \
+            root@${{ vars.PROD_HOST }}:${{ vars.PROD_DEPLOY_DIR }}/cloud.docker-compose.yml
+
+          ssh -i ~/.ssh/id_ed25519 -o PasswordAuthentication=no \
+            root@${{ vars.PROD_HOST }} \
+            "mkdir -p ${{ vars.PROD_DEPLOY_DIR }}/infra/mongodb-init"
+
+          scp -i ~/.ssh/id_ed25519 -o PasswordAuthentication=no -r \
+            infra/mongodb-init/. \
+            root@${{ vars.PROD_HOST }}:${{ vars.PROD_DEPLOY_DIR }}/infra/mongodb-init/
+
+      - name: Write prod secrets to .env on prod host
+        run: |
+          ENCODED_PASSWORD=$(printf '%s' "${{ secrets.MONGO_APP_PASSWORD }}" | jq -sRr @uri)
+          printf '%s\n' \
+            "VAPID_PUBLIC_KEY=${{ secrets.VAPID_PUBLIC_KEY }}" \
+            "VAPID_PRIVATE_KEY=${{ secrets.VAPID_PRIVATE_KEY }}" \
+            "MONGO_ROOT_USER=admin" \
+            "MONGO_ROOT_PASSWORD=${{ secrets.MONGO_ROOT_PASSWORD }}" \
+            "MONGO_APP_PASSWORD=${{ secrets.MONGO_APP_PASSWORD }}" \
+            "ENCODED_MONGO_APP_PASSWORD=${ENCODED_PASSWORD}" \
+            > /tmp/prod.env
+          scp -i ~/.ssh/id_ed25519 -o PasswordAuthentication=no \
+            /tmp/prod.env \
+            "root@${{ vars.PROD_HOST }}:${{ vars.PROD_DEPLOY_DIR }}/.env"
+          ssh -i ~/.ssh/id_ed25519 -o PasswordAuthentication=no \
+            "root@${{ vars.PROD_HOST }}" \
+            "chmod 600 '${{ vars.PROD_DEPLOY_DIR }}/.env'"
+          rm -f /tmp/prod.env
+
+      - name: Deploy to production via deploy-cloud.sh
+        run: |
+          scripts/deploy-cloud.sh \
+            "${{ vars.PROD_HOST }}" \
+            "${{ vars.PROD_DEPLOY_DIR }}" \
+            "cloud.docker-compose.yml" \
+            "${{ steps.version.outputs.tag }}" \
+            "funnel"
+        env:
+          DEPLOY_WAIT_SECONDS: '120'
+          HEALTH_RETRIES: '5'
+
+      - name: Setup Node for smoke tests
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install smoke dependencies
+        run: |
+          npm --prefix scripts/smoke ci
+          npm --prefix scripts/smoke run smoke:install
+
+      - name: Run post-deploy smoke tests (blocking)
+        run: |
+          npm --prefix scripts/smoke run smoke -- \
+            --frontend "https://${{ vars.PROD_FQDN }}" \
+            --backend "https://${{ vars.PROD_FQDN }}:8443" \
+            --artifacts /tmp/prod-smoke-artifacts
+
+      - name: Upload smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-deploy-smoke-artifacts
+          path: /tmp/prod-smoke-artifacts/
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Revoke SSH key
+        if: always()
+        run: rm -f ~/.ssh/id_ed25519
+
+      - name: Send Discord notification
+        if: always()
+        run: |
+          if [ -z "${{ secrets.DISCORD_WEBHOOK_URL }}" ]; then
+            echo "DISCORD_WEBHOOK_URL not configured, skipping notification"
+            exit 0
+          fi
+
+          VERSION="${{ steps.version.outputs.tag }}"
+          JOB_STATUS="${{ job.status }}"
+          WORKFLOW_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          if [ "$JOB_STATUS" = "success" ]; then
+            COLOR=3066993
+            TITLE="Production Deploy Succeeded"
+            DESCRIPTION="Version \`${VERSION}\` is live in production."
+          else
+            COLOR=15158332
+            TITLE="Production Deploy FAILED"
+            DESCRIPTION="Deploy of \`${VERSION}\` failed — rollback may have been attempted. Manual check required."
+          fi
+
+          PAYLOAD=$(jq -n \
+            --arg title    "$TITLE" \
+            --arg desc     "$DESCRIPTION" \
+            --argjson color "$COLOR" \
+            --arg version  "$VERSION" \
+            --arg status   "$JOB_STATUS" \
+            --arg url      "$WORKFLOW_URL" \
+            --arg ts       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{embeds: [{
+              title: $title,
+              description: $desc,
+              color: $color,
+              fields: [
+                {name: "Version",  value: $version, inline: true},
+                {name: "Status",   value: $status,  inline: true},
+                {name: "Workflow", value: $url,      inline: false}
+              ],
+              timestamp: $ts
+            }]}')
+
+          curl -fsS -X POST "${{ secrets.DISCORD_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" || echo "Discord notification failed (non-fatal)"
