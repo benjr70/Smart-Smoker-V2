@@ -80,11 +80,18 @@ main() {
         TAILSCALE_FQDN="${TARGET_HOST}"
     fi
 
-    # Check Backend API (via Tailscale Serve HTTPS on port 8443)
-    check_service "Backend API" "https://${TAILSCALE_FQDN}:8443/api/health" || exit 1
-
-    # Check Frontend (via Tailscale Serve HTTPS on port 443)
-    check_service "Frontend" "https://${TAILSCALE_FQDN}" || exit 1
+    # Backend + Frontend reachability. On the deploy host itself (localhost),
+    # Tailscale Serve/Funnel binds the tailnet IP — not 127.0.0.1 — so probing
+    # https://localhost:8443 is refused. Check the container-published ports
+    # directly over HTTP instead. For remote targets, verify the public
+    # Tailscale HTTPS endpoints (Serve/Funnel on :443 / :8443).
+    if [ "${TARGET_HOST}" = "localhost" ] || [ "${TARGET_HOST}" = "127.0.0.1" ]; then
+        check_service "Backend API" "http://localhost:3001/api/health" || exit 1
+        check_service "Frontend" "http://localhost:80" || exit 1
+    else
+        check_service "Backend API" "https://${TAILSCALE_FQDN}:8443/api/health" || exit 1
+        check_service "Frontend" "https://${TAILSCALE_FQDN}" || exit 1
+    fi
 
     # Check Docker container health status (if running locally)
     if [ "${TARGET_HOST}" = "localhost" ] || [ "${TARGET_HOST}" = "127.0.0.1" ]; then
