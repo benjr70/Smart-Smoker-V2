@@ -88,9 +88,12 @@ jobs:
             root@${{ vars.PROD_HOST }} \
             "mkdir -p ${{ vars.PROD_DEPLOY_DIR }}/infra/mongodb-init"
 
-          scp -O -i ~/.ssh/id_ed25519 -o PasswordAuthentication=no -r \
-            infra/mongodb-init/. \
-            root@${{ vars.PROD_HOST }}:${{ vars.PROD_DEPLOY_DIR }}/infra/mongodb-init/
+          # tar-over-ssh instead of `scp -r dir/.`: modern OpenSSH scp rejects
+          # the trailing-dot source ("unexpected filename: .") even with -O.
+          tar -C infra/mongodb-init -cf - . | \
+            ssh -i ~/.ssh/id_ed25519 -o PasswordAuthentication=no \
+              root@${{ vars.PROD_HOST }} \
+              "tar -C ${{ vars.PROD_DEPLOY_DIR }}/infra/mongodb-init -xf -"
 
       - name: Write prod secrets to .env on prod host
         run: |
