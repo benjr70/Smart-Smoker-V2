@@ -80,7 +80,7 @@ jobs:
 
       - name: Copy deployment files to prod host
         run: |
-          scp -i ~/.ssh/id_ed25519 -o PasswordAuthentication=no \
+          scp -O -i ~/.ssh/id_ed25519 -o PasswordAuthentication=no \
             cloud.docker-compose.yml \
             root@${{ vars.PROD_HOST }}:${{ vars.PROD_DEPLOY_DIR }}/cloud.docker-compose.yml
 
@@ -88,7 +88,7 @@ jobs:
             root@${{ vars.PROD_HOST }} \
             "mkdir -p ${{ vars.PROD_DEPLOY_DIR }}/infra/mongodb-init"
 
-          scp -i ~/.ssh/id_ed25519 -o PasswordAuthentication=no -r \
+          scp -O -i ~/.ssh/id_ed25519 -o PasswordAuthentication=no -r \
             infra/mongodb-init/. \
             root@${{ vars.PROD_HOST }}:${{ vars.PROD_DEPLOY_DIR }}/infra/mongodb-init/
 
@@ -103,7 +103,7 @@ jobs:
             "MONGO_APP_PASSWORD=${{ secrets.MONGO_APP_PASSWORD }}" \
             "ENCODED_MONGO_APP_PASSWORD=${ENCODED_PASSWORD}" \
             > /tmp/prod.env
-          scp -i ~/.ssh/id_ed25519 -o PasswordAuthentication=no \
+          scp -O -i ~/.ssh/id_ed25519 -o PasswordAuthentication=no \
             /tmp/prod.env \
             "root@${{ vars.PROD_HOST }}:${{ vars.PROD_DEPLOY_DIR }}/.env"
           ssh -i ~/.ssh/id_ed25519 -o PasswordAuthentication=no \
