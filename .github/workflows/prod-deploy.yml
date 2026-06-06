@@ -18,10 +18,15 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    name: Deploy to Production
-    runs-on: [self-hosted, linux, proxmox]
-    environment: production
+  # Image promotion runs on a GitHub-hosted runner: it needs Docker (to retag +
+  # push to Docker Hub) but does NOT need Tailscale. The self-hosted proxmox
+  # runner used by the deploy job has no local Docker, so promotion lives here.
+  promote:
+    name: Promote images to release tag
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      num: ${{ steps.version.outputs.num }}
 
     steps:
       - name: Checkout
@@ -41,15 +46,6 @@ jobs:
           echo "tag=v${NUM}" >> "$GITHUB_OUTPUT"
           echo "num=${NUM}"  >> "$GITHUB_OUTPUT"
 
-      - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          unset SSH_AUTH_SOCK || true
-          ssh-keyscan -H "${{ vars.PROD_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
-
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
@@ -58,6 +54,29 @@ jobs:
 
       - name: Promote nightly images to release tag
         run: scripts/promote-images.sh "${{ steps.version.outputs.tag }}"
+
+  # Deploy runs on the self-hosted proxmox runner (Tailscale access to the prod
+  # host). All Docker work happens over SSH on the prod host via deploy-cloud.sh,
+  # so this job needs no local Docker — only ssh/scp/node. The `production`
+  # environment provides the gate (required reviewers) and prod-scoped secrets.
+  deploy:
+    name: Deploy to Production
+    needs: promote
+    runs-on: [self-hosted, linux, proxmox]
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          unset SSH_AUTH_SOCK || true
+          ssh-keyscan -H "${{ vars.PROD_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
 
       - name: Copy deployment files to prod host
         run: |
@@ -98,7 +117,7 @@ jobs:
             "${{ vars.PROD_HOST }}" \
             "${{ vars.PROD_DEPLOY_DIR }}" \
             "cloud.docker-compose.yml" \
-            "${{ steps.version.outputs.tag }}" \
+            "${{ needs.promote.outputs.tag }}" \
             "funnel"
         env:
           DEPLOY_WAIT_SECONDS: '120'
@@ -142,7 +161,7 @@ jobs:
             exit 0
           fi
 
-          VERSION="${{ steps.version.outputs.tag }}"
+          VERSION="${{ needs.promote.outputs.tag }}"
           JOB_STATUS="${{ job.status }}"
           WORKFLOW_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
