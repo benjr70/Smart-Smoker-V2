@@ -101,7 +101,10 @@ variable "features" {
   type = object({
     nesting = optional(bool)
     fuse    = optional(bool)
-    mount   = optional(list(string))
+    # keyctl is required on the prod CT (104); modeled here so it is no longer
+    # hand-edited drift. Passed straight through to the lxc-container module.
+    keyctl = optional(bool)
+    mount  = optional(list(string))
   })
   default = null
 }

@@ -35,6 +35,7 @@ resource "proxmox_virtual_environment_container" "this" {
     content {
       nesting = try(features.value.nesting, null)
       fuse    = try(features.value.fuse, null)
+      keyctl  = try(features.value.keyctl, null)
       mount   = try(features.value.mount, null)
     }
   }

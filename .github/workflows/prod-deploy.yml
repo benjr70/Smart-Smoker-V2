@@ -95,6 +95,26 @@ jobs:
               root@${{ vars.PROD_HOST }} \
               "tar -C ${{ vars.PROD_DEPLOY_DIR }}/infra/mongodb-init -xf -"
 
+      - name: Copy deploy helper scripts to prod host
+        run: |
+          # These were previously scp'd by hand. The deploy/rollback/backup flow
+          # on the box depends on them, so ship them automatically every deploy.
+          ssh -i ~/.ssh/id_ed25519 -o PasswordAuthentication=no \
+            root@${{ vars.PROD_HOST }} \
+            "mkdir -p ${{ vars.PROD_DEPLOY_DIR }}/scripts"
+
+          scp -O -i ~/.ssh/id_ed25519 -o PasswordAuthentication=no \
+            scripts/deployment-backup.sh \
+            scripts/deployment-health-check.sh \
+            scripts/rollback.sh \
+            root@${{ vars.PROD_HOST }}:${{ vars.PROD_DEPLOY_DIR }}/scripts/
+
+          ssh -i ~/.ssh/id_ed25519 -o PasswordAuthentication=no \
+            root@${{ vars.PROD_HOST }} \
+            "chmod +x ${{ vars.PROD_DEPLOY_DIR }}/scripts/deployment-backup.sh \
+                      ${{ vars.PROD_DEPLOY_DIR }}/scripts/deployment-health-check.sh \
+                      ${{ vars.PROD_DEPLOY_DIR }}/scripts/rollback.sh"
+
       - name: Write prod secrets to .env on prod host
         run: |
           ENCODED_PASSWORD=$(printf '%s' "${{ secrets.MONGO_APP_PASSWORD }}" | jq -sRr @uri)
@@ -125,41 +145,6 @@ jobs:
         env:
           DEPLOY_WAIT_SECONDS: '120'
           HEALTH_RETRIES: '5'
-
-      - name: Setup Node for smoke tests
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      # Smoke is advisory for now: the self-hosted runner has no passwordless
-      # sudo, so `playwright install --with-deps` cannot install browser system
-      # libs. This mirrors dev-deploy's bake-window posture. Restore blocking by
-      # removing continue-on-error once smoke runs on a runner with Playwright
-      # (e.g. a dedicated ubuntu-latest smoke job against the public funnel URLs).
-      - name: Install smoke dependencies
-        id: smoke_install
-        continue-on-error: true
-        run: |
-          npm --prefix scripts/smoke ci
-          npm --prefix scripts/smoke run smoke:install
-
-      - name: Run post-deploy smoke tests (advisory)
-        id: smoke
-        continue-on-error: true
-        run: |
-          npm --prefix scripts/smoke run smoke -- \
-            --frontend "https://${{ vars.PROD_FQDN }}" \
-            --backend "https://${{ vars.PROD_FQDN }}:8443" \
-            --artifacts /tmp/prod-smoke-artifacts
-
-      - name: Upload smoke artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: prod-deploy-smoke-artifacts
-          path: /tmp/prod-smoke-artifacts/
-          if-no-files-found: ignore
-          retention-days: 30
 
       - name: Revoke SSH key
         if: always()
@@ -210,3 +195,45 @@ jobs:
           curl -fsS -X POST "${{ secrets.DISCORD_WEBHOOK_URL }}" \
             -H "Content-Type: application/json" \
             -d "$PAYLOAD" || echo "Discord notification failed (non-fatal)"
+
+  # Blocking smoke gate. Runs on a GitHub-hosted ubuntu-latest runner so
+  # Playwright can install its browser system libs (the self-hosted proxmox
+  # runner has no passwordless sudo, which is why #237 had to downgrade smoke to
+  # advisory). It hits the PUBLIC funnel URLs, so it needs no Tailscale. A smoke
+  # failure fails this job and therefore the whole prod-deploy run — the gate is
+  # real again. No Discord step here: the deploy job already notifies, and a
+  # failed CI run is sufficient signal.
+  smoke:
+    name: Post-deploy smoke (blocking)
+    needs: [promote, deploy]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node for smoke tests
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install smoke dependencies
+        run: |
+          npm --prefix scripts/smoke ci
+          npm --prefix scripts/smoke run smoke:install
+
+      - name: Run post-deploy smoke tests against public funnel
+        run: |
+          npm --prefix scripts/smoke run smoke -- \
+            --frontend "https://${{ vars.PROD_FQDN }}" \
+            --backend "https://${{ vars.PROD_FQDN }}:8443" \
+            --artifacts /tmp/prod-smoke-artifacts
+
+      - name: Upload smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-deploy-smoke-artifacts
+          path: /tmp/prod-smoke-artifacts/
+          if-no-files-found: ignore
+          retention-days: 30

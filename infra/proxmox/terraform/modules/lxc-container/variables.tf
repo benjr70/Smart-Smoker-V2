@@ -144,7 +144,10 @@ variable "features" {
   type = object({
     nesting = optional(bool)
     fuse    = optional(bool)
-    mount   = optional(list(string))
+    # keyctl lets containers use the kernel keyring (required by some workloads
+    # in unprivileged LXC). Previously hand-set on the prod CTs, causing drift.
+    keyctl = optional(bool)
+    mount  = optional(list(string))
   })
   default = null
 }
