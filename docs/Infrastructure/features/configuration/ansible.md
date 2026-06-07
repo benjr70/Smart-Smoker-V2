@@ -19,7 +19,8 @@ The infrastructure is managed through 7 specialized Ansible roles:
    - Base package installation
 
 2. **docker** - Container runtime
-   - Docker Engine installation
+   - Docker Engine + **crun** OCI runtime installation (crun required in unprivileged LXC; runc fails on `net.ipv4.ip_unprivileged_port_start`)
+   - `daemon.json`: `default-runtime: crun`, non-overlapping `default-address-pools` base (`172.20.0.0/16`)
    - Docker Compose plugin
    - User permissions and daemon configuration
 
@@ -40,7 +41,12 @@ The infrastructure is managed through 7 specialized Ansible roles:
    - MongoDB data directories
    - User/group setup
 
-7. **virtual-device** - Virtual smoker device
+7. **dns-guard** - Persistent DNS resilience
+   - Systemd timer+oneshot that probes `registry-1.docker.io` and rewrites `/etc/resolv.conf` from a template (nameservers: 1.1.1.1, 8.8.8.8, 8.8.4.4)
+   - Required on cloud boxes: the isolated bridge resets resolv.conf to unreachable `10.0.0.x` on reboot, breaking apt/`docker pull`
+   - Applied to both dev-cloud and prod-cloud (must run **before** the `docker` role)
+
+8. **virtual-device** - Virtual smoker device
    - Device directories
    - Python tools for simulation
    - Hardware mocking tools
