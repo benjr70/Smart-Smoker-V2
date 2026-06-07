@@ -9,6 +9,11 @@
 
   roles:
     - common
+    # dns-guard must run before docker so that resolv.conf points at a reachable
+    # nameserver (1.1.1.1) when docker pulls images. Without it the isolated
+    # bridge resets resolv.conf to the unreachable 10.0.0.x gateway and
+    # apt/docker pull fail after a reboot.
+    - dns-guard
     - docker
     - nodejs
     - cloud-app

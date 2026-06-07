@@ -158,7 +158,7 @@ terraform apply tfplan
 - **Purpose**: Production environment for cloud services
 - **Resources**: 4 CPU cores, 8GB RAM, 40GB disk
 - **Network**: vmbr0 (10.20.0.30/24)
-- **Features**: Docker, Docker Compose, Git, automated backups
+- **Features**: Docker (crun runtime), Docker Compose, Git, automated backups, keyctl enabled
 
 ### Networking
 
@@ -178,6 +178,7 @@ All infrastructure is organized in the `smart-smoker` resource pool for easier m
 - **Nesting**: Enabled on all containers for Docker-in-Docker support
 - **Unprivileged**: All containers run as unprivileged for security
 - **Auto-start**: Containers start automatically on host boot
+- **keyctl**: Optional per-container kernel keyring access (`keyctl = true` in tfvars). Required on prod CT (104/108) for workloads that use the kernel keyring in unprivileged LXC. Previously hand-edited drift; now modelled in the `lxc-container` module `features` object.
 
 ### Networking Configuration
 

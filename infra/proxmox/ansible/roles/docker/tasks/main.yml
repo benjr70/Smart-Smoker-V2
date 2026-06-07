@@ -71,6 +71,16 @@
     - docker-ce-cli
   when: docker_version | length > 0
 
+- name: Install crun OCI runtime
+  ansible.builtin.apt:
+    name: crun
+    state: present
+    update_cache: true
+  # runc fails with "net.ipv4.ip_unprivileged_port_start: permission denied"
+  # inside an unprivileged LXC. crun honours the sysctl that the unprivileged
+  # container already has set, so containers binding low ports actually start.
+  notify: Restart docker
+
 - name: Install Docker Compose plugin (latest)
   ansible.builtin.apt:
     name: docker-compose-plugin
@@ -110,9 +120,15 @@
         "live-restore": true,
         "userland-proxy": false,
         "storage-driver": "overlay2",
+        "default-runtime": "crun",
+        "runtimes": {
+          "crun": {
+            "path": "/usr/bin/crun"
+          }
+        },
         "default-address-pools": [
           {
-            "base": "172.17.0.0/16",
+            "base": "172.20.0.0/16",
             "size": 24
           }
         ]
