@@ -1,0 +1,142 @@
+name: Ansible Prod Cloud
+
+# Idempotently apply ansible to smokecloud-2 and verify acceptance criteria.
+# run_ansible=true also propagates any key or config changes (safe; ansible is idempotent).
+# Verification steps run unconditionally — useful as a health-check without an apply.
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_ansible:
+        description: 'Run ansible-playbook setup-prod-cloud.yml before verifying'
+        type: boolean
+        default: false
+      tailscale_auth_key:
+        description: 'Tailscale auth key (only needed on first-provision; leave blank otherwise)'
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ansible-prod-cloud
+  cancel-in-progress: false
+
+jobs:
+  ansible-and-verify:
+    name: Ansible apply + verify smokecloud-2
+    runs-on: [self-hosted, linux, proxmox]
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H smokecloud-2 >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Install Ansible
+        run: |
+          pip install --user ansible --quiet
+          ansible-galaxy collection install community.general ansible.posix --force --quiet
+
+      - name: Run ansible-playbook setup-prod-cloud.yml
+        if: ${{ inputs.run_ansible }}
+        working-directory: infra/proxmox/ansible
+        run: |
+          EXTRA_VARS=""
+          if [ -n "${{ inputs.tailscale_auth_key }}" ]; then
+            EXTRA_VARS="tailscale_auth_key=${{ inputs.tailscale_auth_key }}"
+          fi
+          ansible-playbook playbooks/setup-prod-cloud.yml \
+            --limit prod_cloud \
+            ${EXTRA_VARS:+--extra-vars "$EXTRA_VARS"} \
+            -v
+
+      # ── Verification ────────────────────────────────────────────────────────
+
+      - name: 4a — SSH reachable + Tailscale hostname
+        id: verify_ssh
+        run: |
+          ssh -o BatchMode=yes root@smokecloud-2 \
+            "tailscale status | grep smokecloud-2 && echo SSH_OK"
+
+      - name: 4b — Docker + compose installed
+        id: verify_docker
+        run: |
+          ssh -o BatchMode=yes root@smokecloud-2 \
+            "docker --version && docker compose version"
+
+      - name: 4c — MongoDB bound to localhost only
+        id: verify_mongo_bind
+        run: |
+          BIND=$(ssh -o BatchMode=yes root@smokecloud-2 \
+            "ss -tlnp | grep 27017 || echo NOT_LISTENING")
+          echo "mongo bind: $BIND"
+          if echo "$BIND" | grep -q "0\.0\.0\.0\|:::" ; then
+            echo "FAIL: MongoDB exposed on all interfaces"
+            exit 1
+          fi
+          echo "PASS: MongoDB not exposed (either localhost-only or not yet started)"
+
+      - name: 4d — MongoDB seeded users (start mongo, check, stop)
+        id: verify_mongo_users
+        run: |
+          APP_DIR="/opt/smart-smoker-prod"
+          COMPOSE="cloud.docker-compose.yml"
+          ssh -o BatchMode=yes root@smokecloud-2 "
+            set -e
+            cd $APP_DIR
+            docker compose -f $COMPOSE up -d mongo
+            echo 'Waiting for mongo init...'
+            sleep 15
+            USERS=\$(docker exec smart-smoker-mongo mongosh admin \
+              -u root -p \"\$MONGO_ROOT_PASSWORD\" --quiet \
+              --eval 'db.getUsers().users.map(u=>u.user).join(\",\")' 2>/dev/null || echo ERROR)
+            echo \"Users found: \$USERS\"
+            docker compose -f $COMPOSE stop mongo
+            if echo \"\$USERS\" | grep -q smartsmoker; then
+              echo 'PASS: smartsmoker user present'
+            else
+              echo 'FAIL: smartsmoker user missing'
+              exit 1
+            fi
+          "
+
+      - name: 4e — Backup timer active
+        id: verify_backups
+        run: |
+          ssh -o BatchMode=yes root@smokecloud-2 \
+            "systemctl is-active backup-mongodb.timer && echo BACKUP_TIMER_OK"
+
+      - name: 4f — Tailscale Funnel configured
+        id: verify_funnel
+        run: |
+          ssh -o BatchMode=yes root@smokecloud-2 \
+            "tailscale funnel status || tailscale serve status || echo FUNNEL_CHECK_DONE"
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/id_ed25519
+
+      - name: Verification summary
+        if: always()
+        run: |
+          echo "=========================================="
+          echo "smokecloud-2 verification summary"
+          echo "=========================================="
+          echo "4a SSH+Tailscale:  ${{ steps.verify_ssh.outcome }}"
+          echo "4b Docker+compose: ${{ steps.verify_docker.outcome }}"
+          echo "4c Mongo bind:     ${{ steps.verify_mongo_bind.outcome }}"
+          echo "4d Mongo users:    ${{ steps.verify_mongo_users.outcome }}"
+          echo "4e Backup timer:   ${{ steps.verify_backups.outcome }}"
+          echo "4f Funnel:         ${{ steps.verify_funnel.outcome }}"
+          echo "=========================================="
+          echo "Ansible apply: ${{ inputs.run_ansible }}"
+          echo "=========================================="

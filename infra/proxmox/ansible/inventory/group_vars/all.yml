@@ -22,6 +22,8 @@ ssh_public_keys:
   - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGVL60IcGPlVOKMXK9xuLWLBVmCu8HCQ/mN8LZ8gSFN4 benrolf70@gmail.com"
   # GitHub Actions deployment key (SSH_PRIVATE_KEY secret)
   - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJASuKpE7uEtiQTEM4IeU/WqMabn614ppz8a7AMTaHZT github-runner"
+  # Claude agent provisioning key (claude-agent-1 on tailnet)
+  - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFMHfxspzDnHtfNJqq0ZkU5Kuv1RxTPzyELedb17AKh+ claude-agent-1"
 
 # DNS Configuration
 dns_servers:
