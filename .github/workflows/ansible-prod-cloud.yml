@@ -98,11 +98,13 @@ jobs:
         run: |
           # Issue #223 scope: verify ansible deployed the app dir + mongo-init scripts.
           # Actual user seeding (requires prod secrets via prod-deploy.yml) is verified in issue #224.
+          # mongo-init path matches the compose mount (./infra/mongodb-init) and
+          # the prod-deploy.yml tar-over-ssh copy target ($PROD_DEPLOY_DIR/infra/mongodb-init).
           ssh -o BatchMode=yes root@smokecloud-2 "
             set -e
             test -f /opt/smart-smoker-prod/cloud.docker-compose.yml \
               && echo 'PASS: compose file present'
-            test -f /opt/smart-smoker-prod/mongo-init/01-create-users.js \
+            test -f /opt/smart-smoker-prod/infra/mongodb-init/01-create-users.js \
               && echo 'PASS: mongo-init script present'
           "
 
