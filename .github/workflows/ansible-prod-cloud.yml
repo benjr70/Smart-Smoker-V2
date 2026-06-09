@@ -27,6 +27,9 @@ jobs:
   ansible-and-verify:
     name: Ansible apply + verify smokecloud-2
     runs-on: [self-hosted, linux, proxmox]
+    # production environment holds prod-scoped secrets (MONGO_APP_PASSWORD etc.)
+    # and provides the manual-approval gate for prod config changes.
+    environment: production
     timeout-minutes: 30
 
     steps:
@@ -52,14 +55,18 @@ jobs:
       - name: Run ansible-playbook setup-prod-cloud.yml
         if: ${{ inputs.run_ansible }}
         working-directory: infra/proxmox/ansible
+        env:
+          # backups role templates the mongodb backup script with this credential.
+          MONGO_APP_PASSWORD: ${{ secrets.MONGO_APP_PASSWORD }}
+          TS_AUTH_KEY: ${{ inputs.tailscale_auth_key }}
         run: |
-          EXTRA_VARS=""
-          if [ -n "${{ inputs.tailscale_auth_key }}" ]; then
-            EXTRA_VARS="tailscale_auth_key=${{ inputs.tailscale_auth_key }}"
+          EXTRA_ARGS=(--extra-vars "mongo_app_password=${MONGO_APP_PASSWORD}")
+          if [ -n "${TS_AUTH_KEY}" ]; then
+            EXTRA_ARGS+=(--extra-vars "tailscale_auth_key=${TS_AUTH_KEY}")
           fi
           ansible-playbook playbooks/setup-prod-cloud.yml \
             --limit prod_cloud \
-            ${EXTRA_VARS:+--extra-vars "$EXTRA_VARS"} \
+            "${EXTRA_ARGS[@]}" \
             -v
 
       # ── Verification ────────────────────────────────────────────────────────
