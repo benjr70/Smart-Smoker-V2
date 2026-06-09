@@ -1,8 +1,11 @@
 name: Ansible Prod Cloud
 
-# Idempotently apply ansible to smokecloud-2 and verify acceptance criteria.
-# run_ansible=true also propagates any key or config changes (safe; ansible is idempotent).
-# Verification steps run unconditionally — useful as a health-check without an apply.
+# Two jobs:
+#   apply  — (optional, gated) run setup-prod-cloud.yml against smokecloud-2.
+#            Gated behind the `production` environment because it holds the
+#            prod secrets and a manual-approval gate for prod config changes.
+#   verify — (always) read-only health-checks of the 6 acceptance criteria.
+#            Ungated so it can be run as a health-check without an approval.
 
 on:
   workflow_dispatch:
@@ -24,8 +27,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  ansible-and-verify:
-    name: Ansible apply + verify smokecloud-2
+  apply:
+    name: Ansible apply (gated)
+    if: ${{ inputs.run_ansible }}
     runs-on: [self-hosted, linux, proxmox]
     # production environment holds prod-scoped secrets (MONGO_APP_PASSWORD etc.)
     # and provides the manual-approval gate for prod config changes.
@@ -53,7 +57,6 @@ jobs:
         run: ansible-galaxy collection install community.general ansible.posix --force
 
       - name: Run ansible-playbook setup-prod-cloud.yml
-        if: ${{ inputs.run_ansible }}
         working-directory: infra/proxmox/ansible
         env:
           # backups role templates the mongodb backup script with this credential.
@@ -69,7 +72,27 @@ jobs:
             "${EXTRA_ARGS[@]}" \
             -v
 
-      # ── Verification ────────────────────────────────────────────────────────
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/id_ed25519
+
+  verify:
+    name: Verify smokecloud-2 (read-only)
+    # Run after apply when it ran; otherwise run standalone. Never blocked by a
+    # skipped/failed apply — the checks are the source of truth either way.
+    needs: apply
+    if: ${{ always() }}
+    runs-on: [self-hosted, linux, proxmox]
+    timeout-minutes: 15
+
+    steps:
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H smokecloud-2 >> ~/.ssh/known_hosts 2>/dev/null || true
 
       - name: 4a — SSH reachable + Tailscale hostname
         id: verify_ssh
@@ -142,13 +165,13 @@ jobs:
           echo "4a SSH+Tailscale:  ${{ steps.verify_ssh.outcome }}"
           echo "4b Docker+compose: ${{ steps.verify_docker.outcome }}"
           echo "4c Mongo bind:     ${{ steps.verify_mongo_bind.outcome }}"
-          echo "4d Mongo users:    ${{ steps.verify_mongo_users.outcome }}"
+          echo "4d Mongo files:    ${{ steps.verify_mongo_users.outcome }}"
           echo "4e Backup timer:   ${{ steps.verify_backups.outcome }}"
           echo "4f Funnel:         ${{ steps.verify_funnel.outcome }}"
           echo "=========================================="
           echo "Ansible apply: ${{ inputs.run_ansible }}"
           echo "=========================================="
-          # Fail the job if any verify step failed (continue-on-error suppressed individual step failure)
+          # Fail the job if any critical verify step failed (4a-4e).
           if [[ "${{ steps.verify_ssh.outcome }}"        == "failure" ||
                 "${{ steps.verify_docker.outcome }}"     == "failure" ||
                 "${{ steps.verify_mongo_bind.outcome }}" == "failure" ||
