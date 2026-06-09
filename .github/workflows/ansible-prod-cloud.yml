@@ -66,30 +66,35 @@ jobs:
 
       - name: 4a — SSH reachable + Tailscale hostname
         id: verify_ssh
+        continue-on-error: true
         run: |
           ssh -o BatchMode=yes root@smokecloud-2 \
             "tailscale status | grep smokecloud-2 && echo SSH_OK"
 
       - name: 4b — Docker + compose installed
         id: verify_docker
+        continue-on-error: true
         run: |
           ssh -o BatchMode=yes root@smokecloud-2 \
             "docker --version && docker compose version"
 
       - name: 4c — MongoDB bound to localhost only
         id: verify_mongo_bind
+        continue-on-error: true
         run: |
-          BIND=$(ssh -o BatchMode=yes root@smokecloud-2 \
-            "ss -tlnp | grep 27017 || echo NOT_LISTENING")
-          echo "mongo bind: $BIND"
-          if echo "$BIND" | grep -q "0\.0\.0\.0\|:::" ; then
-            echo "FAIL: MongoDB exposed on all interfaces"
+          # Extract local-address column only; peer column always shows 0.0.0.0:* which is a false positive.
+          LOCAL=$(ssh -o BatchMode=yes root@smokecloud-2 \
+            "ss -tlnp | awk '/27017/{print \$4}'" || echo "NOT_LISTENING")
+          echo "mongo local bind: $LOCAL"
+          if echo "$LOCAL" | grep -qE "^0\.0\.0\.0:27017$|^:::27017$|\*:27017"; then
+            echo "FAIL: MongoDB exposed on all interfaces ($LOCAL)"
             exit 1
           fi
-          echo "PASS: MongoDB not exposed (either localhost-only or not yet started)"
+          echo "PASS: MongoDB localhost-only or not yet started ($LOCAL)"
 
       - name: 4d — MongoDB seeded users (start mongo, check, stop)
         id: verify_mongo_users
+        continue-on-error: true
         run: |
           APP_DIR="/opt/smart-smoker-prod"
           COMPOSE="cloud.docker-compose.yml"
@@ -114,12 +119,14 @@ jobs:
 
       - name: 4e — Backup timer active
         id: verify_backups
+        continue-on-error: true
         run: |
           ssh -o BatchMode=yes root@smokecloud-2 \
             "systemctl is-active backup-mongodb.timer && echo BACKUP_TIMER_OK"
 
       - name: 4f — Tailscale Funnel configured
         id: verify_funnel
+        continue-on-error: true
         run: |
           ssh -o BatchMode=yes root@smokecloud-2 \
             "tailscale funnel status || tailscale serve status || echo FUNNEL_CHECK_DONE"
@@ -143,3 +150,12 @@ jobs:
           echo "=========================================="
           echo "Ansible apply: ${{ inputs.run_ansible }}"
           echo "=========================================="
+          # Fail the job if any verify step failed (continue-on-error suppressed individual step failure)
+          if [[ "${{ steps.verify_ssh.outcome }}"        == "failure" ||
+                "${{ steps.verify_docker.outcome }}"     == "failure" ||
+                "${{ steps.verify_mongo_bind.outcome }}" == "failure" ||
+                "${{ steps.verify_mongo_users.outcome }}" == "failure" ||
+                "${{ steps.verify_backups.outcome }}"    == "failure" ]]; then
+            echo "One or more verification steps FAILED"
+            exit 1
+          fi
