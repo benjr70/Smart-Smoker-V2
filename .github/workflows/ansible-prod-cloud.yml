@@ -47,7 +47,7 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Install Ansible collections
-        run: ansible-galaxy collection install community.general ansible.posix --force --quiet
+        run: ansible-galaxy collection install community.general ansible.posix --force
 
       - name: Run ansible-playbook setup-prod-cloud.yml
         if: ${{ inputs.run_ansible }}
