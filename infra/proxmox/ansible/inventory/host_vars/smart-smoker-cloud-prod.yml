@@ -23,6 +23,9 @@ fail2ban_ban_time: 7200    # 2 hours for production
 fail2ban_max_retry: 3      # Strict for production
 
 # Tailscale Configuration
+# smokecloud-2 is the temporary hostname (original plan: smoke-prod-cloud, renamed during
+# first-provision to avoid conflicting with the PROD_HOST/PROD_FQDN baked into images).
+# Issue #225 cutover will move the `smokecloud` tailnet name to this box.
 tailscale_hostname: "smokecloud-2"
 tailscale_tags:
   - tag:server
