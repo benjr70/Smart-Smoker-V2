@@ -7,7 +7,9 @@ tags: performance, lifecycle, async, hooks
 
 ## Use Async Lifecycle Hooks Correctly
 
-NestJS lifecycle hooks (`onModuleInit`, `onApplicationBootstrap`, etc.) support async operations. However, misusing them can block application startup or cause race conditions. Understand the lifecycle order and use hooks appropriately.
+NestJS lifecycle hooks (`onModuleInit`, `onApplicationBootstrap`, etc.) support
+async operations. However, misusing them can block application startup or cause
+race conditions. Understand the lifecycle order and use hooks appropriately.
 
 **Incorrect (fire-and-forget async without await):**
 
@@ -64,7 +66,7 @@ export class DatabaseService implements OnModuleInit {
 export class CacheWarmerService implements OnApplicationBootstrap {
   constructor(
     private cache: CacheService,
-    private products: ProductsService,
+    private products: ProductsService
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -106,4 +108,5 @@ async function bootstrap() {
 }
 ```
 
-Reference: [NestJS Lifecycle Events](https://docs.nestjs.com/fundamentals/lifecycle-events)
+Reference:
+[NestJS Lifecycle Events](https://docs.nestjs.com/fundamentals/lifecycle-events)

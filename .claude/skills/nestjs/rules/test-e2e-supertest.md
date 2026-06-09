@@ -7,7 +7,9 @@ tags: testing, e2e, supertest, integration
 
 ## Use Supertest for E2E Testing
 
-End-to-end tests use Supertest to make real HTTP requests against your NestJS application. They test the full stack including middleware, guards, pipes, and interceptors. E2E tests catch integration issues that unit tests miss.
+End-to-end tests use Supertest to make real HTTP requests against your NestJS
+application. They test the full stack including middleware, guards, pipes, and
+interceptors. E2E tests catch integration issues that unit tests miss.
 
 **Incorrect (no proper E2E setup or teardown):**
 
@@ -61,7 +63,7 @@ describe('UsersController (e2e)', () => {
         whitelist: true,
         transform: true,
         forbidNonWhitelisted: true,
-      }),
+      })
     );
 
     await app.init();
@@ -77,7 +79,7 @@ describe('UsersController (e2e)', () => {
         .post('/users')
         .send({ name: 'John', email: 'john@test.com' })
         .expect(201)
-        .expect((res) => {
+        .expect(res => {
           expect(res.body).toHaveProperty('id');
           expect(res.body.name).toBe('John');
           expect(res.body.email).toBe('john@test.com');
@@ -89,7 +91,7 @@ describe('UsersController (e2e)', () => {
         .post('/users')
         .send({ name: 'John', email: 'invalid-email' })
         .expect(400)
-        .expect((res) => {
+        .expect(res => {
           expect(res.body.message).toContain('email');
         });
     });
@@ -127,9 +129,7 @@ describe('Protected Routes (e2e)', () => {
   });
 
   it('should return 401 without token', () => {
-    return request(app.getHttpServer())
-      .get('/users/me')
-      .expect(401);
+    return request(app.getHttpServer()).get('/users/me').expect(401);
   });
 
   it('should return user profile with valid token', () => {
@@ -137,7 +137,7 @@ describe('Protected Routes (e2e)', () => {
       .get('/users/me')
       .set('Authorization', `Bearer ${authToken}`)
       .expect(200)
-      .expect((res) => {
+      .expect(res => {
         expect(res.body.email).toBe('test@test.com');
       });
   });
@@ -175,4 +175,5 @@ describe('Orders API (e2e)', () => {
 });
 ```
 
-Reference: [NestJS E2E Testing](https://docs.nestjs.com/fundamentals/testing#end-to-end-testing)
+Reference:
+[NestJS E2E Testing](https://docs.nestjs.com/fundamentals/testing#end-to-end-testing)

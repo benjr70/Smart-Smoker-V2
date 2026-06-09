@@ -7,7 +7,10 @@ tags: microservices, message-pattern, event-pattern, communication
 
 ## Use Message and Event Patterns Correctly
 
-NestJS microservices support two communication patterns: request-response (MessagePattern) and event-based (EventPattern). Use MessagePattern when you need a response, and EventPattern for fire-and-forget notifications. Understanding the difference prevents communication bugs.
+NestJS microservices support two communication patterns: request-response
+(MessagePattern) and event-based (EventPattern). Use MessagePattern when you
+need a response, and EventPattern for fire-and-forget notifications.
+Understanding the difference prevents communication bugs.
 
 **Incorrect (using wrong pattern for use case):**
 
@@ -48,7 +51,8 @@ export class UsersService {
 }
 ```
 
-**Correct (use MessagePattern for request-response, EventPattern for fire-and-forget):**
+**Correct (use MessagePattern for request-response, EventPattern for
+fire-and-forget):**
 
 ```typescript
 // MessagePattern: Request-Response (when you NEED a response)

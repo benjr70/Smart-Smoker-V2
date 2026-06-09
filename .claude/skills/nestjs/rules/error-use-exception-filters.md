@@ -7,7 +7,10 @@ tags: error-handling, exception-filters, consistency
 
 ## Use Exception Filters for Error Handling
 
-Never catch exceptions and manually format error responses in controllers. Use NestJS exception filters to handle errors consistently across your application. Create custom exception filters for specific error types and a global filter for unhandled exceptions.
+Never catch exceptions and manually format error responses in controllers. Use
+NestJS exception filters to handle errors consistently across your application.
+Create custom exception filters for specific error types and a global filter for
+unhandled exceptions.
 
 **Incorrect (manual error handling in controllers):**
 
@@ -107,7 +110,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     this.logger.error(
       `${request.method} ${request.url}`,
-      exception instanceof Error ? exception.stack : exception,
+      exception instanceof Error ? exception.stack : exception
     );
 
     response.status(status).json({
@@ -122,7 +125,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 // Register globally in main.ts
 app.useGlobalFilters(
   new AllExceptionsFilter(app.get(Logger)),
-  new DomainExceptionFilter(),
+  new DomainExceptionFilter()
 );
 
 // Or via module

@@ -7,7 +7,9 @@ tags: database, n-plus-one, queries, performance
 
 ## Avoid N+1 Query Problems
 
-N+1 queries occur when you fetch a list of entities, then make an additional query for each entity to load related data. Use eager loading with `relations`, query builder joins, or DataLoader to batch queries efficiently.
+N+1 queries occur when you fetch a list of entities, then make an additional
+query for each entity to load related data. Use eager loading with `relations`,
+query builder joins, or DataLoader to batch queries efficiently.
 
 **Incorrect (lazy loading in loops causes N+1):**
 

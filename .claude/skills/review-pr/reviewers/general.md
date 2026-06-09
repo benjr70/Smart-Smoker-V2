@@ -1,13 +1,15 @@
 # General Code Quality Reviewer
 
-You are reviewing code changes for adherence to project conventions and general quality.
+You are reviewing code changes for adherence to project conventions and general
+quality.
 
 ## Naming Conventions
 
 - **Backend files**: `kebab-case` (e.g., `smoke-profile.service.ts`)
 - **Frontend components**: `PascalCase` (e.g., `TemperatureChart.tsx`)
 - **Constants/env vars**: `UPPER_SNAKE_CASE`
-- **NestJS modules**: Feature-based naming (`smoke.module.ts`, `smoke.service.ts`, `smoke.controller.ts`)
+- **NestJS modules**: Feature-based naming (`smoke.module.ts`,
+  `smoke.service.ts`, `smoke.controller.ts`)
 
 ## TypeScript
 
@@ -25,7 +27,8 @@ You are reviewing code changes for adherence to project conventions and general 
 
 ## Frontend Patterns (React)
 
-- **Functional components with hooks only** -- no class components (exception: error boundaries)
+- **Functional components with hooks only** -- no class components (exception:
+  error boundaries)
 - Material-UI (MUI) for all UI components
 - D3.js for temperature visualization via shared TemperatureChart package
 - Service layer in `src/Services/` for API calls (axios + Socket.io)
@@ -43,6 +46,7 @@ You are reviewing code changes for adherence to project conventions and general 
 ## Output Format
 
 For each finding:
+
 - **CONVENTION**: [description] -- naming or pattern violation
 - **QUALITY**: [description] -- code quality issue
 - **SECURITY**: [description] -- potential security issue (secrets, injection)

@@ -7,7 +7,10 @@ tags: dependency-injection, tokens, interfaces
 
 ## Use Injection Tokens for Interfaces
 
-TypeScript interfaces are erased at compile time and can't be used as injection tokens. Use string tokens, symbols, or abstract classes when you want to inject implementations of interfaces. This enables swapping implementations for testing or different environments.
+TypeScript interfaces are erased at compile time and can't be used as injection
+tokens. Use string tokens, symbols, or abstract classes when you want to inject
+implementations of interfaces. This enables swapping implementations for testing
+or different environments.
 
 **Incorrect (interface can't be used as token):**
 
@@ -19,7 +22,9 @@ interface PaymentGateway {
 
 @Injectable()
 export class StripeService implements PaymentGateway {
-  charge(amount: number) { /* ... */ }
+  charge(amount: number) {
+    /* ... */
+  }
 }
 
 @Injectable()
@@ -58,9 +63,8 @@ export class MockPaymentService implements PaymentGateway {
   providers: [
     {
       provide: PAYMENT_GATEWAY,
-      useClass: process.env.NODE_ENV === 'test'
-        ? MockPaymentService
-        : StripeService,
+      useClass:
+        process.env.NODE_ENV === 'test' ? MockPaymentService : StripeService,
     },
   ],
   exports: [PAYMENT_GATEWAY],
@@ -70,9 +74,7 @@ export class PaymentModule {}
 // Injection
 @Injectable()
 export class OrdersService {
-  constructor(
-    @Inject(PAYMENT_GATEWAY) private payment: PaymentGateway,
-  ) {}
+  constructor(@Inject(PAYMENT_GATEWAY) private payment: PaymentGateway) {}
 
   async createOrder(dto: CreateOrderDto) {
     await this.payment.charge(dto.amount);
@@ -98,4 +100,5 @@ export class OrdersService {
 }
 ```
 
-Reference: [NestJS Custom Providers](https://docs.nestjs.com/fundamentals/custom-providers)
+Reference:
+[NestJS Custom Providers](https://docs.nestjs.com/fundamentals/custom-providers)

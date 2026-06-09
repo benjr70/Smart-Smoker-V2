@@ -7,7 +7,10 @@ tags: api, pipes, validation, transformation
 
 ## Use Pipes for Input Transformation
 
-Use built-in pipes like `ParseIntPipe`, `ParseUUIDPipe`, and `DefaultValuePipe` for common transformations. Create custom pipes for business-specific transformations. Pipes separate validation/transformation logic from controllers.
+Use built-in pipes like `ParseIntPipe`, `ParseUUIDPipe`, and `DefaultValuePipe`
+for common transformations. Create custom pipes for business-specific
+transformations. Pipes separate validation/transformation logic from
+controllers.
 
 **Incorrect (manual type parsing in handlers):**
 

@@ -1,13 +1,16 @@
 ---
 title: Single Responsibility for Services
 impact: CRITICAL
-impactDescription: "40%+ improvement in testability"
+impactDescription: '40%+ improvement in testability'
 tags: architecture, services, single-responsibility
 ---
 
 ## Single Responsibility for Services
 
-Each service should have a single, well-defined responsibility. Avoid "god services" that handle multiple unrelated concerns. If a service name includes "And" or handles more than one domain concept, it likely violates single responsibility. This reduces complexity and improves testability by 40%+.
+Each service should have a single, well-defined responsibility. Avoid "god
+services" that handle multiple unrelated concerns. If a service name includes
+"And" or handles more than one domain concept, it likely violates single
+responsibility. This reduces complexity and improves testability by 40%+.
 
 **Incorrect (god service anti-pattern):**
 
@@ -19,7 +22,7 @@ export class UserAndOrderService {
     private userRepo: UserRepository,
     private orderRepo: OrderRepository,
     private mailer: MailService,
-    private payment: PaymentService,
+    private payment: PaymentService
   ) {}
 
   async createUser(dto: CreateUserDto) {
@@ -90,7 +93,7 @@ export class OrdersController {
   constructor(
     private orders: OrdersService,
     private payment: PaymentService,
-    private notifications: NotificationService,
+    private notifications: NotificationService
   ) {}
 
   @Post()

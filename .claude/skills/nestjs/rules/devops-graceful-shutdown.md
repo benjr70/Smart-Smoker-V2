@@ -7,7 +7,10 @@ tags: devops, graceful-shutdown, lifecycle, kubernetes
 
 ## Implement Graceful Shutdown
 
-Handle SIGTERM and SIGINT signals to gracefully shutdown your NestJS application. Stop accepting new requests, wait for in-flight requests to complete, close database connections, and clean up resources. This prevents data loss and connection errors during deployments.
+Handle SIGTERM and SIGINT signals to gracefully shutdown your NestJS
+application. Stop accepting new requests, wait for in-flight requests to
+complete, close database connections, and clean up resources. This prevents data
+loss and connection errors during deployments.
 
 **Incorrect (ignoring shutdown signals):**
 
@@ -50,7 +53,7 @@ async function bootstrap() {
 
   // Handle graceful shutdown
   const signals = ['SIGTERM', 'SIGINT'];
-  signals.forEach((signal) => {
+  signals.forEach(signal => {
     process.on(signal, async () => {
       console.log(`Received ${signal}, starting graceful shutdown...`);
 
@@ -79,9 +82,7 @@ export class DatabaseService implements OnApplicationShutdown {
     console.log(`Database service shutting down on ${signal}`);
 
     // Close all connections gracefully
-    await Promise.all(
-      this.connections.map((conn) => conn.close()),
-    );
+    await Promise.all(this.connections.map(conn => conn.close()));
 
     console.log('All database connections closed');
   }
@@ -150,9 +151,7 @@ export class HealthController {
       throw new ServiceUnavailableException('Shutting down');
     }
 
-    return this.health.check([
-      () => this.db.pingCheck('database'),
-    ]);
+    return this.health.check([() => this.db.pingCheck('database')]);
   }
 }
 
@@ -190,7 +189,11 @@ export class RequestTracker implements NestMiddleware, OnApplicationShutdown {
 
     res.on('finish', () => {
       this.activeRequests--;
-      if (this.isShuttingDown && this.activeRequests === 0 && this.resolveShutdown) {
+      if (
+        this.isShuttingDown &&
+        this.activeRequests === 0 &&
+        this.resolveShutdown
+      ) {
         this.resolveShutdown();
       }
     });
@@ -203,14 +206,14 @@ export class RequestTracker implements NestMiddleware, OnApplicationShutdown {
 
     if (this.activeRequests > 0) {
       console.log(`Waiting for ${this.activeRequests} requests to complete`);
-      this.shutdownPromise = new Promise((resolve) => {
+      this.shutdownPromise = new Promise(resolve => {
         this.resolveShutdown = resolve;
       });
 
       // Wait with timeout
       await Promise.race([
         this.shutdownPromise,
-        new Promise((resolve) => setTimeout(resolve, 30000)),
+        new Promise(resolve => setTimeout(resolve, 30000)),
       ]);
     }
 
@@ -219,4 +222,5 @@ export class RequestTracker implements NestMiddleware, OnApplicationShutdown {
 }
 ```
 
-Reference: [NestJS Lifecycle Events](https://docs.nestjs.com/fundamentals/lifecycle-events)
+Reference:
+[NestJS Lifecycle Events](https://docs.nestjs.com/fundamentals/lifecycle-events)

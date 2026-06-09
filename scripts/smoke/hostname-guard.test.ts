@@ -42,7 +42,7 @@ describe('hostname-guard (issue #189)', () => {
           'scripts/',
           '.claude/skills/verify-deploy/',
         ],
-        { cwd: repoRoot, maxBuffer: 10 * 1024 * 1024 },
+        { cwd: repoRoot, maxBuffer: 10 * 1024 * 1024 }
       );
       stdout = result.stdout;
     } catch (err) {
@@ -64,7 +64,7 @@ describe('hostname-guard (issue #189)', () => {
       0,
       `Bare dev-cloud literal (no -N suffix) must not appear in workflow / infra / script / verify-deploy paths. ` +
         `Use \${{ vars.DEV_CLOUD_HOST }} (workflows) or the canonical -1 suffix.\n` +
-        `Offending lines:\n${offending.join('\n')}`,
+        `Offending lines:\n${offending.join('\n')}`
     );
   });
 });

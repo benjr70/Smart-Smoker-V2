@@ -7,7 +7,9 @@ tags: architecture, events, decoupling
 
 ## Use Event-Driven Architecture for Decoupling
 
-Use `@nestjs/event-emitter` for intra-service events and message brokers for inter-service communication. Events allow modules to react to changes without direct dependencies, improving modularity and enabling async processing.
+Use `@nestjs/event-emitter` for intra-service events and message brokers for
+inter-service communication. Events allow modules to react to changes without
+direct dependencies, improving modularity and enabling async processing.
 
 **Incorrect (direct service coupling):**
 
@@ -20,7 +22,7 @@ export class OrdersService {
     private emailService: EmailService,
     private analyticsService: AnalyticsService,
     private notificationService: NotificationService,
-    private loyaltyService: LoyaltyService,
+    private loyaltyService: LoyaltyService
   ) {}
 
   async createOrder(dto: CreateOrderDto): Promise<Order> {
@@ -51,7 +53,7 @@ export class OrderCreatedEvent {
     public readonly orderId: string,
     public readonly userId: string,
     public readonly items: OrderItem[],
-    public readonly total: number,
+    public readonly total: number
   ) {}
 }
 
@@ -60,7 +62,7 @@ export class OrderCreatedEvent {
 export class OrdersService {
   constructor(
     private eventEmitter: EventEmitter2,
-    private repo: Repository<Order>,
+    private repo: Repository<Order>
   ) {}
 
   async createOrder(dto: CreateOrderDto): Promise<Order> {
@@ -69,7 +71,7 @@ export class OrdersService {
     // Emit event - no knowledge of consumers
     this.eventEmitter.emit(
       'order.created',
-      new OrderCreatedEvent(order.id, order.userId, order.items, order.total),
+      new OrderCreatedEvent(order.id, order.userId, order.items, order.total)
     );
 
     return order;

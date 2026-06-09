@@ -17,7 +17,7 @@ export type SshRunner = (host: string, command: string) => Promise<string>;
 /** Production SSH runner — connects as root@host. */
 export const defaultSshRunner: SshRunner = async (
   host: string,
-  command: string,
+  command: string
 ): Promise<string> => {
   const { stdout } = await execFileAsync('ssh', [`root@${host}`, command]);
   return stdout;
@@ -50,10 +50,7 @@ function stripTrailingDot(name: string): string {
  *  (c) No match → throw with actionable message.
  *  (d) Multiple numbered peers share the same base → warn and return highest.
  */
-export async function resolvePeerHostname(
-  input: string,
-  sshRunner: SshRunner,
-): Promise<string> {
+export async function resolvePeerHostname(input: string, sshRunner: SshRunner): Promise<string> {
   // (a) Already a FQDN
   const normalised = stripTrailingDot(input);
   if (normalised.includes('.ts.net')) {
@@ -67,13 +64,13 @@ export async function resolvePeerHostname(
     status = JSON.parse(raw) as TailscaleStatus;
   } catch {
     throw new Error(
-      `resolve-host: failed to parse tailscale status JSON from ${input}: ${raw.slice(0, 200)}`,
+      `resolve-host: failed to parse tailscale status JSON from ${input}: ${raw.slice(0, 200)}`
     );
   }
 
   if (!status.Self || !status.Self.HostName || !status.Self.DNSName) {
     throw new Error(
-      `resolve-host: tailscale status response from ${input} is missing Self.HostName / Self.DNSName`,
+      `resolve-host: tailscale status response from ${input} is missing Self.HostName / Self.DNSName`
     );
   }
 
@@ -106,7 +103,7 @@ export async function resolvePeerHostname(
     const allNames = numberedMatches.map(m => m.peer.HostName).join(', ');
     console.warn(
       `resolve-host: WARNING — multiple peers match "${input}": [${allNames}]. ` +
-        `Using highest suffix: ${winner.peer.HostName}`,
+        `Using highest suffix: ${winner.peer.HostName}`
     );
     return stripTrailingDot(winner.peer.DNSName);
   }
@@ -116,13 +113,11 @@ export async function resolvePeerHostname(
   }
 
   // (c) No match
-  const knownHosts = [status.Self.HostName, ...peers.map(p => p.HostName)].join(
-    ', ',
-  );
+  const knownHosts = [status.Self.HostName, ...peers.map(p => p.HostName)].join(', ');
   throw new Error(
     `resolve-host: no Tailscale peer found matching "${input}". ` +
       `Known hosts: ${knownHosts}. ` +
-      `Run \`tailscale status\` on the machine to verify peer names.`,
+      `Run \`tailscale status\` on the machine to verify peer names.`
   );
 }
 

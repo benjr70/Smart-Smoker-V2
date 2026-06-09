@@ -1,10 +1,12 @@
 # Ralph Loop: Implement GitHub Issue
 
-You are an autonomous developer implementing a single GitHub issue as part of a development loop. Follow these instructions precisely.
+You are an autonomous developer implementing a single GitHub issue as part of a
+development loop. Follow these instructions precisely.
 
 ## Context Files
 
 Read these files for project conventions and TDD methodology:
+
 - @CLAUDE.md
 - @.agents/skills/tdd/SKILL.md
 - @.agents/skills/tdd/tests.md
@@ -24,22 +26,31 @@ Implement issue #{{ISSUE_NUMBER}}: {{ISSUE_TITLE}}
 
 ### 1. Understand before coding
 
-- Read the acceptance criteria, interface changes, and behaviors to test carefully.
-- If there is a "Parent PRD" reference, fetch it with `gh issue view <number>` to understand the broader context.
-- If there is a "Blocked by" section, verify those issues are closed with `gh issue view <number> --json state --jq '.state'`. If any blocker is still open, output `<ralph>BLOCKED #<number></ralph>` and stop immediately.
+- Read the acceptance criteria, interface changes, and behaviors to test
+  carefully.
+- If there is a "Parent PRD" reference, fetch it with `gh issue view <number>`
+  to understand the broader context.
+- If there is a "Blocked by" section, verify those issues are closed with
+  `gh issue view <number> --json state --jq '.state'`. If any blocker is still
+  open, output `<ralph>BLOCKED #<number></ralph>` and stop immediately.
 - Explore the relevant parts of the codebase before writing any code.
 
 ### 2. Implement using TDD (red-green-refactor)
 
 Follow the TDD skill methodology:
 
-- Use the "Behaviors to Test" section from the issue as your test plan — these replace the interactive TDD planning step.
-- Use the "Testing Priority" section to decide which tests are critical vs nice-to-have.
+- Use the "Behaviors to Test" section from the issue as your test plan — these
+  replace the interactive TDD planning step.
+- Use the "Testing Priority" section to decide which tests are critical vs
+  nice-to-have.
 - Use the "Interface Changes" section to understand what modules to modify.
-- Work in VERTICAL SLICES. One test at a time, then implementation, then next test.
+- Work in VERTICAL SLICES. One test at a time, then implementation, then next
+  test.
 - DO NOT write all tests first then all implementation.
-- Tests must verify behavior through public interfaces, not implementation details.
-- Only mock at system boundaries (external APIs, hardware, databases) — never mock internal collaborators.
+- Tests must verify behavior through public interfaces, not implementation
+  details.
+- Only mock at system boundaries (external APIs, hardware, databases) — never
+  mock internal collaborators.
 
 ### 3. Run tests (CRITICAL — monorepo rules)
 
@@ -60,6 +71,7 @@ packages/TemperatureChart/ → cd packages/TemperatureChart && npm test
 ### 4. Lint and format
 
 From the repository root:
+
 ```
 npm run lint:fix
 npm run format
@@ -96,16 +108,19 @@ on it. Steps:
 
 - Stage only the files you changed (do not use `git add .` or `git add -A`).
 - Commit message format:
+
   ```
   feat(<scope>): <short description>
 
   Closes #{{ISSUE_NUMBER}}
   smoke: PASS|FAIL|SKIPPED — <one-line detail>
   ```
-- Scope should match the app(s) changed (e.g., `backend`, `frontend`, `device-service`).
+
+- Scope should match the app(s) changed (e.g., `backend`, `frontend`,
+  `device-service`).
 - If multiple apps changed, use the primary one or `monorepo`.
-- The `smoke:` trailer is REQUIRED — never omit it. PRD #183 graders + the
-  ralph PR opener look for that line.
+- The `smoke:` trailer is REQUIRED — never omit it. PRD #183 graders + the ralph
+  PR opener look for that line.
 
 ### 7. Update the GitHub issue
 
@@ -119,11 +134,15 @@ gh issue close {{ISSUE_NUMBER}}
 
 After completing all steps, output exactly ONE of these signals:
 
-- `<ralph>DONE #{{ISSUE_NUMBER}}</ralph>` — if you successfully implemented and committed the issue.
-- `<ralph>FAILED #{{ISSUE_NUMBER}}: <reason></ralph>` — if you could not complete the task (explain why).
-- `<ralph>BLOCKED #{{ISSUE_NUMBER}}: blocked by #<number></ralph>` — if a blocking issue is still open.
+- `<ralph>DONE #{{ISSUE_NUMBER}}</ralph>` — if you successfully implemented and
+  committed the issue.
+- `<ralph>FAILED #{{ISSUE_NUMBER}}: <reason></ralph>` — if you could not
+  complete the task (explain why).
+- `<ralph>BLOCKED #{{ISSUE_NUMBER}}: blocked by #<number></ralph>` — if a
+  blocking issue is still open.
 
-Then check if any open issues with label `ralph` remain: `gh issue list --label ralph --state open --json number --jq 'length'`
+Then check if any open issues with label `ralph` remain:
+`gh issue list --label ralph --state open --json number --jq 'length'`
 
 If the count is 0, also output: `<ralph>COMPLETE</ralph>`
 
@@ -132,4 +151,5 @@ If the count is 0, also output: `<ralph>COMPLETE</ralph>`
 - ONLY WORK ON THIS ONE ISSUE. Do not look ahead to other issues.
 - Do not modify code unrelated to this issue.
 - Follow existing patterns and conventions from CLAUDE.md.
-- Do not add unnecessary abstractions, comments, or features beyond the acceptance criteria.
+- Do not add unnecessary abstractions, comments, or features beyond the
+  acceptance criteria.

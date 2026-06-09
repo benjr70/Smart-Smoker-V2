@@ -1,13 +1,17 @@
 ---
 title: Implement Health Checks for Microservices
 impact: MEDIUM-HIGH
-impactDescription: Health checks enable orchestrators to manage service lifecycle
+impactDescription:
+  Health checks enable orchestrators to manage service lifecycle
 tags: microservices, health-checks, terminus, kubernetes
 ---
 
 ## Implement Health Checks for Microservices
 
-Implement liveness and readiness probes using `@nestjs/terminus`. Liveness checks determine if the service should be restarted. Readiness checks determine if the service can accept traffic. Proper health checks enable Kubernetes and load balancers to route traffic correctly.
+Implement liveness and readiness probes using `@nestjs/terminus`. Liveness
+checks determine if the service should be restarted. Readiness checks determine
+if the service can accept traffic. Proper health checks enable Kubernetes and
+load balancers to route traffic correctly.
 
 **Incorrect (simple ping that doesn't check dependencies):**
 

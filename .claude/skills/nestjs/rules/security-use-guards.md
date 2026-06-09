@@ -7,7 +7,10 @@ tags: security, guards, authentication, authorization
 
 ## Use Guards for Authentication and Authorization
 
-Guards determine whether a request should be handled based on authentication state, roles, permissions, or other conditions. They run after middleware but before pipes and interceptors, making them ideal for access control. Use guards instead of manual checks in controllers.
+Guards determine whether a request should be handled based on authentication
+state, roles, permissions, or other conditions. They run after middleware but
+before pipes and interceptors, making them ideal for access control. Use guards
+instead of manual checks in controllers.
 
 **Incorrect (manual auth checks in every handler):**
 
@@ -47,7 +50,7 @@ export class AdminController {
 export class JwtAuthGuard implements CanActivate {
   constructor(
     private jwtService: JwtService,
-    private reflector: Reflector,
+    private reflector: Reflector
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -93,7 +96,7 @@ export class RolesGuard implements CanActivate {
     if (!requiredRoles) return true;
 
     const { user } = context.switchToHttp().getRequest();
-    return requiredRoles.some((role) => user.roles?.includes(role));
+    return requiredRoles.some(role => user.roles?.includes(role));
   }
 }
 

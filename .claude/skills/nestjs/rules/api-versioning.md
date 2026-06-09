@@ -1,13 +1,17 @@
 ---
 title: Use API Versioning for Breaking Changes
 impact: MEDIUM
-impactDescription: Versioning allows you to evolve APIs without breaking existing clients
+impactDescription:
+  Versioning allows you to evolve APIs without breaking existing clients
 tags: api, versioning, breaking-changes, compatibility
 ---
 
 ## Use API Versioning for Breaking Changes
 
-Use NestJS built-in versioning when making breaking changes to your API. Choose a versioning strategy (URI, header, or media type) and apply it consistently. This allows old clients to continue working while new clients use updated endpoints.
+Use NestJS built-in versioning when making breaking changes to your API. Choose
+a versioning strategy (URI, header, or media type) and apply it consistently.
+This allows old clients to continue working while new clients use updated
+endpoints.
 
 **Incorrect (breaking changes without versioning):**
 
@@ -161,7 +165,7 @@ export class UsersController {
   @Get(':id')
   async findOne(
     @Param('id') id: string,
-    @Headers('X-API-Version') version: string = '1',
+    @Headers('X-API-Version') version: string = '1'
   ): Promise<any> {
     return this.usersService.findOne(id, version);
   }

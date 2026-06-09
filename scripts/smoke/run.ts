@@ -37,14 +37,11 @@ function arg(name: string, fallback?: string): string | undefined {
 }
 
 const options: SmokeOptions = {
-  frontendUrl:
-    arg('frontend', process.env.SMOKE_FRONTEND_URL) ?? 'http://localhost:3000',
-  backendUrl:
-    arg('backend', process.env.SMOKE_BACKEND_URL) ?? 'http://localhost:3001',
+  frontendUrl: arg('frontend', process.env.SMOKE_FRONTEND_URL) ?? 'http://localhost:3000',
+  backendUrl: arg('backend', process.env.SMOKE_BACKEND_URL) ?? 'http://localhost:3001',
   deviceServiceUrl: arg('device', process.env.SMOKE_DEVICE_URL),
   artifactDir:
-    arg('artifacts', process.env.SMOKE_ARTIFACT_DIR) ??
-    join(process.cwd(), 'smoke-artifacts'),
+    arg('artifacts', process.env.SMOKE_ARTIFACT_DIR) ?? join(process.cwd(), 'smoke-artifacts'),
   timeoutMs: Number(arg('timeout', process.env.SMOKE_TIMEOUT_MS) ?? '30000'),
 };
 
@@ -106,7 +103,7 @@ async function probeReady(url: string): Promise<CheckResult> {
 async function probeFrontend(
   browser: Browser,
   url: string,
-  artifactDir: string,
+  artifactDir: string
 ): Promise<CheckResult> {
   const start = Date.now();
   let page: Page | null = null;
@@ -156,9 +153,7 @@ async function probeFrontend(
 }
 
 function format(check: CheckResult): string {
-  const tag = check.ok
-    ? `${ANSI.green}PASS${ANSI.reset}`
-    : `${ANSI.red}FAIL${ANSI.reset}`;
+  const tag = check.ok ? `${ANSI.green}PASS${ANSI.reset}` : `${ANSI.red}FAIL${ANSI.reset}`;
   const detail = check.detail ? ` — ${check.detail}` : '';
   return `  [${tag}] ${check.name} (${check.durationMs}ms)${detail}`;
 }
@@ -188,9 +183,7 @@ async function main(): Promise<number> {
   let browser: Browser | null = null;
   try {
     browser = await chromium.launch();
-    checks.push(
-      await probeFrontend(browser, options.frontendUrl, options.artifactDir),
-    );
+    checks.push(await probeFrontend(browser, options.frontendUrl, options.artifactDir));
   } catch (err) {
     checks.push({
       name: `browser launch`,
@@ -210,9 +203,7 @@ async function main(): Promise<number> {
     console.log(`\n${ANSI.green}smoke: PASS${ANSI.reset} (${checks.length}/${checks.length})`);
     return 0;
   }
-  console.log(
-    `\n${ANSI.red}smoke: FAIL${ANSI.reset} (${failed.length}/${checks.length} failed)`,
-  );
+  console.log(`\n${ANSI.red}smoke: FAIL${ANSI.reset} (${failed.length}/${checks.length} failed)`);
   return 1;
 }
 

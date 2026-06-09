@@ -7,7 +7,10 @@ tags: dependency-injection, constructor, testing
 
 ## Prefer Constructor Injection
 
-Always use constructor injection over property injection. Constructor injection makes dependencies explicit, enables TypeScript type checking, ensures dependencies are available when the class is instantiated, and improves testability. This is required for proper DI, testing, and TypeScript support.
+Always use constructor injection over property injection. Constructor injection
+makes dependencies explicit, enables TypeScript type checking, ensures
+dependencies are available when the class is instantiated, and improves
+testability. This is required for proper DI, testing, and TypeScript support.
 
 **Incorrect (property injection with hidden dependencies):**
 
@@ -40,7 +43,7 @@ export class UsersService {
 export class UsersService {
   constructor(
     private readonly userRepo: UserRepository,
-    @Inject('CONFIG') private readonly config: ConfigType,
+    @Inject('CONFIG') private readonly config: ConfigType
   ) {}
 
   async findAll(): Promise<User[]> {

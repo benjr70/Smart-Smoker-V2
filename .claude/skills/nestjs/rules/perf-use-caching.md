@@ -7,7 +7,9 @@ tags: performance, caching, redis, optimization
 
 ## Use Caching Strategically
 
-Implement caching for expensive operations, frequently accessed data, and external API calls. Use NestJS CacheModule with appropriate TTLs and cache invalidation strategies. Don't cache everything - focus on high-impact areas.
+Implement caching for expensive operations, frequently accessed data, and
+external API calls. Use NestJS CacheModule with appropriate TTLs and cache
+invalidation strategies. Don't cache everything - focus on high-impact areas.
 
 **Incorrect (no caching or caching everything):**
 
@@ -51,9 +53,7 @@ export class UsersService {
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        stores: [
-          new KeyvRedis(config.get('REDIS_URL')),
-        ],
+        stores: [new KeyvRedis(config.get('REDIS_URL'))],
         ttl: 60 * 1000, // Default 60s
       }),
     }),
@@ -66,7 +66,7 @@ export class AppModule {}
 export class ProductsService {
   constructor(
     @Inject(CACHE_MANAGER) private cache: Cache,
-    private productsRepo: ProductRepository,
+    private productsRepo: ProductRepository
   ) {}
 
   async getPopular(): Promise<Product[]> {

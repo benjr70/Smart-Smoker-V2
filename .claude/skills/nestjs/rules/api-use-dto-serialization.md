@@ -1,13 +1,17 @@
 ---
 title: Use DTOs and Serialization for API Responses
 impact: MEDIUM
-impactDescription: Response DTOs prevent accidental data exposure and ensure consistency
+impactDescription:
+  Response DTOs prevent accidental data exposure and ensure consistency
 tags: api, dto, serialization, class-transformer
 ---
 
 ## Use DTOs and Serialization for API Responses
 
-Never return entity objects directly from controllers. Use response DTOs with class-transformer's `@Exclude()` and `@Expose()` decorators to control exactly what data is sent to clients. This prevents accidental exposure of sensitive fields and provides a stable API contract.
+Never return entity objects directly from controllers. Use response DTOs with
+class-transformer's `@Exclude()` and `@Expose()` decorators to control exactly
+what data is sent to clients. This prevents accidental exposure of sensitive
+fields and provides a stable API contract.
 
 **Incorrect (returning entities directly or manual spreading):**
 
@@ -179,4 +183,5 @@ export class UsersController {
 }
 ```
 
-Reference: [NestJS Serialization](https://docs.nestjs.com/techniques/serialization)
+Reference:
+[NestJS Serialization](https://docs.nestjs.com/techniques/serialization)
