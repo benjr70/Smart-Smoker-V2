@@ -92,7 +92,7 @@ jobs:
           fi
           echo "PASS: MongoDB localhost-only or not yet started ($LOCAL)"
 
-      - name: 4d — MongoDB seeded users (start mongo, check, stop)
+      - name: 4d — MongoDB seeded users (start mongo if needed, check via container env)
         id: verify_mongo_users
         continue-on-error: true
         run: |
@@ -101,18 +101,25 @@ jobs:
           ssh -o BatchMode=yes root@smokecloud-2 "
             set -e
             cd $APP_DIR
-            docker compose -f $COMPOSE up -d mongo
-            echo 'Waiting for mongo init...'
-            sleep 15
-            USERS=\$(docker exec smart-smoker-mongo mongosh admin \
-              -u root -p \"\$MONGO_ROOT_PASSWORD\" --quiet \
-              --eval 'db.getUsers().users.map(u=>u.user).join(\",\")' 2>/dev/null || echo ERROR)
+            RUNNING=\$(docker inspect -f '{{.State.Running}}' smart-smoker-mongo 2>/dev/null || echo false)
+            if [ \"\$RUNNING\" != 'true' ]; then
+              docker compose -f $COMPOSE up -d mongo
+              echo 'Started mongo, waiting for init...'
+              sleep 20
+              STARTED_HERE=1
+            fi
+            # Use the container's own env vars for credentials — host shell has no MONGO_ROOT_PASSWORD
+            USERS=\$(docker exec smart-smoker-mongo sh -c \
+              'mongosh admin -u \"\$MONGO_INITDB_ROOT_USERNAME\" -p \"\$MONGO_INITDB_ROOT_PASSWORD\" --quiet \
+               --eval \"db.getUsers().users.map(u=>u.user).join(\\\",\\\")\"' 2>/dev/null || echo ERROR)
             echo \"Users found: \$USERS\"
-            docker compose -f $COMPOSE stop mongo
+            if [ \"\${STARTED_HERE:-0}\" = '1' ]; then
+              docker compose -f $COMPOSE stop mongo
+            fi
             if echo \"\$USERS\" | grep -q smartsmoker; then
               echo 'PASS: smartsmoker user present'
             else
-              echo 'FAIL: smartsmoker user missing'
+              echo 'FAIL: smartsmoker user missing or mongosh ERROR'
               exit 1
             fi
           "
