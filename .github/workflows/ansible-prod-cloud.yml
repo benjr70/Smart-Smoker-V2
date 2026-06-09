@@ -138,12 +138,19 @@ jobs:
               && echo 'PASS: mongo-init script present'
           "
 
-      - name: 4e — Backup timer active
+      - name: 4e — Backup cron job + script present
         id: verify_backups
         continue-on-error: true
         run: |
-          ssh -o BatchMode=yes root@smokecloud-2 \
-            "systemctl is-active backup-mongodb.timer && echo BACKUP_TIMER_OK"
+          # backups role schedules via root crontab (ansible.builtin.cron), not a
+          # systemd timer. Verify the cron entry and the backup script exist.
+          ssh -o BatchMode=yes root@smokecloud-2 "
+            set -e
+            crontab -l -u root | grep -q 'MongoDB daily backup' \
+              && echo 'PASS: backup cron present'
+            test -x /opt/smart-smoker-prod/scripts/backup-mongodb.sh \
+              && echo 'PASS: backup script present'
+          "
 
       - name: 4f — Tailscale Funnel configured
         id: verify_funnel
@@ -166,7 +173,7 @@ jobs:
           echo "4b Docker+compose: ${{ steps.verify_docker.outcome }}"
           echo "4c Mongo bind:     ${{ steps.verify_mongo_bind.outcome }}"
           echo "4d Mongo files:    ${{ steps.verify_mongo_users.outcome }}"
-          echo "4e Backup timer:   ${{ steps.verify_backups.outcome }}"
+          echo "4e Backup cron:    ${{ steps.verify_backups.outcome }}"
           echo "4f Funnel:         ${{ steps.verify_funnel.outcome }}"
           echo "=========================================="
           echo "Ansible apply: ${{ inputs.run_ansible }}"
