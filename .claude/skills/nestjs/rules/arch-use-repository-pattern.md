@@ -7,7 +7,10 @@ tags: architecture, repository, data-access
 
 ## Use Repository Pattern for Data Access
 
-Create custom repositories to encapsulate complex queries and database logic. This keeps services focused on business logic, makes testing easier with mock repositories, and allows changing database implementations without affecting business code.
+Create custom repositories to encapsulate complex queries and database logic.
+This keeps services focused on business logic, makes testing easier with mock
+repositories, and allows changing database implementations without affecting
+business code.
 
 **Incorrect (complex queries in services):**
 
@@ -15,9 +18,7 @@ Create custom repositories to encapsulate complex queries and database logic. Th
 // Complex queries in services
 @Injectable()
 export class UsersService {
-  constructor(
-    @InjectRepository(User) private repo: Repository<User>,
-  ) {}
+  constructor(@InjectRepository(User) private repo: Repository<User>) {}
 
   async findActiveWithOrders(minOrders: number): Promise<User[]> {
     // Complex query logic mixed with business logic
@@ -42,9 +43,7 @@ export class UsersService {
 // Custom repository with encapsulated queries
 @Injectable()
 export class UsersRepository {
-  constructor(
-    @InjectRepository(User) private repo: Repository<User>,
-  ) {}
+  constructor(@InjectRepository(User) private repo: Repository<User>) {}
 
   async findById(id: string): Promise<User | null> {
     return this.repo.findOne({ where: { id } });
@@ -94,4 +93,5 @@ export class UsersService {
 }
 ```
 
-Reference: [Repository Pattern](https://martinfowler.com/eaaCatalog/repository.html)
+Reference:
+[Repository Pattern](https://martinfowler.com/eaaCatalog/repository.html)

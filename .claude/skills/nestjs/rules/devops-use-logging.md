@@ -7,7 +7,9 @@ tags: devops, logging, structured-logs, pino
 
 ## Use Structured Logging
 
-Use NestJS Logger with structured JSON output in production. Include contextual information (request ID, user ID, operation) to trace requests across services. Avoid console.log and implement proper log levels.
+Use NestJS Logger with structured JSON output in production. Include contextual
+information (request ID, user ID, operation) to trace requests across services.
+Avoid console.log and implement proper log levels.
 
 **Incorrect (using console.log in production):**
 
@@ -82,7 +84,7 @@ export class JsonLogger implements LoggerService {
         timestamp: new Date().toISOString(),
         message,
         ...context,
-      }),
+      })
     );
   }
 
@@ -94,7 +96,7 @@ export class JsonLogger implements LoggerService {
         message,
         trace,
         ...context,
-      }),
+      })
     );
   }
 
@@ -105,7 +107,7 @@ export class JsonLogger implements LoggerService {
         timestamp: new Date().toISOString(),
         message,
         ...context,
-      }),
+      })
     );
   }
 
@@ -116,7 +118,7 @@ export class JsonLogger implements LoggerService {
         timestamp: new Date().toISOString(),
         message,
         ...context,
-      }),
+      })
     );
   }
 }
@@ -166,7 +168,7 @@ export class ContextLogger {
         userId: this.cls.get('userId'),
         message,
         ...data,
-      }),
+      })
     );
   }
 
@@ -181,7 +183,7 @@ export class ContextLogger {
         error: error.message,
         stack: error.stack,
         ...data,
-      }),
+      })
     );
   }
 }
@@ -200,12 +202,12 @@ import { LoggerModule } from 'nestjs-pino';
             : undefined,
         redact: ['req.headers.authorization', 'req.body.password'],
         serializers: {
-          req: (req) => ({
+          req: req => ({
             method: req.method,
             url: req.url,
             query: req.query,
           }),
-          res: (res) => ({
+          res: res => ({
             statusCode: res.statusCode,
           }),
         },

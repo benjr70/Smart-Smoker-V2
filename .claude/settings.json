@@ -34,11 +34,11 @@
       "Bash(curl -f -s -k --max-time * https://smoker-dev-cloud-1.tail74646.ts.net*)",
       "Bash(ssh root@smoker-dev-cloud-1 *)",
       "Bash(ssh smoker@virtual-smoker *)",
-      "mcp__context7*",
-      "mcp__playwright*",
-      "mcp__terraform*",
-      "mcp__docker*",
-      "mcp__mongodb*"
+      "mcp__context7__*",
+      "mcp__playwright__*",
+      "mcp__terraform__*",
+      "mcp__docker__*",
+      "mcp__mongodb__*"
     ],
     "deny": [
       "Bash(git push --force*)",

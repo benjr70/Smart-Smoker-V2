@@ -7,7 +7,10 @@ tags: error-handling, exceptions, services
 
 ## Throw HTTP Exceptions from Services
 
-It's acceptable (and often preferable) to throw `HttpException` subclasses from services in HTTP applications. This keeps controllers thin and allows services to communicate appropriate error states. For truly layer-agnostic services, use domain exceptions that map to HTTP status codes.
+It's acceptable (and often preferable) to throw `HttpException` subclasses from
+services in HTTP applications. This keeps controllers thin and allows services
+to communicate appropriate error states. For truly layer-agnostic services, use
+domain exceptions that map to HTTP status codes.
 
 **Incorrect (return error objects instead of throwing):**
 
@@ -88,7 +91,7 @@ export class UsersController {
 export class EntityNotFoundException extends Error {
   constructor(
     public readonly entity: string,
-    public readonly id: string,
+    public readonly id: string
   ) {
     super(`${entity} with ID "${id}" not found`);
   }

@@ -7,7 +7,10 @@ tags: database, transactions, typeorm, consistency
 
 ## Use Transactions for Multi-Step Operations
 
-When multiple database operations must succeed or fail together, wrap them in a transaction. This prevents partial updates that leave your data in an inconsistent state. Use TypeORM's transaction APIs or the DataSource query runner for complex scenarios.
+When multiple database operations must succeed or fail together, wrap them in a
+transaction. This prevents partial updates that leave your data in an
+inconsistent state. Use TypeORM's transaction APIs or the DataSource query
+runner for complex scenarios.
 
 **Incorrect (multiple saves without transaction):**
 
@@ -21,7 +24,11 @@ export class OrdersService {
 
     for (const item of items) {
       await this.orderItemRepo.save({ orderId: order.id, ...item });
-      await this.inventoryRepo.decrement({ productId: item.productId }, 'stock', item.quantity);
+      await this.inventoryRepo.decrement(
+        { productId: item.productId },
+        'stock',
+        item.quantity
+      );
     }
 
     await this.paymentService.charge(order.id);
@@ -41,7 +48,7 @@ export class OrdersService {
   constructor(private dataSource: DataSource) {}
 
   async createOrder(userId: string, items: OrderItem[]): Promise<Order> {
-    return this.dataSource.transaction(async (manager) => {
+    return this.dataSource.transaction(async manager => {
       // All operations use the same transactional manager
       const order = await manager.save(Order, { userId, status: 'pending' });
 
@@ -51,7 +58,7 @@ export class OrdersService {
           Inventory,
           { productId: item.productId },
           'stock',
-          item.quantity,
+          item.quantity
         );
       }
 
@@ -79,7 +86,7 @@ export class TransferService {
         Account,
         { id: fromId },
         'balance',
-        amount,
+        amount
       );
 
       // Verify sufficient funds
@@ -95,7 +102,7 @@ export class TransferService {
         Account,
         { id: toId },
         'balance',
-        amount,
+        amount
       );
 
       // Log the transaction
@@ -121,14 +128,14 @@ export class TransferService {
 export class UsersRepository {
   constructor(
     @InjectRepository(User) private repo: Repository<User>,
-    private dataSource: DataSource,
+    private dataSource: DataSource
   ) {}
 
   async createWithProfile(
     userData: CreateUserDto,
-    profileData: CreateProfileDto,
+    profileData: CreateProfileDto
   ): Promise<User> {
-    return this.dataSource.transaction(async (manager) => {
+    return this.dataSource.transaction(async manager => {
       const user = await manager.save(User, userData);
       await manager.save(Profile, { ...profileData, userId: user.id });
       return user;

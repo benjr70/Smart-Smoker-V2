@@ -1,13 +1,16 @@
 ---
 title: Avoid Circular Dependencies
 impact: CRITICAL
-impactDescription: "#1 cause of runtime crashes"
+impactDescription: '#1 cause of runtime crashes'
 tags: architecture, modules, dependencies
 ---
 
 ## Avoid Circular Dependencies
 
-Circular dependencies occur when Module A imports Module B, and Module B imports Module A (directly or transitively). NestJS can sometimes resolve these through forward references, but they indicate architectural problems and should be avoided. This is the #1 cause of runtime crashes in NestJS applications.
+Circular dependencies occur when Module A imports Module B, and Module B imports
+Module A (directly or transitively). NestJS can sometimes resolve these through
+forward references, but they indicate architectural problems and should be
+avoided. This is the #1 cause of runtime crashes in NestJS applications.
 
 **Incorrect (circular module imports):**
 
@@ -77,4 +80,5 @@ export class OrdersService {
 }
 ```
 
-Reference: [NestJS Circular Dependency](https://docs.nestjs.com/fundamentals/circular-dependency)
+Reference:
+[NestJS Circular Dependency](https://docs.nestjs.com/fundamentals/circular-dependency)

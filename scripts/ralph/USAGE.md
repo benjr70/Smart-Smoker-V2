@@ -1,6 +1,8 @@
 # Ralph Loop - Development Flow Guide
 
-Ralph is an autonomous development loop that picks up GitHub issues and implements them using TDD. This guide walks through the full pipeline from idea to pull request.
+Ralph is an autonomous development loop that picks up GitHub issues and
+implements them using TDD. This guide walks through the full pipeline from idea
+to pull request.
 
 ## Prerequisites
 
@@ -15,7 +17,8 @@ Ralph is an autonomous development loop that picks up GitHub issues and implemen
 ./scripts/ralph/ralph-setup.sh
 ```
 
-This creates the GitHub labels (`ralph`, `ralph:in-progress`, `ralph:done`) and verifies all prerequisites are installed.
+This creates the GitHub labels (`ralph`, `ralph:in-progress`, `ralph:done`) and
+verifies all prerequisites are installed.
 
 ## The Pipeline
 
@@ -27,7 +30,9 @@ Open Claude Code and run:
 /grill-me
 ```
 
-Describe your feature idea. Claude will interview you relentlessly, walking down every branch of the decision tree until you've thought through all the edge cases. This is where half-baked ideas become solid plans.
+Describe your feature idea. Claude will interview you relentlessly, walking down
+every branch of the decision tree until you've thought through all the edge
+cases. This is where half-baked ideas become solid plans.
 
 ### Step 2: Write the PRD
 
@@ -37,7 +42,9 @@ Once you have a clear vision from the grilling session, run:
 /write-a-prd
 ```
 
-Claude will explore the codebase, interview you about specifics, and create a formal PRD as a GitHub issue. The PRD includes problem statement, user stories, implementation decisions, and testing decisions.
+Claude will explore the codebase, interview you about specifics, and create a
+formal PRD as a GitHub issue. The PRD includes problem statement, user stories,
+implementation decisions, and testing decisions.
 
 ### Step 3: Break Into Issues
 
@@ -47,7 +54,10 @@ With your PRD issue created, run:
 /prd-to-issues
 ```
 
-Give it the PRD issue number. Claude breaks the PRD into thin vertical slices — each one cuts through all layers (schema, API, UI, tests) end-to-end. Issues are created in dependency order with:
+Give it the PRD issue number. Claude breaks the PRD into thin vertical slices —
+each one cuts through all layers (schema, API, UI, tests) end-to-end. Issues are
+created in dependency order with:
+
 - Acceptance criteria
 - Interface changes (what modules to modify)
 - Behaviors to test (the TDD plan)
@@ -62,7 +72,8 @@ AFK slices automatically get the `ralph` label.
 git checkout -b feat/<feature-name>
 ```
 
-Ralph operates on whatever branch you're on. All commits for this PRD go on this branch.
+Ralph operates on whatever branch you're on. All commits for this PRD go on this
+branch.
 
 ### Step 5a: Human-in-the-Loop (Recommended First Time)
 
@@ -76,7 +87,8 @@ Watch Ralph implement one issue with you approving each edit:
 ./scripts/ralph/ralph-once.sh 42
 ```
 
-This runs Claude in `acceptEdits` mode — you see every change and approve it. Good for building confidence before going fully autonomous.
+This runs Claude in `acceptEdits` mode — you see every change and approve it.
+Good for building confidence before going fully autonomous.
 
 ### Step 5b: Go Autonomous (AFK)
 
@@ -91,6 +103,7 @@ Let Ralph implement multiple issues without intervention:
 ```
 
 Ralph will:
+
 1. Pick the next open issue with the `ralph` label
 2. Check if it's blocked (skip if so)
 3. Implement it using TDD (red-green-refactor, one test at a time)
@@ -101,6 +114,7 @@ Ralph will:
 8. Move to the next issue
 
 The loop stops when:
+
 - No more eligible issues remain
 - Max iterations reached
 - Claude outputs the COMPLETE signal
@@ -134,7 +148,8 @@ When satisfied, open a PR:
 
 ### Local Progress Log
 
-`ralph-progress.md` (gitignored) contains timestamped entries for each iteration:
+`ralph-progress.md` (gitignored) contains timestamped entries for each
+iteration:
 
 ```
 [2026-03-24T10:00:00-05:00] Ralph AFK started (max 10 iterations)
@@ -147,6 +162,7 @@ When satisfied, open a PR:
 ### GitHub Labels
 
 Check issue status via labels:
+
 - `ralph` — eligible for pickup
 - `ralph:in-progress` — currently being worked on
 - `ralph:done` — completed and closed
@@ -174,11 +190,14 @@ gh issue edit <number> --remove-label "ralph:in-progress"
 
 ### Blocked issues never get unblocked
 
-Ralph skips blocked issues but doesn't retry them later in the same run. If a blocker gets resolved during the run, start a new Ralph run to pick up the unblocked issues.
+Ralph skips blocked issues but doesn't retry them later in the same run. If a
+blocker gets resolved during the run, start a new Ralph run to pick up the
+unblocked issues.
 
 ### Tests fail in CI but passed locally
 
-Check that coverage thresholds are met (see CLAUDE.md for per-app thresholds). Ralph runs `npm test` which includes coverage, but CI may have stricter checks.
+Check that coverage thresholds are met (see CLAUDE.md for per-app thresholds).
+Ralph runs `npm test` which includes coverage, but CI may have stricter checks.
 
 ### Ralph made a bad commit
 

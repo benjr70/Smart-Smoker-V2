@@ -7,7 +7,10 @@ tags: performance, lazy-loading, modules, optimization
 
 ## Use Lazy Loading for Large Modules
 
-NestJS supports lazy-loading modules, which defers initialization until first use. This is valuable for large applications where some features are rarely used, serverless deployments where cold start time matters, or when certain modules have heavy initialization costs.
+NestJS supports lazy-loading modules, which defers initialization until first
+use. This is valuable for large applications where some features are rarely
+used, serverless deployments where cold start time matters, or when certain
+modules have heavy initialization costs.
 
 **Incorrect (loading everything eagerly):**
 
@@ -83,7 +86,7 @@ export class ModuleLoaderService {
 
   async load<T>(
     key: string,
-    importFn: () => Promise<{ default: Type<T> } | Type<T>>,
+    importFn: () => Promise<{ default: Type<T> } | Type<T>>
   ): Promise<ModuleRef> {
     if (!this.loadedModules.has(key)) {
       const module = await importFn();
@@ -118,4 +121,5 @@ export class ModulePreloader implements OnApplicationBootstrap {
 }
 ```
 
-Reference: [NestJS Lazy Loading Modules](https://docs.nestjs.com/fundamentals/lazy-loading-modules)
+Reference:
+[NestJS Lazy Loading Modules](https://docs.nestjs.com/fundamentals/lazy-loading-modules)

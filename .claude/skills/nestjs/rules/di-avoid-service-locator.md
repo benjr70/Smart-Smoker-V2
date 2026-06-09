@@ -7,7 +7,9 @@ tags: dependency-injection, anti-patterns, testing
 
 ## Avoid Service Locator Anti-Pattern
 
-Avoid using `ModuleRef.get()` or global containers to resolve dependencies at runtime. This hides dependencies, makes code harder to test, and breaks the benefits of dependency injection. Use constructor injection instead.
+Avoid using `ModuleRef.get()` or global containers to resolve dependencies at
+runtime. This hides dependencies, makes code harder to test, and breaks the
+benefits of dependency injection. Use constructor injection instead.
 
 **Incorrect (service locator anti-pattern):**
 
@@ -55,7 +57,7 @@ export class OrdersService {
   constructor(
     private usersService: UsersService,
     private inventoryService: InventoryService,
-    private paymentService: PaymentService,
+    private paymentService: PaymentService
   ) {}
 
   async createOrder(dto: CreateOrderDto): Promise<Order> {
@@ -101,4 +103,5 @@ export class HandlerFactory {
 }
 ```
 
-Reference: [NestJS Module Reference](https://docs.nestjs.com/fundamentals/module-ref)
+Reference:
+[NestJS Module Reference](https://docs.nestjs.com/fundamentals/module-ref)

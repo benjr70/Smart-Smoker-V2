@@ -7,7 +7,10 @@ tags: microservices, queues, bullmq, background-jobs
 
 ## Use Message Queues for Background Jobs
 
-Use `@nestjs/bullmq` for background job processing. Queues decouple long-running tasks from HTTP requests, enable retry logic, and distribute workload across workers. Use them for emails, file processing, notifications, and any task that shouldn't block user requests.
+Use `@nestjs/bullmq` for background job processing. Queues decouple long-running
+tasks from HTTP requests, enable retry logic, and distribute workload across
+workers. Use them for emails, file processing, notifications, and any task that
+shouldn't block user requests.
 
 **Incorrect (long-running tasks in HTTP handlers):**
 
@@ -67,7 +70,7 @@ import { BullModule } from '@nestjs/bullmq';
     BullModule.registerQueue(
       { name: 'email' },
       { name: 'reports' },
-      { name: 'notifications' },
+      { name: 'notifications' }
     ),
   ],
 })
@@ -76,9 +79,7 @@ export class QueueModule {}
 // Producer: Add jobs to queue
 @Injectable()
 export class ReportsService {
-  constructor(
-    @InjectQueue('reports') private reportsQueue: Queue,
-  ) {}
+  constructor(@InjectQueue('reports') private reportsQueue: Queue) {}
 
   async requestReport(dto: GenerateReportDto): Promise<{ jobId: string }> {
     // Return immediately, process in background
@@ -176,7 +177,7 @@ export class NotificationService {
       {
         attempts: 5,
         backoff: { type: 'exponential', delay: 5000 },
-      },
+      }
     );
   }
 }
@@ -194,7 +195,7 @@ export class ScheduledJobsService implements OnModuleInit {
       {
         repeat: { cron: '0 0 * * *' },
         jobId: 'daily-cleanup', // Prevent duplicates
-      },
+      }
     );
 
     // Send digest every hour
@@ -204,7 +205,7 @@ export class ScheduledJobsService implements OnModuleInit {
       {
         repeat: { every: 60 * 60 * 1000 },
         jobId: 'hourly-digest',
-      },
+      }
     );
   }
 }

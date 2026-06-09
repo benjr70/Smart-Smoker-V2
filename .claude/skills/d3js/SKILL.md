@@ -1,26 +1,40 @@
 ---
 name: d3-viz
-description: Creating interactive data visualisations using d3.js. This skill should be used when creating custom charts, graphs, network diagrams, geographic visualisations, or any complex SVG-based data visualisation that requires fine-grained control over visual elements, transitions, or interactions. Use this for bespoke visualisations beyond standard charting libraries, whether in React, Vue, Svelte, vanilla JavaScript, or any other environment.
+description:
+  Creating interactive data visualisations using d3.js. This skill should be
+  used when creating custom charts, graphs, network diagrams, geographic
+  visualisations, or any complex SVG-based data visualisation that requires
+  fine-grained control over visual elements, transitions, or interactions. Use
+  this for bespoke visualisations beyond standard charting libraries, whether in
+  React, Vue, Svelte, vanilla JavaScript, or any other environment.
 ---
 
 # D3.js Visualisation
 
 ## Overview
 
-This skill provides guidance for creating sophisticated, interactive data visualisations using d3.js. D3.js (Data-Driven Documents) excels at binding data to DOM elements and applying data-driven transformations to create custom, publication-quality visualisations with precise control over every visual element. The techniques work across any JavaScript environment, including vanilla JavaScript, React, Vue, Svelte, and other frameworks.
+This skill provides guidance for creating sophisticated, interactive data
+visualisations using d3.js. D3.js (Data-Driven Documents) excels at binding data
+to DOM elements and applying data-driven transformations to create custom,
+publication-quality visualisations with precise control over every visual
+element. The techniques work across any JavaScript environment, including
+vanilla JavaScript, React, Vue, Svelte, and other frameworks.
 
 ## When to use d3.js
 
 **Use d3.js for:**
+
 - Custom visualisations requiring unique visual encodings or layouts
 - Interactive explorations with complex pan, zoom, or brush behaviours
-- Network/graph visualisations (force-directed layouts, tree diagrams, hierarchies, chord diagrams)
+- Network/graph visualisations (force-directed layouts, tree diagrams,
+  hierarchies, chord diagrams)
 - Geographic visualisations with custom projections
 - Visualisations requiring smooth, choreographed transitions
 - Publication-quality graphics with fine-grained styling control
 - Novel chart types not available in standard libraries
 
 **Consider alternatives for:**
+
 - 3D visualisations - use Three.js instead
 
 ## Core workflow
@@ -39,12 +53,14 @@ Or use the CDN version (7.x):
 <script src="https://d3js.org/d3.v7.min.js"></script>
 ```
 
-All modules (scales, axes, shapes, transitions, etc.) are accessible through the `d3` namespace.
+All modules (scales, axes, shapes, transitions, etc.) are accessible through the
+`d3` namespace.
 
 ### 2. Choose the integration pattern
 
-**Pattern A: Direct DOM manipulation (recommended for most cases)**
-Use d3 to select DOM elements and manipulate them imperatively. This works in any JavaScript environment:
+**Pattern A: Direct DOM manipulation (recommended for most cases)** Use d3 to
+select DOM elements and manipulate them imperatively. This works in any
+JavaScript environment:
 
 ```javascript
 function drawChart(data) {
@@ -53,7 +69,7 @@ function drawChart(data) {
   const svg = d3.select('#chart'); // Select by ID, class, or DOM element
 
   // Clear previous content
-  svg.selectAll("*").remove();
+  svg.selectAll('*').remove();
 
   // Set up dimensions
   const width = 800;
@@ -68,12 +84,13 @@ function drawChart(data) {
 drawChart(myData);
 ```
 
-**Pattern B: Declarative rendering (for frameworks with templating)**
-Use d3 for data calculations (scales, layouts) but render elements via your framework:
+**Pattern B: Declarative rendering (for frameworks with templating)** Use d3 for
+data calculations (scales, layouts) but render elements via your framework:
 
 ```javascript
 function getChartElements(data) {
-  const xScale = d3.scaleLinear()
+  const xScale = d3
+    .scaleLinear()
     .domain([0, d3.max(data, d => d.value)])
     .range([0, 400]);
 
@@ -81,7 +98,7 @@ function getChartElements(data) {
     x: 50,
     y: i * 30,
     width: xScale(d.value),
-    height: 25
+    height: 25,
   }));
 }
 
@@ -90,7 +107,9 @@ function getChartElements(data) {
 // In vanilla JS: Create elements manually from the returned data
 ```
 
-Use Pattern A for complex visualisations with transitions, interactions, or when leveraging d3's full capabilities. Use Pattern B for simpler visualisations or when your framework prefers declarative rendering.
+Use Pattern A for complex visualisations with transitions, interactions, or when
+leveraging d3's full capabilities. Use Pattern B for simpler visualisations or
+when your framework prefers declarative rendering.
 
 ### 3. Structure the visualisation code
 
@@ -101,7 +120,7 @@ function drawVisualization(data) {
   if (!data || data.length === 0) return;
 
   const svg = d3.select('#chart'); // Or pass a selector/element
-  svg.selectAll("*").remove(); // Clear previous render
+  svg.selectAll('*').remove(); // Clear previous render
 
   // 1. Define dimensions
   const width = 800;
@@ -111,15 +130,18 @@ function drawVisualization(data) {
   const innerHeight = height - margin.top - margin.bottom;
 
   // 2. Create main group with margins
-  const g = svg.append("g")
-    .attr("transform", `translate(${margin.left},${margin.top})`);
+  const g = svg
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
 
   // 3. Create scales
-  const xScale = d3.scaleLinear()
+  const xScale = d3
+    .scaleLinear()
     .domain([0, d3.max(data, d => d.x)])
     .range([0, innerWidth]);
 
-  const yScale = d3.scaleLinear()
+  const yScale = d3
+    .scaleLinear()
     .domain([0, d3.max(data, d => d.y)])
     .range([innerHeight, 0]); // Note: inverted for SVG coordinates
 
@@ -127,21 +149,18 @@ function drawVisualization(data) {
   const xAxis = d3.axisBottom(xScale);
   const yAxis = d3.axisLeft(yScale);
 
-  g.append("g")
-    .attr("transform", `translate(0,${innerHeight})`)
-    .call(xAxis);
+  g.append('g').attr('transform', `translate(0,${innerHeight})`).call(xAxis);
 
-  g.append("g")
-    .call(yAxis);
+  g.append('g').call(yAxis);
 
   // 5. Bind data and create visual elements
-  g.selectAll("circle")
+  g.selectAll('circle')
     .data(data)
-    .join("circle")
-    .attr("cx", d => xScale(d.x))
-    .attr("cy", d => yScale(d.y))
-    .attr("r", 5)
-    .attr("fill", "steelblue");
+    .join('circle')
+    .attr('cx', d => xScale(d.x))
+    .attr('cy', d => yScale(d.y))
+    .attr('r', 5)
+    .attr('fill', 'steelblue');
 }
 
 // Call when data changes
@@ -186,9 +205,7 @@ Or use ResizeObserver for more direct container monitoring:
 function setupResponsiveChartWithObserver(svgElement, data) {
   const observer = new ResizeObserver(() => {
     const { width, height } = svgElement.getBoundingClientRect();
-    d3.select(svgElement)
-      .attr('width', width)
-      .attr('height', height);
+    d3.select(svgElement).attr('width', width).attr('height', height);
 
     // Redraw visualisation
     drawChart(data, d3.select(svgElement), width, height);
@@ -208,7 +225,7 @@ function drawBarChart(data, svgElement) {
   if (!data || data.length === 0) return;
 
   const svg = d3.select(svgElement);
-  svg.selectAll("*").remove();
+  svg.selectAll('*').remove();
 
   const width = 800;
   const height = 400;
@@ -216,33 +233,35 @@ function drawBarChart(data, svgElement) {
   const innerWidth = width - margin.left - margin.right;
   const innerHeight = height - margin.top - margin.bottom;
 
-  const g = svg.append("g")
-    .attr("transform", `translate(${margin.left},${margin.top})`);
+  const g = svg
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
 
-  const xScale = d3.scaleBand()
+  const xScale = d3
+    .scaleBand()
     .domain(data.map(d => d.category))
     .range([0, innerWidth])
     .padding(0.1);
 
-  const yScale = d3.scaleLinear()
+  const yScale = d3
+    .scaleLinear()
     .domain([0, d3.max(data, d => d.value)])
     .range([innerHeight, 0]);
 
-  g.append("g")
-    .attr("transform", `translate(0,${innerHeight})`)
+  g.append('g')
+    .attr('transform', `translate(0,${innerHeight})`)
     .call(d3.axisBottom(xScale));
 
-  g.append("g")
-    .call(d3.axisLeft(yScale));
+  g.append('g').call(d3.axisLeft(yScale));
 
-  g.selectAll("rect")
+  g.selectAll('rect')
     .data(data)
-    .join("rect")
-    .attr("x", d => xScale(d.category))
-    .attr("y", d => yScale(d.value))
-    .attr("width", xScale.bandwidth())
-    .attr("height", d => innerHeight - yScale(d.value))
-    .attr("fill", "steelblue");
+    .join('rect')
+    .attr('x', d => xScale(d.category))
+    .attr('y', d => yScale(d.value))
+    .attr('width', xScale.bandwidth())
+    .attr('height', d => innerHeight - yScale(d.value))
+    .attr('fill', 'steelblue');
 }
 
 // Usage:
@@ -252,35 +271,37 @@ function drawBarChart(data, svgElement) {
 ### Line chart
 
 ```javascript
-const line = d3.line()
+const line = d3
+  .line()
   .x(d => xScale(d.date))
   .y(d => yScale(d.value))
   .curve(d3.curveMonotoneX); // Smooth curve
 
-g.append("path")
+g.append('path')
   .datum(data)
-  .attr("fill", "none")
-  .attr("stroke", "steelblue")
-  .attr("stroke-width", 2)
-  .attr("d", line);
+  .attr('fill', 'none')
+  .attr('stroke', 'steelblue')
+  .attr('stroke-width', 2)
+  .attr('d', line);
 ```
 
 ### Scatter plot
 
 ```javascript
-g.selectAll("circle")
+g.selectAll('circle')
   .data(data)
-  .join("circle")
-  .attr("cx", d => xScale(d.x))
-  .attr("cy", d => yScale(d.y))
-  .attr("r", d => sizeScale(d.size)) // Optional: size encoding
-  .attr("fill", d => colourScale(d.category)) // Optional: colour encoding
-  .attr("opacity", 0.7);
+  .join('circle')
+  .attr('cx', d => xScale(d.x))
+  .attr('cy', d => yScale(d.y))
+  .attr('r', d => sizeScale(d.size)) // Optional: size encoding
+  .attr('fill', d => colourScale(d.category)) // Optional: colour encoding
+  .attr('opacity', 0.7);
 ```
 
 ### Chord diagram
 
-A chord diagram shows relationships between entities in a circular layout, with ribbons representing flows between them:
+A chord diagram shows relationships between entities in a circular layout, with
+ribbons representing flows between them:
 
 ```javascript
 function drawChordDiagram(data) {
@@ -290,7 +311,7 @@ function drawChordDiagram(data) {
   if (!data || data.length === 0) return;
 
   const svg = d3.select('#chart');
-  svg.selectAll("*").remove();
+  svg.selectAll('*').remove();
 
   const width = 600;
   const height = 600;
@@ -299,7 +320,9 @@ function drawChordDiagram(data) {
 
   // Create matrix from data
   const nodes = Array.from(new Set(data.flatMap(d => [d.source, d.target])));
-  const matrix = Array.from({ length: nodes.length }, () => Array(nodes.length).fill(0));
+  const matrix = Array.from({ length: nodes.length }, () =>
+    Array(nodes.length).fill(0)
+  );
 
   data.forEach(d => {
     const i = nodes.indexOf(d.source);
@@ -309,61 +332,64 @@ function drawChordDiagram(data) {
   });
 
   // Create chord layout
-  const chord = d3.chord()
-    .padAngle(0.05)
-    .sortSubgroups(d3.descending);
+  const chord = d3.chord().padAngle(0.05).sortSubgroups(d3.descending);
 
-  const arc = d3.arc()
-    .innerRadius(innerRadius)
-    .outerRadius(outerRadius);
+  const arc = d3.arc().innerRadius(innerRadius).outerRadius(outerRadius);
 
-  const ribbon = d3.ribbon()
+  const ribbon = d3
+    .ribbon()
     .source(d => d.source)
     .target(d => d.target);
 
-  const colourScale = d3.scaleOrdinal(d3.schemeCategory10)
-    .domain(nodes);
+  const colourScale = d3.scaleOrdinal(d3.schemeCategory10).domain(nodes);
 
-  const g = svg.append("g")
-    .attr("transform", `translate(${width / 2},${height / 2})`);
+  const g = svg
+    .append('g')
+    .attr('transform', `translate(${width / 2},${height / 2})`);
 
   const chords = chord(matrix);
 
   // Draw ribbons
-  g.append("g")
-    .attr("fill-opacity", 0.67)
-    .selectAll("path")
+  g.append('g')
+    .attr('fill-opacity', 0.67)
+    .selectAll('path')
     .data(chords)
-    .join("path")
-    .attr("d", ribbon)
-    .attr("fill", d => colourScale(nodes[d.source.index]))
-    .attr("stroke", d => d3.rgb(colourScale(nodes[d.source.index])).darker());
+    .join('path')
+    .attr('d', ribbon)
+    .attr('fill', d => colourScale(nodes[d.source.index]))
+    .attr('stroke', d => d3.rgb(colourScale(nodes[d.source.index])).darker());
 
   // Draw groups (arcs)
-  const group = g.append("g")
-    .selectAll("g")
-    .data(chords.groups)
-    .join("g");
+  const group = g.append('g').selectAll('g').data(chords.groups).join('g');
 
-  group.append("path")
-    .attr("d", arc)
-    .attr("fill", d => colourScale(nodes[d.index]))
-    .attr("stroke", d => d3.rgb(colourScale(nodes[d.index])).darker());
+  group
+    .append('path')
+    .attr('d', arc)
+    .attr('fill', d => colourScale(nodes[d.index]))
+    .attr('stroke', d => d3.rgb(colourScale(nodes[d.index])).darker());
 
   // Add labels
-  group.append("text")
-    .each(d => { d.angle = (d.startAngle + d.endAngle) / 2; })
-    .attr("dy", "0.31em")
-    .attr("transform", d => `rotate(${(d.angle * 180 / Math.PI) - 90})translate(${outerRadius + 30})${d.angle > Math.PI ? "rotate(180)" : ""}`)
-    .attr("text-anchor", d => d.angle > Math.PI ? "end" : null)
+  group
+    .append('text')
+    .each(d => {
+      d.angle = (d.startAngle + d.endAngle) / 2;
+    })
+    .attr('dy', '0.31em')
+    .attr(
+      'transform',
+      d =>
+        `rotate(${(d.angle * 180) / Math.PI - 90})translate(${outerRadius + 30})${d.angle > Math.PI ? 'rotate(180)' : ''}`
+    )
+    .attr('text-anchor', d => (d.angle > Math.PI ? 'end' : null))
     .text((d, i) => nodes[i])
-    .style("font-size", "12px");
+    .style('font-size', '12px');
 }
 ```
 
 ### Heatmap
 
-A heatmap uses colour to encode values in a two-dimensional grid, useful for showing patterns across categories:
+A heatmap uses colour to encode values in a two-dimensional grid, useful for
+showing patterns across categories:
 
 ```javascript
 function drawHeatmap(data) {
@@ -373,7 +399,7 @@ function drawHeatmap(data) {
   if (!data || data.length === 0) return;
 
   const svg = d3.select('#chart');
-  svg.selectAll("*").remove();
+  svg.selectAll('*').remove();
 
   const width = 800;
   const height = 600;
@@ -385,83 +411,92 @@ function drawHeatmap(data) {
   const rows = Array.from(new Set(data.map(d => d.row)));
   const columns = Array.from(new Set(data.map(d => d.column)));
 
-  const g = svg.append("g")
-    .attr("transform", `translate(${margin.left},${margin.top})`);
+  const g = svg
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
 
   // Create scales
-  const xScale = d3.scaleBand()
+  const xScale = d3
+    .scaleBand()
     .domain(columns)
     .range([0, innerWidth])
     .padding(0.01);
 
-  const yScale = d3.scaleBand()
+  const yScale = d3
+    .scaleBand()
     .domain(rows)
     .range([0, innerHeight])
     .padding(0.01);
 
   // Colour scale for values
-  const colourScale = d3.scaleSequential(d3.interpolateYlOrRd)
+  const colourScale = d3
+    .scaleSequential(d3.interpolateYlOrRd)
     .domain([0, d3.max(data, d => d.value)]);
 
   // Draw rectangles
-  g.selectAll("rect")
+  g.selectAll('rect')
     .data(data)
-    .join("rect")
-    .attr("x", d => xScale(d.column))
-    .attr("y", d => yScale(d.row))
-    .attr("width", xScale.bandwidth())
-    .attr("height", yScale.bandwidth())
-    .attr("fill", d => colourScale(d.value));
+    .join('rect')
+    .attr('x', d => xScale(d.column))
+    .attr('y', d => yScale(d.row))
+    .attr('width', xScale.bandwidth())
+    .attr('height', yScale.bandwidth())
+    .attr('fill', d => colourScale(d.value));
 
   // Add x-axis labels
-  svg.append("g")
-    .attr("transform", `translate(${margin.left},${margin.top})`)
-    .selectAll("text")
+  svg
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`)
+    .selectAll('text')
     .data(columns)
-    .join("text")
-    .attr("x", d => xScale(d) + xScale.bandwidth() / 2)
-    .attr("y", -10)
-    .attr("text-anchor", "middle")
+    .join('text')
+    .attr('x', d => xScale(d) + xScale.bandwidth() / 2)
+    .attr('y', -10)
+    .attr('text-anchor', 'middle')
     .text(d => d)
-    .style("font-size", "12px");
+    .style('font-size', '12px');
 
   // Add y-axis labels
-  svg.append("g")
-    .attr("transform", `translate(${margin.left},${margin.top})`)
-    .selectAll("text")
+  svg
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`)
+    .selectAll('text')
     .data(rows)
-    .join("text")
-    .attr("x", -10)
-    .attr("y", d => yScale(d) + yScale.bandwidth() / 2)
-    .attr("dy", "0.35em")
-    .attr("text-anchor", "end")
+    .join('text')
+    .attr('x', -10)
+    .attr('y', d => yScale(d) + yScale.bandwidth() / 2)
+    .attr('dy', '0.35em')
+    .attr('text-anchor', 'end')
     .text(d => d)
-    .style("font-size", "12px");
+    .style('font-size', '12px');
 
   // Add colour legend
   const legendWidth = 20;
   const legendHeight = 200;
-  const legend = svg.append("g")
-    .attr("transform", `translate(${width - 60},${margin.top})`);
+  const legend = svg
+    .append('g')
+    .attr('transform', `translate(${width - 60},${margin.top})`);
 
-  const legendScale = d3.scaleLinear()
+  const legendScale = d3
+    .scaleLinear()
     .domain(colourScale.domain())
     .range([legendHeight, 0]);
 
-  const legendAxis = d3.axisRight(legendScale)
-    .ticks(5);
+  const legendAxis = d3.axisRight(legendScale).ticks(5);
 
   // Draw colour gradient in legend
   for (let i = 0; i < legendHeight; i++) {
-    legend.append("rect")
-      .attr("y", i)
-      .attr("width", legendWidth)
-      .attr("height", 1)
-      .attr("fill", colourScale(legendScale.invert(i)));
+    legend
+      .append('rect')
+      .attr('y', i)
+      .attr('width', legendWidth)
+      .attr('height', 1)
+      .attr('fill', colourScale(legendScale.invert(i)));
   }
 
-  legend.append("g")
-    .attr("transform", `translate(${legendWidth},0)`)
+  legend
+    .append('g')
+    .attr('transform', `translate(${legendWidth},0)`)
     .call(legendAxis);
 }
 ```
@@ -469,62 +504,71 @@ function drawHeatmap(data) {
 ### Pie chart
 
 ```javascript
-const pie = d3.pie()
+const pie = d3
+  .pie()
   .value(d => d.value)
   .sort(null);
 
-const arc = d3.arc()
+const arc = d3
+  .arc()
   .innerRadius(0)
   .outerRadius(Math.min(width, height) / 2 - 20);
 
 const colourScale = d3.scaleOrdinal(d3.schemeCategory10);
 
-const g = svg.append("g")
-  .attr("transform", `translate(${width / 2},${height / 2})`);
+const g = svg
+  .append('g')
+  .attr('transform', `translate(${width / 2},${height / 2})`);
 
-g.selectAll("path")
+g.selectAll('path')
   .data(pie(data))
-  .join("path")
-  .attr("d", arc)
-  .attr("fill", (d, i) => colourScale(i))
-  .attr("stroke", "white")
-  .attr("stroke-width", 2);
+  .join('path')
+  .attr('d', arc)
+  .attr('fill', (d, i) => colourScale(i))
+  .attr('stroke', 'white')
+  .attr('stroke-width', 2);
 ```
 
 ### Force-directed network
 
 ```javascript
-const simulation = d3.forceSimulation(nodes)
-  .force("link", d3.forceLink(links).id(d => d.id).distance(100))
-  .force("charge", d3.forceManyBody().strength(-300))
-  .force("center", d3.forceCenter(width / 2, height / 2));
+const simulation = d3
+  .forceSimulation(nodes)
+  .force(
+    'link',
+    d3
+      .forceLink(links)
+      .id(d => d.id)
+      .distance(100)
+  )
+  .force('charge', d3.forceManyBody().strength(-300))
+  .force('center', d3.forceCenter(width / 2, height / 2));
 
-const link = g.selectAll("line")
+const link = g
+  .selectAll('line')
   .data(links)
-  .join("line")
-  .attr("stroke", "#999")
-  .attr("stroke-width", 1);
+  .join('line')
+  .attr('stroke', '#999')
+  .attr('stroke-width', 1);
 
-const node = g.selectAll("circle")
+const node = g
+  .selectAll('circle')
   .data(nodes)
-  .join("circle")
-  .attr("r", 8)
-  .attr("fill", "steelblue")
-  .call(d3.drag()
-    .on("start", dragstarted)
-    .on("drag", dragged)
-    .on("end", dragended));
+  .join('circle')
+  .attr('r', 8)
+  .attr('fill', 'steelblue')
+  .call(
+    d3.drag().on('start', dragstarted).on('drag', dragged).on('end', dragended)
+  );
 
-simulation.on("tick", () => {
+simulation.on('tick', () => {
   link
-    .attr("x1", d => d.source.x)
-    .attr("y1", d => d.source.y)
-    .attr("x2", d => d.target.x)
-    .attr("y2", d => d.target.y);
-  
-  node
-    .attr("cx", d => d.x)
-    .attr("cy", d => d.y);
+    .attr('x1', d => d.source.x)
+    .attr('y1', d => d.source.y)
+    .attr('x2', d => d.target.x)
+    .attr('y2', d => d.target.y);
+
+  node.attr('cx', d => d.x).attr('cy', d => d.y);
 });
 
 function dragstarted(event) {
@@ -551,42 +595,45 @@ function dragended(event) {
 
 ```javascript
 // Create tooltip div (outside SVG)
-const tooltip = d3.select("body").append("div")
-  .attr("class", "tooltip")
-  .style("position", "absolute")
-  .style("visibility", "hidden")
-  .style("background-color", "white")
-  .style("border", "1px solid #ddd")
-  .style("padding", "10px")
-  .style("border-radius", "4px")
-  .style("pointer-events", "none");
+const tooltip = d3
+  .select('body')
+  .append('div')
+  .attr('class', 'tooltip')
+  .style('position', 'absolute')
+  .style('visibility', 'hidden')
+  .style('background-color', 'white')
+  .style('border', '1px solid #ddd')
+  .style('padding', '10px')
+  .style('border-radius', '4px')
+  .style('pointer-events', 'none');
 
 // Add to elements
 circles
-  .on("mouseover", function(event, d) {
-    d3.select(this).attr("opacity", 1);
+  .on('mouseover', function (event, d) {
+    d3.select(this).attr('opacity', 1);
     tooltip
-      .style("visibility", "visible")
+      .style('visibility', 'visible')
       .html(`<strong>${d.label}</strong><br/>Value: ${d.value}`);
   })
-  .on("mousemove", function(event) {
+  .on('mousemove', function (event) {
     tooltip
-      .style("top", (event.pageY - 10) + "px")
-      .style("left", (event.pageX + 10) + "px");
+      .style('top', event.pageY - 10 + 'px')
+      .style('left', event.pageX + 10 + 'px');
   })
-  .on("mouseout", function() {
-    d3.select(this).attr("opacity", 0.7);
-    tooltip.style("visibility", "hidden");
+  .on('mouseout', function () {
+    d3.select(this).attr('opacity', 0.7);
+    tooltip.style('visibility', 'hidden');
   });
 ```
 
 ### Zoom and pan
 
 ```javascript
-const zoom = d3.zoom()
+const zoom = d3
+  .zoom()
   .scaleExtent([0.5, 10])
-  .on("zoom", (event) => {
-    g.attr("transform", event.transform);
+  .on('zoom', event => {
+    g.attr('transform', event.transform);
   });
 
 svg.call(zoom);
@@ -595,18 +642,17 @@ svg.call(zoom);
 ### Click interactions
 
 ```javascript
-circles
-  .on("click", function(event, d) {
-    // Handle click (dispatch event, update app state, etc.)
-    console.log("Clicked:", d);
+circles.on('click', function (event, d) {
+  // Handle click (dispatch event, update app state, etc.)
+  console.log('Clicked:', d);
 
-    // Visual feedback
-    d3.selectAll("circle").attr("fill", "steelblue");
-    d3.select(this).attr("fill", "orange");
+  // Visual feedback
+  d3.selectAll('circle').attr('fill', 'steelblue');
+  d3.select(this).attr('fill', 'orange');
 
-    // Optional: dispatch custom event for your framework/app to listen to
-    // window.dispatchEvent(new CustomEvent('chartClick', { detail: d }));
-  });
+  // Optional: dispatch custom event for your framework/app to listen to
+  // window.dispatchEvent(new CustomEvent('chartClick', { detail: d }));
+});
 ```
 
 ## Transitions and animations
@@ -615,33 +661,26 @@ Add smooth transitions to visual changes:
 
 ```javascript
 // Basic transition
-circles
-  .transition()
-  .duration(750)
-  .attr("r", 10);
+circles.transition().duration(750).attr('r', 10);
 
 // Chained transitions
 circles
   .transition()
   .duration(500)
-  .attr("fill", "orange")
+  .attr('fill', 'orange')
   .transition()
   .duration(500)
-  .attr("r", 15);
+  .attr('r', 15);
 
 // Staggered transitions
 circles
   .transition()
   .delay((d, i) => i * 50)
   .duration(500)
-  .attr("cy", d => yScale(d.value));
+  .attr('cy', d => yScale(d.value));
 
 // Custom easing
-circles
-  .transition()
-  .duration(1000)
-  .ease(d3.easeBounceOut)
-  .attr("r", 10);
+circles.transition().duration(1000).ease(d3.easeBounceOut).attr('r', 10);
 ```
 
 ## Scales reference
@@ -650,23 +689,17 @@ circles
 
 ```javascript
 // Linear scale
-const xScale = d3.scaleLinear()
-  .domain([0, 100])
-  .range([0, 500]);
+const xScale = d3.scaleLinear().domain([0, 100]).range([0, 500]);
 
 // Log scale (for exponential data)
-const logScale = d3.scaleLog()
-  .domain([1, 1000])
-  .range([0, 500]);
+const logScale = d3.scaleLog().domain([1, 1000]).range([0, 500]);
 
 // Power scale
-const powScale = d3.scalePow()
-  .exponent(2)
-  .domain([0, 100])
-  .range([0, 500]);
+const powScale = d3.scalePow().exponent(2).domain([0, 100]).range([0, 500]);
 
 // Time scale
-const timeScale = d3.scaleTime()
+const timeScale = d3
+  .scaleTime()
   .domain([new Date(2020, 0, 1), new Date(2024, 0, 1)])
   .range([0, 500]);
 ```
@@ -675,15 +708,14 @@ const timeScale = d3.scaleTime()
 
 ```javascript
 // Band scale (for bar charts)
-const bandScale = d3.scaleBand()
+const bandScale = d3
+  .scaleBand()
   .domain(['A', 'B', 'C', 'D'])
   .range([0, 400])
   .padding(0.1);
 
 // Point scale (for line/scatter categories)
-const pointScale = d3.scalePoint()
-  .domain(['A', 'B', 'C', 'D'])
-  .range([0, 400]);
+const pointScale = d3.scalePoint().domain(['A', 'B', 'C', 'D']).range([0, 400]);
 
 // Ordinal scale (for colours)
 const colourScale = d3.scaleOrdinal(d3.schemeCategory10);
@@ -693,12 +725,10 @@ const colourScale = d3.scaleOrdinal(d3.schemeCategory10);
 
 ```javascript
 // Sequential colour scale
-const colourScale = d3.scaleSequential(d3.interpolateBlues)
-  .domain([0, 100]);
+const colourScale = d3.scaleSequential(d3.interpolateBlues).domain([0, 100]);
 
 // Diverging colour scale
-const divScale = d3.scaleDiverging(d3.interpolateRdBu)
-  .domain([-10, 0, 10]);
+const divScale = d3.scaleDiverging(d3.interpolateRdBu).domain([-10, 0, 10]);
 ```
 
 ## Best practices
@@ -717,7 +747,7 @@ const sortedData = [...data].sort((a, b) => b.value - a.value);
 // Parse dates
 const parsedData = data.map(d => ({
   ...d,
-  date: d3.timeParse("%Y-%m-%d")(d.date)
+  date: d3.timeParse('%Y-%m-%d')(d.date),
 }));
 ```
 
@@ -739,12 +769,15 @@ Make visualisations accessible:
 
 ```javascript
 // Add ARIA labels
-svg.attr("role", "img")
-   .attr("aria-label", "Bar chart showing quarterly revenue");
+svg
+  .attr('role', 'img')
+  .attr('aria-label', 'Bar chart showing quarterly revenue');
 
 // Add title and description
-svg.append("title").text("Quarterly Revenue 2024");
-svg.append("desc").text("Bar chart showing revenue growth across four quarters");
+svg.append('title').text('Quarterly Revenue 2024');
+svg
+  .append('desc')
+  .text('Bar chart showing revenue growth across four quarters');
 
 // Ensure sufficient colour contrast
 // Provide keyboard navigation for interactive elements
@@ -762,38 +795,43 @@ const colours = {
   secondary: '#7B68EE',
   background: '#F5F7FA',
   text: '#333333',
-  gridLines: '#E0E0E0'
+  gridLines: '#E0E0E0',
 };
 
 // Apply consistent typography
-svg.selectAll("text")
-  .style("font-family", "Inter, sans-serif")
-  .style("font-size", "12px");
+svg
+  .selectAll('text')
+  .style('font-family', 'Inter, sans-serif')
+  .style('font-size', '12px');
 
 // Use subtle grid lines
-g.selectAll(".tick line")
-  .attr("stroke", colours.gridLines)
-  .attr("stroke-dasharray", "2,2");
+g.selectAll('.tick line')
+  .attr('stroke', colours.gridLines)
+  .attr('stroke-dasharray', '2,2');
 ```
 
 ## Common issues and solutions
 
 **Issue**: Axes not appearing
+
 - Ensure scales have valid domains (check for NaN values)
 - Verify axis is appended to correct group
 - Check transform translations are correct
 
 **Issue**: Transitions not working
+
 - Call `.transition()` before attribute changes
 - Ensure elements have unique keys for proper data binding
 - Check that useEffect dependencies include all changing data
 
 **Issue**: Responsive sizing not working
+
 - Use ResizeObserver or window resize listener
 - Update dimensions in state to trigger re-render
 - Ensure SVG has width/height attributes or viewBox
 
 **Issue**: Performance problems
+
 - Limit number of DOM elements (consider canvas for >1000 items)
 - Debounce resize handlers
 - Use `.join()` instead of separate enter/update/exit selections
@@ -802,8 +840,11 @@ g.selectAll(".tick line")
 ## Resources
 
 ### references/
+
 Contains detailed reference materials:
-- `d3-patterns.md` - Comprehensive collection of visualisation patterns and code examples
+
+- `d3-patterns.md` - Comprehensive collection of visualisation patterns and code
+  examples
 - `scale-reference.md` - Complete guide to d3 scales with examples
 - `colour-schemes.md` - D3 colour schemes and palette recommendations
 
@@ -815,6 +856,8 @@ Contains boilerplate templates:
 - `interactive-template.js` - Template with tooltips, zoom, and interactions
 - `sample-data.json` - Example datasets for testing
 
-These templates work with vanilla JavaScript, React, Vue, Svelte, or any other JavaScript environment. Adapt them as needed for your specific framework.
+These templates work with vanilla JavaScript, React, Vue, Svelte, or any other
+JavaScript environment. Adapt them as needed for your specific framework.
 
-To use these resources, read the relevant files when detailed guidance is needed for specific visualisation types or patterns.
+To use these resources, read the relevant files when detailed guidance is needed
+for specific visualisation types or patterns.

@@ -7,7 +7,12 @@ tags: dependency-injection, interfaces, solid, isp
 
 ## Apply Interface Segregation Principle
 
-Clients should not be forced to depend on interfaces they don't use. In NestJS, this means keeping interfaces small and focused on specific capabilities rather than creating "fat" interfaces that bundle unrelated methods. When a service only needs to send emails, it shouldn't depend on an interface that also includes SMS, push notifications, and logging. Split large interfaces into role-based ones.
+Clients should not be forced to depend on interfaces they don't use. In NestJS,
+this means keeping interfaces small and focused on specific capabilities rather
+than creating "fat" interfaces that bundle unrelated methods. When a service
+only needs to send emails, it shouldn't depend on an interface that also
+includes SMS, push notifications, and logging. Split large interfaces into
+role-based ones.
 
 **Incorrect (fat interface forcing unused dependencies):**
 
@@ -28,14 +33,14 @@ interface NotificationService {
 @Injectable()
 export class OrdersService {
   constructor(
-    private notifications: NotificationService, // Depends on 8 methods, uses 1
+    private notifications: NotificationService // Depends on 8 methods, uses 1
   ) {}
 
   async confirmOrder(order: Order): Promise<void> {
     await this.notifications.sendEmail(
       order.customer.email,
       'Order Confirmed',
-      `Your order ${order.id} has been confirmed.`,
+      `Your order ${order.id} has been confirmed.`
     );
   }
 }
@@ -43,12 +48,12 @@ export class OrdersService {
 // Testing is painful - must mock unused methods
 const mockNotificationService = {
   sendEmail: jest.fn(),
-  sendSms: jest.fn(),           // Never used, but required
-  sendPush: jest.fn(),          // Never used, but required
-  sendSlack: jest.fn(),         // Never used, but required
-  logNotification: jest.fn(),   // Never used, but required
+  sendSms: jest.fn(), // Never used, but required
+  sendPush: jest.fn(), // Never used, but required
+  sendSlack: jest.fn(), // Never used, but required
+  logNotification: jest.fn(), // Never used, but required
   getDeliveryStatus: jest.fn(), // Never used, but required
-  retryFailed: jest.fn(),       // Never used, but required
+  retryFailed: jest.fn(), // Never used, but required
   scheduleNotification: jest.fn(), // Never used, but required
 };
 ```
@@ -105,14 +110,14 @@ export class SendGridEmailService implements EmailSender {
 @Injectable()
 export class OrdersService {
   constructor(
-    @Inject(EMAIL_SENDER) private emailSender: EmailSender, // Minimal dependency
+    @Inject(EMAIL_SENDER) private emailSender: EmailSender // Minimal dependency
   ) {}
 
   async confirmOrder(order: Order): Promise<void> {
     await this.emailSender.sendEmail(
       order.customer.email,
       'Order Confirmed',
-      `Your order ${order.id} has been confirmed.`,
+      `Your order ${order.id} has been confirmed.`
     );
   }
 }
@@ -150,7 +155,7 @@ type MultiChannelSender = EmailSender & SmsSender & PushSender;
 export class AlertService {
   constructor(
     @Inject(MULTI_CHANNEL_SENDER)
-    private sender: EmailSender & SmsSender,
+    private sender: EmailSender & SmsSender
   ) {}
 
   async sendCriticalAlert(user: User, message: string): Promise<void> {
@@ -162,4 +167,5 @@ export class AlertService {
 }
 ```
 
-Reference: [Interface Segregation Principle](https://en.wikipedia.org/wiki/Interface_segregation_principle)
+Reference:
+[Interface Segregation Principle](https://en.wikipedia.org/wiki/Interface_segregation_principle)

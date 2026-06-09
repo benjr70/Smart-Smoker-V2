@@ -7,7 +7,10 @@ tags: error-handling, async, promises
 
 ## Handle Async Errors Properly
 
-NestJS automatically catches errors from async route handlers, but errors from background tasks, event handlers, and manually created promises can crash your application. Always handle async errors explicitly and use global handlers as a safety net.
+NestJS automatically catches errors from async route handlers, but errors from
+background tasks, event handlers, and manually created promises can crash your
+application. Always handle async errors explicitly and use global handlers as a
+safety net.
 
 **Incorrect (fire-and-forget without error handling):**
 
@@ -61,7 +64,7 @@ export class UsersService {
     const user = await this.repo.save(dto);
 
     // Explicitly catch and log errors
-    this.emailService.sendWelcome(user.email).catch((error) => {
+    this.emailService.sendWelcome(user.email).catch(error => {
       this.logger.error('Failed to send welcome email', error.stack);
       // Optionally queue for retry
     });
@@ -113,7 +116,7 @@ async function bootstrap() {
     logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
   });
 
-  process.on('uncaughtException', (error) => {
+  process.on('uncaughtException', error => {
     logger.error('Uncaught Exception:', error);
     process.exit(1);
   });
@@ -122,4 +125,5 @@ async function bootstrap() {
 }
 ```
 
-Reference: [Node.js Unhandled Rejections](https://nodejs.org/api/process.html#event-unhandledrejection)
+Reference:
+[Node.js Unhandled Rejections](https://nodejs.org/api/process.html#event-unhandledrejection)

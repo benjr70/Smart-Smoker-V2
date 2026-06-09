@@ -7,7 +7,9 @@ tags: performance, database, queries, optimization
 
 ## Optimize Database Queries
 
-Select only needed columns, use proper indexes, avoid over-fetching relations, and consider query performance when designing your data access. Most API slowness traces back to inefficient database queries.
+Select only needed columns, use proper indexes, avoid over-fetching relations,
+and consider query performance when designing your data access. Most API
+slowness traces back to inefficient database queries.
 
 **Incorrect (over-fetching data and missing indexes):**
 
@@ -18,13 +20,18 @@ export class UsersService {
   async findAllEmails(): Promise<string[]> {
     const users = await this.repo.find();
     // Fetches ALL columns for ALL users
-    return users.map((u) => u.email);
+    return users.map(u => u.email);
   }
 
   async getUserSummary(id: string): Promise<UserSummary> {
     const user = await this.repo.findOne({
       where: { id },
-      relations: ['posts', 'posts.comments', 'posts.comments.author', 'followers'],
+      relations: [
+        'posts',
+        'posts.comments',
+        'posts.comments.author',
+        'followers',
+      ],
     });
     // Over-fetches massive relation tree
     return { name: user.name, postCount: user.posts.length };
@@ -52,7 +59,7 @@ export class UsersService {
     const users = await this.repo.find({
       select: ['email'], // Only fetch email column
     });
-    return users.map((u) => u.email);
+    return users.map(u => u.email);
   }
 
   // Use QueryBuilder for complex selections

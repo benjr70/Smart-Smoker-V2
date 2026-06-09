@@ -7,7 +7,9 @@ tags: security, validation, dto, pipes
 
 ## Validate All Input with DTOs and Pipes
 
-Always validate incoming data using class-validator decorators on DTOs and the global ValidationPipe. Never trust user input. Validate all request bodies, query parameters, and route parameters before processing.
+Always validate incoming data using class-validator decorators on DTOs and the
+global ValidationPipe. Never trust user input. Validate all request bodies,
+query parameters, and route parameters before processing.
 
 **Incorrect (trust raw input without validation):**
 
@@ -30,9 +32,9 @@ export class UsersController {
 
 // DTOs without validation decorators
 export class CreateUserDto {
-  name: string;    // No validation
-  email: string;   // Could be "not-an-email"
-  age: number;     // Could be "abc" or -999
+  name: string; // No validation
+  email: string; // Could be "not-an-email"
+  age: number; // Could be "abc" or -999
 }
 ```
 
@@ -45,13 +47,13 @@ async function bootstrap() {
 
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true,              // Strip unknown properties
-      forbidNonWhitelisted: true,   // Throw on unknown properties
-      transform: true,              // Auto-transform to DTO types
+      whitelist: true, // Strip unknown properties
+      forbidNonWhitelisted: true, // Throw on unknown properties
+      transform: true, // Auto-transform to DTO types
       transformOptions: {
         enableImplicitConversion: true,
       },
-    }),
+    })
   );
 
   await app.listen(3000);

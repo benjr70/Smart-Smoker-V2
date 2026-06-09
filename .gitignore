@@ -130,5 +130,9 @@ scripts/smoke/smoke-artifacts/
 # Operator-local Claude Code overrides (per-host permissions, MCP enable list)
 .claude/settings.local.json
 
+# Claude Code runtime artifacts (agent memory, scheduler lock)
+.claude/projects/
+.claude/scheduled_tasks.lock
+
 # MkDocs build output
 site/

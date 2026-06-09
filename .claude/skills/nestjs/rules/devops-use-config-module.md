@@ -7,7 +7,9 @@ tags: devops, configuration, environment, validation
 
 ## Use ConfigModule for Environment Configuration
 
-Use `@nestjs/config` for environment-based configuration. Validate configuration at startup to fail fast on misconfigurations. Use namespaced configuration for organization and type safety.
+Use `@nestjs/config` for environment-based configuration. Validate configuration
+at startup to fail fast on misconfigurations. Use namespaced configuration for
+organization and type safety.
 
 **Incorrect (accessing process.env directly):**
 
@@ -137,7 +139,7 @@ export class AppService {
 export class DatabaseService {
   constructor(
     @Inject(databaseConfig.KEY)
-    private dbConfig: ConfigType<typeof databaseConfig>,
+    private dbConfig: ConfigType<typeof databaseConfig>
   ) {
     // Full type inference!
     const host = this.dbConfig.host; // string
@@ -164,4 +166,5 @@ ConfigModule.forRoot({
 // DB_PORT=5432
 ```
 
-Reference: [NestJS Configuration](https://docs.nestjs.com/techniques/configuration)
+Reference:
+[NestJS Configuration](https://docs.nestjs.com/techniques/configuration)

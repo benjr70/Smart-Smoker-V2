@@ -14,14 +14,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Load fixture once
-const fixtureJson = readFileSync(
-  join(__dirname, 'fixtures', 'tailscale-status.json'),
-  'utf-8',
-);
+const fixtureJson = readFileSync(join(__dirname, 'fixtures', 'tailscale-status.json'), 'utf-8');
 
 /** Stub SshRunner that always returns the fixture JSON */
-const stubSshRunner: SshRunner = async (_host: string, _cmd: string) =>
-  fixtureJson;
+const stubSshRunner: SshRunner = async (_host: string, _cmd: string) => fixtureJson;
 
 /** Stub that returns fixture JSON containing only one peer with "smoker-dev-cloud-1" */
 const singlePeerFixture = JSON.stringify({
@@ -50,7 +46,7 @@ describe('resolvePeerHostname', () => {
     it('returns the FQDN as-is when input ends with .ts.net', async () => {
       const result = await resolvePeerHostname(
         `${DEV_CLOUD_BASE}-1.tail74646.ts.net`,
-        stubSshRunner,
+        stubSshRunner
       );
       assert.equal(result, `${DEV_CLOUD_BASE}-1.tail74646.ts.net`);
     });
@@ -58,7 +54,7 @@ describe('resolvePeerHostname', () => {
     it('strips trailing dot when input is a raw DNS FQDN with trailing dot', async () => {
       const result = await resolvePeerHostname(
         `${DEV_CLOUD_BASE}-1.tail74646.ts.net.`,
-        stubSshRunner,
+        stubSshRunner
       );
       assert.equal(result, `${DEV_CLOUD_BASE}-1.tail74646.ts.net`);
     });
@@ -66,10 +62,7 @@ describe('resolvePeerHostname', () => {
 
   describe('case (b): short name to FQDN expansion', () => {
     it('resolves a short hostname to its full FQDN via peer lookup', async () => {
-      const result = await resolvePeerHostname(
-        `${DEV_CLOUD_BASE}-1`,
-        singlePeerRunner,
-      );
+      const result = await resolvePeerHostname(`${DEV_CLOUD_BASE}-1`, singlePeerRunner);
       assert.equal(result, `${DEV_CLOUD_BASE}-1.tail74646.ts.net`);
     });
 
@@ -95,10 +88,10 @@ describe('resolvePeerHostname', () => {
           assert.ok(err instanceof Error);
           assert.ok(
             err.message.includes('nonexistent-host'),
-            `Expected error message to include hostname, got: ${err.message}`,
+            `Expected error message to include hostname, got: ${err.message}`
           );
           return true;
-        },
+        }
       );
     });
   });
@@ -139,10 +132,7 @@ describe('resolvePeerHostname', () => {
       }
 
       assert.equal(result!, `${DEV_CLOUD_BASE}-2.tail74646.ts.net`);
-      assert.ok(
-        warnMessages.length > 0,
-        'Expected at least one console.warn to be emitted',
-      );
+      assert.ok(warnMessages.length > 0, 'Expected at least one console.warn to be emitted');
     });
   });
 });

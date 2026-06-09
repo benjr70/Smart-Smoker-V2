@@ -1,13 +1,19 @@
 ---
 title: Use Proper Module Sharing Patterns
 impact: CRITICAL
-impactDescription: Prevents duplicate instances, memory leaks, and state inconsistency
+impactDescription:
+  Prevents duplicate instances, memory leaks, and state inconsistency
 tags: architecture, modules, sharing, exports
 ---
 
 ## Use Proper Module Sharing Patterns
 
-NestJS modules are singletons by default. When a service is properly exported from a module and that module is imported elsewhere, the same instance is shared. However, providing a service in multiple modules creates separate instances, leading to memory waste, state inconsistency, and confusing behavior. Always encapsulate services in dedicated modules, export them explicitly, and import the module where needed.
+NestJS modules are singletons by default. When a service is properly exported
+from a module and that module is imported elsewhere, the same instance is
+shared. However, providing a service in multiple modules creates separate
+instances, leading to memory waste, state inconsistency, and confusing behavior.
+Always encapsulate services in dedicated modules, export them explicitly, and
+import the module where needed.
 
 **Incorrect (service provided in multiple modules):**
 

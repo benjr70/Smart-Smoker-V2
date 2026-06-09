@@ -7,7 +7,9 @@ tags: testing, mocking, external-services, jest
 
 ## Mock External Services in Tests
 
-Never call real external services (APIs, databases, message queues) in unit tests. Mock them to ensure tests are fast, deterministic, and don't incur costs. Use realistic mock data and test edge cases like timeouts and errors.
+Never call real external services (APIs, databases, message queues) in unit
+tests. Mock them to ensure tests are fast, deterministic, and don't incur costs.
+Use realistic mock data and test edge cases like timeouts and errors.
 
 **Incorrect (calling real APIs and databases):**
 
@@ -84,21 +86,23 @@ describe('WeatherService', () => {
   });
 
   it('should handle API timeout', async () => {
-    httpService.get.mockReturnValue(
-      throwError(() => new Error('ETIMEDOUT')),
-    );
+    httpService.get.mockReturnValue(throwError(() => new Error('ETIMEDOUT')));
 
-    await expect(service.getWeather('NYC')).rejects.toThrow('Weather service unavailable');
+    await expect(service.getWeather('NYC')).rejects.toThrow(
+      'Weather service unavailable'
+    );
   });
 
   it('should handle rate limiting', async () => {
     httpService.get.mockReturnValue(
       throwError(() => ({
         response: { status: 429, data: { message: 'Rate limited' } },
-      })),
+      }))
     );
 
-    await expect(service.getWeather('NYC')).rejects.toThrow(TooManyRequestsException);
+    await expect(service.getWeather('NYC')).rejects.toThrow(
+      TooManyRequestsException
+    );
   });
 });
 

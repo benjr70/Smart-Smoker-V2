@@ -7,7 +7,9 @@ tags: testing, unit-tests, mocking, jest
 
 ## Use Testing Module for Unit Tests
 
-Use `@nestjs/testing` module to create isolated test environments with mocked dependencies. This ensures your tests run fast, don't depend on external services, and properly test your business logic in isolation.
+Use `@nestjs/testing` module to create isolated test environments with mocked
+dependencies. This ensures your tests run fast, don't depend on external
+services, and properly test your business logic in isolation.
 
 **Incorrect (manual instantiation bypassing DI):**
 
@@ -87,7 +89,7 @@ describe('UsersService', () => {
       repo.findOne.mockResolvedValue({ id: '1', email: 'test@test.com' });
 
       await expect(
-        service.create({ name: 'Test', email: 'test@test.com' }),
+        service.create({ name: 'Test', email: 'test@test.com' })
       ).rejects.toThrow(ConflictException);
     });
   });
@@ -139,7 +141,9 @@ describe('RolesGuard', () => {
   });
 });
 
-function createMockExecutionContext(request: Partial<Request>): ExecutionContext {
+function createMockExecutionContext(
+  request: Partial<Request>
+): ExecutionContext {
   return {
     switchToHttp: () => ({
       getRequest: () => request,

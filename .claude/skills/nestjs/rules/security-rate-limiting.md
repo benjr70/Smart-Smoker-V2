@@ -7,7 +7,10 @@ tags: security, rate-limiting, throttler, protection
 
 ## Implement Rate Limiting
 
-Use `@nestjs/throttler` to limit request rates per client. Apply different limits for different endpoints - stricter for auth endpoints, more relaxed for read operations. Consider using Redis for distributed rate limiting in clustered deployments.
+Use `@nestjs/throttler` to limit request rates per client. Apply different
+limits for different endpoints - stricter for auth endpoints, more relaxed for
+read operations. Consider using Redis for distributed rate limiting in clustered
+deployments.
 
 **Incorrect (no rate limiting on sensitive endpoints):**
 

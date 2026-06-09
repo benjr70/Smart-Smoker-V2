@@ -7,7 +7,9 @@ tags: api, interceptors, logging, caching
 
 ## Use Interceptors for Cross-Cutting Concerns
 
-Interceptors can transform responses, add logging, handle caching, and measure performance without polluting your business logic. They wrap the route handler execution, giving you access to both the request and response streams.
+Interceptors can transform responses, add logging, handle caching, and measure
+performance without polluting your business logic. They wrap the route handler
+execution, giving you access to both the request and response streams.
 
 **Incorrect (logging and transformation in every method):**
 
