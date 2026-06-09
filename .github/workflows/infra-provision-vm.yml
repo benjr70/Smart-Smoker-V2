@@ -25,7 +25,7 @@ permissions:
 
 concurrency:
   group: ansible-provision-dev
-  cancel-in-progress: false  # Don't cancel in-progress provisioning; queues behind ansible-provision.yml
+  cancel-in-progress: false # Don't cancel in-progress provisioning; queues behind ansible-provision.yml
 
 jobs:
   # Step 1: Terraform apply to create/update the VM
@@ -38,6 +38,15 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Ensure Terraform installed
+        run: |
+          if ! command -v terraform &>/dev/null; then
+            TFVER=$(curl -sL https://checkpoint-api.hashicorp.com/v1/check/terraform | python3 -c "import sys,json; print(json.load(sys.stdin)['current_version'])")
+            curl -sLo /tmp/tf.zip "https://releases.hashicorp.com/terraform/${TFVER}/terraform_${TFVER}_linux_amd64.zip"
+            sudo unzip -o /tmp/tf.zip -d /usr/local/bin/ && rm /tmp/tf.zip
+          fi
+          terraform version
 
       - name: Terraform Init
         working-directory: infra/proxmox/terraform
@@ -134,7 +143,10 @@ jobs:
       - name: Install Ansible dependencies
         run: |
           pip install --user ansible
-          ansible-galaxy collection install community.general ansible.posix --force
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install Ansible collections
+        run: ansible-galaxy collection install community.general ansible.posix --force
 
       - name: Run Ansible playbook
         working-directory: infra/proxmox/ansible

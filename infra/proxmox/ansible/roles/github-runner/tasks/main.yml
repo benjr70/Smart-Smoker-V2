@@ -1,4 +1,42 @@
 ---
+# =============================================================================
+# Toolchain — tools workflows call directly on the runner
+# =============================================================================
+
+- name: Install pip3
+  ansible.builtin.apt:
+    name: python3-pip
+    state: present
+    update_cache: false
+
+- name: Install Ansible via pip (system-wide so PATH needs no adjustment)
+  ansible.builtin.pip:
+    name: ansible
+    state: present
+    executable: pip3
+
+- name: Install Ansible collections
+  ansible.builtin.command:
+    cmd: ansible-galaxy collection install community.general ansible.posix --force
+  changed_when: true
+  become: false
+
+- name: Get latest Terraform version
+  ansible.builtin.uri:
+    url: https://checkpoint-api.hashicorp.com/v1/check/terraform
+    return_content: true
+  register: tf_latest
+
+- name: Install Terraform binary
+  ansible.builtin.unarchive:
+    src: "https://releases.hashicorp.com/terraform/{{ tf_latest.json.current_version }}/terraform_{{ tf_latest.json.current_version }}_linux_amd64.zip"
+    dest: /usr/local/bin/
+    remote_src: true
+    creates: /usr/local/bin/terraform
+    mode: "0755"
+
+# =============================================================================
+
 - name: Set runner install directory
   ansible.builtin.set_fact:
     github_runner_install_dir: "{{ github_runner_install_dir | default(github_runner_home + '/actions-runner') }}"
