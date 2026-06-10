@@ -1,28 +1,62 @@
 ---
 # Configure Tailscale Funnel for public internet access
 
-- name: Verify Tailscale Serve is configured before enabling Funnel
-  ansible.builtin.command: tailscale serve status
-  register: tailscale_serve_check
+- name: Check current Tailscale Serve/Funnel configuration
+  ansible.builtin.command: tailscale serve status --json
+  register: tailscale_funnel_status_check
   changed_when: false
-  failed_when: tailscale_serve_check.rc != 0
+  failed_when: false
 
-- name: Configure Tailscale Serve for Funnel ports
+- name: Parse live Tailscale Funnel configuration
+  ansible.builtin.set_fact:
+    tailscale_funnel_live: >-
+      {{ (tailscale_funnel_status_check.stdout | from_json)
+         if tailscale_funnel_status_check.rc == 0
+            and tailscale_funnel_status_check.stdout | length > 0
+         else {} }}
+
+# Idempotency guard: only treat the host as already configured when every
+# desired public port is present in the live AllowFunnel map with value true.
+# A surprising JSON shape collapses to an empty map -> not configured -> we
+# re-run `funnel --bg` (safe to repeat), avoiding a false skip that would
+# leave a fresh box unconfigured.
+- name: Determine whether desired Funnel ports are already live
+  ansible.builtin.set_fact:
+    tailscale_funnel_already_configured: >-
+      {{ tailscale_funnel_config
+         | rejectattr('port', 'in', tailscale_funnel_live_ports)
+         | list | length == 0 }}
+  vars:
+    tailscale_funnel_allow_map: "{{ tailscale_funnel_live.AllowFunnel | default({}) }}"
+    tailscale_funnel_live_ports: >-
+      {{ tailscale_funnel_allow_map
+         | dict2items
+         | selectattr('value', 'equalto', true)
+         | map(attribute='key')
+         | map('regex_replace', '^.*:(\d+)$', '\1')
+         | map('int')
+         | list }}
+
+- name: Report Tailscale Funnel idempotency decision
+  ansible.builtin.debug:
+    msg: >-
+      Tailscale Funnel desired ports
+      {{ tailscale_funnel_config | map(attribute='port') | list }}
+      already configured: {{ tailscale_funnel_already_configured }}
+
+# Modern CLI (tailscale >= 1.50): `funnel --bg` enables the funnel and implies
+# the matching serve proxy, so no separate `serve` step is needed. Port 443 is
+# the implicit default; other ports require --https=PORT.
+- name: Enable Tailscale Funnel for each configured port
   ansible.builtin.command: >-
-    tailscale serve
-    https:{{ item.port }}
-    /
+    tailscale funnel --bg
+    {% if item.port != 443 %}--https={{ item.port }} {% endif %}
     {{ item.target_port }}
   loop: "{{ tailscale_funnel_config }}"
-  register: tailscale_funnel_serve_result
-  changed_when: tailscale_funnel_serve_result.rc == 0
-
-- name: Enable Tailscale Funnel for each configured port
-  ansible.builtin.command: tailscale funnel {{ item.port }} on
-  loop: "{{ tailscale_funnel_config }}"
   register: tailscale_funnel_result
-  changed_when: "'Funnel started' in tailscale_funnel_result.stdout or tailscale_funnel_result.rc == 0"
+  changed_when: tailscale_funnel_result.rc == 0
   failed_when: tailscale_funnel_result.rc != 0
+  when: not tailscale_funnel_already_configured
 
 - name: Create Tailscale Funnel configuration script
   ansible.builtin.template:

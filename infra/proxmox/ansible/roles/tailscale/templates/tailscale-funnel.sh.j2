@@ -12,18 +12,13 @@ echo "Resetting existing Tailscale Serve/Funnel configuration..."
 tailscale serve reset || true
 
 {% if tailscale_funnel_config | length > 0 %}
-# Configure Serve endpoints for Funnel
-echo "Configuring Tailscale Serve endpoints..."
-{% for endpoint in tailscale_funnel_config %}
-echo "  - Setting up HTTPS:{{ endpoint.port }} -> localhost:{{ endpoint.target_port }}"
-tailscale serve https:{{ endpoint.port }} / {{ endpoint.target_port }}
-{% endfor %}
-
-# Enable Funnel for each port
+# Enable Funnel for each port (modern CLI, tailscale >= 1.50).
+# `funnel --bg` implies the matching serve proxy, so no separate serve step is
+# needed. Port 443 is the implicit default; other ports need --https=PORT.
 echo "Enabling Tailscale Funnel for public access..."
 {% for endpoint in tailscale_funnel_config %}
-echo "  - Enabling Funnel on port {{ endpoint.port }}"
-tailscale funnel {{ endpoint.port }} on
+echo "  - Enabling Funnel on HTTPS:{{ endpoint.port }} -> localhost:{{ endpoint.target_port }}"
+tailscale funnel --bg {% if endpoint.port != 443 %}--https={{ endpoint.port }} {% endif %}{{ endpoint.target_port }}
 {% endfor %}
 {% else %}
 echo "No Funnel endpoints configured."

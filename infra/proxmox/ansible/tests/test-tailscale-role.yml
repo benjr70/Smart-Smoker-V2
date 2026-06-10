@@ -235,6 +235,31 @@
         that: true
         success_msg: "Funnel script template renders to valid bash"
 
+    # Test 14b: Modern Tailscale CLI syntax (tailscale >= 1.50)
+    # The pre-1.50 `serve https:PORT / TARGET` and `funnel PORT on` forms were
+    # removed in 1.96.x and cause apply to fail. Assert the rendered script uses
+    # the current --bg syntax.
+    - name: Read rendered funnel script
+      ansible.builtin.slurp:
+        src: /tmp/test-tailscale-funnel.sh
+      register: rendered_funnel_script
+
+    - name: Decode rendered funnel script
+      ansible.builtin.set_fact:
+        rendered_funnel_content: "{{ rendered_funnel_script.content | b64decode }}"
+
+    - name: Assert template uses modern Tailscale serve/funnel CLI
+      ansible.builtin.assert:
+        that:
+          # No legacy serve form: `serve https:PORT / TARGET`
+          - "'serve https:' not in rendered_funnel_content"
+          # No legacy funnel toggle form: `funnel PORT on`
+          - not (rendered_funnel_content | regex_search('funnel\\s+[0-9]+\\s+on'))
+          # Modern background serve/funnel
+          - "'--bg' in rendered_funnel_content"
+        fail_msg: "Rendered funnel script still uses pre-1.50 Tailscale CLI syntax"
+        success_msg: "Funnel script uses modern Tailscale CLI (--bg) syntax"
+
     # Test 15: File Permissions Template
     - name: Test - Verify template sets correct permissions
       ansible.builtin.shell: |
