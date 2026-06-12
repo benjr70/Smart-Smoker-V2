@@ -86,6 +86,7 @@ nav:
       - Overview: Infrastructure/README.md
       - Getting Started: Infrastructure/guides/getting-started.md
       - Architecture: Infrastructure/guides/architecture.md
+      - Prod Pre-Cutover Verification: Infrastructure/guides/prod-pre-cutover-verification.md
       - Implementation Plans:
           - Infrastructure Plan: Infrastructure/implementation/proxmox-infrastructure-plan.md
           - Phase 3 Deployment: Infrastructure/implementation/phase-3-deployment-automation.md
