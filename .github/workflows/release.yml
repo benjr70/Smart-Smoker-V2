@@ -80,6 +80,11 @@ jobs:
       ref: ${{ needs.set-version.outputs.ref }}
       mode: 'release'
       platforms: 'linux/amd64,linux/arm/v7'
+      # publish.yml's publish job downloads fresh source (publish-workspace) with
+      # no dist/ — the smoker/device-service/electron Dockerfiles COPY prebuilt
+      # dist, so publish must build it first. nightly.yml already passes this;
+      # the release path silently defaulted to false and broke on v1.6.0.
+      prebuild: true
     secrets: inherit
 
   # Deploy to smoker devices (optional; Watchtower will also update :latest)
