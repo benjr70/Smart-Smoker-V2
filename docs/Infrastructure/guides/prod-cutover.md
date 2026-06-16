@@ -19,11 +19,18 @@ legacy deploy path. PRD #216 "Cutover sequence" steps 3–5.
 > `test` db; v1.6 uses `smartsmoker`. Migration must **cross-rename**
 > `test.*` → `smartsmoker.*` (`mongorestore --nsFrom 'test.*' --nsTo 'smartsmoker.*'`).
 >
-> ⚠️ **Surprise 2 — `scripts/migrate-prod-data.sh` does NOT work here.** It
-> defaults `--db smart-smoker`, passes no mongo auth, runs host-level
-> `mongodump`/`mongorestore` (tools live only inside the containers), and can't
-> cross-rename. The migration below was done **manually** with the corrected
-> mechanic. Fixing the script is tracked as a follow-up issue.
+> ⚠️ **Surprise 2 — the original `scripts/migrate-prod-data.sh` did NOT work
+> here.** It defaulted `--db smart-smoker`, passed no mongo auth, ran host-level
+> `mongodump`/`mongorestore` (tools live only inside the containers), and
+> couldn't cross-rename. The 2026-06-16 migration was therefore done **manually**
+> with the corrected mechanic (Step 2). The script has since been **rewritten**
+> (#257) to do exactly that — docker-exec, auth sourced from the box env file,
+> and namespace cross-rename — so the codified path now matches reality:
+>
+> ```bash
+> scripts/migrate-prod-data.sh smokecloud-legacy smokecloud \
+>   --old-user ubuntu --src-db test --dst-db smartsmoker
+> ```
 
 All commands below run from an ops host on the tailnet with an SSH key
 authorized as `root@` on the new box and `ubuntu@` on legacy.
