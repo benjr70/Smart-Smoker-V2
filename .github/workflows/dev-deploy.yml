@@ -91,12 +91,25 @@ jobs:
       - name: Verify SSH connectivity
         run: |
           echo "Testing SSH connectivity to ${DEV_HOST}..."
-          if ! ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o PasswordAuthentication=no root@${DEV_HOST} "echo 'SSH connection successful'"; then
-            echo "SSH connection failed. Capturing verbose output for diagnostics..."
-            ssh -vvv -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o PasswordAuthentication=no root@${DEV_HOST} "echo 'test'" 2>&1 || true
-            exit 1
-          fi
-          echo "SSH connectivity verified"
+          # The dev-cloud LXC can briefly drop off the tailnet (tailscaled
+          # restart / node-key refresh), so a single attempt yields spurious
+          # deploy failures. Retry with backoff before giving up.
+          ATTEMPTS=5
+          DELAY=15
+          for i in $(seq 1 "${ATTEMPTS}"); do
+            if ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o PasswordAuthentication=no root@${DEV_HOST} "echo 'SSH connection successful'"; then
+              echo "SSH connectivity verified (attempt ${i}/${ATTEMPTS})"
+              exit 0
+            fi
+            echo "Attempt ${i}/${ATTEMPTS} failed to reach ${DEV_HOST}."
+            if [ "${i}" -lt "${ATTEMPTS}" ]; then
+              echo "Retrying in ${DELAY}s..."
+              sleep "${DELAY}"
+            fi
+          done
+          echo "SSH connection failed after ${ATTEMPTS} attempts. Capturing verbose output for diagnostics..."
+          ssh -vvv -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o PasswordAuthentication=no root@${DEV_HOST} "echo 'test'" 2>&1 || true
+          exit 1
 
       - name: URL-encode MongoDB password
         id: encode_password
