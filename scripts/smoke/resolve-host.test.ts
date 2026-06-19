@@ -19,7 +19,12 @@ const fixtureJson = readFileSync(join(__dirname, 'fixtures', 'tailscale-status.j
 /** Stub SshRunner that always returns the fixture JSON */
 const stubSshRunner: SshRunner = async (_host: string, _cmd: string) => fixtureJson;
 
-/** Stub that returns fixture JSON containing only one peer with "smoker-dev-cloud-1" */
+// Canonical dev-cloud hostname (issue #189). The legacy un-prefixed form (and
+// its numeric `-1` variant) is forbidden by the hostname guard; the canonical
+// name carries the `smart-` prefix and no numeric suffix.
+const DEV_CLOUD_BASE = 'smart-smoker-dev-cloud';
+
+/** Stub that returns fixture JSON containing only one dev-cloud peer */
 const singlePeerFixture = JSON.stringify({
   Self: {
     HostName: 'my-local-machine',
@@ -27,56 +32,50 @@ const singlePeerFixture = JSON.stringify({
   },
   Peer: {
     abc123: {
-      HostName: 'smoker-dev-cloud-1',
-      DNSName: 'smoker-dev-cloud-1.tail74646.ts.net.',
+      HostName: DEV_CLOUD_BASE,
+      DNSName: `${DEV_CLOUD_BASE}.tail74646.ts.net.`,
     },
   },
 });
 
 const singlePeerRunner: SshRunner = async () => singlePeerFixture;
 
-// Build the canonical dev-cloud base hostname from non-adjacent literals so
-// the AC6 hostname guard (issue #189) — which forbids the bare fixed-string
-// dev-cloud base name (without a `-1` suffix) anywhere under scripts/ — does
-// not flag this test source. The runtime semantics are unchanged.
-const DEV_CLOUD_BASE = 'smoker-dev' + '-cloud';
-
 describe('resolvePeerHostname', () => {
   describe('case (a): exact FQDN passthrough', () => {
     it('returns the FQDN as-is when input ends with .ts.net', async () => {
       const result = await resolvePeerHostname(
-        `${DEV_CLOUD_BASE}-1.tail74646.ts.net`,
+        `${DEV_CLOUD_BASE}.tail74646.ts.net`,
         stubSshRunner
       );
-      assert.equal(result, `${DEV_CLOUD_BASE}-1.tail74646.ts.net`);
+      assert.equal(result, `${DEV_CLOUD_BASE}.tail74646.ts.net`);
     });
 
     it('strips trailing dot when input is a raw DNS FQDN with trailing dot', async () => {
       const result = await resolvePeerHostname(
-        `${DEV_CLOUD_BASE}-1.tail74646.ts.net.`,
+        `${DEV_CLOUD_BASE}.tail74646.ts.net.`,
         stubSshRunner
       );
-      assert.equal(result, `${DEV_CLOUD_BASE}-1.tail74646.ts.net`);
+      assert.equal(result, `${DEV_CLOUD_BASE}.tail74646.ts.net`);
     });
   });
 
   describe('case (b): short name to FQDN expansion', () => {
     it('resolves a short hostname to its full FQDN via peer lookup', async () => {
-      const result = await resolvePeerHostname(`${DEV_CLOUD_BASE}-1`, singlePeerRunner);
-      assert.equal(result, `${DEV_CLOUD_BASE}-1.tail74646.ts.net`);
+      const result = await resolvePeerHostname(DEV_CLOUD_BASE, singlePeerRunner);
+      assert.equal(result, `${DEV_CLOUD_BASE}.tail74646.ts.net`);
     });
 
     it('resolves Self.HostName if it matches the input', async () => {
       const selfFixture = JSON.stringify({
         Self: {
-          HostName: `${DEV_CLOUD_BASE}-1`,
-          DNSName: `${DEV_CLOUD_BASE}-1.tail74646.ts.net.`,
+          HostName: DEV_CLOUD_BASE,
+          DNSName: `${DEV_CLOUD_BASE}.tail74646.ts.net.`,
         },
         Peer: {},
       });
       const runner: SshRunner = async () => selfFixture;
-      const result = await resolvePeerHostname(`${DEV_CLOUD_BASE}-1`, runner);
-      assert.equal(result, `${DEV_CLOUD_BASE}-1.tail74646.ts.net`);
+      const result = await resolvePeerHostname(DEV_CLOUD_BASE, runner);
+      assert.equal(result, `${DEV_CLOUD_BASE}.tail74646.ts.net`);
     });
   });
 

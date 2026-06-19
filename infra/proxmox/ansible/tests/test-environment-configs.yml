@@ -36,13 +36,13 @@
     # Test Dev Cloud Configuration
     - name: Load Dev Cloud host vars
       ansible.builtin.include_vars:
-        file: "../inventory/host_vars/smart-smoker-dev-cloud-1.yml"
+        file: "../inventory/host_vars/smart-smoker-dev-cloud.yml"
         name: dev_vars
 
     - name: Test - Dev Cloud Tailscale config
       ansible.builtin.assert:
         that:
-          - dev_vars.tailscale_hostname == "smoker-dev-cloud-1"
+          - dev_vars.tailscale_hostname == "smart-smoker-dev-cloud"
           - "'tag:server' in dev_vars.tailscale_tags"
           - "'tag:development' in dev_vars.tailscale_tags"
           - dev_vars.tailscale_serve_enabled == true
@@ -208,7 +208,7 @@
           - "  ✓ Tagged for CI/CD access"
           - "  ✓ No Serve/Funnel (runner doesn't expose services)"
           - ""
-          - "Dev Cloud (smoker-dev-cloud-1):"
+          - "Dev Cloud (smart-smoker-dev-cloud):"
           - "  ✓ Tailscale Serve enabled"
           - "  ✓ Serves HTTP (80) and WebSocket (3001)"
           - "  ✓ Internal access only (no Funnel)"

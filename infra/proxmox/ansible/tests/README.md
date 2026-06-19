@@ -271,7 +271,7 @@ These tests can be integrated into GitHub Actions or other CI/CD pipelines:
 
 ### Host Variables
 - inventory/host_vars/github-runner.yml
-- inventory/host_vars/smart-smoker-dev-cloud-1.yml
+- inventory/host_vars/smart-smoker-dev-cloud.yml
 - inventory/host_vars/smart-smoker-cloud-prod.yml
 - inventory/host_vars/virtual-smoker-device.yml
 
@@ -293,7 +293,7 @@ The security audit validates:
 - Tags: runner, ci-cd
 - No Serve/Funnel (correct for CI/CD runner)
 
-### Dev Cloud (smoker-dev-cloud-1)
+### Dev Cloud (smart-smoker-dev-cloud)
 - Tailscale Serve enabled
 - Ports: 80 (HTTP), 3001 (WebSocket)
 - Internal access only (no Funnel)

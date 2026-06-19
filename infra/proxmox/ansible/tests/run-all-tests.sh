@@ -110,8 +110,8 @@ else
 fi
 
 echo "3.2 Testing Dev Cloud configuration..."
-if grep -q "tailscale_hostname: \"smoker-dev-cloud-1\"" inventory/host_vars/smart-smoker-dev-cloud-1.yml && \
-   grep -q "tailscale_serve_enabled: true" inventory/host_vars/smart-smoker-dev-cloud-1.yml; then
+if grep -q "tailscale_hostname: \"smart-smoker-dev-cloud\"" inventory/host_vars/smart-smoker-dev-cloud.yml && \
+   grep -q "tailscale_serve_enabled: true" inventory/host_vars/smart-smoker-dev-cloud.yml; then
   print_pass "Dev Cloud has Tailscale Serve enabled"
   ((TOTAL_TESTS++))
 else
@@ -119,8 +119,8 @@ else
   ((TOTAL_TESTS++))
 fi
 
-if grep -q "port: 80" inventory/host_vars/smart-smoker-dev-cloud-1.yml && \
-   grep -q "port: 3001" inventory/host_vars/smart-smoker-dev-cloud-1.yml; then
+if grep -q "port: 80" inventory/host_vars/smart-smoker-dev-cloud.yml && \
+   grep -q "port: 3001" inventory/host_vars/smart-smoker-dev-cloud.yml; then
   print_pass "Dev Cloud Serve ports configured (80, 3001)"
   ((TOTAL_TESTS++))
 else
@@ -237,7 +237,7 @@ fi
 
 if grep -q "Network Topology" README.md && \
    grep -q "smoker-runner" README.md && \
-   grep -q "smoker-dev-cloud-1" README.md && \
+   grep -q "smart-smoker-dev-cloud" README.md && \
    grep -q "smokecloud" README.md && \
    grep -q "virtual-smoker" README.md; then
   print_pass "README documents all 4 hosts"

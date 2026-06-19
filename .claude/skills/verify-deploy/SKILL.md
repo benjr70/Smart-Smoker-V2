@@ -32,7 +32,7 @@ Optional positional arg:
 
 ## Targets
 
-- **dev-cloud**: host `smoker-dev-cloud-1`, FQDN resolved via
+- **dev-cloud**: host `smart-smoker-dev-cloud`, FQDN resolved via
   `scripts/smoke/resolve-host-cli.ts` (see **FQDN Resolution** below). Tailscale
   Serve on 443 (frontend) + 8443 (backend). Containers: `backend_cloud`,
   `frontend_cloud`, `mongo`.
@@ -47,10 +47,10 @@ GitHub Actions repository variables (Settings → Secrets and variables → Acti
 
 | Variable            | Example                                            | Read by                                                                 |
 | ------------------- | -------------------------------------------------- | ----------------------------------------------------------------------- |
-| `DEV_CLOUD_HOST`    | `smoker-dev-cloud-1`                               | `.github/workflows/dev-deploy.yml`                                      |
-| `DEV_CLOUD_FQDN`    | `smoker-dev-cloud-1.tail74646.ts.net`              | `.github/workflows/publish.yml` (nightly smoker `.env.prod`)            |
+| `DEV_CLOUD_HOST`    | `smart-smoker-dev-cloud`                               | `.github/workflows/dev-deploy.yml`                                      |
+| `DEV_CLOUD_FQDN`    | `smart-smoker-dev-cloud.tail74646.ts.net`              | `.github/workflows/publish.yml` (nightly smoker `.env.prod`)            |
 | `DEVICE_HOST`       | `virtual-smoker`                                   | `.github/workflows/device-deploy.yml`                                   |
-| `CLOUD_BACKEND_URL` | `https://smoker-dev-cloud-1.tail74646.ts.net:8443` | `dev-deploy.yml`, `device-deploy.yml`, `scripts/device-health-check.sh` |
+| `CLOUD_BACKEND_URL` | `https://smart-smoker-dev-cloud.tail74646.ts.net:8443` | `dev-deploy.yml`, `device-deploy.yml`, `scripts/device-health-check.sh` |
 
 The runtime fallback when these are missing or drift after re-provisioning is
 `scripts/smoke/resolve-host.ts` (issue #187), which walks
@@ -66,15 +66,15 @@ FQDNs or inline `tailscale status --self --json | jq` pipes.
 
 ```bash
 # Resolve any short name or FQDN → canonical ts.net FQDN
-node --import tsx/esm scripts/smoke/resolve-host-cli.ts smoker-dev-cloud-1
-# → smoker-dev-cloud-1.tail74646.ts.net
+node --import tsx/esm scripts/smoke/resolve-host-cli.ts smart-smoker-dev-cloud
+# → smart-smoker-dev-cloud.tail74646.ts.net
 ```
 
 The resolver (`scripts/smoke/resolve-host.ts`) handles:
 
 - Short hostname → peer lookup via `tailscale status --json`
 - Exact FQDN passthrough (strips trailing `.`)
-- Suffix drift (`smoker-dev-cloud` → `smoker-dev-cloud-1`)
+- Suffix drift (`smoker-dev-cloud` → `smart-smoker-dev-cloud`)
 - Multi-suffix ambiguity: picks highest numeric suffix, emits a warning
 - No-match: throws with actionable message (exits non-zero)
 
@@ -104,7 +104,7 @@ stop. Do not proceed.
 ### 2. dev-cloud reachability + Tailscale Serve
 
 ```bash
-./scripts/deployment-health-check.sh smoker-dev-cloud-1 3
+./scripts/deployment-health-check.sh smart-smoker-dev-cloud 3
 ```
 
 Probes `https://<fqdn>:8443/api/health` and `https://<fqdn>/`. Captures
@@ -114,8 +114,8 @@ Probes `https://<fqdn>:8443/api/health` and `https://<fqdn>/`. Captures
 
 ```bash
 npm --prefix scripts/smoke run smoke -- \
-  --frontend https://smoker-dev-cloud-1.tail74646.ts.net \
-  --backend  https://smoker-dev-cloud-1.tail74646.ts.net:8443 \
+  --frontend https://smart-smoker-dev-cloud.tail74646.ts.net \
+  --backend  https://smart-smoker-dev-cloud.tail74646.ts.net:8443 \
   --artifacts /tmp/smoke-artifacts
 ```
 
@@ -125,7 +125,7 @@ it for the `smoke (cloud)` row. Screenshots land in `/tmp/smoke-artifacts/`.
 ### 4. dev-cloud container health
 
 ```bash
-ssh root@smoker-dev-cloud-1 "docker ps --filter health=healthy --format '{{.Names}}'"
+ssh root@smart-smoker-dev-cloud "docker ps --filter health=healthy --format '{{.Names}}'"
 ```
 
 Count names matching `mongo|backend_cloud|frontend_cloud`. Expect 3.

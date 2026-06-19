@@ -5,8 +5,8 @@
   },
   "Peer": {
     "abc123": {
-      "HostName": "smoker-dev-cloud-1",
-      "DNSName": "smoker-dev-cloud-1.tail74646.ts.net."
+      "HostName": "smart-smoker-dev-cloud",
+      "DNSName": "smart-smoker-dev-cloud.tail74646.ts.net."
     },
     "ghi789": {
       "HostName": "virtual-smoker",

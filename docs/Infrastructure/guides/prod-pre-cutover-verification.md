@@ -12,7 +12,7 @@ approval gate, and judge real verification output.
 | -------------------- | -------------------- | --------------------------------------------------------------- |
 | Legacy prod          | `smokecloud`         | Still serving users. Untouched by this runbook.                  |
 | **New prod (temp)**  | **`smokecloud-2`**   | Target of this runbook. Renamed to `smokecloud` at cutover #225. |
-| Dev cloud            | `smoker-dev-cloud-1` | Receives nightly builds. Not involved.                           |
+| Dev cloud            | `smart-smoker-dev-cloud` | Receives nightly builds. Not involved.                           |
 
 > **Naming note:** PRD/issues refer to the temp host as `smoke-prod-cloud`;
 > the hostname that actually landed during #223 is `smokecloud-2`

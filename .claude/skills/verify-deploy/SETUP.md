@@ -8,19 +8,19 @@ the next.
 
 | Role           | Tailscale name       | IP               | SSH user |
 | -------------- | -------------------- | ---------------- | -------- |
-| dev-cloud      | `smoker-dev-cloud-1` | `100.106.216.34` | `root`   |
+| dev-cloud      | `smart-smoker-dev-cloud` | `100.106.216.34` | `root`   |
 | virtual-smoker | `virtual-smoker`     | `100.118.231.82` | `smoker` |
 
 Re-confirm anytime:
 
 ```bash
-tailscale status | grep -E 'smoker-dev-cloud-1|virtual-smoker'
+tailscale status | grep -E 'smart-smoker-dev-cloud|virtual-smoker'
 ```
 
 If a name drifts, update the GitHub repo variables (`DEV_CLOUD_HOST`,
 `DEV_CLOUD_FQDN`, `DEVICE_HOST`, `CLOUD_BACKEND_URL`) — those are the single
 source of truth (issue #189). Then patch the three hardcodes in `SKILL.md`
-(search `smoker-dev-cloud-1`) **and** the two allowlist entries in
+(search `smart-smoker-dev-cloud`) **and** the two allowlist entries in
 `.claude/settings.json`.
 
 ---
@@ -29,13 +29,13 @@ source of truth (issue #189). Then patch the three hardcodes in `SKILL.md`
 
 ```bash
 sudo tailscale set --accept-dns=true
-getent hosts smoker-dev-cloud-1.tail74646.ts.net
-# expect: 100.106.216.34  smoker-dev-cloud-1.tail74646.ts.net
+getent hosts smart-smoker-dev-cloud.tail74646.ts.net
+# expect: 100.106.216.34  smart-smoker-dev-cloud.tail74646.ts.net
 ```
 
 ---
 
-## 2. SSH key — `root@smoker-dev-cloud-1`
+## 2. SSH key — `root@smart-smoker-dev-cloud`
 
 The `deployment-health-check.sh` script SSHes for FQDN lookup; the skill SSHes
 for `docker ps`. Both need passwordless key auth from this host.
@@ -45,11 +45,11 @@ for `docker ps`. Both need passwordless key auth from this host.
 test -f ~/.ssh/id_ed25519 || ssh-keygen -t ed25519 -N '' -f ~/.ssh/id_ed25519
 
 # Push to dev-cloud (will prompt for root password once)
-ssh-copy-id -i ~/.ssh/id_ed25519.pub root@smoker-dev-cloud-1
+ssh-copy-id -i ~/.ssh/id_ed25519.pub root@smart-smoker-dev-cloud
 
 # Verify
-ssh -o BatchMode=yes root@smoker-dev-cloud-1 "hostname && docker ps --format '{{.Names}}'"
-# expect: smoker-dev-cloud-1
+ssh -o BatchMode=yes root@smart-smoker-dev-cloud "hostname && docker ps --format '{{.Names}}'"
+# expect: smart-smoker-dev-cloud
 #         frontend_cloud / backend_cloud / mongo
 ```
 
@@ -108,12 +108,12 @@ npx --prefix scripts/smoke playwright --version
 ## 6. End-to-end dry run
 
 ```bash
-./scripts/deployment-health-check.sh smoker-dev-cloud-1 1
+./scripts/deployment-health-check.sh smart-smoker-dev-cloud 1
 # expect: ✅ Backend API, ✅ Frontend, exit 0
 
 npm --prefix scripts/smoke run smoke -- \
-  --frontend https://smoker-dev-cloud-1.tail74646.ts.net \
-  --backend  https://smoker-dev-cloud-1.tail74646.ts.net:8443 \
+  --frontend https://smart-smoker-dev-cloud.tail74646.ts.net \
+  --backend  https://smart-smoker-dev-cloud.tail74646.ts.net:8443 \
   --artifacts /tmp/smoke-artifacts
 # expect: smoke: PASS (3/3)
 
@@ -130,8 +130,8 @@ with every sub-row PASS.
 
 To avoid rediscovering peer-name drift:
 
-- Add `tailscale status | grep -q smoker-dev-cloud-1` as the first command in
+- Add `tailscale status | grep -q smart-smoker-dev-cloud` as the first command in
   the skill (already documented in §Steps).
 - Or pin Tailscale node names in
-  `infra/proxmox/ansible/inventory/host_vars/smart-smoker-dev-cloud-1.yml` so
+  `infra/proxmox/ansible/inventory/host_vars/smart-smoker-dev-cloud.yml` so
   re-provisions stop appending `-1`, `-2`, etc.
