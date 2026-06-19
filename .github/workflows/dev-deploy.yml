@@ -43,8 +43,8 @@ jobs:
       - name: Set deployment variables
         id: vars
         run: |
-          DEV_HOST="${{ vars.DEV_CLOUD_HOST || 'smoker-dev-cloud-1' }}"
-          DEV_FQDN="${{ vars.DEV_CLOUD_FQDN || 'smoker-dev-cloud-1.tail74646.ts.net' }}"
+          DEV_HOST="${{ vars.DEV_CLOUD_HOST || 'smart-smoker-dev-cloud' }}"
+          DEV_FQDN="${{ vars.DEV_CLOUD_FQDN || 'smart-smoker-dev-cloud.tail74646.ts.net' }}"
           DEPLOY_DIR="/opt/smart-smoker-dev"
           COMPOSE_FILE="cloud.docker-compose.yml"
           VERSION="nightly"
@@ -447,7 +447,7 @@ jobs:
       ssh_user: 'smoker'
       deploy_dir: '/opt/smoker-device'
       environment: 'dev'
-      cloud_backend_url: ${{ vars.CLOUD_BACKEND_URL || 'https://smoker-dev-cloud-1.tail74646.ts.net:8443' }}
+      cloud_backend_url: ${{ vars.CLOUD_BACKEND_URL || 'https://smart-smoker-dev-cloud.tail74646.ts.net:8443' }}
       requires_arm_emulation: true
     secrets: inherit
 

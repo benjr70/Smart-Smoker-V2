@@ -12,7 +12,7 @@
 # Environment Variables:
 #   SSH_USER - SSH user for remote connections (default: smoker)
 #   CLOUD_BACKEND_URL - Cloud backend URL for connectivity test
-#                       (default: https://smoker-dev-cloud-1.tail74646.ts.net:8443)
+#                       (default: https://smart-smoker-dev-cloud.tail74646.ts.net:8443)
 #                       Source of truth: GitHub repo variable `vars.CLOUD_BACKEND_URL` (issue #189).
 
 set -euo pipefail
@@ -167,7 +167,7 @@ check_cloud_connectivity() {
     local host=$1
     
     # Cloud backend URL - can be overridden via environment variable
-    local cloud_backend_url=${CLOUD_BACKEND_URL:-"https://smoker-dev-cloud-1.tail74646.ts.net:8443"}
+    local cloud_backend_url=${CLOUD_BACKEND_URL:-"https://smart-smoker-dev-cloud.tail74646.ts.net:8443"}
     
     echo -e "${YELLOW}Checking cloud backend connectivity...${NC}"
     echo -e "${BLUE}  Target: ${cloud_backend_url}/api/health${NC}"

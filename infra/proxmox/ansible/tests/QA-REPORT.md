@@ -148,11 +148,11 @@ Each of the 4 environments has been validated for correct Tailscale configuratio
 
 **Assessment**: Correctly configured for basic Tailscale connectivity without exposing services.
 
-#### Development Cloud (smoker-dev-cloud-1) ✅
+#### Development Cloud (smart-smoker-dev-cloud) ✅
 
 | Configuration | Expected | Actual | Status |
 |--------------|----------|--------|--------|
-| Hostname | smoker-dev-cloud-1 | smoker-dev-cloud-1 | ✅ PASS |
+| Hostname | smart-smoker-dev-cloud | smart-smoker-dev-cloud | ✅ PASS |
 | Tags | tag:server, tag:development | ✅ Configured | ✅ PASS |
 | Serve Enabled | Yes | Yes | ✅ PASS |
 | Serve Ports | 80, 3001 | 80, 3001 | ✅ PASS |
@@ -511,7 +511,7 @@ All test execution logs are available at:
 
 ### Host Variables
 - inventory/host_vars/github-runner.yml
-- inventory/host_vars/smart-smoker-dev-cloud-1.yml
+- inventory/host_vars/smart-smoker-dev-cloud.yml
 - inventory/host_vars/smart-smoker-cloud-prod.yml
 - inventory/host_vars/virtual-smoker-device.yml
 

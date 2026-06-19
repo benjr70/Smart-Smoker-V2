@@ -44,7 +44,7 @@ on:
         description: 'Environment name (dev or prod) for notifications'
       cloud_backend_url:
         type: string
-        default: 'https://smoker-dev-cloud-1.tail74646.ts.net:8443'
+        default: 'https://smart-smoker-dev-cloud.tail74646.ts.net:8443'
         description: 'Cloud backend URL for connectivity verification. Source of truth: GitHub repo variable `vars.CLOUD_BACKEND_URL` (passed in by callers); this default is the safety fallback.'
       requires_arm_emulation:
         type: boolean
@@ -75,7 +75,7 @@ on:
         default: 'dev'
       cloud_backend_url:
         type: string
-        default: 'https://smoker-dev-cloud-1.tail74646.ts.net:8443'
+        default: 'https://smart-smoker-dev-cloud.tail74646.ts.net:8443'
         description: 'Cloud backend URL for connectivity verification. Source of truth: GitHub repo variable `vars.CLOUD_BACKEND_URL` (passed in by callers); this default is the safety fallback.'
       requires_arm_emulation:
         type: boolean

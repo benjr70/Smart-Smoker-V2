@@ -65,7 +65,7 @@ test_resolver_invocation_cwd_independent() {
     local output
     # Run from /tmp/<random>, not the repo root, to mimic the bug repro.
     # Use RETRY_COUNT=1 to keep subsequent failing curl checks fast.
-    output=$(cd "${tmpdir}" && "${HEALTH_SCRIPT}" smoker-dev-cloud-1.tail74646.ts.net 1 2>&1) || true
+    output=$(cd "${tmpdir}" && "${HEALTH_SCRIPT}" smart-smoker-dev-cloud.tail74646.ts.net 1 2>&1) || true
 
     # Primary assertion: the resolver must NOT bail with ERR_MODULE_NOT_FOUND.
     if echo "${output}" | grep -q "ERR_MODULE_NOT_FOUND"; then
@@ -76,7 +76,7 @@ test_resolver_invocation_cwd_independent() {
 
     # Secondary assertion: the resolver must successfully report the resolved FQDN.
     # The script prints "Resolved to: <fqdn>" on the success path.
-    if ! echo "${output}" | grep -q "Resolved to: smoker-dev-cloud-1.tail74646.ts.net"; then
+    if ! echo "${output}" | grep -q "Resolved to: smart-smoker-dev-cloud.tail74646.ts.net"; then
         fail "resolver did not report successful FQDN resolution" \
              "output snippet: $(echo "${output}" | head -20 | tr '\n' '|')"
         return

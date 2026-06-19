@@ -2,7 +2,7 @@
  * Tailscale peer-name resolver.
  *
  * Resolves a short hostname or FQDN to a full Tailscale FQDN
- * (e.g. `smoker-dev-cloud-1.tail74646.ts.net`).
+ * (e.g. `smart-smoker-dev-cloud.tail74646.ts.net`).
  *
  * Injectable SshRunner for testability — production uses execFile('ssh', ...).
  */
