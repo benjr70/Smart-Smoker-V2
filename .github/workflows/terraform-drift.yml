@@ -19,6 +19,12 @@ permissions:
   contents: read
   issues: write
 
+env:
+  # Terraform Cloud remote state (Local execution mode). See backend.tf.
+  TF_CLOUD_ORGANIZATION: ${{ vars.TF_CLOUD_ORGANIZATION }}
+  TF_WORKSPACE: smart-smoker-proxmox
+  TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
+
 concurrency:
   # Don't race with the provisioner workflow
   group: ansible-provision-dev

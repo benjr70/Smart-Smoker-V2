@@ -1,0 +1,91 @@
+# Production Terraform Apply (gated)
+#
+# Prod infrastructure is NEVER applied automatically. The master-push auto-apply
+# (infra-provision-vm.yml) is scoped to dev modules only; this workflow is the
+# single path that touches module.prod_cloud, and it runs behind the
+# `production` GitHub Environment (required reviewers + wait timer).
+#
+# Trigger it manually after the prod change has been merged and reviewed:
+#   Actions → Production Terraform Apply → Run workflow
+# Use plan_only=true first to review the plan, then re-run with plan_only=false
+# to apply (the approval gate fires on the apply run).
+
+name: Production Terraform Apply
+
+on:
+  workflow_dispatch:
+    inputs:
+      plan_only:
+        description: 'Plan only (no apply)'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+env:
+  # Terraform Cloud remote state (Local execution mode). See backend.tf.
+  TF_CLOUD_ORGANIZATION: ${{ vars.TF_CLOUD_ORGANIZATION }}
+  TF_WORKSPACE: smart-smoker-proxmox
+  TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
+
+concurrency:
+  # Share the lock with dev provisioning + drift (single TF state/workspace).
+  group: ansible-provision-dev
+  cancel-in-progress: false
+
+jobs:
+  apply-prod:
+    name: Terraform Apply (prod_cloud)
+    runs-on: [self-hosted, linux, proxmox]
+    environment: production # required reviewers + wait timer gate the apply
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: infra/proxmox/terraform
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Ensure Terraform installed
+        run: |
+          if command -v terraform >/dev/null 2>&1; then
+            echo "terraform already present: $(terraform version | head -n1)"
+            exit 0
+          fi
+          TF_VERSION=1.5.7
+          ARCH=$(uname -m)
+          case "$ARCH" in
+            x86_64) TF_ARCH=amd64 ;;
+            aarch64|arm64) TF_ARCH=arm64 ;;
+            armv7l) TF_ARCH=arm ;;
+            *) echo "::error::Unsupported arch $ARCH" ; exit 1 ;;
+          esac
+          TMP=$(mktemp -d)
+          curl -fsSL "https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_${TF_ARCH}.zip" -o "$TMP/tf.zip"
+          python3 -c "import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$TMP/tf.zip" "$TMP"
+          chmod +x "$TMP/terraform"
+          mkdir -p "$HOME/.local/bin"
+          mv "$TMP/terraform" "$HOME/.local/bin/terraform"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/terraform" version
+
+      - name: Terraform Init
+        run: terraform init -input=false
+
+      - name: Terraform Plan (prod_cloud only)
+        run: |
+          echo "=== Terraform Plan (prod-scoped) ==="
+          terraform plan -input=false -out=tfplan -target=module.prod_cloud
+
+      - name: Terraform Apply (prod_cloud only)
+        if: ${{ inputs.plan_only == false }}
+        run: |
+          echo "=== Terraform Apply (prod-scoped) ==="
+          terraform apply -input=false tfplan
+          echo "✅ Production terraform apply completed"
+
+      - name: Cleanup plan file
+        if: always()
+        run: rm -f tfplan

@@ -23,6 +23,12 @@ on:
 permissions:
   contents: read
 
+env:
+  # Terraform Cloud remote state (Local execution mode). See backend.tf.
+  TF_CLOUD_ORGANIZATION: ${{ vars.TF_CLOUD_ORGANIZATION }}
+  TF_WORKSPACE: smart-smoker-proxmox
+  TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
+
 concurrency:
   group: ansible-provision-dev
   cancel-in-progress: false # Don't cancel in-progress provisioning; queues behind ansible-provision.yml
@@ -74,13 +80,19 @@ jobs:
       - name: Terraform Plan
         working-directory: infra/proxmox/terraform
         run: |
-          echo "=== Terraform Plan ==="
-          terraform plan -out=tfplan
+          echo "=== Terraform Plan (dev-scoped — prod_cloud excluded) ==="
+          # Auto-apply on master is dev-only. prod_cloud is applied exclusively
+          # by terraform-apply-prod.yml behind the `production` approval gate.
+          terraform plan -out=tfplan \
+            -target=module.networking \
+            -target=module.github_runner \
+            -target=module.dev_cloud \
+            -target=module.virtual_smoker
 
       - name: Terraform Apply
         working-directory: infra/proxmox/terraform
         run: |
-          echo "=== Terraform Apply ==="
+          echo "=== Terraform Apply (dev-scoped) ==="
           terraform apply tfplan
           echo "✅ Terraform apply completed"
 

@@ -20,6 +20,10 @@ on:
 
 env:
   BLOCKING: 'false'
+  # Terraform Cloud remote state (Local execution mode). See backend.tf.
+  TF_CLOUD_ORGANIZATION: ${{ vars.TF_CLOUD_ORGANIZATION }}
+  TF_WORKSPACE: smart-smoker-proxmox
+  TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
 
 permissions:
   contents: read
