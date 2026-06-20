@@ -42,6 +42,20 @@
     exit 1
   changed_when: false
 
+# A host previously set up with Docker via the modern docker.asc keyring ends up
+# with two apt sources for the same repo once the docker role adds its docker.gpg
+# source, and then EVERY apt run (including this cache update) fails with
+# "Conflicting values set for option Signed-By ... docker.asc != docker.gpg".
+# Remove the legacy .asc source/keyring here in common — before any apt task —
+# so apt is readable for the whole play (the docker role re-adds docker.gpg).
+- name: Remove legacy/conflicting Docker apt source (docker.asc)
+  ansible.builtin.shell: |
+    files=$(grep -rln 'docker\.asc' /etc/apt/sources.list.d/ /etc/apt/sources.list 2>/dev/null || true)
+    [ -n "$files" ] && rm -f $files
+    rm -f /etc/apt/keyrings/docker.asc
+    exit 0
+  changed_when: false
+
 - name: Update apt cache
   ansible.builtin.apt:
     update_cache: true
