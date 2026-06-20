@@ -28,6 +28,10 @@ env:
   TF_CLOUD_ORGANIZATION: ${{ vars.TF_CLOUD_ORGANIZATION }}
   TF_WORKSPACE: smart-smoker-proxmox
   TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
+  # Secret-bearing tfvars (Proxmox creds + container passwords) live on the
+  # self-hosted runner outside the checkout — gitignored, never committed.
+  # Override the path via the TFVARS_FILE repo variable if needed.
+  TFVARS_FILE: ${{ vars.TFVARS_FILE || '/opt/iac/terraform.tfvars' }}
 
 concurrency:
   group: ansible-provision-dev
@@ -71,6 +75,14 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           "$HOME/.local/bin/terraform" version
 
+      - name: Verify tfvars present
+        run: |
+          if [ ! -f "$TFVARS_FILE" ]; then
+            echo "::error title=Missing tfvars::Expected secret tfvars at $TFVARS_FILE on the runner. Place it there (see docs/Infrastructure/guides/terraform-remote-state.md) or set the TFVARS_FILE repo variable."
+            exit 1
+          fi
+          echo "Using tfvars: $TFVARS_FILE"
+
       - name: Terraform Init
         working-directory: infra/proxmox/terraform
         run: |
@@ -83,7 +95,7 @@ jobs:
           echo "=== Terraform Plan (dev-scoped — prod_cloud excluded) ==="
           # Auto-apply on master is dev-only. prod_cloud is applied exclusively
           # by terraform-apply-prod.yml behind the `production` approval gate.
-          terraform plan -out=tfplan \
+          terraform plan -out=tfplan -var-file="$TFVARS_FILE" \
             -target=module.networking \
             -target=module.github_runner \
             -target=module.dev_cloud \

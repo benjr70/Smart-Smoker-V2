@@ -24,6 +24,10 @@ env:
   TF_CLOUD_ORGANIZATION: ${{ vars.TF_CLOUD_ORGANIZATION }}
   TF_WORKSPACE: smart-smoker-proxmox
   TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
+  # Secret-bearing tfvars (Proxmox creds + container passwords) live on the
+  # self-hosted runner outside the checkout — gitignored, never committed.
+  # Override the path via the TFVARS_FILE repo variable if needed.
+  TFVARS_FILE: ${{ vars.TFVARS_FILE || '/opt/iac/terraform.tfvars' }}
 
 permissions:
   contents: read
@@ -72,6 +76,14 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           "$HOME/.local/bin/terraform" version
 
+      - name: Verify tfvars present
+        run: |
+          if [ ! -f "$TFVARS_FILE" ]; then
+            echo "::error title=Missing tfvars::Expected secret tfvars at $TFVARS_FILE on the runner. Place it there (see docs/Infrastructure/guides/terraform-remote-state.md) or set the TFVARS_FILE repo variable."
+            exit 1
+          fi
+          echo "Using tfvars: $TFVARS_FILE"
+
       - name: Terraform Init
         id: init
         run: terraform init -input=false
@@ -81,7 +93,7 @@ jobs:
         continue-on-error: true
         run: |
           set -o pipefail
-          terraform plan -no-color -input=false -out=tfplan.binary 2>&1 | tee plan.txt
+          terraform plan -no-color -input=false -var-file="$TFVARS_FILE" -out=tfplan.binary 2>&1 | tee plan.txt
           terraform show -no-color tfplan.binary > plan-show.txt 2>&1 || true
 
       - name: Truncate plan for PR comment

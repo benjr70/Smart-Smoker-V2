@@ -29,7 +29,16 @@ every TF workflow fails. Do these first:
 4. **Add CI config:**
    - Repo **secret** `TF_API_TOKEN` = the token.
    - Repo **variable** `TF_CLOUD_ORGANIZATION` = your TFC org name.
-5. **Migrate existing state** — from the machine that currently holds the real
+5. **Place the secret tfvars on the runner.** TFC Local execution mode does
+   **not** inject TFC workspace variables, and a fresh `actions/checkout` wipes
+   the working tree, so the required `terraform.tfvars` (Proxmox API token +
+   per-container passwords) must live **outside the checkout** on the
+   self-hosted runner. Copy your populated `terraform.tfvars` to
+   **`/opt/iac/terraform.tfvars`** (root-owned, `chmod 600`). The TF workflows
+   read it via `-var-file="$TFVARS_FILE"`; override the path with the
+   `TFVARS_FILE` repo variable if you put it elsewhere. The workflows fail fast
+   with a clear message if the file is missing.
+6. **Migrate existing state** — from the machine that currently holds the real
    local state (workstation):
    ```bash
    cd infra/proxmox/terraform
@@ -39,7 +48,7 @@ every TF workflow fails. Do these first:
    terraform init -migrate-state         # pushes local state → TFC, confirm "yes"
    terraform plan                        # expect: No changes
    ```
-6. **Then merge** the PR. Confirm a PR `Terraform Plan` check is green against TFC.
+7. **Then merge** the PR. Confirm a PR `Terraform Plan` check is green against TFC.
 
 ## Day-to-day
 
@@ -58,4 +67,6 @@ every TF workflow fails. Do these first:
   pipeline changes. `-target` is a deliberate partial apply — review plans.
 - `backend.tf` is a symlink to `shared/backend.tf` (the real file).
 - `state/` and `*.tfvars` remain gitignored; real `terraform.tfvars` (Proxmox
-  creds, enable toggles) stays out of the repo and on the runner/workstation.
+  creds, enable toggles) stays out of the repo. On the self-hosted runner it
+  lives at `/opt/iac/terraform.tfvars` (override via the `TFVARS_FILE` repo
+  variable) and is passed to every plan/apply with `-var-file`.
