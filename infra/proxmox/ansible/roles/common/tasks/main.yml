@@ -13,6 +13,35 @@
     group: root
     mode: "0644"
 
+# Fresh Proxmox templates run unattended-upgrades on boot, which holds
+# /var/lib/dpkg/lock-frontend and makes the provisioning apt tasks fail with
+# "Could not get lock ... held by ... (unattended-upgr)". Stop the auto-update
+# units (timers included so they can't re-trigger mid-play) and wait for any
+# in-flight transaction to release the lock before we touch apt. common runs
+# first in every play, so this guards all later apt tasks (docker, nodejs, ...).
+- name: Stop apt auto-update services during provisioning (avoid dpkg lock races)
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: stopped
+  loop:
+    - unattended-upgrades.service
+    - apt-daily.service
+    - apt-daily-upgrade.service
+    - apt-daily.timer
+    - apt-daily-upgrade.timer
+  failed_when: false
+  changed_when: false
+
+- name: Wait for the dpkg/apt lock to be released
+  ansible.builtin.shell: |
+    for _ in $(seq 1 60); do
+      fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || exit 0
+      sleep 5
+    done
+    echo "dpkg lock still held after 300s" >&2
+    exit 1
+  changed_when: false
+
 - name: Update apt cache
   ansible.builtin.apt:
     update_cache: true
