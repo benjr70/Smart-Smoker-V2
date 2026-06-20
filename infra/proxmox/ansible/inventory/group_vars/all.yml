@@ -68,7 +68,12 @@ fail2ban_ban_time: 3600    # Ban duration in seconds (1 hour)
 fail2ban_find_time: 600    # Time window to count failures (10 minutes)
 
 # Docker Configuration
-docker_compose_version: "2.24.0"
+# Empty = install the latest docker-compose-plugin from Docker's apt repo. A
+# hard pin (e.g. "2.24.0") breaks provisioning once that exact version ages out
+# of the repo ("no available installation candidate"); the docker role only
+# keeps recent versions. Pin here only to a version you've confirmed is still
+# published, otherwise leave empty. (devices/prod already override to "".)
+docker_compose_version: ""
 docker_users: []
 
 # Node.js Configuration
