@@ -25,6 +25,19 @@
     state: directory
     mode: '0755'
 
+# A box that previously had Docker installed via the modern docker.asc keyring
+# ends up with two apt sources for the same repo once this role adds its
+# docker.gpg source, and apt refuses to read them: "Conflicting values set for
+# option Signed-By ... docker.asc != docker.gpg". Remove the legacy .asc source
+# + keyring first so only this role's docker.gpg source remains. Idempotent.
+- name: Remove legacy/conflicting Docker apt source (docker.asc)
+  ansible.builtin.shell: |
+    files=$(grep -rln 'docker\.asc' /etc/apt/sources.list.d/ /etc/apt/sources.list 2>/dev/null || true)
+    [ -n "$files" ] && rm -f $files
+    rm -f /etc/apt/keyrings/docker.asc
+    exit 0
+  changed_when: false
+
 - name: Add Docker GPG key
   ansible.builtin.apt_key:
     url: https://download.docker.com/linux/ubuntu/gpg
