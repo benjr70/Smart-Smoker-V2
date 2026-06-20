@@ -98,7 +98,12 @@ jobs:
 
       - name: Install Ansible dependencies
         run: |
-          pip install --user ansible
+          # `pip install --user` lands in ~/.local/bin, which is not on the
+          # self-hosted runner's PATH — add it so ansible-galaxy/ansible-playbook
+          # resolve in this and later steps (exit 127 otherwise).
+          python3 -m pip install --user ansible
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.local/bin:$PATH"
           ansible-galaxy collection install community.general ansible.posix --force
 
       - name: Run Ansible playbook
@@ -162,7 +167,12 @@ jobs:
 
       - name: Install Ansible dependencies
         run: |
-          pip install --user ansible
+          # `pip install --user` lands in ~/.local/bin, which is not on the
+          # self-hosted runner's PATH — add it so ansible-galaxy/ansible-playbook
+          # resolve in this and later steps (exit 127 otherwise).
+          python3 -m pip install --user ansible
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.local/bin:$PATH"
           ansible-galaxy collection install community.general ansible.posix --force
 
       - name: Run Ansible playbook
