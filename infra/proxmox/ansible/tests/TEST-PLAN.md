@@ -43,7 +43,7 @@ This document outlines the comprehensive testing strategy for validating the Tai
 
 ## Test Environments
 
-### 1. GitHub Runner (smoker-runner)
+### 1. GitHub Runner (github-runner)
 - **Purpose**: CI/CD execution
 - **Tailscale Config**: Basic connectivity, no Serve/Funnel
 - **Tags**: `tag:runner`, `tag:ci-cd`

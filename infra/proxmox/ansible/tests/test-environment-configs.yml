@@ -25,7 +25,7 @@
     - name: Test - GitHub Runner Tailscale config
       ansible.builtin.assert:
         that:
-          - gh_runner_vars.tailscale_hostname == "smoker-runner"
+          - gh_runner_vars.tailscale_hostname == "github-runner"
           - "'tag:runner' in gh_runner_vars.tailscale_tags"
           - "'tag:ci-cd' in gh_runner_vars.tailscale_tags"
           - gh_runner_vars.tailscale_accept_routes == true
@@ -203,7 +203,7 @@
           - "Environment Configuration Tests Complete!"
           - "=========================================="
           - ""
-          - "GitHub Runner (smoker-runner):"
+          - "GitHub Runner (github-runner):"
           - "  ✓ Basic Tailscale connectivity"
           - "  ✓ Tagged for CI/CD access"
           - "  ✓ No Serve/Funnel (runner doesn't expose services)"
