@@ -1,4 +1,18 @@
 ---
+# Disable apt's download sandbox. In an unprivileged LXC the '_apt' user cannot
+# access /var/cache/apt/archives/partial (uid mapping), so package downloads
+# fail with "E: Failed to fetch ... Permission denied" and the install errors
+# out. Running apt as root sidesteps it. Harmless on VMs/privileged containers
+# (apt already effectively runs as root there). Must run before any apt task.
+- name: Disable apt download sandbox (unprivileged LXC compatibility)
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/99-disable-sandbox
+    content: |
+      APT::Sandbox::User "root";
+    owner: root
+    group: root
+    mode: "0644"
+
 - name: Update apt cache
   ansible.builtin.apt:
     update_cache: true
