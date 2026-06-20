@@ -288,7 +288,7 @@ The security audit validates:
 
 ## Environment-Specific Testing
 
-### GitHub Runner (smoker-runner)
+### GitHub Runner (github-runner)
 - Basic Tailscale connectivity
 - Tags: runner, ci-cd
 - No Serve/Funnel (correct for CI/CD runner)

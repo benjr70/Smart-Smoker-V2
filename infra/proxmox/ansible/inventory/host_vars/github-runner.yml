@@ -21,7 +21,9 @@ additional_packages:
   - dnsutils
 
 # Tailscale Configuration
-tailscale_hostname: "smoker-runner"
+# Must match the inventory ansible_host and the real tailnet peer name so the
+# tailscale role does not rename the node back to a name CI can't resolve.
+tailscale_hostname: "github-runner"
 tailscale_tags:
   - tag:runner
   - tag:ci-cd

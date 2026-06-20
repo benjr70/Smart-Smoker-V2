@@ -100,7 +100,7 @@ fi
 print_section "Test Suite 3: Environment Configuration Validation"
 
 echo "3.1 Testing GitHub Runner configuration..."
-if grep -q "tailscale_hostname: \"smoker-runner\"" inventory/host_vars/github-runner.yml && \
+if grep -q "tailscale_hostname: \"github-runner\"" inventory/host_vars/github-runner.yml && \
    grep -q "tag:runner" inventory/host_vars/github-runner.yml; then
   print_pass "GitHub Runner Tailscale config correct"
   ((TOTAL_TESTS++))
@@ -236,7 +236,7 @@ else
 fi
 
 if grep -q "Network Topology" README.md && \
-   grep -q "smoker-runner" README.md && \
+   grep -q "github-runner" README.md && \
    grep -q "smart-smoker-dev-cloud" README.md && \
    grep -q "smokecloud" README.md && \
    grep -q "virtual-smoker" README.md; then

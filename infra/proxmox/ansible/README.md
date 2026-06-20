@@ -163,7 +163,7 @@ All infrastructure is connected via Tailscale VPN, creating a secure mesh networ
 
 ```
 Tailscale Mesh Network
-├─ smoker-runner (GitHub Actions runner)
+├─ github-runner (GitHub Actions runner)
 │  └─ Tags: runner, ci-cd
 ├─ smart-smoker-dev-cloud (Development environment)
 │  ├─ Tags: server, development
@@ -301,7 +301,7 @@ tailscale funnel status  # Production only
 
 ```bash
 # From any machine on the Tailscale network
-ping smoker-runner
+ping github-runner
 ping smart-smoker-dev-cloud
 ping smokecloud
 ping virtual-smoker
