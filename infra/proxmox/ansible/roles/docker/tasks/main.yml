@@ -32,9 +32,10 @@
 # + keyring first so only this role's docker.gpg source remains. Idempotent.
 - name: Remove legacy/conflicting Docker apt source (docker.asc)
   ansible.builtin.shell: |
-    grep -rln 'docker\.asc' /etc/apt/sources.list.d/ /etc/apt/sources.list 2>/dev/null \
-      | xargs -r rm -f
+    files=$(grep -rln 'docker\.asc' /etc/apt/sources.list.d/ /etc/apt/sources.list 2>/dev/null || true)
+    [ -n "$files" ] && rm -f $files
     rm -f /etc/apt/keyrings/docker.asc
+    exit 0
   changed_when: false
 
 - name: Add Docker GPG key
