@@ -41,7 +41,7 @@ concurrency:
 jobs:
   drift:
     runs-on: [self-hosted, linux, proxmox]
-    timeout-minutes: 20
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: infra/proxmox/terraform

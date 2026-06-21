@@ -40,7 +40,7 @@ concurrency:
 jobs:
   plan:
     runs-on: [self-hosted, linux, proxmox]
-    timeout-minutes: 15
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: infra/proxmox/terraform
