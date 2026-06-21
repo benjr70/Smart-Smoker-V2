@@ -10,9 +10,13 @@
 name: Terraform Drift
 
 on:
-  schedule:
-    # 02:00 UTC nightly
-    - cron: '0 2 * * *'
+  # Nightly schedule is DISABLED until the existing (hand-built) infra is
+  # imported into Terraform state. With an empty TFC state every resource shows
+  # as "to add", so drift would open a bogus issue every night. Re-enable the
+  # cron after import. Manual runs still available via workflow_dispatch.
+  # schedule:
+  #   # 02:00 UTC nightly
+  #   - cron: '0 2 * * *'
   workflow_dispatch:
 
 permissions:

@@ -93,20 +93,21 @@ jobs:
         working-directory: infra/proxmox/terraform
         run: |
           echo "=== Terraform Plan (dev-scoped — prod_cloud excluded) ==="
-          # Auto-apply on master is dev-only. prod_cloud is applied exclusively
-          # by terraform-apply-prod.yml behind the `production` approval gate.
-          terraform plan -out=tfplan -var-file="$TFVARS_FILE" \
+          # PLAN ONLY. The existing Proxmox infra was built by hand and is NOT
+          # yet under Terraform management (empty TFC state), so applying would
+          # try to CREATE resources that already exist. Auto-apply stays disabled
+          # until each existing resource is `terraform import`ed and plan is
+          # clean. prod_cloud is excluded here and only ever applied via
+          # terraform-apply-prod.yml behind the `production` approval gate.
+          terraform plan -input=false -var-file="$TFVARS_FILE" \
             -target=module.networking \
             -target=module.github_runner \
             -target=module.dev_cloud \
             -target=module.virtual_smoker
 
-      - name: Terraform Apply
-        working-directory: infra/proxmox/terraform
+      - name: Terraform Apply (disabled until state imported)
         run: |
-          echo "=== Terraform Apply (dev-scoped) ==="
-          terraform apply tfplan
-          echo "✅ Terraform apply completed"
+          echo "::warning title=Terraform apply disabled::Auto-apply is OFF until existing infra is imported into Terraform state (empty state would recreate live resources). Plan above is advisory. See docs/Infrastructure/guides/terraform-remote-state.md."
 
       - name: Cleanup plan file
         if: always()

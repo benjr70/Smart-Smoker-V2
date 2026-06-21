@@ -1,5 +1,23 @@
 # Terraform: remote state (Terraform Cloud) + prod gating
 
+> **STATUS (2026-06-20): PLAN-ONLY — apply disabled.** The existing Proxmox
+> infra (github-runner CT 106, dev-cloud CT 108, prod-cloud CT 104,
+> virtual-smoker VM 105, on node `pve`) was **built by hand and is not under
+> Terraform** — the TFC workspace `smart-smoker-proxmox` has **empty state** and
+> no real `terraform.tfvars` was ever stored. Until each resource is
+> `terraform import`ed and `plan` is clean, `infra-provision-vm.yml` runs
+> **plan-only** (apply step disabled) and the drift nightly cron is commented
+> out. Re-enable both after import. **Do not run any apply against empty state —
+> it would try to recreate live resources (incl. prod CT 104).**
+>
+> Import addresses (run on runner CT 106 with tfvars at `/opt/iac/terraform.tfvars`
+> + `terraform init`):
+> - `module.github_runner[0].module.container.proxmox_virtual_environment_container.this` → `pve/106`
+> - `module.dev_cloud[0].module.container.proxmox_virtual_environment_container.this` → `pve/108`
+> - `module.prod_cloud[0].module.container.proxmox_virtual_environment_container.this` → `pve/104`
+> - `module.virtual_smoker[0].module.vm.proxmox_virtual_environment_vm.this` → `pve/105`
+> - `module.networking...bridge["<key>"]` → `pve/<bridge>` (per `network_bridges`)
+
 ## Why
 
 State was a `local` backend at `infra/proxmox/terraform/state/`, which is
