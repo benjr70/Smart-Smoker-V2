@@ -25,6 +25,8 @@
     state: directory
     mode: '0755'
 
+# Legacy docker.asc apt source is removed in the common role (before any apt
+# task) so the whole play's apt stays readable; nothing to do here.
 - name: Add Docker GPG key
   ansible.builtin.apt_key:
     url: https://download.docker.com/linux/ubuntu/gpg

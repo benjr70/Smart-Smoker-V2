@@ -126,12 +126,18 @@ jobs:
             echo "Running in CHECK MODE - no changes will be made"
           fi
 
-          # Limit to dev hosts only
+          # Limit to dev hosts only. NOTE: 'runners' is intentionally excluded —
+          # this job runs ON the self-hosted runner, and the github-runner role
+          # stops/uninstalls the actions.runner.* service when it deems the
+          # runner "unhealthy", which cancels this very job ("The operation was
+          # canceled"). The runner can only be (re)provisioned safely from a
+          # different machine, so it is managed out-of-band, not here.
           ansible-playbook playbooks/${PLAYBOOK} \
-            --limit 'dev_cloud:devices:runners' \
+            --limit 'dev_cloud:devices' \
             ${EXTRA_ARGS} \
             --extra-vars "github_runner_pat=${{ secrets.RUNNER_PAT }}" \
             --extra-vars "tailscale_auth_key=${{ secrets.TAILSCALE_AUTH_KEY }}" \
+            --extra-vars "mongo_app_password=${{ secrets.MONGO_APP_PASSWORD }}" \
             -v
 
       - name: Verify provisioning
@@ -140,7 +146,7 @@ jobs:
         run: |
           echo "Running verification playbook..."
           ansible-playbook playbooks/verify-all.yml \
-            --limit 'dev_cloud:devices:runners' \
+            --limit 'dev_cloud:devices' \
             -v || echo "Verification completed with warnings"
 
       - name: Cleanup SSH key
@@ -200,6 +206,7 @@ jobs:
             --limit 'prod_cloud' \
             ${EXTRA_ARGS} \
             --extra-vars "github_runner_pat=${{ secrets.RUNNER_PAT }}" \
+            --extra-vars "mongo_app_password=${{ secrets.MONGO_APP_PASSWORD }}" \
             -v
 
       - name: Verify provisioning

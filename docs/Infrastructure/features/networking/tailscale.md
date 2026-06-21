@@ -81,7 +81,7 @@ ansible-playbook playbooks/verify-tailscale.yml
 Visit https://login.tailscale.com/admin/machines
 
 You should now see these machines:
-- ✅ `smoker-runner` (github-runner)
+- ✅ `github-runner` (GitHub Actions runner)
 - ✅ `smoker-dev-cloud` (dev environment)
 - ✅ `smokecloud` (production environment)
 

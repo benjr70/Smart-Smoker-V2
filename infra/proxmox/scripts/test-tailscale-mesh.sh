@@ -13,7 +13,7 @@ NC='\033[0m' # No Color
 
 # Configuration
 HOSTS=(
-  "smoker-runner"
+  "github-runner"
   "smart-smoker-dev-cloud"
   "smokecloud"
   "virtual-smoker"
@@ -118,10 +118,10 @@ test_ssh_connectivity() {
   print_header "Testing SSH Connectivity (Optional)"
 
   print_info "Testing SSH to GitHub runner..."
-  if timeout 5 ssh -o ConnectTimeout=3 -o StrictHostKeyChecking=no root@smoker-runner "echo 'SSH OK'" &> /dev/null; then
-    print_success "SSH to smoker-runner works"
+  if timeout 5 ssh -o ConnectTimeout=3 -o StrictHostKeyChecking=no root@github-runner "echo 'SSH OK'" &> /dev/null; then
+    print_success "SSH to github-runner works"
   else
-    print_warning "SSH to smoker-runner failed (may require key setup)"
+    print_warning "SSH to github-runner failed (may require key setup)"
   fi
 }
 
@@ -204,7 +204,7 @@ test_virtual_device() {
 check_firewall_rules() {
   print_header "Checking Firewall Rules (on accessible hosts)"
 
-  for host in "smoker-runner" "smart-smoker-dev-cloud" "smokecloud"; do
+  for host in "github-runner" "smart-smoker-dev-cloud" "smokecloud"; do
     print_info "Checking UFW on ${host}..."
 
     if timeout 5 ssh -o ConnectTimeout=3 -o StrictHostKeyChecking=no "root@${host}" "ufw status | grep -E '(tailscale0|41641)'" &> /dev/null; then
@@ -238,7 +238,7 @@ generate_summary() {
   echo -e "${GREEN}Tailscale mesh network test completed!${NC}\n"
 
   print_info "Network topology:"
-  print_info "  ├─ smoker-runner (GitHub Actions runner)"
+  print_info "  ├─ github-runner (GitHub Actions runner)"
   print_info "  ├─ smart-smoker-dev-cloud (Development environment)"
   print_info "  ├─ smokecloud (Production environment with Funnel)"
   print_info "  └─ virtual-smoker (Virtual device)"

@@ -136,11 +136,11 @@ All required variables are defined with appropriate defaults.
 
 Each of the 4 environments has been validated for correct Tailscale configuration.
 
-#### GitHub Runner (smoker-runner) ✅
+#### GitHub Runner (github-runner) ✅
 
 | Configuration | Expected | Actual | Status |
 |--------------|----------|--------|--------|
-| Hostname | smoker-runner | smoker-runner | ✅ PASS |
+| Hostname | github-runner | github-runner | ✅ PASS |
 | Tags | tag:runner, tag:ci-cd | ✅ Configured | ✅ PASS |
 | Serve Enabled | No | No | ✅ PASS |
 | Funnel Enabled | No | No | ✅ PASS |
