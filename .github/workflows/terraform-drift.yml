@@ -56,11 +56,18 @@ jobs:
         # terraform manually using python's stdlib zipfile module instead
         # (python3 is already required by the ansible workflows on this runner).
         run: |
+          # State is stamped with a newer Terraform; an older binary refuses to
+          # read it. Skip install only when an existing terraform is >= this.
+          REQUIRED_TF=1.14.2
           if command -v terraform >/dev/null 2>&1; then
-            echo "terraform already present: $(terraform version | head -n1)"
-            exit 0
+            cur=$(terraform version | head -n1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
+            if [ -n "$cur" ] && [ "$(printf '%s\n%s\n' "$REQUIRED_TF" "$cur" | sort -V | head -n1)" = "$REQUIRED_TF" ]; then
+              echo "terraform present and >= $REQUIRED_TF: $(terraform version | head -n1)"
+              exit 0
+            fi
+            echo "terraform $cur < $REQUIRED_TF; installing $REQUIRED_TF"
           fi
-          TF_VERSION=1.5.7
+          TF_VERSION=1.14.2
           ARCH=$(uname -m)
           case "$ARCH" in
             x86_64) TF_ARCH=amd64 ;;
