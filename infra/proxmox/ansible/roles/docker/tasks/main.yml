@@ -166,3 +166,29 @@
 # and fails with "OCI runtime create failed: crun ... exit status 255".
 - name: Flush handlers to apply Docker runtime changes before later roles
   ansible.builtin.meta: flush_handlers
+
+# The "Restart docker" handler only fires when a task reports "changed" on THIS
+# run. If a previous run wrote the new daemon.json / crun binary but aborted
+# before its handler flushed (e.g. a later verify task failed), those files are
+# already in their desired state, nothing is "changed", the handler never runs,
+# and dockerd keeps serving its stale in-memory config — still pointing at the
+# broken distro crun 0.17. Detect that (config/binary newer than the running
+# dockerd) and restart so the current runtime is actually loaded.
+- name: Detect whether dockerd predates the crun/daemon.json changes
+  ansible.builtin.shell: |
+    set -o pipefail
+    started=$(date -d "$(systemctl show -p ActiveEnterTimestamp --value docker)" +%s 2>/dev/null || echo 0)
+    newest=0
+    for f in /etc/docker/daemon.json {{ docker_crun_path }}; do
+      m=$(stat -c %Y "$f" 2>/dev/null || echo 0)
+      [ "$m" -gt "$newest" ] && newest="$m"
+    done
+    [ "$newest" -gt "$started" ] && echo restart || echo ok
+  register: docker_runtime_state
+  changed_when: false
+
+- name: Restart Docker to load the current runtime configuration
+  ansible.builtin.service:
+    name: docker
+    state: restarted
+  when: docker_runtime_state.stdout == 'restart'
