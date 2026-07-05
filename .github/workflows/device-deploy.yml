@@ -49,7 +49,7 @@ on:
       requires_arm_emulation:
         type: boolean
         default: false
-        description: 'Install qemu-user-static + binfmt registration on target before deploy (for amd64 hosts running arm/v7 images)'
+        description: 'Register qemu arm binfmt handlers on target (via tonistiigi/binfmt) before deploy (for amd64 hosts running arm/v7 images)'
   workflow_dispatch:
     inputs:
       device_host:
@@ -80,7 +80,7 @@ on:
       requires_arm_emulation:
         type: boolean
         default: false
-        description: 'Install qemu-user-static + binfmt registration on target before deploy (for amd64 hosts running arm/v7 images)'
+        description: 'Register qemu arm binfmt handlers on target (via tonistiigi/binfmt) before deploy (for amd64 hosts running arm/v7 images)'
 
 permissions:
   contents: read
@@ -191,14 +191,14 @@ jobs:
         if: ${{ inputs.requires_arm_emulation }}
         run: |
           echo "Ensuring ARM emulation runtime on ${DEVICE_HOST}..."
-          if ssh ${SSH_USER}@${DEVICE_HOST} "update-binfmts --display qemu-arm 2>/dev/null | grep -q 'enabled = yes'"; then
-            echo "qemu-arm binfmt already registered"
-          else
-            echo "Installing qemu-user-static + binfmt-support and registering qemu-arm..."
-            ssh ${SSH_USER}@${DEVICE_HOST} "sudo DEBIAN_FRONTEND=noninteractive apt-get update && \
-              sudo DEBIAN_FRONTEND=noninteractive apt-get install -y qemu-user-static binfmt-support && \
-              sudo update-binfmts --enable qemu-arm"
-          fi
+          # Register qemu binfmt handlers via tonistiigi/binfmt (statically-linked
+          # qemu + the F "fix-binary" flag). The distro's in-kernel qemu-arm entry
+          # (registered by binfmt-support) lacks the F flag and points at a
+          # dynamically-linked interpreter, so crun cannot resolve it inside the
+          # container mount namespace and fails with OCI runtime exit 255. This is
+          # the same mechanism docker/setup-qemu-action uses on GitHub runners.
+          echo "Registering qemu binfmt handlers via tonistiigi/binfmt..."
+          ssh ${SSH_USER}@${DEVICE_HOST} "sudo docker run --privileged --rm tonistiigi/binfmt --install arm"
 
           echo "Verifying arm/v7 emulation end-to-end..."
           UNAME_OUT=$(ssh ${SSH_USER}@${DEVICE_HOST} "sudo docker run --rm --platform linux/arm/v7 alpine uname -m")
