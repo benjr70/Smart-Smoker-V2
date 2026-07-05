@@ -176,7 +176,6 @@
 # dockerd) and restart so the current runtime is actually loaded.
 - name: Detect whether dockerd predates the crun/daemon.json changes
   ansible.builtin.shell: |
-    set -o pipefail
     started=$(date -d "$(systemctl show -p ActiveEnterTimestamp --value docker)" +%s 2>/dev/null || echo 0)
     newest=0
     for f in /etc/docker/daemon.json {{ docker_crun_path }}; do
