@@ -73,14 +73,32 @@
     - docker-ce-cli
   when: docker_version | length > 0
 
-- name: Install crun OCI runtime
+# runc fails with "net.ipv4.ip_unprivileged_port_start: permission denied"
+# inside an unprivileged LXC. crun honours the sysctl that the unprivileged
+# container already has set, so containers binding low ports actually start —
+# so crun stays the default runtime (see daemon.json below).
+#
+# The distro's crun is 0.17 (2021), which fails to create ANY container on
+# newer host kernels/cgroup2 with "OCI runtime create failed: crun ... exit
+# status 255". Pull a current static build from upstream where one is published
+# (amd64/arm64); 32-bit arm (Raspberry Pi) has no upstream binary and keeps the
+# distro package.
+- name: Install crun OCI runtime (upstream static build)
+  ansible.builtin.get_url:
+    url: "https://github.com/containers/crun/releases/download/{{ crun_version }}/crun-{{ crun_version }}-linux-{{ crun_arch_map[ansible_architecture] }}"
+    dest: /usr/local/bin/crun
+    mode: '0755'
+    owner: root
+    group: root
+  when: ansible_architecture in crun_arch_map
+  notify: Restart docker
+
+- name: Install crun OCI runtime (distro package fallback)
   ansible.builtin.apt:
     name: crun
     state: present
     update_cache: true
-  # runc fails with "net.ipv4.ip_unprivileged_port_start: permission denied"
-  # inside an unprivileged LXC. crun honours the sysctl that the unprivileged
-  # container already has set, so containers binding low ports actually start.
+  when: ansible_architecture not in crun_arch_map
   notify: Restart docker
 
 - name: Install Docker Compose plugin (latest)
@@ -125,7 +143,7 @@
         "default-runtime": "crun",
         "runtimes": {
           "crun": {
-            "path": "/usr/bin/crun"
+            "path": "{{ crun_path }}"
           }
         },
         "default-address-pools": [
