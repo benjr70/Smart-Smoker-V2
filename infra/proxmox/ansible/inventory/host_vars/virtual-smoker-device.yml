@@ -17,12 +17,19 @@ tailscale_tags:
 tailscale_accept_routes: true
 tailscale_accept_dns: true
 
-# Tailscale Serve - expose smoker UI and device-service via HTTPS
+# Tailscale Serve - expose the smoker UI via HTTPS.
 # Frontend: https://virtual-smoker.tail74646.ts.net/
-# Device Service API: https://virtual-smoker.tail74646.ts.net:3003/
+#
+# NOTE: no serve entry for the device service. It runs with
+# `network_mode: host` (see virtual-smoker.docker-compose.yml) and binds
+# :::3003 across every interface, including the tailnet IP. A
+# `tailscale serve --https=3003 -> 3003` proxy would need tailscaled to bind
+# the same tailnet IP:3003, so whichever starts first wins and the other fails
+# — in practice tailscaled (boots first) wins and device_service crashloops
+# with "EADDRINUSE :::3003". Host networking already exposes the API on the
+# tailnet at http://virtual-smoker:3003, so the proxy is redundant as well as
+# conflicting.
 tailscale_serve_enabled: true
 tailscale_serve_config:
   - https_port: 443
     target_port: 8080      # Smoker frontend
-  - https_port: 3003
-    target_port: 3003      # Device service API
