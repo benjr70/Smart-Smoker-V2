@@ -158,3 +158,11 @@
     group: root
     mode: '0644'
   notify: Restart docker
+
+# Apply the crun install + daemon.json change now instead of at play end.
+# Roles that run after docker (e.g. virtual-device's arm/v7 emulation check)
+# invoke `docker run`, which must hit the restarted daemon using the new
+# /usr/local/bin/crun 1.21 — otherwise it still uses the broken distro crun 0.17
+# and fails with "OCI runtime create failed: crun ... exit status 255".
+- name: Flush handlers to apply Docker runtime changes before later roles
+  ansible.builtin.meta: flush_handlers
