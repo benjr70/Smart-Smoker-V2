@@ -21,12 +21,14 @@ docker_compose_version: ""
 # Ubuntu's apt package is 0.17 (2021) which fails to create containers on newer
 # host kernels ("OCI runtime create failed: /usr/bin/crun ... exit status 255").
 # Upstream ships static binaries for amd64/arm64 only; 32-bit arm (Raspberry Pi)
-# falls back to the distro package via crun_arch_map lookup below.
-crun_version: "1.21"
-crun_arch_map:
+# falls back to the distro package via docker_crun_arch_map lookup below.
+docker_crun_version: "1.21"
+docker_crun_arch_map:
   x86_64: amd64
   aarch64: arm64
+docker_crun_releases_url: "https://github.com/containers/crun/releases/download"
+docker_crun_asset: "crun-{{ docker_crun_version }}-linux-{{ docker_crun_arch_map[ansible_architecture] }}"
 
 # Path the docker daemon points its "crun" runtime at. Upstream static build
 # lands in /usr/local/bin; the apt fallback lives in /usr/bin.
-crun_path: "{{ '/usr/local/bin/crun' if ansible_architecture in crun_arch_map else '/usr/bin/crun' }}"
+docker_crun_path: "{{ '/usr/local/bin/crun' if ansible_architecture in docker_crun_arch_map else '/usr/bin/crun' }}"

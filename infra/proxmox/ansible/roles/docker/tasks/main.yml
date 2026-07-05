@@ -85,12 +85,12 @@
 # distro package.
 - name: Install crun OCI runtime (upstream static build)
   ansible.builtin.get_url:
-    url: "https://github.com/containers/crun/releases/download/{{ crun_version }}/crun-{{ crun_version }}-linux-{{ crun_arch_map[ansible_architecture] }}"
+    url: "{{ docker_crun_releases_url }}/{{ docker_crun_version }}/{{ docker_crun_asset }}"
     dest: /usr/local/bin/crun
     mode: '0755'
     owner: root
     group: root
-  when: ansible_architecture in crun_arch_map
+  when: ansible_architecture in docker_crun_arch_map
   notify: Restart docker
 
 - name: Install crun OCI runtime (distro package fallback)
@@ -98,7 +98,7 @@
     name: crun
     state: present
     update_cache: true
-  when: ansible_architecture not in crun_arch_map
+  when: ansible_architecture not in docker_crun_arch_map
   notify: Restart docker
 
 - name: Install Docker Compose plugin (latest)
@@ -143,7 +143,7 @@
         "default-runtime": "crun",
         "runtimes": {
           "crun": {
-            "path": "{{ crun_path }}"
+            "path": "{{ docker_crun_path }}"
           }
         },
         "default-address-pools": [
