@@ -23,6 +23,11 @@ Wants=network-online.target
 Type=simple
 User=claude-agent-1
 WorkingDirectory=/home/claude-agent-1/Smart-Smoker-V2
+# systemd's default PATH has neither the claude CLI (~/.local/bin) nor node/npx
+# (nvm-managed) — without this line the sensor degrades and every fire errors
+# with "claude CLI not on PATH". Update the nvm segment when the node version
+# on the host changes.
+Environment=PATH=/home/claude-agent-1/.local/bin:/home/claude-agent-1/.nvm/versions/node/v24.7.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ExecStart=/home/claude-agent-1/Smart-Smoker-V2/scripts/claude-agent/agent-daemon
 # Always-alive: restart on any exit, with a short backoff to avoid a hot loop.
 Restart=always
