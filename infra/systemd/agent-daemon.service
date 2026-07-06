@@ -28,6 +28,10 @@ WorkingDirectory=/home/claude-agent-1/Smart-Smoker-V2
 # with "claude CLI not on PATH". Update the nvm segment when the node version
 # on the host changes.
 Environment=PATH=/home/claude-agent-1/.local/bin:/home/claude-agent-1/.nvm/versions/node/v24.7.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# Optional local secrets (e.g. GH_TOKEN=... if the stored gh keyring token is
+# absent or under-scoped — team-pickup needs the `project` scope). The file is
+# NOT committed; create it mode 0600 or rely on `gh auth login` instead.
+EnvironmentFile=-/home/claude-agent-1/.config/agent-daemon/env
 ExecStart=/home/claude-agent-1/Smart-Smoker-V2/scripts/claude-agent/agent-daemon
 # Always-alive: restart on any exit, with a short backoff to avoid a hot loop.
 Restart=always
