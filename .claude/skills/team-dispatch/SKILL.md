@@ -21,7 +21,7 @@ verification — so a fresh clone can dispatch a team without touching bash firs
 
 ```
 /team-dispatch <prd-issue-number> [--dry-run]
-/team-dispatch --issue <issue-number> [--dry-run]
+/team-dispatch --issue <issue-number> [--resume] [--dry-run]
 ```
 
 - `<prd-issue-number>` — the parent PRD GitHub issue (e.g. 183). Discovers every
@@ -29,6 +29,10 @@ verification — so a fresh clone can dispatch a team without touching bash firs
 - `--issue <N>` — single-issue mode. Skip PRD discovery; populate the task list
   with exactly one task (issue #N). Used by `/team-pickup` for cron-driven
   autonomous pickup.
+- `--resume` — resume mode (single-issue only). The issue was paused mid-run in
+  a prior window; its `feat/issue-<N>` branch already carries partial work. Take
+  the resume entry path in §1a.1 instead of starting from scratch. Passed by
+  `/team-pickup` §5 when it resumed a `team:paused` issue.
 - `--dry-run` — print the planned roster + task list and exit, do NOT spawn
   teammates.
 
@@ -98,9 +102,52 @@ If invoked with `--issue <N>`:
 - Skip the on-demand researcher heuristic (single issues rarely need an upfront
   research memo; if the implementer needs research mid-task, spawn a researcher
   then).
-- Proceed directly to step 2.
+- If `--resume` was passed, take §1a.1 before step 2; otherwise proceed directly
+  to step 2.
 
 Otherwise (PRD mode), continue with step 1 below.
+
+### 1a.1. Resume entry path (`--resume` only)
+
+The issue was paused mid-run; `/team-pickup` §4 already checked out the existing
+`feat/issue-<N>` branch **without** resetting it, so its partial work is
+present: green tests from the prior window and, at HEAD, a
+`wip: freeze partial work on #<N> (usage exhausted)` commit made by `agent-run`
+when usage ran out. The goal is to continue TDD from that state to green — not
+to re-implement what already passes.
+
+Verify the branch state and reconcile the `wip:` freeze **before** spawning the
+implementer's task, so the task description reflects reality:
+
+```bash
+git rev-parse --abbrev-ref HEAD                 # expect feat/issue-<N>
+git log --oneline origin/master..HEAD           # the partial work; may end in a wip: commit
+```
+
+If HEAD is the `wip:` freeze commit, soft-reset it so its frozen edits return to
+the working tree as uncommitted changes — the implementer folds them into proper
+red-green commits rather than building on top of a throwaway commit:
+
+```bash
+if git log -1 --format=%s | grep -q '^wip: freeze partial work'; then
+  git reset --soft HEAD~1                        # un-freeze; edits back in the index/worktree
+fi
+```
+
+When you populate the task list (step 4), the single task's description must
+prime the implementer for resume rather than a cold start. Prepend a **RESUME**
+note to the issue body:
+
+> **RESUME — this issue was paused mid-run; the branch already has partial
+> work.** Do NOT restart from scratch. First run the tests from inside each
+> affected app dir to discover what already passes and what remains
+> (`cd apps/<app> && npm test`, or `bash <lib>.test.sh` for agent-lib work). Any
+> un-frozen `wip:` edits are already in your working tree — reconcile them into
+> proper TDD red-green commits. Then continue the red-green-refactor loop only
+> for the acceptance criteria not yet satisfied, and finish as usual (stage,
+> commit message, hand to `rev`).
+
+Then continue to step 2.
 
 ### 1. Read the PRD + work queue
 

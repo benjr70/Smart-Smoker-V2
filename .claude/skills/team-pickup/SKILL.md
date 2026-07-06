@@ -1,11 +1,12 @@
 ---
 name: team-pickup
 description:
-  Pick the next eligible `team`-labeled GitHub issue from the Smart Smoker V2
+  Resume a `team:paused` issue if one exists (preserving its branch), otherwise
+  pick the next eligible `team`-labeled GitHub issue from the Smart Smoker V2
   GitHub Project (highest Priority field then oldest, blockers resolved, no
-  other team in flight), invoke `/team-dispatch --issue <N>`, then open a PR on
-  success or apply `team:failed` on failure. Designed to be fired by a Claude
-  routine on cron. No arguments (besides optional --dry-run).
+  other team in flight), invoke `/team-dispatch --issue <N> [--resume]`, then
+  open a PR on success or apply `team:failed` on failure. Designed to be fired
+  by a Claude routine on cron. No arguments (besides optional --dry-run).
 ---
 
 # Team Pickup — Autonomous Single-Issue Picker + PR Wrapper
@@ -67,6 +68,53 @@ if [ "$INFLIGHT" -gt 0 ]; then
   exit 0
 fi
 ```
+
+### 1.5. Resume paused work before any new pick
+
+A `team:paused` issue is work that a prior window started and the daemon froze
+mid-run (a `wip:` commit, branch kept) when Claude usage ran out. In-flight work
+is always finished before new work is started, so a paused issue is resumed
+**before** the §2 pick — and its partial branch is preserved, never reset.
+
+The resume-vs-fail decision (including the resume-count cap) is the
+**Pause/Resume state logic** deep module. Source it and hand it the paused
+issue's number and its pause count; do not re-derive the cap logic inline.
+
+```bash
+# The paused issue (at most one — single-flight, same as the in-progress lock).
+PAUSED_N=$(gh issue list --label team:paused --state open --json number --jq '.[0].number // empty')
+
+if [ -n "$PAUSED_N" ]; then
+  # Pause count = number of pause records agent-run left on the issue timeline
+  # (each pause appends a "Run paused at … usage exhausted" comment).
+  PAUSE_COUNT=$(gh issue view "$PAUSED_N" --json comments \
+    --jq '[.comments[] | select(.body | test("Run paused at .*usage exhausted"))] | length')
+
+  . scripts/claude-agent/lib/pause-resume.sh
+  ACTION_JSON=$(pause_resume_action "$PAUSED_N" "${PAUSE_COUNT:-0}")
+  ACTION=$(printf '%s' "$ACTION_JSON" | jq -r '.action')
+
+  case "$ACTION" in
+    resume)
+      # Resume this issue: RESUME_MODE tells §4 to preserve the branch and §5 to
+      # dispatch in resume mode. Skip §2's fresh pick entirely.
+      RESUME_MODE=1
+      N="$PAUSED_N"
+      ;;
+    fail)
+      # Paused too many times (cap reached) — a too-big issue; hand to a human.
+      gh issue edit "$PAUSED_N" --remove-label team:paused --add-label team:failed
+      gh issue comment "$PAUSED_N" --body "team-pickup: paused $(printf '%s' "$ACTION_JSON" | jq -r '.pauseCount') times (resume cap reached) — marking team:failed for human triage at $(date -Iseconds)."
+      echo "team-pickup: #$PAUSED_N hit the resume cap — team:failed, stopping"
+      exit 0
+      ;;
+  esac
+fi
+```
+
+If `RESUME_MODE` is set, skip §2 and §3 and go straight to §4 (§3's dry-run
+short-circuit still applies — print `would-resume #N` and exit). Otherwise
+(`pick-new`, or no paused issue) continue to §2.
 
 ### 2. Pick next eligible issue (highest Priority field, then oldest)
 
@@ -146,15 +194,16 @@ team-pickup: no eligible issue
 If `--dry-run` was passed:
 
 ```
-team-pickup: would-pick #<N> <title>
+team-pickup: would-pick #<N> <title>        # normal pick
+team-pickup: would-resume #<N> <title>      # RESUME_MODE from §1.5
 ```
 
 …and `exit 0`. No git or GitHub mutations.
 
 ### 4. Branch + apply lock
 
-Fresh branch from latest master. `checkout -B` resets if a stale branch from a
-prior failed fire exists.
+**Normal pick** — fresh branch from latest master. `checkout -B` resets if a
+stale branch from a prior failed fire exists.
 
 ```bash
 N=<picked>
@@ -164,12 +213,30 @@ git checkout -B "feat/issue-$N" origin/master
 gh issue edit "$N" --add-label team:in-progress
 ```
 
+**Resume** (`RESUME_MODE=1` from §1.5) — the paused issue already has a
+`feat/issue-$N` branch carrying its partial work (a `wip:` freeze commit and any
+green tests from the prior window). Check it out **as-is** — do **not**
+`checkout -B` from `origin/master`, which would wipe exactly the work we are
+resuming. Move the lock `team:paused → team:in-progress`.
+
+```bash
+N="$PAUSED_N"
+TITLE=$(gh issue view "$N" --json title --jq .title)
+git fetch origin                              # refresh refs; do NOT reset the branch
+git checkout "feat/issue-$N"                  # existing branch, partial work intact
+gh issue edit "$N" --remove-label team:paused --add-label team:in-progress
+```
+
 ### 5. Delegate to /team-dispatch
 
-Invoke the team-dispatch skill in single-issue mode:
+Invoke the team-dispatch skill in single-issue mode. On a resume, add the
+`--resume` flag so team-dispatch takes its resume entry path (read the partial
+branch, run the tests to discover what remains, continue TDD) instead of
+starting the issue from scratch:
 
 ```
-/team-dispatch --issue <N>
+/team-dispatch --issue <N>            # normal pick
+/team-dispatch --issue <N> --resume   # RESUME_MODE from §1.5
 ```
 
 Capture exit code and the final commit on `feat/issue-<N>`. team-dispatch is
@@ -338,7 +405,12 @@ pr-watch agent in §6a.1; `verify:` mirrors the §6a.2 verifier's final
   `gh issue edit <N> --remove-label team:in-progress`.
 - **Branch `feat/issue-<N>` already exists from a prior failed fire** — §4's
   `checkout -B` resets it from `origin/master`, discarding stale work.
-  Recoverable via `git reflog`.
+  Recoverable via `git reflog`. This reset applies to the **normal-pick** path
+  only; the **resume** path (§1.5 → §4) deliberately checks the branch out as-is
+  so the paused window's partial work survives.
+- **Paused issue loops across too many windows** — §1.5 caps resumes via the
+  Pause/Resume state logic (default 3); on the cap it applies `team:failed` and
+  stops, so a too-big issue is handed to a human instead of bouncing forever.
 - **Acceptance Criteria section missing from issue body** — PR body uses a
   placeholder line. PR still opens; reviewer will notice and request the
   amendment.
