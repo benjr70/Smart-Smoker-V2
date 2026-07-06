@@ -3,22 +3,40 @@
 #
 # One fire = one issue picked, implemented, PR opened, CI watched to verdict.
 # Designed to run on the claude-agent-1 Proxmox VM (see docs/CI-CD/claude-agent-vm.md).
-# Cron / scheduler invokes this; output goes to a timestamped log under
-# ~/claude-agent/logs/ AND stdout so cron mailers can capture summaries.
+# Cron / scheduler (or agent-daemon) invokes this; output goes to a timestamped
+# log under ~/claude-agent/logs/ AND stdout so cron mailers can capture summaries.
+#
+# After the fire, the Exhaustion Classifier inspects the captured output + exit
+# code. If the run was cut off by Claude usage exhaustion, agent-run PAUSES the
+# in-flight issue instead of failing: it freezes partial work with a `wip:`
+# commit, flips the issue `team:in-progress -> team:paused` (leaving the branch
+# intact), records the pause as a timestamped comment, emits any scraped reset
+# instant for the daemon, and exits 0 — an out-of-gas event is never a failure.
 #
 # Usage:
-#   agent-run                     # fire once, exit with /team-pickup's exit code
+#   agent-run                     # fire once, exit per the classification below
 #   agent-run --dry-run           # forward --dry-run to /team-pickup
 #
 # Exit codes:
-#   0   — /team-pickup completed cleanly (PR opened + pr-watch verdict captured,
-#         OR no eligible issue, OR another fire in flight)
-#   non-0 — /team-pickup failed (§6b path); cron mailer should escalate.
+#   0   — /team-pickup completed cleanly, OR the run was paused (EXHAUSTED):
+#         partial work is frozen and the issue is left in team:paused for resume.
+#   non-0 — /team-pickup genuinely failed (§6b path); cron mailer should escalate.
+#
+# Injectable for tests (default to the real binaries):
+#   CLAUDE_BIN  claude CLI          GH_BIN  gh CLI          GIT_BIN  git
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# shellcheck source=lib/exhaustion-classifier.sh
+. "${SCRIPT_DIR}/lib/exhaustion-classifier.sh"
+
 REPO_DIR="${REPO_DIR:-$HOME/Smart-Smoker-V2}"
 LOG_DIR="${LOG_DIR:-$HOME/claude-agent/logs}"
+CLAUDE_BIN="${CLAUDE_BIN:-claude}"
+GH_BIN="${GH_BIN:-gh}"
+GIT_BIN="${GIT_BIN:-git}"
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
 LOG_FILE="$LOG_DIR/team-pickup-$TS.log"
 
@@ -29,15 +47,15 @@ if [ ! -d "$REPO_DIR/.git" ]; then
   exit 2
 fi
 
-if ! command -v claude >/dev/null 2>&1; then
-  echo "agent-run: ERROR — claude CLI not on PATH" >&2
+if ! command -v "$CLAUDE_BIN" >/dev/null 2>&1; then
+  echo "agent-run: ERROR — claude CLI ($CLAUDE_BIN) not on PATH" >&2
   exit 2
 fi
 
 cd "$REPO_DIR"
 
 # Refresh master so /team-pickup §4 branches from up-to-date origin/master.
-git fetch --quiet origin master || {
+"$GIT_BIN" fetch --quiet origin master || {
   echo "agent-run: WARN — git fetch failed, continuing with cached refs" | tee -a "$LOG_FILE"
 }
 
@@ -53,7 +71,7 @@ echo "prompt: /team-pickup$DRY_RUN_FLAG" | tee -a "$LOG_FILE"
 echo                          | tee -a "$LOG_FILE"
 
 set +e
-claude \
+"$CLAUDE_BIN" \
   --permission-mode bypassPermissions \
   --print \
   "/team-pickup$DRY_RUN_FLAG" \
@@ -64,4 +82,57 @@ set -e
 echo                                       | tee -a "$LOG_FILE"
 echo "=== agent-run exit $EXIT_CODE ===" | tee -a "$LOG_FILE"
 
-exit "$EXIT_CODE"
+# Classify the run from its captured output + exit code: OK / EXHAUSTED / FAILED.
+VERDICT="$(exhaustion_classify "$EXIT_CODE" < "$LOG_FILE")"
+STATUS="$(printf '%s' "$VERDICT" | jq -r '.status')"
+RESET_AT="$(printf '%s' "$VERDICT" | jq -r '.resetAt')"
+
+# pause_inflight — freeze partial work and move the in-flight issue to
+# team:paused. Every step is best-effort (|| true): a pause must never itself
+# fail the run and re-wedge the pipeline. team:failed is never applied here.
+pause_inflight() {
+  local reset_at="$1" issue ts note
+
+  issue="$("$GH_BIN" issue list --label team:in-progress --state open \
+    --json number --jq '.[0].number' 2>/dev/null || true)"
+  if [ -z "$issue" ] || [ "$issue" = "null" ]; then
+    echo "agent-run: EXHAUSTED but no team:in-progress issue to pause" | tee -a "$LOG_FILE"
+    return 0
+  fi
+
+  # Freeze any partial edits so the next checkout does not lose uncommitted work.
+  "$GIT_BIN" add -A || true
+  if ! "$GIT_BIN" diff --cached --quiet 2>/dev/null; then
+    "$GIT_BIN" commit -m "wip: freeze partial work on #${issue} (usage exhausted)" || true
+  fi
+
+  # Flip the lock to paused, keeping the branch intact for resume next window.
+  "$GH_BIN" issue edit "$issue" \
+    --remove-label team:in-progress --add-label team:paused || true
+
+  ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  note="Run paused at ${ts} — Claude usage exhausted mid-run. Branch kept for resume."
+  if [ -n "$reset_at" ]; then
+    note="${note} Budget resets at ${reset_at}."
+  fi
+  "$GH_BIN" issue comment "$issue" --body "$note" || true
+
+  echo "agent-run: paused #${issue} (team:in-progress -> team:paused)" | tee -a "$LOG_FILE"
+}
+
+case "$STATUS" in
+  EXHAUSTED)
+    echo "agent-run: EXHAUSTED — pausing in-flight work; resetAt=${RESET_AT}" | tee -a "$LOG_FILE"
+    pause_inflight "$RESET_AT"
+    # Emit the scraped reset instant on a stable line for the daemon to schedule off.
+    echo "AGENT_RUN_RESET_AT=${RESET_AT}" | tee -a "$LOG_FILE"
+    exit 0
+    ;;
+  FAILED)
+    echo "agent-run: FAILED — exit $EXIT_CODE" | tee -a "$LOG_FILE"
+    exit "$EXIT_CODE"
+    ;;
+  *)
+    exit "$EXIT_CODE"
+    ;;
+esac
