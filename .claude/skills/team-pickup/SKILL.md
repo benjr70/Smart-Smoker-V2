@@ -261,6 +261,43 @@ Whichever it is, record the result; do NOT exit team-pickup until pr-watch
 returns. The §7 output block below reports both the PR URL and the pr-watch
 verdict.
 
+### 6a.2. Manual verification sweep (verifier agent, BLOCKING)
+
+Run only when §6a.1 returned `pr-watch: PASS` (the code is final — a pr-watch
+fix loop may rewrite it, so verifying earlier would produce stale evidence).
+Skip when pr-watch returned DRAFT or ERROR.
+
+Spawn a **verifier** agent to execute the PR's `## Manual verification`
+checklist against the real shipped code and record the results on the PR.
+
+Invoke via the `Agent` tool with:
+
+- `subagent_type: verifier`
+- `run_in_background: false` ← blocking
+- `prompt` containing PR number, branch, repo, issue number, and these rules
+  verbatim:
+  1. Read the `## Manual verification` checklist from the PR body
+     (`gh pr view <PR_NUM> --json body -q .body`).
+  2. Verify each unchecked item **live**: execute the shipped code with its
+     externals stubbed via the code's own injection points (env vars, CLI args),
+     re-run the adjacent `.test.sh`/test suites, and inspect committed artifacts
+     (e.g. `systemd-analyze verify` for unit files). Never spend Claude usage,
+     never mutate git or GitHub state beyond this PR's body and one comment,
+     never install anything on the host.
+  3. Verdicts: item exercised and observed correct → **✅ pass**, tick its box
+     (`- [ ]` → `- [x]`). Item requires a real deployment, a real usage window,
+     or human observation → **⏭ deferred**, leave unticked. Item demonstrably
+     wrong → **❌ fail**, leave unticked.
+  4. Update the PR body (`gh pr edit <PR_NUM> --body-file <file>`) and post ONE
+     evidence comment: one line per item — verdict, how it was exercised,
+     observed result (concrete numbers/log lines, not "works").
+  5. Final message (exactly):
+     `manual-verify: <pass>/<total> PASS, <deferred> deferred, <fail> FAIL`
+
+Wait for the agent to return and record its final `manual-verify:` line for the
+§7 output block. On any ❌ do NOT touch labels or the PR state — CI is green and
+a human reviews the PR; the FAIL line in the output block is the signal.
+
 ### 6b. Failure path
 
 On any of: team-dispatch non-zero exit, missing smoke trailer, `smoke: FAIL`, or
@@ -285,11 +322,14 @@ picked:   #<N> <title>            (or: skip — N in flight, or: no eligible)
 dispatch: PASS | FAIL — <reason>
 pr:       <url>                    (success only)
 pr-watch: PASS | DRAFT | ERROR — <detail>   (success only)
+verify:   <pass>/<total> PASS, <n> deferred, <n> FAIL   (pr-watch PASS only)
 ```
 
 `pr-watch` line mirrors verbatim the final message returned by the spawned
-pr-watch agent in §6a.1. If §6a failed (no PR opened), omit both `pr:` and
-`pr-watch:` lines.
+pr-watch agent in §6a.1; `verify:` mirrors the §6a.2 verifier's final
+`manual-verify:` line. If §6a failed (no PR opened), omit the `pr:`,
+`pr-watch:`, and `verify:` lines; if pr-watch returned DRAFT/ERROR, omit
+`verify:`.
 
 ## Failure modes
 
@@ -304,6 +344,9 @@ pr-watch agent in §6a.1. If §6a failed (no PR opened), omit both `pr:` and
   amendment.
 - **`smoke:` trailer present but says FAIL** — §6a treats as failure, routes to
   §6b. SKIPPED is acceptable (some apps have no smoke script).
+- **§6a.2 manual verification reports ❌** — the PR stays open with green CI;
+  the unticked box + evidence comment + `verify:` output line flag it for the
+  human reviewer. No label changes, no draft conversion.
 - **Network/auth flake mid-team-dispatch** — teammates may stay spawned.
   Wrapper's §6b cleans GitHub state but cannot clean teammates. Run "Clean up
   the team." manually after a §6b failure.
@@ -315,5 +358,8 @@ pr-watch agent in §6a.1. If §6a failed (no PR opened), omit both `pr:` and
 - Never modifies the parent PRD issue. Only operates on `team`-labeled child
   issues. (PRDs themselves must NOT carry the `team` label.)
 - Never opens a PR if smoke did not pass or skip.
-- Never exits before the §6a.1 pr-watch agent returns. One fire = one issue
-  picked, implemented, PR opened, CI watched to verdict.
+- Never exits before the §6a.1 pr-watch agent (and, on pr-watch PASS, the §6a.2
+  verifier agent) returns. One fire = one issue picked, implemented, PR opened,
+  CI watched to verdict, manual verification recorded on the PR.
+- §6a.2 never burns Claude usage and never mutates anything beyond the PR body
+  and one evidence comment.

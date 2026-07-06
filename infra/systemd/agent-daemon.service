@@ -1,0 +1,36 @@
+# agent-daemon.service — always-alive, usage-paced /team-pickup supervisor.
+#
+# Committed artifact for PRD #287 / issue #288. This slice authors the unit file
+# only; installing and enabling it on the host is the HITL deploy slice. To
+# install manually (deferred):
+#
+#   sudo cp infra/systemd/agent-daemon.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now agent-daemon.service
+#   journalctl -u agent-daemon -f      # follow logs
+#
+# Assumes the repo is checked out at /home/claude-agent-1/Smart-Smoker-V2 and the
+# `claude` CLI is on the agent user's PATH.
+
+[Unit]
+Description=Smart-Smoker usage-paced /team-pickup daemon
+Documentation=https://github.com/benjr70/Smart-Smoker-V2/issues/287
+# Pace off local Claude usage, which needs the network to be up.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=claude-agent-1
+WorkingDirectory=/home/claude-agent-1/Smart-Smoker-V2
+ExecStart=/home/claude-agent-1/Smart-Smoker-V2/scripts/claude-agent/agent-daemon
+# Always-alive: restart on any exit, with a short backoff to avoid a hot loop.
+Restart=always
+RestartSec=10
+# Logs go to the journal (journalctl -u agent-daemon).
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=agent-daemon
+
+[Install]
+WantedBy=multi-user.target

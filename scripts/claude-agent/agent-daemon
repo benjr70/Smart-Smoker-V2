@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+# agent-daemon — always-alive, usage-paced supervisor for `/team-pickup`.
+#
+# The tracer-bullet loop for PRD #287 (issue #288): it establishes the end-to-end
+# path sensor -> decision -> action -> schedule with no pause/resume yet.
+#
+#   1. Sensor  : read local Claude usage via `ccusage blocks --json`.
+#   2. Decision: the Budget Gate decides fire-vs-wait purely from percent of the
+#                active window remaining (plan-agnostic — no wall-clock constants).
+#   3. Action  : when the window is fresh (>= ~90% remaining), fire `agent-run`
+#                (which invokes `/team-pickup`). A mid-run cutoff simply falls
+#                through to existing agent-run behavior for now.
+#   4. Schedule: the Sleep Planner decides how long to sleep and how to poll after
+#                waking; the daemon then sleeps and polls until budget is actually
+#                replenished before the next fire.
+#
+# If `ccusage` is unavailable (e.g. offline) the daemon degrades to a reset
+# estimate from the local JSONL mtime and stays alive rather than crashing.
+#
+# Designed to run under systemd (Restart=always) as the claude-agent user; see
+# infra/systemd/agent-daemon.service. Logs go to stdout/stderr (journald).
+#
+# Everything the loop touches is injectable via env so it is unit-testable
+# without the network, the clock, or the Claude CLI:
+#   CCUSAGE_CMD           shell command that prints ccusage blocks JSON
+#   AGENT_RUN_CMD         path/command to fire one run (default: ./agent-run)
+#   SLEEP_CMD             sleep command (default: sleep)
+#   CLAUDE_JSONL_DIR      dir scanned for the degraded reset estimate
+#   WINDOW_SECS           assumed window length for degraded estimate (default 5h)
+#   AGENT_DAEMON_MAX_ITERS  stop after N loop passes (default: unbounded)
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# shellcheck source=lib/budget-gate.sh
+. "${SCRIPT_DIR}/lib/budget-gate.sh"
+# shellcheck source=lib/sleep-planner.sh
+. "${SCRIPT_DIR}/lib/sleep-planner.sh"
+
+# Pinned ccusage version keeps the sensor reproducible across hosts.
+CCUSAGE_VERSION="${CCUSAGE_VERSION:-20.0.14}"
+CCUSAGE_CMD="${CCUSAGE_CMD:-npx ccusage@${CCUSAGE_VERSION} blocks --json}"
+AGENT_RUN_CMD="${AGENT_RUN_CMD:-${SCRIPT_DIR}/agent-run}"
+SLEEP_CMD="${SLEEP_CMD:-sleep}"
+CLAUDE_JSONL_DIR="${CLAUDE_JSONL_DIR:-${HOME}/.claude}"
+WINDOW_SECS="${WINDOW_SECS:-18000}"
+AGENT_DAEMON_MAX_ITERS="${AGENT_DAEMON_MAX_ITERS:-0}"   # 0 = unbounded
+
+log() { echo "[agent-daemon $(date -u +%Y-%m-%dT%H:%M:%SZ)] $*"; }
+
+# Estimate the next reset when ccusage is unavailable: newest JSONL mtime +
+# WINDOW_SECS, falling back to now + WINDOW_SECS if nothing is found. Keeps the
+# daemon alive and roughly paced instead of crash-looping.
+degraded_reset_iso() {
+    local newest mtime base
+    newest="$(ls -t "${CLAUDE_JSONL_DIR}"/*.jsonl 2>/dev/null | head -1 || true)"
+    if [ -n "${newest}" ] && [ -f "${newest}" ]; then
+        mtime="$(stat -c %Y "${newest}" 2>/dev/null || echo '')"
+    fi
+    base="${mtime:-$(date -u +%s)}"
+    date -u -d "@$((base + WINDOW_SECS))" +%Y-%m-%dT%H:%M:%S.000Z
+}
+
+# One sensor+decision read. Sets globals SHOULD_FIRE / RESET_AT / REMAIN_PCT.
+read_budget() {
+    local json gate_out gate_rc
+    json="$(bash -c "${CCUSAGE_CMD}" 2>/dev/null || true)"
+
+    gate_out="$(printf '%s' "${json}" | budget_gate)" && gate_rc=0 || gate_rc=$?
+
+    if [ "${gate_rc}" -eq 0 ]; then
+        SHOULD_FIRE="$(printf '%s' "${gate_out}" | jq -r '.shouldFire')"
+        RESET_AT="$(printf '%s' "${gate_out}" | jq -r '.resetAt')"
+        REMAIN_PCT="$(printf '%s' "${gate_out}" | jq -r '.remainPct')"
+    else
+        # Degraded: never fire; estimate the reset so we can still schedule.
+        SHOULD_FIRE="false"
+        RESET_AT="$(degraded_reset_iso)"
+        REMAIN_PCT="0"
+        log "WARN — ccusage/budget-gate degraded; estimated reset ${RESET_AT}"
+    fi
+}
+
+# Sleep until the reset, then poll until the window is actually fresh (or the
+# poll cap is hit). Honors the Sleep Planner's plan.
+sleep_and_poll() {
+    local reset_at="$1" plan sleep_secs interval attempts i
+    plan="$(sleep_planner "${reset_at}" "")"
+    sleep_secs="$(printf '%s' "${plan}" | jq -r '.sleepSecs')"
+    interval="$(printf '%s' "${plan}" | jq -r '.pollIntervalSecs')"
+    attempts="$(printf '%s' "${plan}" | jq -r '.pollMaxAttempts')"
+
+    log "sleeping ${sleep_secs}s until reset ${reset_at}"
+    "${SLEEP_CMD}" "${sleep_secs}"
+
+    # Post-wake poll: the reset estimate may be slightly early.
+    for ((i = 0; i < attempts; i++)); do
+        read_budget
+        if [ "${SHOULD_FIRE}" = "true" ]; then
+            return 0
+        fi
+        log "budget not yet replenished (poll $((i + 1))/${attempts}); waiting ${interval}s"
+        "${SLEEP_CMD}" "${interval}"
+    done
+    return 0
+}
+
+main() {
+    log "starting (ccusage='${CCUSAGE_CMD}', max_iters=${AGENT_DAEMON_MAX_ITERS})"
+    local iters=0
+    while true; do
+        read_budget
+        log "remainPct=${REMAIN_PCT} shouldFire=${SHOULD_FIRE} resetAt=${RESET_AT}"
+
+        if [ "${SHOULD_FIRE}" = "true" ]; then
+            log "budget fresh — firing agent-run"
+            # A mid-run cutoff falls through to existing agent-run behavior; the
+            # daemon must survive a non-zero fire and keep pacing.
+            "${AGENT_RUN_CMD}" || log "WARN — agent-run exited non-zero"
+        fi
+
+        # Whether we fired or not, schedule the next window before looping.
+        sleep_and_poll "${RESET_AT}"
+
+        iters=$((iters + 1))
+        if [ "${AGENT_DAEMON_MAX_ITERS}" -ne 0 ] && [ "${iters}" -ge "${AGENT_DAEMON_MAX_ITERS}" ]; then
+            log "reached max iters (${AGENT_DAEMON_MAX_ITERS}) — exiting"
+            break
+        fi
+    done
+}
+
+main "$@"
