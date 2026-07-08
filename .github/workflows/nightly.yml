@@ -30,9 +30,3 @@ jobs:
       platforms: linux/amd64,linux/arm/v7
       prebuild: true
     secrets: inherit
-
-  # deploy-dev:
-  #   needs: publish-nightly
-  #   uses: ./.github/workflows/cloud-deploy.yml
-  #   with:
-  #     version: nightly
