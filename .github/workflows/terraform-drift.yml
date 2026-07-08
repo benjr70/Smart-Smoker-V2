@@ -10,13 +10,13 @@
 name: Terraform Drift
 
 on:
-  # Nightly schedule is DISABLED until the existing (hand-built) infra is
-  # imported into Terraform state. With an empty TFC state every resource shows
-  # as "to add", so drift would open a bogus issue every night. Re-enable the
-  # cron after import. Manual runs still available via workflow_dispatch.
-  # schedule:
-  #   # 02:00 UTC nightly
-  #   - cron: '0 2 * * *'
+  # Nightly drift check. The lxc-container lifecycle ignore_changes (SSH keys +
+  # disk size, see #274) reconciles the known force-replacement drift, so the
+  # plan is expected to be empty and this will not open bogus issues. Manual
+  # runs still available via workflow_dispatch.
+  schedule:
+    # 02:00 UTC nightly
+    - cron: '0 2 * * *'
   workflow_dispatch:
 
 permissions:
