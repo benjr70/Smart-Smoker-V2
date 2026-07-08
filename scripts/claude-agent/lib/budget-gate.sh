@@ -10,10 +10,12 @@
 # `remainPct` is the percent of the *active* usage window still remaining, taken
 # straight from ccusage's own window bounds (`startTime`/`endTime`) — there are
 # no hard-coded wall-clock constants, so the gate is plan-agnostic: a bigger plan
-# reports different underlying numbers and the same 90%-fresh threshold trips
-# accordingly, with no code change. `resetAt` is the active window's `endTime`
-# (when the window rolls over). `shouldFire` is true only when the active window
-# is essentially fresh (>= BUDGET_FRESH_PCT, default 90).
+# reports different underlying numbers and the same threshold trips accordingly,
+# with no code change. `resetAt` is the active window's `endTime` (when the
+# window rolls over). `shouldFire` is true whenever enough of the window remains
+# to be worth starting a run (>= BUDGET_GATE_MIN_PCT, default 25) — mid-run
+# exhaustion is safe because agent-run pauses rather than fails, so the gate
+# only needs to filter out windows too spent to get meaningful work done.
 #
 # The function is pure: it reads only its stdin and env, never the network or the
 # clock beyond an injectable "now" (BUDGET_GATE_NOW epoch — used by tests).
@@ -24,8 +26,9 @@
 #       best-effort non-firing verdict is still printed so callers never crash;
 #       the daemon uses this exit to fall back to its own reset estimate.
 
-# Percent remaining at/above which the active window counts as "fresh".
-: "${BUDGET_FRESH_PCT:=90}"
+# Percent remaining at/above which a fire is worth starting. Honors the legacy
+# BUDGET_FRESH_PCT env if a host still sets it.
+: "${BUDGET_GATE_MIN_PCT:=${BUDGET_FRESH_PCT:-25}}"
 
 # budget_gate: read ccusage JSON on stdin, print the verdict JSON on stdout.
 budget_gate() {
@@ -73,7 +76,7 @@ budget_gate() {
     # Percent remaining, rounded to two decimals via awk (bash has no floats).
     remain_pct="$(awk "BEGIN{printf \"%.2f\", ${remain_secs} / ${window_secs} * 100}")"
 
-    if awk "BEGIN{exit !(${remain_pct} >= ${BUDGET_FRESH_PCT})}"; then
+    if awk "BEGIN{exit !(${remain_pct} >= ${BUDGET_GATE_MIN_PCT})}"; then
         should_fire="true"
     else
         should_fire="false"

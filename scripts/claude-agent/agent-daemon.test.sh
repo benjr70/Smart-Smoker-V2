@@ -160,6 +160,121 @@ $(cat "${dir}/calls.log")"
 }
 
 #-------------------------------------------------------------------------------
+# Test 4: a clean run with budget still above the gate → the daemon fires again
+# immediately (no sleep between fires) — the fresh-window-only pacing is gone.
+#-------------------------------------------------------------------------------
+test_clean_run_refires_same_window() {
+    echo "TEST: clean run re-fires within the same window"
+
+    local dir; dir="$(make_env)"
+    trap "rm -rf '${dir}'" RETURN
+    fixture $((NOW_EPOCH - 60)) > "${dir}/ccusage.json"      # plenty of window left
+
+    BUDGET_GATE_NOW="${NOW_EPOCH}" AGENT_DAEMON_MAX_ITERS=2 \
+        CCUSAGE_CMD="cat '${dir}/ccusage.json'" \
+        AGENT_RUN_CMD="${dir}/agent-run-stub" \
+        SLEEP_CMD="${dir}/sleep-stub" \
+        bash "${DAEMON}" >/dev/null 2>&1
+
+    local fired slept
+    fired="$(grep -c '^fired' "${dir}/calls.log")"
+    slept="$(grep -c '^slept' "${dir}/calls.log")"
+
+    if [ "${fired}" != "2" ]; then
+        fail "two passes with budget must fire twice" "calls:
+$(cat "${dir}/calls.log")"
+        return
+    fi
+    if [ "${slept}" != "0" ]; then
+        fail "a clean run with budget left must NOT sleep before re-firing" "calls:
+$(cat "${dir}/calls.log")"
+        return
+    fi
+
+    pass "clean run re-fires within the same window"
+}
+
+#-------------------------------------------------------------------------------
+# Test 5: a fire that reports AGENT_RUN_NO_WORK=1 (empty queue) → the daemon
+# sleeps out the window instead of hot-looping on empty picks.
+#-------------------------------------------------------------------------------
+test_no_work_sleeps_instead_of_relooping() {
+    echo "TEST: empty queue sleeps instead of re-firing"
+
+    local dir; dir="$(make_env)"
+    trap "rm -rf '${dir}'" RETURN
+    fixture $((NOW_EPOCH - 60)) > "${dir}/ccusage.json"
+    cat > "${dir}/agent-run-stub" <<EOF
+#!/usr/bin/env bash
+echo "fired \$*" >> "${dir}/calls.log"
+echo "team-pickup: no eligible issue"
+echo "AGENT_RUN_NO_WORK=1"
+exit 0
+EOF
+    chmod +x "${dir}/agent-run-stub"
+
+    BUDGET_GATE_NOW="${NOW_EPOCH}" AGENT_DAEMON_MAX_ITERS=1 \
+        CCUSAGE_CMD="cat '${dir}/ccusage.json'" \
+        AGENT_RUN_CMD="${dir}/agent-run-stub" \
+        SLEEP_CMD="${dir}/sleep-stub" \
+        bash "${DAEMON}" >/dev/null 2>&1
+
+    if [ "$(grep -c '^fired' "${dir}/calls.log")" != "1" ]; then
+        fail "empty queue must fire exactly once" "calls:
+$(cat "${dir}/calls.log")"
+        return
+    fi
+    if ! grep -q '^slept' "${dir}/calls.log"; then
+        fail "empty queue must sleep until the window reset" "calls:
+$(cat "${dir}/calls.log")"
+        return
+    fi
+
+    pass "empty queue sleeps instead of re-firing"
+}
+
+#-------------------------------------------------------------------------------
+# Test 6: a fire cut off by usage exhaustion (AGENT_RUN_RESET_AT emitted after
+# the pause) → the daemon sleeps to that reset instead of immediately re-firing
+# into a spent window.
+#-------------------------------------------------------------------------------
+test_exhausted_run_sleeps_to_reset() {
+    echo "TEST: exhausted run sleeps to the scraped reset"
+
+    local dir; dir="$(make_env)"
+    trap "rm -rf '${dir}'" RETURN
+    fixture $((NOW_EPOCH - 60)) > "${dir}/ccusage.json"
+    local reset_iso; reset_iso="$(iso $((NOW_EPOCH + 18000)))"
+    cat > "${dir}/agent-run-stub" <<EOF
+#!/usr/bin/env bash
+echo "fired \$*" >> "${dir}/calls.log"
+echo "agent-run: EXHAUSTED — pausing in-flight work"
+echo "AGENT_RUN_RESET_AT=${reset_iso}"
+exit 0
+EOF
+    chmod +x "${dir}/agent-run-stub"
+
+    BUDGET_GATE_NOW="${NOW_EPOCH}" AGENT_DAEMON_MAX_ITERS=1 \
+        CCUSAGE_CMD="cat '${dir}/ccusage.json'" \
+        AGENT_RUN_CMD="${dir}/agent-run-stub" \
+        SLEEP_CMD="${dir}/sleep-stub" \
+        bash "${DAEMON}" >/dev/null 2>&1
+
+    if [ "$(grep -c '^fired' "${dir}/calls.log")" != "1" ]; then
+        fail "exhausted run must fire exactly once" "calls:
+$(cat "${dir}/calls.log")"
+        return
+    fi
+    if ! grep -q '^slept' "${dir}/calls.log"; then
+        fail "exhausted run must sleep to the scraped reset" "calls:
+$(cat "${dir}/calls.log")"
+        return
+    fi
+
+    pass "exhausted run sleeps to the scraped reset"
+}
+
+#-------------------------------------------------------------------------------
 # Run suite
 #-------------------------------------------------------------------------------
 echo "=========================================="
@@ -169,6 +284,9 @@ echo "=========================================="
 test_fresh_budget_fires
 test_spent_budget_sleeps
 test_ccusage_unavailable_stays_alive
+test_clean_run_refires_same_window
+test_no_work_sleeps_instead_of_relooping
+test_exhausted_run_sleeps_to_reset
 
 echo ""
 echo "=========================================="
