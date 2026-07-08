@@ -7,9 +7,13 @@
 #   1. Sensor  : read local Claude usage via `ccusage blocks --json`.
 #   2. Decision: the Budget Gate decides fire-vs-wait purely from percent of the
 #                active window remaining (plan-agnostic — no wall-clock constants).
-#   3. Action  : when the window is fresh (>= ~90% remaining), fire `agent-run`
-#                (which invokes `/team-pickup`). A mid-run cutoff simply falls
-#                through to existing agent-run behavior for now.
+#   3. Action  : when enough window remains (>= BUDGET_GATE_MIN_PCT, default 25),
+#                fire `agent-run` (which invokes `/team-pickup`). After a clean
+#                run the loop goes straight back to the gate and fires again if
+#                budget still allows — the backlog drains within one window.
+#                agent-run markers steer the exceptions: AGENT_RUN_NO_WORK=1
+#                (empty queue) and AGENT_RUN_RESET_AT=<iso> (mid-run exhaustion,
+#                issue paused) both send the daemon to sleep instead.
 #   4. Schedule: the Sleep Planner decides how long to sleep and how to poll after
 #                waking; the daemon then sleeps and polls until budget is actually
 #                replenished before the next fire.
@@ -108,20 +112,40 @@ sleep_and_poll() {
 
 main() {
     log "starting (ccusage='${CCUSAGE_CMD}', max_iters=${AGENT_DAEMON_MAX_ITERS})"
-    local iters=0
+    local iters=0 fire_log run_reset
     while true; do
         read_budget
         log "remainPct=${REMAIN_PCT} shouldFire=${SHOULD_FIRE} resetAt=${RESET_AT}"
 
         if [ "${SHOULD_FIRE}" = "true" ]; then
-            log "budget fresh — firing agent-run"
-            # A mid-run cutoff falls through to existing agent-run behavior; the
-            # daemon must survive a non-zero fire and keep pacing.
-            "${AGENT_RUN_CMD}" || log "WARN — agent-run exited non-zero"
-        fi
+            log "budget above min — firing agent-run"
+            # Capture the fire's output (while still streaming it to the journal)
+            # so agent-run's markers can steer the next decision. The daemon must
+            # survive a non-zero fire and keep pacing.
+            fire_log="$(mktemp)"
+            "${AGENT_RUN_CMD}" 2>&1 | tee "${fire_log}" || log "WARN — agent-run exited non-zero"
 
-        # Whether we fired or not, schedule the next window before looping.
-        sleep_and_poll "${RESET_AT}"
+            if grep -q '^AGENT_RUN_NO_WORK=1' "${fire_log}"; then
+                # Queue empty: re-firing immediately would burn budget on empty
+                # picks, and new issues arrive on human time — wait a window.
+                log "queue empty — sleeping until window reset"
+                sleep_and_poll "${RESET_AT}"
+            elif grep -q '^AGENT_RUN_RESET_AT=' "${fire_log}"; then
+                # Run was cut off by usage exhaustion (issue paused). Sleep to
+                # the run's own scraped reset, falling back to the window's.
+                run_reset="$(grep -m1 '^AGENT_RUN_RESET_AT=' "${fire_log}" | cut -d= -f2-)"
+                [ -n "${run_reset}" ] || run_reset="${RESET_AT}"
+                log "run exhausted usage — sleeping until ${run_reset}"
+                sleep_and_poll "${run_reset}"
+            else
+                # Run finished with budget possibly to spare: loop straight back
+                # to the gate and keep working through the backlog this window.
+                log "run complete — re-checking budget"
+            fi
+            rm -f "${fire_log}"
+        else
+            sleep_and_poll "${RESET_AT}"
+        fi
 
         iters=$((iters + 1))
         if [ "${AGENT_DAEMON_MAX_ITERS}" -ne 0 ] && [ "${iters}" -ge "${AGENT_DAEMON_MAX_ITERS}" ]; then

@@ -95,9 +95,8 @@ test_fresh_window_fires() {
         fail "fresh window must fire" "out=${out}"
         return
     fi
-    # ~99% remaining; assert >= 90 (the freshness threshold).
     if ! awk "BEGIN{exit !(${remain} >= 90)}"; then
-        fail "fresh window remainPct must be >= 90" "remainPct=${remain}"
+        fail "fresh window remainPct must be ~100" "remainPct=${remain}"
         return
     fi
     if [ "${reset}" != "$(iso "${end}")" ]; then
@@ -109,28 +108,70 @@ test_fresh_window_fires() {
 }
 
 #-------------------------------------------------------------------------------
-# Test 2: mid / near-empty window → shouldFire=false (AC 2; behavior 2).
+# Test 2: mid window (>= min threshold remaining) → shouldFire=true. This is the
+# fresh-window-only removal: a half-spent window is still worth a fire because
+# mid-run exhaustion pauses rather than fails.
 #-------------------------------------------------------------------------------
-test_mid_window_waits() {
-    echo "TEST: mid window waits"
+test_mid_window_fires() {
+    echo "TEST: mid window fires (fresh-only gate removed)"
 
-    local start=$((NOW_EPOCH - 9000))          # 2.5h into a 5h window
+    local start=$((NOW_EPOCH - 9000))          # 2.5h into a 5h window → ~50% left
     local end=$((start + 18000))
     local out should remain
     out="$(active_block_json "${start}" "${end}" | BUDGET_GATE_NOW="${NOW_EPOCH}" budget_gate)"
     should="$(printf '%s' "${out}" | jq -r '.shouldFire')"
     remain="$(printf '%s' "${out}" | jq -r '.remainPct')"
 
-    if [ "${should}" != "false" ]; then
-        fail "mid window must not fire" "out=${out}"
+    if [ "${should}" != "true" ]; then
+        fail "mid window (>= min pct) must fire" "out=${out}"
         return
     fi
-    if ! awk "BEGIN{exit !(${remain} < 90 && ${remain} > 0)}"; then
-        fail "mid window remainPct must be between 0 and 90" "remainPct=${remain}"
+    if ! awk "BEGIN{exit !(${remain} < 90 && ${remain} > 25)}"; then
+        fail "mid window remainPct must be between 25 and 90" "remainPct=${remain}"
         return
     fi
 
-    pass "mid window waits"
+    pass "mid window fires (fresh-only gate removed)"
+}
+
+#-------------------------------------------------------------------------------
+# Test 2b: threshold boundary — just below BUDGET_GATE_MIN_PCT waits, at/above
+# fires, and the threshold is env-tunable.
+#-------------------------------------------------------------------------------
+test_min_pct_boundary() {
+    echo "TEST: min-pct boundary and env override"
+
+    local out should
+
+    # 24% remaining (< default 25) → wait.
+    local start=$((NOW_EPOCH - 13680))         # 76% elapsed → 24% left
+    local end=$((start + 18000))
+    out="$(active_block_json "${start}" "${end}" | BUDGET_GATE_NOW="${NOW_EPOCH}" budget_gate)"
+    should="$(printf '%s' "${out}" | jq -r '.shouldFire')"
+    if [ "${should}" != "false" ]; then
+        fail "24% remaining must wait under the default 25% gate" "out=${out}"
+        return
+    fi
+
+    # 26% remaining (>= 25) → fire.
+    start=$((NOW_EPOCH - 13320))               # 74% elapsed → 26% left
+    end=$((start + 18000))
+    out="$(active_block_json "${start}" "${end}" | BUDGET_GATE_NOW="${NOW_EPOCH}" budget_gate)"
+    should="$(printf '%s' "${out}" | jq -r '.shouldFire')"
+    if [ "${should}" != "true" ]; then
+        fail "26% remaining must fire under the default 25% gate" "out=${out}"
+        return
+    fi
+
+    # Same 26% under BUDGET_GATE_MIN_PCT=50 → wait (env-tunable).
+    out="$(active_block_json "${start}" "${end}" | BUDGET_GATE_NOW="${NOW_EPOCH}" BUDGET_GATE_MIN_PCT=50 budget_gate)"
+    should="$(printf '%s' "${out}" | jq -r '.shouldFire')"
+    if [ "${should}" != "false" ]; then
+        fail "26% remaining must wait when BUDGET_GATE_MIN_PCT=50" "out=${out}"
+        return
+    fi
+
+    pass "min-pct boundary and env override"
 }
 
 test_near_empty_window_waits() {
@@ -203,7 +244,8 @@ echo "budget-gate.sh tests"
 echo "=========================================="
 
 test_fresh_window_fires
-test_mid_window_waits
+test_mid_window_fires
+test_min_pct_boundary
 test_near_empty_window_waits
 test_malformed_json_degrades
 test_no_active_block_degrades

@@ -217,6 +217,62 @@ ${gh}"
 }
 
 #-------------------------------------------------------------------------------
+# Test 4: every fire starts from the tip of master — the checkout is reset and
+# switched to master before claude is invoked, so a prior run's feat/issue-N
+# branch (or crash debris) never leaks into the next pick.
+#-------------------------------------------------------------------------------
+test_fire_starts_from_latest_master() {
+    echo "TEST: every fire starts from latest master"
+
+    local dir git_calls
+    dir="$(make_env "opened PR https://github.com/benjr70/Smart-Smoker-V2/pull/300" 0)"
+    trap "rm -rf '${dir}'" RETURN
+
+    run_agent "${dir}" >/dev/null 2>&1
+
+    git_calls="$(cat "${dir}/git.log")"
+    if ! printf '%s' "${git_calls}" | grep -q 'checkout --quiet master'; then
+        fail "must checkout master before firing" "git:
+${git_calls}"
+        return
+    fi
+    if ! printf '%s' "${git_calls}" | grep -q 'reset --hard --quiet origin/master'; then
+        fail "must hard-reset master to origin/master before firing" "git:
+${git_calls}"
+        return
+    fi
+
+    pass "every fire starts from latest master"
+}
+
+#-------------------------------------------------------------------------------
+# Test 5: a clean run that picked nothing emits AGENT_RUN_NO_WORK=1 so the
+# daemon sleeps out the window instead of re-firing into an empty queue.
+#-------------------------------------------------------------------------------
+test_no_eligible_issue_emits_no_work_marker() {
+    echo "TEST: empty pick emits the no-work marker"
+
+    local dir rc out
+    dir="$(make_env "team-pickup: no eligible issue" 0)"
+    trap "rm -rf '${dir}'" RETURN
+
+    out="$(run_agent "${dir}" 2>/dev/null)"
+    rc=$?
+
+    if [ "${rc}" -ne 0 ]; then
+        fail "an empty pick is not a failure (exit 0)" "rc=${rc}"
+        return
+    fi
+    if ! printf '%s' "${out}" | grep -q '^AGENT_RUN_NO_WORK=1'; then
+        fail "an empty pick must emit AGENT_RUN_NO_WORK=1" "out:
+${out}"
+        return
+    fi
+
+    pass "empty pick emits the no-work marker"
+}
+
+#-------------------------------------------------------------------------------
 # Run suite
 #-------------------------------------------------------------------------------
 echo "=========================================="
@@ -226,6 +282,8 @@ echo "=========================================="
 test_exhaustion_pauses_not_fails
 test_genuine_failure_does_not_pause
 test_clean_success_exits_zero
+test_fire_starts_from_latest_master
+test_no_eligible_issue_emits_no_work_marker
 
 echo ""
 echo "=========================================="

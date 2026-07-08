@@ -59,6 +59,20 @@ cd "$REPO_DIR"
   echo "agent-run: WARN — git fetch failed, continuing with cached refs" | tee -a "$LOG_FILE"
 }
 
+# Every fire starts from the tip of master: a prior run may have left the
+# checkout on its feat/issue-N branch or with crash debris in the tree.
+# Anything worth keeping is already committed on its own branch (an exhausted
+# run freezes partial work with a wip commit before pausing), so discarding
+# local state here loses nothing.
+"$GIT_BIN" reset --hard --quiet || true
+"$GIT_BIN" checkout --quiet master || {
+  echo "agent-run: ERROR — cannot checkout master in $REPO_DIR" >&2
+  exit 2
+}
+"$GIT_BIN" reset --hard --quiet origin/master || {
+  echo "agent-run: WARN — reset to origin/master failed, continuing on local master" | tee -a "$LOG_FILE"
+}
+
 DRY_RUN_FLAG=""
 if [ "${1:-}" = "--dry-run" ]; then
   DRY_RUN_FLAG=" --dry-run"
@@ -133,6 +147,12 @@ case "$STATUS" in
     exit "$EXIT_CODE"
     ;;
   *)
+    # Clean run that picked nothing (empty queue or a stale in-flight skip):
+    # tell the daemon so it sleeps out the window instead of re-firing into an
+    # empty pick loop.
+    if grep -qE 'team-pickup: (no eligible issue|skip)' "$LOG_FILE"; then
+      echo "AGENT_RUN_NO_WORK=1" | tee -a "$LOG_FILE"
+    fi
     exit "$EXIT_CODE"
     ;;
 esac
