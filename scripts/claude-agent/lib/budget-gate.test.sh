@@ -215,25 +215,55 @@ test_malformed_json_degrades() {
     pass "malformed JSON degrades without crashing"
 }
 
-test_no_active_block_degrades() {
-    echo "TEST: no active block degrades without firing"
+test_no_active_block_fires() {
+    echo "TEST: valid JSON with no active block fires (idle = fresh budget)"
 
-    local out rc should
+    local out rc should remain reset
     out="$(printf '{"blocks":[{"id":"x","isActive":false,"isGap":false,"startTime":"'"$(iso "${NOW_EPOCH}")"'","endTime":"'"$(iso $((NOW_EPOCH + 18000)))"'"}]}' \
         | BUDGET_GATE_NOW="${NOW_EPOCH}" budget_gate)"
     rc=$?
     should="$(printf '%s' "${out}" | jq -r '.shouldFire' 2>/dev/null)"
+    remain="$(printf '%s' "${out}" | jq -r '.remainPct' 2>/dev/null)"
+    reset="$(printf '%s' "${out}" | jq -r '.resetAt' 2>/dev/null)"
 
-    if [ "${rc}" -eq 0 ]; then
-        fail "no active block must exit non-zero (degraded)" "out=${out}"
+    if [ "${rc}" -ne 0 ]; then
+        fail "idle (no active block) must exit 0, not degrade" "rc=${rc} out=${out}"
         return
     fi
-    if [ "${should}" = "true" ]; then
-        fail "no active block must not fire" "out=${out}"
+    if [ "${should}" != "true" ]; then
+        fail "idle window must fire (untouched budget)" "out=${out}"
+        return
+    fi
+    if ! awk "BEGIN{exit !(${remain} >= 100)}"; then
+        fail "idle window remainPct must be 100" "remainPct=${remain}"
+        return
+    fi
+    if [ -n "${reset}" ] && [ "${reset}" != "null" ]; then
+        fail "idle window resetAt must be empty (daemon defaults the window)" "out=${out}"
         return
     fi
 
-    pass "no active block degrades without firing"
+    pass "valid JSON with no active block fires (idle = fresh budget)"
+}
+
+test_empty_blocks_array_fires() {
+    echo "TEST: valid JSON, empty blocks array fires (cold box)"
+
+    local out rc should
+    out="$(printf '{"blocks":[]}' | BUDGET_GATE_NOW="${NOW_EPOCH}" budget_gate)"
+    rc=$?
+    should="$(printf '%s' "${out}" | jq -r '.shouldFire' 2>/dev/null)"
+
+    if [ "${rc}" -ne 0 ]; then
+        fail "empty blocks must exit 0 (valid JSON, just idle)" "rc=${rc} out=${out}"
+        return
+    fi
+    if [ "${should}" != "true" ]; then
+        fail "empty blocks must fire" "out=${out}"
+        return
+    fi
+
+    pass "valid JSON, empty blocks array fires (cold box)"
 }
 
 #-------------------------------------------------------------------------------
@@ -248,7 +278,8 @@ test_mid_window_fires
 test_min_pct_boundary
 test_near_empty_window_waits
 test_malformed_json_degrades
-test_no_active_block_degrades
+test_no_active_block_fires
+test_empty_blocks_array_fires
 
 echo ""
 echo "=========================================="

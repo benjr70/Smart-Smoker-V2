@@ -57,13 +57,22 @@ log() { echo "[agent-daemon $(date -u +%Y-%m-%dT%H:%M:%SZ)] $*"; }
 # WINDOW_SECS, falling back to now + WINDOW_SECS if nothing is found. Keeps the
 # daemon alive and roughly paced instead of crash-looping.
 degraded_reset_iso() {
-    local newest mtime base
+    local newest mtime base est now
     newest="$(ls -t "${CLAUDE_JSONL_DIR}"/*.jsonl 2>/dev/null | head -1 || true)"
     if [ -n "${newest}" ] && [ -f "${newest}" ]; then
         mtime="$(stat -c %Y "${newest}" 2>/dev/null || echo '')"
     fi
-    base="${mtime:-$(date -u +%s)}"
-    date -u -d "@$((base + WINDOW_SECS))" +%Y-%m-%dT%H:%M:%S.000Z
+    now="$(date -u +%s)"
+    base="${mtime:-${now}}"
+    est=$((base + WINDOW_SECS))
+    # A stale JSONL mtime puts the estimate in the past, which makes the Sleep
+    # Planner sleep 0s and then burn its whole poll budget every pass (observed
+    # 2026-07-09: hours of "sleeping 0s" + 12×300s polls). Floor at a full
+    # window ahead so a degraded daemon backs off instead of spin-polling.
+    if [ "${est}" -le "${now}" ]; then
+        est=$((now + WINDOW_SECS))
+    fi
+    date -u -d "@${est}" +%Y-%m-%dT%H:%M:%S.000Z
 }
 
 # One sensor+decision read. Sets globals SHOULD_FIRE / RESET_AT / REMAIN_PCT.
@@ -112,7 +121,7 @@ sleep_and_poll() {
 
 main() {
     log "starting (ccusage='${CCUSAGE_CMD}', max_iters=${AGENT_DAEMON_MAX_ITERS})"
-    local iters=0 fire_log run_reset
+    local iters=0 fire_log run_reset fire_rc
     while true; do
         read_budget
         log "remainPct=${REMAIN_PCT} shouldFire=${SHOULD_FIRE} resetAt=${RESET_AT}"
@@ -123,7 +132,13 @@ main() {
             # so agent-run's markers can steer the next decision. The daemon must
             # survive a non-zero fire and keep pacing.
             fire_log="$(mktemp)"
-            "${AGENT_RUN_CMD}" 2>&1 | tee "${fire_log}" || log "WARN — agent-run exited non-zero"
+            # errexit off around the fire: a non-zero agent-run must be handled
+            # (backoff below), not abort the daemon. PIPESTATUS[0] is agent-run's
+            # own exit, unaffected by the tee.
+            set +e
+            "${AGENT_RUN_CMD}" 2>&1 | tee "${fire_log}"
+            fire_rc="${PIPESTATUS[0]}"
+            set -e
 
             if grep -q '^AGENT_RUN_NO_WORK=1' "${fire_log}"; then
                 # Queue empty: re-firing immediately would burn budget on empty
@@ -137,6 +152,14 @@ main() {
                 [ -n "${run_reset}" ] || run_reset="${RESET_AT}"
                 log "run exhausted usage — sleeping until ${run_reset}"
                 sleep_and_poll "${run_reset}"
+            elif [ "${fire_rc}" -ne 0 ]; then
+                # Genuine failure (exit non-zero, no exhaustion/no-work marker).
+                # Re-firing immediately would hot-loop on the same broken pick and
+                # burn the whole window (observed 2026-07-08: 1271 fires in 2h).
+                # A real failure will not fix itself — sleep out the window and
+                # let the next reset (or a human) clear it.
+                log "WARN — agent-run failed (exit ${fire_rc}) — sleeping until window reset"
+                sleep_and_poll "${RESET_AT}"
             else
                 # Run finished with budget possibly to spare: loop straight back
                 # to the gate and keep working through the backlog this window.

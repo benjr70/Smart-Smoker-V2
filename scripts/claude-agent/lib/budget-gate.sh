@@ -21,10 +21,14 @@
 # clock beyond an injectable "now" (BUDGET_GATE_NOW epoch — used by tests).
 #
 # Exit codes:
-#   0 — a verdict was computed from a live active window.
-#   3 — degraded: input was missing/malformed or had no active window. A
-#       best-effort non-firing verdict is still printed so callers never crash;
-#       the daemon uses this exit to fall back to its own reset estimate.
+#   0 — a verdict was computed: either from a live active window, or from a
+#       valid-but-idle payload (no active block). An idle window means the plan's
+#       budget is untouched — the best time to fire — so the verdict is
+#       {remainPct:100, resetAt:"", shouldFire:true}, letting the daemon start
+#       work from a cold box instead of stalling.
+#   3 — degraded: input was missing or malformed JSON. A best-effort non-firing
+#       verdict is still printed so callers never crash; the daemon uses this
+#       exit to fall back to its own reset estimate.
 
 # Percent remaining at/above which a fire is worth starting. Honors the legacy
 # BUDGET_FRESH_PCT env if a host still sets it.
@@ -39,14 +43,23 @@ budget_gate() {
 
     payload="$(cat)"
 
-    # Locate the single active, non-gap block. jq exits non-zero on invalid JSON.
+    # Malformed / empty payload → degraded. Distinguished from a valid-but-idle
+    # payload below: only a real parse failure means the sensor is broken.
+    if ! printf '%s' "${payload}" | jq -e . >/dev/null 2>&1; then
+        printf '{"remainPct":0,"resetAt":"","shouldFire":false}\n'
+        return 3
+    fi
+
+    # Locate the single active, non-gap block.
     active="$(printf '%s' "${payload}" \
         | jq -c 'first(.blocks[]? | select(.isActive == true and (.isGap // false) == false))' 2>/dev/null)"
 
     if [ -z "${active}" ] || [ "${active}" = "null" ]; then
-        # Degraded: unparseable payload or no active window — never fire.
-        printf '{"remainPct":0,"resetAt":"","shouldFire":false}\n'
-        return 3
+        # Valid JSON but no active window: the box is idle, so the plan's budget
+        # is untouched — fire from cold rather than stalling forever. resetAt is
+        # empty; the daemon's Sleep Planner defaults the window on the next pass.
+        printf '{"remainPct":100.00,"resetAt":"","shouldFire":true}\n'
+        return 0
     fi
 
     start_iso="$(printf '%s' "${active}" | jq -r '.startTime // empty')"

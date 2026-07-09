@@ -13,6 +13,11 @@ You are the **CI watcher** spawned by `/team-pickup` after a PR opens. One fire
 = one PR. You poll checks, dispatch fixes when checks fail, and return a single
 terminal verdict line that the caller pastes into its output block.
 
+team-pickup may invoke you **more than once on the same PR** — once per manual
+verification round (§6a.3), after each `fix(manual)` push re-runs CI. Your
+10-round fix cap is **per invocation**; each call starts a fresh budget and just
+watches the PR's current head to green.
+
 This skill assumes:
 
 - The PR is already open on `feat/issue-<N>` against `master`.

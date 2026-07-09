@@ -174,6 +174,83 @@ test_usage_limit_without_reset_is_exhausted_no_resetat() {
 }
 
 #-------------------------------------------------------------------------------
+# Test 5 (REGRESSION): the live "session limit" notice must classify EXHAUSTED,
+# not FAILED. Observed 2026-07-08 — a fire that hit the session cap exited 1 with
+# only this line; the old regex missed it, so the daemon rapid-refired ~1271×.
+#-------------------------------------------------------------------------------
+test_session_limit_is_exhausted() {
+    echo "TEST: session limit classifies as EXHAUSTED"
+
+    local out status
+    out="$(printf '%s\n' \
+        "=== agent-run 20260708T223300Z ===" \
+        "prompt: /team-pickup" \
+        "You've hit your session limit · resets 10:50pm (America/New_York)" \
+        | exhaustion_classify 1)"
+
+    status="$(printf '%s' "${out}" | jq -r '.status')"
+
+    if [ "${status}" = "FAILED" ]; then
+        fail "session limit must NOT classify as FAILED (rapid-refire bug)" "out=${out}"
+        return
+    fi
+    if [ "${status}" != "EXHAUSTED" ]; then
+        fail "session limit must classify as EXHAUSTED" "out=${out}"
+        return
+    fi
+
+    pass "session limit classifies as EXHAUSTED"
+}
+
+#-------------------------------------------------------------------------------
+# Test 6: a wall-clock "resets 10:50pm (America/New_York)" notice scrapes a
+# future ISO-8601 UTC reset. With EC_NOW fixed to 2026-07-08T22:00:00-04:00
+# (02:00Z next day), 10:50pm EDT is the same evening → 2026-07-09T02:50:00Z.
+#-------------------------------------------------------------------------------
+test_clock_reset_scrapes_future_iso() {
+    echo "TEST: wall-clock reset scrapes a future ISO-8601 instant"
+
+    local now out reset
+    now=$(date -u -d '2026-07-09T02:00:00Z' +%s)   # 22:00 EDT Jul 8
+    out="$(printf '%s\n' \
+        "You've hit your session limit · resets 10:50pm (America/New_York)" \
+        | EC_NOW="${now}" exhaustion_classify 1)"
+
+    reset="$(printf '%s' "${out}" | jq -r '.resetAt')"
+
+    if [ "${reset}" != "2026-07-09T02:50:00.000Z" ]; then
+        fail "10:50pm EDT after 22:00 EDT must resolve to 02:50Z same night" "got=${reset}"
+        return
+    fi
+
+    pass "wall-clock reset scrapes a future ISO-8601 instant"
+}
+
+#-------------------------------------------------------------------------------
+# Test 7: a wall-clock reset time already past "now" rolls to the next day (the
+# notice always names a future instant). EC_NOW = 11:00pm EDT, reset 10:50pm →
+# tomorrow's 10:50pm EDT = 2026-07-10T02:50:00Z.
+#-------------------------------------------------------------------------------
+test_clock_reset_rolls_to_next_day() {
+    echo "TEST: past wall-clock reset rolls to the next day"
+
+    local now out reset
+    now=$(date -u -d '2026-07-09T03:00:00Z' +%s)   # 23:00 EDT Jul 8
+    out="$(printf '%s\n' \
+        "You've hit your session limit · resets 10:50pm (America/New_York)" \
+        | EC_NOW="${now}" exhaustion_classify 1)"
+
+    reset="$(printf '%s' "${out}" | jq -r '.resetAt')"
+
+    if [ "${reset}" != "2026-07-10T02:50:00.000Z" ]; then
+        fail "10:50pm EDT after 23:00 EDT must roll to next day 02:50Z" "got=${reset}"
+        return
+    fi
+
+    pass "past wall-clock reset rolls to the next day"
+}
+
+#-------------------------------------------------------------------------------
 # Run suite
 #-------------------------------------------------------------------------------
 echo "=========================================="
@@ -184,6 +261,9 @@ test_clean_success_is_ok
 test_genuine_failure_is_failed_not_exhausted
 test_usage_limit_with_reset_is_exhausted
 test_usage_limit_without_reset_is_exhausted_no_resetat
+test_session_limit_is_exhausted
+test_clock_reset_scrapes_future_iso
+test_clock_reset_rolls_to_next_day
 
 echo ""
 echo "=========================================="
