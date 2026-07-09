@@ -273,6 +273,105 @@ ${out}"
 }
 
 #-------------------------------------------------------------------------------
+# Test 6 (REGRESSION): the real skip report line — `picked:   skip — N in flight`
+# observed live 2026-07-09 — must emit AGENT_RUN_NO_WORK=1. The old grep only
+# matched `team-pickup: skip`, so a lock-skip looked like a clean run and the
+# daemon hot-looped one fire every ~90s.
+#-------------------------------------------------------------------------------
+test_real_skip_output_emits_no_work_marker() {
+    echo "TEST: real skip report line emits the no-work marker"
+
+    local dir rc out
+    dir="$(make_env "=== /team-pickup 2026-07-09T00:00:00Z ===
+picked:   skip — 1 in flight" 0)"
+    trap "rm -rf '${dir}'" RETURN
+
+    out="$(run_agent "${dir}" 2>/dev/null)"
+    rc=$?
+
+    if [ "${rc}" -ne 0 ]; then
+        fail "a skip is not a failure (exit 0)" "rc=${rc}"
+        return
+    fi
+    if ! printf '%s' "${out}" | grep -q '^AGENT_RUN_NO_WORK=1'; then
+        fail "a lock-skip must emit AGENT_RUN_NO_WORK=1" "out:
+${out}"
+        return
+    fi
+
+    pass "real skip report line emits the no-work marker"
+}
+
+#-------------------------------------------------------------------------------
+# Test 7: a genuine failure that had already picked an issue (its log carries the
+# `picked:   #N` line) clears the lock it created — team:in-progress → team:failed
+# with a triage comment — so the next fire is not blocked forever (the #280
+# stuck-lock scenario).
+#-------------------------------------------------------------------------------
+test_failed_run_clears_its_own_lock() {
+    echo "TEST: failed run clears the lock it created"
+
+    local dir rc gh
+    dir="$(make_env "=== /team-pickup 2026-07-09T00:00:00Z ===
+picked:   #280 Tracer: full data-integrity stack
+implementing…
+Error: process exited with code 1" 1)"
+    trap "rm -rf '${dir}'" RETURN
+
+    run_agent "${dir}" >/dev/null 2>&1
+    rc=$?
+
+    if [ "${rc}" -eq 0 ]; then
+        fail "a genuine failure must exit non-zero" "rc=${rc}"
+        return
+    fi
+
+    gh="$(cat "${dir}/gh.log")"
+    if ! printf '%s' "${gh}" | grep -q 'issue edit 280.*--remove-label team:in-progress'; then
+        fail "must remove the leaked team:in-progress lock from the picked issue" "gh:
+${gh}"
+        return
+    fi
+    if ! printf '%s' "${gh}" | grep -q 'issue edit 280.*--add-label team:failed'; then
+        fail "must mark the picked issue team:failed for triage" "gh:
+${gh}"
+        return
+    fi
+    if ! printf '%s' "${gh}" | grep -q 'issue comment 280'; then
+        fail "must comment the failure on the picked issue" "gh:
+${gh}"
+        return
+    fi
+
+    pass "failed run clears the lock it created"
+}
+
+#-------------------------------------------------------------------------------
+# Test 8: a genuine failure that never picked an issue (no `picked:   #N` line)
+# touches NO labels — it must never clear a lock some other run holds.
+#-------------------------------------------------------------------------------
+test_failed_run_without_pick_touches_no_lock() {
+    echo "TEST: failed run with no pick leaves foreign locks untouched"
+
+    local dir gh
+    dir="$(make_env "=== /team-pickup 2026-07-09T00:00:00Z ===
+FAIL apps/backend/src/temps/temps.service.spec.ts
+Error: process exited with code 1" 1)"
+    trap "rm -rf '${dir}'" RETURN
+
+    run_agent "${dir}" >/dev/null 2>&1
+
+    gh="$(cat "${dir}/gh.log")"
+    if printf '%s' "${gh}" | grep -qE 'issue edit .*team:(failed|in-progress)'; then
+        fail "a failure with no pick must not edit any issue's labels" "gh:
+${gh}"
+        return
+    fi
+
+    pass "failed run with no pick leaves foreign locks untouched"
+}
+
+#-------------------------------------------------------------------------------
 # Run suite
 #-------------------------------------------------------------------------------
 echo "=========================================="
@@ -284,6 +383,9 @@ test_genuine_failure_does_not_pause
 test_clean_success_exits_zero
 test_fire_starts_from_latest_master
 test_no_eligible_issue_emits_no_work_marker
+test_real_skip_output_emits_no_work_marker
+test_failed_run_clears_its_own_lock
+test_failed_run_without_pick_touches_no_lock
 
 echo ""
 echo "=========================================="

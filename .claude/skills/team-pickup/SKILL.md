@@ -318,21 +318,33 @@ Invoke pr-watch via the `Agent` tool with:
 - `prompt`:
   `"Invoke the /pr-watch skill for PR #<PR_NUM> on branch feat/issue-<N>, repo benjr70/Smart-Smoker-V2. Issue #<N>. Poll CI every 60s up to 45 minutes per round. On red, loop the implementer up to 10 rounds total. On exhaustion convert the PR to draft and add the team:checks-failed label."`
 
-Wait for the agent to return. Its final message will be one of:
+Wait for the agent to return. Record its final message verbatim as
+`PR_WATCH_LINE`. It will be one of:
 
 - `pr-watch: PASS — all checks green at attempt <K>`
 - `pr-watch: DRAFT — exhausted 10 rounds, marked draft, team:checks-failed`
 - `pr-watch: ERROR — <reason>`
 
-Whichever it is, record the result; do NOT exit team-pickup until pr-watch
-returns. The §7 output block below reports both the PR URL and the pr-watch
-verdict.
+**pr-watch is a blocking checkpoint, not a background task.** While the pr-watch
+agent is in flight you MUST NOT proceed to §6a.2, §6a.3, §7, or any other step,
+and MUST NOT emit the output block or any summary. If the `Agent` tool reports
+the spawn as still running / "in flight", keep waiting (poll for the agent
+result) until a terminal `pr-watch:` line exists. A run that emits its output
+block while pr-watch is still in flight is an **invalid run** — `pr-watch: (in
+flight)` is never a legal value for the §7 block.
+
+§6a.1 may execute **more than once per fire**: every `fix(manual)` push from
+§6a.3 re-enters this step, because new commits re-run CI and invalidate the
+previous PASS. Each entry is a fresh pr-watch invocation with its own 10-round
+budget.
 
 ### 6a.2. Manual verification sweep (verifier agent, BLOCKING)
 
-Run only when §6a.1 returned `pr-watch: PASS` (the code is final — a pr-watch
-fix loop may rewrite it, so verifying earlier would produce stale evidence).
-Skip when pr-watch returned DRAFT or ERROR.
+Run only when the **most recent** §6a.1 invocation returned `pr-watch: PASS`
+(the code is final — a pr-watch fix loop may rewrite it, so verifying earlier
+would produce stale evidence). Skip when it returned DRAFT or ERROR. This step
+is **round `M` of the manual verification loop** (`M` starts at 1, cap
+`MANUAL_ROUNDS_MAX=3` — see §6a.3).
 
 Spawn a **verifier** agent to execute the PR's `## Manual verification`
 checklist against the real shipped code and record the results on the PR.
@@ -341,10 +353,12 @@ Invoke via the `Agent` tool with:
 
 - `subagent_type: verifier`
 - `run_in_background: false` ← blocking
-- `prompt` containing PR number, branch, repo, issue number, and these rules
-  verbatim:
+- `prompt` containing PR number, branch, repo, issue number, the current round
+  `M`, and these rules verbatim:
   1. Read the `## Manual verification` checklist from the PR body
-     (`gh pr view <PR_NUM> --json body -q .body`).
+     (`gh pr view <PR_NUM> --json body -q .body`). Verify every **unchecked**
+     item; items already ticked `- [x]` stay ticked (green CI plus the scope of
+     any `fix(manual)` commit guard them — do not re-litigate them).
   2. Verify each unchecked item **live**: execute the shipped code with its
      externals stubbed via the code's own injection points (env vars, CLI args),
      re-run the adjacent `.test.sh`/test suites, and inspect committed artifacts
@@ -356,14 +370,70 @@ Invoke via the `Agent` tool with:
      or human observation → **⏭ deferred**, leave unticked. Item demonstrably
      wrong → **❌ fail**, leave unticked.
   4. Update the PR body (`gh pr edit <PR_NUM> --body-file <file>`) and post ONE
-     evidence comment: one line per item — verdict, how it was exercised,
-     observed result (concrete numbers/log lines, not "works").
+     evidence comment **per round**, headed `### Manual verification — round
+     <M>/3` (or `### Manual verification — all items pass (round <M>)` when
+     FAIL=0): one line per item — verdict, how it was exercised, observed result
+     (concrete numbers/log lines, not "works"). Every **⏭ deferred** line MUST
+     name the concrete real-world precondition that blocks live verification
+     (deploy window, real hardware, human observation); an **unjustified
+     deferral counts as ❌ FAIL**. Every **❌ fail** line MUST carry the
+     expected-vs-observed evidence — §6a.3 feeds it to the implementer verbatim.
   5. Final message (exactly):
      `manual-verify: <pass>/<total> PASS, <deferred> deferred, <fail> FAIL`
 
-Wait for the agent to return and record its final `manual-verify:` line for the
-§7 output block. On any ❌ do NOT touch labels or the PR state — CI is green and
-a human reviews the PR; the FAIL line in the output block is the signal.
+Wait for the agent to return and record its final `manual-verify:` line as
+`MANUAL_LINE`. This spawn is blocking under the same rule as §6a.1 — do not
+proceed or emit output while it is in flight. Then: if **FAIL = 0**, the loop is
+done — go to §7. If **FAIL > 0**, go to §6a.3.
+
+### 6a.3. Manual fix round (lead commits, mirrors pr-watch)
+
+When §6a.2 reports one or more ❌ FAIL items, do NOT leave them for the human —
+loop the implementer to fix the shipped behavior, then re-verify. Because a fix
+push re-runs CI and stales the prior `pr-watch: PASS`, each fix re-enters §6a.1
+before re-running §6a.2. The whole success path is this bounded outer loop:
+
+```
+M=1; MANUAL_ROUNDS_MAX=3
+while true:
+  §6a.1 pr-watch (blocking) → PR_WATCH_LINE
+  if PR_WATCH_LINE != PASS: break            # DRAFT/ERROR — report, no verify line
+  §6a.2 verifier round M (blocking) → MANUAL_LINE
+  if FAIL == 0: break                        # done — all pass / justified deferrals
+  if M == MANUAL_ROUNDS_MAX: exhaust; break
+  spawn implementer with the ❌ evidence → stages fix (never commits)
+  git commit -m "fix(manual): round $M — <failed items summary>"; git push
+  M=M+1                                       # → re-enter §6a.1 (CI re-runs)
+```
+
+**Implementer spawn** — via the `Agent` tool: `subagent_type: implementer`,
+`model: opus`, `run_in_background: false` (blocking). The prompt embeds the
+issue title + body, the PR diff (`git diff origin/master...HEAD`, capped at 2000
+lines as in pr-watch §3), and the verifier's ❌ evidence lines verbatim, plus
+these instructions verbatim:
+
+> Fix the shipped behavior so each failed manual-verification item passes when
+> exercised live. Stage the fix (`git add`). Do NOT commit and do NOT push — the
+> wrapper handles that. Reply with a short summary when staged. If you believe
+> the acceptance criterion itself is wrong (not the code), reply
+> `manual-verify-dispute: <one-line reason>` and stage nothing.
+
+On `manual-verify-dispute` (or if the implementer staged nothing), treat it as
+exhaustion immediately — this loop never edits acceptance criteria. Otherwise
+the lead commits the staged fix as `fix(manual): round <M> — <summary>` and
+pushes with a plain `git push` (never `--force`), then re-enters §6a.1.
+
+**Exhaustion** (cap reached, or a dispute) — mirror pr-watch's escalation; do
+NOT route to §6b (a PR exists, and §6b is the no-PR path that must not run after
+a push):
+
+```bash
+gh pr ready "$PR_NUM" --undo
+gh pr edit  "$PR_NUM" --add-label team:checks-failed
+gh issue comment "$N" --body "manual verification exhausted $MANUAL_ROUNDS_MAX fix rounds on PR #$PR_NUM — <f> item(s) still FAIL. Marked draft + team:checks-failed. Human triage required."
+```
+
+Report the last `MANUAL_LINE` in the §7 block, suffixed `— EXHAUSTED`.
 
 ### 6b. Failure path
 
@@ -389,14 +459,30 @@ picked:   #<N> <title>            (or: skip — N in flight, or: no eligible)
 dispatch: PASS | FAIL — <reason>
 pr:       <url>                    (success only)
 pr-watch: PASS | DRAFT | ERROR — <detail>   (success only)
-verify:   <pass>/<total> PASS, <n> deferred, <n> FAIL   (pr-watch PASS only)
+verify:   <pass>/<total> PASS, <n> deferred, <n> FAIL — round <M>/3 [— EXHAUSTED]   (pr-watch PASS only)
 ```
 
 `pr-watch` line mirrors verbatim the final message returned by the spawned
 pr-watch agent in §6a.1; `verify:` mirrors the §6a.2 verifier's final
-`manual-verify:` line. If §6a failed (no PR opened), omit the `pr:`,
+`manual-verify:` line (from the last round), suffixed `— round <M>/3` and, on
+§6a.3 exhaustion, `— EXHAUSTED`. If §6a failed (no PR opened), omit the `pr:`,
 `pr-watch:`, and `verify:` lines; if pr-watch returned DRAFT/ERROR, omit
 `verify:`.
+
+**Machine skip lines (for the daemon).** When the fire does not pick — a
+concurrency skip (§1) or an empty queue (§2) — emit, in addition to the human
+`picked:` line, one of these exact standalone lines so `agent-run` can tell the
+daemon to sleep out the window instead of hot-looping into the lock:
+
+- `team-pickup: skip` — a `team:in-progress` lock is already held (§1).
+- `team-pickup: no eligible issue` — nothing eligible in the queue (§2).
+
+**Hard validity rule.** On the §6a success path the output block MUST contain a
+`pr-watch:` line copied verbatim from the last pr-watch agent's terminal
+message, and — whenever that line says PASS — a `verify:` line copied from the
+last verifier's `manual-verify:` message. If either required line is missing,
+the run is **invalid**: do not emit the report; go back and wait for the
+in-flight agent. `pr-watch: (in flight)` is never a legal value.
 
 ## Failure modes
 
@@ -416,9 +502,18 @@ pr-watch agent in §6a.1; `verify:` mirrors the §6a.2 verifier's final
   amendment.
 - **`smoke:` trailer present but says FAIL** — §6a treats as failure, routes to
   §6b. SKIPPED is acceptable (some apps have no smoke script).
-- **§6a.2 manual verification reports ❌** — the PR stays open with green CI;
-  the unticked box + evidence comment + `verify:` output line flag it for the
-  human reviewer. No label changes, no draft conversion.
+- **§6a.2 manual verification reports ❌** — §6a.3 spawns the implementer with
+  the failure evidence, the lead commits `fix(manual): round <M> …` and pushes,
+  and the loop re-enters §6a.1 (CI must re-green before re-verification). Cap 3
+  manual rounds; on exhaustion (or an implementer `manual-verify-dispute`) the PR
+  converts to draft + `team:checks-failed` with an issue comment — the same
+  escalation as pr-watch exhaustion. A **justified ⏭ deferred** item (deploy
+  window / real hardware / human observation, precondition stated) is not a
+  failure and does not loop; it stays unticked for the human.
+- **Lead emits output while pr-watch or the verifier is in flight** — an invalid
+  run per the §7 hard validity rule. The missing terminal `pr-watch:` /
+  `verify:` line is the detection signal; the fix is to wait for the blocking
+  agent before emitting anything.
 - **Network/auth flake mid-team-dispatch** — teammates may stay spawned.
   Wrapper's §6b cleans GitHub state but cannot clean teammates. Run "Clean up
   the team." manually after a §6b failure.
@@ -431,7 +526,11 @@ pr-watch agent in §6a.1; `verify:` mirrors the §6a.2 verifier's final
   issues. (PRDs themselves must NOT carry the `team` label.)
 - Never opens a PR if smoke did not pass or skip.
 - Never exits before the §6a.1 pr-watch agent (and, on pr-watch PASS, the §6a.2
-  verifier agent) returns. One fire = one issue picked, implemented, PR opened,
-  CI watched to verdict, manual verification recorded on the PR.
-- §6a.2 never burns Claude usage and never mutates anything beyond the PR body
-  and one evidence comment.
+  verifier agent — re-entered once per manual fix round) returns. One fire = one
+  issue picked, implemented, PR opened, CI watched to verdict, manual
+  verification executed and recorded on the PR.
+- The §6a.2 **verifier** never burns Claude usage and never mutates anything
+  beyond the PR body and one evidence comment per round. The §6a.3 **fix loop**
+  does burn usage (one implementer spawn per manual round, cap 3) and pushes
+  `fix(manual):` commits to the PR branch only — never to master, never
+  force-pushed.

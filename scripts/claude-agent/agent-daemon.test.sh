@@ -275,6 +275,85 @@ $(cat "${dir}/calls.log")"
 }
 
 #-------------------------------------------------------------------------------
+# Test 7 (REGRESSION): a fire that FAILS (exit non-zero, no exhaustion/no-work
+# marker) must NOT be treated as a clean run and re-fired immediately. The live
+# bug (2026-07-08) was a session-limit failure with no marker looping ~1271×.
+# Across two iters the daemon must fire once, sleep, and not hot-loop.
+#-------------------------------------------------------------------------------
+test_failed_run_sleeps_no_rapid_loop() {
+    echo "TEST: failed fire sleeps instead of hot-looping"
+
+    local dir; dir="$(make_env)"
+    trap "rm -rf '${dir}'" RETURN
+    fixture $((NOW_EPOCH - 60)) > "${dir}/ccusage.json"      # plenty of budget
+    cat > "${dir}/agent-run-stub" <<EOF
+#!/usr/bin/env bash
+echo "fired \$*" >> "${dir}/calls.log"
+echo "agent-run: FAILED — exit 1"
+exit 1
+EOF
+    chmod +x "${dir}/agent-run-stub"
+
+    BUDGET_GATE_NOW="${NOW_EPOCH}" AGENT_DAEMON_MAX_ITERS=2 \
+        CCUSAGE_CMD="cat '${dir}/ccusage.json'" \
+        AGENT_RUN_CMD="${dir}/agent-run-stub" \
+        SLEEP_CMD="${dir}/sleep-stub" \
+        bash "${DAEMON}" >/dev/null 2>&1
+
+    local fired slept
+    fired="$(grep -c '^fired' "${dir}/calls.log")"
+    slept="$(grep -c '^slept' "${dir}/calls.log")"
+
+    # Each of the 2 iters: fire once, fail, sleep. Must NOT fire twice per iter.
+    if [ "${fired}" != "2" ]; then
+        fail "failed fire must fire once per iter (2 iters), not hot-loop" "fired=${fired} calls:
+$(cat "${dir}/calls.log")"
+        return
+    fi
+    if [ "${slept}" -lt "2" ]; then
+        fail "failed fire must sleep out the window each iter" "slept=${slept} calls:
+$(cat "${dir}/calls.log")"
+        return
+    fi
+
+    pass "failed fire sleeps instead of hot-looping"
+}
+
+#-------------------------------------------------------------------------------
+# Test 8: an idle window (valid ccusage JSON but no active block) → the daemon
+# fires from cold instead of stalling. RESET_AT is empty on this path; the fire
+# must still happen and the loop must not crash.
+#-------------------------------------------------------------------------------
+test_idle_window_fires_from_cold() {
+    echo "TEST: idle window fires from cold"
+
+    local dir; dir="$(make_env)"
+    trap "rm -rf '${dir}'" RETURN
+    # No active block — the shape ccusage returns on an idle box.
+    printf '{"blocks":[{"id":"old","isActive":false,"isGap":false,"startTime":"%s","endTime":"%s"}]}\n' \
+        "$(iso $((NOW_EPOCH - 36000)))" "$(iso $((NOW_EPOCH - 18000)))" > "${dir}/ccusage.json"
+
+    BUDGET_GATE_NOW="${NOW_EPOCH}" AGENT_DAEMON_MAX_ITERS=1 \
+        CCUSAGE_CMD="cat '${dir}/ccusage.json'" \
+        AGENT_RUN_CMD="${dir}/agent-run-stub" \
+        SLEEP_CMD="${dir}/sleep-stub" \
+        bash "${DAEMON}" >/dev/null 2>&1
+    local rc=$?
+
+    if [ "${rc}" -ne 0 ]; then
+        fail "idle-window pass must exit cleanly" "rc=${rc}"
+        return
+    fi
+    if ! grep -q '^fired' "${dir}/calls.log"; then
+        fail "idle window (fresh budget) must fire" "calls:
+$(cat "${dir}/calls.log")"
+        return
+    fi
+
+    pass "idle window fires from cold"
+}
+
+#-------------------------------------------------------------------------------
 # Run suite
 #-------------------------------------------------------------------------------
 echo "=========================================="
@@ -287,6 +366,8 @@ test_ccusage_unavailable_stays_alive
 test_clean_run_refires_same_window
 test_no_work_sleeps_instead_of_relooping
 test_exhausted_run_sleeps_to_reset
+test_failed_run_sleeps_no_rapid_loop
+test_idle_window_fires_from_cold
 
 echo ""
 echo "=========================================="

@@ -68,7 +68,7 @@ gh label create "team"             --description "Issue eligible for Level 7 age
 gh label create "team:in-progress" --description "Currently being implemented by an agent team"          --color "FBCA04" --force
 gh label create "team:done"        --description "Completed by an agent team"                            --color "0E8A16" --force
 gh label create "team:failed"      --description "Agent team attempt failed; needs human triage"         --color "B60205" --force
-gh label create "team:checks-failed" --description "PR opened by agent team but CI checks failed after auto-fix loop exhausted" --color "D93F0B" --force
+gh label create "team:checks-failed" --description "Agent-team PR: CI or manual verification could not be brought to pass autonomously (fix loop exhausted)" --color "D93F0B" --force
 ```
 
 `--force` is idempotent: creates the label if absent, updates the metadata if
