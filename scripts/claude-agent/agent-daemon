@@ -4,9 +4,11 @@
 # The tracer-bullet loop for PRD #287 (issue #288): it establishes the end-to-end
 # path sensor -> decision -> action -> schedule with no pause/resume yet.
 #
-#   1. Sensor  : read local Claude usage via `ccusage blocks --json`.
-#   2. Decision: the Budget Gate decides fire-vs-wait purely from percent of the
-#                active window remaining (plan-agnostic — no wall-clock constants).
+#   1. Sensor  : read the account's REAL utilization (session + weekly) from the
+#                OAuth usage endpoint (lib/usage-sensor.sh); fall back to the
+#                local `ccusage blocks --json` time-proxy when unreachable.
+#   2. Decision: fire when >= BUDGET_GATE_MIN_PCT (default 25) percent of the
+#                binding limit's budget remains (plan-agnostic).
 #   3. Action  : when enough window remains (>= BUDGET_GATE_MIN_PCT, default 25),
 #                fire `agent-run` (which invokes `/team-pickup`). After a clean
 #                run the loop goes straight back to the gate and fires again if
@@ -36,6 +38,8 @@
 #   AGENT_DAEMON_MAX_ITERS  stop after N loop passes (default: unbounded)
 #   WORK_PROBE_INTERVAL   secs between mid-sleep work probes (default 900)
 #   WORK_PROBE_CMD        command eval'd for a probe scan (default: wp_scan)
+#   USAGE_FETCH_CMD       command eval'd for the OAuth usage JSON
+#                         (default: usage_sensor_fetch)
 
 set -euo pipefail
 
@@ -47,6 +51,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${SCRIPT_DIR}/lib/sleep-planner.sh"
 # shellcheck source=lib/work-probe.sh
 . "${SCRIPT_DIR}/lib/work-probe.sh"
+# shellcheck source=lib/usage-sensor.sh
+. "${SCRIPT_DIR}/lib/usage-sensor.sh"
 
 # Pinned ccusage version keeps the sensor reproducible across hosts.
 CCUSAGE_VERSION="${CCUSAGE_VERSION:-20.0.14}"
@@ -58,6 +64,7 @@ WINDOW_SECS="${WINDOW_SECS:-18000}"
 AGENT_DAEMON_MAX_ITERS="${AGENT_DAEMON_MAX_ITERS:-0}"   # 0 = unbounded
 WORK_PROBE_INTERVAL="${WORK_PROBE_INTERVAL:-900}"       # secs between probes
 WORK_PROBE_CMD="${WORK_PROBE_CMD:-wp_scan}"             # eval'd; emits scan JSON
+USAGE_FETCH_CMD="${USAGE_FETCH_CMD:-usage_sensor_fetch}" # eval'd; OAuth usage JSON
 
 log() { echo "[agent-daemon $(date -u +%Y-%m-%dT%H:%M:%SZ)] $*"; }
 
@@ -83,23 +90,44 @@ degraded_reset_iso() {
     date -u -d "@${est}" +%Y-%m-%dT%H:%M:%S.000Z
 }
 
-# One sensor+decision read. Sets globals SHOULD_FIRE / RESET_AT / REMAIN_PCT.
+# One sensor+decision read. Sets globals SHOULD_FIRE / RESET_AT / REMAIN_PCT /
+# SENSOR. Primary sensor is the OAuth usage endpoint — the account's REAL
+# session/weekly utilization, the same numbers the Claude usage UI shows
+# (lib/usage-sensor.sh). The ccusage time-proxy only backstops it: it infers a
+# window from local JSONL and reports percent of *time* left, which knows
+# nothing about actual budget (observed live 2026-07-10: refused to fire at
+# "9.72% remaining" while the account sat at 81% real budget free).
 read_budget() {
     local json gate_out gate_rc
+
+    json="$(eval "${USAGE_FETCH_CMD}" 2>/dev/null || true)"
+    if [ -n "${json}" ]; then
+        gate_out="$(printf '%s' "${json}" | usage_gate)" && gate_rc=0 || gate_rc=$?
+        if [ "${gate_rc}" -eq 0 ]; then
+            SENSOR="oauth"
+            SHOULD_FIRE="$(printf '%s' "${gate_out}" | jq -r '.shouldFire')"
+            RESET_AT="$(printf '%s' "${gate_out}" | jq -r '.resetAt')"
+            REMAIN_PCT="$(printf '%s' "${gate_out}" | jq -r '.remainPct')"
+            return 0
+        fi
+    fi
+
     json="$(bash -c "${CCUSAGE_CMD}" 2>/dev/null || true)"
 
     gate_out="$(printf '%s' "${json}" | budget_gate)" && gate_rc=0 || gate_rc=$?
 
     if [ "${gate_rc}" -eq 0 ]; then
+        SENSOR="ccusage-fallback"
         SHOULD_FIRE="$(printf '%s' "${gate_out}" | jq -r '.shouldFire')"
         RESET_AT="$(printf '%s' "${gate_out}" | jq -r '.resetAt')"
         REMAIN_PCT="$(printf '%s' "${gate_out}" | jq -r '.remainPct')"
     else
         # Degraded: never fire; estimate the reset so we can still schedule.
+        SENSOR="degraded"
         SHOULD_FIRE="false"
         RESET_AT="$(degraded_reset_iso)"
         REMAIN_PCT="0"
-        log "WARN — ccusage/budget-gate degraded; estimated reset ${RESET_AT}"
+        log "WARN — usage sensor and ccusage both degraded; estimated reset ${RESET_AT}"
     fi
 }
 
@@ -178,7 +206,7 @@ main() {
     local iters=0 fire_log run_reset fire_rc
     while true; do
         read_budget
-        log "remainPct=${REMAIN_PCT} shouldFire=${SHOULD_FIRE} resetAt=${RESET_AT}"
+        log "sensor=${SENSOR} remainPct=${REMAIN_PCT} shouldFire=${SHOULD_FIRE} resetAt=${RESET_AT}"
 
         if [ "${SHOULD_FIRE}" = "true" ]; then
             log "budget above min — firing agent-run"

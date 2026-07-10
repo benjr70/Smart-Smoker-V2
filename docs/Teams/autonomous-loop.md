@@ -24,12 +24,20 @@ systemd (agent-daemon.service, Restart=always)
 `scripts/claude-agent/agent-daemon` is a supervisor loop, installed as
 `infra/systemd/agent-daemon.service` on the VM. Each pass:
 
-1. **Sensor** — read local usage via `ccusage blocks --json`.
-2. **Decision** — the **Budget Gate** (`lib/budget-gate.sh`) computes the
-   percent of the active 5-hour usage window remaining. Fire when
-   `remainPct ≥ BUDGET_GATE_MIN_PCT` (default 25). An idle box (no active
-   block) means untouched budget → fire at 100%. The gate is plan-agnostic:
-   upgrade the Claude plan and the same threshold just trips more often.
+1. **Sensor** — the **Usage Sensor** (`lib/usage-sensor.sh`) reads the
+   account's REAL utilization — session (5-hour) and weekly limits, the same
+   numbers the Claude usage UI shows — from the OAuth usage endpoint, using
+   the token Claude Code already maintains in `~/.claude/.credentials.json`.
+   If the endpoint is unreachable it falls back to the local
+   `ccusage blocks --json` time-proxy (**Budget Gate**, `lib/budget-gate.sh`),
+   which only knows the percent of *time* left in an inferred window. The
+   journal line carries `sensor=oauth|ccusage-fallback|degraded`.
+2. **Decision** — fire when `remainPct ≥ BUDGET_GATE_MIN_PCT` (default 25),
+   where `remainPct` is 100 minus the **binding** (worst) limit's
+   utilization — a spent weekly wall blocks firing even in a fresh session
+   window, and `resetAt` is the binding limit's true reset. The gate is
+   plan-agnostic: upgrade the Claude plan and the same threshold just trips
+   more often.
 3. **Action** — run `agent-run` (one `/team-pickup` fire). After a clean run
    the loop re-checks the gate immediately, so the backlog drains within a
    window.
@@ -194,7 +202,8 @@ on every PR.
 
 | Module | Job |
 | --- | --- |
-| `lib/budget-gate.sh` | fire-vs-wait from ccusage window % |
+| `lib/usage-sensor.sh` | fire-vs-wait from real OAuth session/weekly utilization |
+| `lib/budget-gate.sh` | fallback fire-vs-wait from ccusage window time % |
 | `lib/sleep-planner.sh` | sleep-to-reset + post-wake poll plan |
 | `lib/exhaustion-classifier.sh` | OK / EXHAUSTED / FAILED + reset scrape |
 | `lib/pause-resume.sh` | resume vs fail (cap) for paused issues |
