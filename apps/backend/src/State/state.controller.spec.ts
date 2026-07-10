@@ -16,7 +16,7 @@ describe('StateController', () => {
   beforeEach(async () => {
     mockStateService = {
       GetState: jest.fn().mockResolvedValue(mockState),
-      update: jest.fn().mockResolvedValue(mockState),
+      updateCurrent: jest.fn().mockResolvedValue(mockState),
       create: jest.fn().mockResolvedValue(mockState),
       toggleSmoking: jest
         .fn()
@@ -63,7 +63,7 @@ describe('StateController', () => {
 
       const result = await controller.updateState(stateDto);
 
-      expect(mockStateService.update).toHaveBeenCalledWith(stateDto);
+      expect(mockStateService.updateCurrent).toHaveBeenCalledWith(stateDto);
       expect(result).toEqual(mockState);
     });
   });

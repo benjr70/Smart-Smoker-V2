@@ -29,8 +29,8 @@ describe('CurrentSmokeService', () => {
       create: jest.fn().mockResolvedValue({ smokeId: '', smoking: false }),
     };
     smokeService = {
-      GetById: jest.fn().mockResolvedValue(activeSmoke),
-      Update: jest.fn().mockResolvedValue(activeSmoke),
+      getById: jest.fn().mockResolvedValue(activeSmoke),
+      update: jest.fn().mockResolvedValue(activeSmoke),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -59,7 +59,7 @@ describe('CurrentSmokeService', () => {
 
     it('loads the smoke referenced by the active state', async () => {
       expect(await service.currentSmoke()).toEqual(activeSmoke);
-      expect(smokeService.GetById).toHaveBeenCalledWith('smoke-1');
+      expect(smokeService.getById).toHaveBeenCalledWith('smoke-1');
     });
   });
 
@@ -77,10 +77,10 @@ describe('CurrentSmokeService', () => {
     });
 
     it('returns the fallback when the active smoke has no child of that key', async () => {
-      smokeService.GetById.mockResolvedValue({
+      smokeService.getById.mockResolvedValue({
         ...activeSmoke,
         postSmokeId: undefined,
-      });
+      } as any);
       const load = jest.fn();
 
       const result = await service.readCurrent('postSmokeId', load, fallback);
@@ -124,15 +124,15 @@ describe('CurrentSmokeService', () => {
 
       expect(update).toHaveBeenCalledWith('post-1');
       expect(create).not.toHaveBeenCalled();
-      expect(smokeService.Update).not.toHaveBeenCalled();
+      expect(smokeService.update).not.toHaveBeenCalled();
       expect(result).toBe(updated);
     });
 
     it('creates the child and links its id back onto the smoke, preserving siblings', async () => {
-      smokeService.GetById.mockResolvedValue({
+      smokeService.getById.mockResolvedValue({
         ...activeSmoke,
         postSmokeId: undefined,
-      });
+      } as any);
       const created = { note: 'created' };
       const create = jest
         .fn()
@@ -144,7 +144,7 @@ describe('CurrentSmokeService', () => {
       });
 
       expect(result).toBe(created);
-      expect(smokeService.Update).toHaveBeenCalledWith(
+      expect(smokeService.update).toHaveBeenCalledWith(
         'smoke-1',
         expect.objectContaining({
           postSmokeId: 'post-new',
@@ -158,10 +158,10 @@ describe('CurrentSmokeService', () => {
     });
 
     it('invokes onResolveSmoke when provided on the create path', async () => {
-      smokeService.GetById.mockResolvedValue({
+      smokeService.getById.mockResolvedValue({
         ...activeSmoke,
         postSmokeId: undefined,
-      });
+      } as any);
       const onResolveSmoke = jest.fn();
 
       await service.upsertCurrent('postSmokeId', {

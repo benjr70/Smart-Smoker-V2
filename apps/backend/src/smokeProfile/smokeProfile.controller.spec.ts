@@ -34,7 +34,7 @@ describe('SmokeProfileController', () => {
     getCurrentSmokeProfile: jest.fn(),
     getById: jest.fn(),
     saveCurrentSmokeProfile: jest.fn(),
-    Delete: jest.fn(),
+    delete: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -177,29 +177,29 @@ describe('SmokeProfileController', () => {
     it('should delete smoke profile by id', async () => {
       const id = 'profile-id-123';
       const deleteResult = { deletedCount: 1 };
-      mockSmokeProfileService.Delete.mockResolvedValue(deleteResult);
+      mockSmokeProfileService.delete.mockResolvedValue(deleteResult);
 
       const result = await controller.DeleteById(id);
 
-      expect(service.Delete).toHaveBeenCalledWith(id);
+      expect(service.delete).toHaveBeenCalledWith(id);
       expect(result).toEqual(deleteResult);
     });
 
     it('should handle deletion of non-existent profile', async () => {
       const id = 'non-existent-id';
       const deleteResult = { deletedCount: 0 };
-      mockSmokeProfileService.Delete.mockResolvedValue(deleteResult);
+      mockSmokeProfileService.delete.mockResolvedValue(deleteResult);
 
       const result = await controller.DeleteById(id);
 
-      expect(service.Delete).toHaveBeenCalledWith(id);
+      expect(service.delete).toHaveBeenCalledWith(id);
       expect(result).toEqual(deleteResult);
     });
 
     it('should handle deletion errors', async () => {
       const id = 'invalid-id';
       const error = new Error('Database error');
-      mockSmokeProfileService.Delete.mockRejectedValue(error);
+      mockSmokeProfileService.delete.mockRejectedValue(error);
 
       await expect(controller.DeleteById(id)).rejects.toThrow('Database error');
     });

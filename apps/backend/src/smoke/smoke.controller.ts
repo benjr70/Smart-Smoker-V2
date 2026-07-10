@@ -24,11 +24,11 @@ export class SmokeController {
 
   @Get('/:id')
   getById(@Param('id') id: string): Promise<Smoke> {
-    return this.smokeService.GetById(id);
+    return this.smokeService.getById(id);
   }
 
   @Delete('/:id')
   DeleteById(@Param('id') id: string) {
-    return this.smokeService.Delete(id);
+    return this.smokeService.delete(id);
   }
 }

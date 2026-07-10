@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { SmokeService } from './smoke.service';
-import { Smoke, SmokeStatus } from './smoke.schema';
+import { Smoke, SmokeDocument, SmokeStatus } from './smoke.schema';
 import { SmokeDto } from './smokeDto';
 import { StateService } from '../State/state.service';
 
@@ -99,70 +99,27 @@ describe('SmokeService', () => {
     });
   });
 
-  describe('GetById', () => {
-    it('should return smoke by id', async () => {
-      const id = 'test-id';
-
-      const result = await service.GetById(id);
-
-      expect(mockSmokeModel.findById).toHaveBeenCalledWith(id);
-      expect(result).toEqual(mockSmokeDocument);
-    });
-  });
-
-  describe('Update', () => {
-    it('should update smoke and return updated document', async () => {
-      const id = 'test-id';
-      const smokeDto: SmokeDto = {
-        preSmokeId: 'updated-pre-smoke-id',
-        status: SmokeStatus.Complete,
-      };
-
-      jest
-        .spyOn(service, 'GetById')
-        .mockResolvedValue(mockSmokeDocument as Smoke);
-
-      const result = await service.Update(id, smokeDto);
-
-      expect(mockSmokeModel.findOneAndUpdate).toHaveBeenCalledWith(
-        { _id: id },
-        smokeDto,
-      );
-      expect(service.GetById).toHaveBeenCalledWith(id);
-    });
-  });
-
-  describe('getAll', () => {
-    it('should return all smokes', async () => {
-      const result = await service.getAll();
-
-      expect(mockSmokeModel.find).toHaveBeenCalled();
-      expect(result).toEqual([mockSmokeDocument]);
-    });
-  });
-
-  describe('Delete', () => {
-    it('should delete smoke by id', async () => {
-      const id = 'test-id';
-
-      const result = await service.Delete(id);
-
-      expect(mockSmokeModel.deleteOne).toHaveBeenCalledWith({ _id: id });
-      expect(result).toEqual({ deletedCount: 1 });
-    });
-  });
-
   describe('getCurrentSmoke', () => {
     it('should return current smoke based on state', async () => {
       jest
-        .spyOn(service, 'GetById')
-        .mockResolvedValue(mockSmokeDocument as Smoke);
+        .spyOn(service, 'getById')
+        .mockResolvedValue(mockSmokeDocument as unknown as SmokeDocument);
 
       const result = await service.getCurrentSmoke();
 
       expect(mockStateService.GetState).toHaveBeenCalled();
-      expect(service.GetById).toHaveBeenCalledWith(mockState.smokeId);
+      expect(service.getById).toHaveBeenCalledWith(mockState.smokeId);
       expect(result).toEqual(mockSmokeDocument);
+    });
+
+    it('should return null when no active smoke', async () => {
+      mockStateService.GetState = jest
+        .fn()
+        .mockResolvedValue({ smokeId: '', smoking: false });
+
+      const result = await service.getCurrentSmoke();
+
+      expect(result).toBeNull();
     });
   });
 
@@ -171,10 +128,10 @@ describe('SmokeService', () => {
       jest
         .spyOn(service, 'getCurrentSmoke')
         .mockResolvedValue(mockSmokeDocument as Smoke);
-      jest.spyOn(service, 'Update').mockResolvedValue({
+      jest.spyOn(service, 'update').mockResolvedValue({
         ...mockSmokeDocument,
         status: SmokeStatus.Complete,
-      } as Smoke);
+      } as unknown as SmokeDocument);
 
       const result = await service.FinishSmoke();
 
@@ -188,7 +145,7 @@ describe('SmokeService', () => {
       };
 
       expect(service.getCurrentSmoke).toHaveBeenCalled();
-      expect(service.Update).toHaveBeenCalledWith('test-smoke-id', expectedDto);
+      expect(service.update).toHaveBeenCalledWith('test-smoke-id', expectedDto);
       expect(result.status).toEqual(SmokeStatus.Complete);
     });
   });

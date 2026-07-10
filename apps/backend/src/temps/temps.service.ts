@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { BaseService } from '../common/base.service';
 import { SmokeService } from '../smoke/smoke.service';
 import { SmokeDto } from '../smoke/smokeDto';
 import { StateService } from '../State/state.service';
@@ -8,19 +9,21 @@ import { TempDto } from './tempDto';
 import { Temp, TempDocument } from './temps.schema';
 
 @Injectable()
-export class TempsService {
+export class TempsService extends BaseService<TempDocument> {
   constructor(
-    @InjectModel('Temp') private tempModel: Model<TempDocument>,
+    @InjectModel('Temp') model: Model<TempDocument>,
     private stateService: StateService,
     private smokeService: SmokeService,
-  ) {}
+  ) {
+    super(model, 'Temp');
+  }
 
   async saveNewTemp(tempDto: TempDto) {
     return this.stateService.GetState().then((state) => {
       if (!state || !state.smokeId || state.smokeId.length <= 0) {
         return;
       }
-      this.smokeService.GetById(state.smokeId).then((smoke) => {
+      this.smokeService.getById(state.smokeId).then((smoke) => {
         if (!smoke) {
           return;
         }
@@ -34,7 +37,7 @@ export class TempsService {
               tempsId: temp['_id'].toString(),
               status: smoke.status,
             };
-            await this.smokeService.Update(state.smokeId, smokeDto);
+            await this.smokeService.update(state.smokeId, smokeDto);
           });
         }
       });
@@ -48,7 +51,7 @@ export class TempsService {
           tempDto.tempsId = tempsId;
           return tempDto;
         });
-        return this.tempModel.insertMany(tempDto);
+        return this.model.insertMany(tempDto);
       }
     });
   }
@@ -58,9 +61,9 @@ export class TempsService {
       if (!state || !state.smokeId || state.smokeId.length <= 0) {
         return [];
       }
-      return this.smokeService.GetById(state.smokeId).then((smoke) => {
+      return this.smokeService.getById(state.smokeId).then((smoke) => {
         if (smoke?.tempsId && smoke.tempsId.length > 0) {
-          return this.tempModel.find({ tempsId: smoke.tempsId });
+          return this.model.find({ tempsId: smoke.tempsId });
         } else {
           return [];
         }
@@ -69,12 +72,7 @@ export class TempsService {
   }
 
   async getAllTempsById(id: string): Promise<Temp[]> {
-    return this.tempModel.find({ tempsId: id });
-  }
-
-  async create(tempDto: TempDto): Promise<Temp> {
-    const Temp = new this.tempModel(tempDto);
-    return Temp.save();
+    return this.model.find({ tempsId: id });
   }
 
   async GetTempID(): Promise<string | undefined> {
@@ -82,13 +80,17 @@ export class TempsService {
       if (!state || !state.smokeId || state.smokeId.length <= 0) {
         return undefined;
       }
-      return this.smokeService.GetById(state.smokeId).then((smoke) => {
+      return this.smokeService.getById(state.smokeId).then((smoke) => {
         return smoke?.tempsId;
       });
     });
   }
 
+  /**
+   * Temps are addressed by their shared `tempsId` (a smoke's temp series), not
+   * by `_id` — so this overrides the by-id `delete` from BaseService.
+   */
   async delete(id: string) {
-    return this.tempModel.deleteMany({ tempsId: id });
+    return this.model.deleteMany({ tempsId: id });
   }
 }

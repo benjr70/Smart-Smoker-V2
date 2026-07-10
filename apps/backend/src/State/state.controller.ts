@@ -16,7 +16,7 @@ export class StateController {
 
   @Put()
   updateState(@Body() dto: StateDto): Promise<State> {
-    return this.stateService.update(dto);
+    return this.stateService.updateCurrent(dto);
   }
 
   @Post()

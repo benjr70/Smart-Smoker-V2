@@ -5,18 +5,21 @@ import { RatingsService } from 'src/ratings/ratings.service';
 import { SmokeService } from 'src/smoke/smoke.service';
 import { SmokeDto } from 'src/smoke/smokeDto';
 import { StateService } from 'src/State/state.service';
+import { BaseService } from '../common/base.service';
 import { SmokeProfile, SmokeProFileDocument } from './smokeProfile.schema';
 import { SmokeProFileDto } from './smokeProfileDto';
 
 @Injectable()
-export class SmokeProfileService {
+export class SmokeProfileService extends BaseService<SmokeProFileDocument> {
   constructor(
     @InjectModel('SmokeProfile')
-    private smokeProfileModel: Model<SmokeProFileDocument>,
+    model: Model<SmokeProFileDocument>,
     private stateService: StateService,
     private smokeService: SmokeService,
     private ratingsService: RatingsService,
-  ) {}
+  ) {
+    super(model, 'SmokeProfile');
+  }
 
   async getCurrentSmokeProfile(): Promise<SmokeProfile> {
     return this.stateService.GetState().then(async (state) => {
@@ -35,12 +38,12 @@ export class SmokeProfileService {
       if (!state.smokeId || state.smokeId.length === 0) {
         return defaultProfile;
       }
-      return this.smokeService.GetById(state.smokeId).then((smoke) => {
+      return this.smokeService.getById(state.smokeId).then((smoke) => {
         if (!smoke) {
           return defaultProfile;
         }
         if (smoke.smokeProfileId) {
-          return this.smokeProfileModel.findById(smoke.smokeProfileId);
+          return this.model.findById(smoke.smokeProfileId);
         } else {
           return defaultProfile;
         }
@@ -55,7 +58,7 @@ export class SmokeProfileService {
     if (!state || !state.smokeId || state.smokeId.length === 0) {
       return null;
     }
-    const smoke = await this.smokeService.GetById(state.smokeId);
+    const smoke = await this.smokeService.getById(state.smokeId);
     if (!smoke) {
       return null;
     }
@@ -69,8 +72,7 @@ export class SmokeProfileService {
       });
     }
     if (smoke.smokeProfileId) {
-      await this.update(smoke.smokeProfileId, dto);
-      return this.getById(smoke.smokeProfileId);
+      return this.update(smoke.smokeProfileId, dto);
     } else {
       const smokeProfile = await this.create(dto);
       const smokeDto: SmokeDto = {
@@ -80,32 +82,8 @@ export class SmokeProfileService {
         tempsId: smoke.tempsId,
         status: smoke.status,
       };
-      await this.smokeService.Update(smoke['_id'].toString(), smokeDto);
+      await this.smokeService.update(smoke['_id'].toString(), smokeDto);
       return smokeProfile;
     }
-  }
-
-  async create(smokeProfileDto: SmokeProFileDto): Promise<SmokeProfile> {
-    const createdSmokeProfile = new this.smokeProfileModel(smokeProfileDto);
-    return createdSmokeProfile.save();
-  }
-
-  async getById(id: string): Promise<SmokeProfile> {
-    return await this.smokeProfileModel.findById(id);
-  }
-
-  async update(
-    id: string,
-    smokeProfileDto: SmokeProFileDto,
-  ): Promise<SmokeProfile> {
-    return this.smokeProfileModel
-      .findByIdAndUpdate({ _id: id }, smokeProfileDto)
-      .then(() => {
-        return this.getById(id);
-      });
-  }
-
-  async Delete(id: string) {
-    return this.smokeProfileModel.deleteOne({ _id: id });
   }
 }

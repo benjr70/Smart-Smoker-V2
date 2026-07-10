@@ -21,7 +21,7 @@ export class HistoryService {
         smokeList
           .filter((smoke) => smoke.status === SmokeStatus.Complete)
           .map(async (smoke) => {
-            const preSmoke = await this.preSmokeService.GetByID(
+            const preSmoke = await this.preSmokeService.getById(
               smoke.preSmokeId,
             );
             const smokeProfile = await this.smokeProfileService.getById(

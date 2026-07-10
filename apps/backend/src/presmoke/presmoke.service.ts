@@ -1,6 +1,7 @@
-import { Inject, Injectable, forwardRef } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { BaseService } from '../common/base.service';
 import { SmokeService } from '../smoke/smoke.service';
 import { SmokeDto } from '../smoke/smokeDto';
 import { StateService } from '../State/state.service';
@@ -9,12 +10,14 @@ import { PreSmokeDto } from './presmokeDto';
 import { SmokeStatus } from '../smoke/smoke.schema';
 
 @Injectable()
-export class PreSmokeService {
+export class PreSmokeService extends BaseService<PreSmokeDocument> {
   constructor(
-    @InjectModel(PreSmoke.name) private preSmokeModel: Model<PreSmokeDocument>,
+    @InjectModel(PreSmoke.name) model: Model<PreSmokeDocument>,
     private stateService: StateService,
     private smokeService: SmokeService,
-  ) {}
+  ) {
+    super(model, 'PreSmoke');
+  }
 
   async save(preSmokeDto: PreSmokeDto): Promise<PreSmoke> {
     return this.stateService.GetState().then(async (state) => {
@@ -23,12 +26,12 @@ export class PreSmokeService {
         state = await this.stateService.create({ smokeId: '', smoking: false });
       }
       if (state.smokeId && state.smokeId.length > 0) {
-        return this.smokeService.GetById(state.smokeId).then((smoke) => {
+        return this.smokeService.getById(state.smokeId).then((smoke) => {
           if (!smoke) {
             return this.createNewSmokeWithPreSmoke(preSmokeDto, state);
           }
           if (smoke.preSmokeId) {
-            return this.Update(smoke.preSmokeId, preSmokeDto);
+            return this.update(smoke.preSmokeId, preSmokeDto);
           } else {
             return this.create(preSmokeDto).then((preSmoke) => {
               const smokeDto: SmokeDto = {
@@ -57,23 +60,10 @@ export class PreSmokeService {
       };
       this.smokeService.create(smokeDto).then((smoke) => {
         state.smokeId = smoke['_id'].toString();
-        this.stateService.update(state);
+        this.stateService.updateCurrent(state);
       });
       return preSmoke;
     });
-  }
-
-  async create(preSmokeDto: PreSmokeDto): Promise<PreSmoke> {
-    const createdPreSmoke = new this.preSmokeModel(preSmokeDto);
-    return createdPreSmoke.save();
-  }
-
-  async findAll(): Promise<PreSmokeDto[]> {
-    return this.preSmokeModel.find().exec();
-  }
-
-  async GetByID(id: string): Promise<PreSmoke> {
-    return await this.preSmokeModel.findById(id);
   }
 
   async GetByCurrent(): Promise<PreSmoke | null> {
@@ -85,24 +75,12 @@ export class PreSmokeService {
       if (!state.smokeId || state.smokeId.length === 0) {
         return null;
       }
-      return this.smokeService.GetById(state.smokeId).then((smoke) => {
+      return this.smokeService.getById(state.smokeId).then((smoke) => {
         if (!smoke || !smoke.preSmokeId) {
           return null;
         }
-        return this.preSmokeModel.findById(smoke.preSmokeId);
+        return this.model.findById(smoke.preSmokeId);
       });
     });
-  }
-
-  async Update(id: string, preSmokeDto: PreSmokeDto): Promise<PreSmoke> {
-    return this.preSmokeModel
-      .findOneAndUpdate({ _id: id }, preSmokeDto)
-      .then(() => {
-        return this.GetByID(id);
-      });
-  }
-
-  async Delete(id: string) {
-    return this.preSmokeModel.deleteOne({ _id: id });
   }
 }

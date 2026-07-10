@@ -19,12 +19,12 @@ export class PreSmokeController {
 
   @Get('/all')
   getPreSmoke(): Promise<PreSmoke[]> {
-    return this.preSmokeService.findAll();
+    return this.preSmokeService.getAll();
   }
 
   @Get('/:id')
   getPreSmokeById(@Param('id') id: string): Promise<PreSmoke> {
-    return this.preSmokeService.GetByID(id);
+    return this.preSmokeService.getById(id);
   }
 
   @Post('')
@@ -37,7 +37,7 @@ export class PreSmokeController {
     @Param('id') id: string,
     @Body() dto: PreSmokeDto,
   ): Promise<PreSmoke> {
-    return this.preSmokeService.Update(id, dto);
+    return this.preSmokeService.update(id, dto);
   }
 
   @Get('')
@@ -47,6 +47,6 @@ export class PreSmokeController {
 
   @Delete('/:id')
   DeleteById(@Param('id') id: string) {
-    return this.preSmokeService.Delete(id);
+    return this.preSmokeService.delete(id);
   }
 }
