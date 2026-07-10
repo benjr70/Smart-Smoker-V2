@@ -18,8 +18,8 @@ describe('PostSmokeController', () => {
     mockPostSmokeService = {
       getCurrentPostSmoke: jest.fn().mockResolvedValue(mockPostSmoke),
       saveCurrentPostSmoke: jest.fn().mockResolvedValue(mockPostSmoke),
-      getById: jest.fn().mockResolvedValue(mockPostSmoke),
-      Delete: jest.fn().mockResolvedValue({ deletedCount: 1 }),
+      getByIdOrThrow: jest.fn().mockResolvedValue(mockPostSmoke),
+      delete: jest.fn().mockResolvedValue({ deletedCount: 1 }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -70,23 +70,23 @@ describe('PostSmokeController', () => {
   });
 
   describe('getById', () => {
-    it('should return post-smoke by id', async () => {
-      const id = 'test-id';
+    it('should return post-smoke by id via getByIdOrThrow', async () => {
+      const id = '507f1f77bcf86cd799439011';
 
       const result = await controller.getById(id);
 
-      expect(mockPostSmokeService.getById).toHaveBeenCalledWith(id);
+      expect(mockPostSmokeService.getByIdOrThrow).toHaveBeenCalledWith(id);
       expect(result).toEqual(mockPostSmoke);
     });
   });
 
   describe('DeleteById', () => {
     it('should delete post-smoke by id', async () => {
-      const id = 'test-id';
+      const id = '507f1f77bcf86cd799439011';
 
       const result = await controller.DeleteById(id);
 
-      expect(mockPostSmokeService.Delete).toHaveBeenCalledWith(id);
+      expect(mockPostSmokeService.delete).toHaveBeenCalledWith(id);
       expect(result).toEqual({ deletedCount: 1 });
     });
   });
