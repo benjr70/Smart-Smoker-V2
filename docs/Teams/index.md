@@ -8,6 +8,8 @@ This section covers the team built on top of [Claude Code Agent Teams](https://c
 
 You start with a PRD that has been broken into issues via `/prd-to-issues`. Issues labeled `team` are eligible for the team. You open Claude Code in the repo root and invoke `/team-dispatch <prd-number>`. The running session becomes the **team lead**: it reads the PRD, spawns three teammates (implementer, reviewer, verifier) plus a researcher on-demand, populates a shared task list with one task per issue, and coordinates the flow. An implementer drives TDD. The reviewer reads the staged diff and posts approval or change-requests through the mailbox. The verifier runs `scripts/smoke/run.ts`, writes a `smoke: …` trailer, commits. Labels advance `team` → `team:in-progress` → `team:done`. When the queue is empty, the lead shuts down each teammate and runs team cleanup. You come back to a clean commit log and a set of closed issues.
 
+Fully hands-off, the same flow runs without you invoking anything: the [Autonomous Loop](autonomous-loop.md) daemon fires `/team-pickup` whenever Claude budget allows, working one unit per fire — reconcile an open PR a human handed back (or that master conflicted), resume paused work, or pick the next issue — and every PR gets CI babysitting plus a live manual-verification sweep before the fire ends.
+
 ## Pillars
 
 | Pillar | What it is | Docs |
@@ -15,6 +17,7 @@ You start with a PRD that has been broken into issues via `/prd-to-issues`. Issu
 | **Roles** | Four subagent definitions in `.claude/agents/` — implementer, reviewer, verifier, researcher. Each a separate teammate with its own context window and tool allowlist. | [Roles](roles.md) |
 | **Dispatch** | The `/team-dispatch` skill in `.claude/skills/team-dispatch/`. The playbook the team lead executes. Self-bootstrapping — pre-flight + label creation run on every dispatch (idempotent). | [Dispatch](dispatch.md) |
 | **Hooks** | Two quality-gate hooks in `.claude/hooks/` — `task-completed-smoke.sh` (enforces the `smoke:` trailer), `teammate-idle-review.sh` (blocks the implementer from idling with open reviewer change-requests). | [Dispatch](dispatch.md#hooks) |
+| **Autonomous Loop** | The always-on pipeline: a budget-paced systemd daemon fires `/team-pickup`, which reconciles PRs needing attention (merge conflicts, `team:revise` review hand-backs), resumes paused work, or picks the next issue — then babysits CI (`/pr-watch`) and executes the PR's manual-verification checklist. | [Autonomous Loop](autonomous-loop.md) |
 
 ## Why agent teams over a Ralph-style loop
 

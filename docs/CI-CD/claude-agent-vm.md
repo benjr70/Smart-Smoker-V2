@@ -6,9 +6,11 @@ the apps with a real GUI/Electron window, push branches, open PRs.
 Replaces the prior remote-routine model so every step happens locally on
 hardware Claude controls.
 
-Scheduling/triggering of autonomous fires is **deferred** — this guide
-sets up the environment only. Job scheduling is a separate concern and
-will be documented in a follow-up.
+This guide sets up the environment only. Scheduling/triggering of
+autonomous fires is handled by the budget-paced `agent-daemon` systemd
+service — see [Autonomous Loop](../Teams/autonomous-loop.md) for the
+daemon, `/team-pickup`, PR CI babysitting (`/pr-watch`), manual
+verification, and the PR reconcile flow (`/pr-reconcile`).
 
 ---
 
