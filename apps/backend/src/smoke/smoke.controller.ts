@@ -1,6 +1,7 @@
-import { Controller, Delete, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Smoke } from './smoke.schema';
+import { SmokeDto } from './smokeDto';
 import { SmokeService } from './smoke.service';
 
 @ApiTags('Smoke')
@@ -9,8 +10,8 @@ export class SmokeController {
   constructor(private readonly smokeService: SmokeService) {}
 
   @Post()
-  CreateSmoke(): Promise<Smoke> {
-    return this.CreateSmoke();
+  CreateSmoke(@Body() smokeDto: SmokeDto): Promise<Smoke> {
+    return this.smokeService.create(smokeDto);
   }
   @Get('/all')
   getAllSmoke(): Promise<Smoke[]> {

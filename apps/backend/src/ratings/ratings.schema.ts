@@ -4,16 +4,16 @@ export type RatingsDocument = Ratings & Document;
 
 @Schema()
 export class Ratings {
-  @Prop()
+  @Prop({ min: 0, max: 10 })
   smokeFlavor: number;
 
-  @Prop()
+  @Prop({ min: 0, max: 10 })
   seasoning: number;
 
-  @Prop()
+  @Prop({ min: 0, max: 10 })
   tenderness: number;
 
-  @Prop()
+  @Prop({ min: 0, max: 10 })
   overallTaste: number;
 
   @Prop()

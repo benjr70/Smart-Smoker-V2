@@ -90,6 +90,7 @@
       "!main.ts",
       "!**/*.module.ts",
       "!**/*.schema.ts",
+      "!**/testing/**",
       "!logger.middleware.ts"
     ],
     "coverageDirectory": "coverage",
