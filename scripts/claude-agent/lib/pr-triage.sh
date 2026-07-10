@@ -43,6 +43,48 @@
 #   1 — nothing needs attention (verdict {"pr":null}); also for empty/malformed
 #       input — a broken sensor must fall through to the normal pick, not crash.
 
+# pr_triage_scan: own the gh call AND ride out GitHub's async mergeability.
+#
+# A push to master queues a background recompute of every open PR's mergeable
+# state; until it lands, the API says UNKNOWN and pr_triage_pick (correctly)
+# refuses to guess. But "re-check next fire" strands a conflicted PR for a
+# whole no-work sleep when the fire lands seconds after a merge (observed
+# 2026-07-10: #312 merged at 18:44, the 18:45 fire saw #305 as UNKNOWN,
+# triaged {"pr":null}, and slept). Querying mergeable is itself what triggers
+# the recompute, so polling resolves it in seconds: re-list while any
+# ours-shaped open non-draft PR is still UNKNOWN, up to
+# PR_TRIAGE_UNKNOWN_RETRIES re-lists (default 6) every
+# PR_TRIAGE_UNKNOWN_INTERVAL seconds (default 20 — ~2 min worst case), then
+# triage whatever the last listing said.
+#
+# Env (beyond pr_triage_pick's): GH_BIN, PR_TRIAGE_UNKNOWN_RETRIES,
+# PR_TRIAGE_UNKNOWN_INTERVAL, PR_TRIAGE_SLEEP (injectable for tests).
+# Exit codes: pr_triage_pick's.
+pr_triage_scan() {
+    local gh="${GH_BIN:-gh}" tries="${PR_TRIAGE_UNKNOWN_RETRIES:-6}"
+    local interval="${PR_TRIAGE_UNKNOWN_INTERVAL:-20}" sleep_bin="${PR_TRIAGE_SLEEP:-sleep}"
+    local i prs unknown
+
+    for ((i = 0; i <= tries; i++)); do
+        prs="$("${gh}" pr list --state open \
+            --json number,headRefName,isDraft,mergeable,labels,createdAt,author \
+            2>/dev/null || echo '[]')"
+
+        unknown="$(printf '%s' "${prs}" | jq '
+            [ .[]
+              | select((.isDraft // false) | not)
+              | select(.headRefName | test("^feat/issue-[0-9]+$"))
+              | select((.mergeable // "UNKNOWN") == "UNKNOWN") ]
+            | length' 2>/dev/null || echo '0')"
+
+        if [ "${unknown:-0}" = "0" ] || [ "${i}" -ge "${tries}" ]; then
+            printf '%s' "${prs}" | pr_triage_pick
+            return $?
+        fi
+        "${sleep_bin}" "${interval}"
+    done
+}
+
 # pr_triage_pick: read the PR-list JSON on stdin, print the verdict JSON.
 pr_triage_pick() {
     local payload verdict

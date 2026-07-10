@@ -80,12 +80,17 @@ auto-fixed, no label needed) or it carries the **`team:revise`** label (a human
 reviewed it and explicitly handed it back). Detection is a cheap `gh` read + the
 **PR Triage** deep module — zero Claude usage when nothing needs attention.
 
+`pr_triage_scan` owns the `gh pr list` call and rides out GitHub's async
+mergeability: a fresh master push leaves every open PR `UNKNOWN` for a few
+seconds, and a plain one-shot listing would miss a conflicted PR on this very
+fire (observed live 2026-07-10: #305 missed at 18:45, one minute after a merge).
+The scan re-lists while any agent-shaped PR is `UNKNOWN` (up to ~2 min), then
+triages.
+
 ```bash
 AGENT_LOGIN=$(gh api user -q .login 2>/dev/null || echo "")
 . scripts/claude-agent/lib/pr-triage.sh
-PICK_JSON=$(gh pr list --state open \
-    --json number,headRefName,isDraft,mergeable,labels,createdAt,author \
-  | PR_TRIAGE_AUTHOR="$AGENT_LOGIN" pr_triage_pick) || PICK_JSON=""
+PICK_JSON=$(PR_TRIAGE_AUTHOR="$AGENT_LOGIN" pr_triage_scan) || PICK_JSON=""
 ```
 
 If nothing is picked (`PICK_JSON` empty / `{"pr":null}`), fall through to §1.5.

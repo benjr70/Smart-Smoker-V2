@@ -137,6 +137,12 @@ A PR **needs attention** when it is *ours* (open, not draft, head
 `team:revise` outranks plain conflicts; oldest first within rank. Parked PRs
 (`team:revise-failed` / `team:rebase-failed`) and drafts are skipped.
 
+A master push leaves every open PR's mergeable state `UNKNOWN` for a few
+seconds while GitHub recomputes it asynchronously. The triage scan
+(`pr_triage_scan`) re-lists while any agent-shaped PR is still `UNKNOWN` (up
+to ~2 min) rather than skipping a conflict the fire lands seconds after a
+merge; the work probe re-checks every 15 minutes as the backstop.
+
 The picked PR goes to **`/pr-reconcile`** (`.claude/skills/pr-reconcile/`),
 which is fresh and stateless — context is rebuilt from the issue, the diff,
 and the review threads (no session resume). Per fire:
