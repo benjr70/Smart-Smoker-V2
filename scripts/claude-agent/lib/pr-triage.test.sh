@@ -224,6 +224,90 @@ test_empty_and_malformed_no_pick() {
 }
 
 #-------------------------------------------------------------------------------
+# Test 8: pr_triage_scan rides out async mergeability — first listing says
+# UNKNOWN (GitHub still computing after a master push), the re-list says
+# CONFLICTING → the pick lands on the SAME fire instead of stranding the PR
+# for a whole no-work sleep (live 2026-07-10: #305 missed at 18:45).
+#-------------------------------------------------------------------------------
+test_scan_polls_unknown_to_resolution() {
+    echo "TEST: scan polls UNKNOWN until resolved"
+
+    local dir; dir="$(mktemp -d)"
+    trap "rm -rf '${dir}'" RETURN
+
+    jq -s '.' <(pr_json 305 "feat/issue-281" "UNKNOWN" "2026-07-09T10:00:00Z" "") \
+        > "${dir}/list-1.json"
+    jq -s '.' <(pr_json 305 "feat/issue-281" "CONFLICTING" "2026-07-09T10:00:00Z" "") \
+        > "${dir}/list-2.json"
+    cat > "${dir}/gh-stub" <<EOF
+#!/usr/bin/env bash
+n=\$(cat "${dir}/count" 2>/dev/null || echo 0)
+n=\$((n + 1)); echo "\$n" > "${dir}/count"
+if [ "\$n" -ge 2 ]; then cat "${dir}/list-2.json"; else cat "${dir}/list-1.json"; fi
+EOF
+    cat > "${dir}/sleep-stub" <<EOF
+#!/usr/bin/env bash
+echo "slept \$*" >> "${dir}/sleeps"
+EOF
+    chmod +x "${dir}/gh-stub" "${dir}/sleep-stub"
+
+    local out rc
+    out="$(GH_BIN="${dir}/gh-stub" PR_TRIAGE_SLEEP="${dir}/sleep-stub" pr_triage_scan)"
+    rc=$?
+
+    if [ "${rc}" -ne 0 ] || [ "$(printf '%s' "${out}" | jq -r '.pr')" != "305" ]; then
+        fail "scan must pick once UNKNOWN resolves" "rc=${rc} out=${out}"
+        return
+    fi
+    if [ "$(wc -l < "${dir}/sleeps")" != "1" ]; then
+        fail "scan must have slept exactly once" "sleeps: $(cat "${dir}/sleeps")"
+        return
+    fi
+
+    pass "scan polls UNKNOWN until resolved"
+}
+
+#-------------------------------------------------------------------------------
+# Test 9: pr_triage_scan retry cap — mergeability never resolves → after the
+# cap it triages the last listing (UNKNOWN skips → no-pick exit 1) instead of
+# hanging the fire.
+#-------------------------------------------------------------------------------
+test_scan_retry_cap_no_pick() {
+    echo "TEST: scan retry cap yields no-pick"
+
+    local dir; dir="$(mktemp -d)"
+    trap "rm -rf '${dir}'" RETURN
+
+    jq -s '.' <(pr_json 305 "feat/issue-281" "UNKNOWN" "2026-07-09T10:00:00Z" "") \
+        > "${dir}/list.json"
+    cat > "${dir}/gh-stub" <<EOF
+#!/usr/bin/env bash
+cat "${dir}/list.json"
+EOF
+    cat > "${dir}/sleep-stub" <<EOF
+#!/usr/bin/env bash
+echo "slept" >> "${dir}/sleeps"
+EOF
+    chmod +x "${dir}/gh-stub" "${dir}/sleep-stub"
+
+    local out rc
+    out="$(GH_BIN="${dir}/gh-stub" PR_TRIAGE_SLEEP="${dir}/sleep-stub" \
+        PR_TRIAGE_UNKNOWN_RETRIES=3 pr_triage_scan)"
+    rc=$?
+
+    if [ "${rc}" -ne 1 ] || [ "$(printf '%s' "${out}" | jq -r '.pr')" != "null" ]; then
+        fail "unresolved UNKNOWN must end in no-pick exit 1" "rc=${rc} out=${out}"
+        return
+    fi
+    if [ "$(wc -l < "${dir}/sleeps")" != "3" ]; then
+        fail "scan must sleep once per retry (3)" "sleeps: $(wc -l < "${dir}/sleeps")"
+        return
+    fi
+
+    pass "scan retry cap yields no-pick"
+}
+
+#-------------------------------------------------------------------------------
 # Run suite
 #-------------------------------------------------------------------------------
 echo "=========================================="
@@ -237,6 +321,8 @@ test_ours_filter_excludes
 test_empty_author_env_accepts_any
 test_no_attention_no_pick
 test_empty_and_malformed_no_pick
+test_scan_polls_unknown_to_resolution
+test_scan_retry_cap_no_pick
 
 echo ""
 echo "=========================================="
