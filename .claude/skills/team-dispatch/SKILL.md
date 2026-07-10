@@ -69,6 +69,9 @@ gh label create "team:in-progress" --description "Currently being implemented by
 gh label create "team:done"        --description "Completed by an agent team"                            --color "0E8A16" --force
 gh label create "team:failed"      --description "Agent team attempt failed; needs human triage"         --color "B60205" --force
 gh label create "team:checks-failed" --description "Agent-team PR: CI or manual verification could not be brought to pass autonomously (fix loop exhausted)" --color "D93F0B" --force
+gh label create "team:revise"        --description "Human hand-back: agent must address this PR's unresolved review comments" --color "0052CC" --force
+gh label create "team:revise-failed" --description "Agent-team PR: review comments could not be auto-resolved (revise loop exhausted)" --color "B60205" --force
+gh label create "team:rebase-failed" --description "Agent-team PR: automatic rebase onto master failed; human rebase required" --color "B60205" --force
 ```
 
 `--force` is idempotent: creates the label if absent, updates the metadata if

@@ -1,12 +1,14 @@
 ---
 name: team-pickup
 description:
-  Resume a `team:paused` issue if one exists (preserving its branch), otherwise
-  pick the next eligible `team`-labeled GitHub issue from the Smart Smoker V2
-  GitHub Project (highest Priority field then oldest, blockers resolved, no
-  other team in flight), invoke `/team-dispatch --issue <N> [--resume]`, then
-  open a PR on success or apply `team:failed` on failure. Designed to be fired
-  by a Claude routine on cron. No arguments (besides optional --dry-run).
+  Reconcile an open agent PR needing attention (merge conflict or a human's
+  `team:revise` hand-back) if one exists, else resume a `team:paused` issue
+  (preserving its branch), otherwise pick the next eligible `team`-labeled
+  GitHub issue from the Smart Smoker V2 GitHub Project (highest Priority field
+  then oldest, blockers resolved, no other team in flight), invoke
+  `/team-dispatch --issue <N> [--resume]`, then open a PR on success or apply
+  `team:failed` on failure. Designed to be fired by a Claude routine on cron. No
+  arguments (besides optional --dry-run).
 ---
 
 # Team Pickup — Autonomous Single-Issue Picker + PR Wrapper
@@ -68,6 +70,66 @@ if [ "$INFLIGHT" -gt 0 ]; then
   exit 0
 fi
 ```
+
+### 1.2. Reconcile a PR needing attention (before resume, before any new pick)
+
+An already-open agent PR that a human is waiting on outranks everything else:
+finishing it is the shortest path to a merge. Two signals make a PR "needing
+attention": its mergeable state is `CONFLICTING` (master moved under it — always
+auto-fixed, no label needed) or it carries the **`team:revise`** label (a human
+reviewed it and explicitly handed it back). Detection is a cheap `gh` read + the
+**PR Triage** deep module — zero Claude usage when nothing needs attention.
+
+```bash
+AGENT_LOGIN=$(gh api user -q .login 2>/dev/null || echo "")
+. scripts/claude-agent/lib/pr-triage.sh
+PICK_JSON=$(gh pr list --state open \
+    --json number,headRefName,isDraft,mergeable,labels,createdAt,author \
+  | PR_TRIAGE_AUTHOR="$AGENT_LOGIN" pr_triage_pick) || PICK_JSON=""
+```
+
+If nothing is picked (`PICK_JSON` empty / `{"pr":null}`), fall through to §1.5.
+Otherwise (`--dry-run`: print
+`team-pickup: would-reconcile PR #<P> (issue #<N>)` and exit 0):
+
+```bash
+RECON_PR=$(printf '%s' "$PICK_JSON" | jq -r '.pr')
+RECON_BRANCH=$(printf '%s' "$PICK_JSON" | jq -r '.branch')
+RECON_N=$(printf '%s' "$PICK_JSON" | jq -r '.issue')
+RECON_REASON=$(printf '%s' "$PICK_JSON" | jq -r '.reason')
+# When the PR both conflicts AND carries team:revise, pass --reason both.
+
+# Single-flight lock: reuse the issue lock so §1's skip, the daemon's pacing,
+# and agent-run's crash cleanup all keep working unchanged. Remember whether
+# team:done was present so it can be restored on exit.
+HAD_DONE=$(gh issue view "$RECON_N" --json labels --jq '[.labels[].name] | index("team:done") != null')
+gh issue edit "$RECON_N" --remove-label team:done --add-label team:in-progress 2>/dev/null || true
+```
+
+Emit the pick line (this exact shape — agent-run's crash cleanup scrapes it):
+
+```
+picked:   reconcile PR #<RECON_PR> (issue #<RECON_N>)
+```
+
+Then spawn the **`/pr-reconcile`** skill via the `Agent` tool —
+`subagent_type: general-purpose`, `model: opus`, `run_in_background: false`
+(blocking, same rule as §6a.1: never proceed or emit output while it is in
+flight) — with the prompt:
+
+`"Invoke the /pr-reconcile skill with --pr <RECON_PR> --branch <RECON_BRANCH> --issue <RECON_N> --reason <RECON_REASON>, repo benjr70/Smart-Smoker-V2."`
+
+Record its terminal `pr-reconcile:` line verbatim as `RECONCILE_LINE`. Then
+restore the lock and exit — a reconcile fire never falls through to §1.5/§2 (one
+fire = one unit of work):
+
+```bash
+gh issue edit "$RECON_N" --remove-label team:in-progress 2>/dev/null || true
+[ "$HAD_DONE" = "true" ] && gh issue edit "$RECON_N" --add-label team:done 2>/dev/null || true
+```
+
+Report per the reconcile output block in §7 and exit 0 (exit non-zero only if
+the pr-reconcile agent itself crashed with no terminal line).
 
 ### 1.5. Resume paused work before any new pick
 
@@ -330,8 +392,8 @@ agent is in flight you MUST NOT proceed to §6a.2, §6a.3, §7, or any other ste
 and MUST NOT emit the output block or any summary. If the `Agent` tool reports
 the spawn as still running / "in flight", keep waiting (poll for the agent
 result) until a terminal `pr-watch:` line exists. A run that emits its output
-block while pr-watch is still in flight is an **invalid run** — `pr-watch: (in
-flight)` is never a legal value for the §7 block.
+block while pr-watch is still in flight is an **invalid run** —
+`pr-watch: (in flight)` is never a legal value for the §7 block.
 
 §6a.1 may execute **more than once per fire**: every `fix(manual)` push from
 §6a.3 re-enters this step, because new commits re-run CI and invalidate the
@@ -370,14 +432,15 @@ Invoke via the `Agent` tool with:
      or human observation → **⏭ deferred**, leave unticked. Item demonstrably
      wrong → **❌ fail**, leave unticked.
   4. Update the PR body (`gh pr edit <PR_NUM> --body-file <file>`) and post ONE
-     evidence comment **per round**, headed `### Manual verification — round
-     <M>/3` (or `### Manual verification — all items pass (round <M>)` when
-     FAIL=0): one line per item — verdict, how it was exercised, observed result
-     (concrete numbers/log lines, not "works"). Every **⏭ deferred** line MUST
-     name the concrete real-world precondition that blocks live verification
-     (deploy window, real hardware, human observation); an **unjustified
-     deferral counts as ❌ FAIL**. Every **❌ fail** line MUST carry the
-     expected-vs-observed evidence — §6a.3 feeds it to the implementer verbatim.
+     evidence comment **per round**, headed
+     `### Manual verification — round <M>/3` (or
+     `### Manual verification — all items pass (round <M>)` when FAIL=0): one
+     line per item — verdict, how it was exercised, observed result (concrete
+     numbers/log lines, not "works"). Every **⏭ deferred** line MUST name the
+     concrete real-world precondition that blocks live verification (deploy
+     window, real hardware, human observation); an **unjustified deferral counts
+     as ❌ FAIL**. Every **❌ fail** line MUST carry the expected-vs-observed
+     evidence — §6a.3 feeds it to the implementer verbatim.
   5. Final message (exactly):
      `manual-verify: <pass>/<total> PASS, <deferred> deferred, <fail> FAIL`
 
@@ -462,6 +525,15 @@ pr-watch: PASS | DRAFT | ERROR — <detail>   (success only)
 verify:   <pass>/<total> PASS, <n> deferred, <n> FAIL — round <M>/3 [— EXHAUSTED]   (pr-watch PASS only)
 ```
 
+A **reconcile fire** (§1.2 picked a PR instead of an issue) emits this block
+instead:
+
+```
+=== /team-pickup <ISO-8601> ===
+picked:   reconcile PR #<P> (issue #<N>)
+reconcile: <verbatim terminal pr-reconcile: line from the §1.2 agent>
+```
+
 `pr-watch` line mirrors verbatim the final message returned by the spawned
 pr-watch agent in §6a.1; `verify:` mirrors the §6a.2 verifier's final
 `manual-verify:` line (from the last round), suffixed `— round <M>/3` and, on
@@ -505,8 +577,8 @@ in-flight agent. `pr-watch: (in flight)` is never a legal value.
 - **§6a.2 manual verification reports ❌** — §6a.3 spawns the implementer with
   the failure evidence, the lead commits `fix(manual): round <M> …` and pushes,
   and the loop re-enters §6a.1 (CI must re-green before re-verification). Cap 3
-  manual rounds; on exhaustion (or an implementer `manual-verify-dispute`) the PR
-  converts to draft + `team:checks-failed` with an issue comment — the same
+  manual rounds; on exhaustion (or an implementer `manual-verify-dispute`) the
+  PR converts to draft + `team:checks-failed` with an issue comment — the same
   escalation as pr-watch exhaustion. A **justified ⏭ deferred** item (deploy
   window / real hardware / human observation, precondition stated) is not a
   failure and does not loop; it stays unticked for the human.
@@ -517,10 +589,21 @@ in-flight agent. `pr-watch: (in flight)` is never a legal value.
 - **Network/auth flake mid-team-dispatch** — teammates may stay spawned.
   Wrapper's §6b cleans GitHub state but cannot clean teammates. Run "Clean up
   the team." manually after a §6b failure.
+- **Crash mid-reconcile (§1.2)** — the issue is left `team:in-progress` with no
+  live fire. agent-run's crash cleanup scrapes the
+  `picked:   reconcile PR #<P> (issue #<N>)` line and restores the lock
+  (`team:in-progress` removed, `team:done` re-added) instead of applying
+  `team:failed` — the issue's work was already done; only the PR needs care.
+- **Reconcile pick loops on the same PR** — cannot happen while parked:
+  `/pr-reconcile` always exits having either removed the attention signal
+  (rebased ⇒ no longer CONFLICTING; threads done ⇒ `team:revise` dropped) or
+  applied a parked label (`team:rebase-failed` / `team:revise-failed`) that the
+  PR Triage skips.
 
 ## Boundaries
 
-- Never picks more than one issue per fire.
+- Never picks more than one unit of work per fire — a reconcile (§1.2), a resume
+  (§1.5), or a fresh issue (§2), in that priority order, never two.
 - Never invokes `scripts/ralph/*` (separate Level 6 system).
 - Never modifies the parent PRD issue. Only operates on `team`-labeled child
   issues. (PRDs themselves must NOT carry the `team` label.)

@@ -82,6 +82,7 @@ nav:
       - Overview: Teams/index.md
       - Roles: Teams/roles.md
       - Dispatch: Teams/dispatch.md
+      - Autonomous Loop: Teams/autonomous-loop.md
   - Infrastructure:
       - Overview: Infrastructure/README.md
       - Getting Started: Infrastructure/guides/getting-started.md
