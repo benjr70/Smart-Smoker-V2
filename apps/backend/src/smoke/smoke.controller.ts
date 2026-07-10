@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { ParseObjectIdPipe } from '../common/parse-object-id.pipe';
 import { Smoke } from './smoke.schema';
 import { SmokeDto } from './smokeDto';
 import { SmokeService } from './smoke.service';
@@ -24,12 +25,12 @@ export class SmokeController {
   }
 
   @Get('/:id')
-  getById(@Param('id') id: string): Promise<Smoke> {
-    return this.smokeService.getById(id);
+  getById(@Param('id', ParseObjectIdPipe) id: string): Promise<Smoke> {
+    return this.smokeService.getByIdOrThrow(id);
   }
 
   @Delete('/:id')
-  DeleteById(@Param('id') id: string) {
+  DeleteById(@Param('id', ParseObjectIdPipe) id: string) {
     return this.smokeService.delete(id);
   }
 }

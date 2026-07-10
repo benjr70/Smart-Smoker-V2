@@ -27,7 +27,7 @@ describe('SmokeController', () => {
       FinishSmoke: jest
         .fn()
         .mockResolvedValue({ ...mockSmoke, status: SmokeStatus.Complete }),
-      getById: jest.fn().mockResolvedValue(mockSmoke),
+      getByIdOrThrow: jest.fn().mockResolvedValue(mockSmoke),
       delete: jest.fn().mockResolvedValue({ deletedCount: 1 }),
     };
 
@@ -71,12 +71,12 @@ describe('SmokeController', () => {
   });
 
   describe('getById', () => {
-    it('should return smoke by id', async () => {
+    it('should return smoke by id via getByIdOrThrow', async () => {
       const id = 'test-id';
 
       const result = await controller.getById(id);
 
-      expect(mockSmokeService.getById).toHaveBeenCalledWith(id);
+      expect(mockSmokeService.getByIdOrThrow).toHaveBeenCalledWith(id);
       expect(result).toEqual(mockSmoke);
     });
   });

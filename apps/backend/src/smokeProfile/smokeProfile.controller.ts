@@ -7,6 +7,7 @@ import {
   Post,
 } from '@nestjs/common/decorators';
 import { ApiTags } from '@nestjs/swagger';
+import { ParseObjectIdPipe } from '../common/parse-object-id.pipe';
 import { SmokeProfile } from './smokeProfile.schema';
 import { SmokeProfileService } from './smokeProfile.service';
 import { SmokeProFileDto } from './smokeProfileDto';
@@ -22,8 +23,10 @@ export class SmokeProfileController {
   }
 
   @Get('/:id')
-  getSmokeProfileById(@Param('id') id: string): Promise<SmokeProfile> {
-    return this.smokeProfileService.getById(id);
+  getSmokeProfileById(
+    @Param('id', ParseObjectIdPipe) id: string,
+  ): Promise<SmokeProfile> {
+    return this.smokeProfileService.getByIdOrThrow(id);
   }
 
   @Post('/current')
@@ -32,7 +35,7 @@ export class SmokeProfileController {
   }
 
   @Delete('/:id')
-  DeleteById(@Param('id') id: string) {
+  DeleteById(@Param('id', ParseObjectIdPipe) id: string) {
     return this.smokeProfileService.delete(id);
   }
 }

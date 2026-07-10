@@ -8,6 +8,7 @@ import {
   Put,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { ParseObjectIdPipe } from '../common/parse-object-id.pipe';
 import { PreSmoke } from './presmoke.schema';
 import { PreSmokeService } from './presmoke.service';
 import { PreSmokeDto } from './presmokeDto';
@@ -23,8 +24,10 @@ export class PreSmokeController {
   }
 
   @Get('/:id')
-  getPreSmokeById(@Param('id') id: string): Promise<PreSmoke> {
-    return this.preSmokeService.getById(id);
+  getPreSmokeById(
+    @Param('id', ParseObjectIdPipe) id: string,
+  ): Promise<PreSmoke> {
+    return this.preSmokeService.getByIdOrThrow(id);
   }
 
   @Post('')
@@ -34,7 +37,7 @@ export class PreSmokeController {
 
   @Put('/update/:id')
   updatePreSmoke(
-    @Param('id') id: string,
+    @Param('id', ParseObjectIdPipe) id: string,
     @Body() dto: PreSmokeDto,
   ): Promise<PreSmoke> {
     return this.preSmokeService.update(id, dto);
@@ -46,7 +49,7 @@ export class PreSmokeController {
   }
 
   @Delete('/:id')
-  DeleteById(@Param('id') id: string) {
+  DeleteById(@Param('id', ParseObjectIdPipe) id: string) {
     return this.preSmokeService.delete(id);
   }
 }

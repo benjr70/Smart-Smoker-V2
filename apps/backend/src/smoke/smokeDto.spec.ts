@@ -1,7 +1,33 @@
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 import { SmokeDto } from './smokeDto';
 import { SmokeStatus } from './smoke.schema';
 
 describe('SmokeDto', () => {
+  describe('validation', () => {
+    it('passes for a well-formed payload', async () => {
+      const dto = plainToInstance(SmokeDto, {
+        preSmokeId: 'pre-smoke-1',
+        status: SmokeStatus.InProgress,
+      });
+
+      const errors = await validate(dto);
+
+      expect(errors).toHaveLength(0);
+    });
+
+    it('rejects a non-string preSmokeId', async () => {
+      const dto = plainToInstance(SmokeDto, {
+        preSmokeId: 123,
+        status: SmokeStatus.InProgress,
+      });
+
+      const errors = await validate(dto);
+
+      expect(errors.some((e) => e.property === 'preSmokeId')).toBe(true);
+    });
+  });
+
   it('should create a SmokeDto instance', () => {
     const smokeDto = new SmokeDto();
     expect(smokeDto).toBeDefined();

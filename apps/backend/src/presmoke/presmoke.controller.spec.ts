@@ -26,7 +26,7 @@ describe('PreSmokeController', () => {
   beforeEach(async () => {
     mockPreSmokeService = {
       getAll: jest.fn().mockResolvedValue(mockPreSmokes),
-      getById: jest.fn().mockResolvedValue(mockPreSmoke),
+      getByIdOrThrow: jest.fn().mockResolvedValue(mockPreSmoke),
       save: jest.fn().mockResolvedValue(mockPreSmoke),
       update: jest.fn().mockResolvedValue(mockPreSmoke),
       GetByCurrent: jest.fn().mockResolvedValue(mockPreSmoke),
@@ -64,12 +64,12 @@ describe('PreSmokeController', () => {
   });
 
   describe('getPreSmokeById', () => {
-    it('should return pre-smoke by id', async () => {
+    it('should return pre-smoke by id via getByIdOrThrow', async () => {
       const id = 'test-id';
 
       const result = await controller.getPreSmokeById(id);
 
-      expect(mockPreSmokeService.getById).toHaveBeenCalledWith(id);
+      expect(mockPreSmokeService.getByIdOrThrow).toHaveBeenCalledWith(id);
       expect(result).toEqual(mockPreSmoke);
     });
   });
