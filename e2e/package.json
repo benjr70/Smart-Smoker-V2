@@ -6,6 +6,7 @@
   "scripts": {
     "test": "playwright test",
     "test:hermetic": "playwright test --project=hermetic",
+    "test:workflow": "node --test ci/*.test.mts",
     "stack:up": "docker compose -f docker/docker-compose.e2e.yml up --build -d",
     "stack:down": "docker compose -f docker/docker-compose.e2e.yml down -v",
     "stack:logs": "docker compose -f docker/docker-compose.e2e.yml logs -f",
@@ -15,6 +16,7 @@
   "devDependencies": {
     "@playwright/test": "^1.49.1",
     "@types/node": "^20.11.0",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "yaml": "^1.10.2"
   }
 }
