@@ -12,8 +12,10 @@
 #                run the loop goes straight back to the gate and fires again if
 #                budget still allows — the backlog drains within one window.
 #                agent-run markers steer the exceptions: AGENT_RUN_NO_WORK=1
-#                (empty queue) and AGENT_RUN_RESET_AT=<iso> (mid-run exhaustion,
-#                issue paused) both send the daemon to sleep instead.
+#                (empty queue) sleeps in chunks with a zero-cost Work Probe
+#                that wakes the loop early when work appears mid-window;
+#                AGENT_RUN_RESET_AT=<iso> (mid-run exhaustion, issue paused)
+#                sleeps to that reset.
 #   4. Schedule: the Sleep Planner decides how long to sleep and how to poll after
 #                waking; the daemon then sleeps and polls until budget is actually
 #                replenished before the next fire.
@@ -32,6 +34,8 @@
 #   CLAUDE_JSONL_DIR      dir scanned for the degraded reset estimate
 #   WINDOW_SECS           assumed window length for degraded estimate (default 5h)
 #   AGENT_DAEMON_MAX_ITERS  stop after N loop passes (default: unbounded)
+#   WORK_PROBE_INTERVAL   secs between mid-sleep work probes (default 900)
+#   WORK_PROBE_CMD        command eval'd for a probe scan (default: wp_scan)
 
 set -euo pipefail
 
@@ -41,6 +45,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${SCRIPT_DIR}/lib/budget-gate.sh"
 # shellcheck source=lib/sleep-planner.sh
 . "${SCRIPT_DIR}/lib/sleep-planner.sh"
+# shellcheck source=lib/work-probe.sh
+. "${SCRIPT_DIR}/lib/work-probe.sh"
 
 # Pinned ccusage version keeps the sensor reproducible across hosts.
 CCUSAGE_VERSION="${CCUSAGE_VERSION:-20.0.14}"
@@ -50,6 +56,8 @@ SLEEP_CMD="${SLEEP_CMD:-sleep}"
 CLAUDE_JSONL_DIR="${CLAUDE_JSONL_DIR:-${HOME}/.claude}"
 WINDOW_SECS="${WINDOW_SECS:-18000}"
 AGENT_DAEMON_MAX_ITERS="${AGENT_DAEMON_MAX_ITERS:-0}"   # 0 = unbounded
+WORK_PROBE_INTERVAL="${WORK_PROBE_INTERVAL:-900}"       # secs between probes
+WORK_PROBE_CMD="${WORK_PROBE_CMD:-wp_scan}"             # eval'd; emits scan JSON
 
 log() { echo "[agent-daemon $(date -u +%Y-%m-%dT%H:%M:%SZ)] $*"; }
 
@@ -95,19 +103,10 @@ read_budget() {
     fi
 }
 
-# Sleep until the reset, then poll until the window is actually fresh (or the
-# poll cap is hit). Honors the Sleep Planner's plan.
-sleep_and_poll() {
-    local reset_at="$1" plan sleep_secs interval attempts i
-    plan="$(sleep_planner "${reset_at}" "")"
-    sleep_secs="$(printf '%s' "${plan}" | jq -r '.sleepSecs')"
-    interval="$(printf '%s' "${plan}" | jq -r '.pollIntervalSecs')"
-    attempts="$(printf '%s' "${plan}" | jq -r '.pollMaxAttempts')"
-
-    log "sleeping ${sleep_secs}s until reset ${reset_at}"
-    "${SLEEP_CMD}" "${sleep_secs}"
-
-    # Post-wake poll: the reset estimate may be slightly early.
+# Post-wake poll: the reset estimate may be slightly early, so poll the gate
+# until the window is actually fresh (or the poll cap is hit).
+budget_poll() {
+    local interval="$1" attempts="$2" i
     for ((i = 0; i < attempts; i++)); do
         read_budget
         if [ "${SHOULD_FIRE}" = "true" ]; then
@@ -117,6 +116,61 @@ sleep_and_poll() {
         "${SLEEP_CMD}" "${interval}"
     done
     return 0
+}
+
+# Sleep until the reset, then poll until the window is actually fresh (or the
+# poll cap is hit). Honors the Sleep Planner's plan.
+sleep_and_poll() {
+    local reset_at="$1" plan sleep_secs interval attempts
+    # BUDGET_GATE_NOW (the test clock pin) also pins the planner's "now".
+    plan="$(sleep_planner "${reset_at}" "${BUDGET_GATE_NOW:-}")"
+    sleep_secs="$(printf '%s' "${plan}" | jq -r '.sleepSecs')"
+    interval="$(printf '%s' "${plan}" | jq -r '.pollIntervalSecs')"
+    attempts="$(printf '%s' "${plan}" | jq -r '.pollMaxAttempts')"
+
+    log "sleeping ${sleep_secs}s until reset ${reset_at}"
+    "${SLEEP_CMD}" "${sleep_secs}"
+
+    budget_poll "${interval}" "${attempts}"
+}
+
+# probe_sleep — chunked sleep-to-reset that wakes early when the Work Probe
+# sees actionable work appear mid-window. Used only on the NO_WORK path: the
+# budget is there but the queue was empty at fire time, and work arrives on
+# human time (a merge that conflicts an open PR, a team:revise hand-back, a
+# new issue). Observed live 2026-07-10: a human merge 52s after a no-work
+# fire left a CONFLICTING PR waiting ~4h for the window reset. A probe is
+# pure `gh` — zero Claude cost. wp_decide's rules keep this loop-proof: a
+# held lock never wakes, reconcile/paused wake unconditionally (team-pickup
+# deterministically acts on them), and pick-class candidates wake only when
+# they differ from the baseline captured here at no-work time.
+probe_sleep() {
+    local reset_at="$1" plan sleep_secs interval attempts elapsed=0 chunk baseline scan reason
+    plan="$(sleep_planner "${reset_at}" "${BUDGET_GATE_NOW:-}")"
+    sleep_secs="$(printf '%s' "${plan}" | jq -r '.sleepSecs')"
+    interval="$(printf '%s' "${plan}" | jq -r '.pollIntervalSecs')"
+    attempts="$(printf '%s' "${plan}" | jq -r '.pollMaxAttempts')"
+
+    baseline="$(eval "${WORK_PROBE_CMD}" 2>/dev/null | jq -r '.pickSig // ""' 2>/dev/null || echo '')"
+
+    log "sleeping ${sleep_secs}s until reset ${reset_at} (work probe every ${WORK_PROBE_INTERVAL}s)"
+    while [ "${elapsed}" -lt "${sleep_secs}" ]; do
+        chunk=$((sleep_secs - elapsed))
+        if [ "${chunk}" -gt "${WORK_PROBE_INTERVAL}" ]; then
+            chunk="${WORK_PROBE_INTERVAL}"
+        fi
+        "${SLEEP_CMD}" "${chunk}"
+        elapsed=$((elapsed + chunk))
+
+        scan="$(eval "${WORK_PROBE_CMD}" 2>/dev/null || true)"
+        [ -n "${scan}" ] || continue
+        if reason="$(printf '%s' "${scan}" | wp_decide "${baseline}")"; then
+            log "work appeared mid-window (${reason}) — waking early"
+            return 0
+        fi
+    done
+
+    budget_poll "${interval}" "${attempts}"
 }
 
 main() {
@@ -142,9 +196,11 @@ main() {
 
             if grep -q '^AGENT_RUN_NO_WORK=1' "${fire_log}"; then
                 # Queue empty: re-firing immediately would burn budget on empty
-                # picks, and new issues arrive on human time — wait a window.
-                log "queue empty — sleeping until window reset"
-                sleep_and_poll "${RESET_AT}"
+                # picks, but new work arrives on human time — sleep in chunks
+                # and let the Work Probe (pure gh, zero Claude cost) wake the
+                # loop early when something actionable appears.
+                log "queue empty — sleeping until window reset (with work probe)"
+                probe_sleep "${RESET_AT}"
             elif grep -q '^AGENT_RUN_RESET_AT=' "${fire_log}"; then
                 # Run was cut off by usage exhaustion (issue paused). Sleep to
                 # the run's own scraped reset, falling back to the window's.
