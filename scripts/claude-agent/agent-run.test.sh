@@ -372,6 +372,44 @@ ${gh}"
 }
 
 #-------------------------------------------------------------------------------
+# Test 9: the claude invocation runs with the print background-task ceiling
+# lifted (CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0), so a long team dispatch is not
+# killed at the default 600s. A host override (already-set value) is honored.
+#-------------------------------------------------------------------------------
+test_bg_ceiling_lifted_for_claude() {
+    echo "TEST: claude runs with the background-task ceiling lifted"
+
+    local dir out
+    dir="$(make_env "opened PR https://github.com/benjr70/Smart-Smoker-V2/pull/300" 0)"
+    trap "rm -rf '${dir}'" RETURN
+    # Replace the claude stub so it reports the ceiling env it was invoked with.
+    cat > "${dir}/claude-stub" <<EOF
+#!/usr/bin/env bash
+echo "CEILING=\${CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS:-unset}"
+exit 0
+EOF
+    chmod +x "${dir}/claude-stub"
+
+    # Default (unset by caller) → agent-run must set 0.
+    out="$(run_agent "${dir}" 2>/dev/null)"
+    if ! printf '%s' "${out}" | grep -q '^CEILING=0'; then
+        fail "default must lift the ceiling to 0" "out:
+${out}"
+        return
+    fi
+
+    # Host override must be honored, not clobbered.
+    out="$(CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=1200000 run_agent "${dir}" 2>/dev/null)"
+    if ! printf '%s' "${out}" | grep -q '^CEILING=1200000'; then
+        fail "an existing host override must be honored" "out:
+${out}"
+        return
+    fi
+
+    pass "claude runs with the background-task ceiling lifted"
+}
+
+#-------------------------------------------------------------------------------
 # Run suite
 #-------------------------------------------------------------------------------
 echo "=========================================="
@@ -386,6 +424,7 @@ test_no_eligible_issue_emits_no_work_marker
 test_real_skip_output_emits_no_work_marker
 test_failed_run_clears_its_own_lock
 test_failed_run_without_pick_touches_no_lock
+test_bg_ceiling_lifted_for_claude
 
 echo ""
 echo "=========================================="

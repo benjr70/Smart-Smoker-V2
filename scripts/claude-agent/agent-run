@@ -84,6 +84,13 @@ echo "log:    $LOG_FILE"      | tee -a "$LOG_FILE"
 echo "prompt: /team-pickup$DRY_RUN_FLAG" | tee -a "$LOG_FILE"
 echo                          | tee -a "$LOG_FILE"
 
+# `/team-pickup` spawns background subagents (implementer/reviewer/verifier) that
+# routinely run well past `claude --print`'s default 600s background-task ceiling.
+# Left at the default, print terminates the team mid-dispatch and returns exit 0
+# with no PR and the issue still locked. 0 = wait indefinitely. Honor a host
+# override (e.g. the systemd EnvironmentFile drop-in) if one is already set.
+export CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS="${CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS:-0}"
+
 set +e
 "$CLAUDE_BIN" \
   --permission-mode bypassPermissions \
