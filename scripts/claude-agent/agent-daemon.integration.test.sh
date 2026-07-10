@@ -31,6 +31,10 @@ DAEMON="${SCRIPT_DIR}/agent-daemon"
 AGENT_RUN="${SCRIPT_DIR}/agent-run"
 LIB_DIR="${SCRIPT_DIR}/lib"
 
+# The suite drives the ccusage fallback path; keep the primary OAuth usage
+# sensor off the network.
+export USAGE_FETCH_CMD="false"
+
 TESTS_RUN=0
 TESTS_FAILED=0
 FAILED_NAMES=()

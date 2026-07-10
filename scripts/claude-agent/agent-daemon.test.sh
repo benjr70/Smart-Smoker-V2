@@ -43,6 +43,10 @@ fi
 NOW_EPOCH=$(date -u -d '2026-07-05T20:00:00Z' +%s)
 iso() { date -u -d "@$1" +%Y-%m-%dT%H:%M:%S.000Z; }
 
+# Existing tests drive the ccusage fallback path; disable the primary OAuth
+# usage sensor for the whole suite (tests that exercise it override this).
+export USAGE_FETCH_CMD="false"
+
 # Build a fixture whose active window is [start, start+5h].
 fixture() {
     local start="$1" end=$(( $1 + 18000 ))
@@ -456,6 +460,82 @@ $(cat "${dir}/calls.log")"
 }
 
 #-------------------------------------------------------------------------------
+# Test 9: OAuth usage sensor is the primary — real utilization drives the
+# decision (ccusage would say the window is nearly over; the account's 81%
+# free budget must win), and its resets_at becomes RESET_AT.
+#-------------------------------------------------------------------------------
+test_oauth_sensor_overrides_ccusage() {
+    echo "TEST: oauth sensor overrides the ccusage time-proxy"
+
+    local dir; dir="$(make_env)"
+    trap "rm -rf '${dir}'" RETURN
+    # ccusage fixture: window almost over (would NOT fire on the time-proxy).
+    fixture $((NOW_EPOCH - 17000)) > "${dir}/ccusage.json"
+    # OAuth fixture: the live 2026-07-10 shape — 19% session / 18% weekly.
+    cat > "${dir}/usage.json" <<'EOF'
+{ "five_hour": { "utilization": 19, "resets_at": "2026-07-05T23:00:00+00:00" },
+  "seven_day": { "utilization": 18, "resets_at": "2026-07-08T00:00:00+00:00" } }
+EOF
+
+    BUDGET_GATE_NOW="${NOW_EPOCH}" AGENT_DAEMON_MAX_ITERS=1 \
+        CCUSAGE_CMD="cat '${dir}/ccusage.json'" \
+        USAGE_FETCH_CMD="cat '${dir}/usage.json'" \
+        AGENT_RUN_CMD="${dir}/agent-run-stub" \
+        SLEEP_CMD="${dir}/sleep-stub" \
+        bash "${DAEMON}" > "${dir}/daemon.out" 2>&1
+
+    if ! grep -q '^fired' "${dir}/calls.log"; then
+        fail "real budget free must fire despite an old ccusage window" "out:
+$(tail -3 "${dir}/daemon.out")"
+        return
+    fi
+    if ! grep -q 'sensor=oauth' "${dir}/daemon.out"; then
+        fail "decision must be attributed to the oauth sensor" "out:
+$(tail -3 "${dir}/daemon.out")"
+        return
+    fi
+    if ! grep -q 'remainPct=81.00' "${dir}/daemon.out"; then
+        fail "remainPct must be real budget (81.00)" "out:
+$(tail -3 "${dir}/daemon.out")"
+        return
+    fi
+
+    pass "oauth sensor overrides the ccusage time-proxy"
+}
+
+#-------------------------------------------------------------------------------
+# Test 10: OAuth sensor unreachable → falls back to the ccusage time-proxy
+# (attributed as such) instead of degrading or crashing.
+#-------------------------------------------------------------------------------
+test_oauth_unreachable_falls_back_to_ccusage() {
+    echo "TEST: oauth sensor unreachable falls back to ccusage"
+
+    local dir; dir="$(make_env)"
+    trap "rm -rf '${dir}'" RETURN
+    fixture $((NOW_EPOCH - 60)) > "${dir}/ccusage.json"      # fresh window
+
+    BUDGET_GATE_NOW="${NOW_EPOCH}" AGENT_DAEMON_MAX_ITERS=1 \
+        CCUSAGE_CMD="cat '${dir}/ccusage.json'" \
+        USAGE_FETCH_CMD="false" \
+        AGENT_RUN_CMD="${dir}/agent-run-stub" \
+        SLEEP_CMD="${dir}/sleep-stub" \
+        bash "${DAEMON}" > "${dir}/daemon.out" 2>&1
+
+    if ! grep -q '^fired' "${dir}/calls.log"; then
+        fail "ccusage fallback with fresh window must fire" "out:
+$(tail -3 "${dir}/daemon.out")"
+        return
+    fi
+    if ! grep -q 'sensor=ccusage-fallback' "${dir}/daemon.out"; then
+        fail "decision must be attributed to the fallback" "out:
+$(tail -3 "${dir}/daemon.out")"
+        return
+    fi
+
+    pass "oauth sensor unreachable falls back to ccusage"
+}
+
+#-------------------------------------------------------------------------------
 # Run suite
 #-------------------------------------------------------------------------------
 echo "=========================================="
@@ -472,6 +552,8 @@ test_no_work_probe_suppresses_stale_candidates
 test_exhausted_run_sleeps_to_reset
 test_failed_run_sleeps_no_rapid_loop
 test_idle_window_fires_from_cold
+test_oauth_sensor_overrides_ccusage
+test_oauth_unreachable_falls_back_to_ccusage
 
 echo ""
 echo "=========================================="
