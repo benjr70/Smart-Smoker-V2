@@ -1,81 +1,58 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
+import { NotFoundException } from '@nestjs/common';
 import { TempsService } from './temps.service';
 import { Temp } from './temps.schema';
 import { TempDto } from './tempDto';
-import { StateService } from '../State/state.service';
-import { SmokeService } from '../smoke/smoke.service';
-import { SmokeStatus } from '../smoke/smoke.schema';
+import { CurrentSmokeService } from '../common/current-smoke.service';
+
+const query = <T>(value: T) => ({ exec: jest.fn().mockResolvedValue(value) });
 
 describe('TempsService', () => {
   let service: TempsService;
-  let mockTempModel: any;
-  let mockStateService: Partial<StateService>;
-  let mockSmokeService: Partial<SmokeService>;
+  let model: any;
+  let currentSmoke: {
+    readCurrent: jest.Mock;
+    upsertCurrent: jest.Mock;
+  };
 
-  const mockTemp: Temp = {
+  const tempDto: TempDto = {
     MeatTemp: '150',
     Meat2Temp: '160',
     Meat3Temp: '170',
     ChamberTemp: '225',
-    tempsId: 'temps-id',
-    date: new Date('2023-01-01'),
   };
 
-  const mockTempDocument = {
-    _id: 'temp-doc-id',
-    ...mockTemp,
-    save: jest.fn().mockResolvedValue(mockTemp),
-  };
-
-  const mockState = {
-    smokeId: 'test-smoke-id',
-    smoking: true,
-  };
-
-  const mockSmoke = {
-    _id: 'test-smoke-id',
-    preSmokeId: 'pre-smoke-id',
-    tempsId: 'existing-temps-id',
-    status: SmokeStatus.InProgress,
-  };
+  const mockTempRows: Temp[] = [
+    {
+      MeatTemp: '150',
+      Meat2Temp: '160',
+      Meat3Temp: '170',
+      ChamberTemp: '225',
+      tempsId: 'temps-group-1',
+      date: new Date('2023-01-01'),
+    },
+  ];
 
   beforeEach(async () => {
-    // Create a mock constructor function
-    mockTempModel = jest.fn().mockImplementation((dto) => ({
-      ...dto,
-      save: jest.fn().mockResolvedValue({ ...dto, _id: 'new-temp-id' }),
+    model = jest.fn().mockImplementation((doc) => ({
+      ...doc,
+      save: jest.fn().mockResolvedValue({ ...doc, _id: 'new-temp-id' }),
     }));
+    model.find = jest.fn().mockReturnValue(query(mockTempRows));
+    model.insertMany = jest.fn().mockResolvedValue(mockTempRows);
+    model.deleteMany = jest.fn().mockResolvedValue({ deletedCount: 5 });
 
-    // Add static methods to the mock constructor
-    mockTempModel.find = jest.fn().mockResolvedValue([mockTempDocument]);
-    mockTempModel.insertMany = jest.fn().mockResolvedValue([mockTempDocument]);
-    mockTempModel.deleteMany = jest.fn().mockResolvedValue({ deletedCount: 5 });
-
-    mockStateService = {
-      GetState: jest.fn().mockResolvedValue(mockState),
-    };
-
-    mockSmokeService = {
-      getById: jest.fn().mockResolvedValue(mockSmoke),
-      update: jest.fn().mockResolvedValue(mockSmoke),
+    currentSmoke = {
+      readCurrent: jest.fn(),
+      upsertCurrent: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TempsService,
-        {
-          provide: getModelToken('Temp'),
-          useValue: mockTempModel,
-        },
-        {
-          provide: StateService,
-          useValue: mockStateService,
-        },
-        {
-          provide: SmokeService,
-          useValue: mockSmokeService,
-        },
+        { provide: getModelToken('Temp'), useValue: model },
+        { provide: CurrentSmokeService, useValue: currentSmoke },
       ],
     }).compile();
 
@@ -90,208 +67,174 @@ describe('TempsService', () => {
     expect(service).toBeDefined();
   });
 
-  describe('create', () => {
-    it('should create a new temperature record', async () => {
-      const tempDto: TempDto = {
-        MeatTemp: '150',
-        Meat2Temp: '160',
-        Meat3Temp: '170',
-        ChamberTemp: '225',
-      };
-
-      const result = await service.create(tempDto);
-
-      expect(mockTempModel).toHaveBeenCalledWith(tempDto);
-      expect(result).toBeDefined();
-    });
-  });
-
   describe('saveNewTemp', () => {
-    it('should save temp with existing tempsId', async () => {
-      const tempDto: TempDto = {
-        MeatTemp: '150',
-        Meat2Temp: '160',
-        Meat3Temp: '170',
-        ChamberTemp: '225',
-      };
-
-      jest.spyOn(service, 'create').mockResolvedValue(mockTempDocument as any);
-
-      await service.saveNewTemp(tempDto);
-
-      expect(mockStateService.GetState).toHaveBeenCalled();
-      expect(mockSmokeService.getById).toHaveBeenCalledWith(mockState.smokeId);
-      expect(tempDto.tempsId).toBe('existing-temps-id');
-    });
-
-    it('should create new tempsId if smoke does not have one', async () => {
-      const tempDto: TempDto = {
-        MeatTemp: '150',
-        Meat2Temp: '160',
-        Meat3Temp: '170',
-        ChamberTemp: '225',
-      };
-
-      const smokeWithoutTempsId = { ...mockSmoke, tempsId: undefined };
-      mockSmokeService.getById = jest
-        .fn()
-        .mockResolvedValue(smokeWithoutTempsId);
-
-      jest.spyOn(service, 'create').mockResolvedValue({
-        ...mockTempDocument,
-        _id: 'new-temps-id',
-      } as any);
-
-      await service.saveNewTemp(tempDto);
-
-      expect(mockSmokeService.update).toHaveBeenCalledWith(mockState.smokeId, {
-        preSmokeId: smokeWithoutTempsId.preSmokeId,
-        tempsId: 'new-temps-id',
-        status: smokeWithoutTempsId.status,
-      });
-    });
-
-    it('should return early when there is no active smoke', async () => {
-      const stateWithInvalidSmokeId = { ...mockState, smokeId: '' };
-      mockStateService.GetState = jest
-        .fn()
-        .mockResolvedValue(stateWithInvalidSmokeId);
-
-      const tempDto: TempDto = {
-        MeatTemp: '150',
-        Meat2Temp: '160',
-        Meat3Temp: '170',
-        ChamberTemp: '225',
-      };
+    it('appends a temp row under the smoke tempsId group when one exists', async () => {
+      currentSmoke.upsertCurrent.mockImplementation((key, handlers) =>
+        handlers.update('temps-group-1'),
+      );
 
       const result = await service.saveNewTemp(tempDto);
 
-      expect(result).toBeUndefined();
-      expect(mockSmokeService.getById).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('saveTempBatch', () => {
-    it('should save multiple temperatures with tempsId', async () => {
-      const tempDtos: TempDto[] = [
-        {
-          MeatTemp: '150',
-          Meat2Temp: '160',
-          Meat3Temp: '170',
-          ChamberTemp: '225',
-        },
-        {
-          MeatTemp: '155',
-          Meat2Temp: '165',
-          Meat3Temp: '175',
-          ChamberTemp: '230',
-        },
-      ];
-
-      jest.spyOn(service, 'GetTempID').mockResolvedValue('batch-temps-id');
-
-      await service.saveTempBatch(tempDtos);
-
-      expect(service.GetTempID).toHaveBeenCalled();
-      // Note: The original implementation doesn't return the result properly
+      expect(currentSmoke.upsertCurrent).toHaveBeenCalledWith(
+        'tempsId',
+        expect.any(Object),
+      );
+      // The row is tagged with the existing group id, then persisted.
+      expect(model).toHaveBeenCalledWith(
+        expect.objectContaining({ tempsId: 'temps-group-1' }),
+      );
+      expect(result).toMatchObject({ _id: 'new-temp-id' });
     });
 
-    it('should handle undefined tempsId', async () => {
-      const tempDtos: TempDto[] = [
-        {
-          MeatTemp: '150',
-          Meat2Temp: '160',
-          Meat3Temp: '170',
-          ChamberTemp: '225',
-        },
-      ];
+    it('creates the first temp row and reports its id as the new tempsId group', async () => {
+      let linkedChildId: string | undefined;
+      currentSmoke.upsertCurrent.mockImplementation(async (key, handlers) => {
+        const created = await handlers.create();
+        linkedChildId = created.childId;
+        return created.result;
+      });
 
-      jest.spyOn(service, 'GetTempID').mockResolvedValue(undefined);
+      const result = await service.saveNewTemp(tempDto);
 
-      const result = await service.saveTempBatch(tempDtos);
+      expect(model).toHaveBeenCalledWith(tempDto);
+      expect(linkedChildId).toBe('new-temp-id');
+      expect(result).toMatchObject({ _id: 'new-temp-id' });
+    });
 
-      expect(result).toBeUndefined();
-      expect(mockTempModel.insertMany).not.toHaveBeenCalled();
+    it('propagates the 404 when there is no active smoke', async () => {
+      currentSmoke.upsertCurrent.mockRejectedValue(new NotFoundException());
+
+      await expect(service.saveNewTemp(tempDto)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('preserves the smoke sibling FK links via upsertCurrent link-back', async () => {
+      // The FK-preservation contract is owned by CurrentSmokeService.upsertCurrent
+      // (covered in its own spec). TempsService must delegate the link-back to it
+      // rather than hand-rolling a partial SmokeDto that drops postSmokeId /
+      // smokeProfileId / ratingId (the bug this fan-out fixes).
+      currentSmoke.upsertCurrent.mockImplementation(async (key, handlers) => {
+        const created = await handlers.create();
+        return created.result;
+      });
+
+      await service.saveNewTemp(tempDto);
+
+      // No direct Smoke write path in the service anymore — link-back is delegated.
+      expect(currentSmoke.upsertCurrent).toHaveBeenCalledWith(
+        'tempsId',
+        expect.objectContaining({
+          update: expect.any(Function),
+          create: expect.any(Function),
+        }),
+      );
     });
   });
 
   describe('getAllTempsCurrent', () => {
-    it('should return current temperatures for active smoke', async () => {
-      const result = await service.getAllTempsCurrent();
-
-      expect(mockStateService.GetState).toHaveBeenCalled();
-      expect(mockSmokeService.getById).toHaveBeenCalledWith(mockState.smokeId);
-      expect(mockTempModel.find).toHaveBeenCalledWith({
-        tempsId: mockSmoke.tempsId,
-      });
-      expect(result).toEqual([mockTempDocument]);
-    });
-
-    it('should return empty array when no smokeId', async () => {
-      const stateWithoutSmoke = { ...mockState, smokeId: '' };
-      mockStateService.GetState = jest
-        .fn()
-        .mockResolvedValue(stateWithoutSmoke);
+    it('loads the temp rows for the current smoke tempsId group', async () => {
+      currentSmoke.readCurrent.mockImplementation((key, load) =>
+        load('temps-group-1'),
+      );
 
       const result = await service.getAllTempsCurrent();
 
-      expect(result).toEqual([]);
-      expect(mockSmokeService.getById).not.toHaveBeenCalled();
+      expect(currentSmoke.readCurrent).toHaveBeenCalledWith(
+        'tempsId',
+        expect.any(Function),
+        [],
+      );
+      expect(model.find).toHaveBeenCalledWith({ tempsId: 'temps-group-1' });
+      expect(result).toEqual(mockTempRows);
     });
 
-    it('should return empty array when smoke has no tempsId', async () => {
-      const smokeWithoutTempsId = { ...mockSmoke, tempsId: '' };
-      mockSmokeService.getById = jest
-        .fn()
-        .mockResolvedValue(smokeWithoutTempsId);
+    it('returns an empty array when nothing is active (fallback)', async () => {
+      currentSmoke.readCurrent.mockImplementation(
+        (key, load, fallback) => fallback,
+      );
 
       const result = await service.getAllTempsCurrent();
 
       expect(result).toEqual([]);
-      expect(mockTempModel.find).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('getAllTempsById', () => {
-    it('should return temperatures by tempsId', async () => {
-      const tempsId = 'specific-temps-id';
-
-      const result = await service.getAllTempsById(tempsId);
-
-      expect(mockTempModel.find).toHaveBeenCalledWith({ tempsId });
-      expect(result).toEqual([mockTempDocument]);
+      expect(model.find).not.toHaveBeenCalled();
     });
   });
 
   describe('GetTempID', () => {
-    it('should return tempsId from current smoke', async () => {
+    it('returns the current smoke tempsId group', async () => {
+      currentSmoke.readCurrent.mockImplementation((key, load) =>
+        load('temps-group-1'),
+      );
+
       const result = await service.GetTempID();
 
-      expect(mockStateService.GetState).toHaveBeenCalled();
-      expect(mockSmokeService.getById).toHaveBeenCalledWith(mockState.smokeId);
-      expect(result).toBe(mockSmoke.tempsId);
+      expect(currentSmoke.readCurrent).toHaveBeenCalledWith(
+        'tempsId',
+        expect.any(Function),
+        undefined,
+      );
+      expect(result).toBe('temps-group-1');
     });
 
-    it('should return undefined when there is no active smoke', async () => {
-      const stateWithInvalidSmokeId = { ...mockState, smokeId: '' };
-      mockStateService.GetState = jest
-        .fn()
-        .mockResolvedValue(stateWithInvalidSmokeId);
+    it('returns undefined when nothing is active (fallback)', async () => {
+      currentSmoke.readCurrent.mockImplementation(
+        (key, load, fallback) => fallback,
+      );
 
       const result = await service.GetTempID();
 
       expect(result).toBeUndefined();
-      expect(mockSmokeService.getById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('saveTempBatch', () => {
+    it('tags every row with the current tempsId group and bulk-inserts', async () => {
+      jest.spyOn(service, 'GetTempID').mockResolvedValue('batch-group');
+
+      await service.saveTempBatch([{ ...tempDto }, { ...tempDto }]);
+
+      expect(model.insertMany).toHaveBeenCalledWith([
+        expect.objectContaining({ tempsId: 'batch-group' }),
+        expect.objectContaining({ tempsId: 'batch-group' }),
+      ]);
+    });
+
+    it('does not insert when there is no active tempsId group', async () => {
+      jest.spyOn(service, 'GetTempID').mockResolvedValue(undefined);
+
+      const result = await service.saveTempBatch([{ ...tempDto }]);
+
+      expect(result).toBeUndefined();
+      expect(model.insertMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('create', () => {
+    it('persists a new temp document', async () => {
+      const result = await service.create(tempDto);
+
+      expect(model).toHaveBeenCalledWith(tempDto);
+      expect(result).toMatchObject({ _id: 'new-temp-id' });
+    });
+  });
+
+  describe('getAllTempsById', () => {
+    it('returns rows for an explicit tempsId', async () => {
+      const result = await service.getAllTempsById('some-group');
+
+      expect(model.find).toHaveBeenCalledWith({ tempsId: 'some-group' });
+      expect(result).toEqual(mockTempRows);
     });
   });
 
   describe('delete', () => {
-    it('should delete temperatures by tempsId', async () => {
-      const tempsId = 'temps-to-delete';
+    it('removes every row in a tempsId group', async () => {
+      const result = await service.delete('group-to-drop');
 
-      const result = await service.delete(tempsId);
-
-      expect(mockTempModel.deleteMany).toHaveBeenCalledWith({ tempsId });
+      expect(model.deleteMany).toHaveBeenCalledWith({
+        tempsId: 'group-to-drop',
+      });
       expect(result).toEqual({ deletedCount: 5 });
     });
   });

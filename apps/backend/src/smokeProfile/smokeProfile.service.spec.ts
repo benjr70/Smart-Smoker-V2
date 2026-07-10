@@ -1,20 +1,24 @@
 import { getModelToken } from '@nestjs/mongoose';
+import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { StateService } from '../State/state.service';
 import { RatingsService } from '../ratings/ratings.service';
-import { SmokeService } from '../smoke/smoke.service';
-import { SmokeDto } from '../smoke/smokeDto';
+import { CurrentSmokeService } from '../common/current-smoke.service';
+import { Smoke } from '../smoke/smoke.schema';
 import { SmokeProfileService } from './smokeProfile.service';
 import { SmokeProFileDto } from './smokeProfileDto';
 
+const query = <T>(value: T) => ({ exec: jest.fn().mockResolvedValue(value) });
+
 describe('SmokeProfileService', () => {
   let service: SmokeProfileService;
-  let mockSmokeProfileModel: any;
-  let mockStateService: any;
-  let mockSmokeService: any;
-  let mockRatingsService: any;
+  let model: any;
+  let currentSmoke: {
+    readCurrent: jest.Mock;
+    upsertCurrent: jest.Mock;
+  };
+  let ratingsService: { saveCurrentRatings: jest.Mock };
 
-  const mockSmokeProfileDto: SmokeProFileDto = {
+  const dto: SmokeProFileDto = {
     chamberName: 'Big Green Egg',
     probe1Name: 'Brisket',
     probe2Name: 'Pork Shoulder',
@@ -23,38 +27,9 @@ describe('SmokeProfileService', () => {
     woodType: 'Hickory',
   };
 
-  const mockSmokeProfile = {
-    _id: 'profile-id-123',
-    ...mockSmokeProfileDto,
-  };
+  const existing = { _id: 'profile-1', ...dto };
 
-  const mockState = {
-    _id: 'state-id',
-    smokeId: 'smoke-id-123',
-    smoking: true,
-  };
-
-  const mockSmoke = {
-    _id: 'smoke-id-123',
-    smokeProfileId: 'profile-id-123',
-    preSmokeId: 'pre-smoke-id',
-    postSmokeId: 'post-smoke-id',
-    tempsId: 'temps-id',
-    ratingId: 'rating-id-123',
-    status: 1,
-  };
-
-  const mockSmokeWithoutProfile = {
-    _id: 'smoke-id-456',
-    smokeProfileId: null,
-    preSmokeId: 'pre-smoke-id',
-    postSmokeId: 'post-smoke-id',
-    tempsId: 'temps-id',
-    ratingId: null,
-    status: 1,
-  };
-
-  const mockDefaultProfile = {
+  const defaultProfile = {
     notes: '',
     woodType: '',
     chamberName: 'Chamber',
@@ -64,58 +39,27 @@ describe('SmokeProfileService', () => {
   };
 
   beforeEach(async () => {
-    // Mock SmokeProfile model
-    mockSmokeProfileModel = jest.fn().mockImplementation((dto) => ({
-      ...dto,
-      save: jest.fn().mockResolvedValue({ ...dto, _id: 'new-profile-id' }),
+    model = jest.fn().mockImplementation((doc) => ({
+      ...doc,
+      save: jest.fn().mockResolvedValue({ ...doc, _id: 'new-profile-id' }),
     }));
+    model.findById = jest.fn().mockReturnValue(query(existing));
+    model.findByIdAndUpdate = jest.fn().mockReturnValue(query(existing));
+    model.deleteOne = jest.fn().mockReturnValue(query({ deletedCount: 1 }));
 
-    mockSmokeProfileModel.findById = jest
-      .fn()
-      .mockResolvedValue(mockSmokeProfile);
-    mockSmokeProfileModel.deleteOne = jest
-      .fn()
-      .mockResolvedValue({ deletedCount: 1 });
-    mockSmokeProfileModel.findByIdAndUpdate = jest
-      .fn()
-      .mockResolvedValue(mockSmokeProfile);
-
-    // Mock StateService
-    mockStateService = {
-      GetState: jest.fn(),
-      create: jest.fn(),
+    currentSmoke = {
+      readCurrent: jest.fn(),
+      upsertCurrent: jest.fn(),
     };
 
-    // Mock SmokeService
-    mockSmokeService = {
-      getById: jest.fn(),
-      update: jest.fn(),
-    };
-
-    // Mock RatingsService
-    mockRatingsService = {
-      saveCurrentRatings: jest.fn(),
-    };
+    ratingsService = { saveCurrentRatings: jest.fn().mockResolvedValue({}) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SmokeProfileService,
-        {
-          provide: getModelToken('SmokeProfile'),
-          useValue: mockSmokeProfileModel,
-        },
-        {
-          provide: StateService,
-          useValue: mockStateService,
-        },
-        {
-          provide: SmokeService,
-          useValue: mockSmokeService,
-        },
-        {
-          provide: RatingsService,
-          useValue: mockRatingsService,
-        },
+        { provide: getModelToken('SmokeProfile'), useValue: model },
+        { provide: CurrentSmokeService, useValue: currentSmoke },
+        { provide: RatingsService, useValue: ratingsService },
       ],
     }).compile();
 
@@ -131,142 +75,111 @@ describe('SmokeProfileService', () => {
   });
 
   describe('getCurrentSmokeProfile', () => {
-    it('should return current smoke profile when state and smoke have profile', async () => {
-      mockStateService.GetState.mockResolvedValue(mockState);
-      mockSmokeService.getById.mockResolvedValue(mockSmoke);
+    it('loads the linked profile via the current-smoke walk', async () => {
+      currentSmoke.readCurrent.mockImplementation((key, load) =>
+        load('profile-1'),
+      );
 
       const result = await service.getCurrentSmokeProfile();
 
-      expect(mockStateService.GetState).toHaveBeenCalled();
-      expect(mockSmokeService.getById).toHaveBeenCalledWith(mockState.smokeId);
-      expect(mockSmokeProfileModel.findById).toHaveBeenCalledWith(
-        mockSmoke.smokeProfileId,
+      expect(currentSmoke.readCurrent).toHaveBeenCalledWith(
+        'smokeProfileId',
+        expect.any(Function),
+        expect.objectContaining(defaultProfile),
       );
-      expect(result).toEqual(mockSmokeProfile);
+      expect(model.findById).toHaveBeenCalledWith('profile-1');
+      expect(result).toEqual(existing);
     });
 
-    it('should return default profile when smoke has no profile', async () => {
-      mockStateService.GetState.mockResolvedValue(mockState);
-      mockSmokeService.getById.mockResolvedValue(mockSmokeWithoutProfile);
+    it('returns the default profile when nothing is active (fallback)', async () => {
+      currentSmoke.readCurrent.mockImplementation(
+        (key, load, fallback) => fallback,
+      );
 
       const result = await service.getCurrentSmokeProfile();
 
-      expect(mockStateService.GetState).toHaveBeenCalled();
-      expect(mockSmokeService.getById).toHaveBeenCalledWith(mockState.smokeId);
-      expect(result).toEqual(mockDefaultProfile);
-    });
-
-    it('should self-heal a missing state and return the default profile', async () => {
-      mockStateService.GetState.mockResolvedValue(null);
-      mockStateService.create.mockResolvedValue({
-        smokeId: '',
-        smoking: false,
-      });
-
-      const result = await service.getCurrentSmokeProfile();
-
-      expect(result).toEqual(mockDefaultProfile);
-      expect(mockStateService.GetState).toHaveBeenCalled();
-      expect(mockStateService.create).toHaveBeenCalledWith({
-        smokeId: '',
-        smoking: false,
-      });
-    });
-
-    it('should handle errors from state service', async () => {
-      const error = new Error('Database connection failed');
-      mockStateService.GetState.mockRejectedValue(error);
-
-      await expect(service.getCurrentSmokeProfile()).rejects.toThrow(
-        'Database connection failed',
-      );
-    });
-
-    it('should handle errors from smoke service', async () => {
-      mockStateService.GetState.mockResolvedValue(mockState);
-      const error = new Error('Smoke not found');
-      mockSmokeService.getById.mockRejectedValue(error);
-
-      await expect(service.getCurrentSmokeProfile()).rejects.toThrow(
-        'Smoke not found',
-      );
+      expect(result).toEqual(defaultProfile);
+      expect(model.findById).not.toHaveBeenCalled();
     });
   });
 
   describe('saveCurrentSmokeProfile', () => {
-    beforeEach(() => {
-      mockStateService.GetState.mockResolvedValue(mockState);
-    });
-
-    it('should update existing profile when smoke has profileId', async () => {
-      mockSmokeService.getById.mockResolvedValue(mockSmoke);
-      mockRatingsService.saveCurrentRatings.mockResolvedValue({});
-      jest.spyOn(service, 'update').mockResolvedValue(mockSmokeProfile as any);
-
-      const result = await service.saveCurrentSmokeProfile(mockSmokeProfileDto);
-
-      expect(mockRatingsService.saveCurrentRatings).not.toHaveBeenCalled(); // Profile exists, so no rating creation
-      expect(service.update).toHaveBeenCalledWith(
-        mockSmoke.smokeProfileId,
-        mockSmokeProfileDto,
+    it('updates the linked profile when one already exists', async () => {
+      currentSmoke.upsertCurrent.mockImplementation((key, handlers) =>
+        handlers.update('profile-1'),
       );
-      expect(result).toEqual(mockSmokeProfile);
-    });
 
-    it('should create new profile when smoke has no profileId', async () => {
-      mockSmokeService.getById.mockResolvedValue(mockSmokeWithoutProfile);
-      mockRatingsService.saveCurrentRatings.mockResolvedValue({});
-      jest.spyOn(service, 'create').mockResolvedValue(mockSmokeProfile as any);
+      const result = await service.saveCurrentSmokeProfile(dto);
 
-      const expectedSmokeDto: SmokeDto = {
-        smokeProfileId: mockSmokeProfile._id,
-        preSmokeId: mockSmokeWithoutProfile.preSmokeId,
-        postSmokeId: mockSmokeWithoutProfile.postSmokeId,
-        tempsId: mockSmokeWithoutProfile.tempsId,
-        status: mockSmokeWithoutProfile.status,
-      };
-
-      const result = await service.saveCurrentSmokeProfile(mockSmokeProfileDto);
-
-      expect(service.create).toHaveBeenCalledWith(mockSmokeProfileDto);
-      expect(mockSmokeService.update).toHaveBeenCalledWith(
-        mockSmokeWithoutProfile._id,
-        expectedSmokeDto,
+      expect(currentSmoke.upsertCurrent).toHaveBeenCalledWith(
+        'smokeProfileId',
+        expect.objectContaining({
+          update: expect.any(Function),
+          create: expect.any(Function),
+          onResolveSmoke: expect.any(Function),
+        }),
       );
-      expect(result).toEqual(mockSmokeProfile);
-    });
-
-    it('should skip rating creation when rating already exists', async () => {
-      const smokeWithRating = { ...mockSmoke, ratingId: 'existing-rating-id' };
-      mockSmokeService.getById.mockResolvedValue(smokeWithRating);
-      jest.spyOn(service, 'update').mockResolvedValue(mockSmokeProfile as any);
-
-      await service.saveCurrentSmokeProfile(mockSmokeProfileDto);
-
-      expect(mockRatingsService.saveCurrentRatings).not.toHaveBeenCalled();
-      expect(service.update).toHaveBeenCalledWith(
-        smokeWithRating.smokeProfileId,
-        mockSmokeProfileDto,
+      expect(model.findByIdAndUpdate).toHaveBeenCalledWith(
+        'profile-1',
+        { $set: dto },
+        { new: true },
       );
+      expect(result).toEqual(existing);
     });
 
-    it('should handle empty smokeId state', async () => {
-      const emptyState = { ...mockState, smokeId: '' };
-      mockStateService.GetState.mockResolvedValue(emptyState);
+    it('creates a profile and reports its new child id when none exists', async () => {
+      let linkedChildId: string | undefined;
+      currentSmoke.upsertCurrent.mockImplementation(async (key, handlers) => {
+        const created = await handlers.create();
+        linkedChildId = created.childId;
+        return created.result;
+      });
 
-      const result = await service.saveCurrentSmokeProfile(mockSmokeProfileDto);
+      const result = await service.saveCurrentSmokeProfile(dto);
 
-      expect(mockSmokeService.getById).not.toHaveBeenCalled();
-      expect(result).toBeNull();
+      expect(model).toHaveBeenCalledWith(dto);
+      expect(linkedChildId).toBe('new-profile-id');
+      expect(result).toMatchObject({ _id: 'new-profile-id' });
     });
 
-    it('should handle state service errors', async () => {
-      const error = new Error('State service error');
-      mockStateService.GetState.mockRejectedValue(error);
+    it('seeds default ratings via onResolveSmoke when the smoke has no rating yet', async () => {
+      const smoke = { ratingId: undefined } as unknown as Smoke;
+      currentSmoke.upsertCurrent.mockImplementation(async (key, handlers) => {
+        await handlers.onResolveSmoke(smoke);
+        const created = await handlers.create();
+        return created.result;
+      });
 
-      await expect(
-        service.saveCurrentSmokeProfile(mockSmokeProfileDto),
-      ).rejects.toThrow('State service error');
+      await service.saveCurrentSmokeProfile(dto);
+
+      expect(ratingsService.saveCurrentRatings).toHaveBeenCalledWith({
+        smokeFlavor: 0,
+        seasoning: 0,
+        tenderness: 0,
+        overallTaste: 0,
+        notes: '',
+      });
+    });
+
+    it('does not re-seed ratings via onResolveSmoke when one already exists', async () => {
+      const smoke = { ratingId: 'rating-1' } as unknown as Smoke;
+      currentSmoke.upsertCurrent.mockImplementation(async (key, handlers) => {
+        await handlers.onResolveSmoke(smoke);
+        const created = await handlers.create();
+        return created.result;
+      });
+
+      await service.saveCurrentSmokeProfile(dto);
+
+      expect(ratingsService.saveCurrentRatings).not.toHaveBeenCalled();
+    });
+
+    it('propagates the 404 when there is no active smoke', async () => {
+      currentSmoke.upsertCurrent.mockRejectedValue(new NotFoundException());
+
+      await expect(service.saveCurrentSmokeProfile(dto)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
   });
 
