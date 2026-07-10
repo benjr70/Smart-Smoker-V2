@@ -1,0 +1,89 @@
+# Hermetic end-to-end stack for the Playwright suite.
+#
+# Builds all four services from the current checkout (amd64) plus a fresh mongo,
+# and publishes every service on the runner host so the browser-driven smoker
+# page can reach the backend (localhost:3001) and device-service (127.0.0.1:3003).
+#
+# Usage (from e2e/):
+#   npm run stack:up      # build + start, wait for healthchecks
+#   npm test              # run the suite against the stack
+#   npm run stack:down    # tear down, remove the mongo volume (fresh next run)
+#
+# A single-Dockerfile multi-target build (stack.Dockerfile) shares the npm ci +
+# compile stages across all four service builds via buildkit layer caching.
+
+name: smart-smoker-e2e
+
+services:
+  mongo:
+    image: mongo:7.0
+    container_name: e2e-mongo
+    # No host port publish: the dev box already runs a mongo on 27017. The
+    # backend reaches this one by service name on the compose network.
+    healthcheck:
+      test: ['CMD', 'mongosh', '--quiet', '--eval', "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  backend:
+    container_name: e2e-backend
+    image: smart-smoker-e2e-backend
+    build:
+      context: ../..
+      dockerfile: e2e/docker/stack.Dockerfile
+      target: backend
+    environment:
+      - NODE_ENV=prod
+      - PORT=3001
+      - DB_URL=mongodb://mongo:27017/smartsmoker
+      # Throwaway VAPID keypair — web-push validates these at boot. Hermetic
+      # test values only; no real subscriptions exist in this stack.
+      - VAPID_PUBLIC_KEY=BKsNVTbhqnKYEXTbn6tXfyDvHSgDl3Wd665m3cCEdPqUf4BrsVZ9XhuL1otTITcVaGXs6T3_XlldojEbVapCsoc
+      - VAPID_PRIVATE_KEY=B4ASyDu1XYd7-yFGbes08Z6f51ipkGYQZsV7GANfs78
+    ports:
+      - '3001:3001'
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  device-service:
+    container_name: e2e-device-service
+    image: smart-smoker-e2e-device-service
+    build:
+      context: ../..
+      dockerfile: e2e/docker/stack.Dockerfile
+      target: device-service
+    environment:
+      - NODE_ENV=local # emulator mode: synthetic ramping temps every 500ms
+    ports:
+      - '3003:3003'
+
+  frontend:
+    container_name: e2e-frontend
+    image: smart-smoker-e2e-frontend
+    build:
+      context: ../..
+      dockerfile: e2e/docker/stack.Dockerfile
+      target: frontend
+    ports:
+      - '3000:3000'
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  smoker:
+    container_name: e2e-smoker
+    image: smart-smoker-e2e-smoker
+    build:
+      context: ../..
+      dockerfile: e2e/docker/stack.Dockerfile
+      target: smoker
+    ports:
+      - '8080:8080'
+    depends_on:
+      backend:
+        condition: service_healthy
+      device-service:
+        condition: service_healthy

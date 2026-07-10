@@ -27,7 +27,12 @@ jest.mock('@mui/material/BottomNavigation', () => {
 });
 
 jest.mock('@mui/material/BottomNavigationAction', () => {
-  return function MockBottomNavigationAction({ label, icon, ...props }: any) {
+  return function MockBottomNavigationAction({
+    label,
+    icon,
+    'data-testid': _dataTestId,
+    ...props
+  }: any) {
     return (
       <button
         data-testid={`bottom-nav-action-${label.toLowerCase()}`}

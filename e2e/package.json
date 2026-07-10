@@ -1,0 +1,20 @@
+{
+  "name": "e2e",
+  "version": "0.1.0",
+  "private": true,
+  "description": "End-to-end Playwright user-journey suite for Smart Smoker V2",
+  "scripts": {
+    "test": "playwright test",
+    "test:hermetic": "playwright test --project=hermetic",
+    "stack:up": "docker compose -f docker/docker-compose.e2e.yml up --build -d",
+    "stack:down": "docker compose -f docker/docker-compose.e2e.yml down -v",
+    "stack:logs": "docker compose -f docker/docker-compose.e2e.yml logs -f",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write \"**/*.{ts,json,md,yml,yaml}\""
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.1",
+    "@types/node": "^20.11.0",
+    "typescript": "^5.4.5"
+  }
+}

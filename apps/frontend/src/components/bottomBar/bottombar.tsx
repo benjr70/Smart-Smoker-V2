@@ -42,9 +42,13 @@ export function BottomBar(props: buttonBarProps) {
           setValue(newValue);
         }}
       >
-        <BottomNavigationAction label="Smoke" icon={<OutdoorGrillIcon />} />
-        <BottomNavigationAction label="Review" icon={<ReviewsIcon />} />
-        <BottomNavigationAction label="Settings" icon={<SettingsIcon />} />
+        <BottomNavigationAction label="Smoke" icon={<OutdoorGrillIcon />} data-testid="nav-smoke" />
+        <BottomNavigationAction label="Review" icon={<ReviewsIcon />} data-testid="nav-review" />
+        <BottomNavigationAction
+          label="Settings"
+          icon={<SettingsIcon />}
+          data-testid="nav-settings"
+        />
       </BottomNavigation>
     </Grid>
   );

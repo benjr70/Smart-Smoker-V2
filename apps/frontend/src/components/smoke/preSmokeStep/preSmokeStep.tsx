@@ -47,6 +47,7 @@ export function PreSmokeStep(props: PreSmokeStepProps) {
         label="Name"
         variant="standard"
         value={preSmokeState.name}
+        inputProps={{ 'data-testid': 'presmoke-name-input' }}
         onChange={(event: any) => setPreSmokeState({ ...preSmokeState, name: event.target.value })}
       />
       <Autocomplete

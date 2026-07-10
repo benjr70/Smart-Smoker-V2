@@ -309,7 +309,7 @@ export function SmokeStep(props: SmokeStepProps) {
           </Grid>
         </Grid>
       </Grid>
-      <Grid item justifyContent="center">
+      <Grid item justifyContent="center" data-testid="smoke-chart">
         <TempChart
           ChamberTemp={parseFloat(tempState.chamberTemp)}
           MeatTemp={parseFloat(tempState.probeTemp1)}

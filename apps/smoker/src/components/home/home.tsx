@@ -202,7 +202,7 @@ export class Home extends React.Component<
                 <Grid item className="text">
                   {this.state.tempState.chamberName}
                 </Grid>
-                <Grid item className="text">
+                <Grid item className="text" data-testid="smoker-chamber-temp">
                   {this.state.tempState.chamberTemp}
                 </Grid>
               </Grid>
@@ -250,6 +250,7 @@ export class Home extends React.Component<
                     className="button"
                     variant="contained"
                     size="small"
+                    data-testid="smoker-start-button"
                     onClick={() => this.startSmoke()}
                   >
                     {this.state.tempState.smoking ? 'Stop Smoking' : 'Start Smoking'}
