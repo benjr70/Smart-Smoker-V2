@@ -2,9 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { BaseService } from '../common/base.service';
-import { SmokeService } from '../smoke/smoke.service';
-import { SmokeDto } from '../smoke/smokeDto';
-import { StateService } from '../State/state.service';
+import { CurrentSmokeService } from '../common/current-smoke.service';
 import { TempDto } from './tempDto';
 import { Temp, TempDocument } from './temps.schema';
 
@@ -12,78 +10,51 @@ import { Temp, TempDocument } from './temps.schema';
 export class TempsService extends BaseService<TempDocument> {
   constructor(
     @InjectModel('Temp') model: Model<TempDocument>,
-    private stateService: StateService,
-    private smokeService: SmokeService,
+    private readonly currentSmoke: CurrentSmokeService,
   ) {
     super(model, 'Temp');
   }
 
-  async saveNewTemp(tempDto: TempDto) {
-    return this.stateService.GetState().then((state) => {
-      if (!state || !state.smokeId || state.smokeId.length <= 0) {
-        return;
-      }
-      this.smokeService.getById(state.smokeId).then((smoke) => {
-        if (!smoke) {
-          return;
-        }
-        if (smoke.tempsId) {
-          tempDto.tempsId = smoke.tempsId;
-          return this.create(tempDto);
-        } else {
-          this.create(tempDto).then(async (temp) => {
-            const smokeDto: SmokeDto = {
-              preSmokeId: smoke.preSmokeId,
-              tempsId: temp['_id'].toString(),
-              status: smoke.status,
-            };
-            await this.smokeService.update(state.smokeId, smokeDto);
-          });
-        }
-      });
+  async saveNewTemp(tempDto: TempDto): Promise<Temp> {
+    return this.currentSmoke.upsertCurrent<Temp>('tempsId', {
+      update: (tempsId) => {
+        tempDto.tempsId = tempsId;
+        return this.create(tempDto);
+      },
+      create: async () => {
+        const temp = await this.create(tempDto);
+        return { result: temp, childId: temp['_id'].toString() };
+      },
     });
   }
 
   async saveTempBatch(tempDto: TempDto[]) {
-    this.GetTempID().then((tempsId) => {
-      if (tempsId != undefined) {
-        tempDto = tempDto.map((tempDto) => {
-          tempDto.tempsId = tempsId;
-          return tempDto;
-        });
-        return this.model.insertMany(tempDto);
-      }
-    });
+    const tempsId = await this.GetTempID();
+    if (tempsId === undefined) {
+      return;
+    }
+    const rows = tempDto.map((row) => ({ ...row, tempsId }));
+    return this.model.insertMany(rows);
   }
 
   async getAllTempsCurrent(): Promise<Temp[]> {
-    return this.stateService.GetState().then((state) => {
-      if (!state || !state.smokeId || state.smokeId.length <= 0) {
-        return [];
-      }
-      return this.smokeService.getById(state.smokeId).then((smoke) => {
-        if (smoke?.tempsId && smoke.tempsId.length > 0) {
-          return this.model.find({ tempsId: smoke.tempsId });
-        } else {
-          return [];
-        }
-      });
-    });
+    return this.currentSmoke.readCurrent<Temp[]>(
+      'tempsId',
+      (tempsId) => this.model.find({ tempsId }).exec(),
+      [],
+    );
   }
 
   async getAllTempsById(id: string): Promise<Temp[]> {
-    return this.model.find({ tempsId: id });
+    return this.model.find({ tempsId: id }).exec();
   }
 
   async GetTempID(): Promise<string | undefined> {
-    return this.stateService.GetState().then((state) => {
-      if (!state || !state.smokeId || state.smokeId.length <= 0) {
-        return undefined;
-      }
-      return this.smokeService.getById(state.smokeId).then((smoke) => {
-        return smoke?.tempsId;
-      });
-    });
+    return this.currentSmoke.readCurrent<string | undefined>(
+      'tempsId',
+      (tempsId) => Promise.resolve(tempsId),
+      undefined,
+    );
   }
 
   /**

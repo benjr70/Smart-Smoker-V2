@@ -28,7 +28,7 @@ export class PreSmokeService extends BaseService<PreSmokeDocument> {
       if (state.smokeId && state.smokeId.length > 0) {
         return this.smokeService.getById(state.smokeId).then((smoke) => {
           if (!smoke) {
-            return this.createNewSmokeWithPreSmoke(preSmokeDto, state);
+            return this.startSmokeWith(preSmokeDto, state);
           }
           if (smoke.preSmokeId) {
             return this.update(smoke.preSmokeId, preSmokeDto);
@@ -44,12 +44,12 @@ export class PreSmokeService extends BaseService<PreSmokeDocument> {
           }
         });
       } else {
-        return this.createNewSmokeWithPreSmoke(preSmokeDto, state);
+        return this.startSmokeWith(preSmokeDto, state);
       }
     });
   }
 
-  private async createNewSmokeWithPreSmoke(
+  private async startSmokeWith(
     preSmokeDto: PreSmokeDto,
     state: any,
   ): Promise<PreSmoke> {
