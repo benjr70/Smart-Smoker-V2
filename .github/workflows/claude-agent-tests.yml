@@ -1,0 +1,38 @@
+# Runs the claude-agent daemon bash suites (#304). The usage-paced autonomous
+# daemon ships as bash libraries under scripts/claude-agent/ with sibling
+# *.test.sh suites, but no workflow gated them — regressions in the daemon that
+# paces the whole agent pipeline could land silently (see #301/#302). This job
+# discovers and runs every scripts/claude-agent/**/*.test.sh via the aggregate
+# runner, which fails the job if ANY suite exits non-zero (a mid-list failure is
+# never masked). Path-filtered so only changes under scripts/claude-agent/** (or
+# this workflow) trigger it — touching apps/** does not. Needs only bash + jq,
+# both present on ubuntu-latest; no Node app install/build.
+
+name: Claude Agent Tests
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'scripts/claude-agent/**'
+      - '.github/workflows/claude-agent-tests.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'scripts/claude-agent/**'
+      - '.github/workflows/claude-agent-tests.yml'
+
+jobs:
+  claude-agent-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify prerequisites (bash + jq)
+        run: |
+          bash --version | head -1
+          jq --version
+
+      - name: Run claude-agent suites
+        run: bash scripts/claude-agent/run-tests.sh
