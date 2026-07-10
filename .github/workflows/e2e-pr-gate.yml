@@ -71,11 +71,17 @@ jobs:
       # Build all four service images from source with GitHub Actions layer
       # caching. stack.Dockerfile shares its deps/build stages across targets,
       # so a warm cache skips the expensive npm ci + compile on every rebuild.
+      # workdir is e2e/docker (the compose file's own directory) so bake
+      # resolves each service's `context: ../..` against it — landing on the
+      # repo root, exactly like `docker compose build` does locally from e2e/.
+      # (bake resolves relative contexts against its workdir, not against the
+      # compose file's location, so `workdir: e2e` would look for ../../e2e
+      # one level above the repo and fail.)
       - name: Build stack images (cached)
         uses: docker/bake-action@v5
         with:
-          workdir: e2e
-          files: docker/docker-compose.e2e.yml
+          workdir: e2e/docker
+          files: docker-compose.e2e.yml
           load: true
           set: |
             *.cache-from=type=gha,scope=e2e-pr-gate
