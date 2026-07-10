@@ -28,7 +28,9 @@ describe('createMockModel', () => {
     await expect(model.find().exec()).resolves.toEqual([]);
     await expect(model.findById('x').exec()).resolves.toBeNull();
     await expect(model.findOne().exec()).resolves.toBeNull();
-    await expect(model.findByIdAndUpdate('x', {}, {}).exec()).resolves.toBeNull();
+    await expect(
+      model.findByIdAndUpdate('x', {}, {}).exec(),
+    ).resolves.toBeNull();
     await expect(model.deleteOne({ _id: 'x' }).exec()).resolves.toEqual({
       deletedCount: 1,
     });
@@ -41,7 +43,9 @@ describe('createMockModel', () => {
     const model = createMockModel({
       findById: jest
         .fn()
-        .mockReturnValue({ exec: jest.fn().mockResolvedValue({ _id: 'seeded' }) }),
+        .mockReturnValue({
+          exec: jest.fn().mockResolvedValue({ _id: 'seeded' }),
+        }),
     });
 
     await expect(model.findById('seeded').exec()).resolves.toEqual({

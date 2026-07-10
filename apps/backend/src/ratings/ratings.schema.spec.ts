@@ -6,19 +6,19 @@ import { AllExceptionsFilter } from '../common/all-exceptions.filter';
 const RatingsModel = model<Ratings>('RatingsSchemaSpec', RatingsSchema);
 
 describe('RatingsSchema constraints', () => {
-  it('accepts scores within the 0-5 range', () => {
+  it('accepts scores within the 0-10 range', () => {
     const doc = new RatingsModel({
       smokeFlavor: 4,
-      seasoning: 5,
+      seasoning: 10,
       tenderness: 0,
-      overallTaste: 3,
+      overallTaste: 7,
     });
 
     expect(doc.validateSync()).toBeUndefined();
   });
 
-  it('rejects a score above 5 with a ValidationError', () => {
-    const doc = new RatingsModel({ smokeFlavor: 10 });
+  it('rejects a score above 10 with a ValidationError', () => {
+    const doc = new RatingsModel({ smokeFlavor: 11 });
 
     const error = doc.validateSync();
 
