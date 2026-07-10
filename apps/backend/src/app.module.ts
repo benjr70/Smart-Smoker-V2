@@ -5,8 +5,10 @@ import {
   RequestMethod,
 } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { APP_FILTER } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { AllExceptionsFilter } from './common/all-exceptions.filter';
 import { PostSmokeModule } from './postSmoke/postSmoke.module';
 import { PreSmokeModule } from './presmoke/presmoke.module';
 import { SettingsModule } from './settings/settings.module';
@@ -54,7 +56,12 @@ console.log(process.env.NODE_ENV);
     MongooseModule.forRoot(process.env.DB_URL),
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    // Global error → HTTP mapping (HttpException passthrough,
+    // CastError/ValidationError → 400, E11000 → 409, else 500).
+    { provide: APP_FILTER, useClass: AllExceptionsFilter },
+  ],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

@@ -1,87 +1,54 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
+import { NotFoundException } from '@nestjs/common';
 import { PostSmokeService } from './postSmoke.service';
 import { PostSmoke } from './postSmoke.schema';
 import { PostSmokeDto } from './postSmokeDto';
-import { StateService } from '../State/state.service';
-import { SmokeService } from '../smoke/smoke.service';
-import { SmokeStatus } from '../smoke/smoke.schema';
+import { CurrentSmokeService } from '../common/current-smoke.service';
+
+const query = <T>(value: T) => ({ exec: jest.fn().mockResolvedValue(value) });
 
 describe('PostSmokeService', () => {
   let service: PostSmokeService;
-  let mockPostSmokeModel: any;
-  let mockStateService: Partial<StateService>;
-  let mockSmokeService: Partial<SmokeService>;
+  let model: any;
+  let currentSmoke: {
+    readCurrent: jest.Mock;
+    upsertCurrent: jest.Mock;
+  };
 
-  const mockPostSmoke: PostSmoke = {
+  const existing: PostSmoke = {
     restTime: '30 minutes',
-    steps: ['Wrap in foil', 'Let rest'],
-    notes: 'Great results',
+    steps: ['Wrap in foil'],
+    notes: 'notes',
   };
 
-  const mockPostSmokeDocument = {
-    _id: 'postsmoke-id',
-    ...mockPostSmoke,
-    save: jest.fn().mockResolvedValue(mockPostSmoke),
-  };
-
-  const mockState = {
-    smokeId: 'test-smoke-id',
-    smoking: true,
-  };
-
-  const mockSmoke = {
-    _id: 'test-smoke-id',
-    preSmokeId: 'presmoke-id',
-    postSmokeId: 'existing-postsmoke-id',
-    smokeProfileId: 'profile-id',
-    tempsId: 'temps-id',
-    status: SmokeStatus.InProgress,
+  const dto: PostSmokeDto = {
+    restTime: '45 minutes',
+    steps: ['Cool', 'Slice'],
+    notes: 'Perfect results',
   };
 
   beforeEach(async () => {
-    // Create a mock constructor function
-    mockPostSmokeModel = jest.fn().mockImplementation((dto) => ({
-      ...dto,
-      save: jest.fn().mockResolvedValue({ ...dto, _id: 'new-postsmoke-id' }),
+    model = jest.fn().mockImplementation((doc) => ({
+      ...doc,
+      save: jest.fn().mockResolvedValue({ ...doc, _id: 'new-postsmoke-id' }),
     }));
-
-    // Add static methods to the mock constructor
-    mockPostSmokeModel.findById = jest
+    model.findById = jest.fn().mockReturnValue(query(existing));
+    model.findByIdAndUpdate = jest
       .fn()
-      .mockResolvedValue(mockPostSmokeDocument);
-    mockPostSmokeModel.findByIdAndUpdate = jest
-      .fn()
-      .mockResolvedValue(mockPostSmokeDocument);
-    mockPostSmokeModel.deleteOne = jest
-      .fn()
-      .mockResolvedValue({ deletedCount: 1 });
+      .mockReturnValue(query({ ...existing, ...dto, _id: 'post-1' }));
+    model.deleteOne = jest.fn().mockReturnValue(query({ deletedCount: 1 }));
 
-    mockStateService = {
-      GetState: jest.fn().mockResolvedValue(mockState),
-      create: jest.fn().mockResolvedValue(mockState),
-    };
-
-    mockSmokeService = {
-      GetById: jest.fn().mockResolvedValue(mockSmoke),
-      Update: jest.fn().mockResolvedValue(mockSmoke),
+    currentSmoke = {
+      readCurrent: jest.fn(),
+      upsertCurrent: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PostSmokeService,
-        {
-          provide: getModelToken('PostSmoke'),
-          useValue: mockPostSmokeModel,
-        },
-        {
-          provide: StateService,
-          useValue: mockStateService,
-        },
-        {
-          provide: SmokeService,
-          useValue: mockSmokeService,
-        },
+        { provide: getModelToken('PostSmoke'), useValue: model },
+        { provide: CurrentSmokeService, useValue: currentSmoke },
       ],
     }).compile();
 
@@ -96,180 +63,86 @@ describe('PostSmokeService', () => {
     expect(service).toBeDefined();
   });
 
-  describe('create', () => {
-    it('should create a new post-smoke record', async () => {
-      const postSmokeDto: PostSmokeDto = {
-        restTime: '20 minutes',
-        steps: ['Cool down', 'Slice'],
-        notes: 'Perfect cook',
-      };
-
-      const result = await service.create(postSmokeDto);
-
-      expect(mockPostSmokeModel).toHaveBeenCalledWith(postSmokeDto);
-      expect(result).toBeDefined();
-    });
-  });
-
   describe('getCurrentPostSmoke', () => {
-    it('should return current post-smoke when it exists', async () => {
+    it('loads the linked post-smoke via the current-smoke walk', async () => {
+      currentSmoke.readCurrent.mockImplementation((key, load) =>
+        load('post-1'),
+      );
+
       const result = await service.getCurrentPostSmoke();
 
-      expect(mockStateService.GetState).toHaveBeenCalled();
-      expect(mockSmokeService.GetById).toHaveBeenCalledWith(mockState.smokeId);
-      expect(mockPostSmokeModel.findById).toHaveBeenCalledWith(
-        mockSmoke.postSmokeId,
+      expect(currentSmoke.readCurrent).toHaveBeenCalledWith(
+        'postSmokeId',
+        expect.any(Function),
+        expect.objectContaining({ notes: '', restTime: '', steps: [''] }),
       );
-      expect(result).toEqual(mockPostSmokeDocument);
+      expect(model.findById).toHaveBeenCalledWith('post-1');
+      expect(result).toEqual(existing);
     });
 
-    it('should return default post-smoke when none exists', async () => {
-      const smokeWithoutPostSmokeId = { ...mockSmoke, postSmokeId: undefined };
-      mockSmokeService.GetById = jest
-        .fn()
-        .mockResolvedValue(smokeWithoutPostSmokeId);
+    it('returns the default object when nothing is active (fallback)', async () => {
+      currentSmoke.readCurrent.mockImplementation(
+        (key, load, fallback) => fallback,
+      );
 
       const result = await service.getCurrentPostSmoke();
 
       expect(result).toEqual({ notes: '', restTime: '', steps: [''] });
-      expect(mockPostSmokeModel.findById).not.toHaveBeenCalled();
+      expect(model.findById).not.toHaveBeenCalled();
     });
-
-    // TODO: This test reveals a bug in the service logic where state is not reassigned after creation
-    // The service tries to access state.smokeId on the original null state variable
-    /*
-    it('should create default state when none exists', async () => {
-      // Mock sequential calls - first returns null, then returns created state
-      mockStateService.GetState = jest.fn()
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce({ smokeId: '', smoking: false });
-      
-      // Mock the smoke service to handle empty smokeId gracefully
-      mockSmokeService.GetById = jest.fn().mockResolvedValue({ postSmokeId: undefined });
-
-      const result = await service.getCurrentPostSmoke();
-
-      expect(mockStateService.create).toHaveBeenCalledWith({ smokeId: '', smoking: false });
-      // The service has a bug - it doesn't reassign state after creating it
-      // So it will still try to access the original null state
-      // We can't really test this properly without fixing the service logic
-    });
-    */
   });
 
   describe('saveCurrentPostSmoke', () => {
-    it('should update existing post-smoke when postSmokeId exists', async () => {
-      const postSmokeDto: PostSmokeDto = {
-        restTime: '45 minutes',
-        steps: ['Updated step'],
-        notes: 'Updated notes',
-      };
-
-      jest
-        .spyOn(service, 'update')
-        .mockResolvedValue(mockPostSmokeDocument as PostSmoke);
-
-      const result = await service.saveCurrentPostSmoke(postSmokeDto);
-
-      expect(mockStateService.GetState).toHaveBeenCalled();
-      expect(mockSmokeService.GetById).toHaveBeenCalledWith(mockState.smokeId);
-      expect(service.update).toHaveBeenCalledWith(
-        mockSmoke.postSmokeId,
-        postSmokeDto,
+    it('updates the linked post-smoke when one already exists', async () => {
+      currentSmoke.upsertCurrent.mockImplementation((key, handlers) =>
+        handlers.update('post-1'),
       );
+
+      const result = await service.saveCurrentPostSmoke(dto);
+
+      expect(currentSmoke.upsertCurrent).toHaveBeenCalledWith(
+        'postSmokeId',
+        expect.any(Object),
+      );
+      expect(model.findByIdAndUpdate).toHaveBeenCalledWith(
+        'post-1',
+        { $set: dto },
+        { new: true },
+      );
+      expect(result).toMatchObject({ _id: 'post-1' });
     });
 
-    it('should create new post-smoke when none exists', async () => {
-      const postSmokeDto: PostSmokeDto = {
-        restTime: '60 minutes',
-        steps: ['New step'],
-        notes: 'New notes',
-      };
-
-      const smokeWithoutPostSmokeId = { ...mockSmoke, postSmokeId: undefined };
-      mockSmokeService.GetById = jest
-        .fn()
-        .mockResolvedValue(smokeWithoutPostSmokeId);
-
-      jest.spyOn(service, 'create').mockResolvedValue({
-        ...mockPostSmokeDocument,
-        _id: 'new-postsmoke-id',
-      } as PostSmoke);
-
-      const result = await service.saveCurrentPostSmoke(postSmokeDto);
-
-      expect(service.create).toHaveBeenCalledWith(postSmokeDto);
-      expect(mockSmokeService.Update).toHaveBeenCalledWith('test-smoke-id', {
-        smokeProfileId: smokeWithoutPostSmokeId.smokeProfileId,
-        preSmokeId: smokeWithoutPostSmokeId.preSmokeId,
-        postSmokeId: 'new-postsmoke-id',
-        tempsId: smokeWithoutPostSmokeId.tempsId,
-        status: smokeWithoutPostSmokeId.status,
+    it('creates a post-smoke and reports its new child id when none exists', async () => {
+      let linkedChildId: string | undefined;
+      currentSmoke.upsertCurrent.mockImplementation(async (key, handlers) => {
+        const created = await handlers.create();
+        linkedChildId = created.childId;
+        return created.result;
       });
-      expect(result).toBeDefined();
+
+      const result = await service.saveCurrentPostSmoke(dto);
+
+      expect(model).toHaveBeenCalledWith(dto);
+      expect(linkedChildId).toBe('new-postsmoke-id');
+      expect(result).toMatchObject({ _id: 'new-postsmoke-id' });
     });
 
-    it('should handle empty smokeId gracefully', async () => {
-      const postSmokeDto: PostSmokeDto = {
-        restTime: '30 minutes',
-        steps: ['Step'],
-        notes: 'Notes',
-      };
+    it('propagates the 404 when there is no active smoke', async () => {
+      currentSmoke.upsertCurrent.mockRejectedValue(new NotFoundException());
 
-      const stateWithoutSmoke = { ...mockState, smokeId: '' };
-      mockStateService.GetState = jest
-        .fn()
-        .mockResolvedValue(stateWithoutSmoke);
-
-      const result = await service.saveCurrentPostSmoke(postSmokeDto);
-
-      expect(result).toBeUndefined();
-      expect(mockSmokeService.GetById).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('getById', () => {
-    it('should return post-smoke by id', async () => {
-      const id = 'test-id';
-
-      const result = await service.getById(id);
-
-      expect(mockPostSmokeModel.findById).toHaveBeenCalledWith(id);
-      expect(result).toEqual(mockPostSmokeDocument);
-    });
-  });
-
-  describe('update', () => {
-    it('should update post-smoke and return updated document', async () => {
-      const id = 'test-id';
-      const postSmokeDto: PostSmokeDto = {
-        restTime: 'Updated time',
-        steps: ['Updated step'],
-        notes: 'Updated notes',
-      };
-
-      jest
-        .spyOn(service, 'getById')
-        .mockResolvedValue(mockPostSmokeDocument as PostSmoke);
-
-      const result = await service.update(id, postSmokeDto);
-
-      expect(mockPostSmokeModel.findByIdAndUpdate).toHaveBeenCalledWith(
-        { _id: id },
-        postSmokeDto,
+      await expect(service.saveCurrentPostSmoke(dto)).rejects.toBeInstanceOf(
+        NotFoundException,
       );
-      expect(service.getById).toHaveBeenCalledWith(id);
     });
   });
 
-  describe('Delete', () => {
-    it('should delete post-smoke by id', async () => {
-      const id = 'test-id';
+  describe('getByIdOrThrow (inherited)', () => {
+    it('throws NotFoundException for a missing id', async () => {
+      model.findById.mockReturnValue(query(null));
 
-      const result = await service.Delete(id);
-
-      expect(mockPostSmokeModel.deleteOne).toHaveBeenCalledWith({ _id: id });
-      expect(result).toEqual({ deletedCount: 1 });
+      await expect(service.getByIdOrThrow('missing')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
   });
 });
