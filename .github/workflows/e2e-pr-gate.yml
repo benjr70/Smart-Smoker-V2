@@ -1,0 +1,112 @@
+# Blocking end-to-end PR gate (PRD #314, slice 2 / issue #316).
+#
+# Boots the hermetic e2e compose stack from PR source and runs the `hermetic`
+# Playwright user-journey project on every pull request whose diff touches an
+# app, a shared package, the e2e workspace, a Dockerfile, or a compose file.
+# Docs- and infra-only PRs skip the gate via the path allowlist below.
+#
+# BLOCKING from day one (no continue-on-error): a failing spec fails the PR
+# check. Retries (2) come from e2e/playwright.config.ts. Docker layer caching is
+# wired through buildx + the GitHub Actions cache backend so the shared
+# deps/build stages of stack.Dockerfile are reused, holding the ~8-12 min
+# warm-cache budget from the PRD. On failure the compose logs are dumped and the
+# Playwright HTML report + traces are uploaded as artifacts.
+#
+# Existing workflows (including the advisory e2e.yml) and scripts/smoke/ are
+# untouched — this is a new, independent gate.
+
+name: E2E PR Gate
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'apps/**'
+      - 'packages/**'
+      - 'e2e/**'
+      - '**/Dockerfile'
+      - '*.docker-compose.yml'
+      - '.dockerignore'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/e2e-pr-gate.yml'
+
+# Only the latest commit on a PR branch needs the gate; cancel superseded runs.
+concurrency:
+  group: e2e-pr-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+# Narrow token: the gate only reads the checkout.
+permissions:
+  contents: read
+
+jobs:
+  hermetic:
+    name: Hermetic journey suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.7.0'
+
+      - name: Use npm 10
+        run: npm i -g npm@10
+
+      - name: Install workspace dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Install Playwright browser (chromium)
+        working-directory: e2e
+        run: npx playwright install --with-deps chromium
+
+      # Build all four service images from source with GitHub Actions layer
+      # caching. stack.Dockerfile shares its deps/build stages across targets,
+      # so a warm cache skips the expensive npm ci + compile on every rebuild.
+      - name: Build stack images (cached)
+        uses: docker/bake-action@v5
+        with:
+          workdir: e2e
+          files: docker/docker-compose.e2e.yml
+          load: true
+          set: |
+            *.cache-from=type=gha,scope=e2e-pr-gate
+            *.cache-to=type=gha,scope=e2e-pr-gate,mode=max
+
+      - name: Start stack
+        working-directory: e2e
+        run: >-
+          docker compose -f docker/docker-compose.e2e.yml up -d --no-build
+          --wait --wait-timeout 180
+
+      - name: Run hermetic Playwright suite
+        working-directory: e2e
+        run: npm run test:hermetic
+
+      - name: Dump compose logs
+        if: failure()
+        working-directory: e2e
+        run: docker compose -f docker/docker-compose.e2e.yml logs --no-color
+
+      - name: Upload Playwright report and traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-pr-gate-report
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+          retention-days: 7
+
+      - name: Tear down stack
+        if: always()
+        working-directory: e2e
+        run: docker compose -f docker/docker-compose.e2e.yml down -v
