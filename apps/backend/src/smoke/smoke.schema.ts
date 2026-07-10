@@ -27,7 +27,11 @@ export class Smoke {
   @Prop()
   date: Date;
 
-  @Prop()
+  @Prop({
+    required: true,
+    type: Number,
+    enum: [SmokeStatus.InProgress, SmokeStatus.Complete],
+  })
   status: SmokeStatus;
 }
 

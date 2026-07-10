@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { SmokeController } from './smoke.controller';
 import { SmokeService } from './smoke.service';
 import { Smoke, SmokeStatus } from './smoke.schema';
+import { SmokeDto } from './smokeDto';
 
 describe('SmokeController', () => {
   let controller: SmokeController;
@@ -21,6 +22,7 @@ describe('SmokeController', () => {
 
   beforeEach(async () => {
     mockSmokeService = {
+      create: jest.fn().mockResolvedValue(mockSmoke),
       getAll: jest.fn().mockResolvedValue(mockSmokes),
       FinishSmoke: jest
         .fn()
@@ -90,16 +92,17 @@ describe('SmokeController', () => {
     });
   });
 
-  // Note: CreateSmoke method has a bug (infinite recursion) and needs to be fixed
-  // The test is commented out until the implementation is corrected
-  /*
   describe('CreateSmoke', () => {
-    it('should create a new smoke', async () => {
-      // This test will fail due to infinite recursion in the current implementation
-      // The method calls itself instead of the service
-      const result = await controller.CreateSmoke();
-      expect(result).toBeDefined();
+    it('should persist a new smoke via the service (no self-recursion)', async () => {
+      const smokeDto: SmokeDto = {
+        preSmokeId: 'pre-smoke-id',
+        status: SmokeStatus.InProgress,
+      };
+
+      const result = await controller.CreateSmoke(smokeDto);
+
+      expect(mockSmokeService.create).toHaveBeenCalledWith(smokeDto);
+      expect(result).toEqual(mockSmoke);
     });
   });
-  */
 });

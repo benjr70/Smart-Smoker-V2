@@ -1,10 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { RatingsService } from './ratings.service';
-import { Ratings } from './ratings.schema';
 import { RatingsDto } from './ratingsDto';
 import { SmokeService } from '../smoke/smoke.service';
 import { SmokeDto } from '../smoke/smokeDto';
+import { createMockModel } from '../common/testing/create-mock-model';
 
 describe('RatingsService', () => {
   let service: RatingsService;
@@ -45,21 +45,16 @@ describe('RatingsService', () => {
   };
 
   beforeEach(async () => {
-    // Mock Ratings model
-    mockRatingsModel = jest.fn().mockImplementation((dto) => ({
-      ...dto,
-      save: jest.fn().mockResolvedValue({ ...dto, _id: 'new-rating-id' }),
-    }));
-
-    mockRatingsModel.findById = jest
-      .fn()
-      .mockReturnValue({ exec: jest.fn().mockResolvedValue(mockRatings) });
-    mockRatingsModel.deleteOne = jest.fn().mockReturnValue({
-      exec: jest.fn().mockResolvedValue({ deletedCount: 1 }),
+    // Mock Ratings model (shared factory; overrides are exec()-chainable to
+    // match how BaseService drives the model — findById(id).exec()).
+    mockRatingsModel = createMockModel({
+      findById: jest
+        .fn()
+        .mockReturnValue({ exec: jest.fn().mockResolvedValue(mockRatings) }),
+      findByIdAndUpdate: jest
+        .fn()
+        .mockReturnValue({ exec: jest.fn().mockResolvedValue(mockRatings) }),
     });
-    mockRatingsModel.findByIdAndUpdate = jest
-      .fn()
-      .mockReturnValue({ exec: jest.fn().mockResolvedValue(mockRatings) });
 
     // Mock SmokeService
     mockSmokeService = {
