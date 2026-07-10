@@ -100,26 +100,52 @@ jobs:
         working-directory: infra/proxmox/terraform
         run: |
           echo "=== Terraform Plan (dev-scoped — prod_cloud excluded) ==="
-          # PLAN ONLY. The existing Proxmox infra was built by hand and is NOT
-          # yet under Terraform management (empty TFC state), so applying would
-          # try to CREATE resources that already exist. Auto-apply stays disabled
-          # until each existing resource is `terraform import`ed and plan is
-          # clean. prod_cloud is excluded here and only ever applied via
-          # terraform-apply-prod.yml behind the `production` approval gate.
-          terraform plan -input=false -var-file="$TFVARS_FILE" \
+          # Dev-scoped plan saved to a file so the apply below consumes EXACTLY
+          # this plan — the -target set is baked into the saved plan, so
+          # module.prod_cloud can never sneak into the auto-apply. prod_cloud is
+          # applied only via terraform-apply-prod.yml behind the `production`
+          # approval gate. The lxc-container lifecycle ignore_changes (SSH keys +
+          # disk size) keeps this plan non-destructive (see #274).
+          terraform plan -input=false -var-file="$TFVARS_FILE" -out=tfplan \
             -target=module.networking \
             -target=module.github_runner \
             -target=module.dev_cloud \
             -target=module.virtual_smoker
 
-      - name: Terraform Apply (disabled until state imported)
+      - name: Assert plan is non-destructive
+        working-directory: infra/proxmox/terraform
         run: |
-          echo "::warning title=Terraform apply disabled::Auto-apply is OFF until existing infra is imported into Terraform state (empty state would recreate live resources). Plan above is advisory. See docs/Infrastructure/guides/terraform-remote-state.md."
+          # HARD SAFETY (#274): prod CT 104 holds unbacked Mongo data and the
+          # dev/runner containers must not be recreated. Refuse to apply if the
+          # saved plan would delete or replace ANY resource (a replace surfaces
+          # as a "delete" action). python3 is already required on this runner.
+          terraform show -json tfplan > tfplan.json
+          python3 -c '
+          import json, sys
+          plan = json.load(open("tfplan.json"))
+          bad = [(c["address"], c["change"]["actions"])
+                 for c in plan.get("resource_changes", [])
+                 if "delete" in c["change"]["actions"]]
+          if bad:
+              print("::error title=Destructive plan blocked::Refusing to apply — plan would destroy/replace:")
+              for addr, actions in bad:
+                  print("  ", addr, actions)
+              sys.exit(1)
+          print("Plan is non-destructive: 0 to destroy, 0 to replace.")
+          '
+
+      - name: Terraform Apply (dev-scoped)
+        working-directory: infra/proxmox/terraform
+        run: |
+          echo "=== Terraform Apply (dev-scoped — prod_cloud excluded) ==="
+          # Applies the saved, non-destructive plan verified above. prod stays on
+          # the gated terraform-apply-prod.yml workflow — it is never applied here.
+          terraform apply -input=false tfplan
 
       - name: Cleanup plan file
         if: always()
         working-directory: infra/proxmox/terraform
-        run: rm -f tfplan
+        run: rm -f tfplan tfplan.json
 
   # Step 2: Wait for VM to become SSH-reachable
   wait-for-vm:

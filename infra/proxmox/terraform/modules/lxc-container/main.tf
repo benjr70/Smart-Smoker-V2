@@ -86,4 +86,21 @@ resource "proxmox_virtual_environment_container" "this" {
       keys     = local.ssh_keys
     }
   }
+
+  lifecycle {
+    # These two attributes are the only force-replacement drift on the deployed
+    # containers (see #274). Terraform must NOT recreate a live container over
+    # them — that would destroy prod CT 104's unbacked Mongo data.
+    #
+    # - initialization[0].user_account[0].keys: SSH keys are managed by Ansible
+    #   post-provision (incl. an out-of-band CI key), so they legitimately drift
+    #   from tfvars. Scoped to `keys` only so TF still owns hostname/DNS/IP.
+    # - disk[0].size: the runner's disk was grown manually out-of-band; a size
+    #   change forces replacement. Scoped to `size` only so TF still owns the
+    #   datastore.
+    ignore_changes = [
+      initialization[0].user_account[0].keys,
+      disk[0].size,
+    ]
+  }
 }
