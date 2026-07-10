@@ -147,8 +147,26 @@ pause_inflight() {
 # team-pickup's §6b could clean up, the team:in-progress lock leaks and every
 # future fire skips (observed 2026-07-08: #280 stuck for a day). Never touches a
 # lock this run did not create. Idempotent with §6b (best-effort, || true).
+#
+# A reconcile fire (`picked:   reconcile PR #P (issue #N)`) is special: the
+# issue's work was already DONE — the fire only borrowed team:in-progress as
+# the single-flight lock while nursing the PR. On a crash the lock is restored
+# to team:done, never team:failed (failing a finished issue would lie), and the
+# breadcrumb lands on the PR where the human is looking.
 fail_inflight() {
-  local issue ts
+  local issue ts pr
+  pr="$(grep -oE 'picked:[[:space:]]+reconcile PR #[0-9]+ \(issue #[0-9]+\)' "$LOG_FILE" | head -1 || true)"
+  if [ -n "$pr" ]; then
+    issue="$(printf '%s' "$pr" | grep -oE 'issue #[0-9]+' | grep -oE '[0-9]+' || true)"
+    "$GH_BIN" issue edit "$issue" \
+      --remove-label team:in-progress --add-label team:done || true
+    ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    "$GH_BIN" pr comment "$(printf '%s' "$pr" | grep -oE 'PR #[0-9]+' | grep -oE '[0-9]+')" \
+      --body "Reconcile fire crashed at ${ts} — lock restored (team:in-progress → team:done on issue #${issue}). PR left as-is for the next fire or human triage." || true
+    echo "agent-run: failed reconcile — restored #${issue} (team:in-progress -> team:done)" | tee -a "$LOG_FILE"
+    return 0
+  fi
+
   issue="$(grep -oE 'picked:[[:space:]]+#[0-9]+' "$LOG_FILE" | grep -oE '[0-9]+' | head -1 || true)"
   if [ -z "$issue" ]; then
     echo "agent-run: FAILED with no issue picked — no lock to clear" | tee -a "$LOG_FILE"

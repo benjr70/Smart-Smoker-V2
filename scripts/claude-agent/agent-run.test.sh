@@ -372,6 +372,55 @@ ${gh}"
 }
 
 #-------------------------------------------------------------------------------
+# Test 8b: a failed RECONCILE fire (log carries `picked:   reconcile PR #P
+# (issue #N)`) restores the borrowed lock — team:in-progress removed and
+# team:done RE-ADDED, never team:failed (the issue's work was already done) —
+# and leaves the breadcrumb on the PR, not the issue.
+#-------------------------------------------------------------------------------
+test_failed_reconcile_restores_done_lock() {
+    echo "TEST: failed reconcile fire restores team:done, never team:failed"
+
+    local dir rc gh
+    dir="$(make_env "=== /team-pickup 2026-07-10T00:00:00Z ===
+picked:   reconcile PR #310 (issue #281)
+reconciling…
+Error: process exited with code 1" 1)"
+    trap "rm -rf '${dir}'" RETURN
+
+    run_agent "${dir}" >/dev/null 2>&1
+    rc=$?
+
+    if [ "${rc}" -eq 0 ]; then
+        fail "a genuine failure must exit non-zero" "rc=${rc}"
+        return
+    fi
+
+    gh="$(cat "${dir}/gh.log")"
+    if ! printf '%s' "${gh}" | grep -q 'issue edit 281.*--remove-label team:in-progress'; then
+        fail "must clear the borrowed team:in-progress lock" "gh:
+${gh}"
+        return
+    fi
+    if ! printf '%s' "${gh}" | grep -q 'issue edit 281.*--add-label team:done'; then
+        fail "must restore team:done on the reconcile issue" "gh:
+${gh}"
+        return
+    fi
+    if printf '%s' "${gh}" | grep -q 'team:failed'; then
+        fail "a crashed reconcile must NEVER fail a finished issue" "gh:
+${gh}"
+        return
+    fi
+    if ! printf '%s' "${gh}" | grep -q 'pr comment 310'; then
+        fail "must leave the crash breadcrumb on the PR" "gh:
+${gh}"
+        return
+    fi
+
+    pass "failed reconcile fire restores team:done, never team:failed"
+}
+
+#-------------------------------------------------------------------------------
 # Test 9: the claude invocation runs with the print background-task ceiling
 # lifted (CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0), so a long team dispatch is not
 # killed at the default 600s. A host override (already-set value) is honored.
@@ -424,6 +473,7 @@ test_no_eligible_issue_emits_no_work_marker
 test_real_skip_output_emits_no_work_marker
 test_failed_run_clears_its_own_lock
 test_failed_run_without_pick_touches_no_lock
+test_failed_reconcile_restores_done_lock
 test_bg_ceiling_lifted_for_claude
 
 echo ""

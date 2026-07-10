@@ -210,7 +210,10 @@ The team-pickup caller parses this line verbatim into its §7 output block.
 
 ## Boundaries
 
-- Never force-pushes. Never rewrites history. Append-only fix commits.
+- Never force-pushes. Never rewrites history. Append-only fix commits. (The sole
+  sanctioned force-push in the whole autonomous system is `/pr-reconcile`'s
+  rebase phase, and even that is `--force-with-lease` only — pr-watch itself has
+  no exception.)
 - Never merges the PR. Green CI is the verdict; merge is human-gated.
 - Never operates on a PR not on `feat/issue-<N>` (defense against the caller
   passing a hand-crafted PR — only team-pickup output is supported).
