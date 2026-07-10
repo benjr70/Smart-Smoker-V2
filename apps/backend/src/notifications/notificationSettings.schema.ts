@@ -34,7 +34,7 @@ export class NotificationSetting {
   temperature?: number;
 
   @Prop({ default: new Date(0) })
-  lastNotificationSent: Date;
+  lastNotificationSent?: Date;
 }
 
 export const NotificationSettingSchema =

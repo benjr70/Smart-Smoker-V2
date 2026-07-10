@@ -107,6 +107,25 @@ describe('preSmokeService', () => {
       expect(result).toEqual({ data: mockPreSmoke });
     });
 
+    test('should strip persisted _id/__v (and weight._id) before posting', async () => {
+      const fetchedPreSmoke: any = {
+        ...mockPreSmoke,
+        _id: 'presmoke-id-1',
+        __v: 3,
+        weight: { ...mockPreSmoke.weight, _id: 'weight-id-1' },
+      };
+
+      mockAxios.post.mockResolvedValue({ data: mockPreSmoke });
+
+      await setCurrentPreSmoke(fetchedPreSmoke);
+
+      expect(mockAxios.post).toHaveBeenCalledWith('presmoke', mockPreSmoke);
+      const sentBody = mockAxios.post.mock.calls[0][1];
+      expect(sentBody).not.toHaveProperty('_id');
+      expect(sentBody).not.toHaveProperty('__v');
+      expect(sentBody.weight).not.toHaveProperty('_id');
+    });
+
     test('should handle setCurrentPreSmoke error and log it', async () => {
       const mockError = new Error('Server error');
 

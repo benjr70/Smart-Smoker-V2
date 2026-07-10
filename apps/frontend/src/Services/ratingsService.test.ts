@@ -93,15 +93,26 @@ describe('ratingsService', () => {
     });
   });
 
+  // The backend RatingsDto whitelists only these five fields; the strict
+  // validation edge rejects a body carrying the persisted `_id`/`__v`.
+  const whitelistedRating = {
+    smokeFlavor: mockRating.smokeFlavor,
+    seasoning: mockRating.seasoning,
+    tenderness: mockRating.tenderness,
+    overallTaste: mockRating.overallTaste,
+    notes: mockRating.notes,
+  };
+
   describe('setCurrentRatings', () => {
-    test('should post current ratings successfully', async () => {
+    test('should post only whitelisted rating fields, stripping _id', async () => {
       mockAxios.post.mockResolvedValue({
         data: mockRating,
       });
 
       const result = await setCurrentRatings(mockRating);
 
-      expect(mockAxios.post).toHaveBeenCalledWith('ratings/', mockRating);
+      expect(mockAxios.post).toHaveBeenCalledWith('ratings/', whitelistedRating);
+      expect(mockAxios.post.mock.calls[0][1]).not.toHaveProperty('_id');
       expect(result).toEqual({ data: mockRating });
     });
 
@@ -114,7 +125,7 @@ describe('ratingsService', () => {
 
       const result = await setCurrentRatings(mockRating);
 
-      expect(mockAxios.post).toHaveBeenCalledWith('ratings/', mockRating);
+      expect(mockAxios.post).toHaveBeenCalledWith('ratings/', whitelistedRating);
       expect(consoleLogSpy).toHaveBeenCalledWith(mockError);
       expect(result).toBeUndefined();
     });
@@ -172,7 +183,8 @@ describe('ratingsService', () => {
 
       const result = await updateRatings(ratingWithId);
 
-      expect(mockAxios.post).toHaveBeenCalledWith('ratings/' + ratingWithId._id, ratingWithId);
+      expect(mockAxios.post).toHaveBeenCalledWith('ratings/' + ratingWithId._id, whitelistedRating);
+      expect(mockAxios.post.mock.calls[0][1]).not.toHaveProperty('_id');
       expect(result).toEqual({ data: ratingWithId });
     });
 
@@ -186,7 +198,7 @@ describe('ratingsService', () => {
 
       const result = await updateRatings(ratingWithId);
 
-      expect(mockAxios.post).toHaveBeenCalledWith('ratings/' + ratingWithId._id, ratingWithId);
+      expect(mockAxios.post).toHaveBeenCalledWith('ratings/' + ratingWithId._id, whitelistedRating);
       expect(consoleLogSpy).toHaveBeenCalledWith(mockError);
       expect(result).toBeUndefined();
     });

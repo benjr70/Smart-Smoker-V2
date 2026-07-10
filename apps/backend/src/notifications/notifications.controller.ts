@@ -3,6 +3,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
 import { NotificationSubscription } from './notificationSubscription.schema';
 import { NotificationSettings } from './notificationSettings.schema';
+import { NotificationSubscriptionDto } from './notificationSubscriptionDto';
 import { NotificationSettingsDto } from './notificationSettingsDto';
 
 @ApiTags('Notifications')
@@ -12,7 +13,7 @@ export class NotificationsController {
 
   @Post('/subscribe')
   setSubscription(
-    @Body() subscription: NotificationSubscription,
+    @Body() subscription: NotificationSubscriptionDto,
   ): Promise<NotificationSubscription> {
     return this.notificationsService.setSubscription(subscription);
   }
