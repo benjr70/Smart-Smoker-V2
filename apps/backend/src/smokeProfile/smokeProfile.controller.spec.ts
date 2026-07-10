@@ -33,6 +33,7 @@ describe('SmokeProfileController', () => {
   const mockSmokeProfileService = {
     getCurrentSmokeProfile: jest.fn(),
     getById: jest.fn(),
+    getByIdOrThrow: jest.fn(),
     saveCurrentSmokeProfile: jest.fn(),
     delete: jest.fn(),
   };
@@ -94,30 +95,33 @@ describe('SmokeProfileController', () => {
   });
 
   describe('getSmokeProfileById', () => {
-    it('should return smoke profile by id', async () => {
+    it('should return smoke profile by id via getByIdOrThrow', async () => {
       const id = 'profile-id-123';
-      mockSmokeProfileService.getById.mockResolvedValue(mockSmokeProfile);
+      mockSmokeProfileService.getByIdOrThrow.mockResolvedValue(
+        mockSmokeProfile,
+      );
 
       const result = await controller.getSmokeProfileById(id);
 
-      expect(service.getById).toHaveBeenCalledWith(id);
+      expect(service.getByIdOrThrow).toHaveBeenCalledWith(id);
       expect(result).toEqual(mockSmokeProfile);
     });
 
-    it('should return null for non-existent profile', async () => {
+    it('should propagate NotFoundException for non-existent profile', async () => {
       const id = 'non-existent-id';
-      mockSmokeProfileService.getById.mockResolvedValue(null);
+      const error = new Error('SmokeProfile not found');
+      mockSmokeProfileService.getByIdOrThrow.mockRejectedValue(error);
 
-      const result = await controller.getSmokeProfileById(id);
-
-      expect(service.getById).toHaveBeenCalledWith(id);
-      expect(result).toBeNull();
+      await expect(controller.getSmokeProfileById(id)).rejects.toThrow(
+        'SmokeProfile not found',
+      );
+      expect(service.getByIdOrThrow).toHaveBeenCalledWith(id);
     });
 
     it('should handle service errors', async () => {
       const id = 'invalid-id';
       const error = new Error('Invalid ObjectId');
-      mockSmokeProfileService.getById.mockRejectedValue(error);
+      mockSmokeProfileService.getByIdOrThrow.mockRejectedValue(error);
 
       await expect(controller.getSmokeProfileById(id)).rejects.toThrow(
         'Invalid ObjectId',

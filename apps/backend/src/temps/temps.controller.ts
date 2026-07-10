@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { ParseObjectIdPipe } from '../common/parse-object-id.pipe';
 import { TempDto } from './tempDto';
 import { Temp } from './temps.schema';
 import { TempsService } from './temps.service';
@@ -20,7 +21,7 @@ export class TempsController {
   }
 
   @Get('/:id')
-  getAllTempsById(@Param('id') id: string): Promise<Temp[]> {
+  getAllTempsById(@Param('id', ParseObjectIdPipe) id: string): Promise<Temp[]> {
     return this.tempsService.getAllTempsById(id);
   }
 
@@ -30,7 +31,7 @@ export class TempsController {
   }
 
   @Delete('/:id')
-  DeleteById(@Param('id') id: string) {
+  DeleteById(@Param('id', ParseObjectIdPipe) id: string) {
     return this.tempsService.delete(id);
   }
 }

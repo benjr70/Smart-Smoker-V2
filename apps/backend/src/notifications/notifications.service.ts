@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import {
   NotificationSubscription,
@@ -36,7 +36,7 @@ export class NotificationsService {
       const createdSubscription = new this.notificationsModel(subscription);
       return createdSubscription.save();
     } else {
-      throw new Error('Subscription already exists');
+      throw new ConflictException('Subscription already exists');
     }
   }
 

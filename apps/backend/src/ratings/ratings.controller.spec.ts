@@ -26,6 +26,7 @@ describe('RatingsController', () => {
     saveCurrentRatings: jest.fn(),
     update: jest.fn(),
     getById: jest.fn(),
+    getByIdOrThrow: jest.fn(),
     delete: jest.fn(),
   };
 
@@ -115,30 +116,31 @@ describe('RatingsController', () => {
   });
 
   describe('getRatingById', () => {
-    it('should return rating by id', async () => {
+    it('should return rating by id via getByIdOrThrow', async () => {
       const id = 'rating-id-123';
-      mockRatingsService.getById.mockResolvedValue(mockRatings);
+      mockRatingsService.getByIdOrThrow.mockResolvedValue(mockRatings);
 
       const result = await controller.getRatingById(id);
 
-      expect(service.getById).toHaveBeenCalledWith(id);
+      expect(service.getByIdOrThrow).toHaveBeenCalledWith(id);
       expect(result).toEqual(mockRatings);
     });
 
-    it('should return null for non-existent rating', async () => {
+    it('should propagate NotFoundException for non-existent rating', async () => {
       const id = 'non-existent-id';
-      mockRatingsService.getById.mockResolvedValue(null);
+      const error = new Error('Ratings not found');
+      mockRatingsService.getByIdOrThrow.mockRejectedValue(error);
 
-      const result = await controller.getRatingById(id);
-
-      expect(service.getById).toHaveBeenCalledWith(id);
-      expect(result).toBeNull();
+      await expect(controller.getRatingById(id)).rejects.toThrow(
+        'Ratings not found',
+      );
+      expect(service.getByIdOrThrow).toHaveBeenCalledWith(id);
     });
 
     it('should handle service errors', async () => {
       const id = 'invalid-id';
       const error = new Error('Invalid ObjectId');
-      mockRatingsService.getById.mockRejectedValue(error);
+      mockRatingsService.getByIdOrThrow.mockRejectedValue(error);
 
       await expect(controller.getRatingById(id)).rejects.toThrow(
         'Invalid ObjectId',

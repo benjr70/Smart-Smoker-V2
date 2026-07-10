@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConflictException } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { NotificationsService } from './notifications.service';
 import { NotificationSubscription } from './notificationSubscription.schema';
@@ -126,11 +127,14 @@ describe('NotificationsService', () => {
       expect(result).toEqual(expect.objectContaining(mockSubscription));
     });
 
-    it('should throw error when subscription already exists', async () => {
+    it('should throw ConflictException when subscription already exists', async () => {
       mockNotificationSubscriptionModel.findOne.mockReturnValue({
         exec: jest.fn().mockResolvedValue(mockSubscription),
       });
 
+      await expect(service.setSubscription(mockSubscription)).rejects.toThrow(
+        ConflictException,
+      );
       await expect(service.setSubscription(mockSubscription)).rejects.toThrow(
         'Subscription already exists',
       );
