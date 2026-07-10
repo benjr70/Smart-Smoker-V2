@@ -57,8 +57,8 @@ describe('TempsService', () => {
     };
 
     mockSmokeService = {
-      GetById: jest.fn().mockResolvedValue(mockSmoke),
-      Update: jest.fn().mockResolvedValue(mockSmoke),
+      getById: jest.fn().mockResolvedValue(mockSmoke),
+      update: jest.fn().mockResolvedValue(mockSmoke),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -115,12 +115,12 @@ describe('TempsService', () => {
         ChamberTemp: '225',
       };
 
-      jest.spyOn(service, 'create').mockResolvedValue(mockTempDocument as Temp);
+      jest.spyOn(service, 'create').mockResolvedValue(mockTempDocument as any);
 
       await service.saveNewTemp(tempDto);
 
       expect(mockStateService.GetState).toHaveBeenCalled();
-      expect(mockSmokeService.GetById).toHaveBeenCalledWith(mockState.smokeId);
+      expect(mockSmokeService.getById).toHaveBeenCalledWith(mockState.smokeId);
       expect(tempDto.tempsId).toBe('existing-temps-id');
     });
 
@@ -133,27 +133,25 @@ describe('TempsService', () => {
       };
 
       const smokeWithoutTempsId = { ...mockSmoke, tempsId: undefined };
-      mockSmokeService.GetById = jest
+      mockSmokeService.getById = jest
         .fn()
         .mockResolvedValue(smokeWithoutTempsId);
 
       jest.spyOn(service, 'create').mockResolvedValue({
         ...mockTempDocument,
         _id: 'new-temps-id',
-      } as Temp);
+      } as any);
 
       await service.saveNewTemp(tempDto);
 
-      expect(mockSmokeService.Update).toHaveBeenCalledWith(mockState.smokeId, {
+      expect(mockSmokeService.update).toHaveBeenCalledWith(mockState.smokeId, {
         preSmokeId: smokeWithoutTempsId.preSmokeId,
         tempsId: 'new-temps-id',
         status: smokeWithoutTempsId.status,
       });
     });
 
-    it('should return early if smokeId length is invalid', async () => {
-      // Note: The original logic has a bug - it checks for length < 0 instead of <= 0 or == 0
-      // This test reflects the current implementation, not the expected behavior
+    it('should return early when there is no active smoke', async () => {
       const stateWithInvalidSmokeId = { ...mockState, smokeId: '' };
       mockStateService.GetState = jest
         .fn()
@@ -169,8 +167,7 @@ describe('TempsService', () => {
       const result = await service.saveNewTemp(tempDto);
 
       expect(result).toBeUndefined();
-      // Due to the bug in line 19 (should be > 0, not < 0), this will actually call GetById
-      expect(mockSmokeService.GetById).toHaveBeenCalled();
+      expect(mockSmokeService.getById).not.toHaveBeenCalled();
     });
   });
 
@@ -223,7 +220,7 @@ describe('TempsService', () => {
       const result = await service.getAllTempsCurrent();
 
       expect(mockStateService.GetState).toHaveBeenCalled();
-      expect(mockSmokeService.GetById).toHaveBeenCalledWith(mockState.smokeId);
+      expect(mockSmokeService.getById).toHaveBeenCalledWith(mockState.smokeId);
       expect(mockTempModel.find).toHaveBeenCalledWith({
         tempsId: mockSmoke.tempsId,
       });
@@ -239,12 +236,12 @@ describe('TempsService', () => {
       const result = await service.getAllTempsCurrent();
 
       expect(result).toEqual([]);
-      expect(mockSmokeService.GetById).not.toHaveBeenCalled();
+      expect(mockSmokeService.getById).not.toHaveBeenCalled();
     });
 
     it('should return empty array when smoke has no tempsId', async () => {
       const smokeWithoutTempsId = { ...mockSmoke, tempsId: '' };
-      mockSmokeService.GetById = jest
+      mockSmokeService.getById = jest
         .fn()
         .mockResolvedValue(smokeWithoutTempsId);
 
@@ -271,13 +268,11 @@ describe('TempsService', () => {
       const result = await service.GetTempID();
 
       expect(mockStateService.GetState).toHaveBeenCalled();
-      expect(mockSmokeService.GetById).toHaveBeenCalledWith(mockState.smokeId);
+      expect(mockSmokeService.getById).toHaveBeenCalledWith(mockState.smokeId);
       expect(result).toBe(mockSmoke.tempsId);
     });
 
-    it('should return undefined when smokeId length is invalid', async () => {
-      // Note: The original logic has a bug - it checks for length < 0 instead of <= 0 or == 0
-      // This test reflects the current implementation, not the expected behavior
+    it('should return undefined when there is no active smoke', async () => {
       const stateWithInvalidSmokeId = { ...mockState, smokeId: '' };
       mockStateService.GetState = jest
         .fn()
@@ -285,9 +280,8 @@ describe('TempsService', () => {
 
       const result = await service.GetTempID();
 
-      // Due to the bug in line 81 (should be > 0, not < 0), this will actually call GetById
-      expect(result).toBe(mockSmoke.tempsId);
-      expect(mockSmokeService.GetById).toHaveBeenCalled();
+      expect(result).toBeUndefined();
+      expect(mockSmokeService.getById).not.toHaveBeenCalled();
     });
   });
 

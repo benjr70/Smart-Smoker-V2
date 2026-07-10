@@ -48,7 +48,7 @@ export class CurrentSmokeService {
     if (!state.smokeId || state.smokeId.length === 0) {
       return null;
     }
-    return this.smokeService.GetById(state.smokeId);
+    return this.smokeService.getById(state.smokeId);
   }
 
   async readCurrent<T>(
@@ -92,7 +92,7 @@ export class CurrentSmokeService {
       status: smoke.status,
       [key]: childId,
     };
-    await this.smokeService.Update(smoke['_id'].toString(), smokeDto);
+    await this.smokeService.update(smoke['_id'].toString(), smokeDto);
 
     if (handlers.onResolveSmoke) {
       await handlers.onResolveSmoke(smoke);

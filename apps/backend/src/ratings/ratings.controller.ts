@@ -34,6 +34,6 @@ export class RatingsController {
 
   @Delete('/:id')
   DeleteById(@Param('id') id: string) {
-    return this.ratingsService.Delete(id);
+    return this.ratingsService.delete(id);
   }
 }

@@ -1,49 +1,36 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { BaseService } from '../common/base.service';
 import { Smoke, SmokeDocument, SmokeStatus } from './smoke.schema';
 import { SmokeDto } from './smokeDto';
 import { StateService } from '../State/state.service';
 
 @Injectable()
-export class SmokeService {
+export class SmokeService extends BaseService<SmokeDocument> {
   constructor(
-    @InjectModel('Smoke') private smokeModule: Model<SmokeDocument>,
+    @InjectModel('Smoke') model: Model<SmokeDocument>,
     private stateService: StateService,
-  ) {}
+  ) {
+    super(model, 'Smoke');
+  }
 
-  async create(smokeDto: SmokeDto): Promise<Smoke> {
+  create(smokeDto: SmokeDto): Promise<SmokeDocument> {
     smokeDto.date = new Date();
-    const createdSmoke = new this.smokeModule(smokeDto);
-    return await createdSmoke.save();
+    return super.create(smokeDto);
   }
 
-  async GetById(id: string): Promise<Smoke> {
-    return await this.smokeModule.findById(id);
-  }
-
-  async Update(id: string, smokeDto: SmokeDto): Promise<Smoke> {
-    return this.smokeModule
-      .findOneAndUpdate({ _id: id.toString() }, smokeDto)
-      .then(() => {
-        return this.GetById(id);
-      });
-  }
-
-  async getAll(): Promise<Smoke[]> {
-    return this.smokeModule.find().exec();
-  }
-
-  async Delete(id: string) {
-    return this.smokeModule.deleteOne({ _id: id });
-  }
-
+  /**
+   * Degenerate `state → smoke` walk kept local to `SmokeService`. It cannot
+   * delegate to `CurrentSmokeService` — that would make `SmokeModule` depend on
+   * `CommonModule` (which depends on `SmokeModule`), a DI cycle.
+   */
   async getCurrentSmoke(): Promise<Smoke | null> {
     return this.stateService.GetState().then((state) => {
       if (!state || !state.smokeId || state.smokeId.length === 0) {
         return null;
       }
-      return this.GetById(state.smokeId);
+      return this.getById(state.smokeId);
     });
   }
 
@@ -60,7 +47,7 @@ export class SmokeService {
         ratingId: smoke.ratingId,
         status: SmokeStatus.Complete,
       };
-      return await this.Update(smoke['_id'].toString(), smokeDto);
+      return await this.update(smoke['_id'].toString(), smokeDto);
     });
   }
 }

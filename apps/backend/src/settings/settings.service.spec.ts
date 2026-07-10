@@ -80,9 +80,9 @@ describe('SettingsService', () => {
     });
   });
 
-  describe('findAll', () => {
+  describe('getAll', () => {
     it('should return all settings', async () => {
-      const result = await service.findAll();
+      const result = await service.getAll();
 
       expect(mockSettingsModel.find).toHaveBeenCalled();
       expect(result).toEqual([mockSettingsDocument]);

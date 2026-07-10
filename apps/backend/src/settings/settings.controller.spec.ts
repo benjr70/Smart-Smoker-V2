@@ -25,7 +25,7 @@ describe('SettingsController', () => {
 
   beforeEach(async () => {
     mockSettingsService = {
-      findAll: jest.fn().mockResolvedValue(mockSettingsList),
+      getAll: jest.fn().mockResolvedValue(mockSettingsList),
       create: jest.fn().mockResolvedValue(mockSettings),
     };
 
@@ -54,7 +54,7 @@ describe('SettingsController', () => {
     it('should return all settings', async () => {
       const result = await controller.getSettings();
 
-      expect(mockSettingsService.findAll).toHaveBeenCalled();
+      expect(mockSettingsService.getAll).toHaveBeenCalled();
       expect(result).toEqual(mockSettingsList);
     });
   });

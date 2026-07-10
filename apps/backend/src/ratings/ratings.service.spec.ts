@@ -51,18 +51,20 @@ describe('RatingsService', () => {
       save: jest.fn().mockResolvedValue({ ...dto, _id: 'new-rating-id' }),
     }));
 
-    mockRatingsModel.findById = jest.fn().mockResolvedValue(mockRatings);
-    mockRatingsModel.deleteOne = jest
+    mockRatingsModel.findById = jest
       .fn()
-      .mockResolvedValue({ deletedCount: 1 });
+      .mockReturnValue({ exec: jest.fn().mockResolvedValue(mockRatings) });
+    mockRatingsModel.deleteOne = jest.fn().mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ deletedCount: 1 }),
+    });
     mockRatingsModel.findByIdAndUpdate = jest
       .fn()
-      .mockResolvedValue(mockRatings);
+      .mockReturnValue({ exec: jest.fn().mockResolvedValue(mockRatings) });
 
     // Mock SmokeService
     mockSmokeService = {
       getCurrentSmoke: jest.fn(),
-      Update: jest.fn(),
+      update: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -116,7 +118,7 @@ describe('RatingsService', () => {
   describe('saveCurrentRatings', () => {
     it('should update existing rating when smoke has ratingId', async () => {
       mockSmokeService.getCurrentSmoke.mockResolvedValue(mockSmoke);
-      jest.spyOn(service, 'update').mockResolvedValue(mockRatings);
+      jest.spyOn(service, 'update').mockResolvedValue(mockRatings as any);
 
       const result = await service.saveCurrentRatings(mockRatingsDto);
 
@@ -132,7 +134,7 @@ describe('RatingsService', () => {
       mockSmokeService.getCurrentSmoke.mockResolvedValue(
         mockSmokeWithoutRating,
       );
-      jest.spyOn(service, 'create').mockResolvedValue(mockRatings);
+      jest.spyOn(service, 'create').mockResolvedValue(mockRatings as any);
 
       const expectedSmokeDto: SmokeDto = {
         smokeProfileId: mockSmokeWithoutRating.smokeProfileId,
@@ -147,7 +149,7 @@ describe('RatingsService', () => {
 
       expect(mockSmokeService.getCurrentSmoke).toHaveBeenCalled();
       expect(service.create).toHaveBeenCalledWith(mockRatingsDto);
-      expect(mockSmokeService.Update).toHaveBeenCalledWith(
+      expect(mockSmokeService.update).toHaveBeenCalledWith(
         mockSmokeWithoutRating._id,
         expectedSmokeDto,
       );
@@ -164,87 +166,6 @@ describe('RatingsService', () => {
     });
   });
 
-  describe('getById', () => {
-    it('should return rating by id', async () => {
-      const result = await service.getById('rating-id-123');
-
-      expect(mockRatingsModel.findById).toHaveBeenCalledWith('rating-id-123');
-      expect(result).toEqual(mockRatings);
-    });
-
-    it('should return null for non-existent rating', async () => {
-      mockRatingsModel.findById.mockResolvedValue(null);
-
-      const result = await service.getById('non-existent-id');
-
-      expect(mockRatingsModel.findById).toHaveBeenCalledWith('non-existent-id');
-      expect(result).toBeNull();
-    });
-  });
-
-  describe('Delete', () => {
-    it('should delete rating by id', async () => {
-      const result = await service.Delete('rating-id-123');
-
-      expect(mockRatingsModel.deleteOne).toHaveBeenCalledWith({
-        _id: 'rating-id-123',
-      });
-      expect(result).toEqual({ deletedCount: 1 });
-    });
-
-    it('should handle deletion of non-existent rating', async () => {
-      mockRatingsModel.deleteOne.mockResolvedValue({ deletedCount: 0 });
-
-      const result = await service.Delete('non-existent-id');
-
-      expect(mockRatingsModel.deleteOne).toHaveBeenCalledWith({
-        _id: 'non-existent-id',
-      });
-      expect(result).toEqual({ deletedCount: 0 });
-    });
-  });
-
-  describe('update', () => {
-    it('should update rating and return updated data', async () => {
-      jest.spyOn(service, 'getById').mockResolvedValue(mockRatings);
-
-      const result = await service.update('rating-id-123', mockRatingsDto);
-
-      expect(mockRatingsModel.findByIdAndUpdate).toHaveBeenCalledWith(
-        { _id: 'rating-id-123' },
-        mockRatingsDto,
-      );
-      expect(service.getById).toHaveBeenCalledWith('rating-id-123');
-      expect(result).toEqual(mockRatings);
-    });
-
-    it('should handle update errors', async () => {
-      const error = new Error('Update failed');
-      mockRatingsModel.findByIdAndUpdate.mockRejectedValue(error);
-
-      await expect(
-        service.update('rating-id-123', mockRatingsDto),
-      ).rejects.toThrow('Update failed');
-    });
-  });
-
-  describe('create', () => {
-    it('should create new rating', async () => {
-      const result = await service.create(mockRatingsDto);
-
-      expect(mockRatingsModel).toHaveBeenCalledWith(mockRatingsDto);
-      expect(result).toEqual(expect.objectContaining(mockRatingsDto));
-    });
-
-    it('should handle creation errors', async () => {
-      const mockInstance = {
-        save: jest.fn().mockRejectedValue(new Error('Creation failed')),
-      };
-      mockRatingsModel.mockImplementation(() => mockInstance);
-
-      await expect(service.create(mockRatingsDto)).rejects.toThrow(
-        'Creation failed',
-      );
-    });
-  });
+  // create / getById / update / delete are inherited from BaseService and
+  // verified once at the BaseService boundary (base.service.spec.ts).
 });

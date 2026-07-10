@@ -11,7 +11,7 @@ export class SettingsController {
 
   @Get()
   getSettings(): Promise<Settings[]> {
-    return this.settingsService.findAll();
+    return this.settingsService.getAll();
   }
 
   @Post()

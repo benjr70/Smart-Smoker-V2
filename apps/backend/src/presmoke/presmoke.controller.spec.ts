@@ -25,12 +25,12 @@ describe('PreSmokeController', () => {
 
   beforeEach(async () => {
     mockPreSmokeService = {
-      findAll: jest.fn().mockResolvedValue(mockPreSmokes),
-      GetByID: jest.fn().mockResolvedValue(mockPreSmoke),
+      getAll: jest.fn().mockResolvedValue(mockPreSmokes),
+      getById: jest.fn().mockResolvedValue(mockPreSmoke),
       save: jest.fn().mockResolvedValue(mockPreSmoke),
-      Update: jest.fn().mockResolvedValue(mockPreSmoke),
+      update: jest.fn().mockResolvedValue(mockPreSmoke),
       GetByCurrent: jest.fn().mockResolvedValue(mockPreSmoke),
-      Delete: jest.fn().mockResolvedValue({ deletedCount: 1 }),
+      delete: jest.fn().mockResolvedValue({ deletedCount: 1 }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -58,7 +58,7 @@ describe('PreSmokeController', () => {
     it('should return all pre-smoke records', async () => {
       const result = await controller.getPreSmoke();
 
-      expect(mockPreSmokeService.findAll).toHaveBeenCalled();
+      expect(mockPreSmokeService.getAll).toHaveBeenCalled();
       expect(result).toEqual(mockPreSmokes);
     });
   });
@@ -69,7 +69,7 @@ describe('PreSmokeController', () => {
 
       const result = await controller.getPreSmokeById(id);
 
-      expect(mockPreSmokeService.GetByID).toHaveBeenCalledWith(id);
+      expect(mockPreSmokeService.getById).toHaveBeenCalledWith(id);
       expect(result).toEqual(mockPreSmoke);
     });
   });
@@ -104,7 +104,7 @@ describe('PreSmokeController', () => {
 
       const result = await controller.updatePreSmoke(id, preSmokeDto);
 
-      expect(mockPreSmokeService.Update).toHaveBeenCalledWith(id, preSmokeDto);
+      expect(mockPreSmokeService.update).toHaveBeenCalledWith(id, preSmokeDto);
       expect(result).toEqual(mockPreSmoke);
     });
   });
@@ -124,7 +124,7 @@ describe('PreSmokeController', () => {
 
       const result = await controller.DeleteById(id);
 
-      expect(mockPreSmokeService.Delete).toHaveBeenCalledWith(id);
+      expect(mockPreSmokeService.delete).toHaveBeenCalledWith(id);
       expect(result).toEqual({ deletedCount: 1 });
     });
   });

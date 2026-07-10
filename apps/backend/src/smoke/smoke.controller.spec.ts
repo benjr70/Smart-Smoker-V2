@@ -25,8 +25,8 @@ describe('SmokeController', () => {
       FinishSmoke: jest
         .fn()
         .mockResolvedValue({ ...mockSmoke, status: SmokeStatus.Complete }),
-      GetById: jest.fn().mockResolvedValue(mockSmoke),
-      Delete: jest.fn().mockResolvedValue({ deletedCount: 1 }),
+      getById: jest.fn().mockResolvedValue(mockSmoke),
+      delete: jest.fn().mockResolvedValue({ deletedCount: 1 }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -74,7 +74,7 @@ describe('SmokeController', () => {
 
       const result = await controller.getById(id);
 
-      expect(mockSmokeService.GetById).toHaveBeenCalledWith(id);
+      expect(mockSmokeService.getById).toHaveBeenCalledWith(id);
       expect(result).toEqual(mockSmoke);
     });
   });
@@ -85,7 +85,7 @@ describe('SmokeController', () => {
 
       const result = await controller.DeleteById(id);
 
-      expect(mockSmokeService.Delete).toHaveBeenCalledWith(id);
+      expect(mockSmokeService.delete).toHaveBeenCalledWith(id);
       expect(result).toEqual({ deletedCount: 1 });
     });
   });

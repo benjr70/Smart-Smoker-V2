@@ -33,6 +33,6 @@ export class SmokeProfileController {
 
   @Delete('/:id')
   DeleteById(@Param('id') id: string) {
-    return this.smokeProfileService.Delete(id);
+    return this.smokeProfileService.delete(id);
   }
 }

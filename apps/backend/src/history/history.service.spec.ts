@@ -42,7 +42,7 @@ describe('HistoryService', () => {
     };
 
     mockPreSmokeService = {
-      GetByID: jest.fn().mockResolvedValue(mockPreSmoke),
+      getById: jest.fn().mockResolvedValue(mockPreSmoke),
     };
 
     mockSmokeProfileService = {
@@ -91,7 +91,7 @@ describe('HistoryService', () => {
       const result = await service.getHistory();
 
       expect(mockSmokeService.getAll).toHaveBeenCalled();
-      expect(mockPreSmokeService.GetByID).toHaveBeenCalledWith('presmoke-id');
+      expect(mockPreSmokeService.getById).toHaveBeenCalledWith('presmoke-id');
       expect(mockSmokeProfileService.getById).toHaveBeenCalledWith(
         'profile-id',
       );
@@ -118,11 +118,11 @@ describe('HistoryService', () => {
       const result = await service.getHistory();
 
       expect(result).toEqual([]);
-      expect(mockPreSmokeService.GetByID).not.toHaveBeenCalled();
+      expect(mockPreSmokeService.getById).not.toHaveBeenCalled();
     });
 
     it('should handle null preSmoke data', async () => {
-      mockPreSmokeService.GetByID = jest.fn().mockResolvedValue(null);
+      mockPreSmokeService.getById = jest.fn().mockResolvedValue(null);
 
       const result = await service.getHistory();
 

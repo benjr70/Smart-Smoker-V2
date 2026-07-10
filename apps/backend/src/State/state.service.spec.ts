@@ -88,7 +88,7 @@ describe('StateService', () => {
     });
   });
 
-  describe('update', () => {
+  describe('updateCurrent', () => {
     it('should update an existing state', async () => {
       const updateDto: State = {
         smokeId: 'updated-smoke-id',
@@ -99,7 +99,7 @@ describe('StateService', () => {
         .spyOn(service, 'GetState')
         .mockResolvedValue(mockStateDocument as State);
 
-      const result = await service.update(updateDto);
+      const result = await service.updateCurrent(updateDto);
 
       expect(mockStateModel.findOneAndUpdate).toHaveBeenCalledWith(
         { _id: 'test-id' },
@@ -117,12 +117,12 @@ describe('StateService', () => {
       };
       jest.spyOn(service, 'GetState').mockResolvedValue(currentState as State);
       jest
-        .spyOn(service, 'update')
+        .spyOn(service, 'updateCurrent')
         .mockResolvedValue({ ...currentState, smoking: false } as State);
 
       const result = await service.toggleSmoking();
 
-      expect(service.update).toHaveBeenCalledWith({
+      expect(service.updateCurrent).toHaveBeenCalledWith({
         ...currentState,
         smoking: false,
       });
@@ -137,12 +137,12 @@ describe('StateService', () => {
       };
       jest.spyOn(service, 'GetState').mockResolvedValue(currentState as State);
       jest
-        .spyOn(service, 'update')
+        .spyOn(service, 'updateCurrent')
         .mockResolvedValue({ ...currentState, smoking: true } as State);
 
       const result = await service.toggleSmoking();
 
-      expect(service.update).toHaveBeenCalledWith({
+      expect(service.updateCurrent).toHaveBeenCalledWith({
         ...currentState,
         smoking: true,
       });
@@ -152,12 +152,15 @@ describe('StateService', () => {
     it('should not toggle smoking when smokeId is empty', async () => {
       const currentState = { ...mockStateDocument, smoking: true, smokeId: '' };
       jest.spyOn(service, 'GetState').mockResolvedValue(currentState as State);
-      jest.spyOn(service, 'update').mockResolvedValue(currentState as State);
+      jest
+        .spyOn(service, 'updateCurrent')
+        .mockResolvedValue(currentState as State);
 
       const result = await service.toggleSmoking();
 
-      expect(service.update).toHaveBeenCalledWith(currentState);
-      expect(result.smoking).toBe(true); // Should remain unchanged
+      // No active smoke → no write, returns null.
+      expect(service.updateCurrent).not.toHaveBeenCalled();
+      expect(result).toBeNull();
     });
   });
 
@@ -168,11 +171,13 @@ describe('StateService', () => {
         smoking: false,
       };
 
-      jest.spyOn(service, 'update').mockResolvedValue(expectedDto as State);
+      jest
+        .spyOn(service, 'updateCurrent')
+        .mockResolvedValue(expectedDto as State);
 
       const result = await service.clearSmoke();
 
-      expect(service.update).toHaveBeenCalledWith(expectedDto);
+      expect(service.updateCurrent).toHaveBeenCalledWith(expectedDto);
       expect(result).toEqual(expectedDto);
     });
   });
