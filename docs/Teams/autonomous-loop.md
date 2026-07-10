@@ -40,9 +40,28 @@ systemd (agent-daemon.service, Restart=always)
 
 | Marker on stdout | Meaning | Daemon reaction |
 | --- | --- | --- |
-| `AGENT_RUN_NO_WORK=1` | queue empty or lock skip | sleep out the window |
+| `AGENT_RUN_NO_WORK=1` | queue empty or lock skip | chunked sleep with the **Work Probe** (below) — wakes early if work appears |
 | `AGENT_RUN_RESET_AT=<iso>` | usage exhausted mid-run (issue paused) | sleep to that reset |
 | non-zero exit, no marker | genuine failure | sleep out the window (no hot-loop) |
+
+### The Work Probe (early wake on new work)
+
+A no-work sleep used to be deaf until the window reset — observed live
+2026-07-10: a human merge 52 seconds after a no-work fire conflicted an open
+PR, which then waited ~4 hours for the reset. Now the daemon sleeps in
+`WORK_PROBE_INTERVAL` chunks (default 900s) and runs `lib/work-probe.sh`
+between chunks — a pure `gh` sweep, **zero Claude cost**. Wake rules:
+
+- **lock held** (`team:in-progress` anywhere) → never wake; a fire would just
+  skip. A `gh` error on the lock read fails safe as "locked".
+- **reconcile candidate** (same `pr_triage_pick` the fire runs) or a
+  **`team:paused`** issue → wake unconditionally; team-pickup
+  deterministically acts on both.
+- **new pick candidates** (open `team` issues with no state label) → wake only
+  when the candidate set *differs* from the baseline captured when the fire
+  reported no work — an issue team-pickup already declined (open blocker, not
+  in the project) cannot wake-loop the daemon; a genuinely new issue wakes it
+  once.
 
 The **Exhaustion Classifier** (`lib/exhaustion-classifier.sh`) tells an
 out-of-gas event apart from a real failure: exhaustion **pauses** the issue
@@ -180,6 +199,7 @@ on every PR.
 | `lib/exhaustion-classifier.sh` | OK / EXHAUSTED / FAILED + reset scrape |
 | `lib/pause-resume.sh` | resume vs fail (cap) for paused issues |
 | `lib/pr-triage.sh` | which PR needs reconciling (ours-filter, rank, order) |
+| `lib/work-probe.sh` | mid-sleep "did work appear?" scan + wake decision |
 | `lib/thread-reconciler.sh` | unresolved-thread enum, in-thread reply, resolve |
 | `lib/rebase-driver.sh` | rebase / continue / abort / force-with-lease push |
 
@@ -193,6 +213,8 @@ on every PR.
 - **Host env drop-in** — `~/.config/agent-daemon/env` (systemd
   `EnvironmentFile`) survives the per-fire reset; it carries
   `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0` and any `GH_TOKEN`.
+  `WORK_PROBE_INTERVAL=<secs>` tunes the mid-sleep probe cadence (default
+  900).
 - **Stuck lock** — a crashed fire normally cleans up after itself
   (`fail_inflight`); if not: `gh issue edit <N> --remove-label
   team:in-progress`.

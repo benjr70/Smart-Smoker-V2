@@ -196,7 +196,8 @@ $(cat "${dir}/calls.log")"
 
 #-------------------------------------------------------------------------------
 # Test 5: a fire that reports AGENT_RUN_NO_WORK=1 (empty queue) → the daemon
-# sleeps out the window instead of hot-looping on empty picks.
+# sleeps out the window instead of hot-looping on empty picks. The injected
+# work probe reports "nothing there" throughout, so no early wake happens.
 #-------------------------------------------------------------------------------
 test_no_work_sleeps_instead_of_relooping() {
     echo "TEST: empty queue sleeps instead of re-firing"
@@ -217,6 +218,7 @@ EOF
         CCUSAGE_CMD="cat '${dir}/ccusage.json'" \
         AGENT_RUN_CMD="${dir}/agent-run-stub" \
         SLEEP_CMD="${dir}/sleep-stub" \
+        WORK_PROBE_CMD="echo '{\"locked\":false,\"reconcile\":null,\"paused\":null,\"pickSig\":\"\"}'" \
         bash "${DAEMON}" >/dev/null 2>&1
 
     if [ "$(grep -c '^fired' "${dir}/calls.log")" != "1" ]; then
@@ -231,6 +233,106 @@ $(cat "${dir}/calls.log")"
     fi
 
     pass "empty queue sleeps instead of re-firing"
+}
+
+#-------------------------------------------------------------------------------
+# Test 5b: work appears mid-sleep after a NO_WORK fire (the live 2026-07-10
+# race: a human merge conflicted an open PR 52s after a no-work fire) → the
+# work probe wakes the daemon early and the next pass fires again.
+#-------------------------------------------------------------------------------
+test_no_work_probe_wakes_early_on_new_work() {
+    echo "TEST: work probe wakes the no-work sleep early"
+
+    local dir; dir="$(make_env)"
+    trap "rm -rf '${dir}'" RETURN
+    fixture $((NOW_EPOCH - 60)) > "${dir}/ccusage.json"
+    cat > "${dir}/agent-run-stub" <<EOF
+#!/usr/bin/env bash
+echo "fired \$*" >> "${dir}/calls.log"
+echo "team-pickup: no eligible issue"
+echo "AGENT_RUN_NO_WORK=1"
+exit 0
+EOF
+    chmod +x "${dir}/agent-run-stub"
+    # The probe sees a reconcile candidate (a CONFLICTING agent PR).
+    cat > "${dir}/probe-stub" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' '{"locked":false,"reconcile":305,"paused":null,"pickSig":""}'
+EOF
+    chmod +x "${dir}/probe-stub"
+
+    BUDGET_GATE_NOW="${NOW_EPOCH}" AGENT_DAEMON_MAX_ITERS=2 \
+        CCUSAGE_CMD="cat '${dir}/ccusage.json'" \
+        AGENT_RUN_CMD="${dir}/agent-run-stub" \
+        SLEEP_CMD="${dir}/sleep-stub" \
+        WORK_PROBE_CMD="${dir}/probe-stub" \
+        bash "${DAEMON}" > "${dir}/daemon.out" 2>&1
+
+    if ! grep -q 'waking early' "${dir}/daemon.out"; then
+        fail "probe hit must log an early wake" "out:
+$(tail -5 "${dir}/daemon.out")"
+        return
+    fi
+    if ! grep -q 'reconcile PR #305' "${dir}/daemon.out"; then
+        fail "early wake must name the work found" "out:
+$(tail -5 "${dir}/daemon.out")"
+        return
+    fi
+    if [ "$(grep -c '^fired' "${dir}/calls.log")" != "2" ]; then
+        fail "early wake must lead to a second fire" "calls:
+$(cat "${dir}/calls.log")"
+        return
+    fi
+    # Early wake = one chunk slept per no-work iter (2 iters), never the full
+    # window of ~20 chunks.
+    if [ "$(grep -c '^slept' "${dir}/calls.log")" != "2" ]; then
+        fail "each probe hit must end its sleep after one chunk" "calls:
+$(cat "${dir}/calls.log")"
+        return
+    fi
+
+    pass "work probe wakes the no-work sleep early"
+}
+
+#-------------------------------------------------------------------------------
+# Test 5c: pick-class suppression end-to-end — the probe keeps seeing the same
+# candidate signature that was already there when the fire reported no work
+# (e.g. an issue with an open blocker). The daemon must NOT wake early for it.
+#-------------------------------------------------------------------------------
+test_no_work_probe_suppresses_stale_candidates() {
+    echo "TEST: work probe suppresses the no-work baseline"
+
+    local dir; dir="$(make_env)"
+    trap "rm -rf '${dir}'" RETURN
+    fixture $((NOW_EPOCH - 60)) > "${dir}/ccusage.json"
+    cat > "${dir}/agent-run-stub" <<EOF
+#!/usr/bin/env bash
+echo "fired \$*" >> "${dir}/calls.log"
+echo "team-pickup: no eligible issue"
+echo "AGENT_RUN_NO_WORK=1"
+exit 0
+EOF
+    chmod +x "${dir}/agent-run-stub"
+
+    BUDGET_GATE_NOW="${NOW_EPOCH}" AGENT_DAEMON_MAX_ITERS=1 \
+        CCUSAGE_CMD="cat '${dir}/ccusage.json'" \
+        AGENT_RUN_CMD="${dir}/agent-run-stub" \
+        SLEEP_CMD="${dir}/sleep-stub" \
+        WORK_PROBE_CMD="echo '{\"locked\":false,\"reconcile\":null,\"paused\":null,\"pickSig\":\"290\"}'" \
+        bash "${DAEMON}" > "${dir}/daemon.out" 2>&1
+
+    if grep -q 'waking early' "${dir}/daemon.out"; then
+        fail "an unchanged candidate signature must not wake the daemon" "out:
+$(grep 'waking early' "${dir}/daemon.out")"
+        return
+    fi
+    if [ "$(grep -c '^fired' "${dir}/calls.log")" != "1" ]; then
+        fail "suppressed probe must not cause extra fires" "calls:
+$(cat "${dir}/calls.log")"
+        return
+    fi
+
+    pass "work probe suppresses the no-work baseline"
 }
 
 #-------------------------------------------------------------------------------
@@ -365,6 +467,8 @@ test_spent_budget_sleeps
 test_ccusage_unavailable_stays_alive
 test_clean_run_refires_same_window
 test_no_work_sleeps_instead_of_relooping
+test_no_work_probe_wakes_early_on_new_work
+test_no_work_probe_suppresses_stale_candidates
 test_exhausted_run_sleeps_to_reset
 test_failed_run_sleeps_no_rapid_loop
 test_idle_window_fires_from_cold
