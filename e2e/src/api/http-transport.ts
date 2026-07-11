@@ -31,7 +31,10 @@ export class FetchTransport implements HttpTransport {
     if (!res.ok) {
       throw new Error(`POST ${path} failed (${res.status}): ${await res.text()}`);
     }
-    return (await res.json()) as T;
+    // Some endpoints answer 2xx with an empty body (e.g. the ratings
+    // save-current update branch returns no content), so tolerate an empty
+    // response rather than throwing "Unexpected end of JSON input" on parse.
+    return (await res.json().catch(() => ({}))) as T;
   }
 
   async put<T>(path: string, body: unknown = {}): Promise<T> {
