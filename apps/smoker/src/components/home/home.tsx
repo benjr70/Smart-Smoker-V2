@@ -240,6 +240,8 @@ export class Home extends React.Component<
                     className="wifiButton"
                     variant="contained"
                     size="small"
+                    data-testid="smoker-connection-status"
+                    data-connected={this.state.connection}
                     onClick={() => this.setActiveScreen(1)}
                   >
                     {this.state.connection ? <WifiIcon /> : <WifiOffIcon />}

@@ -68,6 +68,31 @@ export class FrontendApp {
     await expect.poll(async () => this.chartDataSize(), { timeout: 30_000 }).toBeGreaterThan(first);
   }
 
+  /**
+   * Reload the whole app and return to the live Smoke step. On mount the chart
+   * re-fetches the current smoke's temps from the backend, so this exercises the
+   * persistence path: a fresh page must rebuild the accumulated series from
+   * stored records rather than from whatever it had in memory.
+   */
+  async reloadToSmokeStep(): Promise<void> {
+    await this.page.reload();
+    await expect(this.stepButton('Pre-Smoke')).toBeVisible();
+    await this.openSmokeStep();
+  }
+
+  /**
+   * After a reload, assert the chart still shows the accumulated series. The
+   * reloaded page seeds the chart from persisted temps before any new live
+   * points could plausibly regrow it, so reaching a comparable size quickly is
+   * evidence the records survived, not that the chart is filling from zero.
+   */
+  async expectChartRetainsSeries(previousSize: number): Promise<void> {
+    await expect(this.chartLines.first()).toBeVisible({ timeout: 30_000 });
+    await expect
+      .poll(async () => this.chartDataSize(), { timeout: 15_000 })
+      .toBeGreaterThanOrEqual(Math.floor(previousSize / 2));
+  }
+
   /** Advance to the Post-Smoke step, enter a rest time, and finish the smoke. */
   async completePostSmoke(restTime: string): Promise<void> {
     await this.stepButton('Post-Smoke').click();
