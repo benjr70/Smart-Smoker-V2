@@ -46,4 +46,21 @@ export class BackendClient {
       throw new Error(`Failed to seed pre-smoke (${res.status}): ${await res.text()}`);
     }
   }
+
+  /**
+   * Number of temperature records persisted for the current smoke.
+   *
+   * `GET /api/temps` returns the current smoke's temps, which is exactly the
+   * series the relay writes as the emulator streams. The temp-chain spec uses
+   * this as a storage-level persistence check that survives a frontend reload:
+   * the records live in the backend, not just the browser chart.
+   */
+  async getCurrentTempCount(): Promise<number> {
+    const res = await fetch(`${this.base}/api/temps`);
+    if (!res.ok) {
+      throw new Error(`Failed to read current temps (${res.status}): ${await res.text()}`);
+    }
+    const temps = (await res.json()) as unknown[];
+    return Array.isArray(temps) ? temps.length : 0;
+  }
 }

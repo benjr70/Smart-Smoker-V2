@@ -135,6 +135,14 @@ describe('Home Component', () => {
     });
   });
 
+  it('should expose the connection indicator with a stable test id and connected state', async () => {
+    render(<Home />);
+
+    const indicator = await screen.findByTestId('smoker-connection-status');
+    // Defaults to connected until a production-mode poll flips it.
+    expect(indicator).toHaveAttribute('data-connected', 'true');
+  });
+
   it('should handle missing smoke profile gracefully', async () => {
     mockGetCurrentSmokeProfile.mockRejectedValue(new Error('No profile found'));
 
