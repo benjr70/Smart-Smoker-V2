@@ -63,4 +63,25 @@ export class BackendClient {
     const temps = (await res.json()) as unknown[];
     return Array.isArray(temps) ? temps.length : 0;
   }
+
+  /**
+   * Poll `GET /api/temps` until at least one record is persisted for the current
+   * smoke, returning the observed count.
+   *
+   * The backend throttles its persist path — it writes roughly one temp record
+   * per handful of streamed frames while smoking — so the first DB write lands a
+   * few seconds after smoking is toggled on (≈5.5s at the 500ms emulator
+   * cadence). A single immediate read races that throttle window and sees `[]`.
+   * This waits across several windows before giving up so the persistence check
+   * is deterministic rather than timing-dependent.
+   */
+  async waitForPersistedTemps(timeoutMs = 30000, intervalMs = 500): Promise<number> {
+    const deadline = Date.now() + timeoutMs;
+    let count = await this.getCurrentTempCount();
+    while (count === 0 && Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, intervalMs));
+      count = await this.getCurrentTempCount();
+    }
+    return count;
+  }
 }

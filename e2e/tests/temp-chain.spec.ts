@@ -54,8 +54,11 @@ test('temp-chain: emulator temps reach smoker + frontend chart and persist acros
     await frontend.waitForGrowingChart();
 
     // 6. Persistence at the storage layer: records accumulate in the backend
-    //    for the active smoke (this is what a reload will rebuild from).
-    const persistedBefore = await backend.getCurrentTempCount();
+    //    for the active smoke (this is what a reload will rebuild from). The
+    //    backend throttles its persist path, so the first write lands a few
+    //    seconds after smoke start — poll across several throttle windows rather
+    //    than reading once and racing it.
+    const persistedBefore = await backend.waitForPersistedTemps();
     expect(persistedBefore).toBeGreaterThan(0);
 
     // 7. Behaviour 2 (persistence): after a full frontend reload the chart still
