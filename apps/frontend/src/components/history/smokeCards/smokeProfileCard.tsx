@@ -95,7 +95,9 @@ export function SmokeProfileCard(props: SmokeProfileCardProps): JSX.Element {
               smoking={false}
               initData={props.temps}
             />
-            <Typography sx={{ fontSize: 18 }}>{props.smokeProfile.woodType} Wood</Typography>
+            <Typography sx={{ fontSize: 18 }} data-testid="review-smoke-woodtype">
+              {props.smokeProfile.woodType} Wood
+            </Typography>
             <Typography padding={1} sx={{ fontSize: 14 }} paragraph={true} color="text.secondary">
               {props.smokeProfile.notes}
             </Typography>

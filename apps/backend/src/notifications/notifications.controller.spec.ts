@@ -3,6 +3,7 @@ import { NotificationsController } from './notifications.controller';
 import { NotificationsService } from './notifications.service';
 import { NotificationSubscription } from './notificationSubscription.schema';
 import { NotificationSettings } from './notificationSettings.schema';
+import { NotificationSettingsDto } from './notificationSettingsDto';
 
 describe('NotificationsController', () => {
   let controller: NotificationsController;
@@ -89,7 +90,9 @@ describe('NotificationsController', () => {
         mockNotificationSettings,
       );
 
-      const result = await controller.setSettings(mockNotificationSettings);
+      const result = await controller.setSettings(
+        mockNotificationSettings as unknown as NotificationSettingsDto,
+      );
 
       expect(service.setSettings).toHaveBeenCalledWith(
         mockNotificationSettings,
@@ -102,7 +105,9 @@ describe('NotificationsController', () => {
       mockNotificationsService.setSettings.mockRejectedValue(error);
 
       await expect(
-        controller.setSettings(mockNotificationSettings),
+        controller.setSettings(
+          mockNotificationSettings as unknown as NotificationSettingsDto,
+        ),
       ).rejects.toThrow('Database error');
     });
   });

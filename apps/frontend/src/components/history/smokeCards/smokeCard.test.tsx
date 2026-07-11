@@ -224,12 +224,13 @@ describe('SmokeCard Component', () => {
     test('should have correct button properties', () => {
       render(<SmokeCard {...mockProps} />);
 
-      const buttons = screen.getAllByTestId('button');
-      expect(buttons).toHaveLength(2);
+      // The action buttons carry e2e test ids, so query them directly rather
+      // than through the shared `button` test id.
+      const viewButton = screen.getByTestId('smoke-card-view-button');
+      const deleteButton = screen.getByTestId('smoke-card-delete-button');
 
-      const viewButton = buttons.find(b => b.textContent === 'View');
-      const deleteButton = buttons.find(b => b.textContent === 'delete');
-
+      expect(viewButton).toHaveTextContent('View');
+      expect(deleteButton).toHaveTextContent('delete');
       expect(viewButton).toHaveAttribute('data-size', 'small');
       expect(deleteButton).toHaveAttribute('data-size', 'small');
       expect(deleteButton).toHaveAttribute('data-color', 'error');

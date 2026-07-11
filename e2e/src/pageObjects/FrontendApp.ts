@@ -85,6 +85,13 @@ export class FrontendApp {
     return this.page.getByTestId('smoke-card-name').filter({ hasText: name });
   }
 
+  /** The whole history card (View/delete actions + name) for a given smoke. */
+  private historyCardFor(name: string): Locator {
+    return this.page
+      .getByTestId('smoke-card')
+      .filter({ has: this.page.getByTestId('smoke-card-name').filter({ hasText: name }) });
+  }
+
   /**
    * The History list only fetches when it mounts, so a just-archived smoke can
    * be missing if the list rendered before the archive was queryable. Re-enter
@@ -98,5 +105,130 @@ export class FrontendApp {
       }
       await expect(this.historyCard(name)).toBeVisible({ timeout: 3_000 });
     }).toPass({ timeout: 20_000 });
+  }
+
+  /** Assert a smoke is absent from the history list, refetching to be sure. */
+  async expectHistoryMissing(name: string): Promise<void> {
+    await expect(async () => {
+      await this.page.getByTestId('nav-smoke').click();
+      await this.page.getByTestId('nav-review').click();
+      await expect(this.historyCard(name)).toHaveCount(0, { timeout: 3_000 });
+    }).toPass({ timeout: 20_000 });
+  }
+
+  /** Open a completed smoke's review from its history card. */
+  async openReview(name: string): Promise<void> {
+    // The ratings card re-persists its value once it loads. Capture that
+    // load-time write here (listener set before the click that triggers it) so
+    // a later re-rating is the last write and isn't clobbered by this one
+    // landing late.
+    const ratingsPersisted = this.page
+      .waitForResponse(
+        res => res.url().includes('/api/ratings/') && res.request().method() === 'POST',
+        { timeout: 15_000 }
+      )
+      .catch(() => undefined);
+    await this.historyCardFor(name).getByTestId('smoke-card-view-button').click();
+    await expect(this.page.getByTestId('review-presmoke-name')).toBeVisible();
+    await ratingsPersisted;
+  }
+
+  /** Delete a completed smoke from its history card. */
+  async deleteFromHistory(name: string): Promise<void> {
+    await this.historyCardFor(name).getByTestId('smoke-card-delete-button').click();
+  }
+
+  /**
+   * Assert the review cards render the values a smoke was finished with. Covers
+   * the pre-smoke, smoke-profile and post-smoke cards in one intent-revealing
+   * check; ratings have their own accessor because they are interactive.
+   */
+  async expectReviewShows(fields: {
+    name: string;
+    meatType: string;
+    weight: string;
+    woodType: string;
+    restTime: string;
+  }): Promise<void> {
+    await expect(this.page.getByTestId('review-presmoke-name')).toHaveText(fields.name);
+    await expect(this.page.getByTestId('review-presmoke-details')).toContainText(fields.meatType);
+    await expect(this.page.getByTestId('review-presmoke-details')).toContainText(fields.weight);
+    await expect(this.page.getByTestId('review-smoke-woodtype')).toContainText(fields.woodType);
+    await expect(this.page.getByTestId('review-postsmoke-resttime')).toContainText(fields.restTime);
+  }
+
+  private get overallTasteRating(): Locator {
+    return this.page.getByTestId('review-rating-overallTaste');
+  }
+
+  /**
+   * Set the Overall Taste rating (1-10) on the currently-open review. The
+   * ratings card persists on change (`POST /api/ratings/:id`); wait for that
+   * write so a following reload reads the new value rather than racing it.
+   */
+  async setOverallTaste(value: number): Promise<void> {
+    const accessibleName = `${value} Star${value === 1 ? '' : 's'}`;
+    // MUI's radio inputs are 1px visually-hidden elements stacked at the start,
+    // so clicking one lands on the first star. The clickable target is each
+    // star's <label>, which overlays its own star and is tied to the input by
+    // id — resolve that so the correct star is selected.
+    const inputId = await this.overallTasteRating
+      .getByRole('radio', { name: accessibleName, exact: true })
+      .getAttribute('id');
+    const star = inputId
+      ? this.overallTasteRating.locator(`label[for="${inputId}"]`)
+      : this.overallTasteRating.getByRole('radio', { name: accessibleName });
+    await Promise.all([
+      // Wait for the write that carries the new value so a following reload
+      // reads it back rather than racing the persist.
+      this.page.waitForResponse(
+        res =>
+          res.url().includes('/api/ratings/') &&
+          res.request().method() === 'POST' &&
+          res.request().postDataJSON()?.overallTaste === value
+      ),
+      star.click(),
+    ]);
+    await this.expectOverallTaste(value);
+  }
+
+  /** Assert the Overall Taste rating shown on the open review. */
+  async expectOverallTaste(value: number): Promise<void> {
+    await expect(this.page.getByTestId('review-rating-overallTaste-value')).toHaveText(
+      `Overall Taste: ${value}`
+    );
+  }
+
+  async openSettings(): Promise<void> {
+    await this.page.getByTestId('nav-settings').click();
+    await expect(this.notificationMessage).toBeVisible();
+  }
+
+  private get notificationMessage(): Locator {
+    // The first notification rule's message field; the suite only exercises one.
+    return this.page.getByTestId('settings-notification-message').first();
+  }
+
+  /** Type a notification message in Settings (persisted when the tab unmounts). */
+  async setNotificationMessage(message: string): Promise<void> {
+    await this.notificationMessage.fill(message);
+  }
+
+  async expectNotificationMessage(message: string): Promise<void> {
+    await expect(this.notificationMessage).toHaveValue(message);
+  }
+
+  /**
+   * Leave Settings via the Smoke tab. Settings persists on unmount, so this is
+   * how a change is committed before a reload re-reads it from the backend.
+   */
+  async leaveSettings(): Promise<void> {
+    await this.page.getByTestId('nav-smoke').click();
+    await expect(this.stepButton('Pre-Smoke')).toBeVisible();
+  }
+
+  async reload(): Promise<void> {
+    await this.page.reload();
+    await expect(this.stepButton('Pre-Smoke')).toBeVisible();
   }
 }

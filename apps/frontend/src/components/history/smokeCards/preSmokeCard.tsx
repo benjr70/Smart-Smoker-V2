@@ -28,10 +28,15 @@ export function PreSmokeCard(props: preSmokeCardProps): JSX.Element {
             <Typography variant="h5" component="div" align={'center'}>
               PreSmoke
             </Typography>
-            <Typography variant="h5" component="div">
+            <Typography variant="h5" component="div" data-testid="review-presmoke-name">
               {props.preSmoke.name}
             </Typography>
-            <Typography sx={{ fontSize: 14 }} paddingBottom={1} color="text.secondary">
+            <Typography
+              sx={{ fontSize: 14 }}
+              paddingBottom={1}
+              color="text.secondary"
+              data-testid="review-presmoke-details"
+            >
               {props.preSmoke.meatType} {props.preSmoke.weight.weight} {props.preSmoke.weight.unit}
             </Typography>
             {props.preSmoke.steps.map((step, index) => {

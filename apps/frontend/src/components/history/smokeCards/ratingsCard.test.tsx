@@ -368,10 +368,11 @@ describe('RatingsCard Component', () => {
       );
       expect(tendernessLabel).toBeInTheDocument();
 
-      const overallTasteLabel = typographies.find(
-        t => t.getAttribute('data-component') === 'legend' && t.textContent === 'Overall Taste: 8.5'
-      );
-      expect(overallTasteLabel).toBeInTheDocument();
+      // The Overall Taste legend carries an e2e test id, so query it directly
+      // rather than through the shared `typography` test id.
+      const overallTasteLabel = screen.getByTestId('review-rating-overallTaste-value');
+      expect(overallTasteLabel).toHaveAttribute('data-component', 'legend');
+      expect(overallTasteLabel).toHaveTextContent('Overall Taste: 8.5');
     });
   });
 

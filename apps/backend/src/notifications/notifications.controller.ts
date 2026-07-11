@@ -3,6 +3,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
 import { NotificationSubscription } from './notificationSubscription.schema';
 import { NotificationSettings } from './notificationSettings.schema';
+import { NotificationSettingsDto } from './notificationSettingsDto';
 
 @ApiTags('Notifications')
 @Controller('api/notifications')
@@ -18,9 +19,14 @@ export class NotificationsController {
 
   @Post('/settings')
   setSettings(
-    @Body() settings: NotificationSettings,
+    @Body() settings: NotificationSettingsDto,
   ): Promise<NotificationSettings> {
-    return this.notificationsService.setSettings(settings);
+    // The DTO carries client-typed fields (e.g. lastNotificationSent as an ISO
+    // string); Mongoose coerces them on save, so hand the validated body to the
+    // schema-typed service unchanged.
+    return this.notificationsService.setSettings(
+      settings as unknown as NotificationSettings,
+    );
   }
 
   @Get('/settings')

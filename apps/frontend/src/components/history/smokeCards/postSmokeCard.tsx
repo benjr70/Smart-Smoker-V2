@@ -28,7 +28,7 @@ export function PostSmokeCard(props: preSmokeCardProps): JSX.Element {
             <Typography variant="h5" component="div" align={'center'}>
               PostSmoke
             </Typography>
-            <Typography variant="h6" component="div">
+            <Typography variant="h6" component="div" data-testid="review-postsmoke-resttime">
               Rest Time: {props.postSmoke.restTime}
             </Typography>
             {props.postSmoke.steps.map((step, index) => {

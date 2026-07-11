@@ -61,10 +61,19 @@ export function SmokeCard(props: SmokeCardProps): JSX.Element {
               value={parseFloat(props.overAllRatings)}
             />
             <CardActions sx={{ display: 'flex', justifyContent: 'space-between' }}>
-              <Button size="small" onClick={() => props.onViewClick(props.smokeId)}>
+              <Button
+                size="small"
+                data-testid="smoke-card-view-button"
+                onClick={() => props.onViewClick(props.smokeId)}
+              >
                 View
               </Button>
-              <Button size="small" color="error" onClick={() => props.onDeleteClick(props.smokeId)}>
+              <Button
+                size="small"
+                color="error"
+                data-testid="smoke-card-delete-button"
+                onClick={() => props.onDeleteClick(props.smokeId)}
+              >
                 delete
               </Button>
             </CardActions>
