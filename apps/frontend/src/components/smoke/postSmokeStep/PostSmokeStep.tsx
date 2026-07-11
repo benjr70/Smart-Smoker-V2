@@ -53,6 +53,7 @@ export const PostSmokeStep: React.FC<PostSmokeStepProps> = ({ nextButton }) => {
         onChange={(event: any) =>
           setPostSmokeState({ ...postSmokeState, restTime: event.target.value })
         }
+        inputProps={{ 'data-testid': 'postsmoke-rest-time-input' }}
         InputProps={{
           inputComponent: TextMaskCustom as any,
         }}

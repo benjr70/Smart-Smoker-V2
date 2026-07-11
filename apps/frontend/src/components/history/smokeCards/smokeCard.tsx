@@ -41,9 +41,9 @@ export function SmokeCard(props: SmokeCardProps): JSX.Element {
   return (
     <Grid>
       <ThemeProvider theme={theme}>
-        <Card>
+        <Card data-testid="smoke-card">
           <CardContent>
-            <Typography variant="h5" component="div">
+            <Typography variant="h5" component="div" data-testid="smoke-card-name">
               {props.name}
             </Typography>
             <Typography sx={{ fontSize: 14 }} color="text.secondary">

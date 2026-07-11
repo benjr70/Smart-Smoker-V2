@@ -40,7 +40,13 @@ export function Smoke(): JSX.Element {
 
   let step;
   const nextButton = (
-    <Button className="nextButton" variant="contained" size="small" onClick={() => nextStep()}>
+    <Button
+      className="nextButton"
+      variant="contained"
+      size="small"
+      data-testid="smoke-next-button"
+      onClick={() => nextStep()}
+    >
       {activeStep === 2 ? 'Finish' : 'Next'}
     </Button>
   );
@@ -63,7 +69,11 @@ export function Smoke(): JSX.Element {
         <Stepper nonLinear alternativeLabel activeStep={activeStep}>
           {steps.map((label, index) => (
             <Step key={label}>
-              <StepButton color="inherit" onClick={() => handleStep(index)}>
+              <StepButton
+                color="inherit"
+                data-testid={`smoke-step-${label}`}
+                onClick={() => handleStep(index)}
+              >
                 {label}
               </StepButton>
             </Step>

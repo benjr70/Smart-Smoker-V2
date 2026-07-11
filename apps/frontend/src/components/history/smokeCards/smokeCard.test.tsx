@@ -10,7 +10,7 @@ jest.mock('@mui/material', () => ({
       {children}
     </button>
   ),
-  Card: ({ children, ...props }: any) => (
+  Card: ({ children, 'data-testid': _dataTestId, ...props }: any) => (
     <div data-testid="card" {...props}>
       {children}
     </div>
@@ -48,7 +48,15 @@ jest.mock('@mui/material', () => ({
       {children}
     </div>
   ),
-  Typography: ({ children, variant, component, sx, color, ...props }: any) => (
+  Typography: ({
+    children,
+    variant,
+    component,
+    sx,
+    color,
+    'data-testid': _dataTestId,
+    ...props
+  }: any) => (
     <div
       data-testid="typography"
       data-variant={variant}
