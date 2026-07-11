@@ -88,7 +88,7 @@ COPY --from=build /workspace/apps/frontend/dist /usr/share/nginx/html
 COPY apps/frontend/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 3000
 HEALTHCHECK --interval=10s --timeout=5s --retries=15 --start-period=10s \
-    CMD wget -qO- http://localhost:3000/ >/dev/null 2>&1 || exit 1
+    CMD wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 || exit 1
 
 # ---------------------------------------------------------------------------
 # smoker runtime (nginx serving the touchscreen web bundle)
@@ -98,4 +98,4 @@ COPY --from=build /workspace/apps/smoker/dist /usr/share/nginx/html
 COPY apps/smoker/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=5s --retries=15 --start-period=10s \
-    CMD wget -qO- http://localhost:8080/ >/dev/null 2>&1 || exit 1
+    CMD wget -qO- http://127.0.0.1:8080/ >/dev/null 2>&1 || exit 1
