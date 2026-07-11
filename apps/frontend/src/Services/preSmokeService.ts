@@ -2,6 +2,18 @@ import { preSmoke } from '../components/common/interfaces/preSmoke';
 
 const envUrl = process.env.REACT_APP_CLOUD_URL;
 
+// Coerce a weight value to a number for the backend `@IsNumber()` DTO. The UI
+// text input stores the weight as a string at runtime, so a raw forward would
+// 400 on the strict edge. Empty/undefined weights become `undefined` (not
+// `NaN`, which would still fail validation) so the shape stays unambiguous.
+const toNumericWeight = (value: unknown): number | undefined => {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+  const numeric = Number(value);
+  return Number.isNaN(numeric) ? undefined : numeric;
+};
+
 // Project a pre-smoke down to exactly the fields the backend PreSmokeDto
 // whitelists. A fetched current pre-smoke document carries persisted `_id`/`__v`
 // (and a `weight._id` on the nested subdocument) that the strict validation edge
@@ -11,7 +23,7 @@ const toPreSmokePayload = (presmoke: preSmoke) => ({
   meatType: presmoke.meatType,
   weight: {
     unit: presmoke.weight?.unit,
-    weight: presmoke.weight?.weight,
+    weight: toNumericWeight(presmoke.weight?.weight),
   },
   steps: presmoke.steps,
   notes: presmoke.notes,
