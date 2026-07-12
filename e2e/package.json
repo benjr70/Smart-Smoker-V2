@@ -7,6 +7,7 @@
     "test": "playwright test",
     "test:hermetic": "playwright test --project=hermetic",
     "test:deployed": "E2E_TARGET=deployed playwright test --project=deployed",
+    "test:virtual-smoker": "E2E_TARGET=virtual-smoker playwright test --project=virtual-smoker",
     "test:unit": "node --test \"src/**/*.test.mts\"",
     "test:workflow": "node --test ci/*.test.mts",
     "stack:up": "docker compose -f docker/docker-compose.e2e.yml up --build -d",

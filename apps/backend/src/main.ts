@@ -30,12 +30,18 @@ async function bootstrap() {
       // Production cloud (accessed via Tailscale Serve HTTPS)
       'https://smokecloud.tail74646.ts.net',
       'https://smokecloud.tail74646.ts.net:8443',
-      // Dev cloud (accessed via Tailscale Serve HTTPS)
-      'https://smoker-dev-cloud.tail74646.ts.net',
-      'https://smoker-dev-cloud.tail74646.ts.net:8443',
-      // Smoker devices (accessed via direct HTTP - no Tailscale Serve)
+      // Dev cloud (accessed via Tailscale Serve HTTPS; renamed from
+      // smoker-dev-cloud in PR #262)
+      'https://smart-smoker-dev-cloud.tail74646.ts.net',
+      'https://smart-smoker-dev-cloud.tail74646.ts.net:8443',
+      // Smoker devices (direct HTTP - no Tailscale Serve). On the device
+      // itself the app loads from localhost/short name; the post-deploy e2e
+      // browser reaches the same UI over the tailnet FQDN, so both origin
+      // spellings must be allowed.
       'http://virtual-smoker:8080',
+      'http://virtual-smoker.tail74646.ts.net:8080',
       'http://smoker:8080',
+      'http://smoker.tail74646.ts.net:8080',
       // Local development
       'http://localhost:8080',
       'http://localhost:3000',

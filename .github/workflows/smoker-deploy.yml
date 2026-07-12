@@ -93,3 +93,102 @@ jobs:
 
       - name: docker compose remove old containers
         run: sudo docker system prune -a --volumes --force
+
+  # Post-deploy temperature-chain verification (PRD #314, issue #321). Runs the
+  # `virtual-smoker` Playwright project — the full temp-chain journey — against
+  # the real deployed topology: the smoker UI + device-service emulator on the
+  # virtual-smoker box (reached over the tailnet), with the frontend + backend
+  # on dev-cloud (the box's published smoker image writes to the dev database).
+  # Runs on a tailnet-connected runner AFTER the deploy job (which includes the
+  # existing shallow smoke probe), complementing the hermetic PR gate by
+  # verifying published images in the deployed topology.
+  #
+  # Every write goes through the backend fixture: the suite's global setup
+  # sweeps any smoke-test-* leftovers and preflights every service health
+  # endpoint (so an unreachable box surfaces as a named connectivity failure,
+  # not a misleading spec assertion), and each spec cleans up after itself, so
+  # no residue is left in the dev database.
+  #
+  # Blocking: a failed temp-chain fails the run, with Playwright traces + the
+  # HTML report uploaded on failure.
+  virtual-smoker-e2e:
+    needs: deploy
+    if: success()
+    runs-on: [self-hosted, linux, proxmox]
+    env:
+      VIRTUAL_SMOKER_FQDN: ${{ vars.VIRTUAL_SMOKER_FQDN || 'virtual-smoker.tail74646.ts.net' }}
+      DEV_CLOUD_FQDN: ${{ vars.DEV_CLOUD_FQDN || 'smart-smoker-dev-cloud.tail74646.ts.net' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node for e2e
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Use npm 10
+        run: npm i -g npm@10
+
+      - name: Install workspace dependencies
+        run: npm ci --legacy-peer-deps
+
+      # The smoker bundle's temp relay is hardcoded to the on-device address
+      # (io('http://127.0.0.1:3003') in the smoker app) because on a real
+      # smoker the Electron kiosk and device-service share the box. The
+      # virtual-smoker box runs no browser — the only live smoker-app instance
+      # is this job's test browser — so forward the runner's localhost:3003 to
+      # the box's device-service for the duration of the job. The test browser
+      # runs with --network host (below), so its 127.0.0.1:3003 lands on this
+      # forward.
+      - name: Forward device-service port for the smoker temp relay
+        run: |
+          docker rm -f e2e-device-forward 2>/dev/null || true
+          docker run -d --name e2e-device-forward --network host alpine/socat \
+            TCP-LISTEN:3003,fork,reuseaddr TCP:${{ env.VIRTUAL_SMOKER_FQDN }}:3003
+
+      # The self-hosted runner has no passwordless sudo, so
+      # `playwright install --with-deps` cannot install browser system
+      # libraries on the host (this killed the first deployed-e2e run, see
+      # PR #340). Run the journey inside the official Playwright image instead
+      # (browsers + OS deps baked in, version pinned to the workspace
+      # @playwright/test). --network host keeps tailnet MagicDNS resolution;
+      # --ipc host avoids chromium /dev/shm crashes; running as the runner uid
+      # keeps report files owned by the runner so the next checkout's
+      # `git clean` works.
+      - name: Run virtual-smoker temp-chain journey (playwright container)
+        env:
+          CI: 'true'
+          E2E_TARGET: virtual-smoker
+          # Smoker UI + device-service emulator live on the virtual-smoker box.
+          E2E_SMOKER_URL: http://${{ env.VIRTUAL_SMOKER_FQDN }}:8080
+          E2E_DEVICE_URL: http://${{ env.VIRTUAL_SMOKER_FQDN }}:3003
+          # Frontend + backend are the dev-cloud stack the box writes to.
+          E2E_FRONTEND_URL: https://${{ env.DEV_CLOUD_FQDN }}
+          E2E_BACKEND_URL: https://${{ env.DEV_CLOUD_FQDN }}:8443
+        run: |
+          PLAYWRIGHT_VERSION=$(node -p "require('./node_modules/@playwright/test/package.json').version")
+          docker run --rm --network host --ipc host \
+            --user "$(id -u):$(id -g)" \
+            -v "$PWD":/repo -w /repo/e2e \
+            -e HOME=/tmp \
+            -e CI -e E2E_TARGET \
+            -e E2E_FRONTEND_URL -e E2E_BACKEND_URL -e E2E_SMOKER_URL -e E2E_DEVICE_URL \
+            "mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble" \
+            npm run test:virtual-smoker
+
+      - name: Stop device-service port forward
+        if: always()
+        run: docker rm -f e2e-device-forward 2>/dev/null || true
+
+      - name: Upload virtual-smoker e2e report and traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoker-deploy-temp-chain-report
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+          if-no-files-found: ignore
+          retention-days: 14

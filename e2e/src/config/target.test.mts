@@ -19,6 +19,20 @@ const DEPLOYED_ENV = {
   E2E_DEVICE_URL: 'https://device.example.com',
 } satisfies NodeJS.ProcessEnv;
 
+/**
+ * The virtual-smoker target aims the temp-chain journey at the real deployed
+ * topology: the smoker UI + device-service emulator live on the virtual-smoker
+ * box, while the frontend + backend are the dev-cloud stack the box's smoker
+ * image is built to write to.
+ */
+const VIRTUAL_SMOKER_ENV = {
+  E2E_TARGET: 'virtual-smoker',
+  E2E_FRONTEND_URL: 'https://dev-cloud.example.com',
+  E2E_SMOKER_URL: 'http://virtual-smoker.example.com:8080',
+  E2E_BACKEND_URL: 'https://dev-cloud.example.com:8443',
+  E2E_DEVICE_URL: 'http://virtual-smoker.example.com:3003',
+} satisfies NodeJS.ProcessEnv;
+
 describe('resolveTarget', () => {
   it('defaults to the hermetic target with localhost URLs when env is empty', () => {
     const resolved = resolveTarget({});
@@ -59,5 +73,23 @@ describe('resolveTarget', () => {
     const { E2E_BACKEND_URL: _omitted, ...missingBackend } = DEPLOYED_ENV;
 
     assert.throws(() => resolveTarget(missingBackend), /E2E_BACKEND_URL/);
+  });
+
+  it('selects the virtual-smoker target and uses the supplied box + dev-cloud URLs', () => {
+    const resolved = resolveTarget(VIRTUAL_SMOKER_ENV);
+
+    assert.equal(resolved.target, 'virtual-smoker');
+    // Frontend + backend are the dev-cloud stack.
+    assert.equal(resolved.urls.frontend, 'https://dev-cloud.example.com');
+    assert.equal(resolved.urls.backend, 'https://dev-cloud.example.com:8443');
+    // Smoker UI + device-service emulator live on the box.
+    assert.equal(resolved.urls.smoker, 'http://virtual-smoker.example.com:8080');
+    assert.equal(resolved.urls.device, 'http://virtual-smoker.example.com:3003');
+  });
+
+  it('refuses a virtual-smoker target that is missing a service URL (never falls back to localhost)', () => {
+    const { E2E_SMOKER_URL: _omitted, ...missingSmoker } = VIRTUAL_SMOKER_ENV;
+
+    assert.throws(() => resolveTarget(missingSmoker), /E2E_SMOKER_URL/);
   });
 });

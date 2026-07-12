@@ -289,7 +289,43 @@ export class BackendFixture {
     for (const doc of leftovers) {
       await this.http.delete(`${PRESMOKE_PATH}/${doc._id}`);
     }
+    await this.clearDanglingCurrentSmoke();
     await this.sweepNotificationSettings();
+  }
+
+  /**
+   * Heal a poisoned current smoke. When a crashed run's `smoke-test-*`
+   * pre-smoke is deleted (by its own `cleanup()` or by the sweep above) while
+   * it is still the *current* smoke, the state keeps an in-progress smoke whose
+   * `preSmokeId` points at a deleted document — and from then on every
+   * `POST /api/presmoke` 404s on the stale reference, so no journey can start.
+   * Detect exactly that shape, cascade-delete the orphaned smoke, and clear the
+   * state. A real in-progress smoke still has its pre-smoke document, so it is
+   * never touched.
+   */
+  private async clearDanglingCurrentSmoke(): Promise<void> {
+    const state = await this.http.get<{ smokeId?: string }>(STATE_PATH).catch(() => null);
+    if (!state?.smokeId) {
+      return;
+    }
+    const smoke = await this.http
+      .get<SmokeDoc>(`${SMOKE_PATH}/${state.smokeId}`)
+      .catch(() => null);
+    if (!smoke?.preSmokeId) {
+      return;
+    }
+    const pre = await this.http
+      .get<NamedDoc>(`${PRESMOKE_PATH}/${smoke.preSmokeId}`)
+      .catch(() => null);
+    if (pre?._id) {
+      return;
+    }
+    try {
+      await this.deleteCompletedSmoke(state.smokeId);
+    } catch {
+      /* best-effort — clearing the state below is what unblocks pre-smoke saves */
+    }
+    await this.http.put(`${STATE_PATH}/clearSmoke`);
   }
 
   /**
