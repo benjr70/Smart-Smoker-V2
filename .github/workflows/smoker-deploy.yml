@@ -134,12 +134,30 @@ jobs:
       - name: Install workspace dependencies
         run: npm ci --legacy-peer-deps
 
-      - name: Install Playwright browser (chromium)
-        working-directory: e2e
-        run: npx playwright install --with-deps chromium
+      # The smoker bundle's temp relay is hardcoded to the on-device address
+      # (io('http://127.0.0.1:3003') in the smoker app) because on a real
+      # smoker the Electron kiosk and device-service share the box. The
+      # virtual-smoker box runs no browser — the only live smoker-app instance
+      # is this job's test browser — so forward the runner's localhost:3003 to
+      # the box's device-service for the duration of the job. The test browser
+      # runs with --network host (below), so its 127.0.0.1:3003 lands on this
+      # forward.
+      - name: Forward device-service port for the smoker temp relay
+        run: |
+          docker rm -f e2e-device-forward 2>/dev/null || true
+          docker run -d --name e2e-device-forward --network host alpine/socat \
+            TCP-LISTEN:3003,fork,reuseaddr TCP:${{ env.VIRTUAL_SMOKER_FQDN }}:3003
 
-      - name: Run virtual-smoker temp-chain journey
-        working-directory: e2e
+      # The self-hosted runner has no passwordless sudo, so
+      # `playwright install --with-deps` cannot install browser system
+      # libraries on the host (this killed the first deployed-e2e run, see
+      # PR #340). Run the journey inside the official Playwright image instead
+      # (browsers + OS deps baked in, version pinned to the workspace
+      # @playwright/test). --network host keeps tailnet MagicDNS resolution;
+      # --ipc host avoids chromium /dev/shm crashes; running as the runner uid
+      # keeps report files owned by the runner so the next checkout's
+      # `git clean` works.
+      - name: Run virtual-smoker temp-chain journey (playwright container)
         env:
           CI: 'true'
           E2E_TARGET: virtual-smoker
@@ -149,7 +167,20 @@ jobs:
           # Frontend + backend are the dev-cloud stack the box writes to.
           E2E_FRONTEND_URL: https://${{ env.DEV_CLOUD_FQDN }}
           E2E_BACKEND_URL: https://${{ env.DEV_CLOUD_FQDN }}:8443
-        run: npm run test:virtual-smoker
+        run: |
+          PLAYWRIGHT_VERSION=$(node -p "require('./node_modules/@playwright/test/package.json').version")
+          docker run --rm --network host --ipc host \
+            --user "$(id -u):$(id -g)" \
+            -v "$PWD":/repo -w /repo/e2e \
+            -e HOME=/tmp \
+            -e CI -e E2E_TARGET \
+            -e E2E_FRONTEND_URL -e E2E_BACKEND_URL -e E2E_SMOKER_URL -e E2E_DEVICE_URL \
+            "mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble" \
+            npm run test:virtual-smoker
+
+      - name: Stop device-service port forward
+        if: always()
+        run: docker rm -f e2e-device-forward 2>/dev/null || true
 
       - name: Upload virtual-smoker e2e report and traces
         if: failure()

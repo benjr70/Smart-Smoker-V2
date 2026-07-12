@@ -226,6 +226,38 @@ describe('BackendFixture.sweep', () => {
     assert.deepEqual(http.deletes, []);
   });
 
+  it('heals a dangling current smoke whose pre-smoke was deleted', async () => {
+    // A prior crashed run's cleanup deleted the smoke-test-* pre-smoke while it
+    // was still current: POST /api/presmoke now 404s until the state is cleared.
+    http.getResponses['/api/state'] = { smokeId: 'smoke-9' };
+    http.getResponses['/api/smoke/smoke-9'] = {
+      _id: 'smoke-9',
+      preSmokeId: 'pre-gone', // no canned response — reads as deleted
+      tempsId: 'temps-1',
+    };
+
+    await fixture.sweep();
+
+    assert.ok(http.deletes.includes('/api/smoke/smoke-9'), 'orphaned smoke must be deleted');
+    assert.ok(http.deletes.includes('/api/temps/temps-1'), 'orphan sub-entities must cascade');
+    assert.deepEqual(
+      http.puts.map(p => p.path),
+      ['/api/state/clearSmoke'],
+      'state must be cleared so the next pre-smoke save starts fresh',
+    );
+  });
+
+  it('never touches a live current smoke whose pre-smoke still exists', async () => {
+    http.getResponses['/api/state'] = { smokeId: 'smoke-9' };
+    http.getResponses['/api/smoke/smoke-9'] = { _id: 'smoke-9', preSmokeId: 'pre-live' };
+    http.getResponses['/api/presmoke/pre-live'] = { _id: 'pre-live', name: 'Real Brisket' };
+
+    await fixture.sweep();
+
+    assert.deepEqual(http.deletes, []);
+    assert.deepEqual(http.puts, []);
+  });
+
   it('strips only smoke-test-* notification rules a crashed run left, keeping real ones', async () => {
     http.getResponses['/api/presmoke/all'] = [];
     http.getResponses['/api/notifications/settings'] = {
