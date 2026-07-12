@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
-import { BackendClient } from '../src/api/BackendClient';
+import { BackendFixture } from '../src/api/backend-fixture';
+import { isTestEntityName } from '../src/api/test-entity';
 import { FrontendApp } from '../src/pageObjects/FrontendApp';
 import { SmokerApp } from '../src/pageObjects/SmokerApp';
 
@@ -25,11 +26,13 @@ import { SmokerApp } from '../src/pageObjects/SmokerApp';
 test('lifecycle: pre-smoke -> smoke -> live chart -> post-smoke -> history', async ({
   browser,
 }) => {
-  const smokeName = `E2E Brisket ${Date.now()}`;
   const restTime = '00:30';
 
-  // 1. Create the pre-smoke; the backend sets up the current smoke + state.
-  await new BackendClient().createPreSmoke({ name: smokeName });
+  // 1. Create the pre-smoke through the fixture; the backend sets up the current
+  //    smoke + state. The fixture names it with the `smoke-test-` prefix so the
+  //    record is always attributable and reclaimable by cleanup()/sweep().
+  const fixture = new BackendFixture();
+  const { name: smokeName } = await fixture.createPreSmoke({ label: 'brisket' });
 
   const frontendContext = await browser.newContext();
   const smokerContext = await browser.newContext();
@@ -60,7 +63,9 @@ test('lifecycle: pre-smoke -> smoke -> live chart -> post-smoke -> history', asy
   } finally {
     await frontendContext.close();
     await smokerContext.close();
+    // Delete exactly what this run seeded, pass or fail.
+    await fixture.cleanup();
   }
 
-  expect(smokeName).toContain('E2E Brisket');
+  expect(isTestEntityName(smokeName)).toBe(true);
 });

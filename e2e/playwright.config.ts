@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
-import { resolveUrls } from './src/config/urls';
+import { resolveTarget } from './src/config/target';
 
-const urls = resolveUrls();
+const { target, urls } = resolveTarget();
 const isCI = !!process.env.CI;
 
 /**
@@ -30,7 +30,10 @@ export default defineConfig({
   },
   projects: [
     {
-      name: 'hermetic',
+      // Named for the resolved target: `hermetic` (default, the PR gate) runs
+      // against the local compose stack; `deployed` aims the same specs at
+      // env-provided URLs.
+      name: target,
       use: { ...devices['Desktop Chrome'] },
     },
   ],

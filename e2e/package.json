@@ -6,6 +6,7 @@
   "scripts": {
     "test": "playwright test",
     "test:hermetic": "playwright test --project=hermetic",
+    "test:unit": "node --test \"src/**/*.test.mts\"",
     "test:workflow": "node --test ci/*.test.mts",
     "stack:up": "docker compose -f docker/docker-compose.e2e.yml up --build -d",
     "stack:down": "docker compose -f docker/docker-compose.e2e.yml down -v",
