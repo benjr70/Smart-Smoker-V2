@@ -49,6 +49,18 @@
     shell: /bin/bash
     create_home: true
 
+# Workflows run docker directly on this runner (e2e journeys execute inside
+# the official Playwright image — see dev-deploy.yml deployed-e2e). Without
+# docker-group membership every `docker run` dies with "permission denied
+# while trying to connect to the docker API". The runner service must be
+# restarted (or the box rebooted) after the first grant for the group to
+# take effect on the service process.
+- name: Add runner user to docker group
+  ansible.builtin.user:
+    name: "{{ github_runner_user }}"
+    groups: docker
+    append: true
+
 - name: Create runner directory
   ansible.builtin.file:
     path: "{{ github_runner_install_dir }}"
