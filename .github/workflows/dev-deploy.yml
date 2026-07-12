@@ -465,12 +465,16 @@ jobs:
       - name: Install workspace dependencies
         run: npm ci --legacy-peer-deps
 
-      - name: Install Playwright browser (chromium)
-        working-directory: e2e
-        run: npx playwright install --with-deps chromium
-
-      - name: Run deployed user journeys
-        working-directory: e2e
+      # The self-hosted runner has no passwordless sudo, so
+      # `playwright install --with-deps` cannot install browser system
+      # libraries on the host. Run the journeys inside the official Playwright
+      # image instead (browsers + OS deps baked in, version pinned to the
+      # workspace @playwright/test). --network host keeps the container in the
+      # runner's network namespace so tailnet MagicDNS names resolve; --ipc
+      # host avoids chromium /dev/shm crashes; running as the runner uid keeps
+      # report/test-result files owned by the runner so the next checkout's
+      # `git clean` can remove them.
+      - name: Run deployed user journeys (playwright container)
         env:
           CI: 'true'
           E2E_TARGET: deployed
@@ -481,7 +485,16 @@ jobs:
           E2E_BACKEND_URL: https://${{ env.DEV_FQDN }}:8443
           E2E_SMOKER_URL: https://${{ env.DEV_FQDN }}
           E2E_DEVICE_URL: https://${{ env.DEV_FQDN }}:8443
-        run: npm run test:deployed
+        run: |
+          PLAYWRIGHT_VERSION=$(node -p "require('./node_modules/@playwright/test/package.json').version")
+          docker run --rm --network host --ipc host \
+            --user "$(id -u):$(id -g)" \
+            -v "$PWD":/repo -w /repo/e2e \
+            -e HOME=/tmp \
+            -e CI -e E2E_TARGET \
+            -e E2E_FRONTEND_URL -e E2E_BACKEND_URL -e E2E_SMOKER_URL -e E2E_DEVICE_URL \
+            "mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble" \
+            npm run test:deployed
 
       - name: Upload deployed e2e report and traces
         if: failure()
