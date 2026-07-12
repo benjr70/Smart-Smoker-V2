@@ -22,50 +22,57 @@ import { SmokerApp } from '../src/pageObjects/SmokerApp';
  * UI so the tracer bullet stays centred on the live temperature pipeline and
  * the interactive lifecycle steps; UI-driven pre-smoke entry is exercised by
  * the secondary-flow specs in a later slice.
+ *
+ * Tagged `@virtual-smoker`: the same journey logic is reused as the post-deploy
+ * temperature-chain verification against the virtual-smoker box (smoker UI +
+ * device-service emulator on the box, backend + frontend on dev-cloud). The
+ * fixture's `smoke-test-` prefix + cleanup keep the dev database clean.
  */
-test('lifecycle: pre-smoke -> smoke -> live chart -> post-smoke -> history', async ({
-  browser,
-}) => {
-  const restTime = '00:30';
+test(
+  'lifecycle: pre-smoke -> smoke -> live chart -> post-smoke -> history',
+  { tag: '@virtual-smoker' },
+  async ({ browser }) => {
+    const restTime = '00:30';
 
-  // 1. Create the pre-smoke through the fixture; the backend sets up the current
-  //    smoke + state. The fixture names it with the `smoke-test-` prefix so the
-  //    record is always attributable and reclaimable by cleanup()/sweep().
-  const fixture = new BackendFixture();
-  const { name: smokeName } = await fixture.createPreSmoke({ label: 'brisket' });
+    // 1. Create the pre-smoke through the fixture; the backend sets up the current
+    //    smoke + state. The fixture names it with the `smoke-test-` prefix so the
+    //    record is always attributable and reclaimable by cleanup()/sweep().
+    const fixture = new BackendFixture();
+    const { name: smokeName } = await fixture.createPreSmoke({ label: 'brisket' });
 
-  const frontendContext = await browser.newContext();
-  const smokerContext = await browser.newContext();
-  const frontend = new FrontendApp(await frontendContext.newPage());
-  const smoker = new SmokerApp(await smokerContext.newPage());
+    const frontendContext = await browser.newContext();
+    const smokerContext = await browser.newContext();
+    const frontend = new FrontendApp(await frontendContext.newPage());
+    const smoker = new SmokerApp(await smokerContext.newPage());
 
-  try {
-    // 2. Open the frontend on the live Smoke step.
-    await frontend.goto();
-    await frontend.expectPreSmokeLoaded(smokeName);
-    await frontend.openSmokeStep();
+    try {
+      // 2. Open the frontend on the live Smoke step.
+      await frontend.goto();
+      await frontend.expectPreSmokeLoaded(smokeName);
+      await frontend.openSmokeStep();
 
-    // 3. Start the smoke from the smoker touchscreen UI.
-    await smoker.goto();
-    await smoker.startSmoke();
+      // 3. Start the smoke from the smoker touchscreen UI.
+      await smoker.goto();
+      await smoker.startSmoke();
 
-    // 4. Emulator temps must flow to the smoker readout and grow the frontend
-    //    chart (device-service -> smoker relay -> backend -> frontend).
-    await smoker.waitForLiveTemps();
-    await frontend.waitForGrowingChart();
+      // 4. Emulator temps must flow to the smoker readout and grow the frontend
+      //    chart (device-service -> smoker relay -> backend -> frontend).
+      await smoker.waitForLiveTemps();
+      await frontend.waitForGrowingChart();
 
-    // 5. Complete the post-smoke, which archives the smoke.
-    await frontend.completePostSmoke(restTime);
+      // 5. Complete the post-smoke, which archives the smoke.
+      await frontend.completePostSmoke(restTime);
 
-    // 6. The finished smoke is visible in history under its pre-smoke name.
-    await frontend.openHistory();
-    await frontend.expectHistoryContains(smokeName);
-  } finally {
-    await frontendContext.close();
-    await smokerContext.close();
-    // Delete exactly what this run seeded, pass or fail.
-    await fixture.cleanup();
+      // 6. The finished smoke is visible in history under its pre-smoke name.
+      await frontend.openHistory();
+      await frontend.expectHistoryContains(smokeName);
+    } finally {
+      await frontendContext.close();
+      await smokerContext.close();
+      // Delete exactly what this run seeded, pass or fail.
+      await fixture.cleanup();
+    }
+
+    expect(isTestEntityName(smokeName)).toBe(true);
   }
-
-  expect(isTestEntityName(smokeName)).toBe(true);
-});
+);

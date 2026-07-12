@@ -93,3 +93,71 @@ jobs:
 
       - name: docker compose remove old containers
         run: sudo docker system prune -a --volumes --force
+
+  # Post-deploy temperature-chain verification (PRD #314, issue #321). Runs the
+  # `virtual-smoker` Playwright project — the full temp-chain journey — against
+  # the real deployed topology: the smoker UI + device-service emulator on the
+  # virtual-smoker box (reached over the tailnet), with the frontend + backend
+  # on dev-cloud (the box's published smoker image writes to the dev database).
+  # Runs on a tailnet-connected runner AFTER the deploy job (which includes the
+  # existing shallow smoke probe), complementing the hermetic PR gate by
+  # verifying published images in the deployed topology.
+  #
+  # Every write goes through the backend fixture: the suite's global setup
+  # sweeps any smoke-test-* leftovers and preflights every service health
+  # endpoint (so an unreachable box surfaces as a named connectivity failure,
+  # not a misleading spec assertion), and each spec cleans up after itself, so
+  # no residue is left in the dev database.
+  #
+  # Blocking: a failed temp-chain fails the run, with Playwright traces + the
+  # HTML report uploaded on failure.
+  virtual-smoker-e2e:
+    needs: deploy
+    if: success()
+    runs-on: [self-hosted, linux, proxmox]
+    env:
+      VIRTUAL_SMOKER_FQDN: ${{ vars.VIRTUAL_SMOKER_FQDN || 'virtual-smoker.tail74646.ts.net' }}
+      DEV_CLOUD_FQDN: ${{ vars.DEV_CLOUD_FQDN || 'smart-smoker-dev-cloud.tail74646.ts.net' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node for e2e
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Use npm 10
+        run: npm i -g npm@10
+
+      - name: Install workspace dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Install Playwright browser (chromium)
+        working-directory: e2e
+        run: npx playwright install --with-deps chromium
+
+      - name: Run virtual-smoker temp-chain journey
+        working-directory: e2e
+        env:
+          CI: 'true'
+          E2E_TARGET: virtual-smoker
+          # Smoker UI + device-service emulator live on the virtual-smoker box.
+          E2E_SMOKER_URL: http://${{ env.VIRTUAL_SMOKER_FQDN }}:8080
+          E2E_DEVICE_URL: http://${{ env.VIRTUAL_SMOKER_FQDN }}:3003
+          # Frontend + backend are the dev-cloud stack the box writes to.
+          E2E_FRONTEND_URL: https://${{ env.DEV_CLOUD_FQDN }}
+          E2E_BACKEND_URL: https://${{ env.DEV_CLOUD_FQDN }}:8443
+        run: npm run test:virtual-smoker
+
+      - name: Upload virtual-smoker e2e report and traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoker-deploy-temp-chain-report
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+          if-no-files-found: ignore
+          retention-days: 14

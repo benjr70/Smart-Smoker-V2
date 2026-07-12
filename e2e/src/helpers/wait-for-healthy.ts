@@ -4,7 +4,7 @@
  * Playwright global setup; the compose healthchecks gate container ordering,
  * this gates the test run itself.
  */
-import { resolveUrls } from '../config/urls';
+import { resolveUrls } from '../config/urls.ts';
 
 export interface HealthTarget {
   name: string;
@@ -64,8 +64,13 @@ export async function waitForHealthy(
     }
     if (pending.size === 0) break;
     if (Date.now() > deadline) {
+      // Classify as a connectivity/reachability failure and name the offending
+      // services, so a deployed run against an unreachable host (e.g. the
+      // virtual-smoker box off the tailnet) is distinguishable from an in-spec
+      // assertion failure in the workflow output.
       throw new Error(
-        `Timed out after ${timeoutMs}ms waiting for: ${[...pending.keys()].join(', ')}`
+        `Connectivity preflight failed: timed out after ${timeoutMs}ms; ` +
+          `services unreachable: ${[...pending.keys()].join(', ')}`
       );
     }
     await sleep(intervalMs);
