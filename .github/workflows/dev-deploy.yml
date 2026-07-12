@@ -435,6 +435,65 @@ jobs:
           echo "Runner disk usage after cleanup:"
           df -h / || true
 
+  # Post-deploy end-to-end user journeys (PRD #314, issue #320). Runs the
+  # `deployed` Playwright project — the @deployed-tagged, no-temp journeys
+  # (history, ratings, delete, settings) — against the live dev-cloud over
+  # Tailscale (the runner is already on the tailnet). Every write goes through
+  # the backend fixture: a pre-run sweep clears any smoke-test-* leftovers and
+  # each spec cleans up after itself, so no residue is left in dev-cloud data.
+  # Blocking: a failed journey fails the run so a broken dev-cloud deploy is
+  # visible, with Playwright traces + HTML report uploaded on failure.
+  deployed-e2e:
+    needs: deploy-dev-cloud
+    if: success()
+    runs-on: [self-hosted, linux, proxmox]
+    env:
+      DEV_FQDN: ${{ vars.DEV_CLOUD_FQDN || 'smart-smoker-dev-cloud.tail74646.ts.net' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node for e2e
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Use npm 10
+        run: npm i -g npm@10
+
+      - name: Install workspace dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Install Playwright browser (chromium)
+        working-directory: e2e
+        run: npx playwright install --with-deps chromium
+
+      - name: Run deployed user journeys
+        working-directory: e2e
+        env:
+          CI: 'true'
+          E2E_TARGET: deployed
+          # dev-cloud has no smoker app; the deployed project excludes the temp
+          # journeys, but resolveTarget still requires every service URL, so the
+          # smoker/device URLs point at the same host (unused by these specs).
+          E2E_FRONTEND_URL: https://${{ env.DEV_FQDN }}
+          E2E_BACKEND_URL: https://${{ env.DEV_FQDN }}:8443
+          E2E_SMOKER_URL: https://${{ env.DEV_FQDN }}
+          E2E_DEVICE_URL: https://${{ env.DEV_FQDN }}:8443
+        run: npm run test:deployed
+
+      - name: Upload deployed e2e report and traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-deploy-e2e-report
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
   # Deploy to virtual smoker device after dev-cloud deployment succeeds
   deploy-virtual-smoker:
     needs: deploy-dev-cloud
