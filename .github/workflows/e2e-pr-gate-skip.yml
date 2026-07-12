@@ -1,0 +1,42 @@
+# No-op companion to the blocking e2e PR gate (PRD #314, slice 8 / issue #322).
+#
+# "Hermetic journey suite" is a REQUIRED status check in master branch
+# protection, but e2e-pr-gate.yml is path-filtered — on a docs- or infra-only
+# PR it never triggers, and a required check that never reports leaves the PR
+# stuck on "Expected — waiting for status" forever. This is GitHub's documented
+# workaround (docs: "Handling skipped but required checks"): a second workflow
+# with the SAME job name that triggers on the complementary paths and passes
+# instantly, so every PR reports exactly the one required context.
+#
+# The paths-ignore list below MUST stay identical to the paths list in
+# e2e-pr-gate.yml — if they drift, some PRs get no "Hermetic journey suite"
+# check at all and cannot merge. On PRs touching both kinds of paths both
+# workflows run; the real gate finishes last, so its result is the one branch
+# protection sees.
+
+name: E2E PR Gate (skip)
+
+on:
+  pull_request:
+    branches: [master]
+    paths-ignore:
+      - 'apps/**'
+      - 'packages/**'
+      - 'e2e/**'
+      - '**/Dockerfile'
+      - '*.docker-compose.yml'
+      - '.dockerignore'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/e2e-pr-gate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  hermetic:
+    name: Hermetic journey suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip hermetic gate
+        run: echo "No app, package, e2e, or docker paths touched — hermetic e2e gate not required for this diff."
