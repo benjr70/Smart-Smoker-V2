@@ -276,25 +276,22 @@ describe('PreSmokeCard Component', () => {
       );
       expect(preSmokeTitle).toBeInTheDocument();
 
-      // Check name title
-      const nameTitle = typographies.find(
-        t => t.getAttribute('data-variant') === 'h5' && t.textContent === 'BBQ Brisket'
-      );
-      expect(nameTitle).toBeInTheDocument();
+      // The name carries an e2e test id, so query it directly rather than
+      // through the shared `typography` test id.
+      const nameTitle = screen.getByTestId('review-presmoke-name');
+      expect(nameTitle).toHaveAttribute('data-variant', 'h5');
+      expect(nameTitle).toHaveTextContent('BBQ Brisket');
     });
 
     test('should have correct typography for meat info', () => {
       render(<PreSmokeCard {...mockProps} />);
 
-      const typographies = screen.getAllByTestId('typography');
-
-      const meatInfo = typographies.find(
-        t =>
-          t.getAttribute('data-color') === 'text.secondary' &&
-          t.getAttribute('data-padding-bottom') === '1' &&
-          t.textContent === 'Beef Brisket 12 LB'
-      );
-      expect(meatInfo).toBeInTheDocument();
+      // The meat info carries an e2e test id, so query it directly rather than
+      // through the shared `typography` test id.
+      const meatInfo = screen.getByTestId('review-presmoke-details');
+      expect(meatInfo).toHaveAttribute('data-color', 'text.secondary');
+      expect(meatInfo).toHaveAttribute('data-padding-bottom', '1');
+      expect(meatInfo).toHaveTextContent('Beef Brisket 12 LB');
     });
 
     test('should have correct typography for steps', () => {

@@ -218,6 +218,7 @@ function Notification(props: NotificationProps): JSX.Element {
           variant="standard"
           value={props.notification.message}
           onChange={onMessageChange}
+          inputProps={{ 'data-testid': 'settings-notification-message' }}
           sx={{ width: '100%' }}
         />
       </Grid>

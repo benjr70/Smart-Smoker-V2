@@ -222,11 +222,11 @@ describe('PostSmokeCard Component', () => {
       );
       expect(postSmokeTitle).toBeInTheDocument();
 
-      // Check rest time title
-      const restTimeTitle = typographies.find(
-        t => t.getAttribute('data-variant') === 'h6' && t.textContent === 'Rest Time: 30 minutes'
-      );
-      expect(restTimeTitle).toBeInTheDocument();
+      // The rest time carries an e2e test id, so query it directly rather than
+      // through the shared `typography` test id.
+      const restTimeTitle = screen.getByTestId('review-postsmoke-resttime');
+      expect(restTimeTitle).toHaveAttribute('data-variant', 'h6');
+      expect(restTimeTitle).toHaveTextContent('Rest Time: 30 minutes');
     });
 
     test('should have correct typography for steps', () => {

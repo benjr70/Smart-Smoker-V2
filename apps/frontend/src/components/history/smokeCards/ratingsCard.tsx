@@ -91,20 +91,24 @@ export function RatingsCard(props: RatingsCardProps): JSX.Element {
                 });
               }}
             />
-            <Typography component="legend">Overall Taste: {ratings.overallTaste}</Typography>
-            <Rating
-              name="size-large"
-              defaultValue={5}
-              size="large"
-              max={10}
-              value={ratings.overallTaste}
-              onChange={event => {
-                setRatings({
-                  ...ratings,
-                  overallTaste: parseFloat((event.target as HTMLInputElement).value),
-                });
-              }}
-            />
+            <Typography component="legend" data-testid="review-rating-overallTaste-value">
+              Overall Taste: {ratings.overallTaste}
+            </Typography>
+            <span data-testid="review-rating-overallTaste">
+              <Rating
+                name="size-large"
+                defaultValue={5}
+                size="large"
+                max={10}
+                value={ratings.overallTaste}
+                onChange={event => {
+                  setRatings({
+                    ...ratings,
+                    overallTaste: parseFloat((event.target as HTMLInputElement).value),
+                  });
+                }}
+              />
+            </span>
           </CardContent>
         </Card>
       </ThemeProvider>
