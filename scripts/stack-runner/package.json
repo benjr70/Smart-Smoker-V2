@@ -1,0 +1,21 @@
+{
+  "name": "@smart-smoker/stack-runner",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hermetic per-PR stack runner CLI. Wraps the e2e compose stack (PRD #314) with per-PR project/port isolation. Part of PRD #327 verify-pr harness.",
+  "type": "module",
+  "scripts": {
+    "up": "tsx cli.ts up",
+    "down": "tsx cli.ts down",
+    "test": "tsx --test *.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "yaml": "^2.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
