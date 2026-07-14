@@ -241,6 +241,23 @@ describe('smokerService', () => {
       expect(consoleLogSpy).toHaveBeenCalledWith(mockError);
       expect(result).toBeUndefined();
     });
+
+    test('should strip persisted _id/__v before posting', async () => {
+      const mockAxios = require('axios');
+      const fetchedProfile: any = {
+        ...mockSmokeProfile,
+        _id: 'profile-id-1',
+        __v: 5,
+      };
+      mockAxios.post.mockResolvedValue({ data: mockSmokeProfile });
+
+      await setSmokeProfile(fetchedProfile);
+
+      expect(mockAxios.post).toHaveBeenCalledWith('smokeProfile/current', mockSmokeProfile);
+      const sentBody = mockAxios.post.mock.calls[0][1];
+      expect(sentBody).not.toHaveProperty('_id');
+      expect(sentBody).not.toHaveProperty('__v');
+    });
   });
 
   describe('getSmokeProfileById', () => {

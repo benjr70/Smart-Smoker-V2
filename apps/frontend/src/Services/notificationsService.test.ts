@@ -84,70 +84,93 @@ describe('notificationsService', () => {
   });
 
   describe('setNotificationSettings', () => {
-    test('should post notification settings successfully', async () => {
-      const mockSettings = {
-        emailNotifications: true,
-        pushNotifications: false,
-        smsNotifications: true,
+    // The component posts `{ settings: NotificationsRef.current }`; rules fetched
+    // from the backend carry a persisted subdocument `_id` that the strict
+    // validation edge rejects, so the service must strip it before posting.
+    const editableRule = {
+      type: false,
+      message: 'Meat done',
+      probe1: 'Chamber',
+      op: '>',
+      probe2: 'Probe 1',
+      offset: 5,
+      temperature: 165,
+    };
+
+    test('should post only whitelisted rule fields, stripping _id/__v', async () => {
+      const fetchedSettings = {
+        settings: [{ ...editableRule, _id: 'rule-id-1', __v: 0 }],
       };
 
-      mockAxios.post.mockResolvedValue({
-        data: mockSettings,
+      mockAxios.post.mockResolvedValue({ data: fetchedSettings });
+
+      await setNotificationSettings(fetchedSettings);
+
+      expect(mockAxios.post).toHaveBeenCalledWith('notifications/settings', {
+        settings: [editableRule],
       });
+      const sentRule = mockAxios.post.mock.calls[0][1].settings[0];
+      expect(sentRule).not.toHaveProperty('_id');
+      expect(sentRule).not.toHaveProperty('__v');
+    });
 
-      const result = await setNotificationSettings(mockSettings);
+    test('should preserve lastNotificationSent when present', async () => {
+      const sent = '2026-07-10T00:00:00.000Z';
+      const fetchedSettings = {
+        settings: [{ ...editableRule, _id: 'rule-id-1', lastNotificationSent: sent }],
+      };
 
-      expect(mockAxios.post).toHaveBeenCalledWith('notifications/settings', mockSettings);
-      expect(result).toEqual({ data: mockSettings });
+      mockAxios.post.mockResolvedValue({ data: fetchedSettings });
+
+      await setNotificationSettings(fetchedSettings);
+
+      const sentRule = mockAxios.post.mock.calls[0][1].settings[0];
+      expect(sentRule.lastNotificationSent).toBe(sent);
+      expect(sentRule).not.toHaveProperty('_id');
     });
 
     test('should handle setNotificationSettings error and log it', async () => {
-      const mockSettings = { emailNotifications: true };
+      const fetchedSettings = { settings: [editableRule] };
       const mockError = new Error('Server error');
       mockAxios.post.mockRejectedValue(mockError);
 
       const consoleLogSpy = jest.spyOn(console, 'log');
 
-      const result = await setNotificationSettings(mockSettings);
+      const result = await setNotificationSettings(fetchedSettings);
 
-      expect(mockAxios.post).toHaveBeenCalledWith('notifications/settings', mockSettings);
+      expect(mockAxios.post).toHaveBeenCalledWith('notifications/settings', {
+        settings: [editableRule],
+      });
       expect(consoleLogSpy).toHaveBeenCalledWith(mockError);
       expect(result).toBeUndefined();
     });
 
-    test('should handle empty settings object', async () => {
-      const mockSettings = {};
+    test('should send an empty settings array when given no settings', async () => {
+      mockAxios.post.mockResolvedValue({ data: {} });
 
-      mockAxios.post.mockResolvedValue({
-        data: mockSettings,
+      await setNotificationSettings({});
+
+      expect(mockAxios.post).toHaveBeenCalledWith('notifications/settings', {
+        settings: [],
       });
-
-      const result = await setNotificationSettings(mockSettings);
-
-      expect(mockAxios.post).toHaveBeenCalledWith('notifications/settings', mockSettings);
-      expect(result).toEqual({ data: mockSettings });
     });
 
-    test('should handle null settings', async () => {
-      const mockSettings = null;
+    test('should handle null settings without throwing', async () => {
+      mockAxios.post.mockResolvedValue({ data: null });
 
-      mockAxios.post.mockResolvedValue({
-        data: null,
+      await setNotificationSettings(null);
+
+      expect(mockAxios.post).toHaveBeenCalledWith('notifications/settings', {
+        settings: [],
       });
-
-      const result = await setNotificationSettings(mockSettings);
-
-      expect(mockAxios.post).toHaveBeenCalledWith('notifications/settings', mockSettings);
-      expect(result).toEqual({ data: null });
     });
 
     test('should set correct baseURL from environment variable', async () => {
       process.env.REACT_APP_CLOUD_URL = 'https://api.example.com/';
 
-      const mockSettings = { test: true };
-      mockAxios.post.mockResolvedValue({ data: mockSettings });
+      mockAxios.post.mockResolvedValue({ data: {} });
 
-      await setNotificationSettings(mockSettings);
+      await setNotificationSettings({ settings: [editableRule] });
     });
   });
 });

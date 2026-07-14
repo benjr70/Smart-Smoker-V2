@@ -2,6 +2,15 @@ import { PostSmoke } from '../components/smoke/postSmokeStep/PostSmokeStep';
 
 const envUrl = process.env.REACT_APP_CLOUD_URL;
 
+// Project a post-smoke down to exactly the fields the backend PostSmokeDto
+// whitelists, so a fetched document's persisted `_id`/`__v` cannot ride along
+// and trip the strict validation edge (forbidNonWhitelisted) on save.
+const toPostSmokePayload = (postSmoke: PostSmoke) => ({
+  restTime: postSmoke.restTime,
+  steps: postSmoke.steps,
+  notes: postSmoke.notes,
+});
+
 export const getCurrentPostSmoke = async (): Promise<PostSmoke> => {
   const axios = require('axios');
   axios.defaults.baseURL = envUrl;
@@ -18,7 +27,7 @@ export const getCurrentPostSmoke = async (): Promise<PostSmoke> => {
 export const setCurrentPostSmoke = async (postSmoke: PostSmoke): Promise<any> => {
   const axios = require('axios');
   axios.defaults.baseURL = envUrl;
-  return axios.post('postSmoke/current', postSmoke).catch((error: any) => {
+  return axios.post('postSmoke/current', toPostSmokePayload(postSmoke)).catch((error: any) => {
     console.log(error);
   });
 };

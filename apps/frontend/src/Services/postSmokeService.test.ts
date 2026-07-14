@@ -115,6 +115,23 @@ describe('postSmokeService', () => {
       expect(result).toBeUndefined();
     });
 
+    test('should strip persisted _id/__v before posting', async () => {
+      const fetchedPostSmoke: any = {
+        ...mockPostSmoke,
+        _id: 'postsmoke-id-1',
+        __v: 2,
+      };
+
+      mockAxios.post.mockResolvedValue({ data: mockPostSmoke });
+
+      await setCurrentPostSmoke(fetchedPostSmoke);
+
+      expect(mockAxios.post).toHaveBeenCalledWith('postSmoke/current', mockPostSmoke);
+      const sentBody = mockAxios.post.mock.calls[0][1];
+      expect(sentBody).not.toHaveProperty('_id');
+      expect(sentBody).not.toHaveProperty('__v');
+    });
+
     test('should handle empty post smoke object', async () => {
       const emptyPostSmoke = {} as PostSmoke;
 

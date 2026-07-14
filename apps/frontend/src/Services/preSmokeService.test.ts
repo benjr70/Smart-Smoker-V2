@@ -107,6 +107,61 @@ describe('preSmokeService', () => {
       expect(result).toEqual({ data: mockPreSmoke });
     });
 
+    test('should strip persisted _id/__v (and weight._id) before posting', async () => {
+      const fetchedPreSmoke: any = {
+        ...mockPreSmoke,
+        _id: 'presmoke-id-1',
+        __v: 3,
+        weight: { ...mockPreSmoke.weight, _id: 'weight-id-1' },
+      };
+
+      mockAxios.post.mockResolvedValue({ data: mockPreSmoke });
+
+      await setCurrentPreSmoke(fetchedPreSmoke);
+
+      expect(mockAxios.post).toHaveBeenCalledWith('presmoke', mockPreSmoke);
+      const sentBody = mockAxios.post.mock.calls[0][1];
+      expect(sentBody).not.toHaveProperty('_id');
+      expect(sentBody).not.toHaveProperty('__v');
+      expect(sentBody.weight).not.toHaveProperty('_id');
+    });
+
+    test('should coerce a numeric-string weight to a number before posting', async () => {
+      const stringWeightPreSmoke: any = {
+        ...mockPreSmoke,
+        _id: 'presmoke-id-2',
+        __v: 1,
+        weight: { unit: WeightUnits.LB, weight: '12', _id: 'weight-id-2' },
+      };
+
+      mockAxios.post.mockResolvedValue({ data: mockPreSmoke });
+
+      await setCurrentPreSmoke(stringWeightPreSmoke);
+
+      const sentBody = mockAxios.post.mock.calls[0][1];
+      expect(typeof sentBody.weight.weight).toBe('number');
+      expect(sentBody.weight.weight).toBe(12);
+      expect(sentBody).not.toHaveProperty('_id');
+      expect(sentBody).not.toHaveProperty('__v');
+      expect(sentBody.weight).not.toHaveProperty('_id');
+    });
+
+    test('should not send NaN when the weight is empty/undefined', async () => {
+      const emptyWeightPreSmoke: any = {
+        name: 'No weight yet',
+        weight: { unit: WeightUnits.LB, weight: '' },
+        steps: [],
+      };
+
+      mockAxios.post.mockResolvedValue({ data: emptyWeightPreSmoke });
+
+      await setCurrentPreSmoke(emptyWeightPreSmoke);
+
+      const sentBody = mockAxios.post.mock.calls[0][1];
+      expect(Number.isNaN(sentBody.weight.weight)).toBe(false);
+      expect(sentBody.weight.weight).toBeUndefined();
+    });
+
     test('should handle setCurrentPreSmoke error and log it', async () => {
       const mockError = new Error('Server error');
 

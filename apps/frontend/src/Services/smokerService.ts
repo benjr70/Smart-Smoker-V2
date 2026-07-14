@@ -53,7 +53,15 @@ export const getState = async (): Promise<State> => {
 export const setSmokeProfile = async (smokeProfileDTO: smokeProfile) => {
   const axios = require('axios');
   axios.defaults.baseURL = envUrl;
-  return axios.post('smokeProfile/current', smokeProfileDTO).catch((error: any) => {
+  const payload = {
+    chamberName: smokeProfileDTO.chamberName,
+    probe1Name: smokeProfileDTO.probe1Name,
+    probe2Name: smokeProfileDTO.probe2Name,
+    probe3Name: smokeProfileDTO.probe3Name,
+    notes: smokeProfileDTO.notes,
+    woodType: smokeProfileDTO.woodType,
+  };
+  return axios.post('smokeProfile/current', payload).catch((error: any) => {
     console.log(error);
   });
 };
