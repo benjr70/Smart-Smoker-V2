@@ -201,16 +201,18 @@ success tail against this PR, with one modification:
 
 - **§6a.1 pr-watch** (blocking, fresh 10-round budget) — spawn exactly as
   team-pickup §6a.1 specifies, with this PR's number/branch/issue.
-- **§6a.2 manual verification** (blocking) — spawn the verifier exactly as
-  team-pickup §6a.2 specifies, EXCEPT instruct it to **re-verify every item,
-  including ones already ticked `- [x]`** (the rebase/fixes may have changed
-  anything; existing ticks are stale). Evidence comment headed
+- **§6a.2 manual verification** (blocking) — delegate to `/verify-pr` exactly as
+  team-pickup §6a.2 specifies (a blocking `/verify-pr` round per PR, consuming
+  its terminal `manual-verify:` line and splitting spec-demanding deferrals into
+  the fix loop). Because the rebase/fixes may have changed anything, existing
+  ticks are stale: instruct the round to **re-verify every item, including ones
+  already ticked `- [x]`**, and head its evidence comment
   `### Manual verification — post-reconcile round <M>/3`.
 - **§6a.3 manual fix loop** — identical semantics, `MANUAL_ROUNDS_MAX=3`,
   exhaustion → draft + `team:checks-failed` + issue comment.
 
 The same blocking rules apply verbatim: never emit output while pr-watch or the
-verifier is in flight; `pr-watch: (in flight)` is never a legal value.
+`/verify-pr` round is in flight; `pr-watch: (in flight)` is never a legal value.
 
 If neither §1 nor §2 pushed a commit (e.g. `team:revise` with zero actionable
 threads), skip the tail — nothing changed, existing evidence stands.

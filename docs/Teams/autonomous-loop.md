@@ -108,15 +108,17 @@ runs before the fire may exit:
 - **`/pr-watch`** — polls CI every 60s (45 min cap per round); on red, spawns
   an implementer to fix and pushes `fix(ci):` commits (cap 10 rounds); on
   exhaustion converts the PR to draft + `team:checks-failed`.
-- **Manual verification sweep** — a verifier agent executes the PR's
-  `## Manual verification` checklist **live** (runs the shipped code with its
-  externals stubbed, re-runs adjacent test suites, inspects artifacts), ticks
-  the boxes it proved, and posts one evidence comment per round
-  (`### Manual verification — round <M>/3`). Failures loop an implementer
-  (`fix(manual):` commits, cap 3 rounds) and re-enter pr-watch, since a push
-  stales CI. Deferred items must name the concrete precondition (deploy
-  window, real hardware, human observation) — an unjustified deferral counts
-  as a failure.
+- **Manual verification sweep** — team-pickup §6a.2 delegates the round to the
+  **`/verify-pr`** harness: it parses the PR's `## Manual verification`
+  checklist, boots a hermetic per-PR stack, spawns the `manual-verifier` agent
+  to exercise each unchecked item **live** in a real headful browser / Electron /
+  hermetic Mongo, ticks the boxes it proved, posts one evidence comment per round
+  (`### Manual verification — round <M>/3`), and tears the stack down. Failures —
+  and deployed-env deferrals that demand a tagged `<!-- post-deploy: … -->` spec
+  the PR does not yet carry — loop an implementer (`fix(manual):` commits, cap 3
+  rounds) and re-enter pr-watch, since a push stales CI. A justified DEFER (real
+  hardware, human observation, or a deployed-env item whose demanded spec is
+  already present) does not loop; it stays unticked for the human.
 
 ## PR reconcile (the post-review loop)
 
