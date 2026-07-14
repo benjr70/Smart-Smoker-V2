@@ -31,7 +31,9 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 MCP_CONFIG_FILE="${MCP_CONFIG_FILE:-${REPO_ROOT}/.mcp.json}"
 CHROME_MCP_WRAPPER="${CHROME_MCP_WRAPPER:-${SCRIPT_DIR}/chrome-mcp-wrapper.sh}"
+ELECTRON_MCP_WRAPPER="${ELECTRON_MCP_WRAPPER:-${SCRIPT_DIR}/electron-cdp-mcp-wrapper.sh}"
 MCP_SERVER_KEY="playwright-chrome"
+ELECTRON_MCP_SERVER_KEY="playwright-electron"
 
 # Candidate binary names that satisfy "real Chrome present". Overridable so the
 # presence check can be exercised without depending on the host's PATH.
@@ -99,41 +101,47 @@ ensure_playwright() {
 }
 
 #-------------------------------------------------------------------------------
-# Step 4 (config): register the wrapper as an MCP server, idempotently. Skips
-# the write entirely when the entry already points at the wrapper so a second
-# run leaves the file byte-identical.
+# Step 4 (config): register a wrapper as an MCP server, idempotently. Skips the
+# write entirely when the entry already points at the wrapper so a second run
+# leaves the file byte-identical.
+#   $1 = MCP server key   $2 = wrapper command path
 #-------------------------------------------------------------------------------
 ensure_mcp_entry() {
-    local current
-    current="$(jq -r --arg k "${MCP_SERVER_KEY}" \
+    local key="$1" wrapper="$2" current
+    current="$(jq -r --arg k "${key}" \
         '.mcpServers[$k].command // ""' "${MCP_CONFIG_FILE}" 2>/dev/null)"
 
-    if [ "${current}" = "${CHROME_MCP_WRAPPER}" ]; then
-        log "MCP entry '${MCP_SERVER_KEY}' already points at the wrapper — no change"
+    if [ "${current}" = "${wrapper}" ]; then
+        log "MCP entry '${key}' already points at the wrapper — no change"
         return 0
     fi
 
-    log "writing MCP entry '${MCP_SERVER_KEY}' → ${CHROME_MCP_WRAPPER}"
+    log "writing MCP entry '${key}' → ${wrapper}"
     local tmp
     tmp="$(mktemp)"
-    jq --arg k "${MCP_SERVER_KEY}" --arg cmd "${CHROME_MCP_WRAPPER}" \
+    jq --arg k "${key}" --arg cmd "${wrapper}" \
         '.mcpServers[$k] = {type: "stdio", command: $cmd, args: [], env: {}}' \
         "${MCP_CONFIG_FILE}" > "${tmp}" && mv "${tmp}" "${MCP_CONFIG_FILE}"
 }
 
 main() {
-    log "provisioning box for /verify-pr headful Chrome MCP"
+    log "provisioning box for /verify-pr headful Chrome + Electron CDP MCP"
 
-    # Guard: the wrapper we are about to register must exist and be executable.
+    # Guard: the wrappers we are about to register must exist and be executable.
     if [ ! -x "${CHROME_MCP_WRAPPER}" ]; then
         log "ERROR: wrapper not found or not executable: ${CHROME_MCP_WRAPPER}"
+        return 1
+    fi
+    if [ ! -x "${ELECTRON_MCP_WRAPPER}" ]; then
+        log "ERROR: wrapper not found or not executable: ${ELECTRON_MCP_WRAPPER}"
         return 1
     fi
 
     ensure_chrome || return 1
     ensure_docker || return 1
     ensure_playwright || return 1
-    ensure_mcp_entry || return 1
+    ensure_mcp_entry "${MCP_SERVER_KEY}" "${CHROME_MCP_WRAPPER}" || return 1
+    ensure_mcp_entry "${ELECTRON_MCP_SERVER_KEY}" "${ELECTRON_MCP_WRAPPER}" || return 1
 
     log "provisioning complete"
     return 0

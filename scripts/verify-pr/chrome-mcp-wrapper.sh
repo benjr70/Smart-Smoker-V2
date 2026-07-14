@@ -34,38 +34,17 @@
 
 set -uo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 log() { echo "[chrome-mcp-wrapper] $*" >&2; }
 
-# 1. Resolve the display. XWayland on the box lives on :0.
-DISPLAY="${DISPLAY:-:0}"
-
-# 2. Resolve the rotating X-authority file by glob. The runtime dir defaults to
-#    /run/user/<uid>; mutter drops a fresh `.mutter-Xwaylandauth.XXXXXX` there
-#    each boot, so the exact name is never hardcoded.
-runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-xauth_glob="${CHROME_MCP_XAUTH_GLOB:-${runtime_dir}/.mutter-Xwaylandauth.*}"
-
-# Newest match wins (a rotated boot may leave a stale file behind).
-xauthority=""
-for candidate in $(ls -1t ${xauth_glob} 2>/dev/null); do
-    if [ -f "${candidate}" ]; then
-        xauthority="${candidate}"
-        break
-    fi
-done
-
-if [ -z "${xauthority}" ]; then
-    log "ERROR: no active desktop session — no X-authority file matching"
-    log "       '${xauth_glob}' (expected a GNOME/XWayland session on DISPLAY=${DISPLAY})."
-    log "       A headful Chrome needs a logged-in desktop session on the box;"
-    log "       refusing to fall back to headless. Log into the box's desktop"
-    log "       (or run the provisioning script) and retry."
-    exit 3
-fi
-
-export DISPLAY
-export XAUTHORITY="${xauthority}"
-log "resolved DISPLAY=${DISPLAY} XAUTHORITY=${XAUTHORITY}"
+# 1 & 2. Resolve DISPLAY + the rotating X-authority file via the shared display
+# lib (same resolution the Electron launcher uses — one source of truth). No
+# desktop session => the lib returns 3 with a clear error; we never fall back to
+# headless.
+# shellcheck source=lib/resolve-display-env.sh
+source "${SCRIPT_DIR}/lib/resolve-display-env.sh"
+DISPLAY_ENV_LOG_PREFIX="chrome-mcp-wrapper" resolve_display_env || exit $?
 
 # 3. Fresh, unique user-data-dir per run so no cookies/permissions leak between
 #    verification runs.

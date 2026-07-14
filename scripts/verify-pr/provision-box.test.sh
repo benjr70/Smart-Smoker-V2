@@ -18,6 +18,7 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROVISION="${SCRIPT_DIR}/provision-box.sh"
 WRAPPER="${SCRIPT_DIR}/chrome-mcp-wrapper.sh"
+ELECTRON_WRAPPER="${SCRIPT_DIR}/electron-cdp-mcp-wrapper.sh"
 
 TESTS_RUN=0
 TESTS_FAILED=0
@@ -340,6 +341,49 @@ $(cat "${stderr}")"
 }
 
 #-------------------------------------------------------------------------------
+# Test 7: provisioning also registers the `playwright-electron` MCP server whose
+#         command is the CDP wrapper, alongside the chrome entry — the second
+#         interactive path for the smoker Electron app (issue #330 config entry).
+#-------------------------------------------------------------------------------
+test_registers_electron_cdp_entry() {
+    echo "TEST: registers a playwright-electron MCP entry pointing at the CDP wrapper"
+
+    local tmp mock_dir cfg
+    tmp="$(mktemp -d)"
+    cfg="${tmp}/.mcp.json"
+    seed_config "${cfg}"
+    mock_dir="$(make_mock_bin yes yes yes)"
+    trap "rm -rf '${tmp}' '${mock_dir}'" RETURN
+
+    PROVISION_CALL_LOG="${tmp}/calls.log" \
+        MCP_CONFIG_FILE="${cfg}" CHROME_MCP_WRAPPER="${WRAPPER}" \
+        ELECTRON_MCP_WRAPPER="${ELECTRON_WRAPPER}" \
+        PATH="${mock_dir}:${PATH}" \
+        bash "${PROVISION}" >/dev/null 2>&1
+    local exit_code=$?
+
+    if [ "${exit_code}" -ne 0 ]; then
+        fail "provisioning should exit 0 when host is ready" "exit=${exit_code}"
+        return
+    fi
+
+    local cmd
+    cmd="$(jq -r '.mcpServers["playwright-electron"].command' "${cfg}")"
+    if [ "${cmd}" != "${ELECTRON_WRAPPER}" ]; then
+        fail "playwright-electron command must point at the CDP wrapper" \
+            "got '${cmd}', want '${ELECTRON_WRAPPER}'"
+        return
+    fi
+    # The chrome entry must still be present alongside it.
+    if [ "$(jq -r '.mcpServers["playwright-chrome"].command' "${cfg}")" != "${WRAPPER}" ]; then
+        fail "chrome entry must be preserved alongside the electron entry" "$(cat "${cfg}")"
+        return
+    fi
+
+    pass "registers a playwright-electron MCP entry pointing at the CDP wrapper"
+}
+
+#-------------------------------------------------------------------------------
 # Run suite
 #-------------------------------------------------------------------------------
 echo "=========================================="
@@ -352,6 +396,7 @@ test_installs_chrome_when_absent
 test_adds_docker_group_when_unusable
 test_installs_playwright_when_absent
 test_missing_wrapper_errors
+test_registers_electron_cdp_entry
 
 echo ""
 echo "=========================================="
