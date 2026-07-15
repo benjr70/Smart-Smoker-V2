@@ -75,6 +75,9 @@ jobs:
             "TemperatureChart")
               echo "path=packages/TemperatureChart" >> $GITHUB_OUTPUT
               ;;
+            "smoke-session")
+              echo "path=packages/smoke-session" >> $GITHUB_OUTPUT
+              ;;
             *)
               echo "path=apps/${{ matrix.app }}" >> $GITHUB_OUTPUT
               ;;

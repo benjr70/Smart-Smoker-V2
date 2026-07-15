@@ -16,7 +16,7 @@ jobs:
   test-apps:
     uses: ./.github/workflows/test.yml
     with:
-      apps: '["backend", "device-service", "frontend", "smoker", "TemperatureChart"]'
+      apps: '["backend", "device-service", "frontend", "smoker", "TemperatureChart", "smoke-session"]'
       ref: ${{ github.ref }}
 
   # Advisory typecheck gate (PRD #183, Level 6 harness). Flip `blocking: true`
@@ -24,7 +24,7 @@ jobs:
   typecheck:
     uses: ./.github/workflows/typecheck.yml
     with:
-      apps: '["backend", "device-service", "frontend", "smoker", "TemperatureChart"]'
+      apps: '["backend", "device-service", "frontend", "smoker", "TemperatureChart", "smoke-session"]'
       ref: ${{ github.ref }}
       blocking: false
 
@@ -76,7 +76,7 @@ jobs:
           echo "" >> comment.md
 
           # Process each app first to build the arrays
-          apps=("backend" "device-service" "frontend" "smoker" "TemperatureChart")
+          apps=("backend" "device-service" "frontend" "smoker" "TemperatureChart" "smoke-session")
           failed_apps=()
           coverage_failed_apps=()
 
@@ -173,9 +173,13 @@ jobs:
               
                             # Try multiple possible paths for coverage-summary.json based on app type
               coverage_summary_path=""
-              if [ "$app" = "TemperatureChart" ]; then
-                # Look in packages/TemperatureChart/coverage first
-                for possible_path in "./artifacts/coverage-$app/packages/TemperatureChart/coverage/coverage-summary.json" "./artifacts/coverage-$app/coverage-summary.json"; do
+              case "$app" in
+                TemperatureChart|smoke-session) is_package=true ;;
+                *) is_package=false ;;
+              esac
+              if [ "$is_package" = "true" ]; then
+                # Look in packages/<pkg>/coverage first
+                for possible_path in "./artifacts/coverage-$app/packages/$app/coverage/coverage-summary.json" "./artifacts/coverage-$app/coverage-summary.json"; do
                   if [ -f "$possible_path" ]; then
                     coverage_summary_path="$possible_path"
                     echo "Found coverage-summary.json at: $possible_path" >&2
@@ -225,9 +229,13 @@ jobs:
               else
                 # Try multiple possible paths for lcov.info as fallback
                 lcov_path=""
-                if [ "$app" = "TemperatureChart" ]; then
-                  # Look in packages/TemperatureChart/coverage first
-                  for possible_path in "./artifacts/coverage-$app/packages/TemperatureChart/coverage/lcov.info" "./artifacts/coverage-$app/lcov.info"; do
+                case "$app" in
+                  TemperatureChart|smoke-session) is_package=true ;;
+                  *) is_package=false ;;
+                esac
+                if [ "$is_package" = "true" ]; then
+                  # Look in packages/<pkg>/coverage first
+                  for possible_path in "./artifacts/coverage-$app/packages/$app/coverage/lcov.info" "./artifacts/coverage-$app/lcov.info"; do
                     if [ -f "$possible_path" ]; then
                       lcov_path="$possible_path"
                       echo "Found lcov.info at: $possible_path" >&2
@@ -313,7 +321,7 @@ jobs:
             fi
             
             # Build status (for apps that have builds)
-            if [[ "$app" == "TemperatureChart" ]]; then
+            if [[ "$app" == "TemperatureChart" || "$app" == "smoke-session" ]]; then
               build_status_icon="N/A"
             elif [[ "$build_status" == "success" ]]; then
               build_status_icon="✅ Passed"
@@ -388,6 +396,7 @@ jobs:
             echo "- **Frontend**: 75% lines/functions/statements, 70% branches" >> comment.md
             echo "- **Smoker**: 80% lines/functions/statements, 75% branches" >> comment.md
             echo "- **TemperatureChart**: 75% lines/branches/statements, 45% functions" >> comment.md
+            echo "- **smoke-session**: 80% (lines, functions, branches, statements)" >> comment.md
           fi
 
           echo "" >> comment.md

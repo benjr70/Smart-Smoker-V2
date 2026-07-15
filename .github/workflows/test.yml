@@ -89,6 +89,9 @@ jobs:
             "TemperatureChart")
               npm run test:coverage --prefix packages/TemperatureChart -- --coverageReporters=json-summary --coverageReporters=lcov --coverageReporters=text 2>&1 | tee test-output.log
               ;;
+            "smoke-session")
+              npm run test:coverage --prefix packages/smoke-session -- --coverageReporters=json-summary --coverageReporters=lcov --coverageReporters=text 2>&1 | tee test-output.log
+              ;;
             *)
               echo "Unknown app: ${{ matrix.app }}"
               exit 1
@@ -138,10 +141,11 @@ jobs:
           set -e
           mkdir -p artifacts_to_upload
 
-          # Determine where to search for coverage and where to place it in artifact
-          if [ "${{ matrix.app }}" = "TemperatureChart" ]; then
-            search_root="packages/TemperatureChart"
-            rel_dest="packages/TemperatureChart/coverage"
+          # Determine where to search for coverage and where to place it in
+          # artifact. Packages live under packages/, apps under apps/.
+          if [ -d "packages/${{ matrix.app }}" ]; then
+            search_root="packages/${{ matrix.app }}"
+            rel_dest="packages/${{ matrix.app }}/coverage"
           else
             search_root="apps/${{ matrix.app }}"
             rel_dest="apps/${{ matrix.app }}/coverage"
@@ -206,8 +210,8 @@ jobs:
           echo "Looking for coverage files..." >&2
 
           # Check for coverage in the correct app-specific location
-          if [ "${{ matrix.app }}" = "TemperatureChart" ]; then
-            coverage_path="packages/TemperatureChart/coverage"
+          if [ -d "packages/${{ matrix.app }}" ]; then
+            coverage_path="packages/${{ matrix.app }}/coverage"
           else
             coverage_path="apps/${{ matrix.app }}/coverage"
           fi
@@ -335,9 +339,13 @@ jobs:
             if [ -d "$coverage_dir" ]; then
               # Try to find coverage summary in the correct location
               coverage_summary_path=""
-              if [ "$app" = "TemperatureChart" ]; then
-                # Look in packages/TemperatureChart/coverage first
-                for possible_path in "$coverage_dir/packages/TemperatureChart/coverage/coverage-summary.json" "$coverage_dir/coverage-summary.json"; do
+              case "$app" in
+                TemperatureChart|smoke-session) is_package=true ;;
+                *) is_package=false ;;
+              esac
+              if [ "$is_package" = "true" ]; then
+                # Look in packages/<pkg>/coverage first
+                for possible_path in "$coverage_dir/packages/$app/coverage/coverage-summary.json" "$coverage_dir/coverage-summary.json"; do
                   if [ -f "$possible_path" ]; then
                     coverage_summary_path="$possible_path"
                     break
