@@ -15,6 +15,8 @@ import {
 } from './smokerService';
 import { State } from '../components/common/interfaces/state';
 import { smokeHistory } from '../components/common/interfaces/history';
+import { createApiClient } from '../api/client';
+import { createFakeBackend, FakeBackend } from '../api/fakeBackend';
 
 // Mock socket.io-client
 const mockSocket = {
@@ -25,24 +27,41 @@ jest.mock('socket.io-client', () => ({
   io: jest.fn(() => mockSocket),
 }));
 
-// Create a mock that allows baseURL to be tracked
-let currentBaseURL = '';
-const mockAxios = {
-  get: jest.fn(),
-  post: jest.fn(),
-  delete: jest.fn(),
-  put: jest.fn(),
-  defaults: {
-    get baseURL() {
-      return currentBaseURL;
-    },
-    set baseURL(value) {
-      currentBaseURL = value;
-    },
-  },
-};
+// The profile functions are now deprecated shims delegating to the deep API
+// client. Mock only that client-injection boundary; below the seam the real
+// client runs against an in-memory fake backend (no axios mocking for profile).
+jest.mock('../api', () => {
+  const actual = jest.requireActual('../api');
+  return { ...actual, getDefaultApiClient: jest.fn() };
+});
 
-jest.mock('axios', () => mockAxios);
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const apiModule = require('../api');
+
+// Self-contained axios mock for the remaining (non-profile) legacy functions
+// that still use axios directly. Kept self-contained (no outer-scope const) so
+// eagerly importing the real API client above — which pulls in the axios-based
+// HTTP adapter at module load — cannot trip a temporal-dead-zone on the mock.
+jest.mock('axios', () => {
+  let currentBaseURL = '';
+  return {
+    get: jest.fn(),
+    post: jest.fn(),
+    delete: jest.fn(),
+    put: jest.fn(),
+    defaults: {
+      get baseURL() {
+        return currentBaseURL;
+      },
+      set baseURL(value: string) {
+        currentBaseURL = value;
+      },
+    },
+  };
+});
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const mockAxios = require('axios');
 
 // Mock environment variables
 const originalEnv = process.env;
@@ -215,99 +234,170 @@ describe('smokerService', () => {
     });
   });
 
-  describe('setSmokeProfile', () => {
-    test('should set smoke profile successfully', async () => {
-      const mockAxios = require('axios');
-      mockAxios.post.mockResolvedValue({
-        data: mockSmokeProfile,
+  describe('smokeProfile (deprecated shims)', () => {
+    let backend: FakeBackend;
+
+    beforeEach(() => {
+      backend = createFakeBackend({
+        smokeProfile: {
+          current: mockSmokeProfile,
+          records: { 'profile-id-123': mockSmokeProfile },
+        },
+      });
+      (apiModule.getDefaultApiClient as jest.Mock).mockReturnValue(createApiClient(backend));
+    });
+
+    describe('setSmokeProfile', () => {
+      test('should save the current profile through the client', async () => {
+        await setSmokeProfile(mockSmokeProfile);
+
+        expect(backend.store.smokeProfile.current).toEqual(mockSmokeProfile);
+        expect(backend.requests).toContainEqual({
+          method: 'post',
+          path: 'smokeProfile/current',
+          body: mockSmokeProfile,
+        });
       });
 
-      const result = await setSmokeProfile(mockSmokeProfile);
+      test('should strip persisted _id/__v before posting', async () => {
+        const fetchedProfile = {
+          ...mockSmokeProfile,
+          _id: 'profile-id-1',
+          __v: 5,
+        } as smokeProfile;
 
-      expect(mockAxios.post).toHaveBeenCalledWith('smokeProfile/current', mockSmokeProfile);
-      expect(result).toEqual({ data: mockSmokeProfile });
-    });
+        await setSmokeProfile(fetchedProfile);
 
-    test('should handle setSmokeProfile error and log it', async () => {
-      const mockError = new Error('Set profile failed');
-      const mockAxios = require('axios');
-      mockAxios.post.mockRejectedValue(mockError);
-
-      const consoleLogSpy = jest.spyOn(console, 'log');
-
-      const result = await setSmokeProfile(mockSmokeProfile);
-
-      expect(mockAxios.post).toHaveBeenCalledWith('smokeProfile/current', mockSmokeProfile);
-      expect(consoleLogSpy).toHaveBeenCalledWith(mockError);
-      expect(result).toBeUndefined();
-    });
-
-    test('should strip persisted _id/__v before posting', async () => {
-      const mockAxios = require('axios');
-      const fetchedProfile: any = {
-        ...mockSmokeProfile,
-        _id: 'profile-id-1',
-        __v: 5,
-      };
-      mockAxios.post.mockResolvedValue({ data: mockSmokeProfile });
-
-      await setSmokeProfile(fetchedProfile);
-
-      expect(mockAxios.post).toHaveBeenCalledWith('smokeProfile/current', mockSmokeProfile);
-      const sentBody = mockAxios.post.mock.calls[0][1];
-      expect(sentBody).not.toHaveProperty('_id');
-      expect(sentBody).not.toHaveProperty('__v');
-    });
-  });
-
-  describe('getSmokeProfileById', () => {
-    test('should get smoke profile by id successfully', async () => {
-      const testId = 'profile-id-123';
-      const mockAxios = require('axios');
-      mockAxios.get.mockResolvedValue({
-        data: mockSmokeProfile,
+        const post = backend.requests.find(r => r.method === 'post');
+        expect(post?.body).toEqual(mockSmokeProfile);
+        expect(post?.body).not.toHaveProperty('_id');
+        expect(post?.body).not.toHaveProperty('__v');
       });
 
-      const result = await getSmokeProfileById(testId);
+      test('should swallow-and-log on failure and resolve undefined', async () => {
+        backend.injectFault({ method: 'post', path: 'smokeProfile/current', status: 500 });
+        const consoleLogSpy = jest.spyOn(console, 'log');
 
-      expect(mockAxios.get).toHaveBeenCalledWith('smokeProfile/' + testId);
-      expect(result).toEqual(mockSmokeProfile);
+        const result = await setSmokeProfile(mockSmokeProfile);
+
+        expect(result).toBeUndefined();
+        expect(consoleLogSpy).toHaveBeenCalledTimes(1);
+      });
     });
 
-    test('should handle missing notes and woodType fields', async () => {
-      const testId = 'profile-id-123';
-      const profileWithoutOptionalFields = {
-        chamberName: 'Main Chamber',
-        probe1Name: 'Meat Probe',
-        probe2Name: 'Chamber Probe',
-        probe3Name: 'Water Pan',
-        // notes and woodType missing
-      };
+    describe('getSmokeProfileById', () => {
+      test('should get smoke profile by id successfully', async () => {
+        const result = await getSmokeProfileById('profile-id-123');
 
-      const mockAxios = require('axios');
-      mockAxios.get.mockResolvedValue({
-        data: profileWithoutOptionalFields,
+        expect(result).toEqual(mockSmokeProfile);
+        expect(backend.requests).toContainEqual({
+          method: 'get',
+          path: 'smokeProfile/profile-id-123',
+          body: undefined,
+        });
       });
 
-      const result = await getSmokeProfileById(testId);
+      test('should default missing notes and woodType fields to empty strings', async () => {
+        backend = createFakeBackend({
+          smokeProfile: {
+            records: {
+              'profile-id-123': {
+                chamberName: 'Main Chamber',
+                probe1Name: 'Meat Probe',
+                probe2Name: 'Chamber Probe',
+                probe3Name: 'Water Pan',
+                // notes and woodType missing
+              },
+            },
+          },
+        });
+        (apiModule.getDefaultApiClient as jest.Mock).mockReturnValue(createApiClient(backend));
 
-      expect(result.notes).toBe('');
-      expect(result.woodType).toBe('');
+        const result = await getSmokeProfileById('profile-id-123');
+
+        expect(result.notes).toBe('');
+        expect(result.woodType).toBe('');
+      });
+
+      test('should swallow-and-log on failure and resolve undefined', async () => {
+        const consoleLogSpy = jest.spyOn(console, 'log');
+
+        const result = await getSmokeProfileById('missing');
+
+        expect(result).toBeUndefined();
+        expect(consoleLogSpy).toHaveBeenCalledTimes(1);
+      });
     });
 
-    test('should handle getSmokeProfileById error and log it', async () => {
-      const testId = 'profile-id-123';
-      const mockError = new Error('Profile not found');
-      const mockAxios = require('axios');
-      mockAxios.get.mockRejectedValue(mockError);
+    describe('getCurrentSmokeProfile', () => {
+      test('should get the current smoke profile successfully', async () => {
+        const result = await getCurrentSmokeProfile();
 
-      const consoleLogSpy = jest.spyOn(console, 'log');
+        expect(result).toEqual(mockSmokeProfile);
+        expect(backend.requests).toContainEqual({
+          method: 'get',
+          path: 'smokeProfile/current',
+          body: undefined,
+        });
+      });
 
-      const result = await getSmokeProfileById(testId);
+      test('should default missing notes and woodType fields to empty strings', async () => {
+        backend = createFakeBackend({
+          smokeProfile: {
+            current: {
+              chamberName: 'Main Chamber',
+              probe1Name: 'Meat Probe',
+              probe2Name: 'Chamber Probe',
+              probe3Name: 'Water Pan',
+            },
+          },
+        });
+        (apiModule.getDefaultApiClient as jest.Mock).mockReturnValue(createApiClient(backend));
 
-      expect(mockAxios.get).toHaveBeenCalledWith('smokeProfile/' + testId);
-      expect(consoleLogSpy).toHaveBeenCalledWith(mockError);
-      expect(result).toBeUndefined();
+        const result = await getCurrentSmokeProfile();
+
+        expect(result.notes).toBe('');
+        expect(result.woodType).toBe('');
+      });
+
+      test('should swallow-and-log on failure and resolve undefined', async () => {
+        backend.injectFault({ method: 'get', path: 'smokeProfile/current', status: 500 });
+        const consoleLogSpy = jest.spyOn(console, 'log');
+
+        const result = await getCurrentSmokeProfile();
+
+        expect(result).toBeUndefined();
+        expect(consoleLogSpy).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    describe('deleteSmokeProfileById', () => {
+      test('should delete a stored profile through the client', async () => {
+        await deleteSmokeProfileById('profile-id-123');
+
+        expect(backend.store.smokeProfile.records['profile-id-123']).toBeUndefined();
+        expect(backend.requests).toContainEqual({
+          method: 'delete',
+          path: 'smokeProfile/profile-id-123',
+          body: undefined,
+        });
+      });
+
+      test('should swallow-and-log on failure and resolve undefined', async () => {
+        backend.injectFault({
+          method: 'delete',
+          path: 'smokeProfile/profile-id-123',
+          status: 500,
+        });
+        const consoleLogSpy = jest.spyOn(console, 'log');
+
+        const result = await deleteSmokeProfileById('profile-id-123');
+
+        expect(result).toBeUndefined();
+        expect(consoleLogSpy).toHaveBeenCalledTimes(1);
+        // the faulted delete must leave the record intact
+        expect(backend.store.smokeProfile.records['profile-id-123']).toEqual(mockSmokeProfile);
+      });
     });
   });
 
@@ -335,53 +425,6 @@ describe('smokerService', () => {
       const result = await FinishSmoke();
 
       expect(mockAxios.post).toHaveBeenCalledWith('smoke/finish');
-      expect(consoleLogSpy).toHaveBeenCalledWith(mockError);
-      expect(result).toBeUndefined();
-    });
-  });
-
-  describe('getCurrentSmokeProfile', () => {
-    test('should get current smoke profile successfully', async () => {
-      const mockAxios = require('axios');
-      mockAxios.get.mockResolvedValue({
-        data: mockSmokeProfile,
-      });
-
-      const result = await getCurrentSmokeProfile();
-
-      expect(mockAxios.get).toHaveBeenCalledWith('smokeProfile/current');
-      expect(result).toEqual(mockSmokeProfile);
-    });
-
-    test('should handle missing notes and woodType fields in current profile', async () => {
-      const profileWithoutOptionalFields = {
-        chamberName: 'Main Chamber',
-        probe1Name: 'Meat Probe',
-        probe2Name: 'Chamber Probe',
-        probe3Name: 'Water Pan',
-      };
-
-      const mockAxios = require('axios');
-      mockAxios.get.mockResolvedValue({
-        data: profileWithoutOptionalFields,
-      });
-
-      const result = await getCurrentSmokeProfile();
-
-      expect(result.notes).toBe('');
-      expect(result.woodType).toBe('');
-    });
-
-    test('should handle getCurrentSmokeProfile error and log it', async () => {
-      const mockError = new Error('Get current profile failed');
-      const mockAxios = require('axios');
-      mockAxios.get.mockRejectedValue(mockError);
-
-      const consoleLogSpy = jest.spyOn(console, 'log');
-
-      const result = await getCurrentSmokeProfile();
-
-      expect(mockAxios.get).toHaveBeenCalledWith('smokeProfile/current');
       expect(consoleLogSpy).toHaveBeenCalledWith(mockError);
       expect(result).toBeUndefined();
     });
@@ -470,34 +513,6 @@ describe('smokerService', () => {
       const result = await getSmokeById(testId);
 
       expect(mockAxios.get).toHaveBeenCalledWith('smoke/' + testId);
-      expect(consoleLogSpy).toHaveBeenCalledWith(mockError);
-      expect(result).toBeUndefined();
-    });
-  });
-
-  describe('deleteSmokeProfileById', () => {
-    test('should delete smoke profile by id successfully', async () => {
-      const testId = 'profile-id-123';
-      const mockAxios = require('axios');
-      mockAxios.delete.mockResolvedValue({});
-
-      const result = await deleteSmokeProfileById(testId);
-
-      expect(mockAxios.delete).toHaveBeenCalledWith('smokeProfile/' + testId);
-      expect(result).toEqual({});
-    });
-
-    test('should handle deleteSmokeProfileById error and log it', async () => {
-      const testId = 'profile-id-123';
-      const mockError = new Error('Delete profile failed');
-      const mockAxios = require('axios');
-      mockAxios.delete.mockRejectedValue(mockError);
-
-      const consoleLogSpy = jest.spyOn(console, 'log');
-
-      const result = await deleteSmokeProfileById(testId);
-
-      expect(mockAxios.delete).toHaveBeenCalledWith('smokeProfile/' + testId);
       expect(consoleLogSpy).toHaveBeenCalledWith(mockError);
       expect(result).toBeUndefined();
     });
