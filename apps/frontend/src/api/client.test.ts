@@ -3,10 +3,11 @@
  * the sync-query rule's name heuristic mis-fires on it.
  */
 /* eslint-disable testing-library/no-await-sync-query */
-import { SmokeProfile, TempData, rating, NotificationSettings } from './types';
+import { NotificationSettings, Smoke, SmokeHistory, SmokeProfile, TempData, rating } from './types';
 import { createApiClient } from './client';
 import { createFakeBackend } from './fakeBackend';
 import { ApiError } from './transport';
+import { SmokeEventPort } from './events';
 
 const sampleTemps: TempData[] = [
   {
@@ -80,6 +81,106 @@ const sampleProfile: SmokeProfile = {
   notes: 'Test smoke',
   woodType: 'Hickory',
 };
+
+describe('state client — clear smoke side-effect', () => {
+  test('clear performs the REST call and invokes the injected event port exactly once', async () => {
+    const backend = createFakeBackend({ state: { smokeId: 's1', smoking: true } });
+    const emitClear = jest.fn();
+    const events: SmokeEventPort = { emitClear };
+    const client = createApiClient(backend, events);
+
+    await client.state.clearSmoke();
+
+    expect(emitClear).toHaveBeenCalledTimes(1);
+    expect(backend.requests).toContainEqual({
+      method: 'put',
+      path: 'state/clearSmoke',
+      body: undefined,
+    });
+  });
+
+  test('toggleSmoking rejects with the typed ApiError when the backend fails', async () => {
+    const backend = createFakeBackend();
+    backend.injectFault({ method: 'put', path: 'state/toggleSmoking', status: 500 });
+    const client = createApiClient(backend);
+
+    const error = (await client.state.toggleSmoking().catch(e => e)) as ApiError;
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.status).toBe(500);
+    expect(error.method).toBe('put');
+    expect(error.path).toBe('state/toggleSmoking');
+  });
+});
+
+describe('state/smoke/history client — legacy endpoint contract', () => {
+  test('every operation hits the exact legacy endpoint path', async () => {
+    const smoke: Smoke = {
+      preSmokeId: 'pre1',
+      tempsId: 'temps1',
+      postSmokeId: 'post1',
+      smokeProfileId: 'prof1',
+      ratingId: 'rate1',
+      date: new Date('2025-01-01T00:00:00Z'),
+      status: 0,
+    };
+    const backend = createFakeBackend({
+      smoke: { records: { abc123: smoke }, all: [smoke], finish: smoke },
+      history: [],
+    });
+    const client = createApiClient(backend, { emitClear: jest.fn() });
+
+    await client.state.get();
+    await client.state.toggleSmoking();
+    await client.state.clearSmoke();
+    await client.smoke.getById('abc123');
+    await client.smoke.getAll();
+    await client.smoke.finish();
+    await client.history.list();
+
+    expect(backend.requests).toEqual([
+      { method: 'get', path: 'state', body: undefined },
+      { method: 'put', path: 'state/toggleSmoking', body: undefined },
+      { method: 'put', path: 'state/clearSmoke', body: undefined },
+      { method: 'get', path: 'smoke/abc123', body: undefined },
+      { method: 'get', path: 'smoke/all', body: undefined },
+      { method: 'post', path: 'smoke/finish', body: undefined },
+      { method: 'get', path: 'history', body: undefined },
+    ]);
+  });
+});
+
+describe('history client — list read', () => {
+  const rows: SmokeHistory[] = [
+    {
+      name: 'Test Brisket',
+      meatType: 'Beef',
+      weight: '12',
+      weightUnit: 'lbs',
+      woodType: 'Hickory',
+      date: '2025-01-01',
+      smokeId: 'smoke-id-1',
+      overAllRating: '8',
+    },
+  ];
+
+  test('resolves the history rows on success', async () => {
+    const backend = createFakeBackend({ history: rows });
+    const client = createApiClient(backend);
+
+    await expect(client.history.list()).resolves.toEqual(rows);
+  });
+
+  test('rejects with the typed ApiError on failure', async () => {
+    const backend = createFakeBackend({ history: rows });
+    backend.injectFault({ method: 'get', path: 'history', status: 503 });
+    const client = createApiClient(backend);
+
+    const error = (await client.history.list().catch(e => e)) as ApiError;
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.status).toBe(503);
+  });
+});
 
 describe('smokeProfile client — legacy endpoint contract', () => {
   test('methods hit the exact legacy endpoint paths', async () => {

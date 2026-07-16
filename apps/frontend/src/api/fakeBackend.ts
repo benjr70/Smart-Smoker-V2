@@ -7,7 +7,17 @@
  * requests) afterward — no axios mocking required.
  */
 import { ApiError, HttpMethod, TransportPort } from './transport';
-import { NotificationSettings, PostSmoke, PreSmoke, SmokeProfile, TempData, rating } from './types';
+import {
+  NotificationSettings,
+  PostSmoke,
+  PreSmoke,
+  Smoke,
+  SmokeHistory,
+  SmokeProfile,
+  State,
+  TempData,
+  rating,
+} from './types';
 
 /**
  * A profile as it may sit persisted on the backend: the optional `notes`/
@@ -55,6 +65,13 @@ export interface FakeBackendSeed {
   notifications?: {
     settings?: NotificationSettings[];
   };
+  state?: State;
+  smoke?: {
+    records?: Record<string, Smoke>;
+    all?: Smoke[];
+    finish?: Smoke;
+  };
+  history?: SmokeHistory[];
 }
 
 interface FakeStore {
@@ -81,6 +98,13 @@ interface FakeStore {
   notifications: {
     settings: NotificationSettings[];
   };
+  state: State;
+  smoke: {
+    records: Record<string, Smoke>;
+    all: Smoke[];
+    finish: Smoke | Record<string, never>;
+  };
+  history: SmokeHistory[];
 }
 
 export interface FakeBackend extends TransportPort {
@@ -131,6 +155,13 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
     notifications: {
       settings: seed.notifications?.settings ?? [],
     },
+    state: seed.state ?? { smokeId: '', smoking: false },
+    smoke: {
+      records: seed.smoke?.records ?? {},
+      all: seed.smoke?.all ?? [],
+      finish: seed.smoke?.finish ?? {},
+    },
+    history: seed.history ?? [],
   };
   const requests: RecordedRequest[] = [];
   const faults: FaultInjection[] = [];
@@ -277,6 +308,40 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
         store.notifications.settings = clone(settings);
         return clone({ settings: store.notifications.settings }) as unknown as T;
       }
+    }
+
+    if (resource === 'state') {
+      if (method === 'get' && id === undefined) {
+        return clone(store.state) as unknown as T;
+      }
+      if (method === 'put' && id === 'toggleSmoking') {
+        store.state = { ...store.state, smoking: !store.state.smoking };
+        return clone(store.state) as unknown as T;
+      }
+      if (method === 'put' && id === 'clearSmoke') {
+        store.state = { smokeId: '', smoking: false };
+        return clone(store.state) as unknown as T;
+      }
+    }
+
+    if (resource === 'smoke') {
+      if (method === 'get' && id === 'all') {
+        return clone(store.smoke.all) as unknown as T;
+      }
+      if (method === 'post' && id === 'finish') {
+        return clone(store.smoke.finish) as unknown as T;
+      }
+      if (method === 'get' && id !== undefined) {
+        const record = store.smoke.records[id];
+        if (!record) {
+          throw new ApiError({ status: 404, path, method });
+        }
+        return clone(record) as unknown as T;
+      }
+    }
+
+    if (resource === 'history' && method === 'get' && id === undefined) {
+      return clone(store.history) as unknown as T;
     }
 
     throw new ApiError({

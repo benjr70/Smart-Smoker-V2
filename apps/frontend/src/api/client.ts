@@ -6,9 +6,21 @@
  * routing, aggregates and the ordered delete cascade. It throws typed errors —
  * it never resolves `undefined`.
  */
+import { SmokeEventPort, noopEventPort } from './events';
 import { createHttpTransport } from './httpAdapter';
+import { createSocketEventPort } from './socketEventAdapter';
 import { TransportPort } from './transport';
-import { NotificationSettings, PostSmoke, PreSmoke, SmokeProfile, TempData, rating } from './types';
+import {
+  NotificationSettings,
+  PostSmoke,
+  PreSmoke,
+  Smoke,
+  SmokeHistory,
+  SmokeProfile,
+  State,
+  TempData,
+  rating,
+} from './types';
 
 /** The wire envelope wrapping the notification rules on both get and save. */
 interface NotificationSettingsEnvelope {
@@ -88,6 +100,33 @@ export interface NotificationsResource {
   saveSettings(input: unknown): Promise<NotificationSettingsEnvelope>;
 }
 
+export interface StateResource {
+  /** GET `state` — the current smoke-session state. */
+  get(): Promise<State>;
+  /** PUT `state/toggleSmoking` — flip active-smoking; rejects on failure. */
+  toggleSmoking(): Promise<State>;
+  /**
+   * PUT `state/clearSmoke` — reset the session. Also fires the injected event
+   * port's clear signal so connected devices reset; the client never touches
+   * the socket library itself.
+   */
+  clearSmoke(): Promise<State>;
+}
+
+export interface SmokeResource {
+  /** GET `smoke/:id` — a stored smoke aggregate by id. */
+  getById(id: string): Promise<Smoke>;
+  /** GET `smoke/all` — every stored smoke. */
+  getAll(): Promise<Smoke[]>;
+  /** POST `smoke/finish` — finalize the current smoke. */
+  finish(): Promise<Smoke>;
+}
+
+export interface HistoryResource {
+  /** GET `history` — the denormalized history rows. */
+  list(): Promise<SmokeHistory[]>;
+}
+
 export interface ApiClient {
   temps: TempsResource;
   smokeProfile: SmokeProfileResource;
@@ -95,6 +134,9 @@ export interface ApiClient {
   postSmoke: PostSmokeResource;
   ratings: RatingsResource;
   notifications: NotificationsResource;
+  state: StateResource;
+  smoke: SmokeResource;
+  history: HistoryResource;
 }
 
 /**
@@ -205,7 +247,10 @@ const toNotificationSettingsPayload = (input: unknown): NotificationSettingsEnve
   };
 };
 
-export const createApiClient = (transport: TransportPort): ApiClient => ({
+export const createApiClient = (
+  transport: TransportPort,
+  events: SmokeEventPort = noopEventPort
+): ApiClient => ({
   temps: {
     getCurrent: () => transport.get<TempData[]>('temps'),
     getById: (id: string) => transport.get<TempData[]>(`temps/${id}`),
@@ -264,10 +309,32 @@ export const createApiClient = (transport: TransportPort): ApiClient => ({
         toNotificationSettingsPayload(input)
       ),
   },
+  state: {
+    get: () => transport.get<State>('state'),
+    toggleSmoking: () => transport.put<State>('state/toggleSmoking'),
+    clearSmoke: () => {
+      events.emitClear();
+      return transport.put<State>('state/clearSmoke');
+    },
+  },
+  smoke: {
+    getById: (id: string) => transport.get<Smoke>(`smoke/${id}`),
+    getAll: () => transport.get<Smoke[]>('smoke/all'),
+    finish: () => transport.post<Smoke>('smoke/finish'),
+  },
+  history: {
+    list: () => transport.get<SmokeHistory[]>('history'),
+  },
 });
 
-/** Builds the production client backed by the HTTP (axios) transport. */
-export const createProductionApiClient = (): ApiClient => createApiClient(createHttpTransport());
+/**
+ * Builds the production client: the HTTP (axios) transport plus the
+ * socket-backed event port so `clearSmoke` broadcasts over the websocket. This
+ * is the single wiring site that pairs the transport-pure client with its one
+ * side-effect adapter.
+ */
+export const createProductionApiClient = (): ApiClient =>
+  createApiClient(createHttpTransport(), createSocketEventPort());
 
 let defaultClient: ApiClient | undefined;
 
