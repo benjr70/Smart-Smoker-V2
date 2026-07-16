@@ -79,7 +79,7 @@ EOF
     local scan
     scan="$(GH_BIN="${dir}/gh-stub" wp_scan)"
 
-    local want='{"locked":false,"reconcile":305,"paused":null,"pickSig":"290"}'
+    local want='{"locked":false,"reconcile":305,"paused":null,"pickSig":"290","prSig":"305"}'
     if [ "${scan}" != "${want}" ]; then
         fail "scan shape mismatch" "got:  ${scan}
 want: ${want}"
@@ -242,6 +242,219 @@ test_decide_malformed_keeps_sleeping() {
 }
 
 #-------------------------------------------------------------------------------
+# Test 9: wp_scan derives the open-PR signature from the PR list it already
+# fetches — a sorted CSV of open PR numbers, no extra gh call (the same
+# `pr list` query that feeds reconcile triage). (behavior 6)
+#-------------------------------------------------------------------------------
+test_scan_emits_pr_sig() {
+    echo "TEST: wp_scan emits the open-PR signature"
+
+    local dir; dir="$(make_env)"
+    trap "rm -rf '${dir}'" RETURN
+    cat > "${dir}/prs.out" <<'EOF'
+[{"number":367,"headRefName":"feat/a","isDraft":false,"mergeable":"MERGEABLE",
+  "labels":[],"createdAt":"2026-07-15T00:00:00Z","author":{"login":"agent-bot"}},
+ {"number":354,"headRefName":"feat/b","isDraft":false,"mergeable":"MERGEABLE",
+  "labels":[],"createdAt":"2026-07-15T00:00:00Z","author":{"login":"agent-bot"}}]
+EOF
+
+    local pr_sig
+    pr_sig="$(GH_BIN="${dir}/gh-stub" wp_scan | jq -r '.prSig')"
+
+    if [ "${pr_sig}" != "354,367" ]; then
+        fail "prSig must be the sorted CSV of open PR numbers" "prSig=${pr_sig}"
+        return
+    fi
+
+    pass "wp_scan emits the open-PR signature"
+}
+
+#-------------------------------------------------------------------------------
+# Test 10: an empty open-PR set is a READABLE empty signature (""), distinct
+# from an unreadable set — the reconcile fetch succeeded and returned []. Must
+# not read as null. (behavior 6)
+#-------------------------------------------------------------------------------
+test_scan_empty_pr_set_is_empty_sig() {
+    echo "TEST: wp_scan empty PR set is a readable empty signature"
+
+    local dir; dir="$(make_env)"
+    trap "rm -rf '${dir}'" RETURN
+    # default prs.out is "[]"
+
+    local pr_sig_raw
+    pr_sig_raw="$(GH_BIN="${dir}/gh-stub" wp_scan | jq -r '.prSig')"
+
+    if [ "${pr_sig_raw}" != "" ]; then
+        fail "an empty PR set must be an empty-string prSig, not null" "prSig=${pr_sig_raw}"
+        return
+    fi
+    # explicitly: the field is present and an empty string, not JSON null
+    local is_null
+    is_null="$(GH_BIN="${dir}/gh-stub" wp_scan | jq -r '.prSig == null')"
+    if [ "${is_null}" != "false" ]; then
+        fail "empty PR set prSig must be \"\", not JSON null" "prSig==null? ${is_null}"
+        return
+    fi
+
+    pass "wp_scan empty PR set is a readable empty signature"
+}
+
+#-------------------------------------------------------------------------------
+# Test 11: `gh pr list` failure fails SAFE — prSig scans as JSON null (the set
+# is UNKNOWN, not empty), so wp_decide cannot mistake a fetch flake for a
+# whole-set shrink and wake-loop. (behavior 5, CRITICAL)
+#-------------------------------------------------------------------------------
+test_scan_pr_list_error_null_sig() {
+    echo "TEST: wp_scan pr-list error scans prSig as null"
+
+    local dir; dir="$(make_env)"
+    trap "rm -rf '${dir}'" RETURN
+    rm "${dir}/prs.out"   # stub's cat fails → gh exits non-zero for `pr list`
+
+    local is_null
+    is_null="$(GH_BIN="${dir}/gh-stub" wp_scan | jq -r '.prSig == null')"
+
+    if [ "${is_null}" != "true" ]; then
+        fail "pr-list error must scan prSig as JSON null" "prSig==null? ${is_null}"
+        return
+    fi
+
+    pass "wp_scan pr-list error scans prSig as null"
+}
+
+#-------------------------------------------------------------------------------
+# Test 12: shrink-wake — a PR present in the baseline but absent from a later
+# scan wakes the daemon, naming the disappeared PR(s). This is the 2026-07-15
+# scenario: baseline holds blocker PRs #354,#367; after the human merge the
+# open set is empty. (behaviors 1 & 6, CRITICAL)
+#-------------------------------------------------------------------------------
+test_decide_pr_shrink_wakes() {
+    echo "TEST: wp_decide wakes when a baseline PR leaves the open set"
+
+    local reason
+    if ! reason="$(printf '%s' \
+        '{"locked":false,"reconcile":null,"paused":null,"pickSig":"","prSig":""}' \
+        | wp_decide "" "354,367")"; then
+        fail "a disappeared baseline PR must wake" ""
+        return
+    fi
+    if [ "${reason}" != "PR(s) left the open set #354,367" ]; then
+        fail "wake reason must name the disappeared PR(s)" "reason=${reason}"
+        return
+    fi
+
+    pass "wp_decide wakes when a baseline PR leaves the open set"
+}
+
+#-------------------------------------------------------------------------------
+# Test 13: partial shrink — only the PRs actually gone are named; PRs still
+# open are not. Baseline {354,367}, scan {367} → wake naming only #354.
+# (behavior 3, complement)
+#-------------------------------------------------------------------------------
+test_decide_pr_partial_shrink_names_gone() {
+    echo "TEST: wp_decide names only the PRs that left"
+
+    local reason
+    reason="$(printf '%s' \
+        '{"locked":false,"reconcile":null,"paused":null,"pickSig":"","prSig":"367"}' \
+        | wp_decide "" "354,367")"
+
+    if [ "${reason}" != "PR(s) left the open set #354" ]; then
+        fail "only the disappeared PR must be named" "reason=${reason}"
+        return
+    fi
+
+    pass "wp_decide names only the PRs that left"
+}
+
+#-------------------------------------------------------------------------------
+# Test 14: set growth alone does NOT wake — a new PR appears mid-sleep but none
+# from the baseline disappeared. New PRs are covered by the reconcile signal
+# when actionable, so the shrink rule must ignore growth. (behavior 3)
+#-------------------------------------------------------------------------------
+test_decide_pr_growth_no_wake() {
+    echo "TEST: wp_decide does not wake on PR-set growth"
+
+    if printf '%s' \
+        '{"locked":false,"reconcile":null,"paused":null,"pickSig":"","prSig":"354,367,401"}' \
+        | wp_decide "" "354,367" >/dev/null; then
+        fail "a grown PR set must not wake by itself" ""
+        return
+    fi
+
+    pass "wp_decide does not wake on PR-set growth"
+}
+
+#-------------------------------------------------------------------------------
+# Test 15: an unchanged PR set keeps sleeping. (behavior 4, CRITICAL)
+#-------------------------------------------------------------------------------
+test_decide_pr_unchanged_no_wake() {
+    echo "TEST: wp_decide keeps sleeping on an unchanged PR set"
+
+    if printf '%s' \
+        '{"locked":false,"reconcile":null,"paused":null,"pickSig":"","prSig":"354,367"}' \
+        | wp_decide "" "354,367" >/dev/null; then
+        fail "an unchanged PR set must not wake" ""
+        return
+    fi
+
+    pass "wp_decide keeps sleeping on an unchanged PR set"
+}
+
+#-------------------------------------------------------------------------------
+# Test 16: a null (unreadable) current PR signature keeps sleeping even against
+# a non-empty baseline — a `gh pr list` flake mid-sleep must never look like a
+# whole-set shrink. (behavior 5, CRITICAL)
+#-------------------------------------------------------------------------------
+test_decide_pr_unreadable_no_wake() {
+    echo "TEST: wp_decide keeps sleeping when the PR set is unreadable"
+
+    if printf '%s' \
+        '{"locked":false,"reconcile":null,"paused":null,"pickSig":"","prSig":null}' \
+        | wp_decide "" "354,367" >/dev/null; then
+        fail "an unreadable PR set must not wake against a non-empty baseline" ""
+        return
+    fi
+
+    pass "wp_decide keeps sleeping when the PR set is unreadable"
+}
+
+#-------------------------------------------------------------------------------
+# Test 17: an empty PR baseline disables shrink-wake — the sleep began with no
+# open PRs (or an unreadable set snapshotted as ""), so nothing can "leave".
+# (fail-safe)
+#-------------------------------------------------------------------------------
+test_decide_pr_empty_baseline_no_wake() {
+    echo "TEST: wp_decide with an empty PR baseline never shrink-wakes"
+
+    if printf '%s' \
+        '{"locked":false,"reconcile":null,"paused":null,"pickSig":"","prSig":""}' \
+        | wp_decide "" "" >/dev/null; then
+        fail "an empty PR baseline must not shrink-wake" ""
+        return
+    fi
+
+    pass "wp_decide with an empty PR baseline never shrink-wakes"
+}
+
+#-------------------------------------------------------------------------------
+# Test 18: a held lock suppresses shrink-wake too — every fire would just skip.
+# (fail-safe, priority order)
+#-------------------------------------------------------------------------------
+test_decide_locked_suppresses_shrink() {
+    echo "TEST: wp_decide never shrink-wakes while locked"
+
+    if printf '%s' \
+        '{"locked":true,"reconcile":null,"paused":null,"pickSig":"","prSig":""}' \
+        | wp_decide "" "354,367" >/dev/null; then
+        fail "locked scan must not shrink-wake" ""
+        return
+    fi
+
+    pass "wp_decide never shrink-wakes while locked"
+}
+
+#-------------------------------------------------------------------------------
 # Run suite
 #-------------------------------------------------------------------------------
 echo "=========================================="
@@ -256,6 +469,16 @@ test_decide_locked_never_wakes
 test_decide_paused_wakes
 test_decide_pick_baseline_suppression
 test_decide_malformed_keeps_sleeping
+test_scan_emits_pr_sig
+test_scan_empty_pr_set_is_empty_sig
+test_scan_pr_list_error_null_sig
+test_decide_pr_shrink_wakes
+test_decide_pr_partial_shrink_names_gone
+test_decide_pr_growth_no_wake
+test_decide_pr_unchanged_no_wake
+test_decide_pr_unreadable_no_wake
+test_decide_pr_empty_baseline_no_wake
+test_decide_locked_suppresses_shrink
 
 echo ""
 echo "=========================================="

@@ -173,13 +173,20 @@ sleep_and_poll() {
 # deterministically acts on them), and pick-class candidates wake only when
 # they differ from the baseline captured here at no-work time.
 probe_sleep() {
-    local reset_at="$1" plan sleep_secs interval attempts elapsed=0 chunk baseline scan reason
+    local reset_at="$1" plan sleep_secs interval attempts elapsed=0 chunk reason
+    local baseline_scan baseline pr_baseline scan
     plan="$(sleep_planner "${reset_at}" "${BUDGET_GATE_NOW:-}")"
     sleep_secs="$(printf '%s' "${plan}" | jq -r '.sleepSecs')"
     interval="$(printf '%s' "${plan}" | jq -r '.pollIntervalSecs')"
     attempts="$(printf '%s' "${plan}" | jq -r '.pollMaxAttempts')"
 
-    baseline="$(eval "${WORK_PROBE_CMD}" 2>/dev/null | jq -r '.pickSig // ""' 2>/dev/null || echo '')"
+    # Snapshot both baselines from a single scan: the pick-class signature (new
+    # issues) and the open-PR signature (blocker PRs whose merge unblocks the
+    # queue). An unreadable PR set snapshots as "" (via // ""), which disables
+    # shrink-wake — nothing can "leave" an unknown baseline.
+    baseline_scan="$(eval "${WORK_PROBE_CMD}" 2>/dev/null || true)"
+    baseline="$(printf '%s' "${baseline_scan}" | jq -r '.pickSig // ""' 2>/dev/null || echo '')"
+    pr_baseline="$(printf '%s' "${baseline_scan}" | jq -r '.prSig // ""' 2>/dev/null || echo '')"
 
     log "sleeping ${sleep_secs}s until reset ${reset_at} (work probe every ${WORK_PROBE_INTERVAL}s)"
     while [ "${elapsed}" -lt "${sleep_secs}" ]; do
@@ -192,7 +199,7 @@ probe_sleep() {
 
         scan="$(eval "${WORK_PROBE_CMD}" 2>/dev/null || true)"
         [ -n "${scan}" ] || continue
-        if reason="$(printf '%s' "${scan}" | wp_decide "${baseline}")"; then
+        if reason="$(printf '%s' "${scan}" | wp_decide "${baseline}" "${pr_baseline}")"; then
             log "work appeared mid-window (${reason}) — waking early"
             return 0
         fi
