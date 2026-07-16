@@ -38,7 +38,7 @@ export type SessionRole = 'monitor' | 'smoker';
 export type NameTarget = 'chamber' | 'probe1' | 'probe2' | 'probe3';
 
 /** Where a surfaced startup/runtime failure originated. */
-export type SessionErrorSource = 'profile' | 'state' | 'temps';
+export type SessionErrorSource = 'profile' | 'state' | 'temps' | 'device';
 
 /**
  * A startup or load failure surfaced honestly in the snapshot instead of being
