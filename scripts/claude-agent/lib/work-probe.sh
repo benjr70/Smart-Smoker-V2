@@ -13,9 +13,14 @@
 #                         { "locked":    <bool>,        # team:in-progress held
 #                           "reconcile": <pr# | null>,  # pr_triage_pick verdict
 #                           "paused":    <issue# | null>,
-#                           "pickSig":   "<csv of candidate issue numbers>" }
+#                           "pickSig":   "<csv of candidate issue numbers>",
+#                           "prSig":     "<csv of open PR numbers>" | null }
+#                         prSig is derived from the same `pr list` fetch that
+#                         feeds reconcile triage — no extra API call. A failed
+#                         or malformed fetch emits prSig=null (set UNKNOWN),
+#                         never "" (which means a readable EMPTY set).
 #
-#   wp_decide <baseline-pickSig>
+#   wp_decide <baseline-pickSig> <baseline-prSig>
 #                       pure: reads a scan JSON on stdin, prints a one-line
 #                       wake reason and exits 0, or exits 1 (keep sleeping).
 #
@@ -28,6 +33,14 @@
 #     act on it.
 #   - team:paused issue → wake unconditionally. §1.5 always acts (resume, or
 #     cap → team:failed — either way the signal clears itself).
+#   - open-PR set shrink → wake unconditionally when a PR present in the
+#     baseline is absent from the current scan (merged OR closed — no
+#     distinction needed; a wake that finds nothing re-baselines next fire).
+#     This closes the blocker-PR blind spot: chain-root issues are closed by
+#     the agent before their PR merges, so a blocker-PR merge changes no
+#     issue-side signal — but it unblocks the queue. Set GROWTH never wakes
+#     here (new PRs ride the reconcile signal when actionable). Fails SAFE: a
+#     null (unreadable) current prSig is never read as a shrink.
 #   - pick-class candidates (open `team` issues with no state label) → wake
 #     ONLY when the signature differs from the baseline captured when the fire
 #     reported no work. The probe cannot cheaply check Project #1 membership
@@ -49,6 +62,7 @@ _WP_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # everything else → "nothing there"), never crash the daemon's sleep loop.
 wp_scan() {
     local gh="${GH_BIN:-gh}" author locked_raw locked prs pick_json reconcile paused pick_sig
+    local pr_sig pr_sig_arg
 
     author="${WP_AUTHOR:-$("${gh}" api user -q .login 2>/dev/null || echo '')}"
 
@@ -60,9 +74,21 @@ wp_scan() {
         locked=true
     fi
 
+    # One `pr list` fetch feeds BOTH the reconcile triage and the open-PR
+    # signature — no extra API call for the shrink signal. A failed/malformed
+    # fetch fails SAFE: the set is UNKNOWN (prSig → JSON null), never mistaken
+    # for an empty set, so wp_decide can't read a flake as a whole-set shrink.
     prs="$("${gh}" pr list --state open \
         --json number,headRefName,isDraft,mergeable,labels,createdAt,author \
-        2>/dev/null || echo '[]')"
+        2>/dev/null)" || prs=''
+    if [ -n "${prs}" ] && printf '%s' "${prs}" | jq -e 'type == "array"' >/dev/null 2>&1; then
+        pr_sig="$(printf '%s' "${prs}" | jq -r '[.[].number] | sort | map(tostring) | join(",")')"
+        pr_sig_arg="$(jq -cn --arg s "${pr_sig}" '$s')"
+    else
+        prs='[]'          # reconcile triage still needs a valid empty array
+        pr_sig_arg='null' # set unreadable → signature is null, not ""
+    fi
+
     pick_json="$(printf '%s' "${prs}" | PR_TRIAGE_AUTHOR="${author}" pr_triage_pick)" || true
     reconcile="$(printf '%s' "${pick_json}" | jq -r '.pr // "null"' 2>/dev/null || echo 'null')"
 
@@ -84,14 +110,17 @@ wp_scan() {
         --argjson reconcile "${reconcile}" \
         --argjson paused "${paused}" \
         --arg pickSig "${pick_sig}" \
-        '{locked: $locked, reconcile: $reconcile, paused: $paused, pickSig: $pickSig}'
+        --argjson prSig "${pr_sig_arg}" \
+        '{locked: $locked, reconcile: $reconcile, paused: $paused, pickSig: $pickSig, prSig: $prSig}'
 }
 
 # wp_decide: read a scan JSON on stdin; wake (print reason, exit 0) or keep
-# sleeping (exit 1). $1 is the baseline pickSig captured at no-work time.
-# Anything malformed keeps sleeping — a broken sensor must never wake-loop.
+# sleeping (exit 1). $1 is the baseline pickSig and $2 the baseline prSig, both
+# captured at no-work time. Anything malformed keeps sleeping — a broken sensor
+# must never wake-loop.
 wp_decide() {
-    local baseline="${1:-}" scan locked reconcile paused pick_sig
+    local baseline="${1:-}" pr_baseline="${2:-}" scan locked reconcile paused pick_sig
+    local pr_readable pr_sig gone
     scan="$(cat)"
 
     printf '%s' "${scan}" | jq -e 'type == "object"' >/dev/null 2>&1 || return 1
@@ -112,6 +141,25 @@ wp_decide() {
     if [ "${paused}" != "null" ]; then
         printf 'resume issue #%s\n' "${paused}"
         return 0
+    fi
+
+    # Shrink-wake: a PR present in the baseline but gone from the current scan
+    # (merged or closed — no distinction needed) unblocks the queue. Only fires
+    # when the current set is READABLE (prSig not null): a `gh pr list` flake
+    # scans as null and must never look like a whole-set shrink. Set growth is
+    # ignored here — new PRs are covered by the reconcile signal when actionable.
+    if [ -n "${pr_baseline}" ]; then
+        pr_readable="$(printf '%s' "${scan}" | jq -r '.prSig != null' 2>/dev/null || echo 'false')"
+        if [ "${pr_readable}" = "true" ]; then
+            pr_sig="$(printf '%s' "${scan}" | jq -r '.prSig')"
+            gone="$(jq -rn --arg b "${pr_baseline}" --arg c "${pr_sig}" \
+                'def toset($s): ($s | if length > 0 then split(",") else [] end);
+                 (toset($b) - toset($c)) | join(",")')"
+            if [ -n "${gone}" ]; then
+                printf 'PR(s) left the open set #%s\n' "${gone}"
+                return 0
+            fi
+        fi
     fi
 
     pick_sig="$(printf '%s' "${scan}" | jq -r '.pickSig // ""')"

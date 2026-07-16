@@ -340,6 +340,69 @@ $(cat "${dir}/calls.log")"
 }
 
 #-------------------------------------------------------------------------------
+# Test 5d: the 2026-07-15 blind spot — a NO_WORK fire found every issue blocked
+# on open human-review PRs (#354, #367). The probe snapshots the open-PR
+# signature at sleep start; when the human merges both PRs mid-sleep the set
+# shrinks, and the probe wakes the daemon early instead of sleeping ~2 days.
+# The probe stub returns the baseline set on its first call (sleep-start
+# snapshot) and the empty set afterward. (behaviors 1, 7)
+#-------------------------------------------------------------------------------
+test_no_work_probe_wakes_on_pr_shrink() {
+    echo "TEST: work probe wakes when blocker PRs leave the open set"
+
+    local dir; dir="$(make_env)"
+    trap "rm -rf '${dir}'" RETURN
+    fixture $((NOW_EPOCH - 60)) > "${dir}/ccusage.json"
+    cat > "${dir}/agent-run-stub" <<EOF
+#!/usr/bin/env bash
+echo "fired \$*" >> "${dir}/calls.log"
+echo "team-pickup: all issues blocked on open PRs"
+echo "AGENT_RUN_NO_WORK=1"
+exit 0
+EOF
+    chmod +x "${dir}/agent-run-stub"
+    # First probe call (baseline snapshot) sees the blocker PRs open; every call
+    # after sees them merged (empty open set), a readable shrink.
+    : > "${dir}/probe.count"
+    cat > "${dir}/probe-stub" <<EOF
+#!/usr/bin/env bash
+n="\$(wc -c < "${dir}/probe.count")"
+printf 'x' >> "${dir}/probe.count"
+if [ "\${n}" -eq 0 ]; then
+    printf '%s\n' '{"locked":false,"reconcile":null,"paused":null,"pickSig":"","prSig":"354,367"}'
+else
+    printf '%s\n' '{"locked":false,"reconcile":null,"paused":null,"pickSig":"","prSig":""}'
+fi
+EOF
+    chmod +x "${dir}/probe-stub"
+
+    BUDGET_GATE_NOW="${NOW_EPOCH}" AGENT_DAEMON_MAX_ITERS=2 \
+        CCUSAGE_CMD="cat '${dir}/ccusage.json'" \
+        AGENT_RUN_CMD="${dir}/agent-run-stub" \
+        SLEEP_CMD="${dir}/sleep-stub" \
+        WORK_PROBE_CMD="${dir}/probe-stub" \
+        bash "${DAEMON}" > "${dir}/daemon.out" 2>&1
+
+    if ! grep -q 'waking early' "${dir}/daemon.out"; then
+        fail "a mid-sleep PR-set shrink must log an early wake" "out:
+$(tail -5 "${dir}/daemon.out")"
+        return
+    fi
+    if ! grep -q 'PR(s) left the open set #354,367' "${dir}/daemon.out"; then
+        fail "early wake must name the disappeared blocker PRs" "out:
+$(tail -5 "${dir}/daemon.out")"
+        return
+    fi
+    if [ "$(grep -c '^fired' "${dir}/calls.log")" != "2" ]; then
+        fail "the shrink wake must lead to a second fire" "calls:
+$(cat "${dir}/calls.log")"
+        return
+    fi
+
+    pass "work probe wakes when blocker PRs leave the open set"
+}
+
+#-------------------------------------------------------------------------------
 # Test 6: a fire cut off by usage exhaustion (AGENT_RUN_RESET_AT emitted after
 # the pause) → the daemon sleeps to that reset instead of immediately re-firing
 # into a spent window.
@@ -549,6 +612,7 @@ test_clean_run_refires_same_window
 test_no_work_sleeps_instead_of_relooping
 test_no_work_probe_wakes_early_on_new_work
 test_no_work_probe_suppresses_stale_candidates
+test_no_work_probe_wakes_on_pr_shrink
 test_exhausted_run_sleeps_to_reset
 test_failed_run_sleeps_no_rapid_loop
 test_idle_window_fires_from_cold
