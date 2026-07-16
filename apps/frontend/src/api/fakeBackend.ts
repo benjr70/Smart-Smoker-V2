@@ -7,7 +7,17 @@
  * requests) afterward — no axios mocking required.
  */
 import { ApiError, HttpMethod, TransportPort } from './transport';
-import { TempData } from './types';
+import { SmokeProfile, TempData } from './types';
+
+/**
+ * A profile as it may sit persisted on the backend: the optional `notes`/
+ * `woodType` may be absent and Mongo's `_id`/`__v` may ride along. Seeded by
+ * tests to exercise read-path normalization and outbound DTO projection.
+ */
+export type StoredSmokeProfile = Partial<SmokeProfile> & {
+  _id?: string;
+  __v?: number;
+};
 
 export interface RecordedRequest {
   method: HttpMethod;
@@ -26,12 +36,20 @@ export interface FakeBackendSeed {
     current?: TempData[];
     records?: Record<string, TempData[]>;
   };
+  smokeProfile?: {
+    current?: StoredSmokeProfile;
+    records?: Record<string, StoredSmokeProfile>;
+  };
 }
 
 interface FakeStore {
   temps: {
     current: TempData[];
     records: Record<string, TempData[]>;
+  };
+  smokeProfile: {
+    current: StoredSmokeProfile;
+    records: Record<string, StoredSmokeProfile>;
   };
 }
 
@@ -64,6 +82,10 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
       current: seed.temps?.current ?? [],
       records: seed.temps?.records ?? {},
     },
+    smokeProfile: {
+      current: seed.smokeProfile?.current ?? {},
+      records: seed.smokeProfile?.records ?? {},
+    },
   };
   const requests: RecordedRequest[] = [];
   const faults: FaultInjection[] = [];
@@ -95,6 +117,27 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
       }
       if (method === 'delete' && id !== undefined) {
         delete store.temps.records[id];
+        return {} as unknown as T;
+      }
+    }
+
+    if (resource === 'smokeProfile') {
+      if (method === 'get' && id === 'current') {
+        return clone(store.smokeProfile.current) as unknown as T;
+      }
+      if (method === 'get' && id !== undefined) {
+        const record = store.smokeProfile.records[id];
+        if (!record) {
+          throw new ApiError({ status: 404, path, method });
+        }
+        return clone(record) as unknown as T;
+      }
+      if (method === 'post' && id === 'current') {
+        store.smokeProfile.current = clone(body) as StoredSmokeProfile;
+        return clone(store.smokeProfile.current) as unknown as T;
+      }
+      if (method === 'delete' && id !== undefined) {
+        delete store.smokeProfile.records[id];
         return {} as unknown as T;
       }
     }

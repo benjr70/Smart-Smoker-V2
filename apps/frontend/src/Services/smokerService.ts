@@ -1,17 +1,17 @@
 import { io } from 'socket.io-client';
 import { State } from '../components/common/interfaces/state';
 import { smokeHistory } from '../components/common/interfaces/history';
+import { getDefaultApiClient } from '../api';
+import { SmokeProfile } from '../api/types';
 
 const envUrl = process.env.REACT_APP_CLOUD_URL;
 
-export interface smokeProfile {
-  chamberName: string;
-  probe1Name: string;
-  probe2Name: string;
-  probe3Name: string;
-  notes: string;
-  woodType: string;
-}
+/**
+ * @deprecated The profile domain type now lives in the API types module
+ * (`SmokeProfile`). This alias is re-exported here only so existing callers
+ * importing `smokeProfile` from this service keep compiling until they migrate.
+ */
+export type { SmokeProfile as smokeProfile } from '../api/types';
 
 export const toggleSmoking = async (): Promise<State> => {
   const axios = require('axios');
@@ -50,39 +50,33 @@ export const getState = async (): Promise<State> => {
     });
 };
 
-export const setSmokeProfile = async (smokeProfileDTO: smokeProfile) => {
-  const axios = require('axios');
-  axios.defaults.baseURL = envUrl;
-  const payload = {
-    chamberName: smokeProfileDTO.chamberName,
-    probe1Name: smokeProfileDTO.probe1Name,
-    probe2Name: smokeProfileDTO.probe2Name,
-    probe3Name: smokeProfileDTO.probe3Name,
-    notes: smokeProfileDTO.notes,
-    woodType: smokeProfileDTO.woodType,
-  };
-  return axios.post('smokeProfile/current', payload).catch((error: any) => {
+/**
+ * @deprecated Use `useApiClient().smokeProfile.saveCurrent` instead. Deprecated
+ * delegating shim: the outbound DTO projection (stripping stray persisted
+ * fields such as `_id`/`__v`) now lives inside the client. Preserves the legacy
+ * swallow-and-log semantics (catch, `console.log`, resolve `undefined`).
+ */
+export const setSmokeProfile = async (smokeProfileDTO: SmokeProfile) => {
+  try {
+    return await getDefaultApiClient().smokeProfile.saveCurrent(smokeProfileDTO);
+  } catch (error) {
     console.log(error);
-  });
+    return undefined;
+  }
 };
 
-export const getSmokeProfileById = async (id: string): Promise<smokeProfile> => {
-  const axios = require('axios');
-  axios.defaults.baseURL = envUrl;
-  return axios
-    .get('smokeProfile/' + id)
-    .then((result: any) => {
-      if (!result.data.notes) {
-        result.data.notes = '';
-      }
-      if (!result.data.woodType) {
-        result.data.woodType = '';
-      }
-      return result.data;
-    })
-    .catch((error: any) => {
-      console.log(error);
-    });
+/**
+ * @deprecated Use `useApiClient().smokeProfile.getById` instead. Deprecated
+ * delegating shim; the notes/wood-type empty-string normalization now lives
+ * inside the client. Preserves the legacy swallow-and-log semantics.
+ */
+export const getSmokeProfileById = async (id: string): Promise<SmokeProfile> => {
+  try {
+    return await getDefaultApiClient().smokeProfile.getById(id);
+  } catch (error) {
+    console.log(error);
+    return undefined as unknown as SmokeProfile;
+  }
 };
 
 export const FinishSmoke = async (): Promise<any> => {
@@ -98,23 +92,18 @@ export const FinishSmoke = async (): Promise<any> => {
     });
 };
 
-export const getCurrentSmokeProfile = async (): Promise<smokeProfile> => {
-  const axios = require('axios');
-  axios.defaults.baseURL = envUrl;
-  return axios
-    .get('smokeProfile/current')
-    .then((result: any) => {
-      if (!result.data.notes) {
-        result.data.notes = '';
-      }
-      if (!result.data.woodType) {
-        result.data.woodType = '';
-      }
-      return result.data;
-    })
-    .catch((error: any) => {
-      console.log(error);
-    });
+/**
+ * @deprecated Use `useApiClient().smokeProfile.getCurrent` instead. Deprecated
+ * delegating shim; the notes/wood-type empty-string normalization now lives
+ * inside the client. Preserves the legacy swallow-and-log semantics.
+ */
+export const getCurrentSmokeProfile = async (): Promise<SmokeProfile> => {
+  try {
+    return await getDefaultApiClient().smokeProfile.getCurrent();
+  } catch (error) {
+    console.log(error);
+    return undefined as unknown as SmokeProfile;
+  }
 };
 
 export const getSmokeHistory = async (): Promise<smokeHistory[]> => {
@@ -156,12 +145,16 @@ export const getSmokeById = async (id: string): Promise<any> => {
     });
 };
 
+/**
+ * @deprecated Use `useApiClient().smokeProfile.deleteById` instead. Deprecated
+ * delegating shim; preserves the legacy swallow-and-log semantics.
+ */
 export const deleteSmokeProfileById = async (id: string) => {
-  const axios = require('axios');
-  axios.defaults.baseURL = envUrl;
-  return axios.delete('smokeProfile/' + id).catch((error: any) => {
+  try {
+    await getDefaultApiClient().smokeProfile.deleteById(id);
+  } catch (error) {
     console.log(error);
-  });
+  }
 };
 
 export const deleteSmokeById = async (id: string) => {
