@@ -3,7 +3,7 @@
  * the sync-query rule's name heuristic mis-fires on it.
  */
 /* eslint-disable testing-library/no-await-sync-query */
-import { SmokeProfile, TempData } from './types';
+import { SmokeProfile, TempData, rating, NotificationSettings } from './types';
 import { createApiClient } from './client';
 import { createFakeBackend } from './fakeBackend';
 import { ApiError } from './transport';
@@ -163,5 +163,182 @@ describe('smokeProfile client — outbound DTO projection (PR #323 strict edge)'
     // The strict-validation edge from PR #323: stray persisted fields are gone.
     expect(post?.body).not.toHaveProperty('_id');
     expect(post?.body).not.toHaveProperty('__v');
+  });
+});
+
+const sampleRating: rating = {
+  smokeFlavor: 8,
+  seasoning: 7,
+  tenderness: 9,
+  overallTaste: 8,
+  notes: 'Delicious!',
+};
+
+describe('ratings client — legacy endpoint contract', () => {
+  test('getCurrent returns the current rating from the collection path', async () => {
+    const backend = createFakeBackend({ ratings: { current: sampleRating } });
+    const client = createApiClient(backend);
+
+    const result = await client.ratings.getCurrent();
+
+    expect(result).toEqual(sampleRating);
+    expect(backend.requests).toContainEqual({ method: 'get', path: 'ratings', body: undefined });
+  });
+
+  test('getById fetches a stored rating from the id-scoped path', async () => {
+    const backend = createFakeBackend({ ratings: { records: { r1: sampleRating } } });
+    const client = createApiClient(backend);
+
+    const result = await client.ratings.getById('r1');
+
+    expect(result).toEqual(sampleRating);
+    expect(backend.requests).toContainEqual({ method: 'get', path: 'ratings/r1', body: undefined });
+  });
+
+  test('save without an id creates on the collection path with only whitelisted fields', async () => {
+    const backend = createFakeBackend();
+    const client = createApiClient(backend);
+
+    // Input carries persisted fields that the strict validation edge rejects.
+    const incoming = { ...sampleRating, _id: undefined, __v: 3 } as rating;
+    await client.ratings.save(incoming);
+
+    expect(backend.requests).toContainEqual({
+      method: 'post',
+      path: 'ratings',
+      body: {
+        smokeFlavor: 8,
+        seasoning: 7,
+        tenderness: 9,
+        overallTaste: 8,
+        notes: 'Delicious!',
+      },
+    });
+    const body = backend.requests.find(r => r.method === 'post')?.body as Record<string, unknown>;
+    expect(body).not.toHaveProperty('_id');
+    expect(body).not.toHaveProperty('__v');
+  });
+
+  test('save with an id updates the id-scoped path with only whitelisted fields', async () => {
+    const backend = createFakeBackend();
+    const client = createApiClient(backend);
+
+    const incoming = { ...sampleRating, _id: 'r9', __v: 0 } as rating;
+    await client.ratings.save(incoming);
+
+    expect(backend.requests).toContainEqual({
+      method: 'post',
+      path: 'ratings/r9',
+      body: {
+        smokeFlavor: 8,
+        seasoning: 7,
+        tenderness: 9,
+        overallTaste: 8,
+        notes: 'Delicious!',
+      },
+    });
+    const body = backend.requests.find(r => r.method === 'post')?.body as Record<string, unknown>;
+    expect(body).not.toHaveProperty('_id');
+    expect(body).not.toHaveProperty('__v');
+  });
+
+  test('deleteById removes a stored rating and leaves it intact on a faulted delete', async () => {
+    const backend = createFakeBackend({ ratings: { records: { r1: sampleRating } } });
+    const client = createApiClient(backend);
+
+    await client.ratings.deleteById('r1');
+    expect(backend.store.ratings.records.r1).toBeUndefined();
+    expect(backend.requests).toContainEqual({
+      method: 'delete',
+      path: 'ratings/r1',
+      body: undefined,
+    });
+
+    const backend2 = createFakeBackend({ ratings: { records: { r2: sampleRating } } });
+    const client2 = createApiClient(backend2);
+    backend2.injectFault({ method: 'delete', path: 'ratings/r2', status: 500 });
+    const error = (await client2.ratings.deleteById('r2').catch(e => e)) as ApiError;
+    expect(error).toBeInstanceOf(ApiError);
+    expect(backend2.store.ratings.records.r2).toEqual(sampleRating);
+  });
+});
+
+const editableRule: NotificationSettings = {
+  type: false,
+  message: 'Meat done',
+  probe1: 'Chamber',
+  op: '>',
+  probe2: 'Probe 1',
+  offset: 5,
+  temperature: 165,
+};
+
+describe('notifications client — legacy endpoint contract', () => {
+  test('getSettings returns the plain settings array although the wire nests it', async () => {
+    const backend = createFakeBackend({ notifications: { settings: [editableRule] } });
+    const client = createApiClient(backend);
+
+    const result = await client.notifications.getSettings();
+
+    expect(result).toEqual([editableRule]);
+    expect(backend.requests).toContainEqual({
+      method: 'get',
+      path: 'notifications/settings',
+      body: undefined,
+    });
+  });
+
+  test('saveSettings wraps the projected rules in the legacy envelope, stripping _id/__v', async () => {
+    const backend = createFakeBackend();
+    const client = createApiClient(backend);
+
+    const fetched = {
+      settings: [{ ...editableRule, _id: 'rule-1', __v: 0 }],
+    };
+    await client.notifications.saveSettings(fetched);
+
+    expect(backend.requests).toContainEqual({
+      method: 'post',
+      path: 'notifications/settings',
+      body: { settings: [editableRule] },
+    });
+    const sentRule = (
+      backend.requests.find(r => r.method === 'post')?.body as {
+        settings: Record<string, unknown>[];
+      }
+    ).settings[0];
+    expect(sentRule).not.toHaveProperty('_id');
+    expect(sentRule).not.toHaveProperty('__v');
+  });
+
+  test('saveSettings preserves lastNotificationSent only when present', async () => {
+    const backend = createFakeBackend();
+    const client = createApiClient(backend);
+
+    const sent = '2026-07-10T00:00:00.000Z';
+    await client.notifications.saveSettings({
+      settings: [{ ...editableRule, _id: 'rule-1', lastNotificationSent: sent }],
+    });
+
+    const sentRule = (
+      backend.requests.find(r => r.method === 'post')?.body as {
+        settings: Record<string, unknown>[];
+      }
+    ).settings[0];
+    expect(sentRule.lastNotificationSent).toBe(sent);
+    expect(sentRule).not.toHaveProperty('_id');
+  });
+
+  test('saveSettings sends an empty settings array when given no settings', async () => {
+    const backend = createFakeBackend();
+    const client = createApiClient(backend);
+
+    await client.notifications.saveSettings({});
+
+    expect(backend.requests).toContainEqual({
+      method: 'post',
+      path: 'notifications/settings',
+      body: { settings: [] },
+    });
   });
 });

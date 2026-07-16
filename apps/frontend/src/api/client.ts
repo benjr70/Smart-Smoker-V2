@@ -8,7 +8,12 @@
  */
 import { createHttpTransport } from './httpAdapter';
 import { TransportPort } from './transport';
-import { PostSmoke, PreSmoke, SmokeProfile, TempData } from './types';
+import { NotificationSettings, PostSmoke, PreSmoke, SmokeProfile, TempData, rating } from './types';
+
+/** The wire envelope wrapping the notification rules on both get and save. */
+interface NotificationSettingsEnvelope {
+  settings: NotificationSettings[];
+}
 
 export interface TempsResource {
   /** GET `temps` — the current smoke's temperature series. */
@@ -52,11 +57,44 @@ export interface PostSmokeResource {
   deleteById(id: string): Promise<void>;
 }
 
+export interface RatingsResource {
+  /** GET `ratings` — the current smoke's rating. */
+  getCurrent(): Promise<rating>;
+  /** GET `ratings/:id` — a stored rating by id. */
+  getById(id: string): Promise<rating>;
+  /**
+   * Persist a rating. Routes create vs update from the presence of `_id`:
+   * a rating with an id updates the id-scoped path, one without creates on the
+   * collection path. The outbound body is projected to the backend DTO
+   * whitelist on both paths (see {@link toRatingsPayload}).
+   */
+  save(rating: rating): Promise<rating>;
+  /** DELETE `ratings/:id` — remove a stored rating. */
+  deleteById(id: string): Promise<void>;
+}
+
+export interface NotificationsResource {
+  /**
+   * GET `notifications/settings` — returns the plain rules array, unwrapping the
+   * `{ settings }` envelope the backend nests them in.
+   */
+  getSettings(): Promise<NotificationSettings[]>;
+  /**
+   * POST `notifications/settings` — projects each rule to the backend DTO
+   * whitelist, keeps `lastNotificationSent` only when present, strips the
+   * persisted `_id`/`__v`, and wraps the result in the legacy `{ settings }`
+   * envelope.
+   */
+  saveSettings(input: unknown): Promise<NotificationSettingsEnvelope>;
+}
+
 export interface ApiClient {
   temps: TempsResource;
   smokeProfile: SmokeProfileResource;
   preSmoke: PreSmokeResource;
   postSmoke: PostSmokeResource;
+  ratings: RatingsResource;
+  notifications: NotificationsResource;
 }
 
 /**
@@ -123,6 +161,50 @@ const toPostSmokePayload = (postSmoke: PostSmoke) => ({
   notes: postSmoke.notes,
 });
 
+/**
+ * Project a rating down to exactly the fields the backend RatingsDto whitelists.
+ * The strict validation edge (forbidNonWhitelisted, introduced by PR #323)
+ * rejects a body carrying stray fields such as the persisted `_id`/`__v` that
+ * ride along on a fetched rating document.
+ */
+const toRatingsPayload = (rating: rating): rating => ({
+  smokeFlavor: rating.smokeFlavor,
+  seasoning: rating.seasoning,
+  tenderness: rating.tenderness,
+  overallTaste: rating.overallTaste,
+  notes: rating.notes,
+});
+
+/**
+ * Project the notification rules onto the backend NotificationSettingsDto
+ * whitelist. Rules fetched from the backend carry a persisted subdocument
+ * `_id`/`__v` that the strict validation edge (forbidNonWhitelisted, PR #323)
+ * rejects on save; `lastNotificationSent` is server-managed but validated, so it
+ * is preserved when present to avoid resetting the notification throttle.
+ */
+const toNotificationSettingsPayload = (input: unknown): NotificationSettingsEnvelope => {
+  const settings = (input as { settings?: unknown })?.settings;
+  return {
+    settings: Array.isArray(settings)
+      ? settings.map(rule => {
+          const projected: NotificationSettings & { lastNotificationSent?: unknown } = {
+            type: rule.type,
+            message: rule.message,
+            probe1: rule.probe1,
+            op: rule.op,
+            probe2: rule.probe2,
+            offset: rule.offset,
+            temperature: rule.temperature,
+          };
+          if (rule.lastNotificationSent !== undefined) {
+            projected.lastNotificationSent = rule.lastNotificationSent;
+          }
+          return projected;
+        })
+      : [],
+  };
+};
+
 export const createApiClient = (transport: TransportPort): ApiClient => ({
   temps: {
     getCurrent: () => transport.get<TempData[]>('temps'),
@@ -159,6 +241,28 @@ export const createApiClient = (transport: TransportPort): ApiClient => ({
     deleteById: async (id: string) => {
       await transport.delete<void>(`postSmoke/${id}`);
     },
+  },
+  ratings: {
+    getCurrent: () => transport.get<rating>('ratings'),
+    getById: (id: string) => transport.get<rating>(`ratings/${id}`),
+    save: (rating: rating) =>
+      rating._id
+        ? transport.post<rating>(`ratings/${rating._id}`, toRatingsPayload(rating))
+        : transport.post<rating>('ratings', toRatingsPayload(rating)),
+    deleteById: async (id: string) => {
+      await transport.delete<void>(`ratings/${id}`);
+    },
+  },
+  notifications: {
+    getSettings: async () => {
+      const response = await transport.get<NotificationSettingsEnvelope>('notifications/settings');
+      return response.settings;
+    },
+    saveSettings: (input: unknown) =>
+      transport.post<NotificationSettingsEnvelope>(
+        'notifications/settings',
+        toNotificationSettingsPayload(input)
+      ),
   },
 });
 

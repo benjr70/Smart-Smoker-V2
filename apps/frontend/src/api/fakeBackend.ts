@@ -7,7 +7,7 @@
  * requests) afterward — no axios mocking required.
  */
 import { ApiError, HttpMethod, TransportPort } from './transport';
-import { PostSmoke, PreSmoke, SmokeProfile, TempData } from './types';
+import { NotificationSettings, PostSmoke, PreSmoke, SmokeProfile, TempData, rating } from './types';
 
 /**
  * A profile as it may sit persisted on the backend: the optional `notes`/
@@ -48,6 +48,13 @@ export interface FakeBackendSeed {
     current?: PostSmoke;
     records?: Record<string, PostSmoke>;
   };
+  ratings?: {
+    current?: rating;
+    records?: Record<string, rating>;
+  };
+  notifications?: {
+    settings?: NotificationSettings[];
+  };
 }
 
 interface FakeStore {
@@ -66,6 +73,13 @@ interface FakeStore {
   postSmoke: {
     current: PostSmoke | undefined;
     records: Record<string, PostSmoke>;
+  };
+  ratings: {
+    current: rating | undefined;
+    records: Record<string, rating>;
+  };
+  notifications: {
+    settings: NotificationSettings[];
   };
 }
 
@@ -109,6 +123,13 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
     postSmoke: {
       current: seed.postSmoke?.current,
       records: seed.postSmoke?.records ?? {},
+    },
+    ratings: {
+      current: seed.ratings?.current,
+      records: seed.ratings?.records ?? {},
+    },
+    notifications: {
+      settings: seed.notifications?.settings ?? [],
     },
   };
   const requests: RecordedRequest[] = [];
@@ -193,6 +214,33 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
       }
     }
 
+    if (resource === 'ratings') {
+      if (method === 'get' && id === undefined) {
+        return clone(store.ratings.current) as unknown as T;
+      }
+      if (method === 'get' && id !== undefined) {
+        const record = store.ratings.records[id];
+        if (!record) {
+          throw new ApiError({ status: 404, path, method });
+        }
+        return clone(record) as unknown as T;
+      }
+      if (method === 'post' && id === undefined) {
+        // Create: the new current rating.
+        store.ratings.current = clone(body) as rating;
+        return clone(body) as unknown as T;
+      }
+      if (method === 'post' && id !== undefined) {
+        // Update the id-scoped record.
+        store.ratings.records[id] = clone(body) as rating;
+        return clone(body) as unknown as T;
+      }
+      if (method === 'delete' && id !== undefined) {
+        delete store.ratings.records[id];
+        return {} as unknown as T;
+      }
+    }
+
     // Post-smoke routes. The current document lives at `postSmoke/current` for
     // both GET and POST; records are addressed by id at `postSmoke/:id`.
     if (resource === 'postSmoke') {
@@ -216,6 +264,18 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
       if (method === 'delete' && id !== undefined && id !== 'current') {
         delete store.postSmoke.records[id];
         return {} as unknown as T;
+      }
+    }
+
+    if (resource === 'notifications' && id === 'settings') {
+      if (method === 'get') {
+        // The wire response nests the array under `settings`.
+        return clone({ settings: store.notifications.settings }) as unknown as T;
+      }
+      if (method === 'post') {
+        const settings = (body as { settings?: NotificationSettings[] })?.settings ?? [];
+        store.notifications.settings = clone(settings);
+        return clone({ settings: store.notifications.settings }) as unknown as T;
       }
     }
 

@@ -7,6 +7,7 @@
  */
 import { TempData } from 'temperaturechart/src/tempChart';
 import { preSmoke } from '../components/common/interfaces/preSmoke';
+import { rating } from '../components/common/interfaces/rating';
 
 export type { TempData };
 
@@ -41,4 +42,30 @@ export interface PostSmoke {
   restTime: string;
   steps: string[];
   notes?: string;
+}
+
+/**
+ * A smoke rating. The canonical definition still lives with the other shared
+ * component interfaces; it is re-exported here so API call sites depend only on
+ * the API types module. The persisted `_id` rides along on a fetched document
+ * and is stripped before the outbound DTO is sent (see the client's ratings
+ * save projection).
+ */
+export type { rating };
+
+/**
+ * A single notification rule. Relocated here from the settings component so API
+ * call sites depend only on the API types module; the component re-exports it
+ * for backward compatibility. Rules fetched from the backend also carry a
+ * persisted subdocument `_id`/`__v` (and a server-managed `lastNotificationSent`)
+ * that are handled by the client's notifications save projection.
+ */
+export interface NotificationSettings {
+  type: boolean;
+  message: string;
+  probe1: string;
+  op: string;
+  probe2?: string;
+  offset?: number;
+  temperature?: number;
 }
