@@ -3,13 +3,12 @@ import React, { useEffect, useRef, useState } from 'react';
 import { getCurrentPostSmoke, setCurrentPostSmoke } from '../../../Services/postSmokeService';
 import { DynamicList } from '../../common/components/DynamicList';
 import { IMaskInput } from 'react-imask';
+import { PostSmoke } from '../../../api/types';
 import './postSmokeStep.style.css';
 
-export interface PostSmoke {
-  restTime: string;
-  steps: string[];
-  notes?: string;
-}
+// The post-smoke domain type now lives in the API types module. Re-exported here
+// for backward compatibility with existing importers of this component.
+export type { PostSmoke };
 
 type PostSmokeStepProps = {
   nextButton: JSX.Element;

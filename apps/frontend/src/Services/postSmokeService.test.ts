@@ -4,249 +4,121 @@ import {
   getPostSmokeById,
   deletePostSmokeById,
 } from './postSmokeService';
-import { PostSmoke } from '../components/smoke/postSmokeStep/PostSmokeStep';
+import { createApiClient } from '../api/client';
+import { createFakeBackend, FakeBackend } from '../api/fakeBackend';
+import { PostSmoke } from '../api/types';
 
-// Create a mock that allows baseURL to be tracked
-let currentBaseURL = '';
-const mockAxios = {
-  get: jest.fn(),
-  post: jest.fn(),
-  delete: jest.fn(),
-  put: jest.fn(),
-  defaults: {
-    get baseURL() {
-      return currentBaseURL;
-    },
-    set baseURL(value) {
-      currentBaseURL = value;
-    },
-  },
+// Mock only the client-injection boundary: the deprecated shims delegate to the
+// default client, and here that default is a client backed by an in-memory fake
+// backend. Everything below the seam (real client + real fake backend) runs.
+jest.mock('../api', () => {
+  const actual = jest.requireActual('../api');
+  return { ...actual, getDefaultApiClient: jest.fn() };
+});
+
+// eslint-disable-next-line import/first, @typescript-eslint/no-var-requires
+const api = require('../api');
+
+const samplePostSmoke: PostSmoke = {
+  restTime: '30 minutes',
+  steps: ['Step 1', 'Step 2'],
+  notes: 'Test notes',
 };
 
-jest.mock('axios', () => mockAxios);
-
-// Mock environment variables
-const originalEnv = process.env;
+let backend: FakeBackend;
 
 beforeEach(() => {
-  mockAxios.get.mockClear();
-  mockAxios.post.mockClear();
-  mockAxios.delete.mockClear();
-  if (mockAxios.put) mockAxios.put.mockClear();
-  mockAxios.defaults.baseURL = '';
-
-  process.env = {
-    ...originalEnv,
-    REACT_APP_CLOUD_URL: 'http://localhost:3001/',
-  };
+  backend = createFakeBackend({
+    postSmoke: { current: samplePostSmoke, records: { abc123: samplePostSmoke } },
+  });
+  (api.getDefaultApiClient as jest.Mock).mockReturnValue(createApiClient(backend));
   jest.spyOn(console, 'log').mockImplementation(() => {});
 });
 
 afterEach(() => {
-  process.env = originalEnv;
   jest.restoreAllMocks();
 });
 
-describe('postSmokeService', () => {
-  const mockPostSmoke: PostSmoke = {
-    restTime: '30 minutes',
-    steps: ['Step 1', 'Step 2'],
-    notes: 'Test notes',
-  };
-
-  describe('getCurrentPostSmoke', () => {
-    test('should fetch current post smoke successfully', async () => {
-      mockAxios.get.mockResolvedValue({
-        data: mockPostSmoke,
-      });
-
-      const result = await getCurrentPostSmoke();
-
-      expect(mockAxios.get).toHaveBeenCalledWith('postSmoke/current');
-      expect(result).toEqual(mockPostSmoke);
-    });
-
-    test('should handle getCurrentPostSmoke error and log it', async () => {
-      const mockError = new Error('Network error');
-
-      mockAxios.get.mockRejectedValue(mockError);
-
-      const consoleLogSpy = jest.spyOn(console, 'log');
-
-      const result = await getCurrentPostSmoke();
-
-      expect(mockAxios.get).toHaveBeenCalledWith('postSmoke/current');
-      expect(consoleLogSpy).toHaveBeenCalledWith(mockError);
-      expect(result).toBeUndefined();
-    });
-
-    test('should set correct baseURL from environment variable', async () => {
-      process.env.REACT_APP_CLOUD_URL = 'https://api.example.com/';
-
-      mockAxios.get.mockResolvedValue({ data: mockPostSmoke });
-
-      await getCurrentPostSmoke();
+describe('postSmokeService (deprecated shims)', () => {
+  test('getCurrentPostSmoke resolves the current post-smoke on success', async () => {
+    const result = await getCurrentPostSmoke();
+    expect(result).toEqual(samplePostSmoke);
+    expect(backend.requests).toContainEqual({
+      method: 'get',
+      path: 'postSmoke/current',
+      body: undefined,
     });
   });
 
-  describe('setCurrentPostSmoke', () => {
-    test('should post current post smoke successfully', async () => {
-      mockAxios.post.mockResolvedValue({
-        data: mockPostSmoke,
-      });
+  test('getCurrentPostSmoke resolves undefined and logs on failure', async () => {
+    backend.injectFault({ method: 'get', path: 'postSmoke/current', status: 500 });
+    const consoleSpy = jest.spyOn(console, 'log');
 
-      const result = await setCurrentPostSmoke(mockPostSmoke);
+    const result = await getCurrentPostSmoke();
 
-      expect(mockAxios.post).toHaveBeenCalledWith('postSmoke/current', mockPostSmoke);
-      expect(result).toEqual({ data: mockPostSmoke });
-    });
+    expect(result).toBeUndefined();
+    expect(consoleSpy).toHaveBeenCalledTimes(1);
+  });
 
-    test('should handle setCurrentPostSmoke error and log it', async () => {
-      const mockError = new Error('Server error');
+  test('setCurrentPostSmoke posts the projected payload and resolves on success', async () => {
+    const fetched = { ...samplePostSmoke, _id: 'x', __v: 1 } as unknown as PostSmoke;
+    await setCurrentPostSmoke(fetched);
 
-      mockAxios.post.mockRejectedValue(mockError);
+    const posted = backend.requests.find(r => r.method === 'post')?.body as Record<string, unknown>;
+    expect(Object.keys(posted).sort()).toEqual(['notes', 'restTime', 'steps']);
+    expect(posted).not.toHaveProperty('_id');
+    expect(posted).not.toHaveProperty('__v');
+    expect(backend.store.postSmoke.current).toEqual(posted);
+  });
 
-      const consoleLogSpy = jest.spyOn(console, 'log');
+  test('setCurrentPostSmoke resolves undefined and logs on failure', async () => {
+    backend.injectFault({ method: 'post', path: 'postSmoke/current', status: 500 });
+    const consoleSpy = jest.spyOn(console, 'log');
 
-      const result = await setCurrentPostSmoke(mockPostSmoke);
+    const result = await setCurrentPostSmoke(samplePostSmoke);
 
-      expect(mockAxios.post).toHaveBeenCalledWith('postSmoke/current', mockPostSmoke);
-      expect(consoleLogSpy).toHaveBeenCalledWith(mockError);
-      expect(result).toBeUndefined();
-    });
+    expect(result).toBeUndefined();
+    expect(consoleSpy).toHaveBeenCalledTimes(1);
+  });
 
-    test('should strip persisted _id/__v before posting', async () => {
-      const fetchedPostSmoke: any = {
-        ...mockPostSmoke,
-        _id: 'postsmoke-id-1',
-        __v: 2,
-      };
-
-      mockAxios.post.mockResolvedValue({ data: mockPostSmoke });
-
-      await setCurrentPostSmoke(fetchedPostSmoke);
-
-      expect(mockAxios.post).toHaveBeenCalledWith('postSmoke/current', mockPostSmoke);
-      const sentBody = mockAxios.post.mock.calls[0][1];
-      expect(sentBody).not.toHaveProperty('_id');
-      expect(sentBody).not.toHaveProperty('__v');
-    });
-
-    test('should handle empty post smoke object', async () => {
-      const emptyPostSmoke = {} as PostSmoke;
-
-      mockAxios.post.mockResolvedValue({ data: emptyPostSmoke });
-
-      const result = await setCurrentPostSmoke(emptyPostSmoke);
-
-      expect(mockAxios.post).toHaveBeenCalledWith('postSmoke/current', emptyPostSmoke);
-      expect(result).toEqual({ data: emptyPostSmoke });
-    });
-
-    test('should set correct baseURL from environment variable', async () => {
-      process.env.REACT_APP_CLOUD_URL = 'https://api.example.com/';
-
-      mockAxios.post.mockResolvedValue({ data: mockPostSmoke });
-
-      await setCurrentPostSmoke(mockPostSmoke);
+  test('getPostSmokeById resolves the record on success', async () => {
+    const result = await getPostSmokeById('abc123');
+    expect(result).toEqual(samplePostSmoke);
+    expect(backend.requests).toContainEqual({
+      method: 'get',
+      path: 'postSmoke/abc123',
+      body: undefined,
     });
   });
 
-  describe('getPostSmokeById', () => {
-    test('should fetch post smoke by id successfully', async () => {
-      const testId = 'test-id-123';
+  test('getPostSmokeById resolves undefined and logs when the record is missing', async () => {
+    const consoleSpy = jest.spyOn(console, 'log');
 
-      mockAxios.get.mockResolvedValue({
-        data: mockPostSmoke,
-      });
+    const result = await getPostSmokeById('missing');
 
-      const result = await getPostSmokeById(testId);
+    expect(result).toBeUndefined();
+    expect(consoleSpy).toHaveBeenCalledTimes(1);
+  });
 
-      expect(mockAxios.get).toHaveBeenCalledWith('postSmoke/' + testId);
-      expect(result).toEqual(mockPostSmoke);
-    });
-
-    test('should handle getPostSmokeById error and log it', async () => {
-      const testId = 'test-id-123';
-      const mockError = new Error('Not found');
-
-      mockAxios.get.mockRejectedValue(mockError);
-
-      const consoleLogSpy = jest.spyOn(console, 'log');
-
-      const result = await getPostSmokeById(testId);
-
-      expect(mockAxios.get).toHaveBeenCalledWith('postSmoke/' + testId);
-      expect(consoleLogSpy).toHaveBeenCalledWith(mockError);
-      expect(result).toBeUndefined();
-    });
-
-    test('should handle special characters in id', async () => {
-      const testId = 'test-id-with-special-chars-!@#';
-
-      mockAxios.get.mockResolvedValue({ data: mockPostSmoke });
-
-      await getPostSmokeById(testId);
-
-      expect(mockAxios.get).toHaveBeenCalledWith('postSmoke/' + testId);
-    });
-
-    test('should set correct baseURL from environment variable', async () => {
-      process.env.REACT_APP_CLOUD_URL = 'https://api.example.com/';
-
-      const testId = 'test-id';
-
-      mockAxios.get.mockResolvedValue({ data: mockPostSmoke });
-
-      await getPostSmokeById(testId);
+  test('deletePostSmokeById removes the record and resolves on success', async () => {
+    await deletePostSmokeById('abc123');
+    expect(backend.store.postSmoke.records.abc123).toBeUndefined();
+    expect(backend.requests).toContainEqual({
+      method: 'delete',
+      path: 'postSmoke/abc123',
+      body: undefined,
     });
   });
 
-  describe('deletePostSmokeById', () => {
-    test('should delete post smoke by id successfully', async () => {
-      const testId = 'test-id-123';
+  test('deletePostSmokeById resolves undefined and logs on failure', async () => {
+    backend.injectFault({ method: 'delete', path: 'postSmoke/abc123', status: 500 });
+    const consoleSpy = jest.spyOn(console, 'log');
 
-      mockAxios.delete.mockResolvedValue({});
+    const result = await deletePostSmokeById('abc123');
 
-      const result = await deletePostSmokeById(testId);
-
-      expect(mockAxios.delete).toHaveBeenCalledWith('postSmoke/' + testId);
-      expect(result).toEqual({});
-    });
-
-    test('should handle deletePostSmokeById error and log it', async () => {
-      const testId = 'test-id-123';
-      const mockError = new Error('Delete failed');
-
-      mockAxios.delete.mockRejectedValue(mockError);
-
-      const consoleLogSpy = jest.spyOn(console, 'log');
-
-      const result = await deletePostSmokeById(testId);
-
-      expect(mockAxios.delete).toHaveBeenCalledWith('postSmoke/' + testId);
-      expect(consoleLogSpy).toHaveBeenCalledWith(mockError);
-      expect(result).toBeUndefined();
-    });
-
-    test('should handle empty string id', async () => {
-      const testId = '';
-
-      mockAxios.delete.mockResolvedValue({});
-
-      await deletePostSmokeById(testId);
-
-      expect(mockAxios.delete).toHaveBeenCalledWith('postSmoke/');
-    });
-
-    test('should set correct baseURL from environment variable', async () => {
-      process.env.REACT_APP_CLOUD_URL = 'https://api.example.com/';
-
-      const testId = 'test-id';
-
-      mockAxios.delete.mockResolvedValue({});
-
-      await deletePostSmokeById(testId);
-    });
+    expect(result).toBeUndefined();
+    expect(consoleSpy).toHaveBeenCalledTimes(1);
+    // faulted delete must leave the record intact
+    expect(backend.store.postSmoke.records.abc123).toEqual(samplePostSmoke);
   });
 });

@@ -1,72 +1,48 @@
-import { preSmoke } from '../components/common/interfaces/preSmoke';
+import { getDefaultApiClient } from '../api';
+import { PreSmoke } from '../api/types';
 
-const envUrl = process.env.REACT_APP_CLOUD_URL;
+/**
+ * @deprecated Use the API client (`useApiClient().preSmoke`) instead. These are
+ * delegating shims that preserve the legacy swallow-and-log semantics (catch,
+ * `console.log`, resolve `undefined`) until every caller has migrated, at which
+ * point they will be deleted. The outbound DTO projection (strip persisted
+ * `_id`/`__v`, coerce the string weight) now lives in the client's
+ * `preSmoke.saveCurrent`.
+ */
+export const getCurrentPreSmoke = async (): Promise<PreSmoke> => {
+  try {
+    return await getDefaultApiClient().preSmoke.getCurrent();
+  } catch (error) {
+    console.log(error);
+    return undefined as unknown as PreSmoke;
+  }
+};
 
-// Coerce a weight value to a number for the backend `@IsNumber()` DTO. The UI
-// text input stores the weight as a string at runtime, so a raw forward would
-// 400 on the strict edge. Empty/undefined weights become `undefined` (not
-// `NaN`, which would still fail validation) so the shape stays unambiguous.
-const toNumericWeight = (value: unknown): number | undefined => {
-  if (value === undefined || value === null || value === '') {
+/** @deprecated Use `useApiClient().preSmoke.saveCurrent` instead. */
+export const setCurrentPreSmoke = async (presmoke: PreSmoke): Promise<PreSmoke | undefined> => {
+  try {
+    return await getDefaultApiClient().preSmoke.saveCurrent(presmoke);
+  } catch (error) {
+    console.log(error);
     return undefined;
   }
-  const numeric = Number(value);
-  return Number.isNaN(numeric) ? undefined : numeric;
 };
 
-// Project a pre-smoke down to exactly the fields the backend PreSmokeDto
-// whitelists. A fetched current pre-smoke document carries persisted `_id`/`__v`
-// (and a `weight._id` on the nested subdocument) that the strict validation edge
-// (forbidNonWhitelisted) would reject on save.
-const toPreSmokePayload = (presmoke: preSmoke) => ({
-  name: presmoke.name,
-  meatType: presmoke.meatType,
-  weight: {
-    unit: presmoke.weight?.unit,
-    weight: toNumericWeight(presmoke.weight?.weight),
-  },
-  steps: presmoke.steps,
-  notes: presmoke.notes,
-});
-
-export const getCurrentPreSmoke = async (): Promise<preSmoke> => {
-  const axios = require('axios');
-  axios.defaults.baseURL = envUrl;
-  return axios
-    .get('presmoke/')
-    .then((result: any) => {
-      return result.data;
-    })
-    .catch((error: any) => {
-      console.log(error);
-    });
-};
-
-export const setCurrentPreSmoke = async (presmoke: preSmoke): Promise<any> => {
-  const axios = require('axios');
-  axios.defaults.baseURL = envUrl;
-  return axios.post('presmoke', toPreSmokePayload(presmoke)).catch((error: any) => {
+/** @deprecated Use `useApiClient().preSmoke.getById` instead. */
+export const getPreSmokeById = async (id: string): Promise<PreSmoke> => {
+  try {
+    return await getDefaultApiClient().preSmoke.getById(id);
+  } catch (error) {
     console.log(error);
-  });
+    return undefined as unknown as PreSmoke;
+  }
 };
 
-export const getPreSmokeById = async (id: string): Promise<preSmoke> => {
-  const axios = require('axios');
-  axios.defaults.baseURL = envUrl;
-  return axios
-    .get('presmoke/' + id)
-    .then((result: any) => {
-      return result.data;
-    })
-    .catch((error: any) => {
-      console.log(error);
-    });
-};
-
-export const deletePreSmokeById = async (id: string) => {
-  const axios = require('axios');
-  axios.defaults.baseURL = envUrl;
-  return axios.delete('presmoke/' + id).catch((error: any) => {
+/** @deprecated Use `useApiClient().preSmoke.deleteById` instead. */
+export const deletePreSmokeById = async (id: string): Promise<void> => {
+  try {
+    await getDefaultApiClient().preSmoke.deleteById(id);
+  } catch (error) {
     console.log(error);
-  });
+  }
 };

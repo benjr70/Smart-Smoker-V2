@@ -8,7 +8,7 @@
  */
 import { createHttpTransport } from './httpAdapter';
 import { TransportPort } from './transport';
-import { SmokeProfile, TempData } from './types';
+import { PostSmoke, PreSmoke, SmokeProfile, TempData } from './types';
 
 export interface TempsResource {
   /** GET `temps` — the current smoke's temperature series. */
@@ -30,9 +30,33 @@ export interface SmokeProfileResource {
   deleteById(id: string): Promise<void>;
 }
 
+export interface PreSmokeResource {
+  /** GET `presmoke/` — the current smoke's pre-smoke document. */
+  getCurrent(): Promise<PreSmoke>;
+  /** GET `presmoke/:id` — a stored pre-smoke document by id. */
+  getById(id: string): Promise<PreSmoke>;
+  /** POST `presmoke` — save the current pre-smoke (projected to the DTO whitelist). */
+  saveCurrent(preSmoke: PreSmoke): Promise<PreSmoke>;
+  /** DELETE `presmoke/:id` — remove a stored pre-smoke document. */
+  deleteById(id: string): Promise<void>;
+}
+
+export interface PostSmokeResource {
+  /** GET `postSmoke/current` — the current smoke's post-smoke document. */
+  getCurrent(): Promise<PostSmoke>;
+  /** GET `postSmoke/:id` — a stored post-smoke document by id. */
+  getById(id: string): Promise<PostSmoke>;
+  /** POST `postSmoke/current` — save the current post-smoke (projected to the DTO whitelist). */
+  saveCurrent(postSmoke: PostSmoke): Promise<PostSmoke>;
+  /** DELETE `postSmoke/:id` — remove a stored post-smoke document. */
+  deleteById(id: string): Promise<void>;
+}
+
 export interface ApiClient {
   temps: TempsResource;
   smokeProfile: SmokeProfileResource;
+  preSmoke: PreSmokeResource;
+  postSmoke: PostSmokeResource;
 }
 
 /**
@@ -62,6 +86,43 @@ const toProfileDto = (profile: SmokeProfile): SmokeProfile => ({
   woodType: profile.woodType,
 });
 
+// Coerce a weight value to a number for the backend `@IsNumber()` DTO. The UI
+// text input stores the weight as a string at runtime, so a raw forward would
+// 400 on the strict edge. Empty/undefined/non-numeric weights become
+// `undefined` (not `NaN`, which would still fail validation) so the shape stays
+// unambiguous.
+const toNumericWeight = (value: unknown): number | undefined => {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+  const numeric = Number(value);
+  return Number.isNaN(numeric) ? undefined : numeric;
+};
+
+// Project a pre-smoke down to exactly the fields the backend PreSmokeDto
+// whitelists. A fetched current pre-smoke document carries persisted `_id`/`__v`
+// (and a `weight._id` on the nested subdocument) that the strict validation edge
+// (forbidNonWhitelisted) would reject on save.
+const toPreSmokePayload = (preSmoke: PreSmoke) => ({
+  name: preSmoke.name,
+  meatType: preSmoke.meatType,
+  weight: {
+    unit: preSmoke.weight?.unit,
+    weight: toNumericWeight(preSmoke.weight?.weight),
+  },
+  steps: preSmoke.steps,
+  notes: preSmoke.notes,
+});
+
+// Project a post-smoke down to exactly the fields the backend PostSmokeDto
+// whitelists, so a fetched document's persisted `_id`/`__v` cannot ride along
+// and trip the strict validation edge (forbidNonWhitelisted) on save.
+const toPostSmokePayload = (postSmoke: PostSmoke) => ({
+  restTime: postSmoke.restTime,
+  steps: postSmoke.steps,
+  notes: postSmoke.notes,
+});
+
 export const createApiClient = (transport: TransportPort): ApiClient => ({
   temps: {
     getCurrent: () => transport.get<TempData[]>('temps'),
@@ -79,6 +140,24 @@ export const createApiClient = (transport: TransportPort): ApiClient => ({
       transport.post<SmokeProfile>('smokeProfile/current', toProfileDto(profile)),
     deleteById: async (id: string) => {
       await transport.delete<void>(`smokeProfile/${id}`);
+    },
+  },
+  preSmoke: {
+    getCurrent: () => transport.get<PreSmoke>('presmoke/'),
+    getById: (id: string) => transport.get<PreSmoke>(`presmoke/${id}`),
+    saveCurrent: (preSmoke: PreSmoke) =>
+      transport.post<PreSmoke>('presmoke', toPreSmokePayload(preSmoke)),
+    deleteById: async (id: string) => {
+      await transport.delete<void>(`presmoke/${id}`);
+    },
+  },
+  postSmoke: {
+    getCurrent: () => transport.get<PostSmoke>('postSmoke/current'),
+    getById: (id: string) => transport.get<PostSmoke>(`postSmoke/${id}`),
+    saveCurrent: (postSmoke: PostSmoke) =>
+      transport.post<PostSmoke>('postSmoke/current', toPostSmokePayload(postSmoke)),
+    deleteById: async (id: string) => {
+      await transport.delete<void>(`postSmoke/${id}`);
     },
   },
 });
