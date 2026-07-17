@@ -6,16 +6,22 @@
  * typed client sits above it; a React provider/hook injects the client.
  */
 export type {
-  SmokeProfile,
-  TempData,
-  PreSmoke,
-  PostSmoke,
-  rating,
   NotificationSettings,
+  PostSmoke,
+  PreSmoke,
+  Smoke,
+  SmokeHistory,
+  SmokeProfile,
+  State,
+  TempData,
+  rating,
 } from './types';
 export type { HttpMethod, TransportPort } from './transport';
 export { ApiError } from './transport';
 export { createHttpTransport } from './httpAdapter';
+export type { SmokeEventPort } from './events';
+export { noopEventPort } from './events';
+export { createSocketEventPort } from './socketEventAdapter';
 export type {
   FakeBackend,
   FakeBackendSeed,
@@ -26,12 +32,15 @@ export type {
 export { createFakeBackend } from './fakeBackend';
 export type {
   ApiClient,
-  SmokeProfileResource,
-  TempsResource,
-  PreSmokeResource,
-  PostSmokeResource,
-  RatingsResource,
+  HistoryResource,
   NotificationsResource,
+  PostSmokeResource,
+  PreSmokeResource,
+  RatingsResource,
+  SmokeProfileResource,
+  SmokeResource,
+  StateResource,
+  TempsResource,
 } from './client';
 export { createApiClient, createProductionApiClient, getDefaultApiClient } from './client';
 export { ApiClientProvider, useApiClient } from './ApiClientProvider';

@@ -1,4 +1,3 @@
-import { io } from 'socket.io-client';
 import { State } from '../components/common/interfaces/state';
 import { smokeHistory } from '../components/common/interfaces/history';
 import { getDefaultApiClient } from '../api';
@@ -13,41 +12,42 @@ const envUrl = process.env.REACT_APP_CLOUD_URL;
  */
 export type { SmokeProfile as smokeProfile } from '../api/types';
 
+/**
+ * @deprecated Use `useApiClient().state.toggleSmoking` instead. Deprecated
+ * delegating shim. Deliberately has no catch: toggle must keep **rejecting** on
+ * backend failure (callers depend on the rejection), so the client's typed
+ * error propagates unchanged.
+ */
 export const toggleSmoking = async (): Promise<State> => {
-  const axios = require('axios');
-  axios.defaults.baseURL = envUrl;
-  return axios.put('state/toggleSmoking').then((result: any) => {
-    return result.data;
-  });
+  return getDefaultApiClient().state.toggleSmoking();
 };
 
+/**
+ * @deprecated Use `useApiClient().state.clearSmoke` instead. Deprecated
+ * delegating shim; the websocket `clear` broadcast now happens inside the
+ * client via its injected socket-backed event port (no socket created here).
+ * Preserves the legacy swallow-and-log semantics.
+ */
 export const clearSmoke = async (): Promise<State> => {
-  let url = process.env.WS_URL ?? '';
-  const socket = io(url);
-  socket.emit('clear', true);
-  const axios = require('axios');
-  axios.defaults.baseURL = envUrl;
-  return axios
-    .put('state/clearSmoke')
-    .then((result: any) => {
-      return result.data;
-    })
-    .catch((error: any) => {
-      console.log(error);
-    });
+  try {
+    return await getDefaultApiClient().state.clearSmoke();
+  } catch (error) {
+    console.log(error);
+    return undefined as unknown as State;
+  }
 };
 
+/**
+ * @deprecated Use `useApiClient().state.get` instead. Deprecated delegating
+ * shim; preserves the legacy swallow-and-log semantics.
+ */
 export const getState = async (): Promise<State> => {
-  const axios = require('axios');
-  axios.defaults.baseURL = envUrl;
-  return axios
-    .get('state')
-    .then((result: any) => {
-      return result.data;
-    })
-    .catch((error: any) => {
-      console.log(error);
-    });
+  try {
+    return await getDefaultApiClient().state.get();
+  } catch (error) {
+    console.log(error);
+    return undefined as unknown as State;
+  }
 };
 
 /**
@@ -79,17 +79,17 @@ export const getSmokeProfileById = async (id: string): Promise<SmokeProfile> => 
   }
 };
 
+/**
+ * @deprecated Use `useApiClient().smoke.finish` instead. Deprecated delegating
+ * shim; preserves the legacy swallow-and-log semantics.
+ */
 export const FinishSmoke = async (): Promise<any> => {
-  const axios = require('axios');
-  axios.defaults.baseURL = envUrl;
-  return axios
-    .post('smoke/finish')
-    .then((result: any) => {
-      return result.data;
-    })
-    .catch((error: any) => {
-      console.log(error);
-    });
+  try {
+    return await getDefaultApiClient().smoke.finish();
+  } catch (error) {
+    console.log(error);
+    return undefined;
+  }
 };
 
 /**
@@ -106,43 +106,43 @@ export const getCurrentSmokeProfile = async (): Promise<SmokeProfile> => {
   }
 };
 
+/**
+ * @deprecated Use `useApiClient().history.list` instead. Deprecated delegating
+ * shim; preserves the legacy swallow-and-log semantics.
+ */
 export const getSmokeHistory = async (): Promise<smokeHistory[]> => {
-  const axios = require('axios');
-  axios.defaults.baseURL = envUrl;
-  return axios
-    .get('history')
-    .then((result: any) => {
-      return result.data;
-    })
-    .catch((error: any) => {
-      console.log(error);
-    });
+  try {
+    return await getDefaultApiClient().history.list();
+  } catch (error) {
+    console.log(error);
+    return undefined as unknown as smokeHistory[];
+  }
 };
 
+/**
+ * @deprecated Use `useApiClient().smoke.getAll` instead. Deprecated delegating
+ * shim; preserves the legacy swallow-and-log semantics.
+ */
 export const getAllSmoke = async (): Promise<any> => {
-  const axios = require('axios');
-  axios.defaults.baseURL = envUrl;
-  return axios
-    .get('smoke/all')
-    .then((result: any) => {
-      return result.data;
-    })
-    .catch((error: any) => {
-      console.log(error);
-    });
+  try {
+    return await getDefaultApiClient().smoke.getAll();
+  } catch (error) {
+    console.log(error);
+    return undefined;
+  }
 };
 
+/**
+ * @deprecated Use `useApiClient().smoke.getById` instead. Deprecated delegating
+ * shim; preserves the legacy swallow-and-log semantics.
+ */
 export const getSmokeById = async (id: string): Promise<any> => {
-  const axios = require('axios');
-  axios.defaults.baseURL = envUrl;
-  return axios
-    .get('smoke/' + id)
-    .then((result: any) => {
-      return result.data;
-    })
-    .catch((error: any) => {
-      console.log(error);
-    });
+  try {
+    return await getDefaultApiClient().smoke.getById(id);
+  } catch (error) {
+    console.log(error);
+    return undefined;
+  }
 };
 
 /**
