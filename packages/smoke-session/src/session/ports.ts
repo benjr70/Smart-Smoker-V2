@@ -32,6 +32,10 @@ export interface CloudSocketPort {
   emitSmokeUpdate(update: SmokeUpdate): void;
   /** Broadcast a clear signal. */
   emitClear(): void;
+  /** Broadcast the frozen `events` payload as the raw JSON *string*. */
+  emitEvents(payload: string): void;
+  /** Broadcast a `refresh` signal (tell viewers to re-fetch chart history). */
+  emitRefresh(): void;
 }
 
 /**
@@ -73,4 +77,15 @@ export interface DeviceFeedPort {
   onReading(listener: (raw: string) => void): Unsubscribe;
   /** Device connectivity transitions. */
   onConnectionChange(listener: (connected: boolean) => void): Unsubscribe;
+}
+
+/**
+ * The device's wifi connectivity, as a single point query. Consumed only by the
+ * smoker role and only when wifi probing is enabled in config. The store calls
+ * it behind a throttle so the indicator stays accurate without one HTTP round
+ * trip per serial reading.
+ */
+export interface WifiStatusPort {
+  /** Resolve `true` when the device currently has a wifi connection. */
+  getStatus(): Promise<boolean>;
 }

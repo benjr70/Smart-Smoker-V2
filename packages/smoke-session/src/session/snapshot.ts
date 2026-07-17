@@ -23,6 +23,17 @@ export interface SessionSnapshot {
   initialTemps: BatchTempDto[];
   /** True while the cloud socket reports a live connection. */
   connected: boolean;
+  /**
+   * How many offline readings are buffered awaiting the next reconnect flush
+   * (smoker role only; always 0 for the monitor role).
+   */
+  pendingBatchSize: number;
+  /**
+   * The device's last observed wifi connectivity (smoker role only, updated by
+   * the throttled wifi probe). Defaults to `true` so a session that never
+   * probes reads as connected, matching the legacy indicator's initial state.
+   */
+  wifiConnected: boolean;
   /** The most recent surfaced load failure, or `null` when healthy. */
   lastError: SessionError | null;
 }
@@ -48,6 +59,8 @@ export function createInitialSnapshot(now: Date): SessionSnapshot {
     date: now,
     initialTemps: [],
     connected: false,
+    pendingBatchSize: 0,
+    wifiConnected: true,
     lastError: null,
   };
 }

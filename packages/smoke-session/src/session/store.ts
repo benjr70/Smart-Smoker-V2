@@ -1,6 +1,12 @@
-import { buildSmokeUpdate, decodeEvents } from '../wire/codecs';
-import { SmokeUpdate } from '../wire/types';
-import { assertValidConfig, SessionConfig } from './config';
+import {
+  buildSmokeUpdate,
+  decodeEvents,
+  decodeSerialReading,
+  encodeEvents,
+  toBatchDto,
+} from '../wire/codecs';
+import { ProbeReading, SmokeUpdate } from '../wire/types';
+import { assertValidConfig, DEFAULT_BATCH_EVERY, SessionConfig } from './config';
 import { DEFAULT_PROBE_NAMES, NameTarget, SessionError, SmokeProfile } from './domain';
 import { Unsubscribe } from './ports';
 import { createInitialSnapshot, SessionSnapshot } from './snapshot';
@@ -42,11 +48,25 @@ export interface SessionStore {
 export function createSessionStore(config: SessionConfig): SessionStore {
   assertValidConfig(config);
   const { socket, api, clock } = config;
+  const batchEvery = config.batchEvery ?? DEFAULT_BATCH_EVERY;
 
   let snapshot = createInitialSnapshot(clock.now());
   const listeners = new Set<() => void>();
   const portSubscriptions: Unsubscribe[] = [];
   let started = false;
+
+  // --- smoker-role offline batching state ---
+  // Buffered offline readings awaiting the next reconnect flush. Each entry is
+  // an immutable copy captured at reading time, so later renames or newer
+  // readings never mutate an already-buffered sample.
+  let pendingBatch: ProbeReading[] = [];
+  // Counts disconnected readings toward the every-Nth keep gate.
+  let disconnectedCount = 0;
+  // Re-entrancy guard: true while a batch POST is in flight so a reading that
+  // arrives mid-flush cannot kick off a second concurrent upload.
+  let flushInFlight = false;
+  // Epoch millis of the last wifi probe, or null before the first probe.
+  let lastWifiProbeAt: number | null = null;
 
   const getSnapshot = (): SessionSnapshot => snapshot;
 
@@ -168,6 +188,118 @@ export function createSessionStore(config: SessionConfig): SessionStore {
     commit({ connected });
   };
 
+  // --- smoker role: device feed + offline batching ---
+
+  /** Encode the current snapshot into a frozen `events` payload string. */
+  const currentEventsPayload = (): string =>
+    encodeEvents({
+      chamberName: snapshot.chamberName,
+      probe1Name: snapshot.probe1Name,
+      probe2Name: snapshot.probe2Name,
+      probe3Name: snapshot.probe3Name,
+      probeTemp1: snapshot.probeTemp1,
+      probeTemp2: snapshot.probeTemp2,
+      probeTemp3: snapshot.probeTemp3,
+      chamberTemp: snapshot.chamberTemp,
+      smoking: snapshot.smoking,
+      date: snapshot.date,
+    });
+
+  /**
+   * Flush the buffered batch on reconnect. Fix 1: `refresh` is emitted only
+   * after the POST resolves (no race). Fix 2: a failed POST retains the batch
+   * for the next reconnect window and emits no `refresh` (no silent loss).
+   * Re-entrancy guarded so a mid-flush reading cannot double-POST.
+   */
+  const flushPendingBatch = async (): Promise<void> => {
+    if (flushInFlight || pendingBatch.length === 0) return;
+    flushInFlight = true;
+    const sending = pendingBatch;
+    try {
+      await api.postTempsBatch(sending.map(toBatchDto));
+    } catch {
+      // Retain the batch (still in pendingBatch) and emit no refresh.
+      return;
+    } finally {
+      flushInFlight = false;
+    }
+    // Drop exactly the readings we uploaded; any that arrived mid-flush stay.
+    pendingBatch = pendingBatch.slice(sending.length);
+    commit({ pendingBatchSize: pendingBatch.length });
+    socket.emitRefresh();
+  };
+
+  /** Buffer a disconnected reading on the frozen every-Nth cadence. */
+  const bufferReading = (reading: ProbeReading): void => {
+    disconnectedCount += 1;
+    if (disconnectedCount >= batchEvery) {
+      pendingBatch = [...pendingBatch, reading];
+      disconnectedCount = 0;
+      commit({ pendingBatchSize: pendingBatch.length });
+    }
+  };
+
+  /** Query wifi status at most once per throttle window; never throws. */
+  const probeWifi = async (now: Date): Promise<void> => {
+    const wifi = config.wifi;
+    if (wifi === undefined) return;
+    if (lastWifiProbeAt !== null && now.getTime() - lastWifiProbeAt < wifi.throttleMs) {
+      return;
+    }
+    lastWifiProbeAt = now.getTime();
+    try {
+      const wifiConnected = await wifi.port.getStatus();
+      commit({ wifiConnected });
+    } catch {
+      // A wifi probe failure must never kill the session; leave the last value.
+    }
+  };
+
+  const handleDeviceReading = (raw: string): void => {
+    if (!started) return;
+    let reading: ProbeReading;
+    try {
+      reading = decodeSerialReading(raw, clock.now());
+    } catch (cause) {
+      // Malformed frames surface as an error and are dropped; the snapshot temps
+      // are left untouched and the next reading still processes.
+      surface({ source: 'device', message: errorMessage(cause) });
+      return;
+    }
+    // Freeze the captured reading so a later rename/reading cannot mutate a
+    // buffered sample.
+    const captured: ProbeReading = { ...reading };
+    commit({
+      probeTemp1: captured.probeTemp1,
+      probeTemp2: captured.probeTemp2,
+      probeTemp3: captured.probeTemp3,
+      chamberTemp: captured.chamberTemp,
+      date: captured.date,
+    });
+    void probeWifi(captured.date);
+    if (snapshot.connected) {
+      // Capture the payload for THIS reading before awaiting the flush so the
+      // outbound order is deterministically [refresh?, events].
+      const payload = currentEventsPayload();
+      void flushPendingBatch().then(() => socket.emitEvents(payload));
+    } else {
+      bufferReading(captured);
+    }
+  };
+
+  const handleSmokeUpdateSmoker = (update: SmokeUpdate): void => {
+    if (!started) return;
+    // Smoker role applies BOTH smoking and the names (unlike the monitor role,
+    // which never lets inbound names clobber an in-progress local edit).
+    commit({
+      smoking: update.smoking,
+      chamberName: update.chamberName,
+      probe1Name: update.probe1Name,
+      probe2Name: update.probe2Name,
+      probe3Name: update.probe3Name,
+    });
+  };
+
   // --- command surface ---
 
   const toggleSmoking = async (): Promise<void> => {
@@ -212,13 +344,24 @@ export function createSessionStore(config: SessionConfig): SessionStore {
   const start = (): void => {
     if (started) return;
     started = true;
-    portSubscriptions.push(
-      socket.onEvents(handleEvents),
-      socket.onSmokeUpdate(handleSmokeUpdate),
-      socket.onClear(() => void handleClear()),
-      socket.onRefresh(() => void handleRefresh()),
-      socket.onConnectionChange(handleConnectionChange)
-    );
+    if (config.role === 'smoker') {
+      // The smoker produces the feed: it consumes device readings, applies
+      // inbound smokeUpdate names + smoking, and tracks cloud connectivity.
+      const deviceFeed = config.deviceFeed!;
+      portSubscriptions.push(
+        deviceFeed.onReading(handleDeviceReading),
+        socket.onSmokeUpdate(handleSmokeUpdateSmoker),
+        socket.onConnectionChange(handleConnectionChange)
+      );
+    } else {
+      portSubscriptions.push(
+        socket.onEvents(handleEvents),
+        socket.onSmokeUpdate(handleSmokeUpdate),
+        socket.onClear(() => void handleClear()),
+        socket.onRefresh(() => void handleRefresh()),
+        socket.onConnectionChange(handleConnectionChange)
+      );
+    }
     void loadProfile();
     void loadState();
     void loadTemps();

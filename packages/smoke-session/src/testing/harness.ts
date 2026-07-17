@@ -4,6 +4,7 @@ import {
   FakeCloudSocket,
   FakeDeviceFeed,
   FakeSessionApi,
+  FakeWifiStatus,
   flushPromises,
   SteppingClock,
 } from './fakes';
@@ -15,6 +16,8 @@ export interface TestHarness {
   api: FakeSessionApi;
   clock: SteppingClock;
   deviceFeed?: FakeDeviceFeed;
+  /** Present when {@link HarnessOptions.wifiThrottleMs} enabled wifi probing. */
+  wifi?: FakeWifiStatus;
   /** Await the store's in-flight startup/command promises. */
   flush(): Promise<void>;
 }
@@ -23,12 +26,16 @@ export interface TestHarness {
 export interface HarnessOptions {
   /** Defaults to `monitor`. A `smoker` harness gets a fake device feed. */
   role?: SessionRole;
+  /** Enable throttled wifi probing (smoker role) with this window; wires a {@link FakeWifiStatus}. */
+  wifiThrottleMs?: number;
+  /** Override the frozen offline cadence (defaults to the pinned every-11th). */
+  batchEvery?: number;
 }
 
 /**
  * One-call factory: build the fakes, the stepping clock, and a wired store for
- * the requested role. The whole monitor-side lifecycle is then exercisable
- * through the returned kit with no sockets, HTTP, or timers.
+ * the requested role. The whole session lifecycle is then exercisable through
+ * the returned kit with no sockets, HTTP, or timers.
  */
 export function createTestHarness(options: HarnessOptions = {}): TestHarness {
   const role = options.role ?? 'monitor';
@@ -36,8 +43,18 @@ export function createTestHarness(options: HarnessOptions = {}): TestHarness {
   const api = new FakeSessionApi();
   const clock = new SteppingClock();
   const deviceFeed = role === 'smoker' ? new FakeDeviceFeed() : undefined;
+  const wifi = options.wifiThrottleMs !== undefined ? new FakeWifiStatus() : undefined;
 
-  const store = createSessionStore({ role, socket, api, clock, deviceFeed });
+  const store = createSessionStore({
+    role,
+    socket,
+    api,
+    clock,
+    deviceFeed,
+    batchEvery: options.batchEvery,
+    wifi:
+      wifi !== undefined ? { port: wifi, throttleMs: options.wifiThrottleMs as number } : undefined,
+  });
 
   return {
     store,
@@ -45,6 +62,7 @@ export function createTestHarness(options: HarnessOptions = {}): TestHarness {
     api,
     clock,
     deviceFeed,
+    wifi,
     flush: flushPromises,
   };
 }

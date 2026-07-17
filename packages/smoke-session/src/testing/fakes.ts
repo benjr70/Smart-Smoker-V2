@@ -6,7 +6,11 @@ import {
   DeviceFeedPort,
   SessionApiPort,
   Unsubscribe,
+  WifiStatusPort,
 } from '../session/ports';
+
+/** The kind of a single outbound socket frame, recorded in emit order. */
+export type OutboundFrameKind = 'smokeUpdate' | 'clear' | 'events' | 'refresh';
 
 /**
  * In-memory fakes shipped with the package so both host apps (and future e2e
@@ -39,6 +43,16 @@ export class FakeCloudSocket implements CloudSocketPort {
   readonly emittedSmokeUpdates: SmokeUpdate[] = [];
   /** How many clear signals the store broadcast. */
   emittedClears = 0;
+  /** Every `events` payload string the store broadcast, in order. */
+  readonly emittedEvents: string[] = [];
+  /** How many `refresh` signals the store broadcast. */
+  emittedRefreshes = 0;
+  /**
+   * Every outbound frame kind in the exact order it was emitted. Lets a test
+   * assert reconnect choreography ordering (e.g. `['refresh', 'events']`)
+   * across the different frame types.
+   */
+  readonly outbound: OutboundFrameKind[] = [];
 
   onEvents(listener: (payload: string) => void): Unsubscribe {
     return subscription(this.eventsListeners, listener);
@@ -62,10 +76,22 @@ export class FakeCloudSocket implements CloudSocketPort {
 
   emitSmokeUpdate(update: SmokeUpdate): void {
     this.emittedSmokeUpdates.push(update);
+    this.outbound.push('smokeUpdate');
   }
 
   emitClear(): void {
     this.emittedClears += 1;
+    this.outbound.push('clear');
+  }
+
+  emitEvents(payload: string): void {
+    this.emittedEvents.push(payload);
+    this.outbound.push('events');
+  }
+
+  emitRefresh(): void {
+    this.emittedRefreshes += 1;
+    this.outbound.push('refresh');
   }
 
   /** Deliver an inbound `events` JSON-string frame to subscribers. */
@@ -113,6 +139,8 @@ export class FakeSessionApi implements SessionApiPort {
   private smoking = false;
   private temps: BatchTempDto[] = [];
   private readonly failing = new Set<keyof SessionApiPort>();
+  private postGate: Promise<void> | null = null;
+  private releasePostGate: (() => void) | null = null;
 
   /** Seed the profile returned by {@link getProfile} (`null` = none saved). */
   seedProfile(profile: SmokeProfile | null): this {
@@ -179,6 +207,25 @@ export class FakeSessionApi implements SessionApiPort {
   async postTempsBatch(batch: BatchTempDto[]): Promise<void> {
     this.calls.push({ method: 'postTempsBatch', args: [batch] });
     this.guard('postTempsBatch');
+    if (this.postGate !== null) {
+      await this.postGate;
+    }
+  }
+
+  /**
+   * Make the next (and subsequent) `postTempsBatch` calls block until the
+   * returned `release` is invoked. Lets a test hold a flush in flight while it
+   * pushes another reading, to prove re-entrancy is guarded.
+   */
+  holdPostTempsBatch(): () => void {
+    this.postGate = new Promise<void>(resolve => {
+      this.releasePostGate = resolve;
+    });
+    return () => {
+      this.releasePostGate?.();
+      this.postGate = null;
+      this.releasePostGate = null;
+    };
   }
 
   /** Count how many times `method` was invoked. */
@@ -239,6 +286,39 @@ export class FakeDeviceFeed implements DeviceFeedPort {
   /** Report a device connectivity transition. */
   setConnected(connected: boolean): void {
     for (const listener of this.connectionListeners) listener(connected);
+  }
+}
+
+/**
+ * A seedable, recording stand-in for the device wifi status query. Seed the
+ * result with {@link setStatus}; force the next call to reject with
+ * {@link failNext}; read {@link callCount} to assert throttling.
+ */
+export class FakeWifiStatus implements WifiStatusPort {
+  private status = true;
+  private failing = false;
+  /** How many times {@link getStatus} has been invoked. */
+  callCount = 0;
+
+  /** Seed the value the next {@link getStatus} resolves. */
+  setStatus(status: boolean): this {
+    this.status = status;
+    return this;
+  }
+
+  /** Make the next {@link getStatus} reject once, then behave normally. */
+  failNext(): this {
+    this.failing = true;
+    return this;
+  }
+
+  async getStatus(): Promise<boolean> {
+    this.callCount += 1;
+    if (this.failing) {
+      this.failing = false;
+      throw new Error('FakeWifiStatus: forced failure');
+    }
+    return this.status;
   }
 }
 
