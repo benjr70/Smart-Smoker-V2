@@ -16,16 +16,11 @@ import {
   getNotificationSettings,
   setNotificationSettings,
 } from '../../Services/notificationsService';
+import { NotificationSettings } from '../../api/types';
 
-export interface NotificationSettings {
-  type: boolean;
-  message: string;
-  probe1: string;
-  op: string;
-  probe2?: string;
-  offset?: number;
-  temperature?: number;
-}
+// The canonical NotificationSettings type now lives in the API types module.
+// Re-exported here so existing importers of this component keep compiling.
+export type { NotificationSettings };
 
 export function NotificationsCard(): JSX.Element {
   const initialNotification: NotificationSettings = {

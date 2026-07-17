@@ -1,64 +1,57 @@
-import { rating } from '../components/common/interfaces/rating';
+import { getDefaultApiClient } from '../api';
+import { rating } from '../api/types';
 
-const envUrl = process.env.REACT_APP_CLOUD_URL;
-
-// Project a rating down to exactly the fields the backend RatingsDto whitelists.
-// The strict validation edge (forbidNonWhitelisted) rejects stray fields such as
-// the persisted `_id`/`__v` that ride along on a fetched rating document.
-const toRatingsPayload = (rating: rating) => ({
-  smokeFlavor: rating.smokeFlavor,
-  seasoning: rating.seasoning,
-  tenderness: rating.tenderness,
-  overallTaste: rating.overallTaste,
-  notes: rating.notes,
-});
-
+/**
+ * @deprecated Use the API client (`useApiClient().ratings`) instead. These are
+ * one-line delegating shims that preserve the legacy swallow-and-log semantics
+ * (catch, `console.log`, resolve `undefined`) until every caller has migrated,
+ * at which point they will be deleted. The create-vs-update routing and the
+ * DTO-whitelist projection now live inside the client.
+ */
 export const getCurrentRatings = async (): Promise<rating> => {
-  const axios = require('axios');
-  axios.defaults.baseURL = envUrl;
-  return axios
-    .get('ratings/')
-    .then((result: any) => {
-      return result.data;
-    })
-    .catch((error: any) => {
-      console.log(error);
-    });
+  try {
+    return await getDefaultApiClient().ratings.getCurrent();
+  } catch (error) {
+    console.log(error);
+    return undefined as unknown as rating;
+  }
 };
 
+/** @deprecated Use `useApiClient().ratings.save` (id-less create) instead. */
 export const setCurrentRatings = async (rating: rating): Promise<rating> => {
-  const axios = require('axios');
-  axios.defaults.baseURL = envUrl;
-  return axios.post('ratings/', toRatingsPayload(rating)).catch((error: any) => {
+  try {
+    return await getDefaultApiClient().ratings.save({ ...rating, _id: undefined });
+  } catch (error) {
     console.log(error);
-  });
+    return undefined as unknown as rating;
+  }
 };
 
+/** @deprecated Use `useApiClient().ratings.save` (with id -> update) instead. */
 export const updateRatings = async (rating: rating): Promise<rating> => {
-  const axios = require('axios');
-  axios.defaults.baseURL = envUrl;
-  return axios.post('ratings/' + rating._id, toRatingsPayload(rating)).catch((error: any) => {
+  try {
+    return await getDefaultApiClient().ratings.save(rating);
+  } catch (error) {
     console.log(error);
-  });
+    return undefined as unknown as rating;
+  }
 };
 
+/** @deprecated Use `useApiClient().ratings.getById` instead. */
 export const getRatingById = async (id: string): Promise<rating> => {
-  const axios = require('axios');
-  axios.defaults.baseURL = envUrl;
-  return axios
-    .get('ratings/' + id)
-    .then((result: any) => {
-      return result.data;
-    })
-    .catch((error: any) => {
-      console.log(error);
-    });
+  try {
+    return await getDefaultApiClient().ratings.getById(id);
+  } catch (error) {
+    console.log(error);
+    return undefined as unknown as rating;
+  }
 };
 
-export const deleteRatingsById = async (id: string) => {
-  const axios = require('axios');
-  axios.defaults.baseURL = envUrl;
-  return axios.delete('ratings/' + id).catch((error: any) => {
+/** @deprecated Use `useApiClient().ratings.deleteById` instead. */
+export const deleteRatingsById = async (id: string): Promise<void> => {
+  try {
+    await getDefaultApiClient().ratings.deleteById(id);
+  } catch (error) {
     console.log(error);
-  });
+  }
 };

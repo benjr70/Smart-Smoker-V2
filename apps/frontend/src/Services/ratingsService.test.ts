@@ -5,327 +5,139 @@ import {
   getRatingById,
   deleteRatingsById,
 } from './ratingsService';
-import { rating } from '../components/common/interfaces/rating';
+import { createApiClient } from '../api/client';
+import { createFakeBackend, FakeBackend } from '../api/fakeBackend';
+import { rating } from '../api/types';
 
-// Create a mock that allows baseURL to be tracked
-let currentBaseURL = '';
-const mockAxios = {
-  get: jest.fn(),
-  post: jest.fn(),
-  delete: jest.fn(),
-  put: jest.fn(),
-  defaults: {
-    get baseURL() {
-      return currentBaseURL;
-    },
-    set baseURL(value) {
-      currentBaseURL = value;
-    },
-  },
+// Mock only the client-injection boundary: the deprecated shims delegate to the
+// default client, and here that default is a client backed by an in-memory fake
+// backend. Everything below the seam (real client + real fake backend) runs.
+jest.mock('../api', () => {
+  const actual = jest.requireActual('../api');
+  return { ...actual, getDefaultApiClient: jest.fn() };
+});
+
+// eslint-disable-next-line import/first, @typescript-eslint/no-var-requires
+const api = require('../api');
+
+const sampleRating: rating = {
+  smokeFlavor: 8,
+  seasoning: 7,
+  tenderness: 9,
+  overallTaste: 8,
+  notes: 'Delicious!',
 };
 
-jest.mock('axios', () => mockAxios);
-
-// Mock environment variables
-const originalEnv = process.env;
+let backend: FakeBackend;
 
 beforeEach(() => {
-  mockAxios.get.mockClear();
-  mockAxios.post.mockClear();
-  mockAxios.delete.mockClear();
-  if (mockAxios.put) mockAxios.put.mockClear();
-  mockAxios.defaults.baseURL = '';
-
-  process.env = {
-    ...originalEnv,
-    REACT_APP_CLOUD_URL: 'http://localhost:3001/',
-  };
+  backend = createFakeBackend({
+    ratings: { current: sampleRating, records: { abc123: { ...sampleRating, _id: 'abc123' } } },
+  });
+  (api.getDefaultApiClient as jest.Mock).mockReturnValue(createApiClient(backend));
   jest.spyOn(console, 'log').mockImplementation(() => {});
 });
 
 afterEach(() => {
-  process.env = originalEnv;
   jest.restoreAllMocks();
 });
 
-describe('ratingsService', () => {
-  const mockRating: rating = {
-    smokeFlavor: 8,
-    seasoning: 7,
-    tenderness: 9,
-    overallTaste: 8,
-    notes: 'Delicious!',
-    _id: 'test-id-123',
-  };
+describe('ratingsService (deprecated shims)', () => {
+  test('getCurrentRatings resolves the current rating on success', async () => {
+    const result = await getCurrentRatings();
+    expect(result).toEqual(sampleRating);
+    expect(backend.requests).toContainEqual({ method: 'get', path: 'ratings', body: undefined });
+  });
 
-  describe('getCurrentRatings', () => {
-    test('should fetch current ratings successfully', async () => {
-      mockAxios.get.mockResolvedValue({
-        data: mockRating,
-      });
+  test('getCurrentRatings resolves undefined and logs on failure', async () => {
+    backend.injectFault({ method: 'get', path: 'ratings', status: 500 });
+    const consoleSpy = jest.spyOn(console, 'log');
 
-      const result = await getCurrentRatings();
+    const result = await getCurrentRatings();
 
-      expect(mockAxios.get).toHaveBeenCalledWith('ratings/');
-      expect(result).toEqual(mockRating);
-    });
+    expect(result).toBeUndefined();
+    expect(consoleSpy).toHaveBeenCalledTimes(1);
+  });
 
-    test('should handle getCurrentRatings error and log it', async () => {
-      const mockError = new Error('Network error');
-
-      mockAxios.get.mockRejectedValue(mockError);
-
-      const consoleLogSpy = jest.spyOn(console, 'log');
-
-      const result = await getCurrentRatings();
-
-      expect(mockAxios.get).toHaveBeenCalledWith('ratings/');
-      expect(consoleLogSpy).toHaveBeenCalledWith(mockError);
-      expect(result).toBeUndefined();
-    });
-
-    test('should set correct baseURL from environment variable', async () => {
-      process.env.REACT_APP_CLOUD_URL = 'https://api.example.com/';
-
-      mockAxios.get.mockResolvedValue({ data: mockRating });
-
-      await getCurrentRatings();
+  test('setCurrentRatings creates via the collection path with only whitelisted fields', async () => {
+    await setCurrentRatings({ ...sampleRating, _id: undefined } as rating);
+    expect(backend.requests).toContainEqual({
+      method: 'post',
+      path: 'ratings',
+      body: {
+        smokeFlavor: 8,
+        seasoning: 7,
+        tenderness: 9,
+        overallTaste: 8,
+        notes: 'Delicious!',
+      },
     });
   });
 
-  // The backend RatingsDto whitelists only these five fields; the strict
-  // validation edge rejects a body carrying the persisted `_id`/`__v`.
-  const whitelistedRating = {
-    smokeFlavor: mockRating.smokeFlavor,
-    seasoning: mockRating.seasoning,
-    tenderness: mockRating.tenderness,
-    overallTaste: mockRating.overallTaste,
-    notes: mockRating.notes,
-  };
+  test('setCurrentRatings resolves undefined and logs on failure', async () => {
+    backend.injectFault({ method: 'post', path: 'ratings', status: 500 });
+    const consoleSpy = jest.spyOn(console, 'log');
 
-  describe('setCurrentRatings', () => {
-    test('should post only whitelisted rating fields, stripping _id', async () => {
-      mockAxios.post.mockResolvedValue({
-        data: mockRating,
-      });
+    const result = await setCurrentRatings(sampleRating);
 
-      const result = await setCurrentRatings(mockRating);
+    expect(result).toBeUndefined();
+    expect(consoleSpy).toHaveBeenCalledTimes(1);
+  });
 
-      expect(mockAxios.post).toHaveBeenCalledWith('ratings/', whitelistedRating);
-      expect(mockAxios.post.mock.calls[0][1]).not.toHaveProperty('_id');
-      expect(result).toEqual({ data: mockRating });
-    });
+  test('updateRatings updates the id-scoped path, stripping _id', async () => {
+    await updateRatings({ ...sampleRating, _id: 'abc123' });
+    const sent = backend.requests.find(r => r.method === 'post');
+    expect(sent?.path).toBe('ratings/abc123');
+    expect(sent?.body).not.toHaveProperty('_id');
+  });
 
-    test('should handle setCurrentRatings error and log it', async () => {
-      const mockError = new Error('Server error');
+  test('updateRatings resolves undefined and logs on failure', async () => {
+    backend.injectFault({ method: 'post', path: 'ratings/abc123', status: 500 });
+    const consoleSpy = jest.spyOn(console, 'log');
 
-      mockAxios.post.mockRejectedValue(mockError);
+    const result = await updateRatings({ ...sampleRating, _id: 'abc123' });
 
-      const consoleLogSpy = jest.spyOn(console, 'log');
+    expect(result).toBeUndefined();
+    expect(consoleSpy).toHaveBeenCalledTimes(1);
+  });
 
-      const result = await setCurrentRatings(mockRating);
-
-      expect(mockAxios.post).toHaveBeenCalledWith('ratings/', whitelistedRating);
-      expect(consoleLogSpy).toHaveBeenCalledWith(mockError);
-      expect(result).toBeUndefined();
-    });
-
-    test('should handle rating with minimum scores', async () => {
-      const minRating: rating = {
-        smokeFlavor: 1,
-        seasoning: 1,
-        tenderness: 1,
-        overallTaste: 1,
-        notes: '',
-      };
-
-      mockAxios.post.mockResolvedValue({ data: minRating });
-
-      const result = await setCurrentRatings(minRating);
-
-      expect(mockAxios.post).toHaveBeenCalledWith('ratings/', minRating);
-      expect(result).toEqual({ data: minRating });
-    });
-
-    test('should handle rating with maximum scores', async () => {
-      const maxRating: rating = {
-        smokeFlavor: 10,
-        seasoning: 10,
-        tenderness: 10,
-        overallTaste: 10,
-        notes: 'Perfect smoke!',
-      };
-
-      mockAxios.post.mockResolvedValue({ data: maxRating });
-
-      const result = await setCurrentRatings(maxRating);
-
-      expect(mockAxios.post).toHaveBeenCalledWith('ratings/', maxRating);
-      expect(result).toEqual({ data: maxRating });
-    });
-
-    test('should set correct baseURL from environment variable', async () => {
-      process.env.REACT_APP_CLOUD_URL = 'https://api.example.com/';
-
-      mockAxios.post.mockResolvedValue({ data: mockRating });
-
-      await setCurrentRatings(mockRating);
+  test('getRatingById resolves the stored rating on success', async () => {
+    const result = await getRatingById('abc123');
+    expect(result).toEqual({ ...sampleRating, _id: 'abc123' });
+    expect(backend.requests).toContainEqual({
+      method: 'get',
+      path: 'ratings/abc123',
+      body: undefined,
     });
   });
 
-  describe('updateRatings', () => {
-    test('should update ratings successfully', async () => {
-      const ratingWithId: rating = { ...mockRating, _id: 'update-id-123' };
+  test('getRatingById resolves undefined and logs when the record is missing', async () => {
+    const consoleSpy = jest.spyOn(console, 'log');
 
-      mockAxios.post.mockResolvedValue({
-        data: ratingWithId,
-      });
+    const result = await getRatingById('missing');
 
-      const result = await updateRatings(ratingWithId);
+    expect(result).toBeUndefined();
+    expect(consoleSpy).toHaveBeenCalledTimes(1);
+  });
 
-      expect(mockAxios.post).toHaveBeenCalledWith('ratings/' + ratingWithId._id, whitelistedRating);
-      expect(mockAxios.post.mock.calls[0][1]).not.toHaveProperty('_id');
-      expect(result).toEqual({ data: ratingWithId });
-    });
-
-    test('should handle updateRatings error and log it', async () => {
-      const ratingWithId: rating = { ...mockRating, _id: 'update-id-123' };
-      const mockError = new Error('Update failed');
-
-      mockAxios.post.mockRejectedValue(mockError);
-
-      const consoleLogSpy = jest.spyOn(console, 'log');
-
-      const result = await updateRatings(ratingWithId);
-
-      expect(mockAxios.post).toHaveBeenCalledWith('ratings/' + ratingWithId._id, whitelistedRating);
-      expect(consoleLogSpy).toHaveBeenCalledWith(mockError);
-      expect(result).toBeUndefined();
-    });
-
-    test('should handle rating without id', async () => {
-      const ratingWithoutId: rating = {
-        smokeFlavor: 5,
-        seasoning: 6,
-        tenderness: 7,
-        overallTaste: 6,
-        notes: 'No ID',
-      };
-
-      mockAxios.post.mockResolvedValue({ data: ratingWithoutId });
-
-      const result = await updateRatings(ratingWithoutId);
-
-      expect(mockAxios.post).toHaveBeenCalledWith('ratings/' + undefined, ratingWithoutId);
-      expect(result).toEqual({ data: ratingWithoutId });
-    });
-
-    test('should set correct baseURL from environment variable', async () => {
-      process.env.REACT_APP_CLOUD_URL = 'https://api.example.com/';
-
-      const ratingWithId: rating = { ...mockRating, _id: 'test-id' };
-
-      mockAxios.post.mockResolvedValue({ data: ratingWithId });
-
-      await updateRatings(ratingWithId);
+  test('deleteRatingsById removes the record on success', async () => {
+    await deleteRatingsById('abc123');
+    expect(backend.store.ratings.records.abc123).toBeUndefined();
+    expect(backend.requests).toContainEqual({
+      method: 'delete',
+      path: 'ratings/abc123',
+      body: undefined,
     });
   });
 
-  describe('getRatingById', () => {
-    test('should fetch rating by id successfully', async () => {
-      const testId = 'test-id-123';
+  test('deleteRatingsById resolves undefined and logs on failure', async () => {
+    backend.injectFault({ method: 'delete', path: 'ratings/abc123', status: 500 });
+    const consoleSpy = jest.spyOn(console, 'log');
 
-      mockAxios.get.mockResolvedValue({
-        data: mockRating,
-      });
+    const result = await deleteRatingsById('abc123');
 
-      const result = await getRatingById(testId);
-
-      expect(mockAxios.get).toHaveBeenCalledWith('ratings/' + testId);
-      expect(result).toEqual(mockRating);
-    });
-
-    test('should handle getRatingById error and log it', async () => {
-      const testId = 'test-id-123';
-      const mockError = new Error('Not found');
-
-      mockAxios.get.mockRejectedValue(mockError);
-
-      const consoleLogSpy = jest.spyOn(console, 'log');
-
-      const result = await getRatingById(testId);
-
-      expect(mockAxios.get).toHaveBeenCalledWith('ratings/' + testId);
-      expect(consoleLogSpy).toHaveBeenCalledWith(mockError);
-      expect(result).toBeUndefined();
-    });
-
-    test('should handle special characters in id', async () => {
-      const testId = 'test-id-with-special-chars-!@#';
-
-      mockAxios.get.mockResolvedValue({ data: mockRating });
-
-      await getRatingById(testId);
-
-      expect(mockAxios.get).toHaveBeenCalledWith('ratings/' + testId);
-    });
-
-    test('should set correct baseURL from environment variable', async () => {
-      process.env.REACT_APP_CLOUD_URL = 'https://api.example.com/';
-
-      const testId = 'test-id';
-
-      mockAxios.get.mockResolvedValue({ data: mockRating });
-
-      await getRatingById(testId);
-    });
-  });
-
-  describe('deleteRatingsById', () => {
-    test('should delete rating by id successfully', async () => {
-      const testId = 'test-id-123';
-
-      mockAxios.delete.mockResolvedValue({});
-
-      const result = await deleteRatingsById(testId);
-
-      expect(mockAxios.delete).toHaveBeenCalledWith('ratings/' + testId);
-      expect(result).toEqual({});
-    });
-
-    test('should handle deleteRatingsById error and log it', async () => {
-      const testId = 'test-id-123';
-      const mockError = new Error('Delete failed');
-
-      mockAxios.delete.mockRejectedValue(mockError);
-
-      const consoleLogSpy = jest.spyOn(console, 'log');
-
-      const result = await deleteRatingsById(testId);
-
-      expect(mockAxios.delete).toHaveBeenCalledWith('ratings/' + testId);
-      expect(consoleLogSpy).toHaveBeenCalledWith(mockError);
-      expect(result).toBeUndefined();
-    });
-
-    test('should handle empty string id', async () => {
-      const testId = '';
-
-      mockAxios.delete.mockResolvedValue({});
-
-      await deleteRatingsById(testId);
-
-      expect(mockAxios.delete).toHaveBeenCalledWith('ratings/');
-    });
-
-    test('should set correct baseURL from environment variable', async () => {
-      process.env.REACT_APP_CLOUD_URL = 'https://api.example.com/';
-
-      const testId = 'test-id';
-
-      mockAxios.delete.mockResolvedValue({});
-
-      await deleteRatingsById(testId);
-    });
+    expect(result).toBeUndefined();
+    expect(consoleSpy).toHaveBeenCalledTimes(1);
+    expect(backend.store.ratings.records.abc123).toEqual({ ...sampleRating, _id: 'abc123' });
   });
 });

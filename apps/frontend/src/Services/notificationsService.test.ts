@@ -1,176 +1,117 @@
 import { getNotificationSettings, setNotificationSettings } from './notificationsService';
+import { createApiClient } from '../api/client';
+import { createFakeBackend, FakeBackend } from '../api/fakeBackend';
+import { NotificationSettings } from '../api/types';
 
-// Create a mock that allows baseURL to be tracked
-let currentBaseURL = '';
-const mockAxios = {
-  get: jest.fn(),
-  post: jest.fn(),
-  delete: jest.fn(),
-  put: jest.fn(),
-  defaults: {
-    get baseURL() {
-      return currentBaseURL;
-    },
-    set baseURL(value) {
-      currentBaseURL = value;
-    },
-  },
+// Mock only the client-injection boundary: the deprecated shims delegate to the
+// default client, backed here by an in-memory fake backend. Everything below the
+// seam (real client + real fake backend) runs.
+jest.mock('../api', () => {
+  const actual = jest.requireActual('../api');
+  return { ...actual, getDefaultApiClient: jest.fn() };
+});
+
+// eslint-disable-next-line import/first, @typescript-eslint/no-var-requires
+const api = require('../api');
+
+const editableRule: NotificationSettings = {
+  type: false,
+  message: 'Meat done',
+  probe1: 'Chamber',
+  op: '>',
+  probe2: 'Probe 1',
+  offset: 5,
+  temperature: 165,
 };
 
-jest.mock('axios', () => mockAxios);
-
-// Mock environment variables
-const originalEnv = process.env;
+let backend: FakeBackend;
 
 beforeEach(() => {
-  jest.resetModules();
-  process.env = {
-    ...originalEnv,
-    REACT_APP_CLOUD_URL: 'http://localhost:3001/',
-  };
+  backend = createFakeBackend({ notifications: { settings: [editableRule] } });
+  (api.getDefaultApiClient as jest.Mock).mockReturnValue(createApiClient(backend));
   jest.spyOn(console, 'log').mockImplementation(() => {});
-
-  // Reset the mock and set initial baseURL
-  mockAxios.get.mockClear();
-  mockAxios.post.mockClear();
-  mockAxios.defaults.baseURL = '';
 });
 
 afterEach(() => {
-  process.env = originalEnv;
   jest.restoreAllMocks();
 });
 
-describe('notificationsService', () => {
+describe('notificationsService (deprecated shims)', () => {
   describe('getNotificationSettings', () => {
-    test('should fetch notification settings successfully', async () => {
-      const mockSettings = [
-        { id: 1, name: 'Email Notifications', enabled: true },
-        { id: 2, name: 'Push Notifications', enabled: false },
-      ];
-
-      mockAxios.get.mockResolvedValue({
-        data: { settings: mockSettings },
-      });
-
+    test('resolves the unwrapped settings array on success', async () => {
       const result = await getNotificationSettings();
-
-      expect(mockAxios.get).toHaveBeenCalledWith('notifications/settings');
-      expect(result).toEqual(mockSettings);
+      expect(result).toEqual([editableRule]);
+      expect(backend.requests).toContainEqual({
+        method: 'get',
+        path: 'notifications/settings',
+        body: undefined,
+      });
     });
 
-    test('should handle getNotificationSettings error and log it', async () => {
-      const mockError = new Error('Network error');
-      mockAxios.get.mockRejectedValue(mockError);
-
-      const consoleLogSpy = jest.spyOn(console, 'log');
+    test('resolves undefined and logs on failure', async () => {
+      backend.injectFault({ method: 'get', path: 'notifications/settings', status: 500 });
+      const consoleSpy = jest.spyOn(console, 'log');
 
       const result = await getNotificationSettings();
 
-      expect(mockAxios.get).toHaveBeenCalledWith('notifications/settings');
-      expect(consoleLogSpy).toHaveBeenCalledWith(mockError);
       expect(result).toBeUndefined();
-    });
-
-    test('should set correct baseURL from environment variable', async () => {
-      process.env.REACT_APP_CLOUD_URL = 'https://api.example.com/';
-
-      mockAxios.get.mockResolvedValue({
-        data: { settings: [] },
-      });
-
-      await getNotificationSettings();
+      expect(consoleSpy).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('setNotificationSettings', () => {
-    // The component posts `{ settings: NotificationsRef.current }`; rules fetched
-    // from the backend carry a persisted subdocument `_id` that the strict
-    // validation edge rejects, so the service must strip it before posting.
-    const editableRule = {
-      type: false,
-      message: 'Meat done',
-      probe1: 'Chamber',
-      op: '>',
-      probe2: 'Probe 1',
-      offset: 5,
-      temperature: 165,
-    };
-
-    test('should post only whitelisted rule fields, stripping _id/__v', async () => {
-      const fetchedSettings = {
-        settings: [{ ...editableRule, _id: 'rule-id-1', __v: 0 }],
-      };
-
-      mockAxios.post.mockResolvedValue({ data: fetchedSettings });
-
-      await setNotificationSettings(fetchedSettings);
-
-      expect(mockAxios.post).toHaveBeenCalledWith('notifications/settings', {
-        settings: [editableRule],
+    test('posts the projected rules in the legacy envelope, stripping _id/__v', async () => {
+      await setNotificationSettings({
+        settings: [{ ...editableRule, _id: 'rule-1', __v: 0 }],
       });
-      const sentRule = mockAxios.post.mock.calls[0][1].settings[0];
-      expect(sentRule).not.toHaveProperty('_id');
-      expect(sentRule).not.toHaveProperty('__v');
+
+      const sent = backend.requests.find(r => r.method === 'post');
+      expect(sent?.path).toBe('notifications/settings');
+      const rule = (sent?.body as { settings: Record<string, unknown>[] }).settings[0];
+      expect(rule).not.toHaveProperty('_id');
+      expect(rule).not.toHaveProperty('__v');
     });
 
-    test('should preserve lastNotificationSent when present', async () => {
+    test('preserves lastNotificationSent when present', async () => {
       const sent = '2026-07-10T00:00:00.000Z';
-      const fetchedSettings = {
-        settings: [{ ...editableRule, _id: 'rule-id-1', lastNotificationSent: sent }],
-      };
-
-      mockAxios.post.mockResolvedValue({ data: fetchedSettings });
-
-      await setNotificationSettings(fetchedSettings);
-
-      const sentRule = mockAxios.post.mock.calls[0][1].settings[0];
-      expect(sentRule.lastNotificationSent).toBe(sent);
-      expect(sentRule).not.toHaveProperty('_id');
-    });
-
-    test('should handle setNotificationSettings error and log it', async () => {
-      const fetchedSettings = { settings: [editableRule] };
-      const mockError = new Error('Server error');
-      mockAxios.post.mockRejectedValue(mockError);
-
-      const consoleLogSpy = jest.spyOn(console, 'log');
-
-      const result = await setNotificationSettings(fetchedSettings);
-
-      expect(mockAxios.post).toHaveBeenCalledWith('notifications/settings', {
-        settings: [editableRule],
+      await setNotificationSettings({
+        settings: [{ ...editableRule, _id: 'rule-1', lastNotificationSent: sent }],
       });
-      expect(consoleLogSpy).toHaveBeenCalledWith(mockError);
-      expect(result).toBeUndefined();
+
+      const rule = (
+        backend.requests.find(r => r.method === 'post')?.body as {
+          settings: Record<string, unknown>[];
+        }
+      ).settings[0];
+      expect(rule.lastNotificationSent).toBe(sent);
     });
 
-    test('should send an empty settings array when given no settings', async () => {
-      mockAxios.post.mockResolvedValue({ data: {} });
-
+    test('sends an empty settings array when given no settings', async () => {
       await setNotificationSettings({});
-
-      expect(mockAxios.post).toHaveBeenCalledWith('notifications/settings', {
-        settings: [],
+      expect(backend.requests).toContainEqual({
+        method: 'post',
+        path: 'notifications/settings',
+        body: { settings: [] },
       });
     });
 
-    test('should handle null settings without throwing', async () => {
-      mockAxios.post.mockResolvedValue({ data: null });
-
+    test('handles null settings without throwing', async () => {
       await setNotificationSettings(null);
-
-      expect(mockAxios.post).toHaveBeenCalledWith('notifications/settings', {
-        settings: [],
+      expect(backend.requests).toContainEqual({
+        method: 'post',
+        path: 'notifications/settings',
+        body: { settings: [] },
       });
     });
 
-    test('should set correct baseURL from environment variable', async () => {
-      process.env.REACT_APP_CLOUD_URL = 'https://api.example.com/';
+    test('resolves undefined and logs on failure', async () => {
+      backend.injectFault({ method: 'post', path: 'notifications/settings', status: 500 });
+      const consoleSpy = jest.spyOn(console, 'log');
 
-      mockAxios.post.mockResolvedValue({ data: {} });
+      const result = await setNotificationSettings({ settings: [editableRule] });
 
-      await setNotificationSettings({ settings: [editableRule] });
+      expect(result).toBeUndefined();
+      expect(consoleSpy).toHaveBeenCalledTimes(1);
     });
   });
 });
