@@ -389,6 +389,22 @@ describe('notifications client — legacy endpoint contract', () => {
     });
   });
 
+  test('getSettings resolves undefined (not a throw) when the wire body is empty', async () => {
+    // The backend serializes "no settings document yet" as a 200 with an empty
+    // body, which the transport normalizes to `null`. getSettings must unwrap
+    // that defensively rather than dereferencing `null.settings` — so consumers
+    // (via useCurrentResource) keep their safe defaults instead of crashing.
+    const emptyBodyTransport = {
+      get: async () => null as never,
+      post: async () => undefined as never,
+      put: async () => undefined as never,
+      delete: async () => undefined as never,
+    };
+    const client = createApiClient(emptyBodyTransport);
+
+    await expect(client.notifications.getSettings()).resolves.toBeUndefined();
+  });
+
   test('saveSettings wraps the projected rules in the legacy envelope, stripping _id/__v', async () => {
     const backend = createFakeBackend();
     const client = createApiClient(backend);

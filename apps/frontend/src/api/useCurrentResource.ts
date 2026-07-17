@@ -55,7 +55,12 @@ export function useCurrentResource<T>(
 
     load(clientRef.current)
       .then(result => {
-        if (active && result !== null && result !== undefined) {
+        // Keep the safe defaults unless the load produced an actual resource.
+        // `null`/`undefined` mean "no current resource yet"; an empty string is
+        // the shape an empty-body 200 collapses to if it ever reaches here — none
+        // are resources, so none should overwrite the initial value (which would
+        // otherwise blank the form fields / crash on `state.field.subfield`).
+        if (active && result !== null && result !== undefined && (result as unknown) !== '') {
           setState(result);
         }
       })

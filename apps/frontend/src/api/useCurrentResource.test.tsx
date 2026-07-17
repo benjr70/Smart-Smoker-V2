@@ -123,6 +123,41 @@ describe('useCurrentResource', () => {
     expect(screen.queryByText('Could not load pre-smoke.')).not.toBeInTheDocument();
   });
 
+  test('keeps defaults when the load resolves an empty string (empty-body 200)', async () => {
+    // A NestJS handler returning `null` serializes as an empty body that axios
+    // surfaces as `''`. If that ever reaches the hook it must NOT become state:
+    // an empty string is not a resource, and setting it would blank the form and
+    // crash the component on `state.weight.weight`. The hook keeps the defaults.
+    const backend = createFakeBackend();
+    const client = createApiClient(backend);
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <ApiClientProvider client={client}>
+        <SnackbarProvider>{children}</SnackbarProvider>
+      </ApiClientProvider>
+    );
+
+    const load = jest.fn().mockResolvedValue('' as unknown as PreSmoke);
+    const { result } = renderHook(
+      () =>
+        useCurrentResource<PreSmoke>({
+          initialValue: preSmokeDefaults,
+          load,
+          save: jest.fn().mockResolvedValue(undefined),
+          loadErrorMessage: 'Could not load pre-smoke.',
+          saveErrorMessage: 'Could not save pre-smoke.',
+        }),
+      { wrapper }
+    );
+
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(result.current[0]).toEqual(preSmokeDefaults);
+    expect(screen.queryByText('Could not load pre-smoke.')).not.toBeInTheDocument();
+  });
+
   test('raises the snackbar and does not throw when the unmount save fails', async () => {
     const backend = createFakeBackend({
       preSmoke: {

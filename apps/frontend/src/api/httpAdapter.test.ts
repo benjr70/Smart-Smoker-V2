@@ -39,6 +39,19 @@ describe('httpAdapter', () => {
     expect(result).toEqual([{ ChamberTemp: 225 }]);
   });
 
+  test('maps an empty-body 200 to null (no current resource)', async () => {
+    // NestJS serializes a handler that returns `null` (e.g. GetByCurrent with no
+    // current document) as an empty body; axios surfaces that as `''`. The
+    // transport must collapse it to `null` so a "no current resource" read never
+    // hands a truthy-shaped empty string to callers/component state.
+    mockInstance.get.mockResolvedValue({ data: '' });
+    const transport = createHttpTransport('https://api.example.com/');
+
+    const result = await transport.get('presmoke/');
+
+    expect(result).toBeNull();
+  });
+
   test('maps an axios failure to the typed ApiError with status/path/method', async () => {
     mockInstance.delete.mockRejectedValue({ response: { status: 503 }, message: 'boom' });
     const transport = createHttpTransport('https://api.example.com/');
