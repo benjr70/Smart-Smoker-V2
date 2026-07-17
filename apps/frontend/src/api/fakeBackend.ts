@@ -338,6 +338,10 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
         }
         return clone(record) as unknown as T;
       }
+      if (method === 'delete' && id !== undefined) {
+        delete store.smoke.records[id];
+        return {} as unknown as T;
+      }
     }
 
     if (resource === 'history' && method === 'get' && id === undefined) {

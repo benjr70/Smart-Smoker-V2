@@ -443,3 +443,164 @@ describe('notifications client — legacy endpoint contract', () => {
     });
   });
 });
+
+// A smoke whose five child ids each point at a seeded child record, so the
+// cascade delete and review aggregate resolve every piece from the store.
+const seededSmoke: Smoke = {
+  _id: 'smoke-1',
+  preSmokeId: 'pre-1',
+  smokeProfileId: 'prof-1',
+  tempsId: 'temps-1',
+  postSmokeId: 'post-1',
+  ratingId: 'rate-1',
+  date: new Date('2025-01-01T00:00:00Z'),
+  status: 2,
+};
+
+const seedFullSmoke = () =>
+  createFakeBackend({
+    smoke: { records: { 'smoke-1': seededSmoke } },
+    preSmoke: {
+      records: { 'pre-1': { name: 'Brisket', meatType: 'Beef', weight: {}, steps: [] } },
+    },
+    smokeProfile: {
+      records: {
+        'prof-1': {
+          chamberName: 'Main',
+          probe1Name: 'A',
+          probe2Name: 'B',
+          probe3Name: 'C',
+          notes: '',
+          woodType: 'Oak',
+        },
+      },
+    },
+    temps: { records: { 'temps-1': sampleTemps } },
+    postSmoke: { records: { 'post-1': { restTime: '30', steps: [], notes: 'rested' } } },
+    ratings: {
+      records: {
+        'rate-1': { smokeFlavor: 5, seasoning: 4, tenderness: 5, overallTaste: 5, notes: 'great' },
+      },
+    },
+  });
+
+describe('smoke client — ordered cascade delete', () => {
+  test('a fully seeded smoke removes all five children and then the parent', async () => {
+    const backend = seedFullSmoke();
+    const client = createApiClient(backend);
+
+    await client.smoke.deleteCascade('smoke-1');
+
+    expect(backend.store.preSmoke.records['pre-1']).toBeUndefined();
+    expect(backend.store.smokeProfile.records['prof-1']).toBeUndefined();
+    expect(backend.store.temps.records['temps-1']).toBeUndefined();
+    expect(backend.store.postSmoke.records['post-1']).toBeUndefined();
+    expect(backend.store.ratings.records['rate-1']).toBeUndefined();
+    expect(backend.store.smoke.records['smoke-1']).toBeUndefined();
+  });
+
+  test('an injected child-delete failure leaves the parent present and rejects with the typed error', async () => {
+    const backend = seedFullSmoke();
+    const client = createApiClient(backend);
+    backend.injectFault({ method: 'delete', path: 'temps/temps-1', status: 500 });
+
+    const error = (await client.smoke.deleteCascade('smoke-1').catch(e => e)) as ApiError;
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.status).toBe(500);
+    // Parent must survive so the operation is retryable with no orphans.
+    expect(backend.store.smoke.records['smoke-1']).toEqual(seededSmoke);
+    // The parent delete must never have been issued.
+    expect(backend.requests).not.toContainEqual({
+      method: 'delete',
+      path: 'smoke/smoke-1',
+      body: undefined,
+    });
+  });
+
+  test('a nonexistent smoke rejects and issues zero delete calls', async () => {
+    const backend = seedFullSmoke();
+    const client = createApiClient(backend);
+
+    const error = (await client.smoke.deleteCascade('missing').catch(e => e)) as ApiError;
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.status).toBe(404);
+    // Not a single delete was issued.
+    expect(backend.requests.filter(r => r.method === 'delete')).toHaveLength(0);
+    // Every seeded record is untouched.
+    expect(backend.store.smoke.records['smoke-1']).toEqual(seededSmoke);
+    expect(backend.store.preSmoke.records['pre-1']).toBeDefined();
+    expect(backend.store.temps.records['temps-1']).toBeDefined();
+    expect(backend.store.ratings.records['rate-1']).toBeDefined();
+  });
+});
+
+describe('smoke client — review aggregate', () => {
+  test('composes the parent plus all five child pieces for a seeded smoke', async () => {
+    const backend = seedFullSmoke();
+    const client = createApiClient(backend);
+
+    const review = await client.smoke.getReview('smoke-1');
+
+    expect(review.smoke).toEqual(seededSmoke);
+    expect(review.preSmoke.name).toBe('Brisket');
+    expect(review.smokeProfile.chamberName).toBe('Main');
+    expect(review.temps).toEqual(sampleTemps);
+    expect(review.postSmoke.restTime).toBe('30');
+    expect(review.rating.overallTaste).toBe(5);
+  });
+
+  test('a missing optional piece yields its typed default instead of failing the whole call', async () => {
+    // Seed everything except the temperature series.
+    const backend = seedFullSmoke();
+    backend.injectFault({ method: 'get', path: 'temps/temps-1', status: 404 });
+    const client = createApiClient(backend);
+
+    const review = await client.smoke.getReview('smoke-1');
+
+    // The other four pieces still resolve from the store.
+    expect(review.preSmoke.name).toBe('Brisket');
+    expect(review.rating.overallTaste).toBe(5);
+    // The absent temps piece is the typed default (an empty series), not a throw.
+    expect(review.temps).toEqual([]);
+  });
+
+  test('a parent whose every child is absent still composes with all typed defaults', async () => {
+    // Seed only the parent, pointing at child ids that have no records.
+    const backend = createFakeBackend({ smoke: { records: { 'smoke-1': seededSmoke } } });
+    const client = createApiClient(backend);
+
+    const review = await client.smoke.getReview('smoke-1');
+
+    expect(review.smoke).toEqual(seededSmoke);
+    expect(review.preSmoke).toEqual({ weight: {}, steps: [] });
+    expect(review.smokeProfile).toEqual({
+      chamberName: '',
+      probe1Name: '',
+      probe2Name: '',
+      probe3Name: '',
+      notes: '',
+      woodType: '',
+    });
+    expect(review.temps).toEqual([]);
+    expect(review.postSmoke).toEqual({ restTime: '', steps: [] });
+    expect(review.rating).toEqual({
+      smokeFlavor: 0,
+      seasoning: 0,
+      tenderness: 0,
+      overallTaste: 0,
+      notes: '',
+    });
+  });
+
+  test('a missing parent rejects with the typed ApiError', async () => {
+    const backend = createFakeBackend();
+    const client = createApiClient(backend);
+
+    const error = (await client.smoke.getReview('missing').catch(e => e)) as ApiError;
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.status).toBe(404);
+  });
+});

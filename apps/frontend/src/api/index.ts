@@ -12,6 +12,7 @@ export type {
   Smoke,
   SmokeHistory,
   SmokeProfile,
+  SmokeReview,
   State,
   TempData,
   rating,
