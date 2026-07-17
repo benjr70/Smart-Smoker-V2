@@ -1,50 +1,35 @@
-export interface State {
-  smokeId: string;
-  smoking: boolean;
-}
+import { getDefaultApiClient } from '../api';
+import type { SmokeProfile, State as ApiState } from '../api';
 
-export interface smokeProfile {
-  chamberName: string;
-  probe1Name: string;
-  probe2Name: string;
-  probe3Name: string;
-  notes: string;
-  woodType: string;
-}
+/**
+ * The persisted state document. Re-exported from the API types so components
+ * keep importing it from here unchanged while the shape lives in one place.
+ */
+export type State = ApiState;
 
-const envUrl = process.env.REACT_APP_CLOUD_URL_API;
+/**
+ * The current smoke profile shape. Kept as the legacy lowercase alias so the
+ * existing component imports (`smokeProfile`) compile unchanged.
+ */
+export type smokeProfile = SmokeProfile;
 
-export const toggleSmoking = async (): Promise<State> => {
-  const axios = require('axios');
-  axios.defaults.baseURL = envUrl;
-  return axios.put('state/toggleSmoking').then((result: any) => {
-    return result.data;
-  });
-};
+/**
+ * @deprecated Thin shim over `getDefaultApiClient().state`. No longer mutates
+ * `axios.defaults`; failures reject with the typed {@link ApiError} instead of a
+ * swallowed `undefined`.
+ */
+export const toggleSmoking = (): Promise<State> => getDefaultApiClient().state.toggleSmoking();
 
-export const getState = async (): Promise<State> => {
-  const axios = require('axios');
-  axios.defaults.baseURL = envUrl;
-  return axios.get('state').then((result: any) => {
-    return result.data;
-  });
-};
+/** @deprecated Use `getDefaultApiClient().state.getState()` instead. */
+export const getState = (): Promise<State> => getDefaultApiClient().state.getState();
 
+/**
+ * @deprecated Use `getDefaultApiClient().smokeProfile.getCurrent()` instead.
+ * Returns the normalized profile (notes/woodType default to empty strings) and
+ * rejects with the typed error on failure — the legacy swallow-and-resolve-
+ * `undefined` path is gone.
+ */
 export const getCurrentSmokeProfile = async (): Promise<smokeProfile> => {
-  const axios = require('axios');
-  axios.defaults.baseURL = envUrl;
-  return axios
-    .get('smokeProfile/current')
-    .then((result: any) => {
-      if (!result.data.notes) {
-        result.data.notes = '';
-      }
-      if (!result.data.woodType) {
-        result.data.woodType = '';
-      }
-      return result.data;
-    })
-    .catch((error: any) => {
-      console.log(error);
-    });
+  const profile = await getDefaultApiClient().smokeProfile.getCurrent();
+  return profile as smokeProfile;
 };
