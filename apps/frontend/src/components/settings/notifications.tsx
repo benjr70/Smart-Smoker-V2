@@ -11,43 +11,30 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import React, { useEffect, useRef } from 'react';
-import {
-  getNotificationSettings,
-  setNotificationSettings,
-} from '../../Services/notificationsService';
+import React from 'react';
+import { useCurrentResource } from '../../api';
 import { NotificationSettings } from '../../api/types';
 
 // The canonical NotificationSettings type now lives in the API types module.
 // Re-exported here so existing importers of this component keep compiling.
 export type { NotificationSettings };
 
+const initialNotification: NotificationSettings = {
+  type: false,
+  message: '',
+  probe1: 'Chamber',
+  op: '>',
+  probe2: 'Probe 1',
+};
+
 export function NotificationsCard(): JSX.Element {
-  const initialNotification: NotificationSettings = {
-    type: false,
-    message: '',
-    probe1: 'Chamber',
-    op: '>',
-    probe2: 'Probe 1',
-  };
-
-  const [Notifications, setNotifications] = React.useState([initialNotification]);
-
-  const NotificationsRef = useRef(Notifications); // Create a ref
-
-  useEffect(() => {
-    NotificationsRef.current = Notifications; // Update the ref each time Notifications changes
-  }, [Notifications]);
-
-  useEffect(() => {
-    getNotificationSettings().then((data: NotificationSettings[]) => {
-      setNotifications(data);
-    });
-
-    return () => {
-      setNotificationSettings({ settings: NotificationsRef.current });
-    };
-  }, []);
+  const [Notifications, setNotifications] = useCurrentResource<NotificationSettings[]>({
+    initialValue: [initialNotification],
+    load: client => client.notifications.getSettings(),
+    save: (client, value) => client.notifications.saveSettings({ settings: value }),
+    loadErrorMessage: 'Could not load notification settings.',
+    saveErrorMessage: 'Could not save notification settings.',
+  });
 
   const handleNewRule = () => {
     setNotifications([...Notifications, initialNotification]);

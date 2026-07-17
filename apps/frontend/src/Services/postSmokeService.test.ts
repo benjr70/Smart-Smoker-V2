@@ -1,9 +1,4 @@
-import {
-  getCurrentPostSmoke,
-  setCurrentPostSmoke,
-  getPostSmokeById,
-  deletePostSmokeById,
-} from './postSmokeService';
+import { getPostSmokeById, deletePostSmokeById } from './postSmokeService';
 import { createApiClient } from '../api/client';
 import { createFakeBackend, FakeBackend } from '../api/fakeBackend';
 import { PostSmoke } from '../api/types';
@@ -40,47 +35,6 @@ afterEach(() => {
 });
 
 describe('postSmokeService (deprecated shims)', () => {
-  test('getCurrentPostSmoke resolves the current post-smoke on success', async () => {
-    const result = await getCurrentPostSmoke();
-    expect(result).toEqual(samplePostSmoke);
-    expect(backend.requests).toContainEqual({
-      method: 'get',
-      path: 'postSmoke/current',
-      body: undefined,
-    });
-  });
-
-  test('getCurrentPostSmoke resolves undefined and logs on failure', async () => {
-    backend.injectFault({ method: 'get', path: 'postSmoke/current', status: 500 });
-    const consoleSpy = jest.spyOn(console, 'log');
-
-    const result = await getCurrentPostSmoke();
-
-    expect(result).toBeUndefined();
-    expect(consoleSpy).toHaveBeenCalledTimes(1);
-  });
-
-  test('setCurrentPostSmoke posts the projected payload and resolves on success', async () => {
-    const fetched = { ...samplePostSmoke, _id: 'x', __v: 1 } as unknown as PostSmoke;
-    await setCurrentPostSmoke(fetched);
-
-    const posted = backend.requests.find(r => r.method === 'post')?.body as Record<string, unknown>;
-    expect(Object.keys(posted).sort()).toEqual(['notes', 'restTime', 'steps']);
-    expect(posted).not.toHaveProperty('_id');
-    expect(posted).not.toHaveProperty('__v');
-    expect(backend.store.postSmoke.current).toEqual(posted);
-  });
-
-  test('setCurrentPostSmoke resolves undefined and logs on failure', async () => {
-    backend.injectFault({ method: 'post', path: 'postSmoke/current', status: 500 });
-    const consoleSpy = jest.spyOn(console, 'log');
-
-    const result = await setCurrentPostSmoke(samplePostSmoke);
-
-    expect(result).toBeUndefined();
-    expect(consoleSpy).toHaveBeenCalledTimes(1);
-  });
-
   test('getPostSmokeById resolves the record on success', async () => {
     const result = await getPostSmokeById('abc123');
     expect(result).toEqual(samplePostSmoke);
