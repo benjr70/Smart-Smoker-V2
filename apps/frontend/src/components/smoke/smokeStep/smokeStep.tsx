@@ -1,33 +1,12 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useRef } from 'react';
 import Grid from '@mui/material/Grid';
 import './smokeStep.style.css';
-import { io } from 'socket.io-client';
 import { Autocomplete, Button, Divider, Input, TextField } from '@mui/material';
-import {
-  getCurrentSmokeProfile,
-  getState,
-  setSmokeProfile,
-  smokeProfile,
-  toggleSmoking,
-} from '../../../Services/smokerService';
-import { getCurrentTemps } from '../../../Services/tempsService';
-import TempChart, { TempData } from 'temperaturechart/src/tempChart';
-import { Socket } from 'socket.io-client';
-
-interface State {
-  chamberName: string;
-  probe1Name: string;
-  probe2Name: string;
-  probe3Name: string;
-  probeTemp1: string;
-  probeTemp2: string;
-  probeTemp3: string;
-  chamberTemp: string;
-  smoking: boolean;
-  notes: string;
-  woodType: string;
-  date: Date;
-}
+import TempChart from 'temperaturechart/src/tempChart';
+import { SmokeSessionProvider, useSmokeSession } from 'smoke-session/src/react';
+import { createCloudSocketAdapter, SessionConfig } from 'smoke-session/src';
+import { getDefaultApiClient } from '../../../api';
+import { createSessionApiPort } from '../../../api/sessionApiAdapter';
 
 const woodType = ['Hickory', 'Post Oak', 'Pecan', 'Cherry', 'Apple'];
 
@@ -35,180 +14,20 @@ type SmokeStepProps = {
   nextButton: JSX.Element;
 };
 
-let socket: Socket;
-let initTemps: TempData[] = [];
-
-export function SmokeStep(props: SmokeStepProps) {
-  const [tempState, setTempState] = React.useState<State>({
-    chamberName: 'Chamber',
-    probe1Name: 'probe 1',
-    probe2Name: 'probe 2',
-    probe3Name: 'probe 3',
-    probeTemp1: '0',
-    probeTemp2: '0',
-    probeTemp3: '0',
-    chamberTemp: '0',
-    smoking: false,
-    notes: '',
-    woodType: '',
-    date: new Date(),
-  });
-
-  const tempStateRef = useRef(tempState);
-  tempStateRef.current = tempState;
-
-  useEffect(() => {
-    getCurrentSmokeProfile().then((smokeProfile: smokeProfile) => {
-      setTempState(prevState => ({
-        ...prevState,
-        chamberName: smokeProfile.chamberName,
-        probe1Name: smokeProfile.probe1Name,
-        probe2Name: smokeProfile.probe2Name,
-        probe3Name: smokeProfile.probe3Name,
-        notes: smokeProfile.notes,
-        woodType: smokeProfile.woodType,
-      }));
-    });
-    getCurrentTemps().then((temps: TempData[]) => {
-      initTemps = temps;
-    });
-    let url = process.env.WS_URL ?? '';
-    socket = io(url);
-    socket.on('events', message => {
-      let tempObj = JSON.parse(message);
-      setTempState(prevState => ({
-        ...prevState,
-        chamberTemp: tempObj.chamberTemp,
-        probeTemp1: tempObj.probeTemp1,
-        probeTemp2: tempObj.probeTemp2,
-        probeTemp3: tempObj.probeTemp3,
-        date: tempObj.date,
-      }));
-    });
-    socket.on('smokeUpdate', message => {
-      setTempState(prevState => ({ ...prevState, smoking: message.smoking }));
-    });
-    socket.on('refresh', async () => {
-      initTemps = await getCurrentTemps();
-    });
-    getState().then(state => {
-      setTempState(prevState => ({ ...prevState, smoking: state.smoking }));
-    });
-    return () => {
-      const smokeProfileDto: smokeProfile = {
-        chamberName: tempStateRef.current.chamberName,
-        probe1Name: tempStateRef.current.probe1Name,
-        probe2Name: tempStateRef.current.probe2Name,
-        probe3Name: tempStateRef.current.probe3Name,
-        notes: tempStateRef.current.notes,
-        woodType: tempStateRef.current.woodType,
-      };
-      setSmokeProfile(smokeProfileDto);
-    };
-  }, []);
-
-  const startSmoke = (): void => {
-    toggleSmoking().then(state => {
-      let temp = tempState;
-      temp.smoking = state.smoking;
-      let update = {
-        smoking: state.smoking,
-        chamberName: temp.chamberName,
-        probe1Name: temp.probe1Name,
-        probe2Name: temp.probe2Name,
-        probe3Name: temp.probe3Name,
-      };
-      socket.emit('smokeUpdate', update);
-      setTempState(prevState => ({
-        ...prevState,
-        smoking: state.smoking,
-        chamberName: temp.chamberName,
-        probe1Name: temp.probe1Name,
-        probe2Name: temp.probe2Name,
-        probe3Name: temp.probe3Name,
-      }));
-    });
-  };
-
-  const updateChamberName = (newInputValue: string) => {
-    let temp = tempState;
-    temp.chamberName = newInputValue;
-    socket.emit('smokeUpdate', {
-      smoking: temp.smoking,
-      chamberName: temp.chamberName,
-      probe1Name: temp.probe1Name,
-      probe2Name: temp.probe2Name,
-      probe3Name: temp.probe3Name,
-    });
-    setTempState(prevState => ({
-      ...prevState,
-      smoking: temp.smoking,
-      chamberName: temp.chamberName,
-      probe1Name: temp.probe1Name,
-      probe2Name: temp.probe2Name,
-      probe3Name: temp.probe3Name,
-    }));
-  };
-
-  const updateProbe1Name = (newInputValue: string) => {
-    let temp = tempState;
-    temp.probe1Name = newInputValue;
-    socket.emit('smokeUpdate', {
-      smoking: temp.smoking,
-      chamberName: temp.chamberName,
-      probe1Name: temp.probe1Name,
-      probe2Name: temp.probe2Name,
-      probe3Name: temp.probe3Name,
-    });
-    setTempState(prevState => ({
-      ...prevState,
-      smoking: temp.smoking,
-      chamberName: temp.chamberName,
-      probe1Name: temp.probe1Name,
-      probe2Name: temp.probe2Name,
-      probe3Name: temp.probe3Name,
-    }));
-  };
-
-  const updateProbe2Name = (newInputValue: string) => {
-    let temp = tempState;
-    temp.probe2Name = newInputValue;
-    socket.emit('smokeUpdate', {
-      smoking: temp.smoking,
-      chamberName: temp.chamberName,
-      probe1Name: temp.probe1Name,
-      probe2Name: temp.probe2Name,
-      probe3Name: temp.probe3Name,
-    });
-    setTempState(prevState => ({
-      ...prevState,
-      smoking: temp.smoking,
-      chamberName: temp.chamberName,
-      probe1Name: temp.probe1Name,
-      probe2Name: temp.probe2Name,
-      probe3Name: temp.probe3Name,
-    }));
-  };
-
-  const updateProbe3Name = (newInputValue: string) => {
-    let temp = tempState;
-    temp.probe3Name = newInputValue;
-    socket.emit('smokeUpdate', {
-      smoking: temp.smoking,
-      chamberName: temp.chamberName,
-      probe1Name: temp.probe1Name,
-      probe2Name: temp.probe2Name,
-      probe3Name: temp.probe3Name,
-    });
-    setTempState(prevState => ({
-      ...prevState,
-      smoking: temp.smoking,
-      chamberName: temp.chamberName,
-      probe1Name: temp.probe1Name,
-      probe2Name: temp.probe2Name,
-      probe3Name: temp.probe3Name,
-    }));
-  };
+/**
+ * The smoke step as a thin view over the shared session module. It renders
+ * exclusively from the hook snapshot and dispatches only session commands —
+ * there is no socket.io import, no module-level mutable state, and no
+ * hand-built `smokeUpdate` payload here anymore. The four legacy copy-pasted
+ * probe-rename functions collapse into one {@link SmokeSessionCommands.setName}
+ * dispatch per field.
+ *
+ * `flushProfileOnUnmount` reproduces the legacy save-on-leave: leaving the step
+ * unmounts this view and persists the profile draft (names + notes + wood type)
+ * exactly as the old unmount effect did.
+ */
+export function SmokeStepView(props: SmokeStepProps): JSX.Element {
+  const session = useSmokeSession({ flushProfileOnUnmount: true });
 
   return (
     <Grid item xs={12}>
@@ -222,18 +41,13 @@ export function SmokeStep(props: SmokeStepProps) {
         >
           <Input
             defaultValue="Chamber"
-            value={tempState.chamberName}
-            onChange={event => updateChamberName(event.target.value)}
-            sx={{
-              fontSize: 24,
-              fontWeight: 700,
-              color: '#1f4f2d',
-              width: '75%',
-            }}
+            value={session.chamberName}
+            onChange={event => session.setName('chamber', event.target.value)}
+            sx={{ fontSize: 24, fontWeight: 700, color: '#1f4f2d', width: '75%' }}
             disableUnderline={true}
           />
           <Grid item className="text">
-            {tempState.chamberTemp}
+            {session.chamberTemp}
           </Grid>
         </Grid>
         <Divider variant="middle" />
@@ -246,18 +60,13 @@ export function SmokeStep(props: SmokeStepProps) {
         >
           <Input
             defaultValue="Probe 1"
-            value={tempState.probe1Name}
-            onChange={event => updateProbe1Name(event.target.value)}
-            sx={{
-              fontSize: 24,
-              fontWeight: 700,
-              color: '#2a475e',
-              width: '75%',
-            }}
+            value={session.probe1Name}
+            onChange={event => session.setName('probe1', event.target.value)}
+            sx={{ fontSize: 24, fontWeight: 700, color: '#2a475e', width: '75%' }}
             disableUnderline={true}
           />
           <Grid item className="text">
-            {tempState.probeTemp1}
+            {session.probeTemp1}
           </Grid>
         </Grid>
         <Divider variant="middle" />
@@ -270,18 +79,13 @@ export function SmokeStep(props: SmokeStepProps) {
         >
           <Input
             defaultValue="Probe 2"
-            value={tempState.probe2Name}
-            onChange={event => updateProbe2Name(event.target.value)}
-            sx={{
-              fontSize: 24,
-              fontWeight: 700,
-              color: '#118cd8',
-              width: '75%',
-            }}
+            value={session.probe2Name}
+            onChange={event => session.setName('probe2', event.target.value)}
+            sx={{ fontSize: 24, fontWeight: 700, color: '#118cd8', width: '75%' }}
             disableUnderline={true}
           />
           <Grid item className="text">
-            {tempState.probeTemp2}
+            {session.probeTemp2}
           </Grid>
         </Grid>
         <Divider variant="middle" />
@@ -294,39 +98,39 @@ export function SmokeStep(props: SmokeStepProps) {
         >
           <Input
             defaultValue="Probe 3"
-            value={tempState.probe3Name}
-            onChange={event => updateProbe3Name(event.target.value)}
-            sx={{
-              fontSize: 24,
-              fontWeight: 700,
-              color: '#5582a7',
-              width: '75%',
-            }}
+            value={session.probe3Name}
+            onChange={event => session.setName('probe3', event.target.value)}
+            sx={{ fontSize: 24, fontWeight: 700, color: '#5582a7', width: '75%' }}
             disableUnderline={true}
           />
           <Grid item className="text">
-            {tempState.probeTemp3}
+            {session.probeTemp3}
           </Grid>
         </Grid>
       </Grid>
       <Grid item justifyContent="center" data-testid="smoke-chart">
         <TempChart
-          ChamberTemp={parseFloat(tempState.chamberTemp)}
-          MeatTemp={parseFloat(tempState.probeTemp1)}
-          Meat2Temp={parseFloat(tempState.probeTemp2)}
-          Meat3Temp={parseFloat(tempState.probeTemp3)}
-          ChamberName={tempState.chamberName}
-          Probe1Name={tempState.probe1Name}
-          Probe2Name={tempState.probe2Name}
-          Probe3Name={tempState.probe3Name}
-          date={tempState.date}
-          smoking={tempState.smoking}
-          initData={initTemps}
+          ChamberTemp={parseFloat(session.chamberTemp)}
+          MeatTemp={parseFloat(session.probeTemp1)}
+          Meat2Temp={parseFloat(session.probeTemp2)}
+          Meat3Temp={parseFloat(session.probeTemp3)}
+          ChamberName={session.chamberName}
+          Probe1Name={session.probe1Name}
+          Probe2Name={session.probe2Name}
+          Probe3Name={session.probe3Name}
+          date={session.date}
+          smoking={session.smoking}
+          initData={session.initialTemps}
         ></TempChart>
       </Grid>
       <Grid container className="buttonContainer" justifyContent="space-around">
-        <Button className="button" variant="contained" size="small" onClick={() => startSmoke()}>
-          {tempState.smoking ? 'Stop Smoking' : 'Start Smoking'}
+        <Button
+          className="button"
+          variant="contained"
+          size="small"
+          onClick={() => void session.toggleSmoking()}
+        >
+          {session.smoking ? 'Stop Smoking' : 'Start Smoking'}
         </Button>
       </Grid>
       <Grid container direction="column">
@@ -334,18 +138,12 @@ export function SmokeStep(props: SmokeStepProps) {
           sx={{ marginBottom: '10px' }}
           freeSolo
           options={woodType.map(option => option)}
-          inputValue={tempState.woodType}
-          onInputChange={(event, newInputValue) =>
-            setTempState({ ...tempState, woodType: newInputValue })
-          }
+          inputValue={session.woodType}
+          onInputChange={(event, newInputValue) => session.setWoodType(newInputValue)}
           renderInput={params => (
             <Grid container direction="row" justifyContent="space-around">
               <TextField
-                sx={{
-                  marginTop: '10px',
-                  marginBottom: '10px',
-                  width: '95%',
-                }}
+                sx={{ marginTop: '10px', marginBottom: '10px', width: '95%' }}
                 {...params}
                 label="Wood Type"
               />
@@ -354,16 +152,12 @@ export function SmokeStep(props: SmokeStepProps) {
         />
         <Grid container direction="row" justifyContent="space-around">
           <TextField
-            sx={{
-              marginTop: '10px',
-              marginBottom: '10px',
-              width: '95%',
-            }}
+            sx={{ marginTop: '10px', marginBottom: '10px', width: '95%' }}
             id="outlined-multiline-static"
             label="Notes"
             multiline
-            value={tempState.notes}
-            onChange={(event: any) => setTempState({ ...tempState, notes: event.target.value })}
+            value={session.notes}
+            onChange={event => session.setNotes(event.target.value)}
             rows={4}
           />
         </Grid>
@@ -372,5 +166,33 @@ export function SmokeStep(props: SmokeStepProps) {
         {props.nextButton}
       </Grid>
     </Grid>
+  );
+}
+
+/**
+ * Composition root for the web smoke session. Builds the monitor-role config
+ * exactly once (via a ref so the cloud socket is opened a single time for the
+ * step's lifetime), wires the cloud socket adapter and the session-API-port
+ * adapter over the #344 client, and provides the store to the thin view below.
+ *
+ * This is the sole place the websocket URL is read: the env lookup lives here
+ * and nowhere in the view.
+ */
+export function SmokeStep(props: SmokeStepProps): JSX.Element {
+  const configRef = useRef<SessionConfig | null>(null);
+  if (configRef.current === null) {
+    const url = process.env.WS_URL ?? '';
+    configRef.current = {
+      role: 'monitor',
+      socket: createCloudSocketAdapter(url),
+      api: createSessionApiPort(getDefaultApiClient()),
+      clock: { now: () => new Date() },
+    };
+  }
+
+  return (
+    <SmokeSessionProvider config={configRef.current}>
+      <SmokeStepView nextButton={props.nextButton} />
+    </SmokeSessionProvider>
   );
 }
