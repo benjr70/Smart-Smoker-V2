@@ -1,32 +1,52 @@
+/**
+ * Behavior tests for the deprecated `deleteSmoke` shim, driven through the real
+ * deep client over an in-memory fake backend. They assert the store end-state
+ * (which records survive), not call spies — replacing the old test that encoded
+ * the orphan bug (parent deleted in a `finally`, so it vanished even when child
+ * deletes failed) as expected behavior.
+ */
+import { createApiClient, createFakeBackend } from '../api';
+import { Smoke } from '../api/types';
 import { deleteSmoke } from './deleteSmokeService';
-import { deletePostSmokeById } from './postSmokeService';
-import { deletePreSmokeById } from './preSmokeService';
-import { deleteRatingsById } from './ratingsService';
-import { deleteSmokeById, deleteSmokeProfileById, getSmokeById } from './smokerService';
-import { deleteTempsById } from './tempsService';
 
-// Mock all the imported services
-jest.mock('./postSmokeService');
-jest.mock('./preSmokeService');
-jest.mock('./ratingsService');
-jest.mock('./smokerService');
-jest.mock('./tempsService');
+const seededSmoke: Smoke = {
+  _id: 'smoke-1',
+  preSmokeId: 'pre-1',
+  smokeProfileId: 'prof-1',
+  tempsId: 'temps-1',
+  postSmokeId: 'post-1',
+  ratingId: 'rate-1',
+  date: new Date('2025-01-01T00:00:00Z'),
+  status: 2,
+};
 
-const mockDeletePostSmokeById = deletePostSmokeById as jest.MockedFunction<
-  typeof deletePostSmokeById
->;
-const mockDeletePreSmokeById = deletePreSmokeById as jest.MockedFunction<typeof deletePreSmokeById>;
-const mockDeleteRatingsById = deleteRatingsById as jest.MockedFunction<typeof deleteRatingsById>;
-const mockDeleteSmokeById = deleteSmokeById as jest.MockedFunction<typeof deleteSmokeById>;
-const mockDeleteSmokeProfileById = deleteSmokeProfileById as jest.MockedFunction<
-  typeof deleteSmokeProfileById
->;
-const mockGetSmokeById = getSmokeById as jest.MockedFunction<typeof getSmokeById>;
-const mockDeleteTempsById = deleteTempsById as jest.MockedFunction<typeof deleteTempsById>;
+const seedFullSmoke = () =>
+  createFakeBackend({
+    smoke: { records: { 'smoke-1': seededSmoke } },
+    preSmoke: { records: { 'pre-1': { name: 'Brisket', weight: {}, steps: [] } } },
+    smokeProfile: {
+      records: {
+        'prof-1': {
+          chamberName: 'Main',
+          probe1Name: 'A',
+          probe2Name: 'B',
+          probe3Name: 'C',
+          notes: '',
+          woodType: 'Oak',
+        },
+      },
+    },
+    temps: { records: { 'temps-1': [] } },
+    postSmoke: { records: { 'post-1': { restTime: '30', steps: [] } } },
+    ratings: {
+      records: {
+        'rate-1': { smokeFlavor: 5, seasoning: 4, tenderness: 5, overallTaste: 5, notes: '' },
+      },
+    },
+  });
 
-describe('deleteSmokeService', () => {
+describe('deleteSmoke shim', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
     jest.spyOn(console, 'log').mockImplementation(() => {});
   });
 
@@ -34,152 +54,39 @@ describe('deleteSmokeService', () => {
     jest.restoreAllMocks();
   });
 
-  test('deleteSmoke should delete all related data when smoke is found', async () => {
-    const mockSmokeId = 'test-smoke-id';
-    const mockSmoke = {
-      preSmokeId: 'pre-smoke-id',
-      smokeProfileId: 'smoke-profile-id',
-      tempsId: 'temps-id',
-      postSmokeId: 'post-smoke-id',
-      ratingId: 'rating-id',
-    };
+  test('removes all five children and the parent from a fully seeded smoke', async () => {
+    const backend = seedFullSmoke();
+    const client = createApiClient(backend);
 
-    mockGetSmokeById.mockResolvedValue(mockSmoke);
-    mockDeletePreSmokeById.mockResolvedValue(undefined);
-    mockDeleteSmokeProfileById.mockResolvedValue(undefined);
-    mockDeleteTempsById.mockResolvedValue(undefined);
-    mockDeletePostSmokeById.mockResolvedValue(undefined);
-    mockDeleteRatingsById.mockResolvedValue(undefined);
-    mockDeleteSmokeById.mockResolvedValue(undefined);
+    await deleteSmoke('smoke-1', client);
 
-    await deleteSmoke(mockSmokeId);
-
-    expect(mockGetSmokeById).toHaveBeenCalledWith(mockSmokeId);
-    expect(mockDeletePreSmokeById).toHaveBeenCalledWith(mockSmoke.preSmokeId);
-    expect(mockDeleteSmokeProfileById).toHaveBeenCalledWith(mockSmoke.smokeProfileId);
-    expect(mockDeleteTempsById).toHaveBeenCalledWith(mockSmoke.tempsId);
-    expect(mockDeletePostSmokeById).toHaveBeenCalledWith(mockSmoke.postSmokeId);
-    expect(mockDeleteRatingsById).toHaveBeenCalledWith(mockSmoke.ratingId);
-    expect(mockDeleteSmokeById).toHaveBeenCalledWith(mockSmokeId);
+    expect(backend.store.preSmoke.records['pre-1']).toBeUndefined();
+    expect(backend.store.smokeProfile.records['prof-1']).toBeUndefined();
+    expect(backend.store.temps.records['temps-1']).toBeUndefined();
+    expect(backend.store.postSmoke.records['post-1']).toBeUndefined();
+    expect(backend.store.ratings.records['rate-1']).toBeUndefined();
+    expect(backend.store.smoke.records['smoke-1']).toBeUndefined();
   });
 
-  test('deleteSmoke should still delete smoke by id in finally block when getSmokeById succeeds', async () => {
-    const mockSmokeId = 'test-smoke-id';
-    const mockSmoke = {
-      preSmokeId: 'pre-smoke-id',
-      smokeProfileId: 'smoke-profile-id',
-      tempsId: 'temps-id',
-      postSmokeId: 'post-smoke-id',
-      ratingId: 'rating-id',
-    };
+  test('a child-delete failure leaves the parent intact (no orphan) and does not throw', async () => {
+    const backend = seedFullSmoke();
+    const client = createApiClient(backend);
+    backend.injectFault({ method: 'delete', path: 'temps/temps-1', status: 500 });
 
-    mockGetSmokeById.mockResolvedValue(mockSmoke);
-    mockDeletePreSmokeById.mockResolvedValue(undefined);
-    mockDeleteSmokeProfileById.mockResolvedValue(undefined);
-    mockDeleteTempsById.mockResolvedValue(undefined);
-    mockDeletePostSmokeById.mockResolvedValue(undefined);
-    mockDeleteRatingsById.mockResolvedValue(undefined);
-    mockDeleteSmokeById.mockResolvedValue(undefined);
+    await expect(deleteSmoke('smoke-1', client)).resolves.toBeUndefined();
 
-    await deleteSmoke(mockSmokeId);
-
-    expect(mockDeleteSmokeById).toHaveBeenCalledWith(mockSmokeId);
+    // Parent survives so the user can retry; no orphaned child records.
+    expect(backend.store.smoke.records['smoke-1']).toEqual(seededSmoke);
   });
 
-  test('deleteSmoke should handle errors during deletion and still call deleteSmokeById in finally', async () => {
-    const mockSmokeId = 'test-smoke-id';
-    const mockSmoke = {
-      preSmokeId: 'pre-smoke-id',
-      smokeProfileId: 'smoke-profile-id',
-      tempsId: 'temps-id',
-      postSmokeId: 'post-smoke-id',
-      ratingId: 'rating-id',
-    };
+  test('a nonexistent smoke leaves the store untouched and does not throw', async () => {
+    const backend = seedFullSmoke();
+    const client = createApiClient(backend);
 
-    mockGetSmokeById.mockResolvedValue(mockSmoke);
-    mockDeletePreSmokeById.mockRejectedValue(new Error('Delete failed'));
-    mockDeleteSmokeById.mockResolvedValue(undefined);
+    await expect(deleteSmoke('missing', client)).resolves.toBeUndefined();
 
-    const consoleLogSpy = jest.spyOn(console, 'log');
-
-    await deleteSmoke(mockSmokeId);
-
-    expect(mockGetSmokeById).toHaveBeenCalledWith(mockSmokeId);
-    expect(mockDeletePreSmokeById).toHaveBeenCalledWith(mockSmoke.preSmokeId);
-    expect(mockDeleteSmokeById).toHaveBeenCalledWith(mockSmokeId);
-    expect(consoleLogSpy).toHaveBeenCalledWith(expect.any(Error));
-  });
-
-  test('deleteSmoke should handle getSmokeById rejection and still call deleteSmokeById in finally', async () => {
-    const mockSmokeId = 'test-smoke-id';
-    const mockError = new Error('Smoke not found');
-
-    mockGetSmokeById.mockRejectedValue(mockError);
-    mockDeleteSmokeById.mockResolvedValue(undefined);
-
-    const consoleLogSpy = jest.spyOn(console, 'log');
-
-    await deleteSmoke(mockSmokeId);
-
-    expect(mockGetSmokeById).toHaveBeenCalledWith(mockSmokeId);
-    expect(mockDeleteSmokeById).toHaveBeenCalledWith(mockSmokeId);
-    expect(consoleLogSpy).toHaveBeenCalledWith(mockError);
-  });
-
-  test('deleteSmoke should handle deletion failure and still call deleteSmokeById in finally', async () => {
-    const mockSmokeId = 'test-smoke-id';
-    const mockSmoke = {
-      preSmokeId: 'pre-smoke-id',
-      smokeProfileId: 'smoke-profile-id',
-      tempsId: 'temps-id',
-      postSmokeId: 'post-smoke-id',
-      ratingId: 'rating-id',
-    };
-
-    mockGetSmokeById.mockResolvedValue(mockSmoke);
-    mockDeletePreSmokeById.mockResolvedValue(undefined);
-    mockDeleteSmokeProfileById.mockRejectedValue(new Error('Profile delete failed'));
-    mockDeleteTempsById.mockResolvedValue(undefined);
-    mockDeletePostSmokeById.mockResolvedValue(undefined);
-    mockDeleteRatingsById.mockResolvedValue(undefined);
-    mockDeleteSmokeById.mockResolvedValue(undefined);
-
-    const consoleLogSpy = jest.spyOn(console, 'log');
-
-    await deleteSmoke(mockSmokeId);
-
-    expect(mockDeletePreSmokeById).toHaveBeenCalledWith(mockSmoke.preSmokeId);
-    expect(mockDeleteSmokeProfileById).toHaveBeenCalledWith(mockSmoke.smokeProfileId);
-    // After deleteProfile fails, subsequent deletes are not called due to sequential await pattern
-    expect(mockDeleteTempsById).not.toHaveBeenCalled();
-    expect(mockDeletePostSmokeById).not.toHaveBeenCalled();
-    expect(mockDeleteRatingsById).not.toHaveBeenCalled();
-    // deleteSmokeById should still be called in finally block
-    expect(mockDeleteSmokeById).toHaveBeenCalledWith(mockSmokeId);
-    expect(consoleLogSpy).toHaveBeenCalledWith(expect.any(Error));
-  });
-
-  test('deleteSmoke should handle deleteSmokeById failure in finally block', async () => {
-    const mockSmokeId = 'test-smoke-id';
-    const mockSmoke = {
-      preSmokeId: 'pre-smoke-id',
-      smokeProfileId: 'smoke-profile-id',
-      tempsId: 'temps-id',
-      postSmokeId: 'post-smoke-id',
-      ratingId: 'rating-id',
-    };
-
-    mockGetSmokeById.mockResolvedValue(mockSmoke);
-    mockDeletePreSmokeById.mockResolvedValue(undefined);
-    mockDeleteSmokeProfileById.mockResolvedValue(undefined);
-    mockDeleteTempsById.mockResolvedValue(undefined);
-    mockDeletePostSmokeById.mockResolvedValue(undefined);
-    mockDeleteRatingsById.mockResolvedValue(undefined);
-    mockDeleteSmokeById.mockRejectedValue(new Error('Final delete failed'));
-
-    await deleteSmoke(mockSmokeId);
-
-    expect(mockDeleteSmokeById).toHaveBeenCalledWith(mockSmokeId);
-    // Note: errors in finally block don't get caught by the outer catch
+    expect(backend.requests.filter(r => r.method === 'delete')).toHaveLength(0);
+    expect(backend.store.smoke.records['smoke-1']).toEqual(seededSmoke);
+    expect(backend.store.preSmoke.records['pre-1']).toBeDefined();
   });
 });

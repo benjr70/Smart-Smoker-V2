@@ -99,6 +99,23 @@ export interface Smoke {
 }
 
 /**
+ * The composed review read-model: a smoke parent plus its five resolved child
+ * resources, the shape the history review screen renders. The deep client's
+ * review-aggregate call fetches the parent, then the children in parallel, and
+ * fills any absent piece with a typed default so a single missing child never
+ * fails the whole read. Every field is non-optional: callers render it without
+ * per-piece guards.
+ */
+export interface SmokeReview {
+  smoke: Smoke;
+  preSmoke: PreSmoke;
+  smokeProfile: SmokeProfile;
+  temps: TempData[];
+  postSmoke: PostSmoke;
+  rating: rating;
+}
+
+/**
  * A history row: the denormalized summary the history list renders per smoke.
  * Canonical here so the client's history read stays free of component imports;
  * `components/common/interfaces/history` re-exports it as `smokeHistory`.

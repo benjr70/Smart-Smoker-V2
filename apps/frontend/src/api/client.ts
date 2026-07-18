@@ -17,6 +17,7 @@ import {
   Smoke,
   SmokeHistory,
   SmokeProfile,
+  SmokeReview,
   State,
   TempData,
   rating,
@@ -120,6 +121,25 @@ export interface SmokeResource {
   getAll(): Promise<Smoke[]>;
   /** POST `smoke/finish` — finalize the current smoke. */
   finish(): Promise<Smoke>;
+  /** DELETE `smoke/:id` — remove a stored smoke parent record only. */
+  deleteById(id: string): Promise<void>;
+  /**
+   * Ordered cascade delete replacing the buggy legacy orchestration. The parent
+   * is fetched first (a typed {@link ApiError} propagates if it is missing —
+   * zero deletes are issued), then the five child records are deleted, and the
+   * parent is deleted **last**. A failure anywhere in the cascade rejects with
+   * the typed error and leaves the parent record intact: the operation is
+   * retryable and can never orphan child records.
+   */
+  deleteCascade(id: string): Promise<void>;
+  /**
+   * GET the composed review read-model for a smoke: one call that fetches the
+   * parent, then its five child resources in parallel, filling any absent piece
+   * with a typed default (see {@link SmokeReview}). A missing parent rejects
+   * with the typed {@link ApiError}; a missing single child does not fail the
+   * whole read.
+   */
+  getReview(id: string): Promise<SmokeReview>;
 }
 
 export interface HistoryResource {
@@ -247,6 +267,31 @@ const toNotificationSettingsPayload = (input: unknown): NotificationSettingsEnve
   };
 };
 
+/**
+ * Per-piece typed defaults for the review aggregate. Any child resource that is
+ * absent (the wire returns a 404) is filled with its default so a single
+ * missing piece never fails the whole composed read. Each default is the
+ * empty/neutral value for its domain type — never `undefined`.
+ */
+const defaultPreSmoke: PreSmoke = { weight: {}, steps: [] };
+const defaultSmokeProfile: SmokeProfile = {
+  chamberName: '',
+  probe1Name: '',
+  probe2Name: '',
+  probe3Name: '',
+  notes: '',
+  woodType: '',
+};
+const defaultTemps: TempData[] = [];
+const defaultPostSmoke: PostSmoke = { restTime: '', steps: [] };
+const defaultRating: rating = {
+  smokeFlavor: 0,
+  seasoning: 0,
+  tenderness: 0,
+  overallTaste: 0,
+  notes: '',
+};
+
 export const createApiClient = (
   transport: TransportPort,
   events: SmokeEventPort = noopEventPort
@@ -321,6 +366,42 @@ export const createApiClient = (
     getById: (id: string) => transport.get<Smoke>(`smoke/${id}`),
     getAll: () => transport.get<Smoke[]>('smoke/all'),
     finish: () => transport.post<Smoke>('smoke/finish'),
+    deleteById: async (id: string) => {
+      await transport.delete<void>(`smoke/${id}`);
+    },
+    deleteCascade: async (id: string) => {
+      // Fetch the parent first: a missing parent throws the typed ApiError here,
+      // before any delete is issued.
+      const smoke = await transport.get<Smoke>(`smoke/${id}`);
+      // Delete the five children (in parallel); any rejection propagates and the
+      // parent delete below is never reached, so the parent survives.
+      await Promise.all([
+        transport.delete<void>(`presmoke/${smoke.preSmokeId}`),
+        transport.delete<void>(`smokeProfile/${smoke.smokeProfileId}`),
+        transport.delete<void>(`temps/${smoke.tempsId}`),
+        transport.delete<void>(`postSmoke/${smoke.postSmokeId}`),
+        transport.delete<void>(`ratings/${smoke.ratingId}`),
+      ]);
+      // Parent last, so a partial cascade can be retried without orphaning.
+      await transport.delete<void>(`smoke/${id}`);
+    },
+    getReview: async (id: string): Promise<SmokeReview> => {
+      // Fetch the parent first: a missing parent throws the typed ApiError.
+      const smoke = await transport.get<Smoke>(`smoke/${id}`);
+      // Fetch the five children in parallel; each absent piece (404) falls back
+      // to its typed default rather than failing the whole aggregate.
+      const [preSmoke, smokeProfile, temps, postSmoke, rating] = await Promise.all([
+        transport.get<PreSmoke>(`presmoke/${smoke.preSmokeId}`).catch(() => defaultPreSmoke),
+        transport
+          .get<SmokeProfile>(`smokeProfile/${smoke.smokeProfileId}`)
+          .then(normalizeProfile)
+          .catch(() => defaultSmokeProfile),
+        transport.get<TempData[]>(`temps/${smoke.tempsId}`).catch(() => defaultTemps),
+        transport.get<PostSmoke>(`postSmoke/${smoke.postSmokeId}`).catch(() => defaultPostSmoke),
+        transport.get<rating>(`ratings/${smoke.ratingId}`).catch(() => defaultRating),
+      ]);
+      return { smoke, preSmoke, smokeProfile, temps, postSmoke, rating };
+    },
   },
   history: {
     list: () => transport.get<SmokeHistory[]>('history'),
