@@ -1,48 +1,37 @@
-import React, { act } from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import React from 'react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { Home } from './home';
+import { SessionConfig, decodeEvents } from 'smoke-session/src';
+import { SmokeSessionProvider } from 'smoke-session/src/react';
+import {
+  FakeCloudSocket,
+  FakeDeviceFeed,
+  FakeSessionApi,
+  FakeWifiStatus,
+  SteppingClock,
+} from 'smoke-session/src/testing';
 
-// Mock the services
-jest.mock('../../services/stateService', () => ({
-  getCurrentSmokeProfile: jest.fn(),
-  getState: jest.fn(),
-  toggleSmoking: jest.fn(),
-}));
+// The package's flushPromises leans on node's setImmediate, absent in the CRA
+// jsdom test env; a setTimeout(0) drain settles the store's fire-and-forget
+// startup loads and command promises just the same.
+const flushPromises = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 0));
 
-jest.mock('../../services/tempsService', () => ({
-  getCurrentTemps: jest.fn(),
-  postTempsBatch: jest.fn(),
-}));
-
-jest.mock('../../services/deviceService', () => ({
-  getConnection: jest.fn(),
-}));
-
-// Mock TempChart component
+// The chart is a heavy D3 leaf; stub it to a readout of the temps it receives.
 jest.mock('temperaturechart/src/tempChart', () => {
   return function MockTempChart(props: any) {
     return (
       <div data-testid="temp-chart">
-        <div data-testid="chamber-temp">{props.ChamberTemp}</div>
-        <div data-testid="meat-temp">{props.MeatTemp}</div>
-        <div data-testid="meat2-temp">{props.Meat2Temp}</div>
-        <div data-testid="meat3-temp">{props.Meat3Temp}</div>
+        <div data-testid="chart-chamber">{props.ChamberTemp}</div>
+        <div data-testid="chart-meat">{props.MeatTemp}</div>
+        <div data-testid="chart-meat2">{props.Meat2Temp}</div>
+        <div data-testid="chart-meat3">{props.Meat3Temp}</div>
       </div>
     );
   };
 });
 
-// Mock socket.io-client
-jest.mock('socket.io-client', () => ({
-  io: jest.fn(() => ({
-    on: jest.fn(),
-    emit: jest.fn(),
-    connected: false,
-  })),
-}));
-
-// Mock WiFi component
+// The wifi sub-screen owns its own device wiring; stub it to a back button.
 jest.mock('./wifi/wifi', () => ({
   Wifi: function MockWifi(props: any) {
     return (
@@ -54,547 +43,236 @@ jest.mock('./wifi/wifi', () => ({
   },
 }));
 
-const mockGetCurrentSmokeProfile = require('../../services/stateService').getCurrentSmokeProfile;
-const mockGetState = require('../../services/stateService').getState;
-const mockToggleSmoking = require('../../services/stateService').toggleSmoking;
-const mockGetCurrentTemps = require('../../services/tempsService').getCurrentTemps;
-const mockPostTempsBatch = require('../../services/tempsService').postTempsBatch;
-const mockGetConnection = require('../../services/deviceService').getConnection;
-const mockIo = require('socket.io-client').io;
+interface SmokerKit {
+  config: SessionConfig;
+  socket: FakeCloudSocket;
+  api: FakeSessionApi;
+  deviceFeed: FakeDeviceFeed;
+  wifi: FakeWifiStatus;
+}
 
-describe('Home Component', () => {
-  let mockSocket: any;
-  let mockDeviceClient: any;
+function smokerKit(): SmokerKit {
+  const socket = new FakeCloudSocket();
+  const api = new FakeSessionApi();
+  const clock = new SteppingClock();
+  const deviceFeed = new FakeDeviceFeed();
+  const wifi = new FakeWifiStatus();
+  const config: SessionConfig = {
+    role: 'smoker',
+    socket,
+    api,
+    clock,
+    deviceFeed,
+    wifi: { port: wifi, throttleMs: 0 },
+  };
+  return { config, socket, api, deviceFeed, wifi };
+}
 
-  beforeEach(() => {
-    jest.clearAllMocks();
+function renderHome(kit: SmokerKit) {
+  return render(
+    <SmokeSessionProvider config={kit.config}>
+      <Home />
+    </SmokeSessionProvider>
+  );
+}
 
-    // Setup socket mocks
-    mockSocket = {
-      on: jest.fn(),
-      emit: jest.fn(),
-      connected: false,
-    };
+const reading = (chamber: string, meat: string, meat2: string, meat3: string): string =>
+  JSON.stringify({ Chamber: chamber, Meat: meat, Meat2: meat2, Meat3: meat3 });
 
-    mockDeviceClient = {
-      on: jest.fn(),
-      emit: jest.fn(),
-    };
-
-    // Mock io to return different sockets for different URLs
-    mockIo.mockImplementation((url: string) => {
-      if (url.includes('127.0.0.1:3003')) {
-        return mockDeviceClient;
-      }
-      return mockSocket;
+describe('Home (smoker session host)', () => {
+  it('renders a live device reading and relays it to the cloud as an events frame', async () => {
+    const kit = smokerKit();
+    renderHome(kit);
+    await act(async () => {
+      await flushPromises();
     });
 
-    // Setup default mock responses
-    mockGetCurrentTemps.mockResolvedValue([]);
-    mockGetState.mockResolvedValue({ smokeId: 'test', smoking: false });
-    mockGetCurrentSmokeProfile.mockResolvedValue({
-      chamberName: 'Test Chamber',
-      probe1Name: 'Test Probe 1',
-      probe2Name: 'Test Probe 2',
-      probe3Name: 'Test Probe 3',
-      notes: 'Test notes',
+    await act(async () => {
+      kit.socket.setConnected(true);
+      kit.deviceFeed.injectReading(reading('225', '185', '190', '0'));
+      await flushPromises();
+    });
+
+    // The live reading is on screen...
+    expect(screen.getByTestId('chart-chamber')).toHaveTextContent('225');
+    expect(screen.getByTestId('chart-meat')).toHaveTextContent('185');
+    expect(screen.getByTestId('chart-meat2')).toHaveTextContent('190');
+
+    // ...and relayed to the cloud verbatim.
+    expect(kit.socket.emittedEvents).toHaveLength(1);
+    const frame = decodeEvents(kit.socket.emittedEvents[0]);
+    expect(frame.chamberTemp).toBe('225');
+    expect(frame.probeTemp1).toBe('185');
+  });
+
+  it('starts smoking on the button press and broadcasts the agreed smoke update', async () => {
+    const kit = smokerKit();
+    kit.api.seedSmoking(false);
+    renderHome(kit);
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(screen.getByText('Start Smoking')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('smoker-start-button'));
+    await act(async () => {
+      await flushPromises();
+    });
+
+    // The local view flips...
+    expect(screen.getByText('Stop Smoking')).toBeInTheDocument();
+    // ...and the broadcast smokeUpdate agrees with the new snapshot state.
+    expect(kit.socket.emittedSmokeUpdates).toHaveLength(1);
+    expect(kit.socket.emittedSmokeUpdates[0].smoking).toBe(true);
+  });
+
+  it('buffers readings while offline and, on reconnect, posts the batch then refreshes then relays', async () => {
+    const kit = smokerKit();
+    renderHome(kit);
+    await act(async () => {
+      kit.socket.setConnected(false);
+      await flushPromises();
+    });
+
+    // Disconnected: the pinned every-11th cadence keeps one sample; nothing
+    // is posted while offline.
+    await act(async () => {
+      for (let i = 0; i < 11; i++) {
+        kit.deviceFeed.injectReading(reading('225', '185', '190', '0'));
+      }
+      await flushPromises();
+    });
+    expect(kit.api.countCalls('postTempsBatch')).toBe(0);
+    expect(kit.socket.emittedEvents).toHaveLength(0);
+
+    // Reconnect and take one more reading: the buffered batch uploads first,
+    // then a refresh, then the live relay — in that order.
+    await act(async () => {
+      kit.socket.setConnected(true);
+      kit.deviceFeed.injectReading(reading('230', '188', '191', '0'));
+      await flushPromises();
+    });
+
+    expect(kit.api.countCalls('postTempsBatch')).toBe(1);
+    expect(kit.socket.emittedRefreshes).toBe(1);
+    expect(kit.socket.outbound.slice(-2)).toEqual(['refresh', 'events']);
+  });
+
+  it('navigates to the wifi screen and refreshes the chart baseline on return', async () => {
+    const kit = smokerKit();
+    renderHome(kit);
+    await act(async () => {
+      await flushPromises();
+    });
+    expect(kit.api.countCalls('getCurrentTemps')).toBe(1);
+
+    fireEvent.click(screen.getByLabelText('wifi connected'));
+    await act(async () => {
+      await flushPromises();
+    });
+    expect(screen.getByText('WiFi Settings')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Back to Home'));
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(screen.getByText('Start Smoking')).toBeInTheDocument();
+    // Returning to the home screen re-fetches the chart baseline.
+    expect(kit.api.countCalls('getCurrentTemps')).toBe(2);
+  });
+
+  it('drives the wifi indicator off the throttled snapshot connectivity flag', async () => {
+    const kit = smokerKit();
+    kit.wifi.setStatus(false);
+    renderHome(kit);
+    await act(async () => {
+      await flushPromises();
+    });
+
+    // Defaults to connected before any probe.
+    expect(screen.getByTestId('WifiIcon')).toBeInTheDocument();
+
+    // A reading triggers a wifi probe; the disconnected result flips the icon.
+    await act(async () => {
+      kit.socket.setConnected(true);
+      kit.deviceFeed.injectReading(reading('225', '185', '190', '0'));
+      await flushPromises();
+    });
+
+    expect(screen.getByTestId('WifiOffIcon')).toBeInTheDocument();
+  });
+
+  it('renders the probe names from the loaded smoke profile', async () => {
+    const kit = smokerKit();
+    kit.api.seedProfile({
+      chamberName: 'Big Pit',
+      probe1Name: 'Brisket',
+      probe2Name: 'Ribs',
+      probe3Name: 'Wings',
+      notes: '',
       woodType: 'Hickory',
     });
-    mockGetConnection.mockResolvedValue([]);
-    mockPostTempsBatch.mockResolvedValue(undefined);
+    renderHome(kit);
+
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(screen.getByText('Big Pit')).toBeInTheDocument();
+    expect(screen.getByText('Brisket')).toBeInTheDocument();
+    expect(screen.getByText('Ribs')).toBeInTheDocument();
+    expect(screen.getByText('Wings')).toBeInTheDocument();
   });
 
-  afterEach(() => {
-    jest.restoreAllMocks();
+  it('falls back to default probe names when no profile is saved', async () => {
+    const kit = smokerKit();
+    kit.api.seedProfile(null);
+    renderHome(kit);
+
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(screen.getByText('Chamber')).toBeInTheDocument();
+    expect(screen.getByText('probe 1')).toBeInTheDocument();
+    expect(screen.getByText('probe 2')).toBeInTheDocument();
+    expect(screen.getByText('probe 3')).toBeInTheDocument();
   });
 
-  it('should render all main UI elements in home screen', async () => {
-    render(<Home />);
+  it('shows the stop-smoking action when the persisted state is already smoking', async () => {
+    const kit = smokerKit();
+    kit.api.seedSmoking(true);
+    renderHome(kit);
 
-    await waitFor(() => {
-      // Check that probe names and temps are displayed
-      expect(screen.getByText('Test Chamber')).toBeInTheDocument();
-      expect(screen.getByText('Test Probe 1')).toBeInTheDocument();
-      expect(screen.getByText('Test Probe 2')).toBeInTheDocument();
-      expect(screen.getByText('Test Probe 3')).toBeInTheDocument();
-
-      // Check for default temperature values via TempChart
-      expect(screen.getByTestId('chamber-temp')).toHaveTextContent('0');
-      expect(screen.getByTestId('meat-temp')).toHaveTextContent('0');
-      expect(screen.getByTestId('meat2-temp')).toHaveTextContent('0');
-      expect(screen.getByTestId('meat3-temp')).toHaveTextContent('0');
-
-      // Check for start smoking button
-      expect(screen.getByText('Start Smoking')).toBeInTheDocument();
-
-      // Check for WiFi button
-      expect(screen.getByRole('button', { name: '' })).toBeInTheDocument(); // WiFi icon button
-
-      // Check for TempChart
-      expect(screen.getByTestId('temp-chart')).toBeInTheDocument();
+    await act(async () => {
+      await flushPromises();
     });
+
+    expect(screen.getByText('Stop Smoking')).toBeInTheDocument();
   });
 
-  it('should handle missing smoke profile gracefully', async () => {
-    mockGetCurrentSmokeProfile.mockRejectedValue(new Error('No profile found'));
-
+  it('applies an inbound remote smoke update (names and smoking) as the smoker role', async () => {
+    const kit = smokerKit();
+    renderHome(kit);
     await act(async () => {
-      render(<Home />);
-    });
-
-    await waitFor(() => {
-      // Should fall back to default probe names
-      expect(screen.getByText('Chamber')).toBeInTheDocument();
-      expect(screen.getByText('probe 1')).toBeInTheDocument();
-      expect(screen.getByText('probe 2')).toBeInTheDocument();
-      expect(screen.getByText('probe 3')).toBeInTheDocument();
-    });
-  });
-
-  it('should toggle smoking state when start/stop button is clicked', async () => {
-    mockToggleSmoking.mockResolvedValue({ smokeId: 'test', smoking: true });
-
-    await act(async () => {
-      render(<Home />);
-    });
-
-    await waitFor(() => {
-      const startButton = screen.getByText('Start Smoking');
-      fireEvent.click(startButton);
-    });
-
-    await waitFor(() => {
-      expect(mockToggleSmoking).toHaveBeenCalled();
-      expect(mockSocket.emit).toHaveBeenCalledWith(
-        'smokeUpdate',
-        expect.objectContaining({
-          smoking: true,
-        })
-      );
-    });
-  });
-
-  it('should show stop smoking button when currently smoking', async () => {
-    mockGetState.mockResolvedValue({ smokeId: 'test', smoking: true });
-
-    await act(async () => {
-      render(<Home />);
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText('Stop Smoking')).toBeInTheDocument();
-    });
-  });
-
-  it('should navigate to WiFi screen when WiFi button is clicked', async () => {
-    await act(async () => {
-      render(<Home />);
-    });
-
-    await waitFor(() => {
-      const wifiButton = screen.getByRole('button', { name: '' }); // WiFi icon button
-      fireEvent.click(wifiButton);
-    });
-
-    await waitFor(() => {
-      expect(screen.getByTestId('wifi-component')).toBeInTheDocument();
-      expect(screen.getByText('WiFi Settings')).toBeInTheDocument();
-    });
-  });
-
-  it('should navigate back from WiFi screen', async () => {
-    await act(async () => {
-      render(<Home />);
-    });
-
-    // Go to WiFi screen
-    await waitFor(() => {
-      const wifiButton = screen.getByRole('button', { name: '' });
-      fireEvent.click(wifiButton);
-    });
-
-    // Come back to home
-    await waitFor(() => {
-      const backButton = screen.getByText('Back to Home');
-      fireEvent.click(backButton);
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText('Start Smoking')).toBeInTheDocument();
-      expect(screen.getByTestId('temp-chart')).toBeInTheDocument();
-    });
-  });
-
-  it('should handle temperature updates from device client', async () => {
-    let tempCallback: (message: string) => void;
-
-    mockDeviceClient.on.mockImplementation((event: string, callback: any) => {
-      if (event === 'temp') {
-        tempCallback = callback;
-      }
+      await flushPromises();
     });
 
     await act(async () => {
-      render(<Home />);
-    });
-
-    // Wait for initial render
-    await waitFor(() => {
-      expect(screen.getByText('Test Chamber')).toBeInTheDocument();
-    });
-
-    // Simulate temperature update
-    const tempMessage = JSON.stringify({
-      Chamber: '225',
-      Meat: '185',
-      Meat2: '190',
-      Meat3: '0',
-    });
-
-    await act(async () => {
-      tempCallback!(tempMessage);
-    });
-
-    // Check that temperatures are displayed in the UI
-    await waitFor(() => {
-      expect(screen.getByTestId('chamber-temp')).toHaveTextContent('225');
-      expect(screen.getByTestId('meat-temp')).toHaveTextContent('185');
-      expect(screen.getByTestId('meat2-temp')).toHaveTextContent('190');
-      expect(screen.getByTestId('meat3-temp')).toHaveTextContent('0');
-    });
-  });
-
-  it('should handle socket smoke updates', async () => {
-    let smokeUpdateCallback: (message: any) => void;
-
-    mockSocket.on.mockImplementation((event: string, callback: any) => {
-      if (event === 'smokeUpdate') {
-        smokeUpdateCallback = callback;
-      }
-    });
-
-    await act(async () => {
-      render(<Home />);
-    });
-
-    // Simulate smoke update
-    const smokeUpdate = {
-      smoking: true,
-      chamberName: 'Updated Chamber',
-      probe1Name: 'Updated Probe 1',
-      probe2Name: 'Updated Probe 2',
-      probe3Name: 'Updated Probe 3',
-    };
-
-    await act(async () => {
-      smokeUpdateCallback!(smokeUpdate);
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText('Updated Chamber')).toBeInTheDocument();
-      expect(screen.getByText('Updated Probe 1')).toBeInTheDocument();
-      expect(screen.getByText('Stop Smoking')).toBeInTheDocument(); // Now smoking
-    });
-  });
-
-  it('should handle socket clear event', async () => {
-    let clearCallback: (message: any) => void;
-
-    mockSocket.on.mockImplementation((event: string, callback: any) => {
-      if (event === 'clear') {
-        clearCallback = callback;
-      }
-    });
-
-    await act(async () => {
-      render(<Home />);
-    });
-
-    // Simulate clear event
-    await act(async () => {
-      clearCallback!({});
-    });
-
-    await waitFor(() => {
-      expect(mockGetCurrentSmokeProfile).toHaveBeenCalledTimes(2); // Once on mount, once on clear
-    });
-  });
-
-  it('should handle clear event when smoke profile fails', async () => {
-    let clearCallback: (message: any) => void;
-
-    mockSocket.on.mockImplementation((event: string, callback: any) => {
-      if (event === 'clear') {
-        clearCallback = callback;
-      }
-    });
-
-    // Make profile fetch fail on clear
-    mockGetCurrentSmokeProfile
-      .mockResolvedValueOnce({
-        chamberName: 'Test Chamber',
-        probe1Name: 'Test Probe 1',
-        probe2Name: 'Test Probe 2',
-        probe3Name: 'Test Probe 3',
-      })
-      .mockRejectedValueOnce(new Error('Profile fetch failed'));
-
-    await act(async () => {
-      render(<Home />);
-    });
-
-    // Simulate clear event
-    await act(async () => {
-      clearCallback!({});
-    });
-
-    await waitFor(() => {
-      // Should fall back to defaults
-      expect(screen.getByText('Chamber')).toBeInTheDocument();
-      expect(screen.getByText('probe 1')).toBeInTheDocument();
-    });
-  });
-
-  it('should handle connection status updates', async () => {
-    // Mock environment as production to trigger connection checks
-    const originalEnv = process.env.ENV;
-    process.env.ENV = 'production';
-
-    let tempCallback: (message: string) => void;
-
-    mockDeviceClient.on.mockImplementation((event: string, callback: any) => {
-      if (event === 'temp') {
-        tempCallback = callback;
-      }
-    });
-
-    mockGetConnection.mockResolvedValue([{ ssid: 'TestNetwork' }]);
-
-    await act(async () => {
-      render(<Home />);
-    });
-
-    // Simulate temperature update which triggers connection check
-    const tempMessage = JSON.stringify({
-      Chamber: '225',
-      Meat: '185',
-      Meat2: '190',
-      Meat3: '0',
-    });
-
-    await act(async () => {
-      tempCallback!(tempMessage);
-    });
-
-    await waitFor(() => {
-      expect(mockGetConnection).toHaveBeenCalled();
-    });
-
-    // Restore environment
-    process.env.ENV = originalEnv;
-  });
-
-  it('should handle temperature parse errors gracefully', async () => {
-    const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
-    let tempCallback: (message: string) => void;
-
-    mockDeviceClient.on.mockImplementation((event: string, callback: any) => {
-      if (event === 'temp') {
-        tempCallback = callback;
-      }
-    });
-
-    await act(async () => {
-      render(<Home />);
-    });
-
-    // Simulate invalid temperature message
-    await act(async () => {
-      tempCallback!('invalid json');
-    });
-
-    await waitFor(() => {
-      expect(consoleLogSpy).toHaveBeenCalled();
-    });
-
-    consoleLogSpy.mockRestore();
-  });
-
-  it('should emit events when socket is connected', async () => {
-    let tempCallback: (message: string) => void;
-
-    mockSocket.connected = true;
-
-    mockDeviceClient.on.mockImplementation((event: string, callback: any) => {
-      if (event === 'temp') {
-        tempCallback = callback;
-      }
-    });
-
-    await act(async () => {
-      render(<Home />);
-    });
-
-    // Simulate temperature update
-    const tempMessage = JSON.stringify({
-      Chamber: '225',
-      Meat: '185',
-      Meat2: '190',
-      Meat3: '0',
-    });
-
-    await act(async () => {
-      tempCallback!(tempMessage);
-    });
-
-    await waitFor(() => {
-      expect(mockSocket.emit).toHaveBeenCalledWith('events', expect.any(String));
-    });
-  });
-
-  it('should batch temperature data when socket is not connected', async () => {
-    let tempCallback: (message: string) => void;
-
-    mockSocket.connected = false; // Not connected, should batch temps
-
-    mockDeviceClient.on.mockImplementation((event: string, callback: any) => {
-      if (event === 'temp') {
-        tempCallback = callback;
-      }
-    });
-
-    await act(async () => {
-      render(<Home />);
-    });
-
-    // Send multiple temperature updates to trigger batching
-    const tempMessage = JSON.stringify({
-      Chamber: '225',
-      Meat: '185',
-      Meat2: '190',
-      Meat3: '0',
-    });
-
-    // Send enough updates to trigger batch (need 11 for batchCount > 10)
-    for (let i = 0; i < 12; i++) {
-      await act(async () => {
-        tempCallback!(tempMessage);
+      kit.socket.injectSmokeUpdate({
+        smoking: true,
+        chamberName: 'Renamed Chamber',
+        probe1Name: 'Renamed Probe 1',
+        probe2Name: 'Renamed Probe 2',
+        probe3Name: 'Renamed Probe 3',
       });
-    }
-
-    // Should NOT have called postTempsBatch while disconnected - batching waits for reconnection
-    expect(mockPostTempsBatch).not.toHaveBeenCalled();
-
-    // When socket reconnects and we send another temp, it should send the batch
-    mockSocket.connected = true;
-    await act(async () => {
-      tempCallback!(tempMessage);
+      await flushPromises();
     });
 
-    // Now it should have sent the batched data
-    await waitFor(
-      () => {
-        expect(mockPostTempsBatch).toHaveBeenCalled();
-      },
-      { timeout: 5000 }
-    );
-  });
-
-  it('should send temp batch and emit refresh when socket is connected', async () => {
-    let tempCallback: (message: string) => void;
-
-    mockSocket.connected = true; // Connected, should send batch immediately
-
-    mockDeviceClient.on.mockImplementation((event: string, callback: any) => {
-      if (event === 'temp') {
-        tempCallback = callback;
-      }
-    });
-
-    await act(async () => {
-      render(<Home />);
-    });
-
-    // First, build up a batch by temporarily disconnecting
-    mockSocket.connected = false;
-
-    const tempMessage = JSON.stringify({
-      Chamber: '225',
-      Meat: '185',
-      Meat2: '190',
-      Meat3: '0',
-    });
-
-    // Send enough updates to build a batch
-    for (let i = 0; i < 12; i++) {
-      await act(async () => {
-        tempCallback!(tempMessage);
-      });
-    }
-
-    // Now reconnect and send another update
-    mockSocket.connected = true;
-
-    await act(async () => {
-      tempCallback!(tempMessage);
-    });
-
-    // Should have sent the batch and emitted refresh
-    await waitFor(() => {
-      expect(mockSocket.emit).toHaveBeenCalledWith('refresh');
-    });
-  });
-
-  it('should refresh current temps when returning from WiFi screen', async () => {
-    await act(async () => {
-      render(<Home />);
-    });
-
-    // Go to WiFi screen
-    await waitFor(() => {
-      const wifiButton = screen.getByRole('button', { name: '' });
-      fireEvent.click(wifiButton);
-    });
-
-    // Come back to home (this should trigger getCurrentTemps)
-    await waitFor(() => {
-      const backButton = screen.getByText('Back to Home');
-      fireEvent.click(backButton);
-    });
-
-    await waitFor(() => {
-      expect(mockGetCurrentTemps).toHaveBeenCalledTimes(2); // Once on mount, once on return
-    });
-  });
-
-  it('should handle getCurrentTemps error on componentDidMount', async () => {
-    // Mock getCurrentTemps to throw an error
-    mockGetCurrentTemps.mockRejectedValueOnce(new Error('Temperature service unavailable'));
-
-    render(<Home />);
-
-    // The component should still render despite the error
-    await waitFor(() => {
-      expect(screen.getByText(/Chamber/i)).toBeInTheDocument();
-    });
-  });
-
-  it('should test getConnection branch in production mode when temp event is received', async () => {
-    // Set production environment
-    const originalEnv = process.env.ENV;
-    process.env.ENV = 'production';
-
-    // Mock getConnection to return empty array (tests the else branch on line 86)
-    mockGetConnection.mockResolvedValueOnce([]);
-
-    render(<Home />);
-
-    // The component should render normally
-    await waitFor(() => {
-      expect(screen.getByText(/Chamber/i)).toBeInTheDocument();
-    });
-
-    // Restore original environment
-    process.env.ENV = originalEnv;
+    expect(screen.getByText('Renamed Chamber')).toBeInTheDocument();
+    expect(screen.getByText('Renamed Probe 1')).toBeInTheDocument();
+    expect(screen.getByText('Stop Smoking')).toBeInTheDocument();
   });
 });
