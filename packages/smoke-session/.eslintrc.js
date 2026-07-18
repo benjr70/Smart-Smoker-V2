@@ -25,5 +25,17 @@ module.exports = {
     'no-var': 'error',
     'object-shorthand': 'error',
     'prefer-template': 'error',
+    // The socket library is confined to the two production adapters (see the
+    // override below). Everywhere else — the store, ports, fakes — must speak
+    // only through the ports, so the core stays socket-free and fully fakeable.
+    'no-restricted-imports': ['error', { paths: [{ name: 'socket.io-client' }] }],
   },
+  overrides: [
+    {
+      files: ['src/adapters/cloud-socket.ts', 'src/adapters/device-feed.ts'],
+      rules: {
+        'no-restricted-imports': 'off',
+      },
+    },
+  ],
 };
