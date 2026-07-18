@@ -99,6 +99,34 @@ describe('createCloudSocketAdapter (integration)', () => {
     expect(cleared).toBe(1);
   });
 
+  it('emits an events frame the server receives as the exact raw JSON string', async () => {
+    adapter = createCloudSocketAdapter(url);
+
+    await waitUntil(() => serverSockets.length > 0);
+    const received: unknown[] = [];
+    serverSockets[0].on('events', payload => received.push(payload));
+
+    const frame = JSON.stringify({ chamberTemp: '212.5', probeTemp1: '145.0' });
+    adapter.emitEvents(frame);
+
+    await waitUntil(() => received.length > 0);
+    expect(received[0]).toBe(frame);
+    expect(typeof received[0]).toBe('string');
+  });
+
+  it('emits a bare refresh signal the server receives with no payload', async () => {
+    adapter = createCloudSocketAdapter(url);
+
+    await waitUntil(() => serverSockets.length > 0);
+    let refreshed = 0;
+    serverSockets[0].on('refresh', () => (refreshed += 1));
+
+    adapter.emitRefresh();
+
+    await waitUntil(() => refreshed > 0);
+    expect(refreshed).toBe(1);
+  });
+
   it('fires onRefresh when the server broadcasts a bare refresh signal', async () => {
     adapter = createCloudSocketAdapter(url);
     let refreshed = 0;

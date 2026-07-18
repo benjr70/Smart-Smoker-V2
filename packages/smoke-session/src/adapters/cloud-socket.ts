@@ -24,8 +24,9 @@ export interface CloudSocketAdapter extends CloudSocketPort {
 /**
  * Open a socket.io connection to the backend gateway at `url` and expose it as a
  * {@link CloudSocketAdapter}. Inbound frames map to the port's `on*` handlers;
- * `emitSmokeUpdate`/`emitClear` ride the wire as the gateway expects (an object
- * for `smokeUpdate`, the truthy `clear` signal).
+ * the four typed emits ride the wire as the gateway expects: an object for
+ * `smokeUpdate`, the truthy `clear` signal, the raw JSON *string* for `events`,
+ * and a bare `refresh` signal with no payload.
  */
 export function createCloudSocketAdapter(url: string): CloudSocketAdapter {
   const socket: Socket = io(url);
@@ -68,6 +69,12 @@ export function createCloudSocketAdapter(url: string): CloudSocketAdapter {
     },
     emitClear(): void {
       socket.emit('clear', true);
+    },
+    emitEvents(payload: string): void {
+      socket.emit('events', payload);
+    },
+    emitRefresh(): void {
+      socket.emit('refresh');
     },
     close(): void {
       socket.close();
