@@ -1,19 +1,12 @@
 import { TempData } from 'temperaturechart/src/tempChart';
+import { getDefaultApiClient } from '../api';
 
-const envUrl = process.env.REACT_APP_CLOUD_URL_API;
+/**
+ * @deprecated Thin shim over `getDefaultApiClient().temps`. No longer mutates
+ * `axios.defaults`; failures reject with the typed {@link ApiError}.
+ */
+export const getCurrentTemps = (): Promise<TempData[]> => getDefaultApiClient().temps.getCurrent();
 
-export const getCurrentTemps = async (): Promise<TempData[]> => {
-  const axios = require('axios');
-  axios.defaults.baseURL = envUrl;
-  return axios.get('temps').then((result: any) => {
-    return result.data;
-  });
-};
-
-export const postTempsBatch = async (batch: TempData[]): Promise<void> => {
-  const axios = require('axios');
-  axios.defaults.baseURL = envUrl;
-  return axios.post('temps/batch', batch).then((result: any) => {
-    return result.data;
-  });
-};
+/** @deprecated Use `getDefaultApiClient().temps.postBatch(batch)` instead. */
+export const postTempsBatch = (batch: TempData[]): Promise<void> =>
+  getDefaultApiClient().temps.postBatch(batch);

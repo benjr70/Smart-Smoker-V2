@@ -1,275 +1,103 @@
-import {
-  toggleSmoking,
-  getState,
-  getCurrentSmokeProfile,
-  State,
-  smokeProfile,
-} from './stateService';
+import { getCurrentSmokeProfile, getState, toggleSmoking } from './stateService';
+import { createApiClient } from '../api/client';
+import { createFakeBackend, FakeBackend } from '../api/fakeBackend';
 
-// Mock environment variable before importing
-const mockEnvUrl = 'http://test-api.com';
-process.env.REACT_APP_CLOUD_URL_API = mockEnvUrl;
+// Mock only the client-injection boundary: the shims delegate to the default
+// client, and here that default is a client backed by an in-memory fake
+// backend. Everything below the seam (real client + real fake backend) runs —
+// no axios mocking, no global axios.defaults mutation.
+jest.mock('../api', () => {
+  const actual = jest.requireActual('../api');
+  return { ...actual, getDefaultApiClient: jest.fn() };
+});
 
-// Mock axios
-jest.mock('axios', () => ({
-  create: jest.fn(),
-  defaults: {
-    baseURL: '',
-  },
-  put: jest.fn(),
-  get: jest.fn(),
-}));
+// eslint-disable-next-line import/first, @typescript-eslint/no-var-requires
+const api = require('../api');
 
-const mockAxios = require('axios');
+let cloud: FakeBackend;
+let device: FakeBackend;
 
-describe('stateService', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockAxios.defaults.baseURL = '';
-  });
+const useBackend = (seed?: Parameters<typeof createFakeBackend>[0]) => {
+  cloud = createFakeBackend(seed);
+  device = createFakeBackend();
+  (api.getDefaultApiClient as jest.Mock).mockReturnValue(createApiClient(cloud, device));
+};
 
-  afterEach(() => {
-    jest.restoreAllMocks();
-  });
+afterEach(() => {
+  jest.restoreAllMocks();
+});
 
+describe('stateService (deprecated shims)', () => {
   describe('toggleSmoking', () => {
-    it('should successfully toggle smoking state to true', async () => {
-      const mockState: State = {
-        smokeId: 'smoke123',
-        smoking: true,
-      };
-      const mockResponse = { data: mockState };
-
-      mockAxios.put.mockResolvedValue(mockResponse);
+    it('returns the toggled State document', async () => {
+      useBackend({ state: { smokeId: 'smoke123', smoking: false } });
 
       const result = await toggleSmoking();
 
-      expect(mockAxios.put).toHaveBeenCalledWith('state/toggleSmoking');
-      expect(result).toEqual(mockState);
+      expect(result).toEqual({ smokeId: 'smoke123', smoking: true });
+      expect(cloud.requests).toContainEqual({
+        method: 'put',
+        path: 'state/toggleSmoking',
+        body: undefined,
+      });
     });
 
-    it('should successfully toggle smoking state to false', async () => {
-      const mockState: State = {
-        smokeId: 'smoke123',
-        smoking: false,
-      };
-      const mockResponse = { data: mockState };
+    it('propagates the typed error on failure instead of swallowing it', async () => {
+      useBackend();
+      cloud.injectFault({ method: 'put', path: 'state/toggleSmoking', status: 500 });
 
-      mockAxios.put.mockResolvedValue(mockResponse);
-
-      const result = await toggleSmoking();
-
-      expect(result).toEqual(mockState);
-      expect(result.smoking).toBe(false);
-    });
-
-    it('should handle toggle smoking API error', async () => {
-      const apiError = new Error('API is not available');
-
-      mockAxios.put.mockRejectedValue(apiError);
-
-      await expect(toggleSmoking()).rejects.toThrow('API is not available');
-      expect(mockAxios.put).toHaveBeenCalledWith('state/toggleSmoking');
-    });
-
-    it('should handle network timeout', async () => {
-      const timeoutError = new Error('timeout of 5000ms exceeded');
-
-      mockAxios.put.mockRejectedValue(timeoutError);
-
-      await expect(toggleSmoking()).rejects.toThrow('timeout of 5000ms exceeded');
-    });
-
-    it('should handle server error response', async () => {
-      const serverError = {
-        response: {
-          status: 500,
-          data: { error: 'Internal server error' },
-        },
-      };
-
-      mockAxios.put.mockRejectedValue(serverError);
-
-      await expect(toggleSmoking()).rejects.toEqual(serverError);
+      await expect(toggleSmoking()).rejects.toMatchObject({ status: 500 });
     });
   });
 
   describe('getState', () => {
-    it('should successfully get current state', async () => {
-      const mockState: State = {
-        smokeId: 'current-smoke-456',
-        smoking: true,
-      };
-      const mockResponse = { data: mockState };
-
-      mockAxios.get.mockResolvedValue(mockResponse);
+    it('returns the current State document', async () => {
+      useBackend({ state: { smokeId: 'current-456', smoking: true } });
 
       const result = await getState();
 
-      expect(mockAxios.get).toHaveBeenCalledWith('state');
-      expect(result).toEqual(mockState);
+      expect(result).toEqual({ smokeId: 'current-456', smoking: true });
+      expect(cloud.requests).toContainEqual({ method: 'get', path: 'state', body: undefined });
     });
 
-    it('should handle state not found', async () => {
-      const notFoundError = {
-        response: {
-          status: 404,
-          data: { error: 'State not found' },
-        },
-      };
+    it('propagates the typed error on failure', async () => {
+      useBackend();
+      cloud.injectFault({ method: 'get', path: 'state', status: 404 });
 
-      mockAxios.get.mockRejectedValue(notFoundError);
-
-      await expect(getState()).rejects.toEqual(notFoundError);
-    });
-
-    it('should handle get state API error', async () => {
-      const apiError = new Error('Failed to fetch state');
-
-      mockAxios.get.mockRejectedValue(apiError);
-
-      await expect(getState()).rejects.toThrow('Failed to fetch state');
-      expect(mockAxios.get).toHaveBeenCalledWith('state');
-    });
-
-    it('should handle empty state response', async () => {
-      const mockState: State = {
-        smokeId: '',
-        smoking: false,
-      };
-      const mockResponse = { data: mockState };
-
-      mockAxios.get.mockResolvedValue(mockResponse);
-
-      const result = await getState();
-
-      expect(result).toEqual(mockState);
-      expect(result.smokeId).toBe('');
-      expect(result.smoking).toBe(false);
+      await expect(getState()).rejects.toMatchObject({ status: 404 });
     });
   });
 
   describe('getCurrentSmokeProfile', () => {
-    it('should successfully get current smoke profile with all fields', async () => {
-      const mockProfile: smokeProfile = {
-        chamberName: 'Main Chamber',
-        probe1Name: 'Brisket Probe',
-        probe2Name: 'Ambient Probe',
-        probe3Name: 'Spare Probe',
-        notes: 'Test smoking session',
-        woodType: 'Hickory',
-      };
-      const mockResponse = { data: mockProfile };
-
-      mockAxios.get.mockResolvedValue(mockResponse);
-
-      const result = await getCurrentSmokeProfile();
-
-      expect(mockAxios.get).toHaveBeenCalledWith('smokeProfile/current');
-      expect(result).toEqual(mockProfile);
-    });
-
-    it('should handle profile with missing notes field', async () => {
-      const mockProfile = {
-        chamberName: 'Main Chamber',
-        probe1Name: 'Brisket Probe',
-        probe2Name: 'Ambient Probe',
-        probe3Name: 'Spare Probe',
-        woodType: 'Oak',
-        // notes field missing
-      };
-      const mockResponse = { data: mockProfile };
-
-      mockAxios.get.mockResolvedValue(mockResponse);
-
-      const result = await getCurrentSmokeProfile();
-
-      expect(result.notes).toBe('');
-      expect(result.woodType).toBe('Oak');
-    });
-
-    it('should handle profile with missing woodType field', async () => {
-      const mockProfile = {
-        chamberName: 'Main Chamber',
-        probe1Name: 'Brisket Probe',
-        probe2Name: 'Ambient Probe',
-        probe3Name: 'Spare Probe',
-        notes: 'Test run',
-        // woodType field missing
-      };
-      const mockResponse = { data: mockProfile };
-
-      mockAxios.get.mockResolvedValue(mockResponse);
-
-      const result = await getCurrentSmokeProfile();
-
-      expect(result.notes).toBe('Test run');
-      expect(result.woodType).toBe('');
-    });
-
-    it('should handle profile with both notes and woodType missing', async () => {
-      const mockProfile = {
-        chamberName: 'Main Chamber',
-        probe1Name: 'Brisket Probe',
-        probe2Name: 'Ambient Probe',
-        probe3Name: 'Spare Probe',
-        // notes and woodType fields missing
-      };
-      const mockResponse = { data: mockProfile };
-
-      mockAxios.get.mockResolvedValue(mockResponse);
-
-      const result = await getCurrentSmokeProfile();
-
-      expect(result.notes).toBe('');
-      expect(result.woodType).toBe('');
-    });
-
-    it('should handle API error with console.log', async () => {
-      const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
-      const apiError = new Error('Profile not found');
-
-      mockAxios.get.mockRejectedValue(apiError);
-
-      const result = await getCurrentSmokeProfile();
-
-      expect(consoleLogSpy).toHaveBeenCalledWith(apiError);
-      expect(result).toBeUndefined();
-
-      consoleLogSpy.mockRestore();
-    });
-
-    it('should handle network timeout error', async () => {
-      const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
-      const timeoutError = new Error('timeout of 5000ms exceeded');
-
-      mockAxios.get.mockRejectedValue(timeoutError);
-
-      const result = await getCurrentSmokeProfile();
-
-      expect(consoleLogSpy).toHaveBeenCalledWith(timeoutError);
-      expect(result).toBeUndefined();
-
-      consoleLogSpy.mockRestore();
-    });
-
-    it('should handle server error response', async () => {
-      const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
-      const serverError = {
-        response: {
-          status: 500,
-          data: { error: 'Internal server error' },
+    it('returns the profile with missing notes/woodType normalized to empty strings', async () => {
+      useBackend({
+        smokeProfile: {
+          current: {
+            chamberName: 'Main Chamber',
+            probe1Name: 'Brisket Probe',
+            probe2Name: 'Ambient Probe',
+            probe3Name: 'Spare Probe',
+          },
         },
-      };
-
-      mockAxios.get.mockRejectedValue(serverError);
+      });
 
       const result = await getCurrentSmokeProfile();
 
-      expect(consoleLogSpy).toHaveBeenCalledWith(serverError);
-      expect(result).toBeUndefined();
+      expect(result).toEqual({
+        chamberName: 'Main Chamber',
+        probe1Name: 'Brisket Probe',
+        probe2Name: 'Ambient Probe',
+        probe3Name: 'Spare Probe',
+        notes: '',
+        woodType: '',
+      });
+    });
 
-      consoleLogSpy.mockRestore();
+    it('propagates the typed error on failure instead of swallowing it to undefined', async () => {
+      useBackend();
+      cloud.injectFault({ method: 'get', path: 'smokeProfile/current', status: 500 });
+
+      await expect(getCurrentSmokeProfile()).rejects.toMatchObject({ status: 500 });
     });
   });
 });

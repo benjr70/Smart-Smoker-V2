@@ -1,144 +1,78 @@
 import { connectToWiFi, getConnection, wifiManager } from './deviceService';
+import { createApiClient } from '../api/client';
+import { createFakeBackend, FakeBackend } from '../api/fakeBackend';
 
-// Mock axios
-jest.mock('axios', () => ({
-  create: jest.fn(),
-  defaults: {
-    baseURL: '',
-  },
-  post: jest.fn(),
-  get: jest.fn(),
-}));
+// Mock only the client-injection boundary; everything below the seam (real
+// client + real fake backend) runs. The device calls must land on the device
+// transport, never the cloud transport.
+jest.mock('../api', () => {
+  const actual = jest.requireActual('../api');
+  return { ...actual, getDefaultApiClient: jest.fn() };
+});
 
-const mockAxios = require('axios');
+// eslint-disable-next-line import/first, @typescript-eslint/no-var-requires
+const api = require('../api');
 
-describe('deviceService', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockAxios.defaults.baseURL = '';
-  });
+let cloud: FakeBackend;
+let device: FakeBackend;
 
-  afterEach(() => {
-    jest.restoreAllMocks();
-  });
+const useBackend = (deviceSeed?: Parameters<typeof createFakeBackend>[0]) => {
+  cloud = createFakeBackend();
+  device = createFakeBackend(deviceSeed);
+  (api.getDefaultApiClient as jest.Mock).mockReturnValue(createApiClient(cloud, device));
+};
 
+afterEach(() => {
+  jest.restoreAllMocks();
+});
+
+describe('deviceService (deprecated shims)', () => {
   describe('connectToWiFi', () => {
-    it('should successfully connect to WiFi with valid credentials', async () => {
-      const mockCredentials: wifiManager = {
-        ssid: 'TestNetwork',
-        password: 'password123',
-      };
-      const mockResponse = { data: { success: true, message: 'Connected' } };
+    it('posts creds to the device-service route, not the cloud API', async () => {
+      const creds: wifiManager = { ssid: 'TestNetwork', password: 'password123' };
+      useBackend({ wifi: { connectResult: { success: true, message: 'Connected' } } });
 
-      mockAxios.post.mockResolvedValue(mockResponse);
+      const result = await connectToWiFi(creds);
 
-      const result = await connectToWiFi(mockCredentials);
-
-      expect(mockAxios.defaults.baseURL).toBe('http://localhost:3003');
-      expect(mockAxios.post).toHaveBeenCalledWith('api/wifiManager/connect', mockCredentials);
       expect(result).toEqual({ success: true, message: 'Connected' });
+      expect(device.requests).toContainEqual({
+        method: 'post',
+        path: 'api/wifiManager/connect',
+        body: creds,
+      });
+      expect(cloud.requests).toEqual([]);
     });
 
-    it('should handle connection failure', async () => {
-      const mockCredentials: wifiManager = {
-        ssid: 'InvalidNetwork',
-        password: 'wrongpassword',
-      };
-      const mockError = new Error('Connection failed');
+    it('propagates the typed error on failure', async () => {
+      const creds: wifiManager = { ssid: 'InvalidNetwork', password: 'wrongpassword' };
+      useBackend();
+      device.injectFault({ method: 'post', path: 'api/wifiManager/connect', status: 500 });
 
-      mockAxios.post.mockRejectedValue(mockError);
-
-      await expect(connectToWiFi(mockCredentials)).rejects.toThrow('Connection failed');
-      expect(mockAxios.post).toHaveBeenCalledWith('api/wifiManager/connect', mockCredentials);
-    });
-
-    it('should handle empty credentials', async () => {
-      const mockCredentials: wifiManager = {
-        ssid: '',
-        password: '',
-      };
-      const mockResponse = { data: { success: false, message: 'Invalid credentials' } };
-
-      mockAxios.post.mockResolvedValue(mockResponse);
-
-      const result = await connectToWiFi(mockCredentials);
-
-      expect(result).toEqual({ success: false, message: 'Invalid credentials' });
-    });
-
-    it('should handle network timeout', async () => {
-      const mockCredentials: wifiManager = {
-        ssid: 'TestNetwork',
-        password: 'password123',
-      };
-      const timeoutError = new Error('timeout of 5000ms exceeded');
-
-      mockAxios.post.mockRejectedValue(timeoutError);
-
-      await expect(connectToWiFi(mockCredentials)).rejects.toThrow('timeout of 5000ms exceeded');
+      await expect(connectToWiFi(creds)).rejects.toMatchObject({ status: 500 });
     });
   });
 
   describe('getConnection', () => {
-    it('should successfully get connection status', async () => {
-      const mockConnectionData = [{ ssid: 'ConnectedNetwork', status: 'connected' }];
-      const mockResponse = { data: mockConnectionData };
-
-      mockAxios.get.mockResolvedValue(mockResponse);
+    it('reads the connection state from the device-service route', async () => {
+      const connection = [{ ssid: 'ConnectedNetwork', status: 'connected' }];
+      useBackend({ wifi: { connection } });
 
       const result = await getConnection();
 
-      expect(mockAxios.defaults.baseURL).toBe('http://localhost:3003');
-      expect(mockAxios.get).toHaveBeenCalledWith('api/wifiManager/connection');
-      expect(result).toEqual(mockConnectionData);
+      expect(result).toEqual(connection);
+      expect(device.requests).toContainEqual({
+        method: 'get',
+        path: 'api/wifiManager/connection',
+        body: undefined,
+      });
+      expect(cloud.requests).toEqual([]);
     });
 
-    it('should handle empty connection list', async () => {
-      const mockResponse = { data: [] };
+    it('propagates the typed error on failure', async () => {
+      useBackend();
+      device.injectFault({ method: 'get', path: 'api/wifiManager/connection', status: 500 });
 
-      mockAxios.get.mockResolvedValue(mockResponse);
-
-      const result = await getConnection();
-
-      expect(result).toEqual([]);
-      expect(mockAxios.get).toHaveBeenCalledWith('api/wifiManager/connection');
-    });
-
-    it('should handle connection check failure', async () => {
-      const mockError = new Error('Network error');
-
-      mockAxios.get.mockRejectedValue(mockError);
-
-      await expect(getConnection()).rejects.toThrow('Network error');
-      expect(mockAxios.get).toHaveBeenCalledWith('api/wifiManager/connection');
-    });
-
-    it('should handle server error response', async () => {
-      const serverError = {
-        response: {
-          status: 500,
-          data: { error: 'Internal server error' },
-        },
-      };
-
-      mockAxios.get.mockRejectedValue(serverError);
-
-      await expect(getConnection()).rejects.toEqual(serverError);
-    });
-
-    it('should handle multiple connections', async () => {
-      const mockConnectionData = [
-        { ssid: 'Network1', status: 'connected' },
-        { ssid: 'Network2', status: 'available' },
-      ];
-      const mockResponse = { data: mockConnectionData };
-
-      mockAxios.get.mockResolvedValue(mockResponse);
-
-      const result = await getConnection();
-
-      expect(result).toEqual(mockConnectionData);
-      expect(result).toHaveLength(2);
+      await expect(getConnection()).rejects.toMatchObject({ status: 500 });
     });
   });
 });
