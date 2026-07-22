@@ -16,7 +16,7 @@ systemd (agent-daemon.service, Restart=always)
                  2. resume          a team:paused issue (usage ran out mid-run)
                  3. new pick        next eligible `team` issue from Project #1
                       └─ /team-dispatch   implementer/reviewer/verifier TDD team
-                      └─ PR open → /pr-watch (CI babysitter) → manual verification
+                      └─ PR open → /pr-watch (CI babysitter) → /pr-review (one-time code review) → manual verification
 ```
 
 ## The daemon (pacing)
@@ -102,12 +102,24 @@ it makes every other fire skip.
 
 ## The verification tail (every PR, every push)
 
-After a PR opens (and after **any** later push to it), the same two-stage tail
-runs before the fire may exit:
+After a PR opens (and after **any** later push to it), the same tail runs
+before the fire may exit:
 
 - **`/pr-watch`** — polls CI every 60s (45 min cap per round); on red, spawns
   an implementer to fix and pushes `fix(ci):` commits (cap 10 rounds); on
   exhaustion converts the PR to draft + `team:checks-failed`.
+- **`/pr-review`** — the **one-time** autonomous code review (team-pickup
+  §6a.1b), gated by a `<!-- pr-review-done -->` marker comment so it runs
+  exactly once in a PR's life and every later tail pass skips it. Two parallel
+  review axes — correctness (built-in `/code-review` at medium effort) and
+  spec (diff vs. the issue's Acceptance Criteria + parent PRD: missing
+  requirements, scope creep, spec mismatches) — post findings as inline review
+  threads marked `<!-- pr-review-bot -->` / 🤖. The reviewer never fixes its
+  own findings: when it posted any, it applies **`team:revise`** and the fire
+  ends there — the next fire's triage routes the PR into `/pr-reconcile`, whose
+  comment loop fixes the threads, replies in-thread, resolves them, drops the
+  label, and re-runs this whole tail. Zero findings → straight on to manual
+  verification. Best-effort by design: never pushes, never drafts the PR.
 - **Manual verification sweep** — team-pickup §6a.2 delegates the round to the
   **`/verify-pr`** harness: it parses the PR's `## Manual verification`
   checklist, boots a hermetic per-PR stack, spawns the `manual-verifier` agent
@@ -132,7 +144,8 @@ A PR **needs attention** when it is *ours* (open, not draft, head
 
 - it carries **`team:revise`** — a human reviewed it and explicitly handed it
   back (this is the human→agent signal; apply it after leaving **inline**
-  review comments), or
+  review comments), or `/pr-review` posted 🤖 findings and applied the label
+  itself (agent→agent hand-back, same machinery), or
 - its mergeable state is **`CONFLICTING`** — master moved under it (auto,
   no label needed).
 
@@ -196,7 +209,7 @@ done).
 | `team:done` | issue | implemented; PR open/merged |
 | `team:failed` | issue | dispatch failed or resume cap hit; human triage |
 | `team:checks-failed` | PR | CI or manual verification could not be brought to pass (fix loops exhausted); PR is drafted |
-| `team:revise` | PR | **human hand-back**: address my review comments |
+| `team:revise` | PR | hand-back: address the unresolved review comments — applied by a **human** review or by **`/pr-review`** (its 🤖 findings) |
 | `team:revise-failed` | PR | revise loop exhausted (3 rounds) or disputed; parked |
 | `team:rebase-failed` | PR | auto-rebase failed (conflicts unresolvable or lease refused); parked |
 
@@ -218,6 +231,7 @@ on every PR.
 | `lib/pr-triage.sh` | which PR needs reconciling (ours-filter, rank, order) |
 | `lib/work-probe.sh` | mid-sleep "did work appear?" scan + wake decision |
 | `lib/thread-reconciler.sh` | unresolved-thread enum, in-thread reply, resolve |
+| `lib/review-poster.sh` | render/post marked inline review comments, agent-thread filter, done-marker |
 | `lib/rebase-driver.sh` | rebase / continue / abort / force-with-lease push |
 
 ## Operational notes
@@ -244,5 +258,5 @@ on every PR.
 - [Agent Teams overview](index.md) — the dispatch/roles system a fire drives
 - [Dispatch](dispatch.md) — `/team-dispatch` playbook and hooks
 - [Claude Agent VM](../CI-CD/claude-agent-vm.md) — host setup
-- Skills: `.claude/skills/team-pickup/`, `pr-watch/`, `pr-reconcile/`,
-  `team-dispatch/` — the authoritative playbooks
+- Skills: `.claude/skills/team-pickup/`, `pr-watch/`, `pr-review/`,
+  `pr-reconcile/`, `team-dispatch/` — the authoritative playbooks

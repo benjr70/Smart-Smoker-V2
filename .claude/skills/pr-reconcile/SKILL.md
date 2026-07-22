@@ -123,8 +123,12 @@ If the PR is not CONFLICTING, skip this phase entirely.
 
 ### 2. Comment phase (only when `team:revise` is present)
 
-The human reviewed and explicitly handed the PR back. Work every unresolved
-review thread; **cap: 3 implementer rounds per fire**.
+The PR was explicitly handed back — by a human review, or by `/pr-review`
+(team-pickup §6a.1b), which posts its findings as inline threads marked
+`<!-- pr-review-bot -->` / 🤖 and applies this same label. Both kinds of thread
+are worked identically: the reconciler only cares that a thread is unresolved,
+not who authored it. Work every unresolved review thread; **cap: 3 implementer
+rounds per fire**.
 
 ```bash
 . scripts/claude-agent/lib/thread-reconciler.sh
@@ -201,6 +205,12 @@ success tail against this PR, with one modification:
 
 - **§6a.1 pr-watch** (blocking, fresh 10-round budget) — spawn exactly as
   team-pickup §6a.1 specifies, with this PR's number/branch/issue.
+- **§6a.1b pr-review** — marker-gated exactly as team-pickup specifies: a
+  reconciled PR was normally reviewed when it first landed, so the
+  `<!-- pr-review-done -->` marker makes this a SKIP. If the marker is absent
+  (the PR predates `/pr-review`, or a prior attempt ended `pr-review: ERROR`),
+  the one-time review runs here; on findings it applies `team:revise` and the
+  tail ends — the next fire reconciles.
 - **§6a.2 manual verification** (blocking) — delegate to `/verify-pr` exactly as
   team-pickup §6a.2 specifies (a blocking `/verify-pr` round per PR, consuming
   its terminal `manual-verify:` line and splitting spec-demanding deferrals into

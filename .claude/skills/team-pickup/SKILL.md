@@ -77,7 +77,8 @@ An already-open agent PR that a human is waiting on outranks everything else:
 finishing it is the shortest path to a merge. Two signals make a PR "needing
 attention": its mergeable state is `CONFLICTING` (master moved under it — always
 auto-fixed, no label needed) or it carries the **`team:revise`** label (a human
-reviewed it and explicitly handed it back). Detection is a cheap `gh` read + the
+reviewed it and explicitly handed it back — or §6a.1b's `/pr-review` posted 🤖
+findings and applied the label itself). Detection is a cheap `gh` read + the
 **PR Triage** deep module — zero Claude usage when nothing needs attention.
 
 `pr_triage_scan` owns the `gh pr list` call and rides out GitHub's async
@@ -405,13 +406,55 @@ block while pr-watch is still in flight is an **invalid run** —
 previous PASS. Each entry is a fresh pr-watch invocation with its own 10-round
 budget.
 
+### 6a.1b. Autonomous code review (delegates to `/pr-review`, BLOCKING, once per PR ever)
+
+Run only when the **most recent** §6a.1 invocation returned `pr-watch: PASS`.
+The review happens exactly once in a PR's life; the gate is the done-marker
+comment `/pr-review` posts on completion:
+
+```bash
+if [ "$(gh api "repos/benjr70/Smart-Smoker-V2/issues/$PR_NUM/comments" --paginate \
+      --jq '[.[].body | select(contains("<!-- pr-review-done"))] | length')" != "0" ]; then
+  REVIEW_LINE="pr-review: SKIPPED — already reviewed"
+  # → proceed to §6a.2
+fi
+```
+
+When the marker is absent, spawn `/pr-review` via the `Agent` tool —
+`subagent_type: general-purpose`, `model: opus`, `run_in_background: false`
+(blocking, same rule as §6a.1: never proceed or emit output while it is in
+flight) — with the prompt:
+
+> Invoke the /pr-review skill with --pr \<PR_NUM> --branch feat/issue-\<N>
+> --issue \<N>, repo benjr70/Smart-Smoker-V2. Return the skill's terminal
+> `pr-review:` line verbatim.
+
+Record its terminal `pr-review:` line verbatim as `REVIEW_LINE`. Routing:
+
+- `pr-review: DONE — <N> findings posted, team:revise applied` → **end the
+  fire's success path here** (emit the §7 block with this `review:` line and no
+  `verify:` line). The label hands the PR to the NEXT fire's §1.2 triage →
+  `/pr-reconcile`, whose comment loop fixes the 🤖 threads and then re-runs the
+  full pr-watch + manual-verification tail — running §6a.2 now would verify code
+  the reconcile is about to rewrite.
+- `pr-review: PASS — 0 findings` → proceed to §6a.2.
+- `pr-review: SKIPPED — …` → proceed to §6a.2.
+- `pr-review: ERROR — …` → record the line and proceed to §6a.2. The review is
+  **best-effort**: it never drafts the PR and never blocks the tail (the
+  done-marker is absent on ERROR, so a later fire's reconcile tail gets one more
+  chance).
+
+`/pr-review` never fixes, replies, or resolves anything itself — its 🤖 threads
+are ordinary unresolved review threads that ride the `team:revise` →
+`/pr-reconcile` machinery, exactly like a human hand-back.
+
 ### 6a.2. Manual verification round (delegates to `/verify-pr`, BLOCKING)
 
 Run only when the **most recent** §6a.1 invocation returned `pr-watch: PASS`
 (the code is final — a pr-watch fix loop may rewrite it, so verifying earlier
-would produce stale evidence). Skip when it returned DRAFT or ERROR. This step
-is **round `M` of the manual verification loop** (`M` starts at 1, cap
-`MANUAL_ROUNDS_MAX=3` — see §6a.3).
+would produce stale evidence) **and §6a.1b has completed or skipped**. Skip when
+§6a.1 returned DRAFT or ERROR. This step is **round `M` of the manual
+verification loop** (`M` starts at 1, cap `MANUAL_ROUNDS_MAX=3` — see §6a.3).
 
 Delegate the whole round to the **`/verify-pr`** harness skill (the proven slice
 1–5 machinery). team-pickup no longer carries an inline verifier prompt: the
@@ -491,6 +534,8 @@ M=1; MANUAL_ROUNDS_MAX=3
 while true:
   §6a.1 pr-watch (blocking) → PR_WATCH_LINE
   if PR_WATCH_LINE != PASS: break            # DRAFT/ERROR — report, no verify line
+  §6a.1b pr-review (blocking, marker-gated once-ever) → REVIEW_LINE
+  if REVIEW_LINE says team:revise applied: break   # fixes belong to the next fire's reconcile
   §6a.2 /verify-pr round M (blocking) → MANUAL_LINE, OUTSTANDING_SPECS
   if FAIL == 0 and OUTSTANDING_SPECS == 0: break   # all pass / justified deferrals
   if M == MANUAL_ROUNDS_MAX: exhaust; break
@@ -558,6 +603,7 @@ picked:   #<N> <title>            (or: skip — N in flight, or: no eligible)
 dispatch: PASS | FAIL — <reason>
 pr:       <url>                    (success only)
 pr-watch: PASS | DRAFT | ERROR — <detail>   (success only)
+review:   <verbatim pr-review terminal line>   (pr-watch PASS only)
 verify:   <pass>/<total> PASS, <n> deferred, <n> FAIL — round <M>/3 [— EXHAUSTED]   (pr-watch PASS only)
 ```
 
@@ -587,10 +633,14 @@ daemon to sleep out the window instead of hot-looping into the lock:
 
 **Hard validity rule.** On the §6a success path the output block MUST contain a
 `pr-watch:` line copied verbatim from the last pr-watch agent's terminal
-message, and — whenever that line says PASS — a `verify:` line copied from the
-last `/verify-pr` round's `manual-verify:` message. If either required line is
-missing, the run is **invalid**: do not emit the report; go back and wait for
-the in-flight agent. `pr-watch: (in flight)` is never a legal value.
+message, and — whenever that line says PASS — a `review:` line copied from
+§6a.1b's terminal `pr-review:` message (SKIPPED counts) and a `verify:` line
+copied from the last `/verify-pr` round's `manual-verify:` message. Exception:
+when the `review:` line says `team:revise applied`, the fire legally ends
+without a `verify:` line (the reconcile fire re-verifies after the fixes). If
+any required line is missing, the run is **invalid**: do not emit the report; go
+back and wait for the in-flight agent. `pr-watch: (in flight)` and
+`pr-review: (in flight)` are never legal values.
 
 ## Failure modes
 
@@ -646,13 +696,19 @@ the in-flight agent. `pr-watch: (in flight)` is never a legal value.
 - Never modifies the parent PRD issue. Only operates on `team`-labeled child
   issues. (PRDs themselves must NOT carry the `team` label.)
 - Never opens a PR if smoke did not pass or skip.
-- Never exits before the §6a.1 pr-watch agent (and, on pr-watch PASS, the §6a.2
-  `/verify-pr` round — re-entered once per manual fix round) returns. One fire =
-  one issue picked, implemented, PR opened, CI watched to verdict, manual
-  verification executed and recorded on the PR.
+- Never exits before the §6a.1 pr-watch agent (and, on pr-watch PASS, the §6a.1b
+  `/pr-review` review and — unless the review applied `team:revise` — the §6a.2
+  `/verify-pr` round, re-entered once per manual fix round) returns. One fire =
+  one issue picked, implemented, PR opened, CI watched to verdict, code-reviewed
+  once, and either manual verification executed and recorded on the PR or the
+  review's `team:revise` hand-off queued for the next fire's reconcile.
 - The §6a.2 **`/verify-pr` round** mutates nothing beyond the PR body (boxes it
   proved) and one evidence comment per round, and tears its hermetic stack down
   on every exit path; it does spend Claude usage (the `manual-verifier` is an
   opus agent). The §6a.3 **fix loop** also burns usage (one implementer spawn
   per manual round, cap 3) and pushes `fix(manual):` commits to the PR branch
-  only — never to master, never force-pushed.
+  only — never to master, never force-pushed. The §6a.1b **`/pr-review` review**
+  burns usage once per PR ever (two review subagents) and never pushes — its
+  only writes are inline review comments, at most one `team:revise` label add,
+  and one done-marker comment; the fixes it queues are pushed later by
+  `/pr-reconcile` under that skill's own rules.

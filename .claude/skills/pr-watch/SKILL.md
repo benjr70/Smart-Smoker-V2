@@ -217,7 +217,8 @@ The team-pickup caller parses this line verbatim into its §7 output block.
 - Never merges the PR. Green CI is the verdict; merge is human-gated.
 - Never operates on a PR not on `feat/issue-<N>` (defense against the caller
   passing a hand-crafted PR — only team-pickup output is supported).
-- Never spawns reviewer/verifier. The fix-loop is implementer-only; pre-merge
-  review already happened during team-dispatch.
+- Never spawns reviewer/verifier. The fix-loop is implementer-only; the
+  pre-commit review happens during team-dispatch and the one-time post-PR review
+  is `/pr-review` (team-pickup §6a.1b) — pr-watch itself never reviews.
 - Never extends the 10-round cap. Exhaustion is the signal to escalate to a
   human, not to retry harder.
