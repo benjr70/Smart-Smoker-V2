@@ -31,11 +31,14 @@ module.exports = env = {
         exclude: /node_modules/,
       },
       {
-        // Allow building our workspace package "temperaturechart" which ships TS/TSX sources
+        // Allow building our workspace packages "temperaturechart" and
+        // "smoke-session" which ship TS/TSX sources (no prebuilt dist).
         test: /\.tsx?$/,
         include: [
           path.resolve(__dirname, '../../packages/TemperatureChart/src'),
           path.resolve(__dirname, '../../node_modules/temperaturechart/src'),
+          path.resolve(__dirname, '../../packages/smoke-session/src'),
+          path.resolve(__dirname, '../../node_modules/smoke-session/src'),
         ],
         use: {
           loader: 'ts-loader',

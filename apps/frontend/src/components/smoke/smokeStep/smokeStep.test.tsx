@@ -1,95 +1,49 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { SmokeStep } from './smokeStep';
-import {
-  getCurrentSmokeProfile,
-  getState,
-  setSmokeProfile,
-  toggleSmoking,
-} from '../../../Services/smokerService';
-import { io } from 'socket.io-client';
+import { SmokeStep, SmokeStepView } from './smokeStep';
+import { SmokeSessionProvider } from 'smoke-session/src/react';
+import { SessionConfig } from 'smoke-session/src';
+import { encodeEvents } from 'smoke-session/src';
+import { FakeCloudSocket, FakeSessionApi, SteppingClock } from 'smoke-session/src/testing';
 
-import { getCurrentTemps } from '../../../Services/tempsService';
+// The package's `flushPromises` uses `setImmediate`, which is absent from the
+// frontend's jsdom test environment; a `setTimeout(0)` macrotask drains the
+// store's fire-and-forget startup/command promises just the same.
+const flushPromises = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 0));
 
-// Mock socket.io-client
-const mockSocket = {
-  on: jest.fn(),
-  emit: jest.fn(),
-  disconnect: jest.fn(),
-};
-
-jest.mock('socket.io-client', () => ({
-  __esModule: true,
-  io: jest.fn(() => mockSocket),
-  Socket: jest.fn(),
-}));
-
-// Mock Material-UI components
+// Mock Material-UI so the thin view can be driven and queried by simple test
+// ids; all real behavior flows through the fake socket/api (the true boundary).
 jest.mock('@mui/material', () => ({
   Grid: ({ children, container, item, xs, direction, className, sx, ...props }: any) => (
-    <div
-      data-testid="grid"
-      data-container={container}
-      data-item={item}
-      data-xs={xs}
-      data-direction={direction}
-      className={className}
-      data-sx={JSON.stringify(sx)}
-      {...props}
-    >
+    <div data-testid="grid" className={className} {...props}>
       {children}
     </div>
   ),
-  Autocomplete: ({ freeSolo, options, inputValue, onInputChange, renderInput, ...props }: any) => {
-    const handleInputChange = (e: any) => {
-      if (onInputChange) {
-        onInputChange(e, e.target.value);
-      }
-    };
-    return (
-      <div
-        data-testid="autocomplete"
-        data-free-solo={freeSolo}
-        data-options={JSON.stringify(options)}
-        {...props}
-      >
-        <input
-          data-testid="autocomplete-input"
-          value={inputValue || ''}
-          onChange={handleInputChange}
-          placeholder="Wood Type"
-        />
-      </div>
-    );
-  },
-  Button: ({ children, onClick, variant, size, className, ...props }: any) => (
-    <button
-      data-testid="button"
-      data-variant={variant}
-      data-size={size}
-      className={className}
-      onClick={onClick}
-      {...props}
+  Autocomplete: ({ freeSolo, options, inputValue, onInputChange, renderInput, ...props }: any) => (
+    <div
+      data-testid="autocomplete"
+      data-free-solo={freeSolo}
+      data-options={JSON.stringify(options)}
     >
+      <input
+        data-testid="autocomplete-input"
+        value={inputValue || ''}
+        onChange={(e: any) => onInputChange && onInputChange(e, e.target.value)}
+        placeholder="Wood Type"
+      />
+    </div>
+  ),
+  Button: ({ children, onClick, ...props }: any) => (
+    <button data-testid="button" onClick={onClick} {...props}>
       {children}
     </button>
   ),
-  Divider: ({ variant, ...props }: any) => (
-    <hr data-testid="divider" data-variant={variant} {...props} />
+  Divider: ({ variant: _variant, ...props }: any) => <hr data-testid="divider" {...props} />,
+  Input: ({ value, onChange, defaultValue: _dv, disableUnderline: _du, sx: _sx }: any) => (
+    <input data-testid="input" value={value || ''} onChange={onChange} />
   ),
-  Input: ({ value, onChange, defaultValue, sx, disableUnderline, ...props }: any) => (
-    <input
-      data-testid="input"
-      value={value || ''}
-      onChange={onChange}
-      defaultValue={defaultValue}
-      data-sx={JSON.stringify(sx)}
-      data-disable-underline={disableUnderline}
-      {...props}
-    />
-  ),
-  TextField: ({ label, value, onChange, multiline, rows, sx, ...props }: any) => (
+  TextField: ({ label, value, onChange, multiline, rows, ...props }: any) => (
     <input
       data-testid="text-field"
       data-label={label}
@@ -97,430 +51,331 @@ jest.mock('@mui/material', () => ({
       onChange={onChange}
       data-multiline={multiline}
       data-rows={rows}
-      data-sx={JSON.stringify(sx)}
       {...props}
     />
   ),
 }));
 
-// Mock TempChart
+// Mock the D3 TempChart: it renders SVG through d3 which jsdom cannot exercise;
+// the view's contract is that it forwards the snapshot fields as props.
 jest.mock('temperaturechart/src/tempChart', () => ({
   __esModule: true,
-  default: ({
-    ChamberTemp,
-    MeatTemp,
-    Meat2Temp,
-    Meat3Temp,
-    ChamberName,
-    Probe1Name,
-    Probe2Name,
-    Probe3Name,
-    date,
-    smoking,
-    initData,
-  }: any) => (
+  default: ({ ChamberTemp, ChamberName, smoking, initData }: any) => (
     <div
       data-testid="temp-chart"
       data-chamber-temp={ChamberTemp}
-      data-meat-temp={MeatTemp}
-      data-meat2-temp={Meat2Temp}
-      data-meat3-temp={Meat3Temp}
       data-chamber-name={ChamberName}
-      data-probe1-name={Probe1Name}
-      data-probe2-name={Probe2Name}
-      data-probe3-name={Probe3Name}
-      data-date={date}
       data-smoking={smoking ? 'true' : 'false'}
       data-init-data={JSON.stringify(initData)}
     />
   ),
 }));
 
-// Mock services
-jest.mock('../../../Services/smokerService', () => ({
-  getCurrentSmokeProfile: jest.fn(),
-  getState: jest.fn(),
-  setSmokeProfile: jest.fn(),
-  toggleSmoking: jest.fn(),
-}));
+// The composition root opens a real cloud socket and pairs the store with the
+// production API client. Automock both boundaries — the cloud-socket adapter
+// factory (which owns the only socket.io import) and the default API client — so
+// the host test asserts the wiring without touching a network. Implementations
+// are (re)installed in each test's beforeEach because CRA runs `resetMocks`.
+jest.mock('smoke-session/src/adapters/cloud-socket');
+jest.mock('../../../api');
 
-jest.mock('../../../Services/tempsService', () => ({
-  getCurrentTemps: jest.fn(),
-}));
+const nextButton = <button data-testid="next-button">Next</button>;
 
-const mockGetCurrentSmokeProfile = getCurrentSmokeProfile as jest.MockedFunction<
-  typeof getCurrentSmokeProfile
->;
-const mockGetState = getState as jest.MockedFunction<typeof getState>;
-const mockSetSmokeProfile = setSmokeProfile as jest.MockedFunction<typeof setSmokeProfile>;
-const mockToggleSmoking = toggleSmoking as jest.MockedFunction<typeof toggleSmoking>;
-const mockGetCurrentTemps = getCurrentTemps as jest.MockedFunction<typeof getCurrentTemps>;
-const mockIoFunction = io as jest.MockedFunction<typeof io>;
-
-// Mock environment variable
-const originalEnv = process.env;
-
-describe('SmokeStep Component', () => {
-  const mockNextButton = <button data-testid="next-button">Next</button>;
-
-  const mockSmokeProfile = {
-    chamberName: 'Main Chamber',
-    probe1Name: 'Probe 1',
-    probe2Name: 'Probe 2',
-    probe3Name: 'Probe 3',
-    notes: 'Test notes',
-    woodType: 'Hickory',
+/** An inert cloud-socket port: never delivers a frame, records nothing. */
+function inertCloudPort() {
+  const noop = () => undefined;
+  const noopSub = () => noop;
+  return {
+    onEvents: noopSub,
+    onSmokeUpdate: noopSub,
+    onClear: noopSub,
+    onRefresh: noopSub,
+    onConnectionChange: noopSub,
+    emitSmokeUpdate: noop,
+    emitClear: noop,
+    emitEvents: noop,
+    emitRefresh: noop,
+    connected: false,
+    close: noop,
   };
-
-  const mockTemps = [
-    {
-      ChamberTemp: 225,
-      MeatTemp: 150,
-      Meat2Temp: 145,
-      Meat3Temp: 140,
-      date: new Date('2023-07-15T12:00:00Z'),
-    },
-  ];
-
-  const mockState = {
-    smokeId: 'test-id',
-    smoking: false,
-  };
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-    process.env = { ...originalEnv, WS_URL: 'ws://localhost:3001' };
-
-    // Ensure socket mock returns our mock socket
-    mockIoFunction.mockReturnValue(mockSocket as any);
-
-    mockGetCurrentSmokeProfile.mockResolvedValue(mockSmokeProfile);
-    mockGetCurrentTemps.mockResolvedValue(mockTemps);
-    mockGetState.mockResolvedValue(mockState);
-    mockSetSmokeProfile.mockResolvedValue(undefined);
-    mockToggleSmoking.mockResolvedValue({ smokeId: 'test-id', smoking: true });
-  });
-
-  afterEach(() => {
-    process.env = originalEnv;
-  });
-
-  describe('Component Rendering', () => {
-    test('should render SmokeStep component successfully', async () => {
-      render(<SmokeStep nextButton={mockNextButton} />);
-
-      await waitFor(() => {
-        expect(screen.getByTestId('temp-chart')).toBeInTheDocument();
-        expect(screen.getAllByTestId('input')).toHaveLength(4); // chamber + 3 probes
-        expect(screen.getAllByTestId('divider')).toHaveLength(3);
-        expect(screen.getByTestId('autocomplete')).toBeInTheDocument();
-        expect(screen.getByTestId('text-field')).toBeInTheDocument();
-        expect(screen.getByTestId('next-button')).toBeInTheDocument();
-      });
-    });
-
-    test('should load smoke profile data on mount', async () => {
-      render(<SmokeStep nextButton={mockNextButton} />);
-
-      await waitFor(() => {
-        expect(mockGetCurrentSmokeProfile).toHaveBeenCalledTimes(1);
-        expect(mockGetCurrentTemps).toHaveBeenCalledTimes(1);
-        expect(mockGetState).toHaveBeenCalledTimes(1);
-      });
-    });
-
-    test('should display initial temperature values', async () => {
-      render(<SmokeStep nextButton={mockNextButton} />);
-
-      await waitFor(() => {
-        // Check for temperature displays - there are multiple 0s shown for initial temps
-        const tempDisplays = screen.getAllByText('0');
-        expect(tempDisplays.length).toBeGreaterThanOrEqual(4); // Chamber + 3 probes showing initial 0 values
-      });
-    });
-
-    test('should render smoking button with correct initial state', async () => {
-      render(<SmokeStep nextButton={mockNextButton} />);
-
-      await waitFor(() => {
-        expect(screen.getByText('Start Smoking')).toBeInTheDocument();
-      });
-    });
-  });
-
-  describe('Probe Name Updates', () => {
-    test('should update chamber name', async () => {
-      render(<SmokeStep nextButton={mockNextButton} />);
-
-      await waitFor(() => {
-        const inputs = screen.getAllByTestId('input');
-        expect(inputs[0]).toHaveValue('Main Chamber');
-      });
-
-      const chamberInput = screen.getAllByTestId('input')[0];
-      fireEvent.change(chamberInput, { target: { value: 'New Chamber' } });
-
-      expect(chamberInput).toHaveValue('New Chamber');
-    });
-
-    test('should update probe 1 name', async () => {
-      render(<SmokeStep nextButton={mockNextButton} />);
-
-      await waitFor(() => {
-        const inputs = screen.getAllByTestId('input');
-        expect(inputs[1]).toHaveValue('Probe 1');
-      });
-
-      const probe1Input = screen.getAllByTestId('input')[1];
-      fireEvent.change(probe1Input, { target: { value: 'Point' } });
-
-      expect(probe1Input).toHaveValue('Point');
-    });
-
-    test('should update probe 2 name', async () => {
-      render(<SmokeStep nextButton={mockNextButton} />);
-
-      await waitFor(() => {
-        const inputs = screen.getAllByTestId('input');
-        expect(inputs[2]).toHaveValue('Probe 2');
-      });
-
-      const probe2Input = screen.getAllByTestId('input')[2];
-      fireEvent.change(probe2Input, { target: { value: 'Flat' } });
-
-      expect(probe2Input).toHaveValue('Flat');
-    });
-
-    test('should update probe 3 name', async () => {
-      render(<SmokeStep nextButton={mockNextButton} />);
-
-      await waitFor(() => {
-        const inputs = screen.getAllByTestId('input');
-        expect(inputs[3]).toHaveValue('Probe 3');
-      });
-
-      const probe3Input = screen.getAllByTestId('input')[3];
-      fireEvent.change(probe3Input, { target: { value: 'Ambient' } });
-
-      expect(probe3Input).toHaveValue('Ambient');
-    });
-  });
-
-  describe('Smoking Control', () => {
-    test('should toggle smoking state when button clicked', async () => {
-      render(<SmokeStep nextButton={mockNextButton} />);
-
-      await waitFor(() => {
-        expect(screen.getByText('Start Smoking')).toBeInTheDocument();
-      });
-
-      const smokingButton = screen.getByText('Start Smoking');
-      fireEvent.click(smokingButton);
-
-      await waitFor(() => {
-        expect(mockToggleSmoking).toHaveBeenCalledTimes(1);
-      });
-    });
-
-    test('should display "Stop Smoking" when smoking is active', async () => {
-      mockGetState.mockResolvedValue({ smokeId: 'test-id', smoking: true });
-
-      render(<SmokeStep nextButton={mockNextButton} />);
-
-      await waitFor(() => {
-        expect(screen.getByText('Stop Smoking')).toBeInTheDocument();
-      });
-    });
-  });
-
-  describe('Wood Type Selection', () => {
-    test('should render autocomplete with wood type options', async () => {
-      render(<SmokeStep nextButton={mockNextButton} />);
-
-      const autocomplete = screen.getByTestId('autocomplete');
-      const options = JSON.parse(autocomplete.getAttribute('data-options') || '[]');
-
-      expect(options).toContain('Hickory');
-      expect(options).toContain('Post Oak');
-      expect(options).toContain('Pecan');
-      expect(options).toContain('Cherry');
-      expect(options).toContain('Apple');
-    });
-
-    test('should update wood type via autocomplete', async () => {
-      render(<SmokeStep nextButton={mockNextButton} />);
-
-      await waitFor(() => {
-        expect(screen.getByTestId('autocomplete-input')).toHaveValue('Hickory');
-      });
-
-      const autocompleteInput = screen.getByTestId('autocomplete-input');
-      fireEvent.change(autocompleteInput, { target: { value: 'Cherry' } });
-
-      expect(autocompleteInput).toHaveValue('Cherry');
-    });
-
-    test('should support free solo wood type input', () => {
-      render(<SmokeStep nextButton={mockNextButton} />);
-
-      const autocomplete = screen.getByTestId('autocomplete');
-      expect(autocomplete).toHaveAttribute('data-free-solo', 'true');
-    });
-  });
-
-  describe('Notes Field', () => {
-    test('should update notes field', async () => {
-      render(<SmokeStep nextButton={mockNextButton} />);
-
-      await waitFor(() => {
-        expect(screen.getByTestId('text-field')).toHaveValue('Test notes');
-      });
-
-      const notesField = screen.getByTestId('text-field');
-      fireEvent.change(notesField, { target: { value: 'Updated notes' } });
-
-      expect(notesField).toHaveValue('Updated notes');
-    });
-
-    test('should render multiline notes field', () => {
-      render(<SmokeStep nextButton={mockNextButton} />);
-
-      const notesField = screen.getByTestId('text-field');
-      expect(notesField).toHaveAttribute('data-multiline', 'true');
-      expect(notesField).toHaveAttribute('data-rows', '4');
-    });
-  });
-
-  describe('Temperature Chart Integration', () => {
-    test('should render TempChart with correct props', async () => {
-      render(<SmokeStep nextButton={mockNextButton} />);
-
-      await waitFor(() => {
-        const tempChart = screen.getByTestId('temp-chart');
-        expect(tempChart).toHaveAttribute('data-chamber-name', 'Main Chamber');
-        expect(tempChart).toHaveAttribute('data-probe1-name', 'Probe 1');
-        expect(tempChart).toHaveAttribute('data-probe2-name', 'Probe 2');
-        expect(tempChart).toHaveAttribute('data-probe3-name', 'Probe 3');
-        expect(tempChart).toHaveAttribute('data-smoking', 'false');
-      });
-    });
-
-    test('should pass initial temperature data to chart', async () => {
-      render(<SmokeStep nextButton={mockNextButton} />);
-
-      await waitFor(() => {
-        const tempChart = screen.getByTestId('temp-chart');
-        const initData = JSON.parse(tempChart.getAttribute('data-init-data') || '[]');
-        expect(initData).toHaveLength(1);
-        expect(initData[0]).toMatchObject({
-          ChamberTemp: 225,
-          MeatTemp: 150,
-          Meat2Temp: 145,
-          Meat3Temp: 140,
-        });
-      });
-    });
-  });
-
-  describe('Component Lifecycle', () => {
-    test('should call setSmokeProfile on unmount', async () => {
-      const { unmount } = render(<SmokeStep nextButton={mockNextButton} />);
-
-      await waitFor(() => {
-        expect(mockGetCurrentSmokeProfile).toHaveBeenCalled();
-      });
-
-      unmount();
-
-      expect(mockSetSmokeProfile).toHaveBeenCalledWith(
-        expect.objectContaining({
-          chamberName: expect.any(String),
-          probe1Name: expect.any(String),
-          probe2Name: expect.any(String),
-          probe3Name: expect.any(String),
-          notes: expect.any(String),
-          woodType: expect.any(String),
-        })
-      );
-    });
-  });
-
-  describe('Socket Integration', () => {
-    test('should initialize socket connection with correct URL', () => {
-      const { io } = require('socket.io-client');
-
-      render(<SmokeStep nextButton={mockNextButton} />);
-
-      expect(io).toHaveBeenCalledWith('ws://localhost:3001');
-    });
-
-    test('should handle empty WS_URL environment variable', () => {
-      process.env.WS_URL = '';
-      const { io } = require('socket.io-client');
-
-      render(<SmokeStep nextButton={mockNextButton} />);
-
-      expect(io).toHaveBeenCalledWith('');
-    });
-  });
-
-  describe('Component Structure', () => {
-    test('should have correct grid structure', async () => {
-      render(<SmokeStep nextButton={mockNextButton} />);
-
-      // Since real MUI Grid components are being used, check for the actual MUI classes
-      const grids = document.querySelectorAll('.MuiGrid-root');
-      expect(grids.length).toBeGreaterThan(5);
-
-      // Check for specific class names indicating proper grid usage
-      expect(document.querySelector('.MuiGrid-container')).toBeInTheDocument();
-      expect(document.querySelector('.MuiGrid-item')).toBeInTheDocument();
-    });
-
-    test('should render dividers between probe sections', () => {
-      render(<SmokeStep nextButton={mockNextButton} />);
-
-      const dividers = screen.getAllByTestId('divider');
-      expect(dividers).toHaveLength(3);
-
-      dividers.forEach(divider => {
-        expect(divider).toHaveAttribute('data-variant', 'middle');
-      });
-    });
-
-    test('should render inputs with correct styling', async () => {
-      render(<SmokeStep nextButton={mockNextButton} />);
-
-      await waitFor(() => {
-        const inputs = screen.getAllByTestId('input');
-        inputs.forEach(input => {
-          expect(input).toHaveAttribute('data-disable-underline', 'true');
-        });
-      });
-    });
-  });
-
-  describe('Default Values', () => {
-    test('should use default probe names when not provided', async () => {
-      const emptyProfile = {
-        chamberName: '',
-        probe1Name: '',
-        probe2Name: '',
-        probe3Name: '',
+}
+
+/** A minimal API client covering only the monitor-role reads/writes. */
+function fakeApiClient() {
+  return {
+    smokeProfile: {
+      getCurrent: jest.fn().mockResolvedValue({
+        chamberName: 'Chamber',
+        probe1Name: 'probe 1',
+        probe2Name: 'probe 2',
+        probe3Name: 'probe 3',
         notes: '',
         woodType: '',
-      };
-      mockGetCurrentSmokeProfile.mockResolvedValue(emptyProfile);
+      }),
+      saveCurrent: jest.fn().mockResolvedValue(undefined),
+    },
+    state: {
+      get: jest.fn().mockResolvedValue({ smokeId: 'x', smoking: false }),
+      toggleSmoking: jest.fn().mockResolvedValue({ smokeId: 'x', smoking: true }),
+    },
+    temps: { getCurrent: jest.fn().mockResolvedValue([]) },
+  };
+}
 
-      render(<SmokeStep nextButton={mockNextButton} />);
+/** A frozen `events` frame carrying the given chamber temperature. */
+function eventsFrame(chamberTemp: string): string {
+  return encodeEvents({
+    chamberName: 'Chamber',
+    probe1Name: 'probe 1',
+    probe2Name: 'probe 2',
+    probe3Name: 'probe 3',
+    probeTemp1: '0',
+    probeTemp2: '0',
+    probeTemp3: '0',
+    chamberTemp,
+    smoking: false,
+    date: new Date('2026-07-18T12:00:00.000Z'),
+  });
+}
 
-      await waitFor(() => {
-        const inputs = screen.getAllByTestId('input');
-        expect(inputs[0]).toHaveValue('');
-        expect(inputs[1]).toHaveValue('');
-        expect(inputs[2]).toHaveValue('');
-        expect(inputs[3]).toHaveValue('');
+/** Wire a monitor-role config over the shared fake kit (no sockets, no HTTP). */
+function harness(): { config: SessionConfig; socket: FakeCloudSocket; api: FakeSessionApi } {
+  const socket = new FakeCloudSocket();
+  const api = new FakeSessionApi();
+  const clock = new SteppingClock();
+  const config: SessionConfig = { role: 'monitor', socket, api, clock };
+  return { config, socket, api };
+}
+
+/** Render the view under a live Provider wired to the fake kit. */
+function renderView(kit = harness()) {
+  const utils = render(
+    <SmokeSessionProvider config={kit.config}>
+      <SmokeStepView nextButton={nextButton} />
+    </SmokeSessionProvider>
+  );
+  return { ...utils, ...kit };
+}
+
+describe('SmokeStepView', () => {
+  test('renders a new chamber temperature from an inbound events frame', async () => {
+    const { socket } = renderView();
+
+    await act(async () => {
+      await flushPromises();
+    });
+
+    await act(async () => {
+      socket.injectEvents(eventsFrame('213'));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('temp-chart')).toHaveAttribute('data-chamber-temp', '213');
+    });
+  });
+
+  test('editing the chamber name broadcasts the full five-field smokeUpdate', async () => {
+    const { socket } = renderView();
+
+    await act(async () => {
+      await flushPromises();
+    });
+
+    const chamberInput = screen.getAllByTestId('input')[0];
+    fireEvent.change(chamberInput, { target: { value: 'Offset' } });
+
+    expect(chamberInput).toHaveValue('Offset');
+    expect(socket.emittedSmokeUpdates).toEqual([
+      {
+        smoking: false,
+        chamberName: 'Offset',
+        probe1Name: 'probe 1',
+        probe2Name: 'probe 2',
+        probe3Name: 'probe 3',
+      },
+    ]);
+  });
+
+  test('editing each probe name dispatches its own targeted rename', async () => {
+    const { socket } = renderView();
+
+    await act(async () => {
+      await flushPromises();
+    });
+
+    const inputs = () => screen.getAllByTestId('input');
+    fireEvent.change(inputs()[1], { target: { value: 'Point' } });
+    fireEvent.change(inputs()[2], { target: { value: 'Flat' } });
+    fireEvent.change(inputs()[3], { target: { value: 'Ambient' } });
+
+    expect(inputs()[1]).toHaveValue('Point');
+    expect(inputs()[2]).toHaveValue('Flat');
+    expect(inputs()[3]).toHaveValue('Ambient');
+    // The last broadcast carries every accumulated rename in the five-field frame.
+    expect(socket.emittedSmokeUpdates.at(-1)).toEqual({
+      smoking: false,
+      chamberName: 'Chamber',
+      probe1Name: 'Point',
+      probe2Name: 'Flat',
+      probe3Name: 'Ambient',
+    });
+  });
+
+  test('an inbound smokeUpdate flips smoking but never clobbers a name being edited', async () => {
+    const { socket } = renderView();
+
+    await act(async () => {
+      await flushPromises();
+    });
+
+    // The user is mid-edit on the chamber name locally.
+    const chamberInput = screen.getAllByTestId('input')[0];
+    fireEvent.change(chamberInput, { target: { value: 'My Local Name' } });
+
+    // A remote smokeUpdate arrives carrying a different name and smoking=true.
+    await act(async () => {
+      socket.injectSmokeUpdate({
+        smoking: true,
+        chamberName: 'Remote Name',
+        probe1Name: 'r1',
+        probe2Name: 'r2',
+        probe3Name: 'r3',
       });
     });
+
+    // Smoking flipped, but the locally edited name is preserved.
+    await waitFor(() => {
+      expect(screen.getByText('Stop Smoking')).toBeInTheDocument();
+    });
+    expect(screen.getAllByTestId('input')[0]).toHaveValue('My Local Name');
+  });
+
+  test('leaving the step saves the current profile draft exactly once', async () => {
+    const { api, unmount } = renderView();
+
+    await act(async () => {
+      await flushPromises();
+    });
+
+    // Edit the free-text draft fields (wood type + notes).
+    fireEvent.change(screen.getByTestId('autocomplete-input'), { target: { value: 'Cherry' } });
+    fireEvent.change(screen.getByTestId('text-field'), { target: { value: 'wrap at 165' } });
+
+    await act(async () => {
+      unmount();
+      await flushPromises();
+    });
+
+    expect(api.countCalls('saveProfile')).toBe(1);
+    const saved = api.calls.find(call => call.method === 'saveProfile');
+    expect(saved?.args[0]).toMatchObject({ woodType: 'Cherry', notes: 'wrap at 165' });
+  });
+
+  test('the smoking button toggles persisted state and broadcasts the update', async () => {
+    const { socket, api } = renderView();
+
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(screen.getByText('Start Smoking')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Start Smoking'));
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(api.countCalls('toggleSmoking')).toBe(1);
+    expect(socket.emittedSmokeUpdates).toHaveLength(1);
+    expect(socket.emittedSmokeUpdates[0].smoking).toBe(true);
+    expect(await screen.findByText('Stop Smoking')).toBeInTheDocument();
+  });
+
+  test('a refresh signal reloads the chart baseline', async () => {
+    const kit = harness();
+    kit.api.seedTemps([
+      { ChamberTemp: 1, MeatTemp: 1, Meat2Temp: 1, Meat3Temp: 1, date: new Date() },
+    ]);
+    const { socket, api } = renderView(kit);
+
+    await act(async () => {
+      await flushPromises();
+    });
+
+    // A newer baseline is now available; a refresh must re-pull it.
+    api.seedTemps([
+      { ChamberTemp: 2, MeatTemp: 2, Meat2Temp: 2, Meat3Temp: 2, date: new Date() },
+      { ChamberTemp: 3, MeatTemp: 3, Meat2Temp: 3, Meat3Temp: 3, date: new Date() },
+    ]);
+
+    await act(async () => {
+      socket.injectRefresh();
+      await flushPromises();
+    });
+
+    await waitFor(() => {
+      const initData = JSON.parse(
+        screen.getByTestId('temp-chart').getAttribute('data-init-data') || '[]'
+      );
+      expect(initData).toHaveLength(2);
+    });
+  });
+});
+
+describe('SmokeStep composition root', () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { createCloudSocketAdapter } = require('smoke-session/src/adapters/cloud-socket') as {
+    createCloudSocketAdapter: jest.Mock;
+  };
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { getDefaultApiClient } = require('../../../api') as { getDefaultApiClient: jest.Mock };
+
+  beforeEach(() => {
+    // CRA resets mocks before each test, so (re)install implementations here.
+    createCloudSocketAdapter.mockReturnValue(inertCloudPort());
+    getDefaultApiClient.mockReturnValue(fakeApiClient());
+    delete process.env.WS_URL;
+  });
+
+  test('opens the cloud socket at WS_URL and renders the view under the Provider', async () => {
+    process.env.WS_URL = 'ws://cloud.example';
+
+    render(<SmokeStep nextButton={nextButton} />);
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(createCloudSocketAdapter).toHaveBeenCalledWith('ws://cloud.example');
+    expect(screen.getByTestId('temp-chart')).toBeInTheDocument();
+    expect(screen.getByTestId('next-button')).toBeInTheDocument();
+  });
+
+  test('defaults the socket URL to empty string when WS_URL is unset', async () => {
+    render(<SmokeStep nextButton={nextButton} />);
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(createCloudSocketAdapter).toHaveBeenCalledWith('');
+  });
+
+  test('closes the cloud socket when the step unmounts (no leaked connection)', async () => {
+    const port = inertCloudPort();
+    const close = jest.fn();
+    createCloudSocketAdapter.mockReturnValue({ ...port, close });
+
+    const { unmount } = render(<SmokeStep nextButton={nextButton} />);
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(close).not.toHaveBeenCalled();
+
+    await act(async () => {
+      unmount();
+      await flushPromises();
+    });
+
+    expect(close).toHaveBeenCalledTimes(1);
   });
 });

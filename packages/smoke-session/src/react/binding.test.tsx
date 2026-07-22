@@ -186,4 +186,43 @@ describe('useSmokeSession flushProfileOnUnmount', () => {
     const saved = api.calls.find(call => call.method === 'saveProfile');
     expect((saved?.args[0] as SmokeProfile).notes).toBe('brisket day');
   });
+
+  test('swallows a rejected save-on-leave (e.g. no active smoke) without an unhandled rejection', async () => {
+    const { config, api } = monitorConfig();
+    api.seedProfile({
+      chamberName: 'Chamber',
+      probe1Name: 'probe 1',
+      probe2Name: 'probe 2',
+      probe3Name: 'probe 3',
+      notes: '',
+      woodType: '',
+    });
+
+    const unhandled = jest.fn();
+    process.on('unhandledRejection', unhandled);
+
+    function Tree({ showEditor }: { showEditor: boolean }): JSX.Element {
+      return (
+        <SmokeSessionProvider config={config}>
+          {showEditor ? <NotesEditor /> : null}
+        </SmokeSessionProvider>
+      );
+    }
+
+    const { rerender } = render(<Tree showEditor />);
+    await act(async () => {
+      await flushPromises();
+    });
+
+    // The unmount flush hits a backend that rejects (no active smoke).
+    api.failNext('saveProfile');
+    rerender(<Tree showEditor={false} />);
+    await flushPromises();
+    // Let any rejection microtask settle before asserting.
+    await flushPromises();
+
+    process.off('unhandledRejection', unhandled);
+    expect(api.countCalls('saveProfile')).toBe(1);
+    expect(unhandled).not.toHaveBeenCalled();
+  });
 });
