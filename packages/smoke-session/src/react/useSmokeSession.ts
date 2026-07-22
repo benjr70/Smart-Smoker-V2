@@ -66,7 +66,11 @@ export function useSmokeSession(options: UseSmokeSessionOptions = {}): SmokeSess
   useEffect(
     () => () => {
       if (flushOnUnmountRef.current) {
-        void store.flushProfile();
+        // Fire-and-forget on unmount: swallow a rejected save (e.g. no active
+        // smoke → backend 404) so leaving the step never raises an unhandled
+        // promise rejection. This matches the legacy save-on-leave, which
+        // caught and logged the same failure rather than surfacing it.
+        void store.flushProfile().catch(() => undefined);
       }
     },
     [store]

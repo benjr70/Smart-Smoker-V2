@@ -1,10 +1,10 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import Grid from '@mui/material/Grid';
 import './smokeStep.style.css';
 import { Autocomplete, Button, Divider, Input, TextField } from '@mui/material';
 import TempChart from 'temperaturechart/src/tempChart';
 import { SmokeSessionProvider, useSmokeSession } from 'smoke-session/src/react';
-import { createCloudSocketAdapter, SessionConfig } from 'smoke-session/src';
+import { CloudSocketAdapter, createCloudSocketAdapter, SessionConfig } from 'smoke-session/src';
 import { getDefaultApiClient } from '../../../api';
 import { createSessionApiPort } from '../../../api/sessionApiAdapter';
 
@@ -177,18 +177,35 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
  *
  * This is the sole place the websocket URL is read: the env lookup lives here
  * and nowhere in the view.
+ *
+ * The composition root also owns the socket's teardown: {@link
+ * SmokeSessionProvider} stops the store (detaching subscriptions) on unmount,
+ * but only the host that opened the socket can close it. The unmount cleanup
+ * calls {@link CloudSocketAdapter.close} so leaving the step disconnects the
+ * socket.io connection instead of leaking a live connection per visit.
  */
 export function SmokeStep(props: SmokeStepProps): JSX.Element {
   const configRef = useRef<SessionConfig | null>(null);
+  const socketRef = useRef<CloudSocketAdapter | null>(null);
   if (configRef.current === null) {
     const url = process.env.WS_URL ?? '';
+    const socket = createCloudSocketAdapter(url);
+    socketRef.current = socket;
     configRef.current = {
       role: 'monitor',
-      socket: createCloudSocketAdapter(url),
+      socket,
       api: createSessionApiPort(getDefaultApiClient()),
       clock: { now: () => new Date() },
     };
   }
+
+  useEffect(() => {
+    // Child effect cleanups (the Provider's store.stop()) run before this
+    // parent cleanup, so subscriptions are detached before the socket closes.
+    return () => {
+      socketRef.current?.close();
+    };
+  }, []);
 
   return (
     <SmokeSessionProvider config={configRef.current}>

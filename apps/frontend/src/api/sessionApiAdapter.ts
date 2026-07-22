@@ -30,14 +30,23 @@ export function createSessionApiPort(client: ApiClient): SessionApiPort {
     },
     async getSmokingState(): Promise<SmokingState> {
       const state = await client.state.get();
-      return { smoking: state.smoking };
+      // The backend returns null/empty when there is no active smoke (fresh
+      // DB), which serializes to an absent body; coerce to a real boolean so
+      // the port contract (`smoking: boolean`) is never violated with
+      // `undefined`.
+      return { smoking: state?.smoking ?? false };
     },
     async toggleSmoking(): Promise<SmokingState> {
       const state = await client.state.toggleSmoking();
-      return { smoking: state.smoking };
+      return { smoking: state?.smoking ?? false };
     },
-    getCurrentTemps(): Promise<BatchTempDto[]> {
-      return client.temps.getCurrent();
+    async getCurrentTemps(): Promise<BatchTempDto[]> {
+      const temps = await client.temps.getCurrent();
+      // The transport forwards axios-parsed JSON, so each `date` is an ISO
+      // string at runtime even though TempData types it as Date. Normalize to a
+      // real Date at the adapter boundary so downstream consumers that call
+      // `date.getTime()` (per the BatchTempDto contract) never throw.
+      return temps.map(temp => ({ ...temp, date: new Date(temp.date) }));
     },
     postTempsBatch(): Promise<void> {
       return Promise.reject(

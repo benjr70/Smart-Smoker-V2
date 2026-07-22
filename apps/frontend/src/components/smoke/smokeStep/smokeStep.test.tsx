@@ -358,4 +358,24 @@ describe('SmokeStep composition root', () => {
 
     expect(createCloudSocketAdapter).toHaveBeenCalledWith('');
   });
+
+  test('closes the cloud socket when the step unmounts (no leaked connection)', async () => {
+    const port = inertCloudPort();
+    const close = jest.fn();
+    createCloudSocketAdapter.mockReturnValue({ ...port, close });
+
+    const { unmount } = render(<SmokeStep nextButton={nextButton} />);
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(close).not.toHaveBeenCalled();
+
+    await act(async () => {
+      unmount();
+      await flushPromises();
+    });
+
+    expect(close).toHaveBeenCalledTimes(1);
+  });
 });

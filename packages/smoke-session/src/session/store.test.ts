@@ -145,6 +145,20 @@ describe('session store — monitor role', () => {
     });
   });
 
+  it('flushProfile does not persist when the startup profile load never resolved', async () => {
+    const harness = createTestHarness();
+    // The profile load fails, so the draft is never hydrated from the backend.
+    harness.api.failNext('getProfile');
+    harness.store.start();
+    await harness.flush();
+
+    // Leaving the step now must NOT save the placeholder defaults over the
+    // user's real saved profile.
+    await harness.store.flushProfile();
+
+    expect(harness.api.countCalls('saveProfile')).toBe(0);
+  });
+
   it('surfaces a failing profile load in lastError while the session stays live', async () => {
     const harness = createTestHarness();
     harness.api.seedSmoking(true).failNext('getProfile');
@@ -251,6 +265,25 @@ describe('session store — monitor role', () => {
         probe3Name: 'probe 3',
       },
     ]);
+  });
+
+  it('surfaces a failing toggleSmoking in lastError instead of rejecting', async () => {
+    const harness = createTestHarness();
+    harness.store.start();
+    await harness.flush();
+    harness.api.failNext('toggleSmoking');
+
+    // The command must resolve (never reject) so a fire-and-forget caller does
+    // not produce an unhandled rejection; the failure surfaces in the snapshot.
+    await expect(harness.store.toggleSmoking()).resolves.toBeUndefined();
+
+    expect(harness.store.getSnapshot().lastError).toEqual({
+      source: 'state',
+      message: expect.any(String),
+    });
+    // Persisted smoking is unchanged and no smokeUpdate was broadcast.
+    expect(harness.store.getSnapshot().smoking).toBe(false);
+    expect(harness.socket.emittedSmokeUpdates).toHaveLength(0);
   });
 
   it('refreshInitialTemps command re-fetches the baseline', async () => {

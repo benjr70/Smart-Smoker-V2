@@ -54,6 +54,11 @@ export function createSessionStore(config: SessionConfig): SessionStore {
   const listeners = new Set<() => void>();
   const portSubscriptions: Unsubscribe[] = [];
   let started = false;
+  // True once the startup profile load has resolved (whether it found a saved
+  // profile or a null "no smoke yet"). Guards flushProfile from persisting the
+  // placeholder defaults over a real saved profile when the host leaves before
+  // the load completes.
+  let profileLoaded = false;
 
   // --- smoker-role offline batching state ---
   // Buffered offline readings awaiting the next reconnect flush. Each entry is
@@ -117,6 +122,9 @@ export function createSessionStore(config: SessionConfig): SessionStore {
       if (profile !== null) {
         applyProfile(profile);
       }
+      // The draft is now hydrated (real profile applied, or defaults confirmed
+      // as the genuine state): flushing it can no longer clobber saved data.
+      profileLoaded = true;
     } catch (cause) {
       surface({ source: 'profile', message: errorMessage(cause) });
     }
@@ -303,9 +311,16 @@ export function createSessionStore(config: SessionConfig): SessionStore {
   // --- command surface ---
 
   const toggleSmoking = async (): Promise<void> => {
-    const state = await api.toggleSmoking();
-    socket.emitSmokeUpdate(currentSmokeUpdate(state.smoking));
-    commit({ smoking: state.smoking });
+    try {
+      const state = await api.toggleSmoking();
+      socket.emitSmokeUpdate(currentSmokeUpdate(state.smoking));
+      commit({ smoking: state.smoking });
+    } catch (cause) {
+      // A failed toggle surfaces in lastError like the startup loads rather
+      // than rejecting into a fire-and-forget caller (the button's onClick),
+      // which would otherwise produce an unhandled rejection and no feedback.
+      surface({ source: 'state', message: errorMessage(cause) });
+    }
   };
 
   const setName = (target: NameTarget, value: string): void => {
@@ -326,6 +341,11 @@ export function createSessionStore(config: SessionConfig): SessionStore {
   const setWoodType = (value: string): void => commit({ woodType: value });
 
   const flushProfile = async (): Promise<void> => {
+    // Never persist a draft we never hydrated. If the startup profile load has
+    // not resolved (slow network, quick leave), the draft still holds the
+    // placeholder defaults, and saving them would overwrite the user's real
+    // saved profile. Skip until the baseline is known.
+    if (!profileLoaded) return;
     await api.saveProfile({
       chamberName: snapshot.chamberName,
       probe1Name: snapshot.probe1Name,
