@@ -197,6 +197,71 @@ describe('session store — smoker role', () => {
     });
   });
 
+  describe('inbound clear (relayed cloud clear-signal)', () => {
+    it('resets labels to the saved profile and clears the chart baseline on a clear', async () => {
+      const harness = createTestHarness({ role: 'smoker' });
+      harness.api.seedProfile({
+        chamberName: 'Reset Chamber',
+        probe1Name: 'Reset 1',
+        probe2Name: 'Reset 2',
+        probe3Name: 'Reset 3',
+        notes: '',
+        woodType: '',
+      });
+      harness.api.seedTemps([
+        { ChamberTemp: 200, MeatTemp: 100, Meat2Temp: 101, Meat3Temp: 102, date: new Date() },
+      ]);
+      harness.store.start();
+      await harness.flush();
+
+      // Drift the labels away from the profile, as an in-progress smoke would.
+      harness.socket.injectSmokeUpdate({
+        smoking: true,
+        chamberName: 'Offset',
+        probe1Name: 'Brisket',
+        probe2Name: 'Ribs',
+        probe3Name: 'Wings',
+      });
+      expect(harness.store.getSnapshot().initialTemps).toHaveLength(1);
+
+      harness.socket.injectClear();
+      await harness.flush();
+
+      const snap = harness.store.getSnapshot();
+      expect(snap.chamberName).toBe('Reset Chamber');
+      expect(snap.probe1Name).toBe('Reset 1');
+      expect(snap.probe2Name).toBe('Reset 2');
+      expect(snap.probe3Name).toBe('Reset 3');
+      expect(snap.initialTemps).toEqual([]);
+    });
+
+    it('falls back to default labels and stops smoking when the profile reload fails', async () => {
+      const harness = createTestHarness({ role: 'smoker' });
+      harness.store.start();
+      await harness.flush();
+
+      harness.socket.injectSmokeUpdate({
+        smoking: true,
+        chamberName: 'Offset',
+        probe1Name: 'Brisket',
+        probe2Name: 'Ribs',
+        probe3Name: 'Wings',
+      });
+
+      harness.api.failNext('getProfile');
+      harness.socket.injectClear();
+      await harness.flush();
+
+      const snap = harness.store.getSnapshot();
+      expect(snap.chamberName).toBe('Chamber');
+      expect(snap.probe1Name).toBe('probe 1');
+      expect(snap.probe2Name).toBe('probe 2');
+      expect(snap.probe3Name).toBe('probe 3');
+      expect(snap.smoking).toBe(false);
+      expect(snap.initialTemps).toEqual([]);
+    });
+  });
+
   describe('malformed device frames', () => {
     it('surfaces the error, leaves temps unchanged, and keeps processing readings', async () => {
       const harness = createTestHarness({ role: 'smoker' });
