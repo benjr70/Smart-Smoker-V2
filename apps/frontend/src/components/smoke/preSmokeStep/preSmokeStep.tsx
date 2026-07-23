@@ -1,6 +1,6 @@
 import { Autocomplete, Grid, MenuItem, Select, TextField } from '@mui/material';
-import React, { useEffect, useRef } from 'react';
-import { getCurrentPreSmoke, setCurrentPreSmoke } from '../../../Services/preSmokeService';
+import React from 'react';
+import { useCurrentResource } from '../../../api';
 import { DynamicList } from '../../common/components/DynamicList';
 import { WeightUnits } from '../../common/interfaces/enums';
 import { preSmoke } from '../../common/interfaces/preSmoke';
@@ -13,31 +13,21 @@ type PreSmokeStepProps = {
 };
 
 export function PreSmokeStep(props: PreSmokeStepProps) {
-  const [preSmokeState, setPreSmokeState] = React.useState<preSmoke>({
-    name: '',
-    meatType: '',
-    weight: {
-      unit: WeightUnits.LB,
+  const [preSmokeState, setPreSmokeState] = useCurrentResource<preSmoke>({
+    initialValue: {
+      name: '',
+      meatType: '',
+      weight: {
+        unit: WeightUnits.LB,
+      },
+      steps: [''],
+      notes: '',
     },
-    steps: [''],
-    notes: '',
+    load: client => client.preSmoke.getCurrent(),
+    save: (client, value) => client.preSmoke.saveCurrent(value),
+    loadErrorMessage: 'Could not load pre-smoke details.',
+    saveErrorMessage: 'Could not save pre-smoke details.',
   });
-  const latestState = useRef(preSmokeState);
-
-  useEffect(() => {
-    latestState.current = preSmokeState;
-  }, [preSmokeState]);
-
-  useEffect(() => {
-    getCurrentPreSmoke().then(result => {
-      if (result) {
-        setPreSmokeState(result);
-      }
-    });
-    return () => {
-      setCurrentPreSmoke(latestState.current);
-    };
-  }, []);
 
   return (
     <Grid item xs={11} flexDirection="column">

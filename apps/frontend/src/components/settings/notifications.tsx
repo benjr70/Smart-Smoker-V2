@@ -11,58 +11,45 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import React, { useEffect, useRef } from 'react';
-import {
-  getNotificationSettings,
-  setNotificationSettings,
-} from '../../Services/notificationsService';
+import React from 'react';
+import { useCurrentResource } from '../../api';
 import { NotificationSettings } from '../../api/types';
 
 // The canonical NotificationSettings type now lives in the API types module.
 // Re-exported here so existing importers of this component keep compiling.
 export type { NotificationSettings };
 
+// Returns a fresh notification each call so no two rules (or the initial
+// value) share the same object reference. A single module-level constant would
+// be aliased across the initial state and every 'New Rule', and the row editor
+// mutates its notification, corrupting every rule that shared the reference.
+const createInitialNotification = (): NotificationSettings => ({
+  type: false,
+  message: '',
+  probe1: 'Chamber',
+  op: '>',
+  probe2: 'Probe 1',
+});
+
 export function NotificationsCard(): JSX.Element {
-  const initialNotification: NotificationSettings = {
-    type: false,
-    message: '',
-    probe1: 'Chamber',
-    op: '>',
-    probe2: 'Probe 1',
-  };
-
-  const [Notifications, setNotifications] = React.useState([initialNotification]);
-
-  const NotificationsRef = useRef(Notifications); // Create a ref
-
-  useEffect(() => {
-    NotificationsRef.current = Notifications; // Update the ref each time Notifications changes
-  }, [Notifications]);
-
-  useEffect(() => {
-    getNotificationSettings().then((data: NotificationSettings[]) => {
-      setNotifications(data);
-    });
-
-    return () => {
-      setNotificationSettings({ settings: NotificationsRef.current });
-    };
-  }, []);
+  const [Notifications, setNotifications] = useCurrentResource<NotificationSettings[]>({
+    initialValue: [createInitialNotification()],
+    load: client => client.notifications.getSettings(),
+    save: (client, value) => client.notifications.saveSettings({ settings: value }),
+    loadErrorMessage: 'Could not load notification settings.',
+    saveErrorMessage: 'Could not save notification settings.',
+  });
 
   const handleNewRule = () => {
-    setNotifications([...Notifications, initialNotification]);
+    setNotifications([...Notifications, createInitialNotification()]);
   };
 
   const handleDelete = (index: number) => {
-    let temp = Notifications;
-    temp.splice(index, 1);
-    setNotifications([...temp]);
+    setNotifications(Notifications.filter((_, i) => i !== index));
   };
 
   const handleNotificationChange = (notification: NotificationSettings, index: number) => {
-    let temp = Notifications;
-    temp[index] = notification;
-    setNotifications([...temp]);
+    setNotifications(Notifications.map((current, i) => (i === index ? notification : current)));
   };
 
   return (
@@ -136,44 +123,37 @@ function Notification(props: NotificationProps): JSX.Element {
   ];
 
   const handleSwitchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    let temp = props.notification;
-    temp.type = event.target.checked;
+    const temp = { ...props.notification, type: event.target.checked };
     props.onNotificationChange && props.onNotificationChange(temp, props.index);
   };
 
   const onMessageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    let temp = props.notification;
-    temp.message = event.target.value;
+    const temp = { ...props.notification, message: event.target.value };
     props.onNotificationChange && props.onNotificationChange(temp, props.index);
   };
 
   const onProbe1Change = (event: React.ChangeEvent<HTMLInputElement>) => {
-    let temp = props.notification;
-    temp.probe1 = event.target.value;
+    const temp = { ...props.notification, probe1: event.target.value };
     props.onNotificationChange && props.onNotificationChange(temp, props.index);
   };
 
   const onOpsChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    let temp = props.notification;
-    temp.op = event.target.value;
+    const temp = { ...props.notification, op: event.target.value };
     props.onNotificationChange && props.onNotificationChange(temp, props.index);
   };
 
   const onProbe2Change = (event: React.ChangeEvent<HTMLInputElement>) => {
-    let temp = props.notification;
-    temp.probe2 = event.target.value;
+    const temp = { ...props.notification, probe2: event.target.value };
     props.onNotificationChange && props.onNotificationChange(temp, props.index);
   };
 
   const offsetChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    let temp = props.notification;
-    temp.offset = Number(event.target.value);
+    const temp = { ...props.notification, offset: Number(event.target.value) };
     props.onNotificationChange && props.onNotificationChange(temp, props.index);
   };
 
   const onTemperatureChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    let temp = props.notification;
-    temp.temperature = Number(event.target.value);
+    const temp = { ...props.notification, temperature: Number(event.target.value) };
     props.onNotificationChange && props.onNotificationChange(temp, props.index);
   };
 

@@ -91,7 +91,7 @@ export interface NotificationsResource {
    * GET `notifications/settings` — returns the plain rules array, unwrapping the
    * `{ settings }` envelope the backend nests them in.
    */
-  getSettings(): Promise<NotificationSettings[]>;
+  getSettings(): Promise<NotificationSettings[] | undefined>;
   /**
    * POST `notifications/settings` — projects each rule to the backend DTO
    * whitelist, keeps `lastNotificationSent` only when present, strips the
@@ -345,8 +345,14 @@ export const createApiClient = (
   },
   notifications: {
     getSettings: async () => {
-      const response = await transport.get<NotificationSettingsEnvelope>('notifications/settings');
-      return response.settings;
+      // An empty-body 200 (no notification settings document yet) is normalized
+      // to `null` by the transport; unwrap defensively so "nothing yet" resolves
+      // to `undefined` (callers keep their safe defaults) instead of throwing on
+      // `null.settings`.
+      const response = await transport.get<NotificationSettingsEnvelope | null>(
+        'notifications/settings'
+      );
+      return response?.settings;
     },
     saveSettings: (input: unknown) =>
       transport.post<NotificationSettingsEnvelope>(

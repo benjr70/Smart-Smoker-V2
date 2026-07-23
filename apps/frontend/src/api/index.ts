@@ -45,3 +45,7 @@ export type {
 } from './client';
 export { createApiClient, createProductionApiClient, getDefaultApiClient } from './client';
 export { ApiClientProvider, useApiClient } from './ApiClientProvider';
+export type { SnackbarNotifier, SnackbarProviderProps } from './SnackbarProvider';
+export { SnackbarProvider, useApiSnackbar } from './SnackbarProvider';
+export type { UseCurrentResourceOptions } from './useCurrentResource';
+export { useCurrentResource } from './useCurrentResource';

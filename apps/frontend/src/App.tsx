@@ -1,6 +1,7 @@
 import { Grid } from '@mui/material';
 import React from 'react';
 import { BottomBar } from '../src/components/bottomBar/bottombar';
+import { SnackbarProvider } from './api';
 import './App.css';
 import { Screens } from './components/common/interfaces/enums';
 import { History } from './components/history/history';
@@ -87,14 +88,16 @@ class App extends React.Component<{}, { currentScreen: Screens }> {
     }
 
     return (
-      <Grid className="App-header">
-        <Grid>{screen}</Grid>
-        <BottomBar
-          smokeOnClick={this.smokeOnClick}
-          reviewOnClick={this.reviewOnClick}
-          settingsOnClick={this.settingsOnClick}
-        ></BottomBar>
-      </Grid>
+      <SnackbarProvider>
+        <Grid className="App-header">
+          <Grid>{screen}</Grid>
+          <BottomBar
+            smokeOnClick={this.smokeOnClick}
+            reviewOnClick={this.reviewOnClick}
+            settingsOnClick={this.settingsOnClick}
+          ></BottomBar>
+        </Grid>
+      </SnackbarProvider>
     );
   }
 }

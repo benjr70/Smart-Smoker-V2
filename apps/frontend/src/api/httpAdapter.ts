@@ -33,7 +33,13 @@ export const createHttpTransport = (
         method === 'get' || method === 'delete'
           ? await instance[method](path)
           : await instance[method](path, body);
-      return response.data as T;
+      // A NestJS handler that returns `null` (e.g. GetByCurrent with no current
+      // document) serializes as HTTP 200 with an EMPTY body, which axios surfaces
+      // as `''`. That empty string is not a resource — it is "no content" — so it
+      // must not flow into caller/component state as a truthy-shaped value. Map it
+      // back to `null` here, the single seam every read passes through, so
+      // "no current resource" reads uniformly as `null` for all resources.
+      return (response.data === '' ? null : response.data) as T;
     } catch (error) {
       throw toApiError(error, method, path);
     }

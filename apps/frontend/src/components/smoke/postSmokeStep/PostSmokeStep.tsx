@@ -1,6 +1,6 @@
 import { Grid, TextField } from '@mui/material';
-import React, { useEffect, useRef, useState } from 'react';
-import { getCurrentPostSmoke, setCurrentPostSmoke } from '../../../Services/postSmokeService';
+import React from 'react';
+import { useCurrentResource } from '../../../api';
 import { DynamicList } from '../../common/components/DynamicList';
 import { IMaskInput } from 'react-imask';
 import { PostSmoke } from '../../../api/types';
@@ -15,31 +15,17 @@ type PostSmokeStepProps = {
 };
 
 export const PostSmokeStep: React.FC<PostSmokeStepProps> = ({ nextButton }) => {
-  const [postSmokeState, setPostSmokeState] = useState<PostSmoke>({
-    restTime: '',
-    steps: [''],
-    notes: '',
+  const [postSmokeState, setPostSmokeState] = useCurrentResource<PostSmoke>({
+    initialValue: {
+      restTime: '',
+      steps: [''],
+      notes: '',
+    },
+    load: client => client.postSmoke.getCurrent(),
+    save: (client, value) => client.postSmoke.saveCurrent(value),
+    loadErrorMessage: 'Could not load post-smoke details.',
+    saveErrorMessage: 'Could not save post-smoke details.',
   });
-
-  const latestState = useRef(postSmokeState);
-
-  useEffect(() => {
-    latestState.current = postSmokeState;
-  }, [postSmokeState]);
-
-  useEffect(() => {
-    getCurrentPostSmoke().then(postSmoke => {
-      setPostSmokeState({
-        restTime: postSmoke.restTime,
-        steps: postSmoke.steps,
-        notes: postSmoke.notes,
-      });
-    });
-
-    return () => {
-      setCurrentPostSmoke(latestState.current);
-    };
-  }, []);
 
   return (
     <Grid item sx={{ width: '100%' }}>
