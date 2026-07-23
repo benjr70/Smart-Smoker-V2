@@ -1,412 +1,151 @@
 import '@testing-library/jest-dom';
 import { render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
-import * as postSmokeService from '../../../Services/postSmokeService';
-import * as preSmokeService from '../../../Services/preSmokeService';
-import * as ratingsService from '../../../Services/ratingsService';
-import * as smokerService from '../../../Services/smokerService';
-import * as tempsService from '../../../Services/tempsService';
-import { WeightUnits } from '../../common/interfaces/enums';
+import { ApiClientProvider, SnackbarProvider, createApiClient } from '../../../api';
+import { createFakeBackend, FakeBackend } from '../../../api/fakeBackend';
+import { Smoke } from '../../../api/types';
 import { SmokeReview } from './smokeReview';
 
-// Mock Material-UI Grid component
-jest.mock('@mui/material', () => ({
-  Grid: ({ children, item, xs, ...props }: any) => (
-    <div data-testid="grid" data-item={item} data-xs={xs} {...props}>
-      {children}
-    </div>
-  ),
-}));
-
-// Mock the card components
+// The card children are mocked so each rendered piece is observable as a data
+// attribute; the screen's own job is to fetch the aggregate and hand each piece
+// to the right card. The fake client is injected through the provider instead
+// of mocking five separate service modules.
 jest.mock('../smokeCards/preSmokeCard', () => ({
   PreSmokeCard: ({ preSmoke }: any) => (
-    <div data-testid="pre-smoke-card" data-presmoke={JSON.stringify(preSmoke)}>
-      PreSmokeCard
-    </div>
+    <div data-testid="pre-smoke-card" data-presmoke={JSON.stringify(preSmoke)} />
   ),
 }));
-
 jest.mock('../smokeCards/smokeProfileCard', () => ({
   SmokeProfileCard: ({ smokeProfile, temps }: any) => (
     <div
       data-testid="smoke-profile-card"
       data-smokeprofile={JSON.stringify(smokeProfile)}
       data-temps={JSON.stringify(temps)}
-    >
-      SmokeProfileCard
-    </div>
+    />
   ),
 }));
-
 jest.mock('../smokeCards/postSmokeCard', () => ({
   PostSmokeCard: ({ postSmoke }: any) => (
-    <div data-testid="post-smoke-card" data-postsmoke={JSON.stringify(postSmoke)}>
-      PostSmokeCard
-    </div>
+    <div data-testid="post-smoke-card" data-postsmoke={JSON.stringify(postSmoke)} />
   ),
 }));
-
 jest.mock('../smokeCards/ratingsCard', () => ({
   RatingsCard: ({ ratings }: any) => (
-    <div data-testid="ratings-card" data-ratings={JSON.stringify(ratings)}>
-      RatingsCard
-    </div>
+    <div data-testid="ratings-card" data-ratings={JSON.stringify(ratings)} />
   ),
 }));
 
-// Mock all service modules
-jest.mock('../../../Services/preSmokeService');
-jest.mock('../../../Services/smokerService');
-jest.mock('../../../Services/tempsService');
-jest.mock('../../../Services/postSmokeService');
-jest.mock('../../../Services/ratingsService');
+const smokeAggregate = (id: string): Smoke => ({
+  _id: id,
+  preSmokeId: `pre-${id}`,
+  tempsId: `temps-${id}`,
+  postSmokeId: `post-${id}`,
+  smokeProfileId: `profile-${id}`,
+  ratingId: `rating-${id}`,
+  date: new Date('2023-07-15'),
+  status: 1,
+});
 
-// Mock temperaturechart module
-jest.mock('temperaturechart/src/tempChart', () => ({
-  TempData: {},
-}));
+const renderReview = (backend: FakeBackend, smokeId: string) => {
+  const client = createApiClient(backend);
+  return render(
+    <ApiClientProvider client={client}>
+      <SnackbarProvider>
+        <SmokeReview smokeId={smokeId} />
+      </SnackbarProvider>
+    </ApiClientProvider>
+  );
+};
 
-const mockPreSmokeService = preSmokeService as jest.Mocked<typeof preSmokeService>;
-const mockSmokerService = smokerService as jest.Mocked<typeof smokerService>;
-const mockTempsService = tempsService as jest.Mocked<typeof tempsService>;
-const mockPostSmokeService = postSmokeService as jest.Mocked<typeof postSmokeService>;
-const mockRatingsService = ratingsService as jest.Mocked<typeof ratingsService>;
-
-describe('SmokeReview Component', () => {
-  const mockSmokeId = 'test-smoke-id';
-  const mockSmokeData = {
-    preSmokeId: 'pre-smoke-id',
-    smokeProfileId: 'smoke-profile-id',
-    tempsId: 'temps-id',
-    postSmokeId: 'post-smoke-id',
-    ratingId: 'rating-id',
-  };
-
-  const mockPreSmokeData = {
-    weight: {
-      weight: 5,
-      unit: WeightUnits.LB,
-    },
-    steps: ['Step 1', 'Step 2'],
-    notes: 'Pre-smoke notes',
-  };
-
-  const mockSmokeProfileData = {
-    chamberName: 'Test Chamber',
-    probe1Name: 'Test Probe 1',
-    probe2Name: 'Test Probe 2',
-    probe3Name: 'Test Probe 3',
-    woodType: 'Oak',
-    notes: 'Smoke profile notes',
-  };
-
-  const mockTempsData = [
-    {
-      ChamberTemp: 225,
-      MeatTemp: 165,
-      Meat2Temp: 160,
-      Meat3Temp: 155,
-      date: new Date('2023-01-01T12:00:00Z'),
-    },
-    {
-      ChamberTemp: 230,
-      MeatTemp: 170,
-      Meat2Temp: 165,
-      Meat3Temp: 160,
-      date: new Date('2023-01-01T13:00:00Z'),
-    },
-  ];
-
-  const mockPostSmokeData = {
-    restTime: '30 minutes',
-    steps: ['Rest step 1', 'Rest step 2'],
-    notes: 'Post-smoke notes',
-  };
-
-  const mockRatingData = {
-    smokeFlavor: 4,
-    seasoning: 5,
-    tenderness: 4,
-    overallTaste: 4,
-    notes: 'Rating notes',
-  };
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-
-    // Setup default successful mock responses
-    mockSmokerService.getSmokeById.mockResolvedValue(mockSmokeData);
-    mockPreSmokeService.getPreSmokeById.mockResolvedValue(mockPreSmokeData);
-    mockSmokerService.getSmokeProfileById.mockResolvedValue(mockSmokeProfileData);
-    mockTempsService.getTempsById.mockResolvedValue(mockTempsData);
-    mockPostSmokeService.getPostSmokeById.mockResolvedValue(mockPostSmokeData);
-    mockRatingsService.getRatingById.mockResolvedValue(mockRatingData);
-  });
-
-  test('should render SmokeReview component with all cards', async () => {
-    render(<SmokeReview smokeId={mockSmokeId} />);
-
-    // Check that all card components are rendered
-    expect(screen.getByTestId('pre-smoke-card')).toBeInTheDocument();
-    expect(screen.getByTestId('smoke-profile-card')).toBeInTheDocument();
-    expect(screen.getByTestId('post-smoke-card')).toBeInTheDocument();
-    expect(screen.getByTestId('ratings-card')).toBeInTheDocument();
-    expect(screen.getByTestId('grid')).toBeInTheDocument();
-  });
-
-  test('should call getSmokeById with correct smokeId', async () => {
-    render(<SmokeReview smokeId={mockSmokeId} />);
-
-    await waitFor(() => {
-      expect(mockSmokerService.getSmokeById).toHaveBeenCalledWith(mockSmokeId);
+describe('SmokeReview', () => {
+  test('loads the aggregate and hands each display piece to its card', async () => {
+    const backend = createFakeBackend({
+      smoke: { records: { 'smoke-1': smokeAggregate('smoke-1') } },
+      preSmoke: { records: { 'pre-smoke-1': { name: 'Brisket', weight: {}, steps: ['Trim'] } } },
+      smokeProfile: {
+        records: {
+          'profile-smoke-1': {
+            chamberName: 'My Chamber',
+            probe1Name: 'Probe 1',
+            probe2Name: 'Probe 2',
+            probe3Name: 'Probe 3',
+            notes: '',
+            woodType: 'Hickory',
+          },
+        },
+      },
+      temps: {
+        records: {
+          'temps-smoke-1': [
+            { ChamberTemp: 225, MeatTemp: 150, Meat2Temp: 0, Meat3Temp: 0, date: new Date() },
+          ],
+        },
+      },
+      postSmoke: { records: { 'post-smoke-1': { restTime: '30', steps: ['Rest'] } } },
+      ratings: {
+        records: {
+          'rating-smoke-1': {
+            smokeFlavor: 4,
+            seasoning: 5,
+            tenderness: 3,
+            overallTaste: 4,
+            notes: 'tasty',
+          },
+        },
+      },
     });
-  });
 
-  test('should fetch and display all smoke data successfully', async () => {
-    render(<SmokeReview smokeId={mockSmokeId} />);
+    renderReview(backend, 'smoke-1');
 
-    // Wait for all services to be called
     await waitFor(() => {
-      expect(mockSmokerService.getSmokeById).toHaveBeenCalledWith(mockSmokeId);
-      expect(mockPreSmokeService.getPreSmokeById).toHaveBeenCalledWith(mockSmokeData.preSmokeId);
-      expect(mockSmokerService.getSmokeProfileById).toHaveBeenCalledWith(
-        mockSmokeData.smokeProfileId
+      const preSmoke = JSON.parse(
+        screen.getByTestId('pre-smoke-card').getAttribute('data-presmoke') ?? '{}'
       );
-      expect(mockTempsService.getTempsById).toHaveBeenCalledWith(mockSmokeData.tempsId);
-      expect(mockPostSmokeService.getPostSmokeById).toHaveBeenCalledWith(mockSmokeData.postSmokeId);
-      expect(mockRatingsService.getRatingById).toHaveBeenCalledWith(mockSmokeData.ratingId);
+      expect(preSmoke.name).toBe('Brisket');
     });
 
-    // Verify that data is passed to components correctly
-    const preSmokeCard = screen.getByTestId('pre-smoke-card');
-    expect(preSmokeCard).toHaveAttribute('data-presmoke', JSON.stringify(mockPreSmokeData));
-
-    const smokeProfileCard = screen.getByTestId('smoke-profile-card');
-    expect(smokeProfileCard).toHaveAttribute(
-      'data-smokeprofile',
-      JSON.stringify(mockSmokeProfileData)
+    const profileCard = screen.getByTestId('smoke-profile-card');
+    expect(JSON.parse(profileCard.getAttribute('data-smokeprofile') ?? '{}').chamberName).toBe(
+      'My Chamber'
     );
-    expect(smokeProfileCard).toHaveAttribute('data-temps', JSON.stringify(mockTempsData));
-
-    const postSmokeCard = screen.getByTestId('post-smoke-card');
-    expect(postSmokeCard).toHaveAttribute('data-postsmoke', JSON.stringify(mockPostSmokeData));
-
-    const ratingsCard = screen.getByTestId('ratings-card');
-    expect(ratingsCard).toHaveAttribute('data-ratings', JSON.stringify(mockRatingData));
+    expect(JSON.parse(profileCard.getAttribute('data-temps') ?? '[]')).toHaveLength(1);
+    expect(
+      JSON.parse(screen.getByTestId('post-smoke-card').getAttribute('data-postsmoke') ?? '{}')
+        .restTime
+    ).toBe('30');
+    expect(
+      JSON.parse(screen.getByTestId('ratings-card').getAttribute('data-ratings') ?? '{}')
+        .smokeFlavor
+    ).toBe(4);
   });
 
-  test('should handle missing tempsId gracefully', async () => {
-    const smokeDataWithoutTemps = {
-      ...mockSmokeData,
-      tempsId: undefined,
-    };
-    mockSmokerService.getSmokeById.mockResolvedValue(smokeDataWithoutTemps);
-
-    render(<SmokeReview smokeId={mockSmokeId} />);
-
-    await waitFor(() => expect(mockSmokerService.getSmokeById).toHaveBeenCalledWith(mockSmokeId));
-
-    expect(mockTempsService.getTempsById).not.toHaveBeenCalled();
-
-    // Should still render with initial temp data
-    const smokeProfileCard = screen.getByTestId('smoke-profile-card');
-    const expectedInitialTempData = [
-      {
-        ChamberTemp: 0,
-        MeatTemp: 0,
-        Meat2Temp: 0,
-        Meat3Temp: 0,
-        date: expect.any(Date),
-      },
-    ];
-
-    const actualTempData = JSON.parse(smokeProfileCard.getAttribute('data-temps') || '[]');
-    expect(actualTempData).toHaveLength(1);
-    expect(actualTempData[0]).toMatchObject({
-      ChamberTemp: 0,
-      MeatTemp: 0,
-      Meat2Temp: 0,
-      Meat3Temp: 0,
+  test('renders the empty-default temps when the temps piece is absent', async () => {
+    const backend = createFakeBackend({
+      smoke: { records: { 'smoke-1': smokeAggregate('smoke-1') } },
+      preSmoke: { records: { 'pre-smoke-1': { name: 'Brisket', weight: {}, steps: [] } } },
+      // No temps record — the aggregate fills the empty default and the profile
+      // card still renders the rest of the review.
     });
-  });
 
-  test('should handle empty temps array gracefully', async () => {
-    mockTempsService.getTempsById.mockResolvedValue([]);
-
-    render(<SmokeReview smokeId={mockSmokeId} />);
+    renderReview(backend, 'smoke-1');
 
     await waitFor(() => {
-      expect(mockTempsService.getTempsById).toHaveBeenCalledWith(mockSmokeData.tempsId);
+      const preSmoke = JSON.parse(
+        screen.getByTestId('pre-smoke-card').getAttribute('data-presmoke') ?? '{}'
+      );
+      expect(preSmoke.name).toBe('Brisket');
     });
 
-    // Should still render with initial temp data when temps array is empty
-    const smokeProfileCard = screen.getByTestId('smoke-profile-card');
-    const actualTempData = JSON.parse(smokeProfileCard.getAttribute('data-temps') || '[]');
-    expect(actualTempData).toHaveLength(1);
-    expect(actualTempData[0]).toMatchObject({
-      ChamberTemp: 0,
-      MeatTemp: 0,
-      Meat2Temp: 0,
-      Meat3Temp: 0,
-    });
+    expect(
+      JSON.parse(screen.getByTestId('smoke-profile-card').getAttribute('data-temps') ?? '[]')
+    ).toEqual([]);
   });
 
-  test('should handle null/undefined responses from services gracefully', async () => {
-    mockPreSmokeService.getPreSmokeById.mockResolvedValue(null as any);
-    mockSmokerService.getSmokeProfileById.mockResolvedValue(null as any);
-    mockTempsService.getTempsById.mockResolvedValue(null as any);
-    mockPostSmokeService.getPostSmokeById.mockResolvedValue(null as any);
-    mockRatingsService.getRatingById.mockResolvedValue(null as any);
+  test('raises the failure snackbar when the smoke parent cannot be read', async () => {
+    const backend = createFakeBackend({});
 
-    render(<SmokeReview smokeId={mockSmokeId} />);
+    renderReview(backend, 'missing-smoke');
 
-    await waitFor(() => {
-      expect(mockSmokerService.getSmokeById).toHaveBeenCalledWith(mockSmokeId);
-    });
-
-    // Should render with initial values when services return null
-    const preSmokeCard = screen.getByTestId('pre-smoke-card');
-    const expectedInitialPreSmoke = {
-      weight: {
-        weight: undefined,
-        unit: undefined,
-      },
-      steps: [],
-    };
-    expect(preSmokeCard).toHaveAttribute('data-presmoke', JSON.stringify(expectedInitialPreSmoke));
-
-    const smokeProfileCard = screen.getByTestId('smoke-profile-card');
-    const expectedInitialSmokeProfile = {
-      chamberName: 'Chamber',
-      probe1Name: 'Probe 1',
-      probe2Name: 'Probe 2',
-      probe3Name: 'Probe 3',
-      woodType: '',
-      notes: '',
-    };
-    expect(smokeProfileCard).toHaveAttribute(
-      'data-smokeprofile',
-      JSON.stringify(expectedInitialSmokeProfile)
-    );
-
-    const postSmokeCard = screen.getByTestId('post-smoke-card');
-    const expectedInitialPostSmoke = {
-      restTime: '',
-      steps: [],
-    };
-    expect(postSmokeCard).toHaveAttribute(
-      'data-postsmoke',
-      JSON.stringify(expectedInitialPostSmoke)
-    );
-
-    const ratingsCard = screen.getByTestId('ratings-card');
-    const expectedInitialRating = {
-      smokeFlavor: 0,
-      seasoning: 0,
-      tenderness: 0,
-      overallTaste: 0,
-      notes: '',
-    };
-    expect(ratingsCard).toHaveAttribute('data-ratings', JSON.stringify(expectedInitialRating));
-  });
-
-  test('should update data when smokeId prop changes', async () => {
-    const { rerender } = render(<SmokeReview smokeId={mockSmokeId} />);
-
-    await waitFor(() => {
-      expect(mockSmokerService.getSmokeById).toHaveBeenCalledWith(mockSmokeId);
-    });
-
-    // Clear mocks and setup new data for different smokeId
-    jest.clearAllMocks();
-    const newSmokeId = 'new-smoke-id';
-    const newSmokeData = {
-      ...mockSmokeData,
-      preSmokeId: 'new-pre-smoke-id',
-    };
-    const newPreSmokeData = {
-      ...mockPreSmokeData,
-      notes: 'Updated pre-smoke notes',
-    };
-
-    mockSmokerService.getSmokeById.mockResolvedValue(newSmokeData);
-    mockPreSmokeService.getPreSmokeById.mockResolvedValue(newPreSmokeData);
-    mockSmokerService.getSmokeProfileById.mockResolvedValue(mockSmokeProfileData);
-    mockTempsService.getTempsById.mockResolvedValue(mockTempsData);
-    mockPostSmokeService.getPostSmokeById.mockResolvedValue(mockPostSmokeData);
-    mockRatingsService.getRatingById.mockResolvedValue(mockRatingData);
-
-    // Re-render with new smokeId
-    rerender(<SmokeReview smokeId={newSmokeId} />);
-
-    await waitFor(() => {
-      expect(mockSmokerService.getSmokeById).toHaveBeenCalledWith(newSmokeId);
-      expect(mockPreSmokeService.getPreSmokeById).toHaveBeenCalledWith(newSmokeData.preSmokeId);
-    });
-
-    // Verify updated data is displayed
-    const preSmokeCard = screen.getByTestId('pre-smoke-card');
-    expect(preSmokeCard).toHaveAttribute('data-presmoke', JSON.stringify(newPreSmokeData));
-  });
-
-  test('should render with correct Grid props', () => {
-    render(<SmokeReview smokeId={mockSmokeId} />);
-
-    const grid = screen.getByTestId('grid');
-    expect(grid).toHaveAttribute('data-xs', '11');
-    expect(grid).toHaveAttribute('data-item', 'true');
-  });
-
-  test('should handle temps data with valid length correctly', async () => {
-    render(<SmokeReview smokeId={mockSmokeId} />);
-
-    await waitFor(() => {
-      expect(mockTempsService.getTempsById).toHaveBeenCalledWith(mockSmokeData.tempsId);
-    });
-
-    const smokeProfileCard = screen.getByTestId('smoke-profile-card');
-    expect(smokeProfileCard).toHaveAttribute('data-temps', JSON.stringify(mockTempsData));
-  });
-
-  test('should initialize with correct default values', () => {
-    render(<SmokeReview smokeId={mockSmokeId} />);
-
-    // Check initial rendering before any async operations complete
-    const preSmokeCard = screen.getByTestId('pre-smoke-card');
-    const smokeProfileCard = screen.getByTestId('smoke-profile-card');
-    const postSmokeCard = screen.getByTestId('post-smoke-card');
-    const ratingsCard = screen.getByTestId('ratings-card');
-
-    expect(preSmokeCard).toBeInTheDocument();
-    expect(smokeProfileCard).toBeInTheDocument();
-    expect(postSmokeCard).toBeInTheDocument();
-    expect(ratingsCard).toBeInTheDocument();
-  });
-
-  test('should handle services that do not return data gracefully', async () => {
-    // Test the conditional branches without triggering errors
-    mockPreSmokeService.getPreSmokeById.mockResolvedValue(undefined as any);
-    mockSmokerService.getSmokeProfileById.mockResolvedValue(undefined as any);
-    mockPostSmokeService.getPostSmokeById.mockResolvedValue(undefined as any);
-    mockRatingsService.getRatingById.mockResolvedValue(undefined as any);
-
-    render(<SmokeReview smokeId={mockSmokeId} />);
-
-    await waitFor(() => {
-      expect(mockSmokerService.getSmokeById).toHaveBeenCalledWith(mockSmokeId);
-    });
-
-    // Services should be called but component should handle undefined gracefully
-    expect(mockPreSmokeService.getPreSmokeById).toHaveBeenCalled();
-    expect(mockSmokerService.getSmokeProfileById).toHaveBeenCalled();
-    expect(mockPostSmokeService.getPostSmokeById).toHaveBeenCalled();
-    expect(mockRatingsService.getRatingById).toHaveBeenCalled();
-
-    // Component should still render
-    expect(screen.getByTestId('pre-smoke-card')).toBeInTheDocument();
-    expect(screen.getByTestId('smoke-profile-card')).toBeInTheDocument();
-    expect(screen.getByTestId('post-smoke-card')).toBeInTheDocument();
-    expect(screen.getByTestId('ratings-card')).toBeInTheDocument();
+    expect(await screen.findByText('Could not load smoke review.')).toBeVisible();
   });
 });

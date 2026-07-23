@@ -1,4 +1,4 @@
-import { getCurrentTemps, getTempsById, deleteTempsById } from './tempsService';
+import { getCurrentTemps, deleteTempsById } from './tempsService';
 import { createApiClient } from '../api/client';
 import { createFakeBackend, FakeBackend } from '../api/fakeBackend';
 import { TempData } from '../api/types';
@@ -50,25 +50,6 @@ describe('tempsService (deprecated shims)', () => {
     const consoleSpy = jest.spyOn(console, 'log');
 
     const result = await getCurrentTemps();
-
-    expect(result).toBeUndefined();
-    expect(consoleSpy).toHaveBeenCalledTimes(1);
-  });
-
-  test('getTempsById resolves the record on success', async () => {
-    const result = await getTempsById('abc123');
-    expect(result).toEqual(sampleTemps);
-    expect(backend.requests).toContainEqual({
-      method: 'get',
-      path: 'temps/abc123',
-      body: undefined,
-    });
-  });
-
-  test('getTempsById resolves undefined and logs when the record is missing', async () => {
-    const consoleSpy = jest.spyOn(console, 'log');
-
-    const result = await getTempsById('missing');
 
     expect(result).toBeUndefined();
     expect(consoleSpy).toHaveBeenCalledTimes(1);

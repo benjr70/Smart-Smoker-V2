@@ -1,5 +1,4 @@
 import { State } from '../components/common/interfaces/state';
-import { smokeHistory } from '../components/common/interfaces/history';
 import { getDefaultApiClient } from '../api';
 import { SmokeProfile } from '../api/types';
 
@@ -66,20 +65,6 @@ export const setSmokeProfile = async (smokeProfileDTO: SmokeProfile) => {
 };
 
 /**
- * @deprecated Use `useApiClient().smokeProfile.getById` instead. Deprecated
- * delegating shim; the notes/wood-type empty-string normalization now lives
- * inside the client. Preserves the legacy swallow-and-log semantics.
- */
-export const getSmokeProfileById = async (id: string): Promise<SmokeProfile> => {
-  try {
-    return await getDefaultApiClient().smokeProfile.getById(id);
-  } catch (error) {
-    console.log(error);
-    return undefined as unknown as SmokeProfile;
-  }
-};
-
-/**
  * @deprecated Use `useApiClient().smoke.finish` instead. Deprecated delegating
  * shim; preserves the legacy swallow-and-log semantics.
  */
@@ -107,38 +92,12 @@ export const getCurrentSmokeProfile = async (): Promise<SmokeProfile> => {
 };
 
 /**
- * @deprecated Use `useApiClient().history.list` instead. Deprecated delegating
- * shim; preserves the legacy swallow-and-log semantics.
- */
-export const getSmokeHistory = async (): Promise<smokeHistory[]> => {
-  try {
-    return await getDefaultApiClient().history.list();
-  } catch (error) {
-    console.log(error);
-    return undefined as unknown as smokeHistory[];
-  }
-};
-
-/**
  * @deprecated Use `useApiClient().smoke.getAll` instead. Deprecated delegating
  * shim; preserves the legacy swallow-and-log semantics.
  */
 export const getAllSmoke = async (): Promise<any> => {
   try {
     return await getDefaultApiClient().smoke.getAll();
-  } catch (error) {
-    console.log(error);
-    return undefined;
-  }
-};
-
-/**
- * @deprecated Use `useApiClient().smoke.getById` instead. Deprecated delegating
- * shim; preserves the legacy swallow-and-log semantics.
- */
-export const getSmokeById = async (id: string): Promise<any> => {
-  try {
-    return await getDefaultApiClient().smoke.getById(id);
   } catch (error) {
     console.log(error);
     return undefined;

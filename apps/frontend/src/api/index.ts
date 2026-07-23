@@ -49,3 +49,7 @@ export type { SnackbarNotifier, SnackbarProviderProps } from './SnackbarProvider
 export { SnackbarProvider, useApiSnackbar } from './SnackbarProvider';
 export type { UseCurrentResourceOptions } from './useCurrentResource';
 export { useCurrentResource } from './useCurrentResource';
+export type { UseHistoryResult } from './useHistory';
+export { useHistory } from './useHistory';
+export type { UseReviewResult } from './useReview';
+export { useReview } from './useReview';

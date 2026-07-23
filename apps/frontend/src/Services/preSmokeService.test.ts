@@ -1,4 +1,4 @@
-import { getPreSmokeById, deletePreSmokeById } from './preSmokeService';
+import { deletePreSmokeById } from './preSmokeService';
 import { createApiClient } from '../api/client';
 import { createFakeBackend, FakeBackend } from '../api/fakeBackend';
 import { PreSmoke } from '../api/types';
@@ -38,25 +38,6 @@ afterEach(() => {
 });
 
 describe('preSmokeService (deprecated shims)', () => {
-  test('getPreSmokeById resolves the record on success', async () => {
-    const result = await getPreSmokeById('abc123');
-    expect(result).toEqual(samplePreSmoke);
-    expect(backend.requests).toContainEqual({
-      method: 'get',
-      path: 'presmoke/abc123',
-      body: undefined,
-    });
-  });
-
-  test('getPreSmokeById resolves undefined and logs when the record is missing', async () => {
-    const consoleSpy = jest.spyOn(console, 'log');
-
-    const result = await getPreSmokeById('missing');
-
-    expect(result).toBeUndefined();
-    expect(consoleSpy).toHaveBeenCalledTimes(1);
-  });
-
   test('deletePreSmokeById removes the record and resolves on success', async () => {
     await deletePreSmokeById('abc123');
     expect(backend.store.preSmoke.records.abc123).toBeUndefined();
