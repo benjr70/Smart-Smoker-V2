@@ -346,11 +346,14 @@ export function createSessionStore(config: SessionConfig): SessionStore {
     started = true;
     if (config.role === 'smoker') {
       // The smoker produces the feed: it consumes device readings, applies
-      // inbound smokeUpdate names + smoking, and tracks cloud connectivity.
+      // inbound smokeUpdate names + smoking, resets its labels + chart baseline
+      // on a cloud clear (relaying a finished/cleared session), and tracks cloud
+      // connectivity.
       const deviceFeed = config.deviceFeed!;
       portSubscriptions.push(
         deviceFeed.onReading(handleDeviceReading),
         socket.onSmokeUpdate(handleSmokeUpdateSmoker),
+        socket.onClear(() => void handleClear()),
         socket.onConnectionChange(handleConnectionChange)
       );
     } else {
