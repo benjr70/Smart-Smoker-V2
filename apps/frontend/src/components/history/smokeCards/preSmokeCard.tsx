@@ -1,9 +1,9 @@
 import { Card, CardContent, Grid, ThemeProvider, Typography, createTheme } from '@mui/material';
 import React from 'react';
-import { preSmoke } from '../../common/interfaces/preSmoke';
+import { PreSmoke } from '../../../api/types';
 
 interface preSmokeCardProps {
-  preSmoke: preSmoke;
+  preSmoke: PreSmoke;
 }
 
 const theme = createTheme({
