@@ -2,282 +2,119 @@ import WifiIcon from '@mui/icons-material/Wifi';
 import WifiOffIcon from '@mui/icons-material/WifiOff';
 import { Button } from '@mui/material';
 import Grid from '@mui/material/Grid';
-import React from 'react';
-import { io } from 'socket.io-client';
-import TempChart, { TempData } from 'temperaturechart/src/tempChart';
-import { getConnection } from '../../services/deviceService';
-import {
-  getCurrentSmokeProfile,
-  getState,
-  smokeProfile,
-  toggleSmoking,
-} from '../../services/stateService';
-import { getCurrentTemps, postTempsBatch } from '../../services/tempsService';
+import React, { useState } from 'react';
+import TempChart from 'temperaturechart/src/tempChart';
+import { useSmokeSession } from 'smoke-session/src/react';
 import './home.style.css';
 import { Wifi } from './wifi/wifi';
 
-interface State {
-  chamberName: string;
-  probe1Name: string;
-  probe2Name: string;
-  probe3Name: string;
-  probeTemp1: string;
-  probeTemp2: string;
-  probeTemp3: string;
-  chamberTemp: string;
-  smoking: boolean;
-  date: Date;
-}
+/**
+ * The smoker touchscreen home screen. A thin view over the shared session store
+ * (smoker role): every temp, name, smoking flag, and connectivity signal comes
+ * off the hook snapshot, and the two actions (toggle smoking, navigate) dispatch
+ * store commands. All socket/serial wiring, offline batching, and payload
+ * mapping now live in the session store behind the Provider — none of it in this
+ * component.
+ */
+export function Home(): JSX.Element {
+  const session = useSmokeSession();
+  // The only genuinely local state: which sub-screen is showing. Returning to
+  // the home screen refreshes the chart baseline (the wifi screen may have run
+  // for a while).
+  const [activeScreen, setActiveScreen] = useState(0);
 
-let initTemps: TempData[] = [];
-let socket: any;
-let batch: State[] = [];
-let batchCount = 0;
-export class Home extends React.Component<
-  {},
-  { tempState: State; activeScreen: number; connection: boolean }
-> {
-  // comment to test container update
-  constructor(props: any) {
-    super(props);
-    this.state = {
-      tempState: {
-        chamberName: 'Chamber',
-        probe1Name: 'probe 1',
-        probe2Name: 'probe 2',
-        probe3Name: 'probe 3',
-        probeTemp1: '0',
-        probeTemp2: '0',
-        probeTemp3: '0',
-        chamberTemp: '0',
-        smoking: false,
-        date: new Date(),
-      },
-      activeScreen: 0,
-      connection: true,
-    };
-    this.setActiveScreen = this.setActiveScreen.bind(this);
-  }
-
-  async componentDidMount() {
-    try {
-      initTemps = await getCurrentTemps();
-    } catch (e) {
-      console.log(e);
-    }
-    getState().then(state => {
-      console.log(state);
-      let temp = this.state.tempState;
-      temp.smoking = state.smoking;
-      this.setState({ tempState: temp });
-    });
-    getCurrentSmokeProfile()
-      .then((smokeProfile: smokeProfile) => {
-        let temp = this.state.tempState;
-        temp.chamberName = smokeProfile.chamberName;
-        temp.probe1Name = smokeProfile.probe1Name;
-        temp.probe2Name = smokeProfile.probe2Name;
-        temp.probe3Name = smokeProfile.probe3Name;
-        this.setState({ tempState: temp });
-      })
-      .catch(e => {
-        console.log(e, 'no smoke profile found');
-      });
-    let deviceClient = io('http://127.0.0.1:3003');
-    let url = process.env.REACT_APP_CLOUD_URL ?? '';
-    socket = io(url);
-    deviceClient.on('temp', (message: any) => {
-      try {
-        if (process.env.ENV === 'production') {
-          getConnection().then(result => {
-            if (result.length > 0) {
-              this.setState({ connection: true });
-            } else {
-              this.setState({ connection: false });
-            }
-          });
-        }
-        let tempObj = JSON.parse(message);
-        let temp = this.state.tempState;
-        temp.chamberTemp = tempObj.Chamber;
-        temp.probeTemp1 = tempObj.Meat;
-        temp.probeTemp2 = tempObj.Meat2;
-        temp.probeTemp3 = tempObj.Meat3;
-        temp.date = new Date();
-        this.setState({ tempState: temp });
-        if (socket.connected) {
-          if (batch.length > 0) {
-            this.sendTempBatch();
-            socket.emit('refresh');
-            batch = [];
-          }
-          socket.emit('events', JSON.stringify(temp));
-        } else {
-          batchCount++;
-          if (batchCount > 10) {
-            batch.push(JSON.parse(JSON.stringify(temp)));
-            batchCount = 0;
-          }
-        }
-      } catch (e) {
-        console.log(e);
-      }
-    });
-
-    socket.on('smokeUpdate', (message: any) => {
-      let temp = this.state.tempState;
-      temp.smoking = message.smoking;
-      temp.chamberName = message.chamberName;
-      temp.probe1Name = message.probe1Name;
-      temp.probe2Name = message.probe2Name;
-      temp.probe3Name = message.probe3Name;
-      this.setState({ tempState: temp });
-    });
-
-    socket.on('clear', (message: any) => {
-      getCurrentSmokeProfile()
-        .then((smokeProfile: smokeProfile) => {
-          let temp = this.state.tempState;
-          temp.chamberName = smokeProfile.chamberName ?? 'Chamber';
-          temp.probe1Name = smokeProfile.probe1Name ?? 'probe 1';
-          temp.probe2Name = smokeProfile.probe2Name ?? 'probe 2';
-          temp.probe3Name = smokeProfile.probe3Name ?? 'probe 3';
-          this.setState({ tempState: temp });
-        })
-        .catch(e => {
-          let temp = this.state.tempState;
-          temp.chamberName = 'Chamber';
-          temp.probe1Name = 'probe 1';
-          temp.probe2Name = 'probe 2';
-          temp.probe3Name = 'probe 3';
-          temp.smoking = false;
-          this.setState({ tempState: temp });
-        });
-      initTemps = [];
-    });
-  }
-
-  sendTempBatch(): Promise<void> {
-    const tempBatch: TempData[] = batch.map(temp => {
-      return {
-        ChamberTemp: parseFloat(temp.chamberTemp),
-        MeatTemp: parseFloat(temp.probeTemp1),
-        Meat2Temp: parseFloat(temp.probeTemp2),
-        Meat3Temp: parseFloat(temp.probeTemp3),
-        date: temp.date,
-      };
-    });
-    return postTempsBatch(tempBatch);
-  }
-
-  startSmoke(): void {
-    toggleSmoking().then(state => {
-      let temp = this.state.tempState;
-      temp.smoking = state.smoking;
-      socket.emit('smokeUpdate', {
-        smoking: state.smoking,
-        chamberName: temp.chamberName,
-        probe1Name: temp.probe1Name,
-        probe2Name: temp.probe2Name,
-        probe3Name: temp.probe3Name,
-      });
-      this.setState({ tempState: temp });
-    });
-  }
-
-  async setActiveScreen(screen: number): Promise<void> {
-    this.setState({ activeScreen: screen });
+  const goToScreen = (screen: number): void => {
+    setActiveScreen(screen);
     if (screen === 0) {
-      initTemps = await getCurrentTemps();
+      void session.refreshInitialTemps();
     }
-  }
+  };
 
-  render(): React.ReactNode {
-    return (
-      <Grid container className="background">
-        {this.state.activeScreen === 0 ? (
-          <>
-            <Grid item xs={4} container justifyContent="space-evenly" alignItems="center">
-              <Grid container spacing={2} color={'#1f4f2d'}>
-                <Grid item className="text">
-                  {this.state.tempState.chamberName}
-                </Grid>
-                <Grid item className="text" data-testid="smoker-chamber-temp">
-                  {this.state.tempState.chamberTemp}
-                </Grid>
+  return (
+    <Grid container className="background">
+      {activeScreen === 0 ? (
+        <>
+          <Grid item xs={4} container justifyContent="space-evenly" alignItems="center">
+            <Grid container spacing={2} color={'#1f4f2d'}>
+              <Grid item className="text">
+                {session.chamberName}
               </Grid>
-              <Grid container spacing={4} color={'#118cd8'}>
-                <Grid item className="text">
-                  {this.state.tempState.probe2Name}
-                </Grid>
-                <Grid item className="text">
-                  {this.state.tempState.probeTemp2}
-                </Grid>
+              <Grid item className="text" data-testid="smoker-chamber-temp">
+                {session.chamberTemp}
               </Grid>
             </Grid>
-            <Grid item xs={4} container justifyContent="space-evenly" alignItems="center">
-              <Grid container spacing={2} color={'#2a475e'}>
-                <Grid item className="text">
-                  {this.state.tempState.probe1Name}
-                </Grid>
-                <Grid item className="text">
-                  {this.state.tempState.probeTemp1}
-                </Grid>
+            <Grid container spacing={4} color={'#118cd8'}>
+              <Grid item className="text">
+                {session.probe2Name}
               </Grid>
-              <Grid container spacing={2} color={'#5582a7'}>
-                <Grid item className="text">
-                  {this.state.tempState.probe3Name}
-                </Grid>
-                <Grid item className="text">
-                  {this.state.tempState.probeTemp3}
-                </Grid>
+              <Grid item className="text">
+                {session.probeTemp2}
               </Grid>
             </Grid>
-            <Grid item xs={4}>
-              <Grid container className="buttonContainer" flexDirection="row-reverse">
-                <Grid item padding={1}>
-                  <Button
-                    className="wifiButton"
-                    variant="contained"
-                    size="small"
-                    onClick={() => this.setActiveScreen(1)}
-                  >
-                    {this.state.connection ? <WifiIcon /> : <WifiOffIcon />}
-                  </Button>
-                </Grid>
-                <Grid item padding={1}>
-                  <Button
-                    className="button"
-                    variant="contained"
-                    size="small"
-                    data-testid="smoker-start-button"
-                    onClick={() => this.startSmoke()}
-                  >
-                    {this.state.tempState.smoking ? 'Stop Smoking' : 'Start Smoking'}
-                  </Button>
-                </Grid>
+          </Grid>
+          <Grid item xs={4} container justifyContent="space-evenly" alignItems="center">
+            <Grid container spacing={2} color={'#2a475e'}>
+              <Grid item className="text">
+                {session.probe1Name}
+              </Grid>
+              <Grid item className="text">
+                {session.probeTemp1}
               </Grid>
             </Grid>
-            <Grid item xs={12} style={{ height: '83vh' }}>
-              <TempChart
-                ChamberTemp={parseFloat(this.state.tempState.chamberTemp)}
-                MeatTemp={parseFloat(this.state.tempState.probeTemp1)}
-                Meat2Temp={parseFloat(this.state.tempState.probeTemp2)}
-                Meat3Temp={parseFloat(this.state.tempState.probeTemp3)}
-                ChamberName={this.state.tempState.chamberName}
-                Probe1Name={this.state.tempState.probe1Name}
-                Probe2Name={this.state.tempState.probe2Name}
-                Probe3Name={this.state.tempState.probe3Name}
-                date={this.state.tempState.date}
-                smoking={this.state.tempState.smoking}
-                initData={initTemps}
-              ></TempChart>
+            <Grid container spacing={2} color={'#5582a7'}>
+              <Grid item className="text">
+                {session.probe3Name}
+              </Grid>
+              <Grid item className="text">
+                {session.probeTemp3}
+              </Grid>
             </Grid>
-          </>
-        ) : (
-          <Wifi onBack={this.setActiveScreen}></Wifi>
-        )}
-      </Grid>
-    );
-  }
+          </Grid>
+          <Grid item xs={4}>
+            <Grid container className="buttonContainer" flexDirection="row-reverse">
+              <Grid item padding={1}>
+                <Button
+                  className="wifiButton"
+                  variant="contained"
+                  size="small"
+                  aria-label={session.wifiConnected ? 'wifi connected' : 'wifi disconnected'}
+                  onClick={() => goToScreen(1)}
+                >
+                  {session.wifiConnected ? <WifiIcon /> : <WifiOffIcon />}
+                </Button>
+              </Grid>
+              <Grid item padding={1}>
+                <Button
+                  className="button"
+                  variant="contained"
+                  size="small"
+                  data-testid="smoker-start-button"
+                  onClick={() => void session.toggleSmoking()}
+                >
+                  {session.smoking ? 'Stop Smoking' : 'Start Smoking'}
+                </Button>
+              </Grid>
+            </Grid>
+          </Grid>
+          <Grid item xs={12} style={{ height: '83vh' }}>
+            <TempChart
+              ChamberTemp={parseFloat(session.chamberTemp)}
+              MeatTemp={parseFloat(session.probeTemp1)}
+              Meat2Temp={parseFloat(session.probeTemp2)}
+              Meat3Temp={parseFloat(session.probeTemp3)}
+              ChamberName={session.chamberName}
+              Probe1Name={session.probe1Name}
+              Probe2Name={session.probe2Name}
+              Probe3Name={session.probe3Name}
+              date={session.date}
+              smoking={session.smoking}
+              initData={session.initialTemps}
+            ></TempChart>
+          </Grid>
+        </>
+      ) : (
+        <Wifi onBack={goToScreen}></Wifi>
+      )}
+    </Grid>
+  );
 }
