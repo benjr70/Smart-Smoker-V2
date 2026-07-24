@@ -7,7 +7,7 @@ import { PreSmokeStep } from './preSmokeStep/preSmokeStep';
 import { SmokeStep } from './smokeStep/smokeStep';
 import { PostSmokeStep } from './postSmokeStep/PostSmokeStep';
 import { Button, Grid } from '@mui/material';
-import { FinishSmoke, clearSmoke } from '../../Services/smokerService';
+import { useApiClient } from '../../api';
 
 const steps = ['Pre-Smoke', 'Smoke', 'Post-Smoke'];
 
@@ -16,6 +16,7 @@ export function delay(ms: number) {
 }
 
 export function Smoke(): JSX.Element {
+  const client = useApiClient();
   const [activeStep, setActiveStep] = React.useState(0);
 
   const handleStep = (step: any) => {
@@ -28,7 +29,12 @@ export function Smoke(): JSX.Element {
       nextStep = 0;
       setActiveStep(5);
       await delay(2);
-      await FinishSmoke().then(() => clearSmoke());
+      // Finalize the current smoke, then reset the session (the websocket
+      // `clear` broadcast fires inside the client's clearSmoke). Each call
+      // swallows-and-logs so a backend failure still resets the stepper — the
+      // behavior the two legacy shims preserved before this cutover.
+      await client.smoke.finish().catch(error => console.log(error));
+      await client.state.clearSmoke().catch(error => console.log(error));
       setActiveStep(nextStep);
       return;
     }

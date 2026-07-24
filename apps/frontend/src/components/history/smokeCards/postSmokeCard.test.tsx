@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { PostSmokeCard } from './postSmokeCard';
-import { PostSmoke } from '../../smoke/postSmokeStep/PostSmokeStep';
+import { PostSmoke } from '../../../api/types';
 
 // Mock Material-UI components
 jest.mock('@mui/material', () => ({

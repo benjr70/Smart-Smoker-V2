@@ -15,10 +15,6 @@ import React from 'react';
 import { useCurrentResource } from '../../api';
 import { NotificationSettings } from '../../api/types';
 
-// The canonical NotificationSettings type now lives in the API types module.
-// Re-exported here so existing importers of this component keep compiling.
-export type { NotificationSettings };
-
 // Returns a fresh notification each call so no two rules (or the initial
 // value) share the same object reference. A single module-level constant would
 // be aliased across the initial state and every 'New Rule', and the row editor

@@ -8,8 +8,7 @@ import {
   createTheme,
 } from '@mui/material';
 import React, { useEffect, useState } from 'react';
-import { rating } from '../../common/interfaces/rating';
-import { updateRatings } from '../../../Services/ratingsService';
+import { rating, useApiClient } from '../../../api';
 
 interface RatingsCardProps {
   ratings: rating;
@@ -29,6 +28,7 @@ const theme = createTheme({
 });
 
 export function RatingsCard(props: RatingsCardProps): JSX.Element {
+  const client = useApiClient();
   const [ratings, setRatings] = useState<rating>(props.ratings);
 
   useEffect(() => {
@@ -37,9 +37,11 @@ export function RatingsCard(props: RatingsCardProps): JSX.Element {
 
   useEffect(() => {
     if (ratings._id) {
-      updateRatings(ratings);
+      // Persist edits to an existing rating (id present → update). Swallow-and-log
+      // preserves the legacy shim's fire-and-forget semantics for this effect.
+      client.ratings.save(ratings).catch(error => console.log(error));
     }
-  }, [ratings]);
+  }, [ratings, client]);
 
   return (
     <Grid>

@@ -6,8 +6,7 @@
  * as each migration slice lands.
  */
 import { TempData } from 'temperaturechart/src/tempChart';
-import { preSmoke } from '../components/common/interfaces/preSmoke';
-import { rating } from '../components/common/interfaces/rating';
+import type { WeightUnits } from '../components/common/interfaces/enums';
 
 export type { TempData };
 
@@ -28,15 +27,25 @@ export interface SmokeProfile {
 }
 
 /**
- * Pre-smoke domain type. Re-exported from the existing shared interface so the
- * service layer imports it from the API module instead of reaching into a
- * component tree.
+ * Pre-smoke domain type. Canonical here (the definition was relocated from the
+ * component interface tree in the final cutover), so the client and every caller
+ * import it from the API types module rather than reaching into a component.
  */
-export type PreSmoke = preSmoke;
+export interface PreSmoke {
+  name?: string;
+  meatType?: string;
+  weight: {
+    weight?: number;
+    unit?: WeightUnits;
+  };
+  steps: string[];
+  notes?: string;
+}
 
 /**
- * Post-smoke domain type. Relocated here from the React step component (which
- * now re-exports it) so the service/client layer never imports from a component.
+ * Post-smoke domain type. Canonical here (relocated from the React step
+ * component in an earlier slice) so the service/client layer never imports a
+ * domain type from a component.
  */
 export interface PostSmoke {
   restTime: string;
@@ -45,20 +54,26 @@ export interface PostSmoke {
 }
 
 /**
- * A smoke rating. The canonical definition still lives with the other shared
- * component interfaces; it is re-exported here so API call sites depend only on
- * the API types module. The persisted `_id` rides along on a fetched document
- * and is stripped before the outbound DTO is sent (see the client's ratings
- * save projection).
+ * A smoke rating. Canonical here (relocated from the component interface tree in
+ * the final cutover) so API call sites depend only on the API types module. The
+ * persisted `_id` rides along on a fetched document and is stripped before the
+ * outbound DTO is sent (see the client's ratings save projection).
  */
-export type { rating };
+export interface rating {
+  smokeFlavor: number;
+  seasoning: number;
+  tenderness: number;
+  overallTaste: number;
+  notes: string;
+  _id?: string;
+}
 
 /**
- * A single notification rule. Relocated here from the settings component so API
- * call sites depend only on the API types module; the component re-exports it
- * for backward compatibility. Rules fetched from the backend also carry a
- * persisted subdocument `_id`/`__v` (and a server-managed `lastNotificationSent`)
- * that are handled by the client's notifications save projection.
+ * A single notification rule. Canonical here (relocated from the settings
+ * component in an earlier slice) so API call sites depend only on the API types
+ * module. Rules fetched from the backend also carry a persisted subdocument
+ * `_id`/`__v` (and a server-managed `lastNotificationSent`) that are handled by
+ * the client's notifications save projection.
  */
 export interface NotificationSettings {
   type: boolean;
@@ -72,9 +87,8 @@ export interface NotificationSettings {
 
 /**
  * The central smoke-session state singleton as seen by the frontend: which
- * smoke is current and whether it is actively smoking. This is the canonical
- * definition; the legacy `components/common/interfaces/state` module re-exports
- * it so services and the client never import domain types from React land.
+ * smoke is current and whether it is actively smoking. Canonical here so
+ * services and the client never import domain types from React land.
  */
 export interface State {
   smokeId: string;
@@ -117,8 +131,7 @@ export interface SmokeReview {
 
 /**
  * A history row: the denormalized summary the history list renders per smoke.
- * Canonical here so the client's history read stays free of component imports;
- * `components/common/interfaces/history` re-exports it as `smokeHistory`.
+ * Canonical here so the client's history read stays free of component imports.
  */
 export interface SmokeHistory {
   name: string;
