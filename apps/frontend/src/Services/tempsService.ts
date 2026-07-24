@@ -16,16 +16,6 @@ export const getCurrentTemps = async (): Promise<TempData[]> => {
   }
 };
 
-/** @deprecated Use `useApiClient().temps.getById` instead. */
-export const getTempsById = async (id: string): Promise<TempData[]> => {
-  try {
-    return await getDefaultApiClient().temps.getById(id);
-  } catch (error) {
-    console.log(error);
-    return undefined as unknown as TempData[];
-  }
-};
-
 /** @deprecated Use `useApiClient().temps.deleteById` instead. */
 export const deleteTempsById = async (id: string): Promise<void> => {
   try {

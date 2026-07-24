@@ -2,7 +2,6 @@ import {
   getCurrentRatings,
   setCurrentRatings,
   updateRatings,
-  getRatingById,
   deleteRatingsById,
 } from './ratingsService';
 import { createApiClient } from '../api/client';
@@ -96,25 +95,6 @@ describe('ratingsService (deprecated shims)', () => {
     const consoleSpy = jest.spyOn(console, 'log');
 
     const result = await updateRatings({ ...sampleRating, _id: 'abc123' });
-
-    expect(result).toBeUndefined();
-    expect(consoleSpy).toHaveBeenCalledTimes(1);
-  });
-
-  test('getRatingById resolves the stored rating on success', async () => {
-    const result = await getRatingById('abc123');
-    expect(result).toEqual({ ...sampleRating, _id: 'abc123' });
-    expect(backend.requests).toContainEqual({
-      method: 'get',
-      path: 'ratings/abc123',
-      body: undefined,
-    });
-  });
-
-  test('getRatingById resolves undefined and logs when the record is missing', async () => {
-    const consoleSpy = jest.spyOn(console, 'log');
-
-    const result = await getRatingById('missing');
 
     expect(result).toBeUndefined();
     expect(consoleSpy).toHaveBeenCalledTimes(1);

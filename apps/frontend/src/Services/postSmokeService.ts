@@ -1,25 +1,13 @@
 import { getDefaultApiClient } from '../api';
-import { PostSmoke } from '../api/types';
 
 /**
- * @deprecated Use the API client (`useApiClient().postSmoke`) instead. These are
- * the remaining delegating shims that preserve the legacy swallow-and-log
- * semantics (catch, `console.log`, resolve `undefined`) for the by-id read and
- * delete still used by the history review screen and the delete cascade. They
- * will be deleted when those callers migrate in their own slices. The
- * current-document load/save shims were removed once the post-smoke form
- * migrated to the {@link useCurrentResource} hook.
+ * @deprecated Use the API client (`useApiClient().postSmoke`) instead. This is
+ * the remaining delegating shim that preserves the legacy swallow-and-log
+ * semantics (catch, `console.log`, resolve `undefined`) for the by-id delete.
+ * The by-id read shim was removed once the history review screen migrated to the
+ * {@link useReview} hook; the current-document load/save shims were removed once
+ * the post-smoke form migrated to the {@link useCurrentResource} hook.
  */
-/** @deprecated Use `useApiClient().postSmoke.getById` instead. */
-export const getPostSmokeById = async (id: string): Promise<PostSmoke> => {
-  try {
-    return await getDefaultApiClient().postSmoke.getById(id);
-  } catch (error) {
-    console.log(error);
-    return undefined as unknown as PostSmoke;
-  }
-};
-
 /** @deprecated Use `useApiClient().postSmoke.deleteById` instead. */
 export const deletePostSmokeById = async (id: string): Promise<void> => {
   try {

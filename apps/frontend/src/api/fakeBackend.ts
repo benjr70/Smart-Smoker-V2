@@ -340,6 +340,10 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
       }
       if (method === 'delete' && id !== undefined) {
         delete store.smoke.records[id];
+        // History is a derived read-model on the real backend, so deleting a
+        // smoke removes its history row too; mirror that here so a cascade
+        // delete is reflected in the refreshed list.
+        store.history = store.history.filter(row => row.smokeId !== id);
         return {} as unknown as T;
       }
     }

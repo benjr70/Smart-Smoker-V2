@@ -37,16 +37,6 @@ export const updateRatings = async (rating: rating): Promise<rating> => {
   }
 };
 
-/** @deprecated Use `useApiClient().ratings.getById` instead. */
-export const getRatingById = async (id: string): Promise<rating> => {
-  try {
-    return await getDefaultApiClient().ratings.getById(id);
-  } catch (error) {
-    console.log(error);
-    return undefined as unknown as rating;
-  }
-};
-
 /** @deprecated Use `useApiClient().ratings.deleteById` instead. */
 export const deleteRatingsById = async (id: string): Promise<void> => {
   try {

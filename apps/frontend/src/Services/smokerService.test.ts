@@ -3,12 +3,9 @@ import {
   clearSmoke,
   getState,
   setSmokeProfile,
-  getSmokeProfileById,
   FinishSmoke,
   getCurrentSmokeProfile,
-  getSmokeHistory,
   getAllSmoke,
-  getSmokeById,
   deleteSmokeProfileById,
   deleteSmokeById,
   smokeProfile,
@@ -218,29 +215,6 @@ describe('smokerService', () => {
       });
     });
 
-    describe('getSmokeHistory', () => {
-      test('should get the history list through the client', async () => {
-        const result = await getSmokeHistory();
-
-        expect(result).toEqual(mockSmokeHistory);
-        expect(backend.requests).toContainEqual({
-          method: 'get',
-          path: 'history',
-          body: undefined,
-        });
-      });
-
-      test('should swallow-and-log on failure and resolve undefined', async () => {
-        backend.injectFault({ method: 'get', path: 'history', status: 500 });
-        const consoleLogSpy = jest.spyOn(console, 'log');
-
-        const result = await getSmokeHistory();
-
-        expect(result).toBeUndefined();
-        expect(consoleLogSpy).toHaveBeenCalledTimes(1);
-      });
-    });
-
     describe('getAllSmoke', () => {
       test('should get all smokes through the client', async () => {
         const result = await getAllSmoke();
@@ -258,28 +232,6 @@ describe('smokerService', () => {
         const consoleLogSpy = jest.spyOn(console, 'log');
 
         const result = await getAllSmoke();
-
-        expect(result).toBeUndefined();
-        expect(consoleLogSpy).toHaveBeenCalledTimes(1);
-      });
-    });
-
-    describe('getSmokeById', () => {
-      test('should get a smoke by id through the client', async () => {
-        const result = await getSmokeById('smoke-id-1');
-
-        expect(result).toEqual(mockSmoke);
-        expect(backend.requests).toContainEqual({
-          method: 'get',
-          path: 'smoke/smoke-id-1',
-          body: undefined,
-        });
-      });
-
-      test('should swallow-and-log on failure and resolve undefined', async () => {
-        const consoleLogSpy = jest.spyOn(console, 'log');
-
-        const result = await getSmokeById('missing');
 
         expect(result).toBeUndefined();
         expect(consoleLogSpy).toHaveBeenCalledTimes(1);
@@ -332,50 +284,6 @@ describe('smokerService', () => {
         const consoleLogSpy = jest.spyOn(console, 'log');
 
         const result = await setSmokeProfile(mockSmokeProfile);
-
-        expect(result).toBeUndefined();
-        expect(consoleLogSpy).toHaveBeenCalledTimes(1);
-      });
-    });
-
-    describe('getSmokeProfileById', () => {
-      test('should get smoke profile by id successfully', async () => {
-        const result = await getSmokeProfileById('profile-id-123');
-
-        expect(result).toEqual(mockSmokeProfile);
-        expect(backend.requests).toContainEqual({
-          method: 'get',
-          path: 'smokeProfile/profile-id-123',
-          body: undefined,
-        });
-      });
-
-      test('should default missing notes and woodType fields to empty strings', async () => {
-        backend = createFakeBackend({
-          smokeProfile: {
-            records: {
-              'profile-id-123': {
-                chamberName: 'Main Chamber',
-                probe1Name: 'Meat Probe',
-                probe2Name: 'Chamber Probe',
-                probe3Name: 'Water Pan',
-                // notes and woodType missing
-              },
-            },
-          },
-        });
-        (apiModule.getDefaultApiClient as jest.Mock).mockReturnValue(createApiClient(backend));
-
-        const result = await getSmokeProfileById('profile-id-123');
-
-        expect(result.notes).toBe('');
-        expect(result.woodType).toBe('');
-      });
-
-      test('should swallow-and-log on failure and resolve undefined', async () => {
-        const consoleLogSpy = jest.spyOn(console, 'log');
-
-        const result = await getSmokeProfileById('missing');
 
         expect(result).toBeUndefined();
         expect(consoleLogSpy).toHaveBeenCalledTimes(1);

@@ -1,4 +1,4 @@
-import { getPostSmokeById, deletePostSmokeById } from './postSmokeService';
+import { deletePostSmokeById } from './postSmokeService';
 import { createApiClient } from '../api/client';
 import { createFakeBackend, FakeBackend } from '../api/fakeBackend';
 import { PostSmoke } from '../api/types';
@@ -35,25 +35,6 @@ afterEach(() => {
 });
 
 describe('postSmokeService (deprecated shims)', () => {
-  test('getPostSmokeById resolves the record on success', async () => {
-    const result = await getPostSmokeById('abc123');
-    expect(result).toEqual(samplePostSmoke);
-    expect(backend.requests).toContainEqual({
-      method: 'get',
-      path: 'postSmoke/abc123',
-      body: undefined,
-    });
-  });
-
-  test('getPostSmokeById resolves undefined and logs when the record is missing', async () => {
-    const consoleSpy = jest.spyOn(console, 'log');
-
-    const result = await getPostSmokeById('missing');
-
-    expect(result).toBeUndefined();
-    expect(consoleSpy).toHaveBeenCalledTimes(1);
-  });
-
   test('deletePostSmokeById removes the record and resolves on success', async () => {
     await deletePostSmokeById('abc123');
     expect(backend.store.postSmoke.records.abc123).toBeUndefined();
