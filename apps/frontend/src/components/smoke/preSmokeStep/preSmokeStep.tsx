@@ -3,7 +3,7 @@ import React from 'react';
 import { useCurrentResource } from '../../../api';
 import { DynamicList } from '../../common/components/DynamicList';
 import { WeightUnits } from '../../common/interfaces/enums';
-import { preSmoke } from '../../common/interfaces/preSmoke';
+import { PreSmoke } from '../../../api/types';
 import './preSmokeStep.style.css';
 
 const meats = ['Ribs', 'Brisket', 'Turkey'];
@@ -13,7 +13,7 @@ type PreSmokeStepProps = {
 };
 
 export function PreSmokeStep(props: PreSmokeStepProps) {
-  const [preSmokeState, setPreSmokeState] = useCurrentResource<preSmoke>({
+  const [preSmokeState, setPreSmokeState] = useCurrentResource<PreSmoke>({
     initialValue: {
       name: '',
       meatType: '',

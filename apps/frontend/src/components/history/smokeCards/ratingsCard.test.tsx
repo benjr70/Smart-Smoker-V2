@@ -1,14 +1,15 @@
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
-import { updateRatings } from '../../../Services/ratingsService';
-import { rating } from '../../common/interfaces/rating';
+import {
+  ApiClientProvider,
+  createApiClient,
+  createFakeBackend,
+  FakeBackend,
+  rating,
+  RecordedRequest,
+} from '../../../api';
 import { RatingsCard } from './ratingsCard';
-
-// Mock the updateRatings service
-jest.mock('../../../Services/ratingsService', () => ({
-  updateRatings: jest.fn(),
-}));
 
 // Mock Material-UI components
 jest.mock('@mui/material', () => ({
@@ -62,7 +63,29 @@ jest.mock('@mui/material', () => ({
   createTheme: jest.fn(theme => theme),
 }));
 
-const mockUpdateRatings = updateRatings as jest.MockedFunction<typeof updateRatings>;
+let backend: FakeBackend;
+
+// The rating save routes create-vs-update on `_id`; a rating with an id updates
+// the id-scoped path with the DTO-whitelisted body (the `_id` is stripped).
+const ratingSaveRequests = (): RecordedRequest[] =>
+  backend.requests.filter(r => r.method === 'post' && r.path.startsWith('ratings'));
+
+// The outbound body the client projects for a saved rating: exactly the backend
+// DTO whitelist, with the persisted `_id` dropped.
+const projectedBody = (r: rating) => ({
+  smokeFlavor: r.smokeFlavor,
+  seasoning: r.seasoning,
+  tenderness: r.tenderness,
+  overallTaste: r.overallTaste,
+  notes: r.notes,
+});
+
+const renderCard = (props: { ratings: rating }) =>
+  render(
+    <ApiClientProvider client={createApiClient(backend)}>
+      <RatingsCard {...props} />
+    </ApiClientProvider>
+  );
 
 describe('RatingsCard Component', () => {
   const mockRatingData: rating = {
@@ -80,13 +103,19 @@ describe('RatingsCard Component', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.resetAllMocks();
-    mockUpdateRatings.mockResolvedValue(mockRatingData);
+    backend = createFakeBackend({
+      ratings: { records: { 'rating-123': mockRatingData } },
+    });
+    jest.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   describe('Component Rendering', () => {
     test('should render RatingsCard component successfully', () => {
-      render(<RatingsCard {...mockProps} />);
+      renderCard(mockProps);
 
       expect(screen.getByTestId('grid')).toBeInTheDocument();
       expect(screen.getByTestId('theme-provider')).toBeInTheDocument();
@@ -95,13 +124,13 @@ describe('RatingsCard Component', () => {
     });
 
     test('should render Ratings title', () => {
-      render(<RatingsCard {...mockProps} />);
+      renderCard(mockProps);
 
       expect(screen.getByText('Ratings')).toBeInTheDocument();
     });
 
     test('should render all rating categories with values', () => {
-      render(<RatingsCard {...mockProps} />);
+      renderCard(mockProps);
 
       expect(screen.getByText('Smoke Flavor: 8')).toBeInTheDocument();
       expect(screen.getByText('Seasoning: 7')).toBeInTheDocument();
@@ -110,7 +139,7 @@ describe('RatingsCard Component', () => {
     });
 
     test('should render all rating input components', () => {
-      render(<RatingsCard {...mockProps} />);
+      renderCard(mockProps);
 
       const ratingInputs = screen.getAllByTestId('rating');
       expect(ratingInputs).toHaveLength(4);
@@ -123,7 +152,7 @@ describe('RatingsCard Component', () => {
     });
 
     test('should have correct rating component properties', () => {
-      render(<RatingsCard {...mockProps} />);
+      renderCard(mockProps);
 
       const ratingInputs = screen.getAllByTestId('rating');
 
@@ -147,7 +176,7 @@ describe('RatingsCard Component', () => {
         },
       };
 
-      render(<RatingsCard {...propsWithZeroRatings} />);
+      renderCard(propsWithZeroRatings);
 
       expect(screen.getByText('Smoke Flavor: 0')).toBeInTheDocument();
       expect(screen.getByText('Seasoning: 0')).toBeInTheDocument();
@@ -166,7 +195,7 @@ describe('RatingsCard Component', () => {
         },
       };
 
-      render(<RatingsCard {...propsWithMaxRatings} />);
+      renderCard(propsWithMaxRatings);
 
       const ratingInputs = screen.getAllByTestId('rating');
       ratingInputs.forEach(rating => {
@@ -185,7 +214,7 @@ describe('RatingsCard Component', () => {
         },
       };
 
-      render(<RatingsCard {...propsWithDecimalRatings} />);
+      renderCard(propsWithDecimalRatings);
 
       expect(screen.getByText('Smoke Flavor: 7.5')).toBeInTheDocument();
       expect(screen.getByText('Seasoning: 8.2')).toBeInTheDocument();
@@ -201,10 +230,10 @@ describe('RatingsCard Component', () => {
         },
       };
 
-      render(<RatingsCard {...propsWithoutId} />);
+      renderCard(propsWithoutId);
 
       expect(screen.getByTestId('card')).toBeInTheDocument();
-      expect(mockUpdateRatings).not.toHaveBeenCalled();
+      expect(ratingSaveRequests()).toHaveLength(0);
     });
 
     test('should handle empty notes', () => {
@@ -215,15 +244,15 @@ describe('RatingsCard Component', () => {
         },
       };
 
-      render(<RatingsCard {...propsWithEmptyNotes} />);
+      renderCard(propsWithEmptyNotes);
 
       expect(screen.getByTestId('card')).toBeInTheDocument();
     });
   });
 
   describe('User Interactions', () => {
-    test('should update smoke flavor rating when changed', async () => {
-      render(<RatingsCard {...mockProps} />);
+    test('should save smoke flavor rating when changed', async () => {
+      renderCard(mockProps);
 
       const ratingInputs = screen.getAllByTestId('rating');
       const smokeFlavorRating = ratingInputs[0];
@@ -231,15 +260,16 @@ describe('RatingsCard Component', () => {
       fireEvent.change(smokeFlavorRating, { target: { value: '9' } });
 
       await waitFor(() => {
-        expect(mockUpdateRatings).toHaveBeenCalledWith({
-          ...mockRatingData,
-          smokeFlavor: 9,
+        expect(backend.requests).toContainEqual({
+          method: 'post',
+          path: 'ratings/rating-123',
+          body: projectedBody({ ...mockRatingData, smokeFlavor: 9 }),
         });
       });
     });
 
-    test('should update seasoning rating when changed', async () => {
-      render(<RatingsCard {...mockProps} />);
+    test('should save seasoning rating when changed', async () => {
+      renderCard(mockProps);
 
       const ratingInputs = screen.getAllByTestId('rating');
       const seasoningRating = ratingInputs[1];
@@ -247,15 +277,16 @@ describe('RatingsCard Component', () => {
       fireEvent.change(seasoningRating, { target: { value: '8.5' } });
 
       await waitFor(() => {
-        expect(mockUpdateRatings).toHaveBeenCalledWith({
-          ...mockRatingData,
-          seasoning: 8.5,
+        expect(backend.requests).toContainEqual({
+          method: 'post',
+          path: 'ratings/rating-123',
+          body: projectedBody({ ...mockRatingData, seasoning: 8.5 }),
         });
       });
     });
 
-    test('should update tenderness rating when changed', async () => {
-      render(<RatingsCard {...mockProps} />);
+    test('should save tenderness rating when changed', async () => {
+      renderCard(mockProps);
 
       const ratingInputs = screen.getAllByTestId('rating');
       const tendernessRating = ratingInputs[2];
@@ -263,15 +294,16 @@ describe('RatingsCard Component', () => {
       fireEvent.change(tendernessRating, { target: { value: '7' } });
 
       await waitFor(() => {
-        expect(mockUpdateRatings).toHaveBeenCalledWith({
-          ...mockRatingData,
-          tenderness: 7,
+        expect(backend.requests).toContainEqual({
+          method: 'post',
+          path: 'ratings/rating-123',
+          body: projectedBody({ ...mockRatingData, tenderness: 7 }),
         });
       });
     });
 
-    test('should update overall taste rating when changed', async () => {
-      render(<RatingsCard {...mockProps} />);
+    test('should save overall taste rating when changed', async () => {
+      renderCard(mockProps);
 
       const ratingInputs = screen.getAllByTestId('rating');
       const overallTasteRating = ratingInputs[3];
@@ -279,14 +311,15 @@ describe('RatingsCard Component', () => {
       fireEvent.change(overallTasteRating, { target: { value: '9.5' } });
 
       await waitFor(() => {
-        expect(mockUpdateRatings).toHaveBeenCalledWith({
-          ...mockRatingData,
-          overallTaste: 9.5,
+        expect(backend.requests).toContainEqual({
+          method: 'post',
+          path: 'ratings/rating-123',
+          body: projectedBody({ ...mockRatingData, overallTaste: 9.5 }),
         });
       });
     });
 
-    test('should not call updateRatings when rating has no _id', async () => {
+    test('should not save when rating has no _id', async () => {
       const propsWithoutId = {
         ratings: {
           ...mockRatingData,
@@ -294,20 +327,20 @@ describe('RatingsCard Component', () => {
         },
       };
 
-      render(<RatingsCard {...propsWithoutId} />);
+      renderCard(propsWithoutId);
 
       const ratingInputs = screen.getAllByTestId('rating');
       fireEvent.change(ratingInputs[0], { target: { value: '9' } });
 
       await waitFor(() => {
-        expect(mockUpdateRatings).not.toHaveBeenCalled();
+        expect(ratingSaveRequests()).toHaveLength(0);
       });
     });
   });
 
   describe('State Management', () => {
     test('should update internal state when props change', () => {
-      const { rerender } = render(<RatingsCard {...mockProps} />);
+      const { rerender } = renderCard(mockProps);
 
       const newRatings = {
         ...mockRatingData,
@@ -315,14 +348,18 @@ describe('RatingsCard Component', () => {
         seasoning: 6,
       };
 
-      rerender(<RatingsCard ratings={newRatings} />);
+      rerender(
+        <ApiClientProvider client={createApiClient(backend)}>
+          <RatingsCard ratings={newRatings} />
+        </ApiClientProvider>
+      );
 
       expect(screen.getByText('Smoke Flavor: 5')).toBeInTheDocument();
       expect(screen.getByText('Seasoning: 6')).toBeInTheDocument();
     });
 
     test('should maintain local state after rating changes', async () => {
-      render(<RatingsCard {...mockProps} />);
+      renderCard(mockProps);
 
       const ratingInputs = screen.getAllByTestId('rating');
       fireEvent.change(ratingInputs[0], { target: { value: '9' } });
@@ -335,7 +372,7 @@ describe('RatingsCard Component', () => {
 
   describe('Component Structure', () => {
     test('should have correct typography variant for title', () => {
-      render(<RatingsCard {...mockProps} />);
+      renderCard(mockProps);
 
       const typographies = screen.getAllByTestId('typography');
 
@@ -349,7 +386,7 @@ describe('RatingsCard Component', () => {
     });
 
     test('should have correct typography for rating labels', () => {
-      render(<RatingsCard {...mockProps} />);
+      renderCard(mockProps);
 
       const typographies = screen.getAllByTestId('typography');
 
@@ -378,7 +415,7 @@ describe('RatingsCard Component', () => {
 
   describe('Theme Integration', () => {
     test('should apply theme provider with custom theme', () => {
-      render(<RatingsCard {...mockProps} />);
+      renderCard(mockProps);
 
       const themeProvider = screen.getByTestId('theme-provider');
       const theme = JSON.parse(themeProvider.getAttribute('data-theme') || '{}');
@@ -388,33 +425,34 @@ describe('RatingsCard Component', () => {
     });
   });
 
-  describe('Service Integration', () => {
-    test('should call updateRatings service when rating changes and _id exists', async () => {
-      render(<RatingsCard {...mockProps} />);
+  describe('Client Integration', () => {
+    test('should save via the client when rating changes and _id exists', async () => {
+      renderCard(mockProps);
 
       const ratingInputs = screen.getAllByTestId('rating');
       fireEvent.change(ratingInputs[0], { target: { value: '9' } });
 
-      await waitFor(
-        () => expect(mockUpdateRatings).toHaveBeenCalledTimes(2) // Called once on initial render, once on change
-      );
+      // Saved once on initial mount (id present) and again on the change.
+      await waitFor(() => expect(ratingSaveRequests().length).toBeGreaterThanOrEqual(2));
 
-      expect(mockUpdateRatings).toHaveBeenCalledWith({
-        ...mockRatingData,
-        smokeFlavor: 9,
+      expect(backend.requests).toContainEqual({
+        method: 'post',
+        path: 'ratings/rating-123',
+        body: projectedBody({ ...mockRatingData, smokeFlavor: 9 }),
       });
     });
 
-    test('should handle updateRatings service calls', async () => {
-      render(<RatingsCard {...mockProps} />);
+    test('should keep rendering after a save call', async () => {
+      renderCard(mockProps);
       const ratingInputs = screen.getAllByTestId('rating');
 
       fireEvent.change(ratingInputs[0], { target: { value: '9' } });
 
       await waitFor(() => {
-        expect(mockUpdateRatings).toHaveBeenCalledWith({
-          ...mockRatingData,
-          smokeFlavor: 9,
+        expect(backend.requests).toContainEqual({
+          method: 'post',
+          path: 'ratings/rating-123',
+          body: projectedBody({ ...mockRatingData, smokeFlavor: 9 }),
         });
       });
 
@@ -424,43 +462,46 @@ describe('RatingsCard Component', () => {
 
   describe('Edge Cases', () => {
     test('should handle invalid number inputs', async () => {
-      render(<RatingsCard {...mockProps} />);
+      renderCard(mockProps);
 
       const ratingInputs = screen.getAllByTestId('rating');
       fireEvent.change(ratingInputs[0], { target: { value: 'invalid' } });
 
       await waitFor(() => {
-        expect(mockUpdateRatings).toHaveBeenCalledWith({
-          ...mockRatingData,
-          smokeFlavor: NaN,
+        expect(backend.requests).toContainEqual({
+          method: 'post',
+          path: 'ratings/rating-123',
+          body: projectedBody({ ...mockRatingData, smokeFlavor: NaN }),
         });
       });
     });
 
     test('should handle negative values', async () => {
-      render(<RatingsCard {...mockProps} />);
+      renderCard(mockProps);
 
       const ratingInputs = screen.getAllByTestId('rating');
       fireEvent.change(ratingInputs[0], { target: { value: '-1' } });
 
       await waitFor(() => {
-        expect(mockUpdateRatings).toHaveBeenCalledWith({
-          ...mockRatingData,
-          smokeFlavor: -1,
+        expect(backend.requests).toContainEqual({
+          method: 'post',
+          path: 'ratings/rating-123',
+          body: projectedBody({ ...mockRatingData, smokeFlavor: -1 }),
         });
       });
     });
 
     test('should handle values above maximum', async () => {
-      render(<RatingsCard {...mockProps} />);
+      renderCard(mockProps);
 
       const ratingInputs = screen.getAllByTestId('rating');
       fireEvent.change(ratingInputs[0], { target: { value: '15' } });
 
       await waitFor(() => {
-        expect(mockUpdateRatings).toHaveBeenCalledWith({
-          ...mockRatingData,
-          smokeFlavor: 15,
+        expect(backend.requests).toContainEqual({
+          method: 'post',
+          path: 'ratings/rating-123',
+          body: projectedBody({ ...mockRatingData, smokeFlavor: 15 }),
         });
       });
     });
@@ -473,13 +514,13 @@ describe('RatingsCard Component', () => {
         },
       };
 
-      render(<RatingsCard {...propsWithEmptyId} />);
+      renderCard(propsWithEmptyId);
 
       const ratingInputs = screen.getAllByTestId('rating');
       fireEvent.change(ratingInputs[0], { target: { value: '9' } });
 
       await waitFor(() => {
-        expect(mockUpdateRatings).not.toHaveBeenCalled();
+        expect(ratingSaveRequests()).toHaveLength(0);
       });
     });
   });
@@ -497,7 +538,7 @@ describe('RatingsCard Component', () => {
 
       const props = { ratings: validRating };
 
-      expect(() => render(<RatingsCard {...props} />)).not.toThrow();
+      expect(() => renderCard(props)).not.toThrow();
     });
 
     test('should handle rating with minimal required fields', () => {
@@ -511,7 +552,7 @@ describe('RatingsCard Component', () => {
 
       const props = { ratings: minimalRating };
 
-      render(<RatingsCard {...props} />);
+      renderCard(props);
 
       expect(screen.getByText('Ratings')).toBeInTheDocument();
       expect(screen.getAllByTestId('rating')).toHaveLength(4);

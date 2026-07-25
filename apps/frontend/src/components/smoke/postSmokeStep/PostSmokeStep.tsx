@@ -6,10 +6,6 @@ import { IMaskInput } from 'react-imask';
 import { PostSmoke } from '../../../api/types';
 import './postSmokeStep.style.css';
 
-// The post-smoke domain type now lives in the API types module. Re-exported here
-// for backward compatibility with existing importers of this component.
-export type { PostSmoke };
-
 type PostSmokeStepProps = {
   nextButton: JSX.Element;
 };

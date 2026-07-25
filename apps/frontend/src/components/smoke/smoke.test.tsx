@@ -2,7 +2,16 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { Smoke, delay } from './smoke';
-import { FinishSmoke, clearSmoke } from '../../Services/smokerService';
+import { ApiClientProvider, createApiClient, createFakeBackend, FakeBackend } from '../../api';
+
+let backend: FakeBackend;
+
+const renderSmoke = () =>
+  render(
+    <ApiClientProvider client={createApiClient(backend)}>
+      <Smoke />
+    </ApiClientProvider>
+  );
 
 // Mock Material-UI components
 jest.mock('@mui/material', () => ({
@@ -46,25 +55,18 @@ jest.mock('./postSmokeStep/PostSmokeStep', () => ({
   PostSmokeStep: ({ nextButton }: any) => <div data-testid="post-smoke-step">{nextButton}</div>,
 }));
 
-// Mock services
-jest.mock('../../Services/smokerService', () => ({
-  FinishSmoke: jest.fn(),
-  clearSmoke: jest.fn(),
-}));
-
-const mockFinishSmoke = FinishSmoke as jest.MockedFunction<typeof FinishSmoke>;
-const mockClearSmoke = clearSmoke as jest.MockedFunction<typeof clearSmoke>;
-
 describe('Smoke Component', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockFinishSmoke.mockResolvedValue(undefined);
-    mockClearSmoke.mockResolvedValue({ smokeId: 'test-id', smoking: false });
+    backend = createFakeBackend({
+      state: { smokeId: 'test-id', smoking: true },
+      smoke: { finish: { _id: 'test-id' } as never },
+    });
   });
 
   describe('Component Rendering', () => {
     test('should render Smoke component successfully', () => {
-      render(<Smoke />);
+      renderSmoke();
 
       // Look for the actual MUI stepper instead of our mock
       expect(document.querySelector('.MuiStepper-root')).toBeInTheDocument();
@@ -74,7 +76,7 @@ describe('Smoke Component', () => {
     });
 
     test('should render all step labels', () => {
-      render(<Smoke />);
+      renderSmoke();
 
       expect(screen.getByText('Pre-Smoke')).toBeInTheDocument();
       expect(screen.getByText('Smoke')).toBeInTheDocument();
@@ -82,7 +84,7 @@ describe('Smoke Component', () => {
     });
 
     test('should start with step 0 (Pre-Smoke) active', () => {
-      render(<Smoke />);
+      renderSmoke();
 
       // Check that the stepper shows active step 0
       const stepper = document.querySelector('.MuiStepper-root');
@@ -93,7 +95,7 @@ describe('Smoke Component', () => {
     });
 
     test('should render next button with correct text for first step', () => {
-      render(<Smoke />);
+      renderSmoke();
 
       const nextButton = screen.getByText('Next');
       expect(nextButton).toBeInTheDocument();
@@ -103,7 +105,7 @@ describe('Smoke Component', () => {
 
   describe('Step Navigation', () => {
     test('should navigate to next step when next button is clicked', async () => {
-      render(<Smoke />);
+      renderSmoke();
 
       // Start at step 0
       expect(screen.getByTestId('pre-smoke-step')).toBeInTheDocument();
@@ -120,7 +122,7 @@ describe('Smoke Component', () => {
     });
 
     test('should navigate to step 2 from step 1', async () => {
-      render(<Smoke />);
+      renderSmoke();
 
       // Navigate to step 1
       const nextButton = screen.getByText('Next');
@@ -141,7 +143,7 @@ describe('Smoke Component', () => {
     });
 
     test('should show "Finish" button on last step', async () => {
-      render(<Smoke />);
+      renderSmoke();
 
       // Navigate to step 2 using two separate next button clicks
       let nextButton = screen.getByText('Next');
@@ -163,7 +165,7 @@ describe('Smoke Component', () => {
     });
 
     test('should navigate directly to step using step buttons', async () => {
-      render(<Smoke />);
+      renderSmoke();
 
       const stepButtons = document.querySelectorAll('.MuiStepButton-root');
       expect(stepButtons).toHaveLength(3);
@@ -177,7 +179,7 @@ describe('Smoke Component', () => {
     });
 
     test('should navigate to step 1 using step button', async () => {
-      render(<Smoke />);
+      renderSmoke();
 
       const stepButtons = document.querySelectorAll('.MuiStepButton-root');
 
@@ -191,8 +193,8 @@ describe('Smoke Component', () => {
   });
 
   describe('Finish Smoke Functionality', () => {
-    test('should call FinishSmoke and clearSmoke when finish button is clicked', async () => {
-      render(<Smoke />);
+    test('should call finish then clearSmoke on the client when finish button is clicked', async () => {
+      renderSmoke();
 
       // Navigate to step 2 by clicking next buttons twice
       let nextButton = screen.getByText('Next');
@@ -219,13 +221,21 @@ describe('Smoke Component', () => {
       fireEvent.click(finishButton);
 
       await waitFor(() => {
-        expect(mockFinishSmoke).toHaveBeenCalledTimes(1);
-        expect(mockClearSmoke).toHaveBeenCalledTimes(1);
+        expect(backend.requests).toContainEqual({
+          method: 'post',
+          path: 'smoke/finish',
+          body: undefined,
+        });
+        expect(backend.requests).toContainEqual({
+          method: 'put',
+          path: 'state/clearSmoke',
+          body: undefined,
+        });
       });
     });
 
     test('should reset to step 0 after finishing smoke', async () => {
-      render(<Smoke />);
+      renderSmoke();
 
       // Navigate to step 2
       let nextButton = screen.getByText('Next');
@@ -262,7 +272,7 @@ describe('Smoke Component', () => {
 
   describe('Component Structure', () => {
     test('should have correct grid structure', () => {
-      render(<Smoke />);
+      renderSmoke();
 
       const grids = screen.getAllByTestId('grid');
       expect(grids).toHaveLength(3);
@@ -272,7 +282,7 @@ describe('Smoke Component', () => {
     });
 
     test('should render stepper with correct props', () => {
-      render(<Smoke />);
+      renderSmoke();
 
       // Find stepper by its MUI class name
       const stepper = document.querySelector('.MuiStepper-root');
@@ -285,7 +295,7 @@ describe('Smoke Component', () => {
 
   describe('Edge Cases', () => {
     test('should not navigate beyond step 2', async () => {
-      render(<Smoke />);
+      renderSmoke();
 
       // Start at step 0 (pre-smoke)
       expect(screen.getByTestId('pre-smoke-step')).toBeInTheDocument();

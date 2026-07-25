@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { SmokeProfileCard } from './smokeProfileCard';
-import { smokeProfile } from '../../../Services/smokerService';
+import { SmokeProfile } from '../../../api/types';
 import { TempData } from 'temperaturechart/src/tempChart';
 
 // Mock Material-UI components
@@ -76,7 +76,7 @@ jest.mock('temperaturechart/src/tempChart', () => ({
 }));
 
 describe('SmokeProfileCard Component', () => {
-  const mockSmokeProfile: smokeProfile = {
+  const mockSmokeProfile: SmokeProfile = {
     chamberName: 'Main Chamber',
     probe1Name: 'Point',
     probe2Name: 'Flat',

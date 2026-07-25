@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { PreSmokeCard } from './preSmokeCard';
-import { preSmoke } from '../../common/interfaces/preSmoke';
+import { PreSmoke } from '../../../api/types';
 import { WeightUnits } from '../../common/interfaces/enums';
 
 // Mock Material-UI components
@@ -58,7 +58,7 @@ jest.mock('@mui/material', () => ({
 }));
 
 describe('PreSmokeCard Component', () => {
-  const mockPreSmokeData: preSmoke = {
+  const mockPreSmokeData: PreSmoke = {
     name: 'BBQ Brisket',
     meatType: 'Beef Brisket',
     weight: {

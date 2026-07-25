@@ -1,17 +1,17 @@
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
-import { FinishSmoke, clearSmoke } from '../../Services/smokerService';
+import { ApiClientProvider, createApiClient, createFakeBackend, FakeBackend } from '../../api';
 import { Smoke, delay } from './smoke';
 
-// Mock the services
-jest.mock('../../Services/smokerService', () => ({
-  FinishSmoke: jest.fn(() => Promise.resolve({})),
-  clearSmoke: jest.fn(() => Promise.resolve({})),
-}));
+let backend: FakeBackend;
 
-const mockFinishSmoke = FinishSmoke as jest.MockedFunction<typeof FinishSmoke>;
-const mockClearSmoke = clearSmoke as jest.MockedFunction<typeof clearSmoke>;
+const renderSmoke = () =>
+  render(
+    <ApiClientProvider client={createApiClient(backend)}>
+      <Smoke />
+    </ApiClientProvider>
+  );
 
 // Mock the step components with simple implementations
 jest.mock('./preSmokeStep/preSmokeStep', () => ({
@@ -65,18 +65,20 @@ jest.mock('@mui/material', () => ({
 describe('Smoke Component', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockFinishSmoke.mockResolvedValue(undefined);
-    mockClearSmoke.mockResolvedValue({ smokeId: 'test-id', smoking: false });
+    backend = createFakeBackend({
+      state: { smokeId: 'test-id', smoking: true },
+      smoke: { finish: { _id: 'test-id' } as never },
+    });
   });
 
   describe('Component Rendering', () => {
     test('should render Smoke component successfully', () => {
-      render(<Smoke />);
+      renderSmoke();
       expect(screen.getByTestId('pre-smoke-step')).toBeInTheDocument();
     });
 
     test('should render with correct initial state', () => {
-      render(<Smoke />);
+      renderSmoke();
 
       // Should show pre-smoke step initially
       expect(screen.getByTestId('pre-smoke-step')).toBeInTheDocument();
@@ -85,14 +87,14 @@ describe('Smoke Component', () => {
     });
 
     test('should display Next button on pre-smoke step', () => {
-      render(<Smoke />);
+      renderSmoke();
       expect(screen.getByText('Next')).toBeInTheDocument();
     });
   });
 
   describe('Navigation', () => {
     test('should navigate from pre-smoke to smoke step', async () => {
-      render(<Smoke />);
+      renderSmoke();
 
       // Start at pre-smoke step
       expect(screen.getByTestId('pre-smoke-step')).toBeInTheDocument();
@@ -110,7 +112,7 @@ describe('Smoke Component', () => {
     });
 
     test('should navigate from smoke to post-smoke step', async () => {
-      render(<Smoke />);
+      renderSmoke();
 
       // Navigate to smoke step first
       const nextButton = screen.getByText('Next');
@@ -132,7 +134,7 @@ describe('Smoke Component', () => {
     });
 
     test('should show Finish button on post-smoke step', async () => {
-      render(<Smoke />);
+      renderSmoke();
 
       // Navigate to post-smoke step
       const nextButton = screen.getByText('Next');
@@ -154,7 +156,7 @@ describe('Smoke Component', () => {
 
   describe('Stepper Navigation', () => {
     test('should allow direct navigation via stepper buttons', async () => {
-      render(<Smoke />);
+      renderSmoke();
 
       // Get step buttons by their actual names
       const preSmokeButton = screen.getByRole('button', { name: /pre-smoke/i });
@@ -176,7 +178,7 @@ describe('Smoke Component', () => {
 
   describe('Finish Functionality', () => {
     test('should handle finish smoke workflow', async () => {
-      render(<Smoke />);
+      renderSmoke();
 
       // Navigate to post-smoke step
       let nextButton = screen.getByText('Next');
@@ -198,19 +200,40 @@ describe('Smoke Component', () => {
       fireEvent.click(finishButton);
 
       await waitFor(() => {
-        expect(mockFinishSmoke).toHaveBeenCalled();
-        expect(mockClearSmoke).toHaveBeenCalled();
+        expect(backend.requests).toContainEqual({
+          method: 'post',
+          path: 'smoke/finish',
+          body: undefined,
+        });
+        expect(backend.requests).toContainEqual({
+          method: 'put',
+          path: 'state/clearSmoke',
+          body: undefined,
+        });
       });
     });
   });
 
   describe('Delay Function', () => {
-    test('should resolve after specified time', async () => {
-      const startTime = Date.now();
-      await delay(10);
-      const endTime = Date.now();
+    test('should resolve after the scheduled timer fires', async () => {
+      jest.useFakeTimers();
+      try {
+        const resolved = jest.fn();
+        const pending = delay(10).then(resolved);
 
-      expect(endTime - startTime).toBeGreaterThanOrEqual(10);
+        // Nothing resolves before the timer elapses...
+        await Promise.resolve();
+        expect(resolved).not.toHaveBeenCalled();
+
+        // ...and it resolves once the scheduled delay fires. Fake timers make the
+        // assertion deterministic (real timers under --coverage occasionally
+        // measured just under the wall-clock threshold and reddened CI).
+        jest.advanceTimersByTime(10);
+        await pending;
+        expect(resolved).toHaveBeenCalledTimes(1);
+      } finally {
+        jest.useRealTimers();
+      }
     });
 
     test('should be exported and callable', () => {
