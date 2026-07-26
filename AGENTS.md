@@ -8,13 +8,13 @@
 
 ## Start here
 
-| File                                                   | Purpose                                                                                                        |
-| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
-| [`CLAUDE.md`](CLAUDE.md)                               | Core project guide: monorepo layout, build commands, testing rules, conventions, default ports, Ralph pipeline |
-| [`.claude/skills/SKILLS.md`](.claude/skills/SKILLS.md) | Catalog of every custom + plugin skill (`/tdd`, `/review-pr`, `/grill-me`, `/caveman`, etc.)                   |
-| [`scripts/ralph/USAGE.md`](scripts/ralph/USAGE.md)     | How to run the Ralph autonomous implementation loop                                                            |
-| [`.mcp.json`](.mcp.json)                               | MCP servers available (context7, playwright, terraform, docker, mongodb)                                       |
-| [`.claude/settings.json`](.claude/settings.json)       | Project-scoped permissions, hooks, Claude Code config                                                          |
+| File                                                   | Purpose                                                                                                                                                         |
+| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`CLAUDE.md`](CLAUDE.md)                               | Core project guide: monorepo layout, build commands, testing rules, conventions, default ports, Ralph pipeline                                                  |
+| [`.claude/skills/SKILLS.md`](.claude/skills/SKILLS.md) | Catalog of every custom + plugin skill (`/tdd`, `/review-pr`, `/grill-me`, `/caveman`, etc.)                                                                    |
+| [`scripts/ralph/USAGE.md`](scripts/ralph/USAGE.md)     | How to run the Ralph autonomous implementation loop                                                                                                             |
+| [`.mcp.json`](.mcp.json)                               | MCP servers available (context7, playwright, terraform, docker, mongodb, github, plus the verify-pr harness's playwright-chrome / playwright-electron wrappers) |
+| [`.claude/settings.json`](.claude/settings.json)       | Project-scoped permissions, hooks, Claude Code config                                                                                                           |
 
 ## Monorepo layout at a glance
 

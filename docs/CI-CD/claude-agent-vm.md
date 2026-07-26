@@ -461,6 +461,12 @@ echo 'export GITHUB_TOKEN="$(cat ~/.config/claude-agent/gh-pat)"' >> ~/.bashrc
 Commit the `.mcp.json` change in a normal PR — it benefits every clone,
 not just this VM.
 
+The same file also carries the `/verify-pr` harness servers
+(`playwright-chrome`, `playwright-electron`) as committed, repo-relative
+entries (issue #388). Do not let a provisioning run author them by hand:
+`scripts/verify-pr/provision-box.sh` only verifies them, and any uncommitted
+edit to `.mcp.json` is destroyed by the agent-run cleanup's `git reset --hard`.
+
 ### 14d. Working directory layout
 
 ```

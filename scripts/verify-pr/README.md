@@ -12,10 +12,13 @@ GNOME/XWayland display through the Playwright MCP server, surviving reboots:
 
 - **`provision-box.sh`** — one-time, idempotent box provisioning. Verifies (and
   installs when absent) real Chrome, Playwright browsers + system deps, and the
-  agent user's docker access, then registers **both** MCP servers
+  agent user's docker access, then **verifies** both harness MCP servers
   (`playwright-chrome` → `chrome-mcp-wrapper.sh`, `playwright-electron` →
-  `electron-cdp-mcp-wrapper.sh`) in `.mcp.json`. Running it twice changes
-  nothing the second time.
+  `electron-cdp-mcp-wrapper.sh`). Those two entries are **committed** to
+  `.mcp.json` (issue #388), so a healthy box has nothing to do: the run logs
+  `verified` and leaves the file byte-identical. Only a hand-edited or deleted
+  entry is `repaired`, and the repair is written in the same portable
+  repo-relative form. Running it twice changes nothing the second time.
 - **`lib/resolve-display-env.sh`** — shared, sourced helper that resolves
   `DISPLAY` + the rotating X-authority file (mutter writes a fresh
   `.mutter-Xwaylandauth.XXXXXX` under the user runtime dir every boot) **by glob
@@ -61,10 +64,15 @@ GNOME/XWayland display through the Playwright MCP server, surviving reboots:
 scripts/verify-pr/provision-box.sh
 ```
 
-After it runs, `.mcp.json` has `playwright-chrome` and `playwright-electron` MCP
-servers pointing at the two wrappers. The config stays static across reboots —
-the wrappers re-resolve the rotated display environment / CDP endpoint on every
-launch.
+`.mcp.json` ships with the `playwright-chrome` and `playwright-electron` servers
+already pointing at the two wrappers, so a fresh clone is registered before the
+script ever runs — and the daemon's `git reset --hard` cleanup can no longer
+wipe them (it used to, which is how the verifier lost its Electron tools).
+Commands are stored repo-relative, so each clone/worktree resolves its own
+wrappers. The config stays static across reboots — the wrappers re-resolve the
+rotated display environment / CDP endpoint on every launch, and on a machine
+with no desktop session (or no Electron running) they fail when the server
+_starts_, with a clear bounded error, never at config-parse time.
 
 ## Drive the Electron path (against a hermetic stack)
 
@@ -121,4 +129,9 @@ headful real-Chrome argument construction, fresh-unique-profile-per-run,
 hermetic URL/CDP-port wiring, the CDP-ready bounded wait (ready vs. timeout →
 cleanup), the PID-file lifecycle (kill + clean, idempotent stop, stale-file
 handling), the CDP wrapper's retry-until-up / give-up-with-error behavior, and
-provisioning idempotency (second run is a no-op) for both MCP entries.
+provisioning idempotency (second run is a no-op) for both MCP entries — plus the
+committed-entry contract: the shipped config carries both harness servers, a
+fresh checkout of it verifies with zero repairs and zero bytes changed, a
+missing/wrong entry is repaired to the repo-relative command, the other six
+servers are untouched in both states, and each committed command fails at
+connect time (no desktop session / no CDP endpoint) rather than at parse time.

@@ -47,8 +47,12 @@ test -f scripts/verify-pr/tick-checklist.sh
 test -d scripts/stack-runner/node_modules || echo "verify-pr: run 'cd scripts/stack-runner && npm install' first"
 ```
 
-The `playwright-chrome` and `playwright-electron` MCP servers must be registered
-(they are, if `scripts/verify-pr/provision-box.sh` has run).
+The `playwright-chrome` and `playwright-electron` MCP servers are **committed**
+to `.mcp.json`, so every checkout has them — they no longer depend on a
+provisioning run having happened (and can no longer be wiped by the daemon's
+`git reset --hard`). If a session does not list them, the config was
+hand-edited: `scripts/verify-pr/provision-box.sh` re-verifies and repairs the
+entries.
 
 ## The round, step by step
 

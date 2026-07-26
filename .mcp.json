@@ -37,6 +37,18 @@
       "env": {
         "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
       }
+    },
+    "playwright-chrome": {
+      "type": "stdio",
+      "command": "./scripts/verify-pr/chrome-mcp-wrapper.sh",
+      "args": [],
+      "env": {}
+    },
+    "playwright-electron": {
+      "type": "stdio",
+      "command": "./scripts/verify-pr/electron-cdp-mcp-wrapper.sh",
+      "args": [],
+      "env": {}
     }
   }
 }

@@ -3,15 +3,16 @@
 # box for the /verify-pr harness (deep module).
 #
 # Prepares everything an agent needs to open a REAL, headful Google Chrome on
-# the box's GNOME/XWayland display through the Playwright MCP server, and wires
-# the MCP config at the chrome-mcp-wrapper.sh launcher. Running it twice changes
-# nothing the second time — every step is verify-then-act.
+# the box's GNOME/XWayland display through the Playwright MCP server, and checks
+# that the MCP config still points at the harness wrappers. Running it twice
+# changes nothing the second time — every step is verify-then-act.
 #
 # Verifies / provisions:
 #   1. Real Google Chrome present         (installs via apt if absent)
 #   2. Playwright browsers + system deps   (installs via `playwright install`)
 #   3. Docker usable by the agent user     (adds user to the docker group)
-#   4. MCP config entry pointing at the wrapper (writes it if missing)
+#   4. MCP entries for both wrappers       (committed to .mcp.json — verified
+#                                           here, repaired only if damaged)
 #
 # Usage:
 #   scripts/verify-pr/provision-box.sh
@@ -101,25 +102,66 @@ ensure_playwright() {
 }
 
 #-------------------------------------------------------------------------------
-# Step 4 (config): register a wrapper as an MCP server, idempotently. Skips the
-# write entirely when the entry already points at the wrapper so a second run
-# leaves the file byte-identical.
-#   $1 = MCP server key   $2 = wrapper command path
+# Step 4 (config): VERIFY — and only when needed, repair — a wrapper's MCP server
+# entry. The two harness entries live in the repo's committed .mcp.json, so a
+# healthy box has nothing to do here; this step exists to catch a hand-edited or
+# hand-deleted entry, not to author one. (They used to be written on every run;
+# because .mcp.json is tracked, the daemon's `git reset --hard` cleanup wiped
+# them and the verifier lost its Electron/Chrome tools — hence committed entries
+# plus a verify-then-repair step.)
+#
+# "Correct" is judged by where the command RESOLVES, not by string equality: the
+# committed commands are repo-relative (portable across clones and worktrees) and
+# must be accepted as-is, or every run would dirty a tracked file.
 #-------------------------------------------------------------------------------
+
+# Absolute path a configured MCP command points at. Relative commands resolve
+# against the config file's directory — the checkout root, which is the cwd the
+# MCP runtime launches servers from.
+resolve_mcp_command() {
+    local cmd="$1" base
+    base="$(cd "$(dirname "${MCP_CONFIG_FILE}")" && pwd)"
+    case "${cmd}" in
+        /*) realpath -m "${cmd}" ;;
+        *) (cd "${base}" && realpath -m "${cmd}") ;;
+    esac
+}
+
+# The form a repaired entry is written in: repo-relative when the wrapper lives
+# under the config's checkout (keeps the committed config portable), absolute
+# otherwise.
+mcp_command_form() {
+    local wrapper="$1" base rel
+    base="$(cd "$(dirname "${MCP_CONFIG_FILE}")" && pwd)"
+    rel="$(realpath -m --relative-to="${base}" "${wrapper}" 2>/dev/null)"
+    if [ -n "${rel}" ] && [ "${rel#../}" = "${rel}" ] && [ "${rel#/}" = "${rel}" ]; then
+        printf './%s\n' "${rel}"
+    else
+        printf '%s\n' "${wrapper}"
+    fi
+}
+
+#   $1 = MCP server key   $2 = wrapper command path
 ensure_mcp_entry() {
-    local key="$1" wrapper="$2" current
+    local key="$1" wrapper="$2" current entry_type want
     current="$(jq -r --arg k "${key}" \
         '.mcpServers[$k].command // ""' "${MCP_CONFIG_FILE}" 2>/dev/null)"
+    entry_type="$(jq -r --arg k "${key}" \
+        '.mcpServers[$k].type // ""' "${MCP_CONFIG_FILE}" 2>/dev/null)"
+    want="$(realpath -m "${wrapper}")"
 
-    if [ "${current}" = "${wrapper}" ]; then
-        log "MCP entry '${key}' already points at the wrapper — no change"
+    if [ -n "${current}" ] && [ "${entry_type}" = "stdio" ] \
+        && [ "$(resolve_mcp_command "${current}")" = "${want}" ]; then
+        log "MCP entry '${key}' verified — '${current}' resolves to the wrapper, no change"
         return 0
     fi
 
-    log "writing MCP entry '${key}' → ${wrapper}"
+    local was="${current:-(missing)}" form
+    form="$(mcp_command_form "${wrapper}")"
+    log "MCP entry '${key}' repaired — was '${was}', now '${form}'"
     local tmp
     tmp="$(mktemp)"
-    jq --arg k "${key}" --arg cmd "${wrapper}" \
+    jq --arg k "${key}" --arg cmd "${form}" \
         '.mcpServers[$k] = {type: "stdio", command: $cmd, args: [], env: {}}' \
         "${MCP_CONFIG_FILE}" > "${tmp}" && mv "${tmp}" "${MCP_CONFIG_FILE}"
 }
@@ -127,7 +169,7 @@ ensure_mcp_entry() {
 main() {
     log "provisioning box for /verify-pr headful Chrome + Electron CDP MCP"
 
-    # Guard: the wrappers we are about to register must exist and be executable.
+    # Guard: the wrappers the MCP entries point at must exist and be executable.
     if [ ! -x "${CHROME_MCP_WRAPPER}" ]; then
         log "ERROR: wrapper not found or not executable: ${CHROME_MCP_WRAPPER}"
         return 1
@@ -140,6 +182,7 @@ main() {
     ensure_chrome || return 1
     ensure_docker || return 1
     ensure_playwright || return 1
+    # Committed entries — expected to verify; a repair means someone edited them.
     ensure_mcp_entry "${MCP_SERVER_KEY}" "${CHROME_MCP_WRAPPER}" || return 1
     ensure_mcp_entry "${ELECTRON_MCP_SERVER_KEY}" "${ELECTRON_MCP_WRAPPER}" || return 1
 
