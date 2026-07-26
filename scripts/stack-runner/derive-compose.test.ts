@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
-import { parse } from 'yaml';
+import { parse, stringify } from 'yaml';
 import { deriveComposeDocument, type ComposeDocument } from './derive-compose.ts';
 import { computeStackConfig } from './stack-config.ts';
 
@@ -86,5 +86,53 @@ describe('deriveComposeDocument — per-PR isolation transform', () => {
     const snapshot = JSON.stringify(original);
     deriveComposeDocument(original, config, baseDir);
     assert.equal(JSON.stringify(original), snapshot);
+  });
+
+  it('bakes the remapped backend URLs into the smoker image via build args', () => {
+    const derived = deriveComposeDocument(loadRealCompose(), config, baseDir);
+    const build = derived.services.smoker.build as { args?: Record<string, string> };
+    assert.equal(build.args?.SMOKER_CLOUD_URL, `http://localhost:${config.ports.backend}`);
+    assert.equal(build.args?.SMOKER_CLOUD_URL_API, `http://localhost:${config.ports.backend}/api/`);
+  });
+
+  it('only emits build args the hermetic image build declares', () => {
+    const dockerfile = readFileSync(join(baseDir, 'stack.Dockerfile'), 'utf-8');
+    const derived = deriveComposeDocument(loadRealCompose(), config, baseDir);
+    const emitted = Object.keys(derived.services.smoker.build?.args ?? {});
+    assert.ok(emitted.length > 0, 'expected the smoker service to receive build args');
+    for (const name of emitted) {
+      assert.match(
+        dockerfile,
+        new RegExp(`^ARG ${name}(=|$)`, 'm'),
+        `stack.Dockerfile declares no ARG ${name}, so the build would silently ignore it`
+      );
+    }
+  });
+
+  it('leaves services that bake no host URLs without build args', () => {
+    const derived = deriveComposeDocument(loadRealCompose(), config, baseDir);
+    for (const serviceName of ['backend', 'device-service', 'frontend']) {
+      const build = derived.services[serviceName].build as Record<string, unknown>;
+      assert.equal('args' in build, false, `${serviceName} should not have gained build args`);
+    }
+  });
+
+  it('leaves the shared e2e compose file arg-free so the default stack build is unchanged', () => {
+    const build = loadRealCompose().services.smoker.build as Record<string, unknown>;
+    assert.equal(
+      'args' in build,
+      false,
+      'the default e2e stack must build the smoker with the static env only — ' +
+        'per-PR URLs belong in the derived document, not the shared file'
+    );
+  });
+
+  it('round-trips the build args through YAML so compose reads the remapped URLs', () => {
+    const derived = deriveComposeDocument(loadRealCompose(), config, baseDir);
+    const reloaded = parse(stringify(derived)) as ComposeDocument;
+    assert.deepEqual(reloaded.services.smoker.build?.args, {
+      SMOKER_CLOUD_URL: `http://localhost:${config.ports.backend}`,
+      SMOKER_CLOUD_URL_API: `http://localhost:${config.ports.backend}/api/`,
+    });
   });
 });

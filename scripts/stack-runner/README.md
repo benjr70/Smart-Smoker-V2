@@ -17,6 +17,23 @@ It wraps the merged e2e compose stack (PRD #314,
   runner reads the base file and emits a full derived document with per-project
   container names, replaced host ports, a published mongo port, and an
   absolutised build context. The shared compose file is **never modified**.
+- **Per-PR URL bake (backend only)** — the smoker web bundle compiles its cloud
+  URLs in at image-build time, so remapping its ports alone would leave the
+  served page calling the default ports. The derived document passes the
+  remapped **backend** host URLs to the smoker image build as `SMOKER_CLOUD_URL`
+  / `SMOKER_CLOUD_URL_API` args, and `stack.Dockerfile` rewrites the static e2e
+  env with them before webpack runs. The default e2e stack passes no args and
+  builds exactly as before.
+
+  **Known gaps — the smoker page is not yet fully reachable in a per-PR stack**
+  (tracked in [#400](https://github.com/benjr70/Smart-Smoker-V2/issues/400)):
+  the device-service URL is _not_ baked, because the smoker app hardcodes it
+  (`apps/smoker/src/api/client.ts`, `home.tsx`), so its temp socket still dials
+  `:3003`; and the backend's CORS allowlist (`apps/backend/src/main.ts`) does
+  not include the per-PR smoker origin, so cloud REST responses are blocked in a
+  browser even though websockets pass (the gateway allows `*`). Both must be
+  fixed before the slice-4 pilot.
+
 - **Master fallback** — a branch that predates the e2e compose file
   transparently uses the `master` copy (materialised via `git show`).
 

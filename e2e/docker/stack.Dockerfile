@@ -91,10 +91,43 @@ HEALTHCHECK --interval=10s --timeout=5s --retries=15 --start-period=10s \
     CMD wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 || exit 1
 
 # ---------------------------------------------------------------------------
+# smoker-build: optionally re-bake the smoker web bundle against per-stack URLs.
+#
+# The bundle's cloud URLs are compiled in by dotenv-webpack from
+# `apps/smoker/.env.prod` (the static e2e env copied in the `build` stage),
+# which assumes the default host ports. A per-PR hermetic stack publishes the
+# backend somewhere else entirely, so the stack runner passes the remapped host
+# URLs as build args and this stage rewrites the env file and recompiles the
+# bundle before it is served.
+#
+# With no args supplied — the default e2e stack — the rewrite is skipped
+# entirely and the bundle is the one `build` already produced, so the served
+# image is unchanged. Keeping this in its own stage also leaves the shared
+# `build` stage arg-free, so the backend/frontend/device-service images stay on
+# the same cached layers no matter what the smoker is pointed at.
+# ---------------------------------------------------------------------------
+FROM build AS smoker-build
+ARG SMOKER_CLOUD_URL=
+ARG SMOKER_CLOUD_URL_API=
+WORKDIR /workspace
+RUN set -eu; \
+    if [ -z "${SMOKER_CLOUD_URL}${SMOKER_CLOUD_URL_API}" ]; then exit 0; fi; \
+    env_file=apps/smoker/.env.prod; \
+    upsert() { \
+    [ -n "$2" ] || return 0; \
+    if grep -q "^$1=" "$env_file"; then \
+    sed -i "s|^$1=.*|$1=$2|" "$env_file"; \
+    else printf '%s=%s\n' "$1" "$2" >> "$env_file"; fi; \
+    }; \
+    upsert REACT_APP_CLOUD_URL "$SMOKER_CLOUD_URL"; \
+    upsert REACT_APP_CLOUD_URL_API "$SMOKER_CLOUD_URL_API"; \
+    npm run build -w smoker
+
+# ---------------------------------------------------------------------------
 # smoker runtime (nginx serving the touchscreen web bundle)
 # ---------------------------------------------------------------------------
 FROM nginx:alpine AS smoker
-COPY --from=build /workspace/apps/smoker/dist /usr/share/nginx/html
+COPY --from=smoker-build /workspace/apps/smoker/dist /usr/share/nginx/html
 COPY apps/smoker/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=5s --retries=15 --start-period=10s \

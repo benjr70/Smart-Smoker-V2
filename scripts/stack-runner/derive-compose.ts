@@ -12,18 +12,23 @@
  *   - a published host port for mongo (the base publishes none),
  *   - the relative `build.context` absolutised so the derived file can be
  *     written to a temp dir and still build from the checkout,
+ *   - build args carrying the remapped host URLs for the one image that bakes
+ *     them in at compile time (the smoker web bundle),
  *   - the top-level `name` removed so the `-p` project flag governs.
  *
  * Pure transform: it clones its input and never touches the shared file on disk.
  */
 import { resolve } from 'node:path';
-import type { StackConfig } from './stack-config.ts';
+import { resolveStackUrls, type StackConfig } from './stack-config.ts';
 
 /** A parsed compose service. Only the keys we touch are typed; the rest ride along. */
 export interface ComposeService {
   container_name?: string;
   ports?: string[];
-  build?: { context?: string; dockerfile?: string } & Record<string, unknown>;
+  build?: { context?: string; dockerfile?: string; args?: Record<string, string> } & Record<
+    string,
+    unknown
+  >;
   [key: string]: unknown;
 }
 
@@ -38,6 +43,28 @@ export interface ComposeDocument {
 interface ServiceMapping {
   containerPort: number;
   portKey: keyof StackConfig['ports'];
+  /** Build args this service's image needs to bake the remapped host URLs in. */
+  buildArgs?: (config: StackConfig) => Record<string, string>;
+}
+
+/**
+ * The smoker web bundle bakes its cloud URLs at image-build time (dotenv-webpack
+ * over a static env file that assumes the default host ports). A per-PR stack
+ * publishes those services somewhere else entirely, so the derived document
+ * hands the remapped host URLs to the image build, which overrides the static
+ * values before webpack runs.
+ *
+ * Backend only, for now: the smoker app hardcodes the device-service origin in
+ * source, and the backend's CORS allowlist has no per-PR origin, so the page is
+ * not yet fully reachable in a per-PR stack. Both are tracked in issue #400 and
+ * must land before the slice-4 pilot (#391).
+ */
+function smokerBuildArgs(config: StackConfig): Record<string, string> {
+  const urls = resolveStackUrls(config);
+  return {
+    SMOKER_CLOUD_URL: urls.backend,
+    SMOKER_CLOUD_URL_API: `${urls.backend}/api/`,
+  };
 }
 
 const SERVICE_MAP: Record<string, ServiceMapping> = {
@@ -45,7 +72,7 @@ const SERVICE_MAP: Record<string, ServiceMapping> = {
   backend: { containerPort: 3001, portKey: 'backend' },
   'device-service': { containerPort: 3003, portKey: 'device' },
   frontend: { containerPort: 3000, portKey: 'frontend' },
-  smoker: { containerPort: 8080, portKey: 'smoker' },
+  smoker: { containerPort: 8080, portKey: 'smoker', buildArgs: smokerBuildArgs },
 };
 
 /**
@@ -78,6 +105,13 @@ export function deriveComposeDocument(
       service.build = {
         ...service.build,
         context: resolve(baseDir, service.build.context),
+      };
+    }
+
+    if (service.build && mapping.buildArgs) {
+      service.build = {
+        ...service.build,
+        args: { ...service.build.args, ...mapping.buildArgs(config) },
       };
     }
   }
