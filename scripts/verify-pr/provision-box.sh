@@ -110,59 +110,94 @@ ensure_playwright() {
 # them and the verifier lost its Electron/Chrome tools — hence committed entries
 # plus a verify-then-repair step.)
 #
-# "Correct" is judged by where the command RESOLVES, not by string equality: the
-# committed commands are repo-relative (portable across clones and worktrees) and
-# must be accepted as-is, or every run would dirty a tracked file.
+# "Correct" is judged by WHAT THE MCP RUNTIME WOULD LAUNCH, not by string
+# equality against a path. Two facts shape the expected form:
+#
+#   * stdio servers are spawned with the SESSION's cwd, which is not necessarily
+#     the checkout root (CLAUDE.md itself sends developers into `apps/backend`).
+#     A bare './scripts/...' command therefore ENOENTs there — silently, with no
+#     tools and no diagnostic. Relative-to-the-config-file is NOT how it works.
+#   * an absolute path is cwd-independent but not portable: it cannot be
+#     committed, since every clone and worktree lives somewhere else.
+#
+# So the committed form is a tiny shell that resolves the checkout root at launch
+# time (`git rev-parse --show-toplevel`, correct from any subdirectory and inside
+# worktrees) and execs the wrapper from there. Provisioning expects exactly that
+# form; a wrapper outside the config's checkout falls back to an absolute command.
 #-------------------------------------------------------------------------------
 
-# Absolute path a configured MCP command points at. Relative commands resolve
-# against the config file's directory — the checkout root, which is the cwd the
-# MCP runtime launches servers from.
-resolve_mcp_command() {
-    local cmd="$1" base
-    base="$(cd "$(dirname "${MCP_CONFIG_FILE}")" && pwd)"
-    case "${cmd}" in
-        /*) realpath -m "${cmd}" ;;
-        *) (cd "${base}" && realpath -m "${cmd}") ;;
-    esac
+# The launch script a committed entry carries for a repo-relative wrapper path.
+# Sole source of truth for the string — repairs must converge on the committed
+# bytes, or every run would dirty a tracked file.
+mcp_launch_script() {
+    printf 'r="$(git rev-parse --show-toplevel 2>/dev/null)"; if [ -z "$r" ]; then echo "[verify-pr] cannot locate the checkout root from $PWD; start Claude inside the repo" >&2; exit 3; fi; exec "$r/%s"' "$1"
 }
 
-# The form a repaired entry is written in: repo-relative when the wrapper lives
-# under the config's checkout (keeps the committed config portable), absolute
-# otherwise.
-mcp_command_form() {
+# Wrapper path relative to the config's checkout, or non-zero when it cannot be
+# expressed that way (outside the checkout, or realpath unusable).
+mcp_wrapper_rel() {
     local wrapper="$1" base rel
-    base="$(cd "$(dirname "${MCP_CONFIG_FILE}")" && pwd)"
-    rel="$(realpath -m --relative-to="${base}" "${wrapper}" 2>/dev/null)"
-    if [ -n "${rel}" ] && [ "${rel#../}" = "${rel}" ] && [ "${rel#/}" = "${rel}" ]; then
-        printf './%s\n' "${rel}"
-    else
-        printf '%s\n' "${wrapper}"
-    fi
+    base="$(cd "$(dirname "${MCP_CONFIG_FILE}")" 2>/dev/null && pwd)" || return 1
+    [ -n "${base}" ] || return 1
+    rel="$(realpath -m --relative-to="${base}" "${wrapper}" 2>/dev/null)" || return 1
+    [ -n "${rel}" ] || return 1
+    case "${rel}" in
+        /* | ../*) return 1 ;;
+    esac
+    printf '%s' "${rel}"
 }
 
 #   $1 = MCP server key   $2 = wrapper command path
 ensure_mcp_entry() {
-    local key="$1" wrapper="$2" current entry_type want
+    local key="$1" wrapper="$2" rel want_cmd want_args current entry_type current_args
+
+    if rel="$(mcp_wrapper_rel "${wrapper}")"; then
+        want_cmd="bash"
+        want_args="$(jq -nc --arg s "$(mcp_launch_script "${rel}")" '["-c", $s]')"
+    else
+        # Wrapper lives outside the config's checkout: an absolute command is the
+        # only cwd-independent option left.
+        want_cmd="$(realpath -m "${wrapper}" 2>/dev/null)"
+        want_args='[]'
+    fi
+
+    # Never compare an empty expectation: "" = "" would wave any entry through as
+    # verified and suppress the repair, reporting success on a broken config.
+    if [ -z "${want_cmd}" ] || [ -z "${want_args}" ]; then
+        log "ERROR: cannot compute the correct command for MCP entry '${key}'"
+        log "       (could not resolve '${wrapper}' — is realpath available?);"
+        log "       refusing to report the entry verified"
+        return 1
+    fi
+
     current="$(jq -r --arg k "${key}" \
         '.mcpServers[$k].command // ""' "${MCP_CONFIG_FILE}" 2>/dev/null)"
     entry_type="$(jq -r --arg k "${key}" \
         '.mcpServers[$k].type // ""' "${MCP_CONFIG_FILE}" 2>/dev/null)"
-    want="$(realpath -m "${wrapper}")"
+    current_args="$(jq -c --arg k "${key}" \
+        '.mcpServers[$k].args // []' "${MCP_CONFIG_FILE}" 2>/dev/null)"
 
-    if [ -n "${current}" ] && [ "${entry_type}" = "stdio" ] \
-        && [ "$(resolve_mcp_command "${current}")" = "${want}" ]; then
-        log "MCP entry '${key}' verified — '${current}' resolves to the wrapper, no change"
+    if [ "${entry_type}" = "stdio" ] && [ "${current}" = "${want_cmd}" ] \
+        && [ "${current_args}" = "${want_args}" ]; then
+        log "MCP entry '${key}' verified — launches the wrapper from any cwd, no change"
         return 0
     fi
 
-    local was="${current:-(missing)}" form
-    form="$(mcp_command_form "${wrapper}")"
-    log "MCP entry '${key}' repaired — was '${was}', now '${form}'"
+    local was="${current:-(missing)}"
+    case "${current}" in
+        "" | /* | bash) ;;
+        *)
+            log "MCP entry '${key}': command '${current}' is relative — the MCP runtime"
+            log "       launches servers from the session's cwd (not the config's directory),"
+            log "       so it breaks whenever Claude starts outside the checkout root"
+            ;;
+    esac
+    log "MCP entry '${key}' repaired — was '${was}', now resolves the checkout root at launch"
+
     local tmp
     tmp="$(mktemp)"
-    jq --arg k "${key}" --arg cmd "${form}" \
-        '.mcpServers[$k] = {type: "stdio", command: $cmd, args: [], env: {}}' \
+    jq --arg k "${key}" --arg cmd "${want_cmd}" --argjson args "${want_args}" \
+        '.mcpServers[$k] = {type: "stdio", command: $cmd, args: $args, env: {}}' \
         "${MCP_CONFIG_FILE}" > "${tmp}" && mv "${tmp}" "${MCP_CONFIG_FILE}"
 }
 

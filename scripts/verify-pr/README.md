@@ -16,9 +16,11 @@ GNOME/XWayland display through the Playwright MCP server, surviving reboots:
   (`playwright-chrome` → `chrome-mcp-wrapper.sh`, `playwright-electron` →
   `electron-cdp-mcp-wrapper.sh`). Those two entries are **committed** to
   `.mcp.json` (issue #388), so a healthy box has nothing to do: the run logs
-  `verified` and leaves the file byte-identical. Only a hand-edited or deleted
-  entry is `repaired`, and the repair is written in the same portable
-  repo-relative form. Running it twice changes nothing the second time.
+  `verified` and leaves the file byte-identical. Only a hand-edited, deleted, or
+  cwd-dependent entry is `repaired`, and the repair reproduces exactly the
+  committed, cwd-independent launch form (see below) — so a repair converges on
+  the tracked bytes instead of dirtying them. Running it twice changes nothing
+  the second time.
 - **`lib/resolve-display-env.sh`** — shared, sourced helper that resolves
   `DISPLAY` + the rotating X-authority file (mutter writes a fresh
   `.mutter-Xwaylandauth.XXXXXX` under the user runtime dir every boot) **by glob
@@ -38,12 +40,17 @@ GNOME/XWayland display through the Playwright MCP server, surviving reboots:
   the PID file). `stop` kills the app via the PID file and is idempotent — a
   second stop, or a stale PID file whose process is already gone, is a clean
   no-op.
-- **`electron-cdp-mcp-wrapper.sh`** — the Electron-path MCP launcher. Polls the
-  fixed CDP endpoint (bounded retries) and only once it answers execs the
+- **`electron-cdp-mcp-wrapper.sh`** — the Electron-path MCP launcher. Execs the
   Playwright MCP server attached over CDP (`--cdp-endpoint`) to the live
-  Electron renderer, so the agent gets snapshot/click/type/network tools.
-  Endpoint never comes up → non-zero exit + clear error; it never launches a
-  detached browser.
+  Electron renderer, so the agent gets snapshot/click/type/network tools. It
+  polls the fixed CDP endpoint first, but **briefly and non-fatally**: MCP stdio
+  servers are spawned once, at session start, minutes before `/verify-pr`
+  launches Electron, so a wrapper that exited on a dead endpoint would be
+  dropped for the whole session and the verifier would have zero Electron tools
+  (that, plus a 60s wait overrunning the runtime's 30s startup timeout, is why
+  the tools kept going missing). Playwright dials `--cdp-endpoint` lazily, so
+  the server always registers, warns when the endpoint is down, and a too-early
+  tool call is what fails. It never launches a detached browser.
 - **`parse-checklist.sh`** — the `/verify-pr` round's checklist reader (slice
   #331). Reads a PR body (file arg or stdin) and emits, one per line, the
   **unchecked** items under `## Manual verification` (tag `manual`) and
@@ -68,11 +75,22 @@ scripts/verify-pr/provision-box.sh
 already pointing at the two wrappers, so a fresh clone is registered before the
 script ever runs — and the daemon's `git reset --hard` cleanup can no longer
 wipe them (it used to, which is how the verifier lost its Electron tools).
-Commands are stored repo-relative, so each clone/worktree resolves its own
-wrappers. The config stays static across reboots — the wrappers re-resolve the
-rotated display environment / CDP endpoint on every launch, and on a machine
-with no desktop session (or no Electron running) they fail when the server
-_starts_, with a clear bounded error, never at config-parse time.
+
+Each entry is `bash -c '<resolve checkout root>; exec "$r/scripts/verify-pr/…"'`
+rather than a bare path, because the MCP runtime spawns stdio servers with the
+**session's cwd** — not the config file's directory. A `./scripts/…` command
+therefore ENOENTs (silently, no tools, no diagnostic) whenever Claude is started
+from a subdirectory such as `apps/backend`, and an absolute path cannot be
+committed at all. `git rev-parse --show-toplevel` is correct from any
+subdirectory and inside worktrees, so one committed line works everywhere.
+
+The config stays static across reboots — the wrappers re-resolve the rotated
+display environment / CDP endpoint on every launch, and nothing fails at
+config-parse time. The two paths then degrade differently, on purpose: Chrome
+_launches_ a browser, so no desktop session is a startup failure with a clear
+error (never a silent headless fallback); Electron only _attaches_, and the app
+does not exist yet when the session starts, so a dead endpoint only produces a
+warning — the server registers and the failure lands on a premature tool call.
 
 ## Drive the Electron path (against a hermetic stack)
 
@@ -128,10 +146,15 @@ Covered: display-env resolution (found / rotated / absent → clear error),
 headful real-Chrome argument construction, fresh-unique-profile-per-run,
 hermetic URL/CDP-port wiring, the CDP-ready bounded wait (ready vs. timeout →
 cleanup), the PID-file lifecycle (kill + clean, idempotent stop, stale-file
-handling), the CDP wrapper's retry-until-up / give-up-with-error behavior, and
-provisioning idempotency (second run is a no-op) for both MCP entries — plus the
-committed-entry contract: the shipped config carries both harness servers, a
-fresh checkout of it verifies with zero repairs and zero bytes changed, a
-missing/wrong entry is repaired to the repo-relative command, the other six
-servers are untouched in both states, and each committed command fails at
-connect time (no desktop session / no CDP endpoint) rather than at parse time.
+handling), the CDP wrapper's retry-then-register-anyway behavior (endpoint down
+→ still hands off, with a warning, inside a wait short enough for the MCP
+runtime's startup timeout), and provisioning idempotency (second run is a no-op)
+for both MCP entries — plus the committed-entry contract: the shipped config
+carries both harness servers, each launching its wrapper **from a subdirectory
+cwd**, a fresh checkout verifies with zero repairs and zero bytes changed, a
+missing / wrong / cwd-dependent-relative entry is repaired to exactly the
+committed form (with a diagnostic saying why relative is wrong), an uncomputable
+expectation fails loudly instead of reporting "verified", the other six servers
+are untouched in both states, and neither entry fails at parse time (Chrome:
+startup error without a desktop session; Electron: warn + register when no CDP
+endpoint answers).

@@ -41,9 +41,12 @@ endpoints that exist:
 
 - **Browser (web) items** → the `playwright-chrome` MCP server drives a real,
   headful Google Chrome on the box display. Navigate it at `E2E_FRONTEND_URL`.
-- **Electron (smoker desktop) items** → the `playwright-electron` MCP server is
-  attached over CDP to the real smoker app the skill already launched against
-  this stack. Use it for smoker-app items.
+- **Electron (smoker desktop) items** → the `playwright-electron` MCP server
+  attaches over CDP to the real smoker app the skill already launched against
+  this stack. Use it for smoker-app items. It connects on your first tool call
+  (the server registered at session start, before the app existed), so a
+  connection error means the app is not up yet — say so; never treat it as "no
+  tool available".
 - **Database checks** → the `mongodb` MCP tools, or `mongosh`, pointed **only**
   at `E2E_MONGO_URL`. Never connect to any other Mongo (no dev, no prod, no
   `localhost:27017`). If an item needs the DB and `E2E_MONGO_URL` is absent,

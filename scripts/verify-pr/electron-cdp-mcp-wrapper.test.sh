@@ -107,12 +107,18 @@ $(cat "${log}")"
 }
 
 #-------------------------------------------------------------------------------
-# Test 2: when the CDP endpoint never comes up, the wrapper gives up after the
-#         bounded retries with a non-zero exit + a clear error naming the
-#         endpoint, and NEVER launches the MCP server (AC 4).
+# Test 2: the CDP endpoint being down must NOT stop the MCP server from starting.
+#
+#         MCP stdio servers are spawned once, when the session starts — minutes
+#         before /verify-pr checks the PR out, boots the stack and launches
+#         Electron (SKILL.md step 5). A wrapper that exits because nothing is
+#         listening yet is dropped for the WHOLE session, leaving the verifier
+#         with zero Electron tools. @playwright/mcp dials --cdp-endpoint lazily
+#         (first tool call), so the wrapper hands off anyway and the failure
+#         surfaces per tool call instead of killing the registration.
 #-------------------------------------------------------------------------------
-test_gives_up_when_endpoint_never_up() {
-    echo "TEST: bounded retries then clear error; MCP never launched"
+test_still_registers_when_endpoint_down() {
+    echo "TEST: endpoint down at startup still launches MCP (registers), with a warning"
 
     local tmp mock_dir log stderr
     tmp="$(mktemp -d)"
@@ -129,24 +135,70 @@ test_gives_up_when_endpoint_never_up() {
         bash "${WRAPPER}" >/dev/null 2>"${stderr}"
     local exit_code=$?
 
-    if [ "${exit_code}" -eq 0 ]; then
-        fail "wrapper must exit non-zero when the endpoint never comes up" "got exit 0"
+    if [ "${exit_code}" -ne 0 ]; then
+        fail "wrapper must still hand off to the MCP server (exit 0)" "exit=${exit_code}
+$(cat "${stderr}")"
         return
     fi
-    if [ -s "${log}" ]; then
-        fail "MCP server must NOT be launched when the CDP endpoint never answers" \
+    if ! grep -qF -- "--cdp-endpoint http://127.0.0.1:9222" "${log}"; then
+        fail "MCP server must be launched anyway so its tools register" \
             "npx log:
 $(cat "${log}")"
         return
     fi
-    if ! grep -qi "CDP endpoint" "${stderr}"; then
-        fail "error must name the CDP endpoint as the failed precondition" \
+    if ! grep -qi "CDP endpoint" "${stderr}" \
+        || ! grep -qi "electron-launcher.sh" "${stderr}"; then
+        fail "warning must name the dead endpoint and how to bring it up" \
             "stderr:
 $(cat "${stderr}")"
         return
     fi
 
-    pass "bounded retries then clear error; MCP never launched"
+    pass "endpoint down at startup still launches MCP (registers), with a warning"
+}
+
+#-------------------------------------------------------------------------------
+# Test 3: the startup probe stays BOUNDED and short. The MCP runtime drops a
+#         server that has not spoken within its startup timeout (30s in Claude
+#         Code), so the wait must give up well inside that budget — it is a
+#         courtesy for the launcher race, not a gate.
+#-------------------------------------------------------------------------------
+test_startup_wait_is_bounded_and_short() {
+    echo "TEST: startup wait is bounded and well under the MCP startup timeout"
+
+    local tmp mock_dir log probe_log started ended budget
+    tmp="$(mktemp -d)"
+    log="${tmp}/npx.log"
+    probe_log="${tmp}/probe.log"
+    : > "${log}"
+    : > "${probe_log}"
+    mock_dir="$(make_mock_bin)"
+    trap "rm -rf '${tmp}' '${mock_dir}'" RETURN
+
+    # Defaults only (no CDP_WAIT_* overrides): this asserts the SHIPPED budget.
+    started="$(date +%s)"
+    NPX_CALL_LOG="${log}" CDP_PROBE_CMD="echo probe >> ${probe_log}; false" \
+        PATH="${mock_dir}:${PATH}" \
+        bash "${WRAPPER}" >/dev/null 2>&1
+    ended="$(date +%s)"
+    budget=$((ended - started))
+
+    if [ "${budget}" -ge 25 ]; then
+        fail "default startup wait must finish well under the 30s MCP timeout" \
+            "took ${budget}s"
+        return
+    fi
+    if [ ! -s "${probe_log}" ]; then
+        fail "wrapper must still probe the endpoint at startup" "probe never ran"
+        return
+    fi
+    if [ ! -s "${log}" ]; then
+        fail "wrapper must hand off to the MCP server after the bounded wait" \
+            "npx never called"
+        return
+    fi
+
+    pass "startup wait is bounded and well under the MCP startup timeout"
 }
 
 #-------------------------------------------------------------------------------
@@ -157,7 +209,8 @@ echo "electron-cdp-mcp-wrapper.sh tests"
 echo "=========================================="
 
 test_connects_once_endpoint_up
-test_gives_up_when_endpoint_never_up
+test_still_registers_when_endpoint_down
+test_startup_wait_is_bounded_and_short
 
 echo ""
 echo "=========================================="
