@@ -16,6 +16,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 PROVISION="${SCRIPT_DIR}/provision-box.sh"
 WRAPPER="${SCRIPT_DIR}/chrome-mcp-wrapper.sh"
 ELECTRON_WRAPPER="${SCRIPT_DIR}/electron-cdp-mcp-wrapper.sh"
@@ -384,6 +385,484 @@ test_registers_electron_cdp_entry() {
 }
 
 #-------------------------------------------------------------------------------
+# Test 8: the COMMITTED repo config already carries both harness entries, each
+#         resolving to its real wrapper script (issue #388 AC 1 / behavior 1).
+#         These entries are what survives the daemon's `git reset --hard`
+#         cleanup; provisioning only verifies them.
+#
+#         Shape matters: the MCP runtime spawns stdio servers with the SESSION's
+#         cwd, which is not necessarily the checkout root (CLAUDE.md itself sends
+#         developers into `apps/backend`). A bare `./scripts/...` command would
+#         ENOENT there, and an absolute path is not portable across clones — so
+#         each committed entry resolves the checkout root at launch time.
+#-------------------------------------------------------------------------------
+test_committed_config_has_both_entries() {
+    echo "TEST: committed .mcp.json carries both harness entries"
+
+    local cfg key rel script
+    cfg="${REPO_ROOT}/.mcp.json"
+
+    for key in playwright-chrome playwright-electron; do
+        case "${key}" in
+            playwright-chrome) rel="scripts/verify-pr/chrome-mcp-wrapper.sh" ;;
+            *) rel="scripts/verify-pr/electron-cdp-mcp-wrapper.sh" ;;
+        esac
+
+        if [ "$(jq -r --arg k "${key}" '.mcpServers[$k].type // ""' "${cfg}")" != "stdio" ]; then
+            fail "committed config must contain the '${key}' stdio entry" \
+                "servers: $(jq -r '.mcpServers | keys | join(", ")' "${cfg}")"
+            return
+        fi
+        if [ "$(jq -r --arg k "${key}" '.mcpServers[$k].command // ""' "${cfg}")" != "bash" ]; then
+            fail "'${key}' must launch through a shell that resolves the checkout root" \
+                "command: $(jq -r --arg k "${key}" '.mcpServers[$k].command' "${cfg}")"
+            return
+        fi
+        if [ "$(jq -r --arg k "${key}" '.mcpServers[$k].args[0] // ""' "${cfg}")" != "-c" ]; then
+            fail "'${key}' args must be a shell script (-c ...)" \
+                "args: $(jq -c --arg k "${key}" '.mcpServers[$k].args' "${cfg}")"
+            return
+        fi
+
+        script="$(jq -r --arg k "${key}" '.mcpServers[$k].args[1] // ""' "${cfg}")"
+        if ! printf '%s' "${script}" | grep -qF 'git rev-parse --show-toplevel'; then
+            fail "'${key}' must resolve the checkout root at launch (cwd is the session's, not the config's)" \
+                "script: ${script}"
+            return
+        fi
+        if ! printf '%s' "${script}" | grep -qF "/${rel}"; then
+            fail "'${key}' must launch ${rel}" "script: ${script}"
+            return
+        fi
+        if [ ! -x "${REPO_ROOT}/${rel}" ]; then
+            fail "'${key}' must point at an executable wrapper" "not executable: ${REPO_ROOT}/${rel}"
+            return
+        fi
+    done
+
+    pass "committed .mcp.json carries both harness entries"
+}
+
+#-------------------------------------------------------------------------------
+# Test 8b: the committed entries actually launch their wrapper when the session's
+#          cwd is NOT the checkout root — the case a bare repo-relative command
+#          fails silently (ENOENT, no diagnostic, no tools). Each wrapper's own
+#          stderr prefix is the proof that it ran.
+#-------------------------------------------------------------------------------
+test_committed_entries_launch_from_any_cwd() {
+    echo "TEST: committed entries launch their wrapper from a subdirectory cwd"
+
+    local tmp mock_dir stderr script sub
+    tmp="$(mktemp -d)"
+    stderr="${tmp}/stderr.txt"
+    mock_dir="$(make_mock_bin yes yes yes)"
+    trap "rm -rf '${tmp}' '${mock_dir}'" RETURN
+
+    sub="${REPO_ROOT}/apps/backend"
+    if [ ! -d "${sub}" ]; then sub="${SCRIPT_DIR}"; fi
+
+    # Chrome: no desktop session, so the wrapper's own precondition error is the
+    # evidence it was found and executed at all.
+    script="$(jq -r '.mcpServers["playwright-chrome"].args[1]' "${REPO_ROOT}/.mcp.json")"
+    (cd "${sub}" && PROVISION_CALL_LOG="${tmp}/calls.log" \
+        CHROME_MCP_XAUTH_GLOB="${tmp}/no-such-auth.*" PATH="${mock_dir}:${PATH}" \
+        bash -c "${script}") >/dev/null 2>"${stderr}"
+    if ! grep -q "chrome-mcp-wrapper" "${stderr}"; then
+        fail "playwright-chrome entry must launch its wrapper from cwd ${sub}" \
+            "stderr:
+$(cat "${stderr}")"
+        return
+    fi
+
+    # Electron: dead CDP endpoint + mocked npx — the wrapper logs, then hands off.
+    script="$(jq -r '.mcpServers["playwright-electron"].args[1]' "${REPO_ROOT}/.mcp.json")"
+    (cd "${sub}" && PROVISION_CALL_LOG="${tmp}/calls.log" \
+        CDP_PROBE_CMD="false" CDP_WAIT_RETRIES=1 CDP_WAIT_INTERVAL=0 \
+        PATH="${mock_dir}:${PATH}" \
+        bash -c "${script}") >/dev/null 2>"${stderr}"
+    if ! grep -q "electron-cdp-mcp-wrapper" "${stderr}"; then
+        fail "playwright-electron entry must launch its wrapper from cwd ${sub}" \
+            "stderr:
+$(cat "${stderr}")"
+        return
+    fi
+
+    pass "committed entries launch their wrapper from a subdirectory cwd"
+}
+
+#-------------------------------------------------------------------------------
+# Test 9: the wipe scenario (issue #388 AC 3 / behavior 2). A fresh checkout of
+#         the COMMITTED config — repo-relative wrapper commands — followed by a
+#         provisioning run must find nothing to repair: the file stays
+#         byte-identical and the run reports both entries as verified. If the
+#         verify step rewrote the relative form to an absolute path it would
+#         dirty the tracked file on every run — the exact bug this slice kills.
+#-------------------------------------------------------------------------------
+test_committed_config_verifies_without_repair() {
+    echo "TEST: fresh checkout of the committed config verifies, no repair"
+
+    local co mock_dir cfg stderr before after
+    # Simulate a checkout: the committed config at the root of a tree that holds
+    # the wrappers where the repo holds them, so the entries resolve exactly as
+    # they do in a real clone.
+    co="$(make_fake_checkout)"
+    cfg="${co}/.mcp.json"
+    stderr="${co}/stderr.txt"
+    mock_dir="$(make_mock_bin yes yes yes)"
+    trap "rm -rf '${co}' '${mock_dir}'" RETURN
+
+    before="$(cat "${cfg}")"
+    PROVISION_CALL_LOG="${co}/calls.log" MCP_CONFIG_FILE="${cfg}" \
+        CHROME_MCP_WRAPPER="${co}/scripts/verify-pr/chrome-mcp-wrapper.sh" \
+        ELECTRON_MCP_WRAPPER="${co}/scripts/verify-pr/electron-cdp-mcp-wrapper.sh" \
+        PATH="${mock_dir}:${PATH}" \
+        bash "${PROVISION}" >/dev/null 2>"${stderr}"
+    local exit_code=$?
+    after="$(cat "${cfg}")"
+
+    if [ "${exit_code}" -ne 0 ]; then
+        fail "provisioning over a committed config should exit 0" "exit=${exit_code}
+$(cat "${stderr}")"
+        return
+    fi
+    if [ "${before}" != "${after}" ]; then
+        fail "committed config must be byte-identical after provisioning" "after:
+${after}"
+        return
+    fi
+    if ! grep -q "playwright-chrome.*verified" "${stderr}" \
+        || ! grep -q "playwright-electron.*verified" "${stderr}"; then
+        fail "run must report both entries as verified" "stderr:
+$(cat "${stderr}")"
+        return
+    fi
+    if grep -q "repaired" "${stderr}"; then
+        fail "a correct committed config must repair nothing" "stderr:
+$(cat "${stderr}")"
+        return
+    fi
+
+    pass "fresh checkout of the committed config verifies, no repair"
+}
+
+# Build a checkout-shaped temp dir: the committed .mcp.json at its root plus a
+# scripts/verify-pr/ tree holding stub wrappers, so the config's repo-relative
+# commands resolve exactly as they do in a real clone. Echoes the dir.
+make_fake_checkout() {
+    local dir
+    dir="$(mktemp -d)"
+    mkdir -p "${dir}/scripts/verify-pr"
+    local w
+    for w in chrome-mcp-wrapper.sh electron-cdp-mcp-wrapper.sh; do
+        printf '#!/usr/bin/env bash\nexit 0\n' > "${dir}/scripts/verify-pr/${w}"
+        chmod +x "${dir}/scripts/verify-pr/${w}"
+    done
+    cp "${REPO_ROOT}/.mcp.json" "${dir}/.mcp.json"
+    echo "${dir}"
+}
+
+#-------------------------------------------------------------------------------
+# Test 10: repair semantics (issue #388 AC 2 / behavior 3). One entry deleted and
+#          one pointed at a bogus command — both come back with the portable
+#          repo-relative command, and the run says so ("repaired", not
+#          "verified"). This is the hand-edit / partial-wipe recovery path.
+#-------------------------------------------------------------------------------
+test_repairs_missing_and_wrong_entries() {
+    echo "TEST: missing / wrong entries are repaired and reported as repaired"
+
+    local co mock_dir cfg stderr tmpf
+    co="$(make_fake_checkout)"
+    cfg="${co}/.mcp.json"
+    stderr="${co}/stderr.txt"
+    mock_dir="$(make_mock_bin yes yes yes)"
+    trap "rm -rf '${co}' '${mock_dir}'" RETURN
+
+    # Damage: chrome entry gone entirely, electron entry pointing at nonsense.
+    tmpf="${co}/tampered.json"
+    jq 'del(.mcpServers["playwright-chrome"])
+        | .mcpServers["playwright-electron"].command = "/nonexistent/wrong.sh"' \
+        "${cfg}" > "${tmpf}" && mv "${tmpf}" "${cfg}"
+
+    PROVISION_CALL_LOG="${co}/calls.log" MCP_CONFIG_FILE="${cfg}" \
+        CHROME_MCP_WRAPPER="${co}/scripts/verify-pr/chrome-mcp-wrapper.sh" \
+        ELECTRON_MCP_WRAPPER="${co}/scripts/verify-pr/electron-cdp-mcp-wrapper.sh" \
+        PATH="${mock_dir}:${PATH}" \
+        bash "${PROVISION}" >/dev/null 2>"${stderr}"
+    local exit_code=$?
+
+    if [ "${exit_code}" -ne 0 ]; then
+        fail "repairing run should exit 0" "exit=${exit_code}
+$(cat "${stderr}")"
+        return
+    fi
+
+    local key rel script
+    for key in playwright-chrome playwright-electron; do
+        case "${key}" in
+            playwright-chrome) rel="scripts/verify-pr/chrome-mcp-wrapper.sh" ;;
+            *) rel="scripts/verify-pr/electron-cdp-mcp-wrapper.sh" ;;
+        esac
+        if [ "$(jq -r --arg k "${key}" '.mcpServers[$k].command' "${cfg}")" != "bash" ]; then
+            fail "'${key}' must be repaired to the portable launch form" \
+                "got '$(jq -c --arg k "${key}" '.mcpServers[$k]' "${cfg}")'"
+            return
+        fi
+        script="$(jq -r --arg k "${key}" '.mcpServers[$k].args[1] // ""' "${cfg}")"
+        if ! printf '%s' "${script}" | grep -qF 'git rev-parse --show-toplevel' \
+            || ! printf '%s' "${script}" | grep -qF "/${rel}"; then
+            fail "'${key}' must be repaired to launch ${rel} from the resolved checkout root" \
+                "script: ${script}"
+            return
+        fi
+        if ! grep -q "${key}.*repaired" "${stderr}"; then
+            fail "run must report '${key}' as repaired" "stderr:
+$(cat "${stderr}")"
+            return
+        fi
+    done
+
+    # Repaired == what the committed config ships: a repair must converge on the
+    # tracked bytes, never leave the file permanently dirty.
+    if [ "$(jq -S '.mcpServers | {chrome: .["playwright-chrome"], electron: .["playwright-electron"]}' "${cfg}")" \
+        != "$(jq -S '.mcpServers | {chrome: .["playwright-chrome"], electron: .["playwright-electron"]}' "${REPO_ROOT}/.mcp.json")" ]; then
+        fail "repaired entries must match the committed ones byte-for-byte" \
+            "repaired: $(jq -c '.mcpServers | {c: .["playwright-chrome"], e: .["playwright-electron"]}' "${cfg}")"
+        return
+    fi
+
+    pass "missing / wrong entries are repaired and reported as repaired"
+}
+
+#-------------------------------------------------------------------------------
+# Test 10b: a bare repo-relative command (the form that looks right but ENOENTs
+#           whenever the session's cwd is not the checkout root) must be REPAIRED,
+#           not waved through — and the run must say why, so nobody "fixes" it
+#           back. Verification judges an entry by what the MCP runtime can launch,
+#           not by what resolves relative to the config file.
+#-------------------------------------------------------------------------------
+test_repairs_cwd_dependent_relative_command() {
+    echo "TEST: a bare relative command is repaired, with a cwd diagnostic"
+
+    local co mock_dir cfg stderr tmpf
+    co="$(make_fake_checkout)"
+    cfg="${co}/.mcp.json"
+    stderr="${co}/stderr.txt"
+    mock_dir="$(make_mock_bin yes yes yes)"
+    trap "rm -rf '${co}' '${mock_dir}'" RETURN
+
+    tmpf="${co}/tampered.json"
+    jq '.mcpServers["playwright-chrome"] = {
+            type: "stdio",
+            command: "./scripts/verify-pr/chrome-mcp-wrapper.sh",
+            args: [],
+            env: {}
+        }' "${cfg}" > "${tmpf}" && mv "${tmpf}" "${cfg}"
+
+    PROVISION_CALL_LOG="${co}/calls.log" MCP_CONFIG_FILE="${cfg}" \
+        CHROME_MCP_WRAPPER="${co}/scripts/verify-pr/chrome-mcp-wrapper.sh" \
+        ELECTRON_MCP_WRAPPER="${co}/scripts/verify-pr/electron-cdp-mcp-wrapper.sh" \
+        PATH="${mock_dir}:${PATH}" \
+        bash "${PROVISION}" >/dev/null 2>"${stderr}"
+
+    if grep -q "playwright-chrome.*verified" "${stderr}"; then
+        fail "a cwd-dependent relative command must not be reported verified" \
+            "stderr:
+$(cat "${stderr}")"
+        return
+    fi
+    if [ "$(jq -r '.mcpServers["playwright-chrome"].command' "${cfg}")" != "bash" ]; then
+        fail "a cwd-dependent relative command must be repaired" \
+            "$(jq -c '.mcpServers["playwright-chrome"]' "${cfg}")"
+        return
+    fi
+    if ! grep -qi "cwd" "${stderr}"; then
+        fail "the run must explain that relative commands resolve against the session cwd" \
+            "stderr:
+$(cat "${stderr}")"
+        return
+    fi
+
+    pass "a bare relative command is repaired, with a cwd diagnostic"
+}
+
+#-------------------------------------------------------------------------------
+# Test 10c: if the expected command cannot be computed (a broken/absent
+#           `realpath`), the run must fail loudly. It must never let two empty
+#           strings compare equal and report a wrong entry as verified — that is
+#           silent success on a harness config the runtime cannot launch.
+#-------------------------------------------------------------------------------
+test_uncomputable_expectation_never_verifies() {
+    echo "TEST: a broken realpath fails loudly instead of reporting verified"
+
+    local co mock_dir cfg stderr tmpf
+    co="$(make_fake_checkout)"
+    cfg="${co}/.mcp.json"
+    stderr="${co}/stderr.txt"
+    mock_dir="$(make_mock_bin yes yes yes)"
+    trap "rm -rf '${co}' '${mock_dir}'" RETURN
+
+    # `realpath` present but broken: prints nothing, exits non-zero.
+    printf '#!/usr/bin/env bash\nexit 1\n' > "${mock_dir}/realpath"
+    chmod +x "${mock_dir}/realpath"
+
+    # Both entries point at nonsense, so "verified" would be a flat-out lie.
+    tmpf="${co}/tampered.json"
+    jq '.mcpServers["playwright-chrome"].command = "/nonexistent/wrong.sh"
+        | .mcpServers["playwright-chrome"].args = []
+        | .mcpServers["playwright-electron"].command = "/nonexistent/wrong.sh"
+        | .mcpServers["playwright-electron"].args = []' \
+        "${cfg}" > "${tmpf}" && mv "${tmpf}" "${cfg}"
+
+    PROVISION_CALL_LOG="${co}/calls.log" MCP_CONFIG_FILE="${cfg}" \
+        CHROME_MCP_WRAPPER="${co}/scripts/verify-pr/chrome-mcp-wrapper.sh" \
+        ELECTRON_MCP_WRAPPER="${co}/scripts/verify-pr/electron-cdp-mcp-wrapper.sh" \
+        PATH="${mock_dir}:${PATH}" \
+        bash "${PROVISION}" >/dev/null 2>"${stderr}"
+    local exit_code=$?
+
+    if grep -q "MCP entry .* verified" "${stderr}"; then
+        fail "a wrong entry must never be reported verified" "stderr:
+$(cat "${stderr}")"
+        return
+    fi
+    if [ "${exit_code}" -eq 0 ]; then
+        fail "an uncomputable expectation must exit non-zero" "got exit 0
+$(cat "${stderr}")"
+        return
+    fi
+
+    pass "a broken realpath fails loudly instead of reporting verified"
+}
+
+#-------------------------------------------------------------------------------
+# Test 11: non-interference (issue #388 behavior 4). The six general-purpose MCP
+#          servers (context7, playwright, terraform, docker, mongodb, github) are
+#          identical before and after — on the verified pass AND on the repairing
+#          pass, which is the one that rewrites the file.
+#-------------------------------------------------------------------------------
+test_leaves_other_servers_untouched() {
+    echo "TEST: the other MCP servers are untouched in both states"
+
+    local co mock_dir cfg tmpf others_before others_after
+    co="$(make_fake_checkout)"
+    cfg="${co}/.mcp.json"
+    mock_dir="$(make_mock_bin yes yes yes)"
+    trap "rm -rf '${co}' '${mock_dir}'" RETURN
+
+    local strip='.mcpServers | del(.["playwright-chrome"], .["playwright-electron"])'
+    others_before="$(jq -S "${strip}" "${cfg}")"
+
+    local key expected_keys
+    expected_keys="context7 docker github mongodb playwright terraform"
+    for key in ${expected_keys}; do
+        if ! jq -e --arg k "${key}" '.mcpServers | has($k)' "${cfg}" >/dev/null; then
+            fail "fixture must carry the '${key}' server" "$(cat "${cfg}")"
+            return
+        fi
+    done
+
+    # Pass 1: everything correct — verified, no write.
+    PROVISION_CALL_LOG="${co}/calls.log" MCP_CONFIG_FILE="${cfg}" \
+        CHROME_MCP_WRAPPER="${co}/scripts/verify-pr/chrome-mcp-wrapper.sh" \
+        ELECTRON_MCP_WRAPPER="${co}/scripts/verify-pr/electron-cdp-mcp-wrapper.sh" \
+        PATH="${mock_dir}:${PATH}" \
+        bash "${PROVISION}" >/dev/null 2>&1
+    others_after="$(jq -S "${strip}" "${cfg}")"
+    if [ "${others_before}" != "${others_after}" ]; then
+        fail "verified pass must not touch the other servers" "after:
+${others_after}"
+        return
+    fi
+
+    # Pass 2: harness entries damaged — the rewrite must still leave the rest be.
+    tmpf="${co}/tampered.json"
+    jq 'del(.mcpServers["playwright-chrome"])
+        | .mcpServers["playwright-electron"].command = "/nonexistent/wrong.sh"' \
+        "${cfg}" > "${tmpf}" && mv "${tmpf}" "${cfg}"
+    PROVISION_CALL_LOG="${co}/calls.log" MCP_CONFIG_FILE="${cfg}" \
+        CHROME_MCP_WRAPPER="${co}/scripts/verify-pr/chrome-mcp-wrapper.sh" \
+        ELECTRON_MCP_WRAPPER="${co}/scripts/verify-pr/electron-cdp-mcp-wrapper.sh" \
+        PATH="${mock_dir}:${PATH}" \
+        bash "${PROVISION}" >/dev/null 2>&1
+    others_after="$(jq -S "${strip}" "${cfg}")"
+    if [ "${others_before}" != "${others_after}" ]; then
+        fail "repairing pass must not touch the other servers" "before:
+${others_before}
+after:
+${others_after}"
+        return
+    fi
+
+    pass "the other MCP servers are untouched in both states"
+}
+
+#-------------------------------------------------------------------------------
+# Test 12: graceful degradation (issue #388 AC 4). Neither committed entry may
+#          fail at config-parse time; each degrades at its own boundary when a
+#          precondition is missing.
+#
+#          The two boundaries differ on purpose. Chrome LAUNCHES a browser, so no
+#          desktop session is fatal at startup (never fall back to headless).
+#          Electron only ATTACHES over CDP, and the app is launched minutes after
+#          the session's MCP servers are spawned — so a dead endpoint must NOT be
+#          fatal: the server registers (tools exist) and warns, and the failure
+#          lands on the tool call that comes too early.
+#-------------------------------------------------------------------------------
+test_committed_entries_fail_at_connect_time() {
+    echo "TEST: committed entries degrade gracefully at connect time"
+
+    local tmp mock_dir script stderr
+    tmp="$(mktemp -d)"
+    stderr="${tmp}/stderr.txt"
+    mock_dir="$(make_mock_bin yes yes yes)"
+    trap "rm -rf '${tmp}' '${mock_dir}'" RETURN
+
+    # Chrome path: no desktop session (no X-authority file matches the glob).
+    script="$(jq -r '.mcpServers["playwright-chrome"].args[1]' "${REPO_ROOT}/.mcp.json")"
+    (cd "${REPO_ROOT}" && PROVISION_CALL_LOG="${tmp}/calls.log" \
+        CHROME_MCP_XAUTH_GLOB="${tmp}/no-such-auth.*" PATH="${mock_dir}:${PATH}" \
+        bash -c "${script}") >/dev/null 2>"${stderr}"
+    local exit_code=$?
+    if [ "${exit_code}" -eq 0 ]; then
+        fail "chrome entry must fail without a desktop session" "got exit 0"
+        return
+    fi
+    if ! grep -q "no active desktop session" "${stderr}"; then
+        fail "chrome entry must name the missing precondition" "stderr:
+$(cat "${stderr}")"
+        return
+    fi
+
+    # Electron path: CDP endpoint never answers — bounded wait, warn, register.
+    script="$(jq -r '.mcpServers["playwright-electron"].args[1]' "${REPO_ROOT}/.mcp.json")"
+    : > "${tmp}/calls.log"
+    (cd "${REPO_ROOT}" && PROVISION_CALL_LOG="${tmp}/calls.log" \
+        CDP_PROBE_CMD="false" CDP_WAIT_RETRIES=2 CDP_WAIT_INTERVAL=0 \
+        PATH="${mock_dir}:${PATH}" \
+        bash -c "${script}") >/dev/null 2>"${stderr}"
+    exit_code=$?
+    if [ "${exit_code}" -ne 0 ]; then
+        fail "electron entry must still register when no CDP endpoint answers" \
+            "exit=${exit_code}
+$(cat "${stderr}")"
+        return
+    fi
+    if ! grep -qF -- "--cdp-endpoint" "${tmp}/calls.log"; then
+        fail "electron entry must start the MCP server so its tools exist" \
+            "calls:
+$(cat "${tmp}/calls.log")"
+        return
+    fi
+    if ! grep -q "CDP endpoint" "${stderr}"; then
+        fail "electron entry must warn about the dead CDP endpoint" "stderr:
+$(cat "${stderr}")"
+        return
+    fi
+
+    pass "committed entries degrade gracefully at connect time"
+}
+
+#-------------------------------------------------------------------------------
 # Run suite
 #-------------------------------------------------------------------------------
 echo "=========================================="
@@ -397,6 +876,14 @@ test_adds_docker_group_when_unusable
 test_installs_playwright_when_absent
 test_missing_wrapper_errors
 test_registers_electron_cdp_entry
+test_committed_config_has_both_entries
+test_committed_entries_launch_from_any_cwd
+test_committed_config_verifies_without_repair
+test_repairs_missing_and_wrong_entries
+test_repairs_cwd_dependent_relative_command
+test_uncomputable_expectation_never_verifies
+test_leaves_other_servers_untouched
+test_committed_entries_fail_at_connect_time
 
 echo ""
 echo "=========================================="

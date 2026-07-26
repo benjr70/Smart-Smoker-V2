@@ -47,8 +47,41 @@ test -f scripts/verify-pr/tick-checklist.sh
 test -d scripts/stack-runner/node_modules || echo "verify-pr: run 'cd scripts/stack-runner && npm install' first"
 ```
 
-The `playwright-chrome` and `playwright-electron` MCP servers must be registered
-(they are, if `scripts/verify-pr/provision-box.sh` has run).
+The `playwright-chrome` and `playwright-electron` MCP servers are **committed**
+to `.mcp.json`, so every checkout has them — they no longer depend on a
+provisioning run having happened (and can no longer be wiped by the daemon's
+`git reset --hard`). Each entry launches through `bash -c` and resolves the
+checkout root with `git rev-parse --show-toplevel`, so it works from any session
+cwd, in any clone or worktree.
+
+**The Electron server registers before the app exists — that is by design.** MCP
+stdio servers are spawned once, when the session starts, which is long before
+step 5 launches Electron. So `electron-cdp-mcp-wrapper.sh` probes CDP briefly,
+warns if nothing answers, and starts the MCP server anyway; Playwright dials the
+CDP endpoint lazily, on the first tool call. Consequence for this round:
+`mcp__playwright-electron__*` tools exist from the start, but **calling one
+before step 5 has launched the app fails with a connection error**. Launch the
+app first, then use the tools — a failed early call is a sequencing mistake, not
+a missing precondition.
+
+If a session genuinely lists **no** `playwright-electron` server, re-running
+`provision-box.sh` will not help — it only verifies the file, and a running
+session never re-reads it. Diagnose instead:
+
+```bash
+claude mcp list   # shows per-scope endpoints, conflicts, and connect errors
+```
+
+- **A local-scope entry shadowing the project one** (`claude mcp list` reports
+  "defined in multiple scopes"): the stale local copy wins and may point at an
+  old path or the pre-#388 blocking wrapper. Drop it with
+  `claude mcp remove playwright-electron -s local` and start a new session.
+- **A session started before the committed entries landed**: start a new session
+  from the current checkout.
+- **`.mcp.json` actually hand-edited** (rare):
+  `scripts/verify-pr/provision-box.sh` reports each entry as `verified` or
+  `repaired` — a repair means the file was damaged, and the new session picks up
+  the fix.
 
 ## The round, step by step
 
@@ -130,6 +163,12 @@ scripts/verify-pr/electron-launcher.sh start   # blocks until CDP is ready
 ```
 
 If no item needs Electron, skip this — do not launch it needlessly.
+
+This step is the Electron tools' real precondition: the MCP server is already
+registered, but it only connects on the first tool call. Do not call an
+`mcp__playwright-electron__*` tool before this step succeeds; if one errors on
+connection, the app is not up — launch it and retry, do not report a missing
+tool.
 
 ### 6. Spawn the manual-verifier agent
 

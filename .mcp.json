@@ -37,6 +37,24 @@
       "env": {
         "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
       }
+    },
+    "playwright-chrome": {
+      "type": "stdio",
+      "command": "bash",
+      "args": [
+        "-c",
+        "r=\"$(git rev-parse --show-toplevel 2>/dev/null)\"; if [ -z \"$r\" ]; then echo \"[verify-pr] cannot locate the checkout root from $PWD; start Claude inside the repo\" >&2; exit 3; fi; exec \"$r/scripts/verify-pr/chrome-mcp-wrapper.sh\""
+      ],
+      "env": {}
+    },
+    "playwright-electron": {
+      "type": "stdio",
+      "command": "bash",
+      "args": [
+        "-c",
+        "r=\"$(git rev-parse --show-toplevel 2>/dev/null)\"; if [ -z \"$r\" ]; then echo \"[verify-pr] cannot locate the checkout root from $PWD; start Claude inside the repo\" >&2; exit 3; fi; exec \"$r/scripts/verify-pr/electron-cdp-mcp-wrapper.sh\""
+      ],
+      "env": {}
     }
   }
 }

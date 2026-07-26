@@ -461,6 +461,23 @@ echo 'export GITHUB_TOKEN="$(cat ~/.config/claude-agent/gh-pat)"' >> ~/.bashrc
 Commit the `.mcp.json` change in a normal PR — it benefits every clone,
 not just this VM.
 
+The same file also carries the `/verify-pr` harness servers
+(`playwright-chrome`, `playwright-electron`) as committed entries (issue #388).
+Do not let a provisioning run author them by hand:
+`scripts/verify-pr/provision-box.sh` only verifies them, and any uncommitted
+edit to `.mcp.json` is destroyed by the agent-run cleanup's `git reset --hard`.
+
+Both entries launch through `bash -c` and resolve the checkout root with
+`git rev-parse --show-toplevel` before exec'ing their wrapper. That is
+deliberate: stdio MCP servers inherit the **session's cwd**, so a committed
+`./scripts/…` command would ENOENT for anyone who starts Claude in a
+subdirectory, and an absolute path would only ever be right on one machine.
+
+If a session on this VM is missing `mcp__playwright-electron__*` tools, run
+`claude mcp list` and check for a stale **local-scope** duplicate of these two
+servers (`claude mcp remove <name> -s local`) — a local entry shadows the
+committed project entry, including with the old wrapper path.
+
 ### 14d. Working directory layout
 
 ```
