@@ -46,6 +46,44 @@ if [ ! -f "${PROVISION}" ]; then
     exit 2
 fi
 
+# A stand-in Electron binary. It records every invocation in ${PROVISION_CALL_LOG}
+# (so a test can prove provisioning's launch PROBE really ran it), and reports
+# the binary that executed and the PID it executed under — which is what the
+# assertions are about, since the shim is a wrapper script and its own realpath
+# says nothing about what it dispatches to.
+make_fake_electron() {
+    cat > "$1" <<'EOF'
+#!/usr/bin/env bash
+if [ -n "${PROVISION_CALL_LOG:-}" ]; then
+    echo "electron-probe $*" >> "${PROVISION_CALL_LOG}"
+fi
+printf 'bin=%s\n' "$0"
+printf 'pid=%s\n' "$$"
+exit 0
+EOF
+    chmod +x "$1"
+}
+
+# An Electron that RESOLVES but cannot START — the real failure mode of an
+# npm-installed chrome-sandbox that is not root:root 4755 on a box whose
+# unprivileged user namespaces are restricted.
+make_unstartable_electron() {
+    cat > "$1" <<'EOF'
+#!/usr/bin/env bash
+echo "FATAL:setuid_sandbox_host.cc(158) The SUID sandbox helper binary was found, but is not configured correctly." >&2
+exit 133
+EOF
+    chmod +x "$1"
+}
+
+# The binary a command actually RUNS, through a given PATH: the `bin=` line the
+# fake Electron prints. Stronger than realpath on the shim — this is what the
+# launcher would execute when it invokes the name.
+#   $1 = PATH to run under   $2 = command line
+dispatched_binary() {
+    PATH="$1" bash -c "$2" 2>/dev/null | sed -n 's/^bin=//p'
+}
+
 # A fake provisioned smoker workspace: an Electron binary and a shell bundle
 # built after its sources. Exported for every invocation below so "already
 # provisioned" is the hermetic default — no test depends on whether this host
@@ -55,19 +93,19 @@ fi
 # than as a silently satisfied step.
 FAKE_SMOKER_DIR="$(mktemp -d)"
 FAKE_ELECTRON_BIN="${FAKE_SMOKER_DIR}/electron"
-printf '#!/usr/bin/env bash\nexit 0\n' > "${FAKE_ELECTRON_BIN}"
-chmod +x "${FAKE_ELECTRON_BIN}"
+make_fake_electron "${FAKE_ELECTRON_BIN}"
 mkdir -p "${FAKE_SMOKER_DIR}/electron-app" "${FAKE_SMOKER_DIR}/.webpack/main"
 touch "${FAKE_SMOKER_DIR}/electron-app/index.ts"
 touch "${FAKE_SMOKER_DIR}/.webpack/main/index.js"
 export SMOKER_ELECTRON_BINARIES="${FAKE_ELECTRON_BIN}"
 # The launcher's command name and the PATH dir provisioning shims it into are
 # redirected into the same fake workspace — the real ~/.local/bin is never
-# touched by a test run — and the shim starts out correct, so "already
-# provisioned" stays the default for every test that is not about this step.
+# touched by a test run — and a stand-in Electron is seeded under the launcher's
+# command name there, ahead of anything this host has installed, so no test can
+# reach (or be judged by) a real Electron on the box.
 FAKE_SHIM_DIR="${FAKE_SMOKER_DIR}/bin"
 mkdir -p "${FAKE_SHIM_DIR}"
-ln -sfn "${FAKE_ELECTRON_BIN}" "${FAKE_SHIM_DIR}/electron"
+make_fake_electron "${FAKE_SHIM_DIR}/electron"
 export SMOKER_ELECTRON_SHIM_DIR="${FAKE_SHIM_DIR}"
 export PATH="${FAKE_SHIM_DIR}:${PATH}"
 export SMOKER_SHELL_BUNDLE="${FAKE_SMOKER_DIR}/.webpack/main/index.js"
@@ -1077,8 +1115,7 @@ test_links_launcher_electron_when_off_path() {
     trap "rm -rf '${tmp}' '${mock_dir}'" RETURN
 
     mkdir -p "$(dirname "${present_bin}")" "${shim_dir}"
-    printf '#!/usr/bin/env bash\nexit 0\n' > "${present_bin}"
-    chmod +x "${present_bin}"
+    make_fake_electron "${present_bin}"
 
     PROVISION_CALL_LOG="${tmp}/calls.log" MCP_CONFIG_FILE="${cfg}" \
         CHROME_MCP_WRAPPER="${WRAPPER}" \
@@ -1097,7 +1134,7 @@ $(cat "${stderr}")"
     fi
 
     # The launcher's bare default must now resolve, and to the workspace binary.
-    local resolved
+    local resolved dispatched
     resolved="$(PATH="${mock_dir}:${shim_dir}:${PATH}" bash -c \
         'command -v electron-shimtest-xyz' 2>/dev/null)"
     if [ -z "${resolved}" ]; then
@@ -1106,9 +1143,12 @@ $(cat "${stderr}")"
 $(cat "${stderr}")"
         return
     fi
-    if [ "$(realpath "${resolved}")" != "$(realpath "${present_bin}")" ]; then
-        fail "the launcher's electron command must resolve to the workspace binary" \
-            "resolved: ${resolved} -> $(realpath "${resolved}")
+    # Resolving is not running: assert on the binary the name actually executes.
+    dispatched="$(dispatched_binary "${mock_dir}:${shim_dir}:${PATH}" electron-shimtest-xyz)"
+    if [ "${dispatched}" != "${present_bin}" ]; then
+        fail "the launcher's electron command must run the workspace binary" \
+            "resolved: ${resolved}
+ran:      ${dispatched:-nothing}
 wanted:   ${present_bin}"
         return
     fi
@@ -1117,10 +1157,12 @@ wanted:   ${present_bin}"
 }
 
 #-------------------------------------------------------------------------------
-# Test 17: the shim step is verify-then-act like every other one: a shim already
-#          pointing at the workspace binary is a no-op (issue #390 AC 3), while
-#          one left pointing at a stale target is repointed — a box provisioned
-#          before a reinstall must not keep launching a binary that is gone.
+# Test 17: the shim step is verify-then-act like every other one: the shim a
+#          previous run installed is a no-op on the next run (issue #390 AC 3),
+#          while one left pointing at a stale target is rewritten — a box
+#          provisioned before a reinstall must not keep launching a binary that
+#          is gone. The stale fixture is the pre-#402 bare symlink, which is
+#          exactly what a box provisioned by the earlier round carries.
 #-------------------------------------------------------------------------------
 test_launcher_electron_shim_is_idempotent() {
     echo "TEST: correct electron shim is a no-op, stale shim is repointed"
@@ -1138,9 +1180,8 @@ test_launcher_electron_shim_is_idempotent() {
     trap "rm -rf '${tmp}' '${mock_dir}'" RETURN
 
     mkdir -p "$(dirname "${present_bin}")" "$(dirname "${stale_bin}")" "${shim_dir}"
-    printf '#!/usr/bin/env bash\nexit 0\n' > "${present_bin}"
-    printf '#!/usr/bin/env bash\nexit 0\n' > "${stale_bin}"
-    chmod +x "${present_bin}" "${stale_bin}"
+    make_fake_electron "${present_bin}"
+    make_fake_electron "${stale_bin}"
 
     run_shim_provision() {
         PROVISION_CALL_LOG="${tmp}/calls.log" MCP_CONFIG_FILE="${cfg}" \
@@ -1152,10 +1193,19 @@ test_launcher_electron_shim_is_idempotent() {
             bash "${PROVISION}" >/dev/null 2>"${stderr}"
     }
 
-    # Already correct => no link, reported as no change.
-    ln -sfn "${present_bin}" "${shim}"
+    # First run installs the shim; the SECOND run over it must change nothing.
     run_shim_provision
-    local exit_code=$?
+    local exit_code=$? installed
+    if [ "${exit_code}" -ne 0 ]; then
+        fail "provisioning should exit 0 when installing the electron shim" \
+            "exit=${exit_code}
+$(cat "${stderr}")"
+        return
+    fi
+    installed="$(cat "${shim}")"
+
+    run_shim_provision
+    exit_code=$?
 
     if [ "${exit_code}" -ne 0 ]; then
         fail "provisioning should exit 0 when the electron shim is already correct" \
@@ -1163,18 +1213,23 @@ test_launcher_electron_shim_is_idempotent() {
 $(cat "${stderr}")"
         return
     fi
-    if grep -q "linking" "${stderr}"; then
-        fail "a correct electron shim must not be relinked" "stderr:
+    if grep -Eq "linking|installing shim" "${stderr}"; then
+        fail "a correct electron shim must not be rewritten" "stderr:
 $(cat "${stderr}")"
         return
     fi
-    if ! grep -q "no change" "${stderr}"; then
+    if ! grep -q "shim current" "${stderr}"; then
         fail "a correct electron shim must be reported as no change" "stderr:
 $(cat "${stderr}")"
         return
     fi
+    if [ "$(cat "${shim}")" != "${installed}" ]; then
+        fail "a second run must leave the shim byte-identical" "now:
+$(cat "${shim}")"
+        return
+    fi
 
-    # Pointing at a stale target => repointed at the binary on disk now.
+    # Pointing at a stale target => rewritten to run the binary on disk now.
     ln -sfn "${stale_bin}" "${shim}"
     run_shim_provision
     exit_code=$?
@@ -1185,10 +1240,12 @@ $(cat "${stderr}")"
 $(cat "${stderr}")"
         return
     fi
-    if [ "$(realpath "${shim}")" != "$(realpath "${present_bin}")" ]; then
+    local dispatched
+    dispatched="$(dispatched_binary "${mock_dir}:${shim_dir}:${PATH}" electron-shimtest-xyz)"
+    if [ "${dispatched}" != "${present_bin}" ]; then
         fail "a stale electron shim must be repointed at the workspace binary" \
-            "shim -> $(realpath "${shim}")
-wanted:  ${present_bin}"
+            "ran:    ${dispatched:-nothing}
+wanted: ${present_bin}"
         return
     fi
 
@@ -1215,8 +1272,7 @@ test_unresolvable_electron_shim_fails() {
     trap "rm -rf '${tmp}' '${mock_dir}'" RETURN
 
     mkdir -p "$(dirname "${present_bin}")"
-    printf '#!/usr/bin/env bash\nexit 0\n' > "${present_bin}"
-    chmod +x "${present_bin}"
+    make_fake_electron "${present_bin}"
 
     # shim_dir is deliberately absent from PATH.
     PROVISION_CALL_LOG="${tmp}/calls.log" MCP_CONFIG_FILE="${cfg}" \
@@ -1267,12 +1323,10 @@ test_existing_path_electron_is_left_alone() {
     trap "rm -rf '${tmp}' '${mock_dir}'" RETURN
 
     mkdir -p "$(dirname "${present_bin}")" "${shim_dir}"
-    printf '#!/usr/bin/env bash\nexit 0\n' > "${present_bin}"
-    chmod +x "${present_bin}"
+    make_fake_electron "${present_bin}"
 
     # A "system" Electron under the launcher's command name, already on PATH.
-    printf '#!/usr/bin/env bash\nexit 0\n' > "${mock_dir}/electron-shimtest-xyz"
-    chmod +x "${mock_dir}/electron-shimtest-xyz"
+    make_fake_electron "${mock_dir}/electron-shimtest-xyz"
 
     PROVISION_CALL_LOG="${tmp}/calls.log" MCP_CONFIG_FILE="${cfg}" \
         CHROME_MCP_WRAPPER="${WRAPPER}" \
@@ -1296,6 +1350,306 @@ $(cat "${stderr}")"
     fi
 
     pass "an electron already on PATH is left alone (no shim written)"
+}
+
+#-------------------------------------------------------------------------------
+# Test 19b: an Electron whose SUID sandbox helper IS root-owned mode 4755 can
+#           sandbox itself, so provisioning must not weaken it: the shim carries
+#           no sandbox-disabling knob, and no privilege escalation is attempted.
+#           (issue #390 AC 4 — prefer the correct configuration when it holds.)
+#
+#           `stat` is stubbed for the helper only, since a test cannot create a
+#           root-owned setuid file; every other stat call falls through to the
+#           real one.
+#-------------------------------------------------------------------------------
+test_correct_sandbox_is_left_enabled() {
+    echo "TEST: a root-owned 4755 sandbox helper is left enabled (no disabling, no sudo)"
+
+    local tmp mock_dir cfg log stderr present_bin helper shim_dir shim
+    tmp="$(mktemp -d)"
+    cfg="${tmp}/.mcp.json"
+    log="${tmp}/calls.log"
+    stderr="${tmp}/stderr.txt"
+    present_bin="${tmp}/node_modules/electron/dist/electron"
+    helper="${tmp}/node_modules/electron/dist/chrome-sandbox"
+    shim_dir="${tmp}/shimbin"
+    shim="${shim_dir}/electron-shimtest-xyz"
+    seed_config "${cfg}"
+    mock_dir="$(make_mock_bin yes yes yes)"
+    trap "rm -rf '${tmp}' '${mock_dir}'" RETURN
+
+    mkdir -p "$(dirname "${present_bin}")" "${shim_dir}"
+    make_fake_electron "${present_bin}"
+    printf 'not-a-real-sandbox\n' > "${helper}"
+
+    cat > "${mock_dir}/stat" <<EOF
+#!/usr/bin/env bash
+# Only the helper is faked — pretend it is the root-owned setuid binary
+# Chromium demands. Anything else falls through to the real stat.
+if [ "\$3" = "${helper}" ]; then
+    case "\$2" in
+        '%u') echo 0; exit 0 ;;
+        '%a') echo 4755; exit 0 ;;
+    esac
+fi
+exec /usr/bin/stat "\$@"
+EOF
+    chmod +x "${mock_dir}/stat"
+
+    PROVISION_CALL_LOG="${log}" MCP_CONFIG_FILE="${cfg}" \
+        CHROME_MCP_WRAPPER="${WRAPPER}" \
+        SMOKER_ELECTRON_BINARIES="${present_bin}" \
+        SMOKER_LAUNCHER_ELECTRON_CMD="electron-shimtest-xyz" \
+        SMOKER_ELECTRON_SHIM_DIR="${shim_dir}" \
+        PATH="${mock_dir}:${shim_dir}:${PATH}" \
+        bash "${PROVISION}" >/dev/null 2>"${stderr}"
+    local exit_code=$?
+
+    if [ "${exit_code}" -ne 0 ]; then
+        fail "provisioning should exit 0 when the sandbox helper is already correct" \
+            "exit=${exit_code}
+$(cat "${stderr}")"
+        return
+    fi
+    if [ ! -x "${shim}" ]; then
+        fail "provisioning must install the launcher shim" "missing: ${shim}"
+        return
+    fi
+    if grep -q "ELECTRON_DISABLE_SANDBOX" "${shim}"; then
+        fail "a working SUID sandbox must not be disabled in the shim" "shim:
+$(cat "${shim}")"
+        return
+    fi
+    if ! grep -q "sandbox stays on" "${stderr}"; then
+        fail "the run must report that the sandbox stays on" "stderr:
+$(cat "${stderr}")"
+        return
+    fi
+    if grep -q '^sudo ' "${log}"; then
+        fail "no privilege escalation may be attempted when the helper is already correct" \
+            "log:
+$(cat "${log}")"
+        return
+    fi
+    # The step must have actually LAUNCHED Electron through the shim, not merely
+    # resolved the name — the whole point of the probe.
+    if ! grep -q 'electron-probe' "${log}"; then
+        fail "provisioning must launch Electron through the shim as a probe" "log:
+$(cat "${log}")"
+        return
+    fi
+
+    pass "a root-owned 4755 sandbox helper is left enabled (no disabling, no sudo)"
+}
+
+#-------------------------------------------------------------------------------
+# Test 19c: the box the harness actually runs on — an npm-unpacked chrome-sandbox
+#           owned by the agent user, and no passwordless sudo to fix it. Chromium
+#           aborts at startup in that state, so provisioning degrades DELIBERATELY:
+#           the shim disables the sandbox for the harness process, loudly, and the
+#           run still succeeds (issue #390 AC 4).
+#
+#           It must probe privilege with `sudo -n` and never a bare `sudo`: an
+#           unattended round has nobody to type a password, and a prompt would
+#           hang provisioning forever.
+#-------------------------------------------------------------------------------
+test_unfixable_sandbox_is_disabled_in_shim() {
+    echo "TEST: an unfixable SUID sandbox is disabled in the shim, loudly"
+
+    local tmp mock_dir cfg log stderr present_bin helper shim_dir shim
+    tmp="$(mktemp -d)"
+    cfg="${tmp}/.mcp.json"
+    log="${tmp}/calls.log"
+    stderr="${tmp}/stderr.txt"
+    present_bin="${tmp}/node_modules/electron/dist/electron"
+    helper="${tmp}/node_modules/electron/dist/chrome-sandbox"
+    shim_dir="${tmp}/shimbin"
+    shim="${shim_dir}/electron-shimtest-xyz"
+    seed_config "${cfg}"
+    mock_dir="$(make_mock_bin yes yes yes)"
+    trap "rm -rf '${tmp}' '${mock_dir}'" RETURN
+
+    mkdir -p "$(dirname "${present_bin}")" "${shim_dir}"
+    make_fake_electron "${present_bin}"
+    # Owned by the test user, no setuid bit — exactly what `npm install` unpacks.
+    printf 'not-a-real-sandbox\n' > "${helper}"
+    chmod 755 "${helper}"
+
+    # A sudo that behaves like this box's: non-interactive attempts are refused,
+    # and a bare (prompting) sudo is recorded so the test can prove none happened.
+    cat > "${mock_dir}/sudo" <<'EOF'
+#!/usr/bin/env bash
+if [ "$1" = "-n" ]; then
+    echo "sudo -n $*" >> "${PROVISION_CALL_LOG}"
+    echo "sudo: a password is required" >&2
+    exit 1
+fi
+echo "sudo-BARE $*" >> "${PROVISION_CALL_LOG}"
+exit 0
+EOF
+    chmod +x "${mock_dir}/sudo"
+
+    PROVISION_CALL_LOG="${log}" MCP_CONFIG_FILE="${cfg}" \
+        CHROME_MCP_WRAPPER="${WRAPPER}" \
+        SMOKER_ELECTRON_BINARIES="${present_bin}" \
+        SMOKER_LAUNCHER_ELECTRON_CMD="electron-shimtest-xyz" \
+        SMOKER_ELECTRON_SHIM_DIR="${shim_dir}" \
+        PATH="${mock_dir}:${shim_dir}:${PATH}" \
+        bash "${PROVISION}" >/dev/null 2>"${stderr}"
+    local exit_code=$?
+
+    if [ "${exit_code}" -ne 0 ]; then
+        fail "provisioning should still exit 0 when it degrades the sandbox" \
+            "exit=${exit_code}
+$(cat "${stderr}")"
+        return
+    fi
+    if [ ! -x "${shim}" ]; then
+        fail "provisioning must install the launcher shim" "missing: ${shim}"
+        return
+    fi
+    if ! grep -q "ELECTRON_DISABLE_SANDBOX=1" "${shim}"; then
+        fail "an unfixable SUID sandbox must be disabled in the shim" "shim:
+$(cat "${shim}")"
+        return
+    fi
+    if ! grep -q "DEGRADED" "${stderr}"; then
+        fail "the run must say loudly that it degraded the sandbox" "stderr:
+$(cat "${stderr}")"
+        return
+    fi
+    if grep -q 'sudo-BARE' "${log}"; then
+        fail "provisioning must never run a bare sudo (it would hang on a password prompt)" \
+            "log:
+$(cat "${log}")"
+        return
+    fi
+    if ! grep -q 'electron-probe' "${log}"; then
+        fail "provisioning must launch Electron through the degraded shim as a probe" \
+            "log:
+$(cat "${log}")"
+        return
+    fi
+
+    pass "an unfixable SUID sandbox is disabled in the shim, loudly"
+}
+
+#-------------------------------------------------------------------------------
+# Test 19d: the launch probe is the new meaning of "provisioned". An Electron
+#           whose NAME resolves perfectly but which dies on exec (the box's real
+#           sandbox abort) must fail the step and stop the run — the exact case a
+#           resolve-only check waved through, leaving the launcher to die 60s
+#           later on a box that had just reported itself ready (issue #390 AC 4).
+#-------------------------------------------------------------------------------
+test_unstartable_electron_fails_the_run() {
+    echo "TEST: an Electron that resolves but cannot start fails the run"
+
+    local tmp mock_dir cfg stderr broken_bin shim_dir
+    tmp="$(mktemp -d)"
+    cfg="${tmp}/.mcp.json"
+    stderr="${tmp}/stderr.txt"
+    broken_bin="${tmp}/node_modules/electron/dist/electron"
+    shim_dir="${tmp}/shimbin"
+    seed_config "${cfg}"
+    mock_dir="$(make_mock_bin yes yes yes)"
+    trap "rm -rf '${tmp}' '${mock_dir}'" RETURN
+
+    mkdir -p "$(dirname "${broken_bin}")" "${shim_dir}"
+    make_unstartable_electron "${broken_bin}"
+
+    PROVISION_CALL_LOG="${tmp}/calls.log" MCP_CONFIG_FILE="${cfg}" \
+        CHROME_MCP_WRAPPER="${WRAPPER}" \
+        SMOKER_ELECTRON_BINARIES="${broken_bin}" \
+        SMOKER_LAUNCHER_ELECTRON_CMD="electron-shimtest-xyz" \
+        SMOKER_ELECTRON_SHIM_DIR="${shim_dir}" \
+        PATH="${mock_dir}:${shim_dir}:${PATH}" \
+        bash "${PROVISION}" >/dev/null 2>"${stderr}"
+    local exit_code=$?
+
+    if [ "${exit_code}" -eq 0 ]; then
+        fail "an Electron that cannot start must exit non-zero" "got exit 0
+$(cat "${stderr}")"
+        return
+    fi
+    if ! grep -q "does not START Electron" "${stderr}"; then
+        fail "the error must say the command does not start Electron" "stderr:
+$(cat "${stderr}")"
+        return
+    fi
+    if ! grep -q "SUID sandbox helper" "${stderr}"; then
+        fail "the error must carry the probe's own output for diagnosis" "stderr:
+$(cat "${stderr}")"
+        return
+    fi
+    # A box the launcher cannot start the shell on must never report as ready.
+    if grep -q "provisioning complete" "${stderr}"; then
+        fail "a failed launch probe must abort provisioning" "stderr:
+$(cat "${stderr}")"
+        return
+    fi
+
+    pass "an Electron that resolves but cannot start fails the run"
+}
+
+#-------------------------------------------------------------------------------
+# Test 19e: the shim must EXEC the binary, not parent it. electron-launcher.sh
+#           records the PID of what it spawned and `stop` kills that PID, so a
+#           shim that forked would leave the real Electron running after a stop
+#           that reported success. Asserted the way the launcher does it: spawn
+#           in the background, keep `$!`, compare with the PID that actually ran.
+#-------------------------------------------------------------------------------
+test_shim_execs_so_launcher_pid_is_electron() {
+    echo "TEST: the shim execs, so the PID the launcher records is Electron's"
+
+    local tmp mock_dir cfg stderr present_bin shim_dir shim out
+    tmp="$(mktemp -d)"
+    cfg="${tmp}/.mcp.json"
+    stderr="${tmp}/stderr.txt"
+    present_bin="${tmp}/node_modules/electron/dist/electron"
+    shim_dir="${tmp}/shimbin"
+    shim="${shim_dir}/electron-shimtest-xyz"
+    out="${tmp}/shim-out.txt"
+    seed_config "${cfg}"
+    mock_dir="$(make_mock_bin yes yes yes)"
+    trap "rm -rf '${tmp}' '${mock_dir}'" RETURN
+
+    mkdir -p "$(dirname "${present_bin}")" "${shim_dir}"
+    make_fake_electron "${present_bin}"
+
+    PROVISION_CALL_LOG="${tmp}/calls.log" MCP_CONFIG_FILE="${cfg}" \
+        CHROME_MCP_WRAPPER="${WRAPPER}" \
+        SMOKER_ELECTRON_BINARIES="${present_bin}" \
+        SMOKER_LAUNCHER_ELECTRON_CMD="electron-shimtest-xyz" \
+        SMOKER_ELECTRON_SHIM_DIR="${shim_dir}" \
+        PATH="${mock_dir}:${shim_dir}:${PATH}" \
+        bash "${PROVISION}" >/dev/null 2>"${stderr}"
+    local exit_code=$?
+
+    if [ "${exit_code}" -ne 0 ]; then
+        fail "provisioning should exit 0 before the PID check" "exit=${exit_code}
+$(cat "${stderr}")"
+        return
+    fi
+
+    local spawned ran
+    "${shim}" > "${out}" 2>/dev/null &
+    spawned=$!
+    wait "${spawned}"
+    ran="$(sed -n 's/^pid=//p' "${out}")"
+
+    if [ -z "${ran}" ]; then
+        fail "the shim must run the Electron binary" "output:
+$(cat "${out}")"
+        return
+    fi
+    if [ "${spawned}" != "${ran}" ]; then
+        fail "the shim must exec Electron so the launcher's recorded PID is the app" \
+            "launcher would record: ${spawned}
+Electron actually ran as: ${ran}"
+        return
+    fi
+
+    pass "the shim execs, so the PID the launcher records is Electron's"
 }
 
 #-------------------------------------------------------------------------------
@@ -1526,6 +1880,10 @@ test_links_launcher_electron_when_off_path
 test_launcher_electron_shim_is_idempotent
 test_unresolvable_electron_shim_fails
 test_existing_path_electron_is_left_alone
+test_correct_sandbox_is_left_enabled
+test_unfixable_sandbox_is_disabled_in_shim
+test_unstartable_electron_fails_the_run
+test_shim_execs_so_launcher_pid_is_electron
 test_builds_shell_bundle_when_absent
 test_rebuilds_stale_shell_bundle
 test_fresh_shell_bundle_is_noop

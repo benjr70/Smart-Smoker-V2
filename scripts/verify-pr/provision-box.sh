@@ -14,7 +14,9 @@
 #   4. Smoker workspace deps + the Electron binary the launcher runs
 #                                          (workspace install if absent, then a
 #                                           PATH shim so the launcher's default
-#                                           `electron` actually resolves)
+#                                           `electron` actually resolves AND
+#                                           actually starts — sandbox mode and a
+#                                           real launch probe included)
 #   5. Built smoker shell bundle           (Forge/webpack build if absent or
 #                                           older than the shell sources)
 #   6. MCP entries for both wrappers       (committed to .mcp.json — verified
@@ -33,6 +35,12 @@
 #                                 electron) — the shim is named after it
 #   SMOKER_ELECTRON_SHIM_DIR      PATH dir the shim is installed into
 #                                 (default: ~/.local/bin)
+#   SMOKER_ELECTRON_SANDBOX_MODE  how the shim runs Electron: auto (default —
+#                                 measured from the SUID helper), suid, disabled
+#   SMOKER_CHROME_SANDBOX         SUID sandbox helper inspected/repaired
+#                                 (default: chrome-sandbox beside the binary)
+#   SMOKER_ELECTRON_PROBE_CMD     launch probe: exit 0 == Electron really starts
+#                                 (default: timeout 60 <launcher cmd> --version)
 #   SMOKER_SHELL_BUNDLE           built main-process bundle the shell runs
 #                                 (default: apps/smoker/.webpack/main/index.js)
 #   SMOKER_SHELL_SOURCES          paths whose mtimes decide bundle freshness
@@ -70,6 +78,15 @@ SMOKER_DEPS_INSTALL_CMD="${SMOKER_DEPS_INSTALL_CMD:-npm install --legacy-peer-de
 # what this host has installed or writing into the real ~/.local/bin.
 SMOKER_LAUNCHER_ELECTRON_CMD="${SMOKER_LAUNCHER_ELECTRON_CMD:-electron}"
 SMOKER_ELECTRON_SHIM_DIR="${SMOKER_ELECTRON_SHIM_DIR:-${HOME}/.local/bin}"
+
+# How the shim invokes Electron, the SUID sandbox helper that decides it, and the
+# probe that proves the result can actually start. `auto` measures the helper;
+# `suid`/`disabled` force a mode. The probe runs the launcher's command name, so
+# it exercises exactly what the launcher will run. All three are overridable so
+# the branches can be exercised without a real Electron or a privileged host.
+SMOKER_ELECTRON_SANDBOX_MODE="${SMOKER_ELECTRON_SANDBOX_MODE:-auto}"
+SMOKER_CHROME_SANDBOX="${SMOKER_CHROME_SANDBOX:-}"
+SMOKER_ELECTRON_PROBE_CMD="${SMOKER_ELECTRON_PROBE_CMD:-timeout 60 ${SMOKER_LAUNCHER_ELECTRON_CMD} --version}"
 
 # The built main-process bundle the shell actually runs, the sources it is built
 # from (freshness inputs), and the build that produces it. The build is the app's
@@ -152,8 +169,10 @@ ensure_playwright() {
 # an install we re-check it and fail loudly if it still is not there, rather than
 # reporting a provisioned box the launcher will die on.
 #
-# On disk is necessary but not sufficient: the launcher invokes it by NAME, so
-# the step finishes by making that name resolve (see ensure_launcher_electron_cmd).
+# On disk is necessary but not sufficient: the launcher invokes it by NAME, and a
+# name that resolves is still not a shell that starts. So the step finishes by
+# making the name resolve to something that STARTS, and proving it by starting it
+# (see ensure_launcher_electron_cmd).
 #-------------------------------------------------------------------------------
 
 # First existing, executable candidate Electron binary (npm hoists workspace deps
@@ -169,63 +188,209 @@ find_electron_binary() {
     return 1
 }
 
-# Canonical (symlinks resolved) form of a path; the path itself when it cannot
-# be resolved, so comparisons never collapse to an empty string.
-canonical_path() {
-    realpath -m "$1" 2>/dev/null || printf '%s' "$1"
+# Identity of a command path: canonical DIRECTORY plus the plain file name. The
+# final symlink is deliberately NOT followed — the shim is a file we own at a
+# known path, and following it would make a shim left over from an earlier
+# provisioning look like some foreign Electron and get left in place. Falls back
+# to the path itself so comparisons never collapse to an empty string.
+path_id() {
+    local dir base
+    base="$(basename "$1")"
+    dir="$(cd "$(dirname "$1")" 2>/dev/null && pwd -P)" || dir=""
+    [ -n "${dir}" ] || dir="$(dirname "$1")"
+    printf '%s/%s' "${dir}" "${base}"
 }
 
-# What the launcher's command name resolves to today, symlinks followed — empty
+# Where the launcher's command name resolves today (same identity rule), empty
 # when it does not resolve at all.
 resolved_launcher_electron() {
     local found
     hash -r 2>/dev/null || true
     found="$(command -v "${SMOKER_LAUNCHER_ELECTRON_CMD}" 2>/dev/null)" || return 0
     [ -n "${found}" ] || return 0
-    canonical_path "${found}"
+    path_id "${found}"
+}
+
+# The SUID sandbox helper that ships beside an Electron binary.
+chrome_sandbox_path() {
+    if [ -n "${SMOKER_CHROME_SANDBOX}" ]; then
+        printf '%s' "${SMOKER_CHROME_SANDBOX}"
+        return 0
+    fi
+    printf '%s/chrome-sandbox' "$(dirname "$1")"
+}
+
+# True only for the one configuration Chromium's SUID sandbox accepts: owned by
+# root, setuid, mode 4755. Anything else and Electron aborts at startup.
+chrome_sandbox_usable() {
+    local helper="$1" owner mode
+    [ -f "${helper}" ] || return 1
+    owner="$(stat -c '%u' "${helper}" 2>/dev/null)" || return 1
+    mode="$(stat -c '%a' "${helper}" 2>/dev/null)" || return 1
+    [ "${owner}" = "0" ] && [ "${mode}" = "4755" ]
+}
+
+# Decide how the shim must invoke Electron — echoes `suid` or `disabled`.
+#
+# An npm-installed Electron unpacks chrome-sandbox owned by the installing user
+# without the setuid bit, and Chromium refuses to run that way: it aborts with
+# "SUID sandbox helper ... is not configured correctly" before any window exists.
+# Its fallback, an unprivileged user namespace, is switched off on most modern
+# distros (kernel.apparmor_restrict_unprivileged_userns=1). That is why a
+# provisioned box could still not start the shell.
+#
+# Prefer the correct fix, degrade only when the privilege for it is genuinely
+# absent: helper already root:root 4755 => sandbox stays on; repairable with
+# NON-INTERACTIVE sudo => repair it and keep the sandbox on; otherwise the shim
+# disables the sandbox for the harness process only, loudly. `sudo -n` is used
+# everywhere, never a bare `sudo`: an unattended round has nobody to type a
+# password, and a prompt would hang provisioning forever.
+resolve_sandbox_mode() {
+    local bin="$1" helper
+
+    case "${SMOKER_ELECTRON_SANDBOX_MODE}" in
+        suid | disabled)
+            log "sandbox mode forced to '${SMOKER_ELECTRON_SANDBOX_MODE}' (SMOKER_ELECTRON_SANDBOX_MODE)"
+            printf '%s' "${SMOKER_ELECTRON_SANDBOX_MODE}"
+            return 0
+            ;;
+    esac
+
+    helper="$(chrome_sandbox_path "${bin}")"
+
+    if chrome_sandbox_usable "${helper}"; then
+        log "SUID sandbox helper is root-owned mode 4755 (${helper}) — sandbox stays on"
+        printf 'suid'
+        return 0
+    fi
+
+    if [ -f "${helper}" ]; then
+        log "SUID sandbox helper ${helper} is not root:root 4755 — Electron would abort at startup"
+        if sudo -n true >/dev/null 2>&1; then
+            log "non-interactive sudo available — repairing the helper (chown root:root, chmod 4755)"
+            sudo -n chown root:root "${helper}" >/dev/null 2>&1
+            sudo -n chmod 4755 "${helper}" >/dev/null 2>&1
+            if chrome_sandbox_usable "${helper}"; then
+                log "SUID sandbox helper repaired — sandbox stays on"
+                printf 'suid'
+                return 0
+            fi
+            log "helper still not root:root 4755 after the repair attempt"
+        else
+            log "no non-interactive sudo here (sudo -n fails) — the helper cannot be made root-owned"
+        fi
+    else
+        log "no SUID sandbox helper beside ${bin} (looked for ${helper})"
+    fi
+
+    log "DEGRADED: the harness shim will start Electron with the sandbox disabled."
+    log "          Chromium needs EITHER a root-owned setuid helper OR unprivileged"
+    log "          user namespaces, and this box grants this user neither, so the"
+    log "          shell would abort on every start. Only the harness shim is"
+    log "          affected — nothing shipped, and no other program on this box."
+    printf 'disabled'
+}
+
+# The shim's exact bytes for a binary + sandbox mode. Sole source of truth, so
+# "already correct" is decided by content equality and a re-run rewrites nothing.
+# `exec` matters: the launcher records the PID it spawned and `stop` kills that
+# PID, so the shim must BECOME the Electron process, not parent it.
+launcher_shim_content() {
+    local bin="$1" mode="$2" sandbox_line
+    if [ "${mode}" = "disabled" ]; then
+        sandbox_line='export ELECTRON_DISABLE_SANDBOX=1'
+    else
+        sandbox_line='# sandbox left ON — provisioning verified the SUID helper is root:root 4755.'
+    fi
+    cat <<EOF
+#!/usr/bin/env bash
+# GENERATED by scripts/verify-pr/provision-box.sh — do not edit; re-run provisioning.
+# Makes electron-launcher.sh's bare '${SMOKER_LAUNCHER_ELECTRON_CMD}' run this
+# checkout's workspace Electron, in the sandbox mode provisioning proved this box
+# can actually start in. exec keeps the PID the launcher recorded, so the
+# launcher's stop still kills the shell.
+${sandbox_line}
+exec "${bin}" "\$@"
+EOF
+}
+
+# The launch probe: RUN the launcher's command name and let it prove itself.
+# `--version` is dispatched by the browser process AFTER Chromium's sandbox
+# setup, so a box that cannot sandbox aborts here exactly as the shell does —
+# while needing no display, no app and no window, which keeps provisioning cheap
+# and usable over SSH. Echoes the probe's own output for diagnostics; non-zero
+# means this box cannot start Electron.
+probe_launcher_electron() {
+    hash -r 2>/dev/null || true
+    bash -c "${SMOKER_ELECTRON_PROBE_CMD}" 2>&1
 }
 
 # The launcher runs a bare `electron` (its ELECTRON_BIN default) and is not ours
 # to change, but a workspace install lands the binary under node_modules, which
 # is not on PATH — so `launcher start` would die with "command not found" on a
 # box provisioning just called ready, and only surface 60s later as a CDP
-# timeout. This step therefore MAKES that default resolve: a symlink named after
-# the launcher's command, in a PATH directory, pointing at the binary found
-# above. Already correct => no-op; ours but pointing elsewhere => repointed; a
-# foreign `electron` already on PATH => left alone, the launcher's default works.
-# The link is then re-probed, and a name that still does not resolve fails the
-# step: a box the launcher cannot start on must never report as provisioned.
+# timeout. This step therefore MAKES that default work: a small wrapper named
+# after the launcher's command, in a PATH directory, that execs the binary found
+# above in a sandbox mode this box can actually start in. A wrapper rather than a
+# bare symlink because the sandbox has to be handled at the point the launcher
+# invokes the name — which leaves electron-launcher.sh byte-for-byte as shipped.
+# Already correct => no-op; ours but stale (wrong target or wrong sandbox mode)
+# => rewritten; a foreign `electron` already on PATH => left alone.
+#
+# Finally the name is PROBED — actually launched. Resolving is not starting: a
+# box whose Electron dies on exec is exactly the box that used to pass this step
+# and then fail the launcher 60 seconds later, so a failing probe fails the run.
 ensure_launcher_electron_cmd() {
-    local bin="$1" cmd="${SMOKER_LAUNCHER_ELECTRON_CMD}" want shim current
+    local bin="$1" cmd="${SMOKER_LAUNCHER_ELECTRON_CMD}" shim shim_id current mode want probe_out line
 
-    want="$(canonical_path "${bin}")"
     shim="${SMOKER_ELECTRON_SHIM_DIR}/${cmd}"
+    shim_id="$(path_id "${shim}")"
     current="$(resolved_launcher_electron)"
 
-    if [ "${current}" = "${want}" ]; then
-        log "launcher command '${cmd}' resolves to ${bin} — no change"
-        return 0
-    fi
-    if [ -n "${current}" ] && [ "${current}" != "$(canonical_path "${shim}")" ]; then
+    if [ -n "${current}" ] && [ "${current}" != "${shim_id}" ]; then
+        # Someone else's Electron owns the name and the launcher's default already
+        # points at it: leave the host's PATH alone. The probe below still runs.
         log "launcher command '${cmd}' already resolves to ${current} — no change"
-        return 0
+    else
+        mode="$(resolve_sandbox_mode "${bin}")"
+        want="$(launcher_shim_content "${bin}" "${mode}")"
+
+        if [ -n "${current}" ] && [ -x "${shim}" ] && [ ! -L "${shim}" ] \
+            && [ "$(cat "${shim}" 2>/dev/null)" = "${want}" ]; then
+            log "launcher command '${cmd}' shim current (${shim} -> ${bin}, sandbox ${mode}) — no change"
+        else
+            log "launcher command '${cmd}' does not run ${bin} with sandbox ${mode} — installing shim ${shim}"
+            if ! mkdir -p "${SMOKER_ELECTRON_SHIM_DIR}" \
+                || ! rm -f "${shim}" \
+                || ! printf '%s\n' "${want}" > "${shim}" \
+                || ! chmod +x "${shim}"; then
+                log "ERROR: could not install the launcher shim at ${shim}"
+                return 1
+            fi
+
+            current="$(resolved_launcher_electron)"
+            if [ "${current}" != "${shim_id}" ]; then
+                log "ERROR: '${cmd}' still does not resolve to the shim ${shim}"
+                log "       (resolves to: ${current:-nothing}); is ${SMOKER_ELECTRON_SHIM_DIR} on PATH?"
+                log "       PATH=${PATH}"
+                return 1
+            fi
+
+            log "launcher command '${cmd}' installed: ${shim} -> ${bin} (sandbox ${mode})"
+        fi
     fi
 
-    log "launcher command '${cmd}' does not resolve to ${bin} — linking ${shim}"
-    if ! mkdir -p "${SMOKER_ELECTRON_SHIM_DIR}" || ! ln -sfn "${bin}" "${shim}"; then
-        log "ERROR: could not install the launcher shim at ${shim}"
+    if ! probe_out="$(probe_launcher_electron)"; then
+        log "ERROR: '${cmd}' resolves but does not START Electron on this box"
+        log "       probe: ${SMOKER_ELECTRON_PROBE_CMD}"
+        while IFS= read -r line; do
+            [ -n "${line}" ] && log "       ${line}"
+        done <<< "${probe_out}"
+        log "       refusing to report a box the launcher cannot start the shell on"
         return 1
     fi
 
-    current="$(resolved_launcher_electron)"
-    if [ "${current}" != "${want}" ]; then
-        log "ERROR: '${cmd}' still does not resolve to ${bin} after linking ${shim}"
-        log "       (resolves to: ${current:-nothing}); is ${SMOKER_ELECTRON_SHIM_DIR} on PATH?"
-        log "       PATH=${PATH}"
-        return 1
-    fi
-
-    log "launcher command '${cmd}' linked: ${shim} -> ${bin}"
+    log "launcher command '${cmd}' starts Electron (probe: ${SMOKER_ELECTRON_PROBE_CMD}) — verified"
     return 0
 }
 
