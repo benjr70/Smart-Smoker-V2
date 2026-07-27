@@ -57,9 +57,16 @@ export const defaultCommandRunner: CommandRunner = (cmd, args, options = {}) =>
   });
 
 /**
- * Tear down a project's containers and volumes. Idempotent: `docker compose -p
- * <project> down -v` exits 0 even when the project has nothing to remove.
- * Throws only on a genuine teardown failure (nonzero exit).
+ * Tear down a project's containers, volumes and its own built images. Idempotent:
+ * `docker compose -p <project> down -v` exits 0 even when the project has nothing
+ * to remove. Throws only on a genuine teardown failure (nonzero exit).
+ *
+ * `--rmi local` reclaims exactly the images compose tagged for this project
+ * (`<project>-<service>`, because the derived document leaves those services
+ * without an `image:` field) and leaves custom-tagged ones — notably the shared
+ * `mongo:7.0` — alone. Without it every verified PR would leave a full set of
+ * per-project images behind, and being tagged they would survive
+ * `docker image prune`.
  */
 export async function down(
   projectName: string,
@@ -75,6 +82,8 @@ export async function down(
     'down',
     '-v',
     '--remove-orphans',
+    '--rmi',
+    'local',
   ]);
   if (result.code !== 0) {
     throw new Error(

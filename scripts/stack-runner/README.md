@@ -17,23 +17,29 @@ It wraps the merged e2e compose stack (PRD #314,
   runner reads the base file and emits a full derived document with per-project
   container names, replaced host ports, a published mongo port, and an
   absolutised build context. The shared compose file is **never modified**.
-- **Per-PR URL bake (backend only)** — the smoker web bundle compiles its cloud
-  URLs in at image-build time, so remapping its ports alone would leave the
-  served page calling the default ports. The derived document passes the
-  remapped **backend** host URLs to the smoker image build as `SMOKER_CLOUD_URL`
-  / `SMOKER_CLOUD_URL_API` args, and `stack.Dockerfile` rewrites the static e2e
-  env with them before webpack runs. The default e2e stack passes no args and
-  builds exactly as before.
-
-  **Known gaps — the smoker page is not yet fully reachable in a per-PR stack**
-  (tracked in [#400](https://github.com/benjr70/Smart-Smoker-V2/issues/400)):
-  the device-service URL is _not_ baked, because the smoker app hardcodes it
-  (`apps/smoker/src/api/client.ts`, `home.tsx`), so its temp socket still dials
-  `:3003`; and the backend's CORS allowlist (`apps/backend/src/main.ts`) does
-  not include the per-PR smoker origin, so cloud REST responses are blocked in a
-  browser even though websockets pass (the gateway allows `*`). Both must be
-  fixed before the slice-4 pilot.
-
+- **Per-PR URL bake** — the smoker web bundle compiles its host URLs in at
+  image-build time, so remapping its ports alone would leave the served page
+  calling the default ports. The derived document passes the remapped host URLs
+  to the smoker image build as `SMOKER_CLOUD_URL` / `SMOKER_CLOUD_URL_API`
+  (backend REST + socket) and `SMOKER_DEVICE_URL` (device-service temp socket)
+  args; `stack.Dockerfile` rewrites the static e2e env with them and recompiles
+  the bundle before it is served. The smoker app reads the device URL through
+  `apps/smoker/src/api/deviceUrl.ts`, which falls back to the loopback default
+  when nothing was baked in — so the default e2e stack passes no args and builds
+  exactly as before.
+- **Per-PR CORS origins** — the backend's allowlist is a fixed list of deployed
+  origins, so a per-PR UI's REST calls would be blocked in a host browser (the
+  websocket gateway allows `*`, which makes that failure look partial). The
+  derived document passes the per-PR smoker + frontend origins to the backend as
+  `CORS_EXTRA_ORIGINS`, which `apps/backend/src/cors-origins.ts` appends to the
+  static list at boot. Unset — every deployment and the default e2e stack — the
+  allowlist is unchanged.
+- **Per-PR image tags** — the derived document drops the base file's fixed
+  `image:` tag from every built service, so compose tags each stack's build
+  `<project>-<service>`. Two concurrent stacks therefore cannot retag one shared
+  image between another's build and its container creation, and
+  `down --rmi local` reclaims exactly those builds (the pulled `mongo:7.0` is
+  left alone).
 - **Master fallback** — a branch that predates the e2e compose file
   transparently uses the `master` copy (materialised via `git show`).
 
@@ -46,7 +52,7 @@ npm install
 # Boot the stack for PR 328 (builds images from the current checkout):
 npx tsx cli.ts up --pr 328
 
-# Tear it down (containers + volumes; idempotent):
+# Tear it down (containers + volumes + this project's images; idempotent):
 npx tsx cli.ts down --pr 328
 # or by explicit project name:
 npx tsx cli.ts down --project smoker-pr-328
@@ -88,4 +94,9 @@ live end-to-end run is the real proof):
 - **Failed `up` leaves no orphans** — run `up` with a deliberately broken build,
   then confirm `docker ps -a`/`docker volume ls` show nothing for the project.
 - **Live `up` → health probe → `down`** — `up --pr <n>`, curl the printed URLs,
-  then `down --pr <n>` and confirm the containers and the mongo volume are gone.
+  then `down --pr <n>` and confirm the containers, the mongo volume and the
+  `<project>-<service>` images are gone.
+- **Per-PR URLs reach the stack's own services** — open the printed
+  `E2E_SMOKER_URL` in a host browser and confirm, in devtools, that its API and
+  socket requests go to the printed backend/device ports (never 3001/3003) and
+  return 200 rather than a CORS error.

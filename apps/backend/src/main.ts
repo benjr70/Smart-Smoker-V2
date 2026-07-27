@@ -3,6 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
+import { resolveCorsOrigins } from './cors-origins';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
@@ -26,26 +27,9 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
   app.enableCors({
-    origin: [
-      // Production cloud (accessed via Tailscale Serve HTTPS)
-      'https://smokecloud.tail74646.ts.net',
-      'https://smokecloud.tail74646.ts.net:8443',
-      // Dev cloud (accessed via Tailscale Serve HTTPS; renamed from
-      // smoker-dev-cloud in PR #262)
-      'https://smart-smoker-dev-cloud.tail74646.ts.net',
-      'https://smart-smoker-dev-cloud.tail74646.ts.net:8443',
-      // Smoker devices (direct HTTP - no Tailscale Serve). On the device
-      // itself the app loads from localhost/short name; the post-deploy e2e
-      // browser reaches the same UI over the tailnet FQDN, so both origin
-      // spellings must be allowed.
-      'http://virtual-smoker:8080',
-      'http://virtual-smoker.tail74646.ts.net:8080',
-      'http://smoker:8080',
-      'http://smoker.tail74646.ts.net:8080',
-      // Local development
-      'http://localhost:8080',
-      'http://localhost:3000',
-    ],
+    // Deployed origins plus any CORS_EXTRA_ORIGINS (hermetic per-PR stacks
+    // publish their UIs on remapped ports). See cors-origins.ts.
+    origin: resolveCorsOrigins(),
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     preflightContinue: false,
     optionsSuccessStatus: 200,

@@ -93,12 +93,12 @@ HEALTHCHECK --interval=10s --timeout=5s --retries=15 --start-period=10s \
 # ---------------------------------------------------------------------------
 # smoker-build: optionally re-bake the smoker web bundle against per-stack URLs.
 #
-# The bundle's cloud URLs are compiled in by dotenv-webpack from
+# The bundle's cloud + device-service URLs are compiled in by dotenv-webpack from
 # `apps/smoker/.env.prod` (the static e2e env copied in the `build` stage),
 # which assumes the default host ports. A per-PR hermetic stack publishes the
-# backend somewhere else entirely, so the stack runner passes the remapped host
-# URLs as build args and this stage rewrites the env file and recompiles the
-# bundle before it is served.
+# backend and device-service somewhere else entirely, so the stack runner passes
+# the remapped host URLs as build args and this stage rewrites the env file and
+# recompiles the bundle before it is served.
 #
 # With no args supplied — the default e2e stack — the rewrite is skipped
 # entirely and the bundle is the one `build` already produced, so the served
@@ -109,9 +109,10 @@ HEALTHCHECK --interval=10s --timeout=5s --retries=15 --start-period=10s \
 FROM build AS smoker-build
 ARG SMOKER_CLOUD_URL=
 ARG SMOKER_CLOUD_URL_API=
+ARG SMOKER_DEVICE_URL=
 WORKDIR /workspace
 RUN set -eu; \
-    if [ -z "${SMOKER_CLOUD_URL}${SMOKER_CLOUD_URL_API}" ]; then exit 0; fi; \
+    if [ -z "${SMOKER_CLOUD_URL}${SMOKER_CLOUD_URL_API}${SMOKER_DEVICE_URL}" ]; then exit 0; fi; \
     env_file=apps/smoker/.env.prod; \
     upsert() { \
     [ -n "$2" ] || return 0; \
@@ -121,6 +122,7 @@ RUN set -eu; \
     }; \
     upsert REACT_APP_CLOUD_URL "$SMOKER_CLOUD_URL"; \
     upsert REACT_APP_CLOUD_URL_API "$SMOKER_CLOUD_URL_API"; \
+    upsert REACT_APP_DEVICE_URL "$SMOKER_DEVICE_URL"; \
     npm run build -w smoker
 
 # ---------------------------------------------------------------------------
