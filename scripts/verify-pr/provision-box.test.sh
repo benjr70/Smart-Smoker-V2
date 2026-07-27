@@ -61,6 +61,15 @@ mkdir -p "${FAKE_SMOKER_DIR}/electron-app" "${FAKE_SMOKER_DIR}/.webpack/main"
 touch "${FAKE_SMOKER_DIR}/electron-app/index.ts"
 touch "${FAKE_SMOKER_DIR}/.webpack/main/index.js"
 export SMOKER_ELECTRON_BINARIES="${FAKE_ELECTRON_BIN}"
+# The launcher's command name and the PATH dir provisioning shims it into are
+# redirected into the same fake workspace — the real ~/.local/bin is never
+# touched by a test run — and the shim starts out correct, so "already
+# provisioned" stays the default for every test that is not about this step.
+FAKE_SHIM_DIR="${FAKE_SMOKER_DIR}/bin"
+mkdir -p "${FAKE_SHIM_DIR}"
+ln -sfn "${FAKE_ELECTRON_BIN}" "${FAKE_SHIM_DIR}/electron"
+export SMOKER_ELECTRON_SHIM_DIR="${FAKE_SHIM_DIR}"
+export PATH="${FAKE_SHIM_DIR}:${PATH}"
 export SMOKER_SHELL_BUNDLE="${FAKE_SMOKER_DIR}/.webpack/main/index.js"
 export SMOKER_SHELL_SOURCES="${FAKE_SMOKER_DIR}/electron-app"
 export SMOKER_SHELL_BUILD_CMD='printf "shell-build\n" >> "${PROVISION_CALL_LOG}"'
@@ -1044,20 +1053,163 @@ $(cat "${stderr}")"
 }
 
 #-------------------------------------------------------------------------------
-# Test 16: the launcher runs `electron` from PATH by default, but a workspace
-#          install puts the binary in node_modules — off PATH. Provisioning must
-#          hand the operator the exact ELECTRON_BIN to use, or `launcher start`
-#          dies with "command not found" on a box it just called provisioned
-#          (issue #390 AC 4). With `electron` on PATH there is nothing to say.
+# Test 16: the launcher runs `electron` from PATH by default (its unchanged
+#          ELECTRON_BIN default), but a workspace install puts the binary in
+#          node_modules — off PATH. Provisioning must MAKE that name resolve, or
+#          the bare `electron-launcher.sh start` documented in the skill dies
+#          with "command not found" on a box just called provisioned and only
+#          surfaces 60s later as a CDP timeout (issue #390 AC 4).
+#
+#          A per-test command name + shim dir keep the assertion independent of
+#          whatever Electron this host happens to have installed.
 #-------------------------------------------------------------------------------
-test_reports_electron_bin_when_off_path() {
-    echo "TEST: reports the ELECTRON_BIN the launcher needs when electron is off PATH"
+test_links_launcher_electron_when_off_path() {
+    echo "TEST: links the launcher's electron command when it is off PATH"
 
-    local tmp mock_dir cfg stderr present_bin
+    local tmp mock_dir cfg stderr present_bin shim_dir
     tmp="$(mktemp -d)"
     cfg="${tmp}/.mcp.json"
     stderr="${tmp}/stderr.txt"
     present_bin="${tmp}/node_modules/electron/dist/electron"
+    shim_dir="${tmp}/shimbin"
+    seed_config "${cfg}"
+    mock_dir="$(make_mock_bin yes yes yes)"
+    trap "rm -rf '${tmp}' '${mock_dir}'" RETURN
+
+    mkdir -p "$(dirname "${present_bin}")" "${shim_dir}"
+    printf '#!/usr/bin/env bash\nexit 0\n' > "${present_bin}"
+    chmod +x "${present_bin}"
+
+    PROVISION_CALL_LOG="${tmp}/calls.log" MCP_CONFIG_FILE="${cfg}" \
+        CHROME_MCP_WRAPPER="${WRAPPER}" \
+        SMOKER_ELECTRON_BINARIES="${present_bin}" \
+        SMOKER_LAUNCHER_ELECTRON_CMD="electron-shimtest-xyz" \
+        SMOKER_ELECTRON_SHIM_DIR="${shim_dir}" \
+        PATH="${mock_dir}:${shim_dir}:${PATH}" \
+        bash "${PROVISION}" >/dev/null 2>"${stderr}"
+    local exit_code=$?
+
+    if [ "${exit_code}" -ne 0 ]; then
+        fail "provisioning should exit 0 after linking the launcher's electron command" \
+            "exit=${exit_code}
+$(cat "${stderr}")"
+        return
+    fi
+
+    # The launcher's bare default must now resolve, and to the workspace binary.
+    local resolved
+    resolved="$(PATH="${mock_dir}:${shim_dir}:${PATH}" bash -c \
+        'command -v electron-shimtest-xyz' 2>/dev/null)"
+    if [ -z "${resolved}" ]; then
+        fail "the launcher's electron command must resolve on PATH after provisioning" \
+            "stderr:
+$(cat "${stderr}")"
+        return
+    fi
+    if [ "$(realpath "${resolved}")" != "$(realpath "${present_bin}")" ]; then
+        fail "the launcher's electron command must resolve to the workspace binary" \
+            "resolved: ${resolved} -> $(realpath "${resolved}")
+wanted:   ${present_bin}"
+        return
+    fi
+
+    pass "links the launcher's electron command when it is off PATH"
+}
+
+#-------------------------------------------------------------------------------
+# Test 17: the shim step is verify-then-act like every other one: a shim already
+#          pointing at the workspace binary is a no-op (issue #390 AC 3), while
+#          one left pointing at a stale target is repointed — a box provisioned
+#          before a reinstall must not keep launching a binary that is gone.
+#-------------------------------------------------------------------------------
+test_launcher_electron_shim_is_idempotent() {
+    echo "TEST: correct electron shim is a no-op, stale shim is repointed"
+
+    local tmp mock_dir cfg stderr present_bin stale_bin shim_dir shim
+    tmp="$(mktemp -d)"
+    cfg="${tmp}/.mcp.json"
+    stderr="${tmp}/stderr.txt"
+    present_bin="${tmp}/node_modules/electron/dist/electron"
+    stale_bin="${tmp}/old/electron"
+    shim_dir="${tmp}/shimbin"
+    shim="${shim_dir}/electron-shimtest-xyz"
+    seed_config "${cfg}"
+    mock_dir="$(make_mock_bin yes yes yes)"
+    trap "rm -rf '${tmp}' '${mock_dir}'" RETURN
+
+    mkdir -p "$(dirname "${present_bin}")" "$(dirname "${stale_bin}")" "${shim_dir}"
+    printf '#!/usr/bin/env bash\nexit 0\n' > "${present_bin}"
+    printf '#!/usr/bin/env bash\nexit 0\n' > "${stale_bin}"
+    chmod +x "${present_bin}" "${stale_bin}"
+
+    run_shim_provision() {
+        PROVISION_CALL_LOG="${tmp}/calls.log" MCP_CONFIG_FILE="${cfg}" \
+            CHROME_MCP_WRAPPER="${WRAPPER}" \
+            SMOKER_ELECTRON_BINARIES="${present_bin}" \
+            SMOKER_LAUNCHER_ELECTRON_CMD="electron-shimtest-xyz" \
+            SMOKER_ELECTRON_SHIM_DIR="${shim_dir}" \
+            PATH="${mock_dir}:${shim_dir}:${PATH}" \
+            bash "${PROVISION}" >/dev/null 2>"${stderr}"
+    }
+
+    # Already correct => no link, reported as no change.
+    ln -sfn "${present_bin}" "${shim}"
+    run_shim_provision
+    local exit_code=$?
+
+    if [ "${exit_code}" -ne 0 ]; then
+        fail "provisioning should exit 0 when the electron shim is already correct" \
+            "exit=${exit_code}
+$(cat "${stderr}")"
+        return
+    fi
+    if grep -q "linking" "${stderr}"; then
+        fail "a correct electron shim must not be relinked" "stderr:
+$(cat "${stderr}")"
+        return
+    fi
+    if ! grep -q "no change" "${stderr}"; then
+        fail "a correct electron shim must be reported as no change" "stderr:
+$(cat "${stderr}")"
+        return
+    fi
+
+    # Pointing at a stale target => repointed at the binary on disk now.
+    ln -sfn "${stale_bin}" "${shim}"
+    run_shim_provision
+    exit_code=$?
+
+    if [ "${exit_code}" -ne 0 ]; then
+        fail "provisioning should exit 0 after repointing a stale electron shim" \
+            "exit=${exit_code}
+$(cat "${stderr}")"
+        return
+    fi
+    if [ "$(realpath "${shim}")" != "$(realpath "${present_bin}")" ]; then
+        fail "a stale electron shim must be repointed at the workspace binary" \
+            "shim -> $(realpath "${shim}")
+wanted:  ${present_bin}"
+        return
+    fi
+
+    pass "correct electron shim is a no-op, stale shim is repointed"
+}
+
+#-------------------------------------------------------------------------------
+# Test 18: the shim is VERIFIED after it is written, and a name that still does
+#          not resolve fails the run (issue #390 AC 3/4). Writing a link into a
+#          directory that is not on PATH leaves the launcher exactly as broken as
+#          before, so provisioning must not report such a box as provisioned.
+#-------------------------------------------------------------------------------
+test_unresolvable_electron_shim_fails() {
+    echo "TEST: an electron shim that still does not resolve fails the run"
+
+    local tmp mock_dir cfg stderr present_bin shim_dir
+    tmp="$(mktemp -d)"
+    cfg="${tmp}/.mcp.json"
+    stderr="${tmp}/stderr.txt"
+    present_bin="${tmp}/node_modules/electron/dist/electron"
+    shim_dir="${tmp}/not-on-path"
     seed_config "${cfg}"
     mock_dir="$(make_mock_bin yes yes yes)"
     trap "rm -rf '${tmp}' '${mock_dir}'" RETURN
@@ -1066,44 +1218,88 @@ test_reports_electron_bin_when_off_path() {
     printf '#!/usr/bin/env bash\nexit 0\n' > "${present_bin}"
     chmod +x "${present_bin}"
 
-    # The launcher's command name is pointed at one nothing provides, so the
-    # "off PATH" branch is driven regardless of what this host has installed.
+    # shim_dir is deliberately absent from PATH.
     PROVISION_CALL_LOG="${tmp}/calls.log" MCP_CONFIG_FILE="${cfg}" \
         CHROME_MCP_WRAPPER="${WRAPPER}" \
         SMOKER_ELECTRON_BINARIES="${present_bin}" \
-        SMOKER_LAUNCHER_ELECTRON_CMD="electron-absent-xyz" \
+        SMOKER_LAUNCHER_ELECTRON_CMD="electron-shimtest-xyz" \
+        SMOKER_ELECTRON_SHIM_DIR="${shim_dir}" \
         PATH="${mock_dir}:${PATH}" \
         bash "${PROVISION}" >/dev/null 2>"${stderr}"
+    local exit_code=$?
 
-    if ! grep -qF "ELECTRON_BIN=${present_bin}" "${stderr}"; then
-        fail "must name the ELECTRON_BIN the launcher needs when electron is off PATH" \
-            "stderr:
+    if [ "${exit_code}" -eq 0 ]; then
+        fail "an unresolvable launcher electron command must exit non-zero" "got exit 0
+$(cat "${stderr}")"
+        return
+    fi
+    if ! grep -qF "${shim_dir}" "${stderr}"; then
+        fail "the error must name the shim directory that is not on PATH" "stderr:
+$(cat "${stderr}")"
+        return
+    fi
+    # A failed step must stop the run: the later steps never happen.
+    if grep -q "provisioning complete" "${stderr}"; then
+        fail "a failed shim step must abort provisioning" "stderr:
 $(cat "${stderr}")"
         return
     fi
 
-    # With that command resolvable on PATH the launcher's default works: no note.
-    printf '#!/usr/bin/env bash\nexit 0\n' > "${mock_dir}/electron-absent-xyz"
-    chmod +x "${mock_dir}/electron-absent-xyz"
-    PROVISION_CALL_LOG="${tmp}/calls.log" MCP_CONFIG_FILE="${cfg}" \
-        CHROME_MCP_WRAPPER="${WRAPPER}" \
-        SMOKER_ELECTRON_BINARIES="${present_bin}" \
-        SMOKER_LAUNCHER_ELECTRON_CMD="electron-absent-xyz" \
-        PATH="${mock_dir}:${PATH}" \
-        bash "${PROVISION}" >/dev/null 2>"${stderr}"
-
-    if grep -q "ELECTRON_BIN=" "${stderr}"; then
-        fail "must not nag about ELECTRON_BIN when electron is already on PATH" \
-            "stderr:
-$(cat "${stderr}")"
-        return
-    fi
-
-    pass "reports the ELECTRON_BIN the launcher needs when electron is off PATH"
+    pass "an electron shim that still does not resolve fails the run"
 }
 
 #-------------------------------------------------------------------------------
-# Test 17: the shell the launcher runs is the BUILT main-process bundle
+# Test 19: a real Electron already on PATH satisfies the launcher's default, so
+#          provisioning leaves the host's PATH alone — no shim is written
+#          (issue #390 AC 3, "present is a no-op").
+#-------------------------------------------------------------------------------
+test_existing_path_electron_is_left_alone() {
+    echo "TEST: an electron already on PATH is left alone (no shim written)"
+
+    local tmp mock_dir cfg stderr present_bin shim_dir
+    tmp="$(mktemp -d)"
+    cfg="${tmp}/.mcp.json"
+    stderr="${tmp}/stderr.txt"
+    present_bin="${tmp}/node_modules/electron/dist/electron"
+    shim_dir="${tmp}/shimbin"
+    seed_config "${cfg}"
+    mock_dir="$(make_mock_bin yes yes yes)"
+    trap "rm -rf '${tmp}' '${mock_dir}'" RETURN
+
+    mkdir -p "$(dirname "${present_bin}")" "${shim_dir}"
+    printf '#!/usr/bin/env bash\nexit 0\n' > "${present_bin}"
+    chmod +x "${present_bin}"
+
+    # A "system" Electron under the launcher's command name, already on PATH.
+    printf '#!/usr/bin/env bash\nexit 0\n' > "${mock_dir}/electron-shimtest-xyz"
+    chmod +x "${mock_dir}/electron-shimtest-xyz"
+
+    PROVISION_CALL_LOG="${tmp}/calls.log" MCP_CONFIG_FILE="${cfg}" \
+        CHROME_MCP_WRAPPER="${WRAPPER}" \
+        SMOKER_ELECTRON_BINARIES="${present_bin}" \
+        SMOKER_LAUNCHER_ELECTRON_CMD="electron-shimtest-xyz" \
+        SMOKER_ELECTRON_SHIM_DIR="${shim_dir}" \
+        PATH="${mock_dir}:${shim_dir}:${PATH}" \
+        bash "${PROVISION}" >/dev/null 2>"${stderr}"
+    local exit_code=$?
+
+    if [ "${exit_code}" -ne 0 ]; then
+        fail "provisioning should exit 0 when electron already resolves on PATH" \
+            "exit=${exit_code}
+$(cat "${stderr}")"
+        return
+    fi
+    if [ -e "${shim_dir}/electron-shimtest-xyz" ]; then
+        fail "no shim should be written when electron already resolves on PATH" \
+            "unexpected: ${shim_dir}/electron-shimtest-xyz"
+        return
+    fi
+
+    pass "an electron already on PATH is left alone (no shim written)"
+}
+
+#-------------------------------------------------------------------------------
+# Test 20: the shell the launcher runs is the BUILT main-process bundle
 #          (`package.json` "main" is ./.webpack/main, which is gitignored), not
 #          the TypeScript sources. With no bundle on disk `electron <app dir>`
 #          has nothing to run, so provisioning must build it (issue #390 AC 3/4).
@@ -1157,7 +1353,7 @@ $(cat "${stderr}")"
 }
 
 #-------------------------------------------------------------------------------
-# Test 18: a bundle built BEFORE the current shell sources must be rebuilt. This
+# Test 21: a bundle built BEFORE the current shell sources must be rebuilt. This
 #          is the silent-failure case: the stale shell still starts and CDP still
 #          answers, it just runs the old main process — so a round would "verify"
 #          a renderer-URL override the shell never read (issue #390 AC 4).
@@ -1210,7 +1406,7 @@ $(cat "${stderr}")"
 }
 
 #-------------------------------------------------------------------------------
-# Test 19: a bundle newer than every shell source is a no-op — no build, exit 0.
+# Test 22: a bundle newer than every shell source is a no-op — no build, exit 0.
 #          Rebuilding on every run would make each round pay for a full Forge
 #          build it does not need (issue #390 AC 3, idempotency).
 #-------------------------------------------------------------------------------
@@ -1260,7 +1456,7 @@ $(cat "${stderr}")"
 }
 
 #-------------------------------------------------------------------------------
-# Test 20: a build that exits 0 but leaves no bundle must fail loudly, naming the
+# Test 23: a build that exits 0 but leaves no bundle must fail loudly, naming the
 #          path — the same rule as the Electron binary: "provisioned" is what is
 #          on disk, not what a command's exit code claims.
 #-------------------------------------------------------------------------------
@@ -1326,7 +1522,10 @@ test_committed_entries_fail_at_connect_time
 test_installs_smoker_deps_when_absent
 test_smoker_deps_present_is_noop
 test_install_without_binary_fails_loudly
-test_reports_electron_bin_when_off_path
+test_links_launcher_electron_when_off_path
+test_launcher_electron_shim_is_idempotent
+test_unresolvable_electron_shim_fails
+test_existing_path_electron_is_left_alone
 test_builds_shell_bundle_when_absent
 test_rebuilds_stale_shell_bundle
 test_fresh_shell_bundle_is_noop

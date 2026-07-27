@@ -12,7 +12,9 @@
 #   2. Playwright browsers + system deps   (installs via `playwright install`)
 #   3. Docker usable by the agent user     (adds user to the docker group)
 #   4. Smoker workspace deps + the Electron binary the launcher runs
-#                                          (workspace install if absent)
+#                                          (workspace install if absent, then a
+#                                           PATH shim so the launcher's default
+#                                           `electron` actually resolves)
 #   5. Built smoker shell bundle           (Forge/webpack build if absent or
 #                                           older than the shell sources)
 #   6. MCP entries for both wrappers       (committed to .mcp.json — verified
@@ -28,8 +30,9 @@
 #   SMOKER_ELECTRON_BINARIES      candidate Electron binary paths, first wins
 #   SMOKER_DEPS_INSTALL_CMD       install run from the repo root when none exist
 #   SMOKER_LAUNCHER_ELECTRON_CMD  command name the launcher runs (default:
-#                                 electron) — probed to decide whether to print
-#                                 the ELECTRON_BIN the launcher needs
+#                                 electron) — the shim is named after it
+#   SMOKER_ELECTRON_SHIM_DIR      PATH dir the shim is installed into
+#                                 (default: ~/.local/bin)
 #   SMOKER_SHELL_BUNDLE           built main-process bundle the shell runs
 #                                 (default: apps/smoker/.webpack/main/index.js)
 #   SMOKER_SHELL_SOURCES          paths whose mtimes decide bundle freshness
@@ -62,9 +65,11 @@ SMOKER_APP_DIR="${SMOKER_APP_DIR:-${REPO_ROOT}/apps/smoker}"
 SMOKER_ELECTRON_BINARIES="${SMOKER_ELECTRON_BINARIES:-${SMOKER_APP_DIR}/node_modules/electron/dist/electron ${REPO_ROOT}/node_modules/electron/dist/electron}"
 SMOKER_DEPS_INSTALL_CMD="${SMOKER_DEPS_INSTALL_CMD:-npm install --legacy-peer-deps --workspace smoker}"
 # The command name electron-launcher.sh runs by default (its ELECTRON_BIN
-# default). Overridable so the "is it on PATH" check does not depend on what
-# this host happens to have installed.
+# default), and the PATH directory the shim that makes it resolve is installed
+# into. Both overridable so the shim step can be exercised without depending on
+# what this host has installed or writing into the real ~/.local/bin.
 SMOKER_LAUNCHER_ELECTRON_CMD="${SMOKER_LAUNCHER_ELECTRON_CMD:-electron}"
+SMOKER_ELECTRON_SHIM_DIR="${SMOKER_ELECTRON_SHIM_DIR:-${HOME}/.local/bin}"
 
 # The built main-process bundle the shell actually runs, the sources it is built
 # from (freshness inputs), and the build that produces it. The build is the app's
@@ -146,6 +151,9 @@ ensure_playwright() {
 # actually executes, and it is what a half-finished install leaves missing. After
 # an install we re-check it and fail loudly if it still is not there, rather than
 # reporting a provisioned box the launcher will die on.
+#
+# On disk is necessary but not sufficient: the launcher invokes it by NAME, so
+# the step finishes by making that name resolve (see ensure_launcher_electron_cmd).
 #-------------------------------------------------------------------------------
 
 # First existing, executable candidate Electron binary (npm hoists workspace deps
@@ -161,22 +169,71 @@ find_electron_binary() {
     return 1
 }
 
-# The launcher defaults to `electron` on PATH, but a workspace install lands the
-# binary in node_modules, which is not on it. Say which ELECTRON_BIN to pass, or
-# `launcher start` dies with "command not found" on a box just called ready.
-report_electron_bin() {
-    local bin="$1"
-    if command -v "${SMOKER_LAUNCHER_ELECTRON_CMD}" >/dev/null 2>&1; then
+# Canonical (symlinks resolved) form of a path; the path itself when it cannot
+# be resolved, so comparisons never collapse to an empty string.
+canonical_path() {
+    realpath -m "$1" 2>/dev/null || printf '%s' "$1"
+}
+
+# What the launcher's command name resolves to today, symlinks followed — empty
+# when it does not resolve at all.
+resolved_launcher_electron() {
+    local found
+    hash -r 2>/dev/null || true
+    found="$(command -v "${SMOKER_LAUNCHER_ELECTRON_CMD}" 2>/dev/null)" || return 0
+    [ -n "${found}" ] || return 0
+    canonical_path "${found}"
+}
+
+# The launcher runs a bare `electron` (its ELECTRON_BIN default) and is not ours
+# to change, but a workspace install lands the binary under node_modules, which
+# is not on PATH — so `launcher start` would die with "command not found" on a
+# box provisioning just called ready, and only surface 60s later as a CDP
+# timeout. This step therefore MAKES that default resolve: a symlink named after
+# the launcher's command, in a PATH directory, pointing at the binary found
+# above. Already correct => no-op; ours but pointing elsewhere => repointed; a
+# foreign `electron` already on PATH => left alone, the launcher's default works.
+# The link is then re-probed, and a name that still does not resolve fails the
+# step: a box the launcher cannot start on must never report as provisioned.
+ensure_launcher_electron_cmd() {
+    local bin="$1" cmd="${SMOKER_LAUNCHER_ELECTRON_CMD}" want shim current
+
+    want="$(canonical_path "${bin}")"
+    shim="${SMOKER_ELECTRON_SHIM_DIR}/${cmd}"
+    current="$(resolved_launcher_electron)"
+
+    if [ "${current}" = "${want}" ]; then
+        log "launcher command '${cmd}' resolves to ${bin} — no change"
         return 0
     fi
-    log "NOTE: 'electron' is not on PATH — run the launcher with ELECTRON_BIN=${bin}"
+    if [ -n "${current}" ] && [ "${current}" != "$(canonical_path "${shim}")" ]; then
+        log "launcher command '${cmd}' already resolves to ${current} — no change"
+        return 0
+    fi
+
+    log "launcher command '${cmd}' does not resolve to ${bin} — linking ${shim}"
+    if ! mkdir -p "${SMOKER_ELECTRON_SHIM_DIR}" || ! ln -sfn "${bin}" "${shim}"; then
+        log "ERROR: could not install the launcher shim at ${shim}"
+        return 1
+    fi
+
+    current="$(resolved_launcher_electron)"
+    if [ "${current}" != "${want}" ]; then
+        log "ERROR: '${cmd}' still does not resolve to ${bin} after linking ${shim}"
+        log "       (resolves to: ${current:-nothing}); is ${SMOKER_ELECTRON_SHIM_DIR} on PATH?"
+        log "       PATH=${PATH}"
+        return 1
+    fi
+
+    log "launcher command '${cmd}' linked: ${shim} -> ${bin}"
+    return 0
 }
 
 ensure_smoker_deps() {
     local bin
     if bin="$(find_electron_binary)"; then
         log "smoker workspace deps present (Electron binary at ${bin}) — no change"
-        report_electron_bin "${bin}"
+        ensure_launcher_electron_cmd "${bin}" || return 1
         return 0
     fi
 
@@ -188,7 +245,7 @@ ensure_smoker_deps() {
 
     if bin="$(find_electron_binary)"; then
         log "smoker workspace deps installed (Electron binary at ${bin})"
-        report_electron_bin "${bin}"
+        ensure_launcher_electron_cmd "${bin}" || return 1
         return 0
     fi
 

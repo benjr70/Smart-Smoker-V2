@@ -19,9 +19,15 @@ GNOME/XWayland display through the Playwright MCP server, surviving reboots:
   `.webpack/main` build artifact: an unbuilt checkout gives the launcher nothing
   to run, and a bundle older than the shell sources starts fine and answers CDP
   while running the OLD main process, so it would silently ignore the renderer
-  URL the harness exports. Absent or stale ⇒ rebuild, otherwise no-op; if
-  `electron` is not on PATH the run prints the exact `ELECTRON_BIN=` the
-  launcher needs. It then **verifies** both harness MCP servers
+  URL the harness exports. Absent or stale ⇒ rebuild, otherwise no-op. Because
+  the launcher invokes Electron by name (its `ELECTRON_BIN` default is a bare
+  `electron`) while the workspace install lands the binary under `node_modules`,
+  provisioning also links that name into a PATH directory (`~/.local/bin` by
+  default, `SMOKER_ELECTRON_SHIM_DIR` to override) and re-probes it — already
+  correct ⇒ no-op, stale ⇒ repointed, still unresolvable ⇒ the run fails rather
+  than reporting a box the launcher would die on. So
+  `electron-launcher.sh start` works with no `ELECTRON_BIN` prefix after
+  provisioning. It then **verifies** both harness MCP servers
   (`playwright-chrome` → `chrome-mcp-wrapper.sh`, `playwright-electron` →
   `electron-cdp-mcp-wrapper.sh`). Those two entries are **committed** to
   `.mcp.json` (issue #388), so a healthy box has nothing to do: the run logs
