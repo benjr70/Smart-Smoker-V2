@@ -5,6 +5,7 @@ import Grid from '@mui/material/Grid';
 import React from 'react';
 import { io } from 'socket.io-client';
 import TempChart, { TempData } from 'temperaturechart/src/tempChart';
+import { resolveDeviceUrl } from '../../api/deviceUrl';
 import { getConnection } from '../../services/deviceService';
 import {
   getCurrentSmokeProfile,
@@ -28,6 +29,13 @@ interface State {
   smoking: boolean;
   date: Date;
 }
+
+/**
+ * Loopback device-service origin for the temp socket. Used unless a per-stack
+ * URL was baked into the bundle at build time (hermetic per-PR stacks publish
+ * device-service on a remapped host port).
+ */
+const DEVICE_SOCKET_FALLBACK_URL = 'http://127.0.0.1:3003';
 
 let initTemps: TempData[] = [];
 let socket: any;
@@ -83,7 +91,7 @@ export class Home extends React.Component<
       .catch(e => {
         console.log(e, 'no smoke profile found');
       });
-    let deviceClient = io('http://127.0.0.1:3003');
+    let deviceClient = io(resolveDeviceUrl(DEVICE_SOCKET_FALLBACK_URL));
     let url = process.env.REACT_APP_CLOUD_URL ?? '';
     socket = io(url);
     deviceClient.on('temp', (message: any) => {

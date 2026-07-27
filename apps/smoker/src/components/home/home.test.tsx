@@ -579,6 +579,39 @@ describe('Home Component', () => {
     });
   });
 
+  describe('device-service socket URL', () => {
+    const originalDeviceUrl = process.env.REACT_APP_DEVICE_URL;
+
+    afterEach(() => {
+      if (originalDeviceUrl === undefined) {
+        delete process.env.REACT_APP_DEVICE_URL;
+      } else {
+        process.env.REACT_APP_DEVICE_URL = originalDeviceUrl;
+      }
+    });
+
+    it('dials the device URL baked into the bundle when one was supplied', async () => {
+      process.env.REACT_APP_DEVICE_URL = 'http://localhost:20012';
+
+      render(<Home />);
+
+      await waitFor(() => {
+        expect(mockIo).toHaveBeenCalledWith('http://localhost:20012');
+      });
+      expect(mockIo).not.toHaveBeenCalledWith('http://127.0.0.1:3003');
+    });
+
+    it('dials loopback:3003 when no device URL was baked in', async () => {
+      delete process.env.REACT_APP_DEVICE_URL;
+
+      render(<Home />);
+
+      await waitFor(() => {
+        expect(mockIo).toHaveBeenCalledWith('http://127.0.0.1:3003');
+      });
+    });
+  });
+
   it('should test getConnection branch in production mode when temp event is received', async () => {
     // Set production environment
     const originalEnv = process.env.ENV;

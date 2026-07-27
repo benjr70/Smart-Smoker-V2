@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
-import { parse } from 'yaml';
+import { parse, stringify } from 'yaml';
 import { deriveComposeDocument, type ComposeDocument } from './derive-compose.ts';
 import { computeStackConfig } from './stack-config.ts';
 
@@ -86,5 +86,119 @@ describe('deriveComposeDocument — per-PR isolation transform', () => {
     const snapshot = JSON.stringify(original);
     deriveComposeDocument(original, config, baseDir);
     assert.equal(JSON.stringify(original), snapshot);
+  });
+
+  it('bakes the remapped backend URLs into the smoker image via build args', () => {
+    const derived = deriveComposeDocument(loadRealCompose(), config, baseDir);
+    const build = derived.services.smoker.build as { args?: Record<string, string> };
+    assert.equal(build.args?.SMOKER_CLOUD_URL, `http://localhost:${config.ports.backend}`);
+    assert.equal(build.args?.SMOKER_CLOUD_URL_API, `http://localhost:${config.ports.backend}/api/`);
+  });
+
+  it('bakes the remapped device-service URL into the smoker image via build args', () => {
+    const derived = deriveComposeDocument(loadRealCompose(), config, baseDir);
+    const build = derived.services.smoker.build as { args?: Record<string, string> };
+    assert.equal(build.args?.SMOKER_DEVICE_URL, `http://localhost:${config.ports.device}`);
+    assert.notEqual(
+      build.args?.SMOKER_DEVICE_URL,
+      'http://localhost:3003',
+      'the smoker must not dial the default device port from a per-PR stack'
+    );
+  });
+
+  it('only emits build args the hermetic image build declares', () => {
+    const dockerfile = readFileSync(join(baseDir, 'stack.Dockerfile'), 'utf-8');
+    const derived = deriveComposeDocument(loadRealCompose(), config, baseDir);
+    const emitted = Object.keys(derived.services.smoker.build?.args ?? {});
+    assert.ok(emitted.length > 0, 'expected the smoker service to receive build args');
+    for (const name of emitted) {
+      assert.match(
+        dockerfile,
+        new RegExp(`^ARG ${name}(=|$)`, 'm'),
+        `stack.Dockerfile declares no ARG ${name}, so the build would silently ignore it`
+      );
+    }
+  });
+
+  it('leaves services that bake no host URLs without build args', () => {
+    const derived = deriveComposeDocument(loadRealCompose(), config, baseDir);
+    for (const serviceName of ['backend', 'device-service', 'frontend']) {
+      const build = derived.services[serviceName].build as Record<string, unknown>;
+      assert.equal('args' in build, false, `${serviceName} should not have gained build args`);
+    }
+  });
+
+  it('leaves the shared e2e compose file arg-free so the default stack build is unchanged', () => {
+    const build = loadRealCompose().services.smoker.build as Record<string, unknown>;
+    assert.equal(
+      'args' in build,
+      false,
+      'the default e2e stack must build the smoker with the static env only — ' +
+        'per-PR URLs belong in the derived document, not the shared file'
+    );
+  });
+
+  it('round-trips the build args through YAML so compose reads the remapped URLs', () => {
+    const derived = deriveComposeDocument(loadRealCompose(), config, baseDir);
+    const reloaded = parse(stringify(derived)) as ComposeDocument;
+    assert.deepEqual(reloaded.services.smoker.build?.args, {
+      SMOKER_CLOUD_URL: `http://localhost:${config.ports.backend}`,
+      SMOKER_CLOUD_URL_API: `http://localhost:${config.ports.backend}/api/`,
+      SMOKER_DEVICE_URL: `http://localhost:${config.ports.device}`,
+    });
+  });
+
+  it('allowlists the per-PR browser origins on the backend so its CORS lets them in', () => {
+    const derived = deriveComposeDocument(loadRealCompose(), config, baseDir);
+    const environment = derived.services.backend.environment as string[];
+    const entry = environment.find(e => e.startsWith('CORS_EXTRA_ORIGINS='));
+    assert.ok(entry, 'the backend must receive the per-PR origins to allowlist');
+    const origins = entry!.slice('CORS_EXTRA_ORIGINS='.length).split(',');
+    assert.deepEqual(origins, [
+      `http://localhost:${config.ports.smoker}`,
+      `http://localhost:${config.ports.frontend}`,
+    ]);
+  });
+
+  it('keeps the base backend environment intact when injecting the origins', () => {
+    const base = loadRealCompose();
+    const baseEnv = base.services.backend.environment as string[];
+    const derived = deriveComposeDocument(base, config, baseDir);
+    const derivedEnv = derived.services.backend.environment as string[];
+    for (const entry of baseEnv) {
+      assert.ok(derivedEnv.includes(entry), `derived backend env dropped "${entry}"`);
+    }
+  });
+
+  it('leaves the shared e2e compose file free of per-PR origins', () => {
+    const environment = loadRealCompose().services.backend.environment as string[];
+    assert.equal(
+      environment.some(e => e.startsWith('CORS_EXTRA_ORIGINS=')),
+      false,
+      'the default e2e stack serves both UIs on their default ports, which the ' +
+        'backend allowlist already covers — per-PR origins belong in the derived document'
+    );
+  });
+
+  it('drops the shared fixed image tag from every built service so stacks cannot race on it', () => {
+    const base = loadRealCompose();
+    const derived = deriveComposeDocument(base, config, baseDir);
+    for (const serviceName of ['backend', 'device-service', 'frontend', 'smoker']) {
+      assert.ok(
+        typeof base.services[serviceName].image === 'string',
+        `precondition: the base file tags ${serviceName} with a fixed image name`
+      );
+      assert.equal(
+        'image' in derived.services[serviceName],
+        false,
+        `${serviceName} keeps the shared tag, so a concurrent stack's build could ` +
+          "retag it between this stack's build and its container creation"
+      );
+    }
+  });
+
+  it('keeps the pulled image reference for services it does not build', () => {
+    const derived = deriveComposeDocument(loadRealCompose(), config, baseDir);
+    assert.equal(derived.services.mongo.image, 'mongo:7.0');
   });
 });

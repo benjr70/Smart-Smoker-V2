@@ -69,6 +69,20 @@ describe('down — behavior 4 (idempotency)', () => {
     assert.ok(calls[0].args.includes('-v'), 'down must remove volumes');
   });
 
+  it('reclaims the images compose built for this project', async () => {
+    const calls: RecordedCall[] = [];
+    const runner = recordingRunner(() => 0, calls);
+    await down('smoker-pr-328', runner);
+    const args = calls[0].args;
+    const rmiIndex = args.indexOf('--rmi');
+    assert.notEqual(rmiIndex, -1, 'down must remove the per-project images it built');
+    assert.equal(
+      args[rmiIndex + 1],
+      'local',
+      'only this project\'s own builds — "all" would drop the shared mongo image'
+    );
+  });
+
   it('is a zero-exit no-op when the project does not exist (run twice)', async () => {
     const calls: RecordedCall[] = [];
     // Real `docker compose -p <unknown> down -v` exits 0 with nothing to remove.

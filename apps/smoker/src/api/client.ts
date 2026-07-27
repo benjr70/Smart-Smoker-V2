@@ -7,6 +7,7 @@
  * device-service base URL — and routes each resource call to the correct one.
  * It throws typed errors; it never resolves `undefined`.
  */
+import { resolveDeviceUrl } from './deviceUrl';
 import { createHttpTransport } from './httpAdapter';
 import { TransportPort } from './transport';
 import { SmokeProfile, State, TempData, WifiManager } from './types';
@@ -101,12 +102,18 @@ export const createApiClient = (
 /** The cloud API base URL, read once from the environment. */
 const cloudBaseUrl = (): string | undefined => process.env.REACT_APP_CLOUD_URL_API;
 
-/** The local device-service base URL. */
-const DEVICE_BASE_URL = 'http://localhost:3003';
+/** Loopback device-service origin used unless the bundle was baked with one. */
+const DEVICE_FALLBACK_URL = 'http://localhost:3003';
+
+/**
+ * The device-service base URL: the per-stack URL baked into the bundle when
+ * present, else the loopback default (real device, default e2e stack).
+ */
+const deviceBaseUrl = (): string => resolveDeviceUrl(DEVICE_FALLBACK_URL);
 
 /** Builds the production client backed by the two HTTP (axios) transports. */
 export const createProductionApiClient = (): ApiClient =>
-  createApiClient(createHttpTransport(cloudBaseUrl()), createHttpTransport(DEVICE_BASE_URL));
+  createApiClient(createHttpTransport(cloudBaseUrl()), createHttpTransport(deviceBaseUrl()));
 
 let defaultClient: ApiClient | undefined;
 
