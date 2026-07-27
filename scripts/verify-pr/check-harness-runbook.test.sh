@@ -229,6 +229,68 @@ test_named_smoker_paths_exist() {
     fi
 }
 
+#-------------------------------------------------------------------------------
+# Test 7: the shell-drift list covers every input the provisioner itself rebuilds
+#         the shell from (`SMOKER_SHELL_SOURCES` in provision-box.sh) plus the
+#         thin-mode entry document `config.forge.js` loads. Those are exactly the
+#         files whose change makes the daemon-checkout shell stale, so a PR
+#         touching one (e.g. webpack.renderer.config.js, which compiles the
+#         preload) must produce a drift note instead of a silent PASS against the
+#         old build (AC 1).
+#-------------------------------------------------------------------------------
+test_drift_list_covers_shell_build_inputs() {
+    echo "TEST: shell-drift list covers every provisioner shell source"
+
+    local provisioner="${SCRIPT_DIR}/provision-box.sh"
+    local forge="${REPO_ROOT}/apps/smoker/config.forge.js"
+
+    if [ ! -f "${provisioner}" ] || [ ! -f "${forge}" ]; then
+        fail "shell build inputs are discoverable" \
+            "missing ${provisioner} or ${forge}"
+        return
+    fi
+
+    # The provisioner's default source list, with ${SMOKER_APP_DIR} resolved to
+    # the repo-relative app dir the runbook names.
+    local sources
+    sources="$(grep '^SMOKER_SHELL_SOURCES=' "${provisioner}" \
+        | sed -E -e 's/^SMOKER_SHELL_SOURCES="\$\{SMOKER_SHELL_SOURCES:-//' \
+        -e 's/\}"$//' \
+        -e 's|\$\{SMOKER_APP_DIR\}|apps/smoker|g')"
+
+    # The html entry config.forge.js loads in thin mode — the first quoted path
+    # in the entryPoints `html:` ternary, whose thin branch comes first.
+    local thin_entry
+    thin_entry="$(sed -n '/html:/,/js:/p' "${forge}" \
+        | grep -oE "'\./[A-Za-z0-9._/-]+'" | head -1 | tr -d "'")"
+    thin_entry="apps/smoker/${thin_entry#./}"
+
+    if [ -z "${sources}" ] || [ "${thin_entry}" = "apps/smoker/" ]; then
+        fail "shell build inputs are discoverable" \
+            "sources='${sources}' thin_entry='${thin_entry}'"
+        return
+    fi
+
+    local doc path uncovered=()
+    for doc in "${SKILL_FILE}" "${AGENT_FILE}"; do
+        for path in ${sources} "${thin_entry}"; do
+            # A directory source counts as covered when the runbook names it or
+            # a path beneath it (e.g. `apps/smoker/src` → `src/electron/`), so a
+            # literal prefix match is the right test for both kinds.
+            if ! grep -qF -- "${path}" "${doc}"; then
+                uncovered+=("${path} (absent from $(basename "${doc}"))")
+            fi
+        done
+    done
+
+    if [ "${#uncovered[@]}" -eq 0 ]; then
+        pass "every provisioner shell source and the thin entry are in both drift lists"
+    else
+        fail "every provisioner shell source and the thin entry are in both drift lists" \
+            "uncovered: ${uncovered[*]}"
+    fi
+}
+
 main() {
     echo "=========================================="
     echo "check-harness-runbook.sh tests"
@@ -240,6 +302,7 @@ main() {
     test_deletion_detected_in_agent
     test_missing_file_is_usage_error
     test_named_smoker_paths_exist
+    test_drift_list_covers_shell_build_inputs
 
     echo ""
     echo "=========================================="

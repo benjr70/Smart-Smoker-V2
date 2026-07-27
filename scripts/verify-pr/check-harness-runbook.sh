@@ -54,6 +54,9 @@ rule_table() {
         "shell-drift	apps/smoker/electron-app/" \
         "shell-drift	apps/smoker/src/electron/" \
         "shell-drift	apps/smoker/config\.forge\.js" \
+        "shell-drift	apps/smoker/webpack\.renderer\.config\.js" \
+        "shell-drift	apps/smoker/webpack\.rules\.js" \
+        "shell-drift	apps/smoker/public/thin\.html" \
         "stack-mutation	docker stop" \
         "stack-mutation	docker start" \
         "stack-mutation	strictly within the current per-PR compose project namespace" \

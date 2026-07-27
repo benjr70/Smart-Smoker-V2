@@ -83,12 +83,14 @@ the `/verify-pr` skill and enforced by
   checkout while the renderer content comes from the PR's hermetic stack. So
   check the PR diff for the shell's own tracked paths —
   `apps/smoker/electron-app/` (main + preload), `apps/smoker/src/electron/` (the
-  renderer-URL module), `apps/smoker/config.forge.js`,
-  `apps/smoker/webpack.main.config.js`, `apps/smoker/shell.dockerfile`,
-  `apps/smoker/package.json`. If any is touched (or the skill tells you it is),
-  note the drift in your evidence and defer shell-specific behavior for that
-  round; renderer-side behavior is still yours to verify, because that content
-  is the PR's own build.
+  renderer-URL module), the build inputs the provisioner rebuilds the shell from
+  — `apps/smoker/config.forge.js`, `apps/smoker/webpack.main.config.js`,
+  `apps/smoker/webpack.renderer.config.js`, `apps/smoker/webpack.rules.js` —
+  plus `apps/smoker/public/thin.html` (the thin-mode entry document),
+  `apps/smoker/shell.dockerfile`, and `apps/smoker/package.json`. If any is
+  touched (or the skill tells you it is), note the drift in your evidence and
+  defer shell-specific behavior for that round; renderer-side behavior is still
+  yours to verify, because that content is the PR's own build.
 - **Stack-mutation authority.** You may `docker stop` and `docker start`
   containers strictly within the current per-PR compose project namespace
   (`STACK_PROJECT_NAME`) — that is how you exercise offline batching and

@@ -291,7 +291,10 @@ dependencies and the Electron binary are installed there by
 the PR's hermetic stack. Before launching, check whether the PR touches the
 shell itself. These are its real tracked paths — the main process
 (`electron-app/index.ts`, the forge `entryPoints` main), the preload, the
-renderer-URL module slice 3 added, the forge/webpack build config, and the thin
+renderer-URL module slice 3 added, every build input the provisioner treats as a
+shell source (`SMOKER_SHELL_SOURCES` in `provision-box.sh`: the forge config and
+all three webpack configs, since the renderer/rules pair compiles the preload),
+the thin-mode entry document the forge config loads in thin mode, and the thin
 shell image — matched literally, so a rename shows up as a check failure rather
 than as silent under-matching:
 
@@ -301,6 +304,9 @@ gh pr diff "$PR" --name-only | grep -F \
   -e apps/smoker/src/electron/ \
   -e apps/smoker/config.forge.js \
   -e apps/smoker/webpack.main.config.js \
+  -e apps/smoker/webpack.renderer.config.js \
+  -e apps/smoker/webpack.rules.js \
+  -e apps/smoker/public/thin.html \
   -e apps/smoker/shell.dockerfile \
   -e apps/smoker/package.json || true
 ```
