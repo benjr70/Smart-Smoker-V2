@@ -14,7 +14,12 @@
 import type { HttpTransport } from './http-transport.ts';
 import { FetchTransport } from './http-transport.ts';
 import { resolveUrls } from '../config/urls.ts';
-import { isTestEntityName, selectTestEntities, testEntityName } from './test-entity.ts';
+import {
+  TEST_ENTITY_PREFIX,
+  isTestEntityName,
+  selectTestEntities,
+  testEntityName,
+} from './test-entity.ts';
 
 const PRESMOKE_PATH = '/api/presmoke';
 const PRESMOKE_ALL_PATH = '/api/presmoke/all';
@@ -50,6 +55,16 @@ export interface SeedCompletedSmokeOptions extends CreatePreSmokeOptions {
   woodType?: string;
   restTime?: string;
   ratings?: SeedRatings;
+}
+
+/** The ids `adoptCurrentSmoke()` resolved for the smoke the UI created. */
+export interface AdoptedSmoke {
+  /** The in-progress smoke the pre-smoke save opened. */
+  smokeId: string;
+  /** The pre-smoke document the wizard wrote. */
+  preSmokeId: string;
+  /** The (prefixed) name the wizard was driven with. */
+  name: string;
 }
 
 /** The resolved values a completed smoke was seeded with, for assertions. */
@@ -115,6 +130,49 @@ export class BackendFixture {
   }
 
   /**
+   * Adopt the smoke a *journey* just created through the wizard UI.
+   *
+   * A UI-created pre-smoke has no id the fixture could record at creation time,
+   * so without this the run's records would only be reclaimable by the prefix
+   * `sweep()` — which runs at suite start, not at the end of the spec that made
+   * the mess. Adopt closes that gap: it resolves the current smoke and its
+   * pre-smoke through the same API the frontend uses, and registers the smoke
+   * for the exact-delete cascade in `cleanup()`. The prefix sweep stays as the
+   * crash safety net for runs that die before their teardown.
+   *
+   * Two refusals, both leaving nothing tracked:
+   *   - no current smoke exists (the UI save never landed) — a clear error
+   *     rather than a silently empty cleanup;
+   *   - the current pre-smoke's name is not `smoke-test-*` — the fixture must
+   *     never be able to delete a real cook, so an unprefixed record is never
+   *     adopted (this is the same guarantee `sweep()` gets from the prefix).
+   *
+   * The adopted smoke is still the *current* one, so cleanup also clears the
+   * state: deleting a current smoke without clearing it leaves a stale
+   * `preSmokeId` that 404s every later pre-smoke save.
+   */
+  async adoptCurrentSmoke(options: { timeoutMs?: number } = {}): Promise<AdoptedSmoke> {
+    const smokeId = await this.waitForCurrentSmoke('the UI-created pre-smoke', options.timeoutMs);
+    const smoke = await this.http.get<SmokeDoc>(`${SMOKE_PATH}/${smokeId}`).catch(() => null);
+    const preSmokeId = smoke?.preSmokeId ?? '';
+    const pre = preSmokeId
+      ? await this.http.get<NamedDoc>(`${PRESMOKE_PATH}/${preSmokeId}`).catch(() => null)
+      : null;
+    const name = pre?.name ?? '';
+    if (!isTestEntityName(name)) {
+      throw new Error(
+        `Refusing to adopt current smoke ${smokeId}: its pre-smoke name ${JSON.stringify(name)} ` +
+          `does not carry the ${TEST_ENTITY_PREFIX} prefix, so it may not be deleted by cleanup()`
+      );
+    }
+    this.created.push({ resource: 'smoke', id: smokeId, name });
+    this.teardowns.push(async () => {
+      await this.http.put(`${STATE_PATH}/clearSmoke`);
+    });
+    return { smokeId, preSmokeId, name };
+  }
+
+  /**
    * Seed a fully-populated *completed* smoke straight through the REST API the
    * frontend uses, so the secondary-flow specs (history/review/ratings/delete)
    * have a finished smoke to open without driving the whole live pipeline.
@@ -152,7 +210,7 @@ export class BackendFixture {
     });
     // The pre-smoke POST wires up state.smokeId asynchronously; the current-
     // smoke writes below 404 until it lands, so block on it here.
-    await this.waitForCurrentSmoke();
+    await this.waitForCurrentSmoke('the pre-smoke seed');
 
     await this.http.post('/api/smokeProfile/current', {
       chamberName: 'Chamber',
@@ -204,16 +262,20 @@ export class BackendFixture {
     return message;
   }
 
-  /** Poll `GET /api/state` until the pre-smoke's smokeId has been persisted. */
-  private async waitForCurrentSmoke(timeoutMs = 15_000): Promise<void> {
+  /**
+   * Poll `GET /api/state` until a pre-smoke save has persisted its smokeId, and
+   * answer with it. `source` names what the caller was waiting on so a timeout
+   * reads as a diagnosis rather than a bare stall.
+   */
+  private async waitForCurrentSmoke(source: string, timeoutMs = 15_000): Promise<string> {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
       const state = await this.http.get<{ smokeId?: string }>(STATE_PATH).catch(() => null);
       if (state?.smokeId) {
-        return;
+        return state.smokeId;
       }
       if (Date.now() >= deadline) {
-        throw new Error('Timed out waiting for the current smoke to be set after pre-smoke seed');
+        throw new Error(`There is no current smoke: none was set by ${source}`);
       }
       await new Promise(r => setTimeout(r, 250));
     }
@@ -308,9 +370,7 @@ export class BackendFixture {
     if (!state?.smokeId) {
       return;
     }
-    const smoke = await this.http
-      .get<SmokeDoc>(`${SMOKE_PATH}/${state.smokeId}`)
-      .catch(() => null);
+    const smoke = await this.http.get<SmokeDoc>(`${SMOKE_PATH}/${state.smokeId}`).catch(() => null);
     if (!smoke?.preSmokeId) {
       return;
     }

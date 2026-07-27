@@ -169,6 +169,78 @@ describe('BackendFixture.seedNotificationRule', () => {
   });
 });
 
+describe('BackendFixture.adoptCurrentSmoke', () => {
+  /** Wire the fake so it answers as a backend holding a UI-created current smoke. */
+  const givenUiCreatedCurrentSmoke = (name = `${TEST_ENTITY_PREFIX}full-smoke`) => {
+    http.getResponses['/api/state'] = { smokeId: 'smoke-7' };
+    http.getResponses['/api/smoke/smoke-7'] = { _id: 'smoke-7', preSmokeId: 'pre-7' };
+    http.getResponses['/api/presmoke/pre-7'] = { _id: 'pre-7', name };
+    return name;
+  };
+
+  it('resolves the ids of the smoke the UI created', async () => {
+    const name = givenUiCreatedCurrentSmoke();
+
+    const adopted = await fixture.adoptCurrentSmoke();
+
+    assert.deepEqual(adopted, { smokeId: 'smoke-7', preSmokeId: 'pre-7', name });
+  });
+
+  it('registers them so cleanup deletes exactly the UI-created records', async () => {
+    givenUiCreatedCurrentSmoke();
+    await fixture.adoptCurrentSmoke();
+    // By teardown the journey has also produced the linked sub-entities.
+    http.getResponses['/api/smoke/smoke-7'] = {
+      _id: 'smoke-7',
+      preSmokeId: 'pre-7',
+      smokeProfileId: 'prof-7',
+      tempsId: 'temps-7',
+    };
+
+    await fixture.cleanup();
+
+    assert.deepEqual(http.deletes, [
+      '/api/presmoke/pre-7',
+      '/api/smokeProfile/prof-7',
+      '/api/temps/temps-7',
+      '/api/smoke/smoke-7',
+    ]);
+  });
+
+  it('clears the current smoke on cleanup so the next journey starts fresh', async () => {
+    // The adopted smoke is still *current*; deleting it without clearing the
+    // state would leave every later POST /api/presmoke 404ing on a stale ref.
+    givenUiCreatedCurrentSmoke();
+    await fixture.adoptCurrentSmoke();
+
+    await fixture.cleanup();
+
+    assert.deepEqual(
+      http.puts.map(p => p.path),
+      ['/api/state/clearSmoke']
+    );
+  });
+
+  it('refuses to adopt a current smoke that is not a smoke-test- entity', async () => {
+    // Safety net: the fixture may only ever delete prefixed records, so a real
+    // in-progress cook can never be adopted into the delete list.
+    givenUiCreatedCurrentSmoke('Sunday Brisket');
+
+    await assert.rejects(() => fixture.adoptCurrentSmoke(), /smoke-test-/);
+
+    await fixture.cleanup();
+    assert.deepEqual(http.deletes, [], 'a refused adopt must track nothing');
+  });
+
+  it('fails with a clear error and tracks nothing when there is no current smoke', async () => {
+    await assert.rejects(() => fixture.adoptCurrentSmoke({ timeoutMs: 0 }), /no current smoke/i);
+
+    await fixture.cleanup();
+    assert.deepEqual(http.deletes, []);
+    assert.deepEqual(http.puts, []);
+  });
+});
+
 describe('BackendFixture.cleanup', () => {
   it('deletes exactly the entities this run created — and nothing else', async () => {
     const a = await fixture.createPreSmoke();
@@ -243,7 +315,7 @@ describe('BackendFixture.sweep', () => {
     assert.deepEqual(
       http.puts.map(p => p.path),
       ['/api/state/clearSmoke'],
-      'state must be cleared so the next pre-smoke save starts fresh',
+      'state must be cleared so the next pre-smoke save starts fresh'
     );
   });
 
