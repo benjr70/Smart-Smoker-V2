@@ -23,12 +23,80 @@ export class FrontendApp {
     return this.page.getByTestId('smoke-next-button');
   }
 
+  private get preSmokeName(): Locator {
+    return this.page.getByTestId('presmoke-name-input');
+  }
+
+  private get preSmokeWeight(): Locator {
+    return this.page.getByTestId('presmoke-weight-input');
+  }
+
+  /**
+   * Type into a wizard field and make sure the value stuck.
+   *
+   * A step loads its current resource asynchronously after mounting, so a load
+   * landing *after* a field was typed would overwrite it. Retrying the fill
+   * until the value survives keeps the journey from racing that load.
+   */
+  private async fillField(field: Locator, value: string): Promise<void> {
+    await expect(async () => {
+      await field.fill(value);
+      await expect(field).toHaveValue(value, { timeout: 1_000 });
+    }).toPass({ timeout: 15_000 });
+  }
+
   /**
    * Confirm the pre-smoke wizard has loaded the (API-seeded) pre-smoke, so that
    * leaving the step re-persists a valid payload rather than an empty form.
    */
   async expectPreSmokeLoaded(name: string): Promise<void> {
-    await expect(this.page.getByTestId('presmoke-name-input')).toHaveValue(name);
+    await expect(this.preSmokeName).toHaveValue(name);
+  }
+
+  /**
+   * Fill in the pre-smoke wizard, as a pitmaster starting a cook does.
+   *
+   * The weight is not optional even when a journey only cares about the name:
+   * the backend rejects a pre-smoke without a numeric weight, so a name-only
+   * form never persists at all.
+   */
+  async fillPreSmoke(fields: { name: string; weightLb: number }): Promise<void> {
+    await this.fillField(this.preSmokeName, fields.name);
+    await this.fillField(this.preSmokeWeight, String(fields.weightLb));
+  }
+
+  /** Return to the pre-smoke step (e.g. after a reload) and wait for it to render. */
+  async openPreSmokeStep(): Promise<void> {
+    await this.stepButton('Pre-Smoke').click();
+    await expect(this.preSmokeName).toBeVisible();
+  }
+
+  /**
+   * Leave the pre-smoke step for the Smoke step, committing the typed values.
+   *
+   * The wizard saves on unmount, so stepping away is what persists the form —
+   * and the save is fire-and-forget, so a reload issued straight after the click
+   * can outrun it. Wait for the pre-smoke write to land before returning, so a
+   * following reload reads the backend's record rather than racing it.
+   *
+   * "Landed" means accepted, not merely answered: the response is matched by URL
+   * and method (so a rejected save is still awaited rather than timing out on a
+   * silent predicate) and then asserted to be ok, so a payload the backend
+   * refuses fails here — at the write — instead of surfacing later as a
+   * misleading "the data didn't load" assertion.
+   */
+  async leavePreSmokeStep(): Promise<void> {
+    const saved = this.page.waitForResponse(
+      res => res.url().endsWith('/api/presmoke') && res.request().method() === 'POST'
+    );
+    await this.openSmokeStep();
+    const response = await saved;
+    expect(
+      response.ok(),
+      `pre-smoke save was rejected: POST /api/presmoke -> ${response.status()} ${await response
+        .text()
+        .catch(() => '')}`
+    ).toBeTruthy();
   }
 
   /** Move from the pre-smoke step to the live Smoke step. */

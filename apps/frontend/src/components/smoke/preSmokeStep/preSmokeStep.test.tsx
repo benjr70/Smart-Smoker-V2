@@ -74,6 +74,23 @@ describe('PreSmokeStep', () => {
     expect(backend.store.preSmoke.current?.steps).toContain('Trim the fat');
   });
 
+  test('persists a weight typed into the addressable weight field', async () => {
+    // The Name and Weight inputs render with the same DOM id, so neither their
+    // label nor their id identifies one of them; each is addressed by its own
+    // test id (which is also how the e2e journey drives the wizard).
+    const backend = createFakeBackend({ preSmoke: { current: seededPreSmoke } });
+
+    const { unmount } = renderStep(backend);
+
+    const nameField = await screen.findByDisplayValue('Test Smoke');
+    fireEvent.change(screen.getByTestId('presmoke-weight-input'), { target: { value: '12' } });
+    expect(nameField).toHaveValue('Test Smoke');
+
+    unmount();
+
+    await waitFor(() => expect(backend.store.preSmoke.current?.weight.weight).toBe(12));
+  });
+
   test('renders empty fields for a blank current pre-smoke document', async () => {
     const backend = createFakeBackend({
       preSmoke: {

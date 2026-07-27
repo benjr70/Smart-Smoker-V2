@@ -58,6 +58,7 @@ export function PreSmokeStep(props: PreSmokeStepProps) {
           label="Weight"
           variant="standard"
           value={preSmokeState.weight.weight ? preSmokeState.weight.weight : ''}
+          inputProps={{ 'data-testid': 'presmoke-weight-input' }}
           onChange={(event: any) =>
             setPreSmokeState({
               ...preSmokeState,

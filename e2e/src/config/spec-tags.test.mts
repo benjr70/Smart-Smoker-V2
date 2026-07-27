@@ -32,6 +32,18 @@ describe('virtual-smoker spec tags (issue #321)', () => {
     );
   });
 
+  it('leaves the full-smoke journey untagged so only the hermetic project runs it', () => {
+    // The hermetic project runs every spec (no grep); the deployed and
+    // virtual-smoker projects select by tag. An untagged spec is therefore
+    // hermetic-only, which is what the full-smoke journey needs — it drives the
+    // wizard against a stack it is also allowed to write to and clean up.
+    const fullSmoke = read('full-smoke.spec.ts');
+    assert.ok(
+      !fullSmoke.includes(DEPLOYED_TAG) && !fullSmoke.includes(VIRTUAL_SMOKER_TAG),
+      'the full-smoke journey must stay hermetic-only'
+    );
+  });
+
   it('does not tag the no-temp @deployed flows as @virtual-smoker', () => {
     for (const name of [
       'history-review.spec.ts',
