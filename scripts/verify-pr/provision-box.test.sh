@@ -5,7 +5,8 @@
 #
 # Strategy: provisioning touches the host through a handful of external tools —
 # `google-chrome-stable` (presence check), `docker` (daemon reachability),
-# `npx`/`playwright` (browser install), `apt-get` + `usermod` (mutations). We
+# `npx`/`playwright` (browser install), `npm` (smoker workspace install),
+# `apt-get` + `usermod` (mutations). We
 # mock all of them by PATH-prepending stubs that log their invocation to
 # ${PROVISION_CALL_LOG}. Presence/absence of a tool in the mock bin drives the
 # verify-then-act branches. The MCP config file the script edits is redirected
@@ -45,12 +46,33 @@ if [ ! -f "${PROVISION}" ]; then
     exit 2
 fi
 
+# A fake provisioned smoker workspace: an Electron binary and a shell bundle
+# built after its sources. Exported for every invocation below so "already
+# provisioned" is the hermetic default — no test depends on whether this host
+# happens to have Electron installed or the app built — and the tests that
+# exercise the install/build branches point the variables elsewhere. The default
+# build command only logs, so an unintended build shows up as a failure rather
+# than as a silently satisfied step.
+FAKE_SMOKER_DIR="$(mktemp -d)"
+FAKE_ELECTRON_BIN="${FAKE_SMOKER_DIR}/electron"
+printf '#!/usr/bin/env bash\nexit 0\n' > "${FAKE_ELECTRON_BIN}"
+chmod +x "${FAKE_ELECTRON_BIN}"
+mkdir -p "${FAKE_SMOKER_DIR}/electron-app" "${FAKE_SMOKER_DIR}/.webpack/main"
+touch "${FAKE_SMOKER_DIR}/electron-app/index.ts"
+touch "${FAKE_SMOKER_DIR}/.webpack/main/index.js"
+export SMOKER_ELECTRON_BINARIES="${FAKE_ELECTRON_BIN}"
+export SMOKER_SHELL_BUNDLE="${FAKE_SMOKER_DIR}/.webpack/main/index.js"
+export SMOKER_SHELL_SOURCES="${FAKE_SMOKER_DIR}/electron-app"
+export SMOKER_SHELL_BUILD_CMD='printf "shell-build\n" >> "${PROVISION_CALL_LOG}"'
+trap 'rm -rf "${FAKE_SMOKER_DIR}"' EXIT
+
 # Build a mock bin. Args select which tools are "present" and healthy:
 #   $2 = with_chrome  (yes|no)   → provide google-chrome-stable stub
 #   $3 = docker_ok    (yes|no)   → `docker info` exits 0 (else 1)
 #   $4 = playwright_ok(yes|no)   → `npx playwright --version` exits 0 (else 1)
 # Every stub logs `<tool> $*` to ${PROVISION_CALL_LOG}. apt-get, usermod, sudo
-# are always mutation-loggers.
+# are always mutation-loggers. `npm` additionally simulates a successful
+# workspace install by creating the file ${MOCK_NPM_CREATES} names, when set.
 make_mock_bin() {
     local mock_dir with_chrome docker_ok playwright_ok
     with_chrome="$1"; docker_ok="$2"; playwright_ok="$3"
@@ -86,6 +108,19 @@ fi
 exit 0
 EOF
     chmod +x "${mock_dir}/npx"
+
+    cat > "${mock_dir}/npm" <<'EOF'
+#!/usr/bin/env bash
+echo "npm $*" >> "${PROVISION_CALL_LOG}"
+# Stand in for the install actually landing the Electron binary on disk.
+if [ -n "${MOCK_NPM_CREATES:-}" ]; then
+    mkdir -p "$(dirname "${MOCK_NPM_CREATES}")"
+    printf '#!/usr/bin/env bash\nexit 0\n' > "${MOCK_NPM_CREATES}"
+    chmod +x "${MOCK_NPM_CREATES}"
+fi
+exit 0
+EOF
+    chmod +x "${mock_dir}/npm"
 
     for tool in apt-get usermod sudo curl gpg tee install; do
         cat > "${mock_dir}/${tool}" <<'EOF'
@@ -863,6 +898,410 @@ $(cat "${stderr}")"
 }
 
 #-------------------------------------------------------------------------------
+# Test 13: smoker workspace deps absent (no Electron binary on disk) => the
+#          workspace install runs, and the binary is verifiably there afterwards
+#          (issue #390 AC 3 / behavior 4). Without it the harness launcher has
+#          nothing to run in the daemon checkout.
+#-------------------------------------------------------------------------------
+test_installs_smoker_deps_when_absent() {
+    echo "TEST: installs smoker workspace deps when the Electron binary is absent"
+
+    local tmp mock_dir cfg log stderr missing_bin
+    tmp="$(mktemp -d)"
+    cfg="${tmp}/.mcp.json"
+    log="${tmp}/calls.log"
+    stderr="${tmp}/stderr.txt"
+    missing_bin="${tmp}/node_modules/electron/dist/electron"
+    seed_config "${cfg}"
+    mock_dir="$(make_mock_bin yes yes yes)"
+    trap "rm -rf '${tmp}' '${mock_dir}'" RETURN
+
+    # The binary is absent; the mocked npm creates it, standing in for the real
+    # install landing it on disk.
+    PROVISION_CALL_LOG="${log}" MCP_CONFIG_FILE="${cfg}" \
+        CHROME_MCP_WRAPPER="${WRAPPER}" \
+        SMOKER_ELECTRON_BINARIES="${missing_bin}" MOCK_NPM_CREATES="${missing_bin}" \
+        PATH="${mock_dir}:${PATH}" \
+        bash "${PROVISION}" >/dev/null 2>"${stderr}"
+    local exit_code=$?
+
+    if [ "${exit_code}" -ne 0 ]; then
+        fail "provisioning should exit 0 after installing the smoker deps" \
+            "exit=${exit_code}
+$(cat "${stderr}")"
+        return
+    fi
+    if ! grep -Eq 'npm install .*(--workspace|-w) ?=?smoker' "${log}"; then
+        fail "absent smoker deps must trigger the workspace install" "log:
+$(cat "${log}")"
+        return
+    fi
+    if ! grep -q 'legacy-peer-deps' "${log}"; then
+        fail "the workspace install must use --legacy-peer-deps (repo-wide rule)" "log:
+$(cat "${log}")"
+        return
+    fi
+    if [ ! -x "${missing_bin}" ]; then
+        fail "the Electron binary must be on disk after provisioning" "missing: ${missing_bin}"
+        return
+    fi
+    if ! grep -qi "installed" "${stderr}"; then
+        fail "the run must report the deps as installed" "stderr:
+$(cat "${stderr}")"
+        return
+    fi
+
+    pass "installs smoker workspace deps when the Electron binary is absent"
+}
+
+#-------------------------------------------------------------------------------
+# Test 14: smoker workspace deps already present => no install at all, exit 0,
+#          reported as a no-op (issue #390 AC 3 / behavior 3). This is the state
+#          of a provisioned box, which is every run after the first: a round must
+#          never pay for an npm install it does not need.
+#-------------------------------------------------------------------------------
+test_smoker_deps_present_is_noop() {
+    echo "TEST: smoker deps present => no install (no-op)"
+
+    local tmp mock_dir cfg log stderr present_bin
+    tmp="$(mktemp -d)"
+    cfg="${tmp}/.mcp.json"
+    log="${tmp}/calls.log"
+    stderr="${tmp}/stderr.txt"
+    present_bin="${tmp}/node_modules/electron/dist/electron"
+    seed_config "${cfg}"
+    mock_dir="$(make_mock_bin yes yes yes)"
+    trap "rm -rf '${tmp}' '${mock_dir}'" RETURN
+
+    mkdir -p "$(dirname "${present_bin}")"
+    printf '#!/usr/bin/env bash\nexit 0\n' > "${present_bin}"
+    chmod +x "${present_bin}"
+
+    PROVISION_CALL_LOG="${log}" MCP_CONFIG_FILE="${cfg}" \
+        CHROME_MCP_WRAPPER="${WRAPPER}" \
+        SMOKER_ELECTRON_BINARIES="${present_bin}" \
+        PATH="${mock_dir}:${PATH}" \
+        bash "${PROVISION}" >/dev/null 2>"${stderr}"
+    local exit_code=$?
+
+    if [ "${exit_code}" -ne 0 ]; then
+        fail "provisioning should exit 0 when the smoker deps are present" \
+            "exit=${exit_code}
+$(cat "${stderr}")"
+        return
+    fi
+    if grep -q 'npm install' "${log}"; then
+        fail "present smoker deps must not trigger an install" "log:
+$(cat "${log}")"
+        return
+    fi
+    if ! grep -q "smoker workspace deps present" "${stderr}"; then
+        fail "the run must report the deps as already present" "stderr:
+$(cat "${stderr}")"
+        return
+    fi
+
+    pass "smoker deps present => no install (no-op)"
+}
+
+#-------------------------------------------------------------------------------
+# Test 15: the binary check is what "provisioned" means (issue #390 AC 3). An
+#          install that exits 0 but leaves no Electron binary on disk must fail
+#          loudly here, not silently hand the launcher a box it cannot run on.
+#-------------------------------------------------------------------------------
+test_install_without_binary_fails_loudly() {
+    echo "TEST: install that leaves no Electron binary fails loudly"
+
+    local tmp mock_dir cfg stderr missing_bin
+    tmp="$(mktemp -d)"
+    cfg="${tmp}/.mcp.json"
+    stderr="${tmp}/stderr.txt"
+    missing_bin="${tmp}/node_modules/electron/dist/electron"
+    seed_config "${cfg}"
+    mock_dir="$(make_mock_bin yes yes yes)"
+    trap "rm -rf '${tmp}' '${mock_dir}'" RETURN
+
+    # npm "succeeds" but creates nothing (MOCK_NPM_CREATES unset).
+    PROVISION_CALL_LOG="${tmp}/calls.log" MCP_CONFIG_FILE="${cfg}" \
+        CHROME_MCP_WRAPPER="${WRAPPER}" \
+        SMOKER_ELECTRON_BINARIES="${missing_bin}" \
+        PATH="${mock_dir}:${PATH}" \
+        bash "${PROVISION}" >/dev/null 2>"${stderr}"
+    local exit_code=$?
+
+    if [ "${exit_code}" -eq 0 ]; then
+        fail "a missing Electron binary after install must exit non-zero" "got exit 0
+$(cat "${stderr}")"
+        return
+    fi
+    if ! grep -qF "${missing_bin}" "${stderr}"; then
+        fail "the error must name where the Electron binary was expected" "stderr:
+$(cat "${stderr}")"
+        return
+    fi
+
+    pass "install that leaves no Electron binary fails loudly"
+}
+
+#-------------------------------------------------------------------------------
+# Test 16: the launcher runs `electron` from PATH by default, but a workspace
+#          install puts the binary in node_modules — off PATH. Provisioning must
+#          hand the operator the exact ELECTRON_BIN to use, or `launcher start`
+#          dies with "command not found" on a box it just called provisioned
+#          (issue #390 AC 4). With `electron` on PATH there is nothing to say.
+#-------------------------------------------------------------------------------
+test_reports_electron_bin_when_off_path() {
+    echo "TEST: reports the ELECTRON_BIN the launcher needs when electron is off PATH"
+
+    local tmp mock_dir cfg stderr present_bin
+    tmp="$(mktemp -d)"
+    cfg="${tmp}/.mcp.json"
+    stderr="${tmp}/stderr.txt"
+    present_bin="${tmp}/node_modules/electron/dist/electron"
+    seed_config "${cfg}"
+    mock_dir="$(make_mock_bin yes yes yes)"
+    trap "rm -rf '${tmp}' '${mock_dir}'" RETURN
+
+    mkdir -p "$(dirname "${present_bin}")"
+    printf '#!/usr/bin/env bash\nexit 0\n' > "${present_bin}"
+    chmod +x "${present_bin}"
+
+    # The launcher's command name is pointed at one nothing provides, so the
+    # "off PATH" branch is driven regardless of what this host has installed.
+    PROVISION_CALL_LOG="${tmp}/calls.log" MCP_CONFIG_FILE="${cfg}" \
+        CHROME_MCP_WRAPPER="${WRAPPER}" \
+        SMOKER_ELECTRON_BINARIES="${present_bin}" \
+        SMOKER_LAUNCHER_ELECTRON_CMD="electron-absent-xyz" \
+        PATH="${mock_dir}:${PATH}" \
+        bash "${PROVISION}" >/dev/null 2>"${stderr}"
+
+    if ! grep -qF "ELECTRON_BIN=${present_bin}" "${stderr}"; then
+        fail "must name the ELECTRON_BIN the launcher needs when electron is off PATH" \
+            "stderr:
+$(cat "${stderr}")"
+        return
+    fi
+
+    # With that command resolvable on PATH the launcher's default works: no note.
+    printf '#!/usr/bin/env bash\nexit 0\n' > "${mock_dir}/electron-absent-xyz"
+    chmod +x "${mock_dir}/electron-absent-xyz"
+    PROVISION_CALL_LOG="${tmp}/calls.log" MCP_CONFIG_FILE="${cfg}" \
+        CHROME_MCP_WRAPPER="${WRAPPER}" \
+        SMOKER_ELECTRON_BINARIES="${present_bin}" \
+        SMOKER_LAUNCHER_ELECTRON_CMD="electron-absent-xyz" \
+        PATH="${mock_dir}:${PATH}" \
+        bash "${PROVISION}" >/dev/null 2>"${stderr}"
+
+    if grep -q "ELECTRON_BIN=" "${stderr}"; then
+        fail "must not nag about ELECTRON_BIN when electron is already on PATH" \
+            "stderr:
+$(cat "${stderr}")"
+        return
+    fi
+
+    pass "reports the ELECTRON_BIN the launcher needs when electron is off PATH"
+}
+
+#-------------------------------------------------------------------------------
+# Test 17: the shell the launcher runs is the BUILT main-process bundle
+#          (`package.json` "main" is ./.webpack/main, which is gitignored), not
+#          the TypeScript sources. With no bundle on disk `electron <app dir>`
+#          has nothing to run, so provisioning must build it (issue #390 AC 3/4).
+#-------------------------------------------------------------------------------
+test_builds_shell_bundle_when_absent() {
+    echo "TEST: builds the shell bundle when it is absent"
+
+    local tmp mock_dir cfg log stderr bundle
+    tmp="$(mktemp -d)"
+    cfg="${tmp}/.mcp.json"
+    log="${tmp}/calls.log"
+    stderr="${tmp}/stderr.txt"
+    bundle="${tmp}/.webpack/main/index.js"
+    seed_config "${cfg}"
+    mock_dir="$(make_mock_bin yes yes yes)"
+    trap "rm -rf '${tmp}' '${mock_dir}'" RETURN
+
+    mkdir -p "${tmp}/electron-app"
+    touch "${tmp}/electron-app/index.ts"
+
+    PROVISION_CALL_LOG="${log}" MCP_CONFIG_FILE="${cfg}" \
+        CHROME_MCP_WRAPPER="${WRAPPER}" \
+        SMOKER_SHELL_BUNDLE="${bundle}" SMOKER_SHELL_SOURCES="${tmp}/electron-app" \
+        SMOKER_SHELL_BUILD_CMD="printf 'shell-build\n' >> '${log}'; mkdir -p '$(dirname "${bundle}")'; touch '${bundle}'" \
+        PATH="${mock_dir}:${PATH}" \
+        bash "${PROVISION}" >/dev/null 2>"${stderr}"
+    local exit_code=$?
+
+    if [ "${exit_code}" -ne 0 ]; then
+        fail "provisioning should exit 0 after building the shell bundle" \
+            "exit=${exit_code}
+$(cat "${stderr}")"
+        return
+    fi
+    if ! grep -q 'shell-build' "${log}"; then
+        fail "an absent shell bundle must trigger the shell build" "log:
+$(cat "${log}")"
+        return
+    fi
+    if [ ! -f "${bundle}" ]; then
+        fail "the shell bundle must be on disk after provisioning" "missing: ${bundle}"
+        return
+    fi
+    if ! grep -qi "shell bundle built" "${stderr}"; then
+        fail "the run must report the shell bundle as built" "stderr:
+$(cat "${stderr}")"
+        return
+    fi
+
+    pass "builds the shell bundle when it is absent"
+}
+
+#-------------------------------------------------------------------------------
+# Test 18: a bundle built BEFORE the current shell sources must be rebuilt. This
+#          is the silent-failure case: the stale shell still starts and CDP still
+#          answers, it just runs the old main process — so a round would "verify"
+#          a renderer-URL override the shell never read (issue #390 AC 4).
+#-------------------------------------------------------------------------------
+test_rebuilds_stale_shell_bundle() {
+    echo "TEST: rebuilds the shell bundle when sources are newer than it"
+
+    local tmp mock_dir cfg log stderr bundle
+    tmp="$(mktemp -d)"
+    cfg="${tmp}/.mcp.json"
+    log="${tmp}/calls.log"
+    stderr="${tmp}/stderr.txt"
+    bundle="${tmp}/.webpack/main/index.js"
+    seed_config "${cfg}"
+    mock_dir="$(make_mock_bin yes yes yes)"
+    trap "rm -rf '${tmp}' '${mock_dir}'" RETURN
+
+    # Bundle first, then a source edit after it: the shell change that never made
+    # it into the built bundle.
+    mkdir -p "${tmp}/electron-app" "$(dirname "${bundle}")"
+    touch "${bundle}"
+    touch "${tmp}/electron-app/index.ts"
+
+    PROVISION_CALL_LOG="${log}" MCP_CONFIG_FILE="${cfg}" \
+        CHROME_MCP_WRAPPER="${WRAPPER}" \
+        SMOKER_SHELL_BUNDLE="${bundle}" SMOKER_SHELL_SOURCES="${tmp}/electron-app" \
+        SMOKER_SHELL_BUILD_CMD="printf 'shell-build\n' >> '${log}'; touch '${bundle}'" \
+        PATH="${mock_dir}:${PATH}" \
+        bash "${PROVISION}" >/dev/null 2>"${stderr}"
+    local exit_code=$?
+
+    if [ "${exit_code}" -ne 0 ]; then
+        fail "provisioning should exit 0 after rebuilding a stale bundle" \
+            "exit=${exit_code}
+$(cat "${stderr}")"
+        return
+    fi
+    if ! grep -q 'shell-build' "${log}"; then
+        fail "a bundle older than its sources must be rebuilt" "log:
+$(cat "${log}")"
+        return
+    fi
+    if ! grep -qi "stale" "${stderr}"; then
+        fail "the run must say the bundle was stale" "stderr:
+$(cat "${stderr}")"
+        return
+    fi
+
+    pass "rebuilds the shell bundle when sources are newer than it"
+}
+
+#-------------------------------------------------------------------------------
+# Test 19: a bundle newer than every shell source is a no-op — no build, exit 0.
+#          Rebuilding on every run would make each round pay for a full Forge
+#          build it does not need (issue #390 AC 3, idempotency).
+#-------------------------------------------------------------------------------
+test_fresh_shell_bundle_is_noop() {
+    echo "TEST: an up-to-date shell bundle is a no-op"
+
+    local tmp mock_dir cfg log stderr bundle
+    tmp="$(mktemp -d)"
+    cfg="${tmp}/.mcp.json"
+    log="${tmp}/calls.log"
+    stderr="${tmp}/stderr.txt"
+    bundle="${tmp}/.webpack/main/index.js"
+    seed_config "${cfg}"
+    mock_dir="$(make_mock_bin yes yes yes)"
+    trap "rm -rf '${tmp}' '${mock_dir}'" RETURN
+
+    mkdir -p "${tmp}/electron-app" "$(dirname "${bundle}")"
+    touch "${tmp}/electron-app/index.ts"
+    touch "${bundle}"
+
+    PROVISION_CALL_LOG="${log}" MCP_CONFIG_FILE="${cfg}" \
+        CHROME_MCP_WRAPPER="${WRAPPER}" \
+        SMOKER_SHELL_BUNDLE="${bundle}" SMOKER_SHELL_SOURCES="${tmp}/electron-app" \
+        SMOKER_SHELL_BUILD_CMD="printf 'shell-build\n' >> '${log}'" \
+        PATH="${mock_dir}:${PATH}" \
+        bash "${PROVISION}" >/dev/null 2>"${stderr}"
+    local exit_code=$?
+
+    if [ "${exit_code}" -ne 0 ]; then
+        fail "provisioning should exit 0 when the bundle is up to date" \
+            "exit=${exit_code}
+$(cat "${stderr}")"
+        return
+    fi
+    if grep -q 'shell-build' "${log}"; then
+        fail "an up-to-date bundle must not be rebuilt" "log:
+$(cat "${log}")"
+        return
+    fi
+    if ! grep -q "shell bundle up to date" "${stderr}"; then
+        fail "the run must report the bundle as up to date" "stderr:
+$(cat "${stderr}")"
+        return
+    fi
+
+    pass "an up-to-date shell bundle is a no-op"
+}
+
+#-------------------------------------------------------------------------------
+# Test 20: a build that exits 0 but leaves no bundle must fail loudly, naming the
+#          path — the same rule as the Electron binary: "provisioned" is what is
+#          on disk, not what a command's exit code claims.
+#-------------------------------------------------------------------------------
+test_shell_build_without_bundle_fails_loudly() {
+    echo "TEST: a build that produces no bundle fails loudly"
+
+    local tmp mock_dir cfg stderr bundle
+    tmp="$(mktemp -d)"
+    cfg="${tmp}/.mcp.json"
+    stderr="${tmp}/stderr.txt"
+    bundle="${tmp}/.webpack/main/index.js"
+    seed_config "${cfg}"
+    mock_dir="$(make_mock_bin yes yes yes)"
+    trap "rm -rf '${tmp}' '${mock_dir}'" RETURN
+
+    mkdir -p "${tmp}/electron-app"
+    touch "${tmp}/electron-app/index.ts"
+
+    PROVISION_CALL_LOG="${tmp}/calls.log" MCP_CONFIG_FILE="${cfg}" \
+        CHROME_MCP_WRAPPER="${WRAPPER}" \
+        SMOKER_SHELL_BUNDLE="${bundle}" SMOKER_SHELL_SOURCES="${tmp}/electron-app" \
+        SMOKER_SHELL_BUILD_CMD="true" \
+        PATH="${mock_dir}:${PATH}" \
+        bash "${PROVISION}" >/dev/null 2>"${stderr}"
+    local exit_code=$?
+
+    if [ "${exit_code}" -eq 0 ]; then
+        fail "a build that leaves no bundle must exit non-zero" "got exit 0
+$(cat "${stderr}")"
+        return
+    fi
+    if ! grep -qF "${bundle}" "${stderr}"; then
+        fail "the error must name where the bundle was expected" "stderr:
+$(cat "${stderr}")"
+        return
+    fi
+
+    pass "a build that produces no bundle fails loudly"
+}
+
+#-------------------------------------------------------------------------------
 # Run suite
 #-------------------------------------------------------------------------------
 echo "=========================================="
@@ -884,6 +1323,14 @@ test_repairs_cwd_dependent_relative_command
 test_uncomputable_expectation_never_verifies
 test_leaves_other_servers_untouched
 test_committed_entries_fail_at_connect_time
+test_installs_smoker_deps_when_absent
+test_smoker_deps_present_is_noop
+test_install_without_binary_fails_loudly
+test_reports_electron_bin_when_off_path
+test_builds_shell_bundle_when_absent
+test_rebuilds_stale_shell_bundle
+test_fresh_shell_bundle_is_noop
+test_shell_build_without_bundle_fails_loudly
 
 echo ""
 echo "=========================================="

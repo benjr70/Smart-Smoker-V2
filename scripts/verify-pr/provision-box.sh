@@ -11,15 +11,30 @@
 #   1. Real Google Chrome present         (installs via apt if absent)
 #   2. Playwright browsers + system deps   (installs via `playwright install`)
 #   3. Docker usable by the agent user     (adds user to the docker group)
-#   4. MCP entries for both wrappers       (committed to .mcp.json — verified
+#   4. Smoker workspace deps + the Electron binary the launcher runs
+#                                          (workspace install if absent)
+#   5. Built smoker shell bundle           (Forge/webpack build if absent or
+#                                           older than the shell sources)
+#   6. MCP entries for both wrappers       (committed to .mcp.json — verified
 #                                           here, repaired only if damaged)
 #
 # Usage:
 #   scripts/verify-pr/provision-box.sh
 #
 # Environment overrides (production defaults; mainly for tests):
-#   MCP_CONFIG_FILE     .mcp.json to update  (default: repo-root .mcp.json)
-#   CHROME_MCP_WRAPPER  wrapper to register  (default: this dir's wrapper)
+#   MCP_CONFIG_FILE               .mcp.json to update  (default: repo .mcp.json)
+#   CHROME_MCP_WRAPPER            wrapper to register  (default: this dir's)
+#   SMOKER_APP_DIR                smoker app dir       (default: apps/smoker)
+#   SMOKER_ELECTRON_BINARIES      candidate Electron binary paths, first wins
+#   SMOKER_DEPS_INSTALL_CMD       install run from the repo root when none exist
+#   SMOKER_LAUNCHER_ELECTRON_CMD  command name the launcher runs (default:
+#                                 electron) — probed to decide whether to print
+#                                 the ELECTRON_BIN the launcher needs
+#   SMOKER_SHELL_BUNDLE           built main-process bundle the shell runs
+#                                 (default: apps/smoker/.webpack/main/index.js)
+#   SMOKER_SHELL_SOURCES          paths whose mtimes decide bundle freshness
+#   SMOKER_SHELL_BUILD_CMD        build run from SMOKER_APP_DIR when the bundle
+#                                 is absent or stale
 #
 # Exit codes:
 #   0  host is provisioned (or already was)
@@ -39,6 +54,25 @@ ELECTRON_MCP_SERVER_KEY="playwright-electron"
 # Candidate binary names that satisfy "real Chrome present". Overridable so the
 # presence check can be exercised without depending on the host's PATH.
 CHROME_BINARIES="${CHROME_BINARIES:-google-chrome-stable google-chrome}"
+
+# Candidate paths that satisfy "the smoker workspace's Electron binary is on
+# disk", and the install that puts it there. Both overridable so the
+# verify-then-act branches can be exercised without a real install.
+SMOKER_APP_DIR="${SMOKER_APP_DIR:-${REPO_ROOT}/apps/smoker}"
+SMOKER_ELECTRON_BINARIES="${SMOKER_ELECTRON_BINARIES:-${SMOKER_APP_DIR}/node_modules/electron/dist/electron ${REPO_ROOT}/node_modules/electron/dist/electron}"
+SMOKER_DEPS_INSTALL_CMD="${SMOKER_DEPS_INSTALL_CMD:-npm install --legacy-peer-deps --workspace smoker}"
+# The command name electron-launcher.sh runs by default (its ELECTRON_BIN
+# default). Overridable so the "is it on PATH" check does not depend on what
+# this host happens to have installed.
+SMOKER_LAUNCHER_ELECTRON_CMD="${SMOKER_LAUNCHER_ELECTRON_CMD:-electron}"
+
+# The built main-process bundle the shell actually runs, the sources it is built
+# from (freshness inputs), and the build that produces it. The build is the app's
+# own Forge/webpack pipeline; it also packages the app into `out/`, which the
+# harness has no use for, so the default drops that 200MB+ byproduct again.
+SMOKER_SHELL_BUNDLE="${SMOKER_SHELL_BUNDLE:-${SMOKER_APP_DIR}/.webpack/main/index.js}"
+SMOKER_SHELL_SOURCES="${SMOKER_SHELL_SOURCES:-${SMOKER_APP_DIR}/electron-app ${SMOKER_APP_DIR}/src ${SMOKER_APP_DIR}/package.json ${SMOKER_APP_DIR}/config.forge.js ${SMOKER_APP_DIR}/webpack.main.config.js ${SMOKER_APP_DIR}/webpack.renderer.config.js ${SMOKER_APP_DIR}/webpack.rules.js}"
+SMOKER_SHELL_BUILD_CMD="${SMOKER_SHELL_BUILD_CMD:-ELECTRON_APP_MODE=thin npx electron-forge package && rm -rf out/smoker-electron-build}"
 
 log() { echo "[provision-box] $*" >&2; }
 
@@ -102,7 +136,122 @@ ensure_playwright() {
 }
 
 #-------------------------------------------------------------------------------
-# Step 4 (config): VERIFY — and only when needed, repair — a wrapper's MCP server
+# Step 4 (smoker deps): verify the smoker workspace's dependencies — the Electron
+# binary above all — exist in this checkout, and install them if not. The
+# launcher runs the shell from the provisioned checkout, so without this step it
+# has nothing to run; and rounds themselves never install anything, so the
+# install has to happen here.
+#
+# The Electron binary on disk is the probe: it is the one dependency the launcher
+# actually executes, and it is what a half-finished install leaves missing. After
+# an install we re-check it and fail loudly if it still is not there, rather than
+# reporting a provisioned box the launcher will die on.
+#-------------------------------------------------------------------------------
+
+# First existing, executable candidate Electron binary (npm hoists workspace deps
+# to the root, but a workspace-local install is equally valid).
+find_electron_binary() {
+    local candidate
+    for candidate in ${SMOKER_ELECTRON_BINARIES}; do
+        if [ -x "${candidate}" ]; then
+            printf '%s' "${candidate}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# The launcher defaults to `electron` on PATH, but a workspace install lands the
+# binary in node_modules, which is not on it. Say which ELECTRON_BIN to pass, or
+# `launcher start` dies with "command not found" on a box just called ready.
+report_electron_bin() {
+    local bin="$1"
+    if command -v "${SMOKER_LAUNCHER_ELECTRON_CMD}" >/dev/null 2>&1; then
+        return 0
+    fi
+    log "NOTE: 'electron' is not on PATH — run the launcher with ELECTRON_BIN=${bin}"
+}
+
+ensure_smoker_deps() {
+    local bin
+    if bin="$(find_electron_binary)"; then
+        log "smoker workspace deps present (Electron binary at ${bin}) — no change"
+        report_electron_bin "${bin}"
+        return 0
+    fi
+
+    log "smoker workspace deps absent — installing: ${SMOKER_DEPS_INSTALL_CMD}"
+    if ! (cd "${REPO_ROOT}" && bash -c "${SMOKER_DEPS_INSTALL_CMD}"); then
+        log "ERROR: smoker workspace install failed: ${SMOKER_DEPS_INSTALL_CMD}"
+        return 1
+    fi
+
+    if bin="$(find_electron_binary)"; then
+        log "smoker workspace deps installed (Electron binary at ${bin})"
+        report_electron_bin "${bin}"
+        return 0
+    fi
+
+    log "ERROR: install completed but no Electron binary is on disk;"
+    log "       looked for: ${SMOKER_ELECTRON_BINARIES}"
+    return 1
+}
+
+#-------------------------------------------------------------------------------
+# Step 5 (shell bundle): verify the built main-process bundle exists and is newer
+# than the shell sources, and (re)build it if not.
+#
+# This step is what makes the renderer-URL override reach the box. The launcher
+# runs `electron <app dir>`, and the app's `package.json` "main" points at
+# ./.webpack/main — a gitignored BUILD ARTIFACT. So the shell never executes the
+# TypeScript sources: a checkout that was never built has nothing to run, and a
+# checkout built before a shell change runs the OLD main process. The stale case
+# is the dangerous one, because the shell still comes up and CDP still answers —
+# it just quietly loads the old URL, which is exactly the kind of silent failure
+# this slice exists to remove.
+#-------------------------------------------------------------------------------
+
+# True when any shell source is newer than the built bundle.
+shell_sources_newer_than_bundle() {
+    local path
+    for path in ${SMOKER_SHELL_SOURCES}; do
+        [ -e "${path}" ] || continue
+        if [ -n "$(find "${path}" -newer "${SMOKER_SHELL_BUNDLE}" -print -quit 2>/dev/null)" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+ensure_smoker_shell_bundle() {
+    if [ -f "${SMOKER_SHELL_BUNDLE}" ]; then
+        if ! shell_sources_newer_than_bundle; then
+            log "smoker shell bundle up to date (${SMOKER_SHELL_BUNDLE}) — no change"
+            return 0
+        fi
+        log "smoker shell bundle is stale — shell sources changed since it was built"
+    else
+        log "smoker shell bundle absent (${SMOKER_SHELL_BUNDLE})"
+    fi
+
+    log "building the smoker shell: ${SMOKER_SHELL_BUILD_CMD}"
+    if ! (cd "${SMOKER_APP_DIR}" && bash -c "${SMOKER_SHELL_BUILD_CMD}"); then
+        log "ERROR: smoker shell build failed: ${SMOKER_SHELL_BUILD_CMD}"
+        return 1
+    fi
+
+    if [ ! -f "${SMOKER_SHELL_BUNDLE}" ]; then
+        log "ERROR: build completed but no main-process bundle is on disk;"
+        log "       expected: ${SMOKER_SHELL_BUNDLE}"
+        return 1
+    fi
+
+    log "smoker shell bundle built (${SMOKER_SHELL_BUNDLE})"
+    return 0
+}
+
+#-------------------------------------------------------------------------------
+# Step 6 (config): VERIFY — and only when needed, repair — a wrapper's MCP server
 # entry. The two harness entries live in the repo's committed .mcp.json, so a
 # healthy box has nothing to do here; this step exists to catch a hand-edited or
 # hand-deleted entry, not to author one. (They used to be written on every run;
@@ -217,6 +366,8 @@ main() {
     ensure_chrome || return 1
     ensure_docker || return 1
     ensure_playwright || return 1
+    ensure_smoker_deps || return 1
+    ensure_smoker_shell_bundle || return 1
     # Committed entries — expected to verify; a repair means someone edited them.
     ensure_mcp_entry "${MCP_SERVER_KEY}" "${CHROME_MCP_WRAPPER}" || return 1
     ensure_mcp_entry "${ELECTRON_MCP_SERVER_KEY}" "${ELECTRON_MCP_WRAPPER}" || return 1

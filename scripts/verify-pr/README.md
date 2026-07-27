@@ -11,8 +11,17 @@ GNOME/XWayland display through the Playwright MCP server, surviving reboots:
 ## Contents
 
 - **`provision-box.sh`** — one-time, idempotent box provisioning. Verifies (and
-  installs when absent) real Chrome, Playwright browsers + system deps, and the
-  agent user's docker access, then **verifies** both harness MCP servers
+  installs when absent) real Chrome, Playwright browsers + system deps, the
+  agent user's docker access, and the smoker shell's own prerequisites — the
+  workspace dependencies including the Electron binary the launcher executes,
+  and the **built** main-process bundle (issue #390). That last one matters
+  because the app's `package.json` `main` points at the gitignored
+  `.webpack/main` build artifact: an unbuilt checkout gives the launcher nothing
+  to run, and a bundle older than the shell sources starts fine and answers CDP
+  while running the OLD main process, so it would silently ignore the renderer
+  URL the harness exports. Absent or stale ⇒ rebuild, otherwise no-op; if
+  `electron` is not on PATH the run prints the exact `ELECTRON_BIN=` the
+  launcher needs. It then **verifies** both harness MCP servers
   (`playwright-chrome` → `chrome-mcp-wrapper.sh`, `playwright-electron` →
   `electron-cdp-mcp-wrapper.sh`). Those two entries are **committed** to
   `.mcp.json` (issue #388), so a healthy box has nothing to do: the run logs
