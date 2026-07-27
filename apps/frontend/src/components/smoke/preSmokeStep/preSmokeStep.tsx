@@ -48,7 +48,13 @@ export function PreSmokeStep(props: PreSmokeStepProps) {
         onInputChange={(event, newInputValue) => {
           setPreSmokeState({ ...preSmokeState, meatType: newInputValue });
         }}
-        renderInput={params => <TextField {...params} label="Meat Type" />}
+        renderInput={params => (
+          <TextField
+            {...params}
+            label="Meat Type"
+            inputProps={{ ...params.inputProps, 'data-testid': 'presmoke-meat-type-input' }}
+          />
+        )}
       />
       <Grid className="weight">
         <TextField
@@ -72,6 +78,12 @@ export function PreSmokeStep(props: PreSmokeStepProps) {
           id="demo-simple-select"
           value={preSmokeState.weight.unit}
           label="Age"
+          // The rendered display element is what a test clicks to open the unit
+          // menu; `SelectDisplayProps` is typed as plain HTML attributes, which
+          // do not admit `data-*` keys, hence the cast.
+          SelectDisplayProps={
+            { 'data-testid': 'presmoke-weight-unit-select' } as React.HTMLAttributes<HTMLDivElement>
+          }
           onChange={(event: any) =>
             setPreSmokeState({
               ...preSmokeState,
@@ -79,8 +91,12 @@ export function PreSmokeStep(props: PreSmokeStepProps) {
             })
           }
         >
-          <MenuItem value={WeightUnits.LB}>LB</MenuItem>
-          <MenuItem value={WeightUnits.OZ}>OZ</MenuItem>
+          <MenuItem value={WeightUnits.LB} data-testid="presmoke-weight-unit-option-LB">
+            LB
+          </MenuItem>
+          <MenuItem value={WeightUnits.OZ} data-testid="presmoke-weight-unit-option-OZ">
+            OZ
+          </MenuItem>
         </Select>
       </Grid>
       <Grid flexDirection="column">
@@ -95,6 +111,7 @@ export function PreSmokeStep(props: PreSmokeStepProps) {
             })
           }
           steps={preSmokeState.steps}
+          testIdPrefix="presmoke-step"
           onListChange={(step, index) =>
             setPreSmokeState({
               ...preSmokeState,
@@ -112,6 +129,7 @@ export function PreSmokeStep(props: PreSmokeStepProps) {
         id="outlined-multiline-static"
         label="Notes"
         multiline
+        inputProps={{ 'data-testid': 'presmoke-notes-input' }}
         value={preSmokeState.notes}
         onChange={(event: any) => setPreSmokeState({ ...preSmokeState, notes: event.target.value })}
         rows={4}

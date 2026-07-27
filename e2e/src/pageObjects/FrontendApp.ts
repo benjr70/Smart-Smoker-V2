@@ -1,5 +1,21 @@
 import { expect, Locator, Page } from '@playwright/test';
 
+/** The weight units the pre-smoke wizard offers; LB is the form's default. */
+export type WeightUnit = 'LB' | 'OZ';
+
+/** Every value the pre-smoke wizard holds, as a journey enters (and re-reads) them. */
+export type PreSmokeFields = {
+  name: string;
+  meatType: string;
+  weight: number;
+  weightUnit: WeightUnit;
+  steps: string[];
+  notes: string;
+};
+
+/** Test-id prefix of the pre-smoke step's prep-steps list. */
+const PRE_SMOKE_STEPS = 'presmoke-step';
+
 /**
  * Page object for the React web frontend.
  *
@@ -27,8 +43,20 @@ export class FrontendApp {
     return this.page.getByTestId('presmoke-name-input');
   }
 
+  private get preSmokeMeatType(): Locator {
+    return this.page.getByTestId('presmoke-meat-type-input');
+  }
+
   private get preSmokeWeight(): Locator {
     return this.page.getByTestId('presmoke-weight-input');
+  }
+
+  private get preSmokeWeightUnit(): Locator {
+    return this.page.getByTestId('presmoke-weight-unit-select');
+  }
+
+  private get preSmokeNotes(): Locator {
+    return this.page.getByTestId('presmoke-notes-input');
   }
 
   /**
@@ -59,10 +87,104 @@ export class FrontendApp {
    * The weight is not optional even when a journey only cares about the name:
    * the backend rejects a pre-smoke without a numeric weight, so a name-only
    * form never persists at all.
+   *
+   * The meat type is a free-solo autocomplete, so any string a pitmaster types
+   * is accepted — including cuts absent from the suggestion list.
    */
-  async fillPreSmoke(fields: { name: string; weightLb: number }): Promise<void> {
+  async fillPreSmoke(fields: PreSmokeFields): Promise<void> {
     await this.fillField(this.preSmokeName, fields.name);
-    await this.fillField(this.preSmokeWeight, String(fields.weightLb));
+    await this.fillField(this.preSmokeMeatType, fields.meatType);
+    await this.fillField(this.preSmokeWeight, String(fields.weight));
+    await this.selectPreSmokeWeightUnit(fields.weightUnit);
+    await this.fillDynamicList(PRE_SMOKE_STEPS, fields.steps);
+    await this.fillField(this.preSmokeNotes, fields.notes);
+  }
+
+  /**
+   * Pick the weight's unit from its dropdown. Retried for the same reason a
+   * field fill is: a step's asynchronous load landing after the pick would put
+   * the stored (default) unit back.
+   */
+  private async selectPreSmokeWeightUnit(unit: WeightUnit): Promise<void> {
+    await expect(async () => {
+      await this.preSmokeWeightUnit.click();
+      await this.page.getByTestId(`presmoke-weight-unit-option-${unit}`).click();
+      await expect(this.preSmokeWeightUnit).toHaveText(unit, { timeout: 1_000 });
+    }).toPass({ timeout: 15_000 });
+  }
+
+  /** Drop one prep step by position, as a pitmaster revising the plan does. */
+  async removePreSmokeStep(index: number): Promise<void> {
+    await this.removeDynamicListRow(PRE_SMOKE_STEPS, index);
+  }
+
+  /**
+   * Assert the pre-smoke step shows the given values — the read half of the
+   * fill/expect pair, used after a reload to prove the backend supplied them.
+   */
+  async expectPreSmokeShows(fields: PreSmokeFields): Promise<void> {
+    await expect(this.preSmokeName).toHaveValue(fields.name);
+    await expect(this.preSmokeMeatType).toHaveValue(fields.meatType);
+    await expect(this.preSmokeWeight).toHaveValue(String(fields.weight));
+    await expect(this.preSmokeWeightUnit).toHaveText(fields.weightUnit);
+    await this.expectDynamicList(PRE_SMOKE_STEPS, fields.steps);
+    await expect(this.preSmokeNotes).toHaveValue(fields.notes);
+  }
+
+  // --- Dynamic steps lists -------------------------------------------------
+  //
+  // The add/remove row list the pre-smoke and post-smoke steps share. Rows are
+  // addressed by a caller-chosen test-id prefix: `<prefix>-row` per row, and
+  // within it `<prefix>-input`, `<prefix>-add-button` (last row only) and
+  // `<prefix>-remove-button` (every other row).
+
+  private dynamicListRows(prefix: string): Locator {
+    return this.page.getByTestId(`${prefix}-row`);
+  }
+
+  /**
+   * Drive a dynamic steps list to hold exactly `values`, adding rows as needed.
+   *
+   * Such a list starts as a single empty row and grows when the last row's "+"
+   * is clicked, so n values means n-1 additions. The whole sequence is retried
+   * as a unit for the same reason a single field fill is: a step's asynchronous
+   * load landing mid-fill restores the stored list, which would otherwise leave
+   * the rows half-typed.
+   */
+  private async fillDynamicList(prefix: string, values: string[]): Promise<void> {
+    const rows = this.dynamicListRows(prefix);
+    await expect(async () => {
+      for (const [index, value] of values.entries()) {
+        while ((await rows.count()) <= index) {
+          const before = await rows.count();
+          await rows.last().getByTestId(`${prefix}-add-button`).click();
+          await expect(rows).toHaveCount(before + 1, { timeout: 2_000 });
+        }
+        await rows.nth(index).getByTestId(`${prefix}-input`).fill(value);
+      }
+      await this.expectDynamicList(prefix, values, 1_000);
+    }).toPass({ timeout: 20_000 });
+  }
+
+  /** Assert a dynamic steps list shows exactly `values`, in order. */
+  private async expectDynamicList(
+    prefix: string,
+    values: string[],
+    timeout?: number
+  ): Promise<void> {
+    const rows = this.dynamicListRows(prefix);
+    await expect(rows).toHaveCount(values.length, { timeout });
+    for (const [index, value] of values.entries()) {
+      await expect(rows.nth(index).getByTestId(`${prefix}-input`)).toHaveValue(value, { timeout });
+    }
+  }
+
+  /** Remove one row of a dynamic steps list via its "-" button. */
+  private async removeDynamicListRow(prefix: string, index: number): Promise<void> {
+    const rows = this.dynamicListRows(prefix);
+    const before = await rows.count();
+    await rows.nth(index).getByTestId(`${prefix}-remove-button`).click();
+    await expect(rows).toHaveCount(before - 1);
   }
 
   /** Return to the pre-smoke step (e.g. after a reload) and wait for it to render. */

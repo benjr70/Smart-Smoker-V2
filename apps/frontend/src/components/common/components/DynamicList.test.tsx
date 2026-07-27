@@ -3,36 +3,53 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { DynamicList } from './DynamicList';
 
-// Mock Material-UI components
+// Mock Material-UI components.
+//
+// These stubs address elements by their own synthetic test ids (`button-+`,
+// `textfield-Step`, `grid`), so they are applied *after* the component's props:
+// the component's own `data-testid` (used by the e2e page object) must not
+// shadow the ids this suite queries by. `inputProps` is forwarded to the input
+// as real MUI does, rather than spread onto the DOM node as an unknown prop.
 jest.mock('@mui/material', () => ({
   Button: ({ children, onClick, className, variant, size, ...props }: any) => (
     <button
       onClick={onClick}
       className={className}
-      data-testid={`button-${children}`}
       data-variant={variant}
       data-size={size}
       {...props}
+      data-testid={`button-${children}`}
     >
       {children}
     </button>
   ),
   Grid: ({ children, className, ...props }: any) => (
-    <div className={className} data-testid="grid" {...props}>
+    <div className={className} {...props} data-testid="grid">
       {children}
     </div>
   ),
-  TextField: ({ value, onChange, label, placeholder, multiline, sx, id, ...props }: any) => (
+  TextField: ({
+    value,
+    onChange,
+    label,
+    placeholder,
+    multiline,
+    sx,
+    id,
+    inputProps,
+    ...props
+  }: any) => (
     <input
       type="text"
       value={value}
       onChange={onChange}
       placeholder={placeholder}
-      data-testid={`textfield-${label || 'input'}`}
       data-label={label}
       data-multiline={multiline}
       data-id={id}
+      {...inputProps}
       {...props}
+      data-testid={`textfield-${label || 'input'}`}
     />
   ),
 }));
