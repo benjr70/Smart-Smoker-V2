@@ -1,4 +1,28 @@
-import { expect, Locator, Page } from '@playwright/test';
+import { expect, Locator, Page, Request } from '@playwright/test';
+
+/** The weight units the pre-smoke wizard offers; LB is the form's default. */
+export type WeightUnit = 'LB' | 'OZ';
+
+/** Every value the pre-smoke wizard holds, as a journey enters (and re-reads) them. */
+export type PreSmokeFields = {
+  name: string;
+  meatType: string;
+  weight: number;
+  weightUnit: WeightUnit;
+  steps: string[];
+  notes: string;
+};
+
+/** Test-id prefix of the pre-smoke step's prep-steps list. */
+const PRE_SMOKE_STEPS = 'presmoke-step';
+
+/**
+ * The pre-smoke step's load: `GET /api/presmoke/` (the trailing slash is what
+ * separates the *current* pre-smoke from `GET /api/presmoke/:id`, which the
+ * review screens use).
+ */
+const isPreSmokeLoad = (request: Request): boolean =>
+  request.method() === 'GET' && /\/api\/presmoke\/$/.test(request.url());
 
 /**
  * Page object for the React web frontend.
@@ -8,11 +32,87 @@ import { expect, Locator, Page } from '@playwright/test';
  * selector lives here so Material-UI class churn never reaches a test.
  */
 export class FrontendApp {
-  constructor(private readonly page: Page) {}
+  /** Pre-smoke loads that have completed, and how many are still in flight. */
+  private preSmokeLoadsLanded = 0;
+  private preSmokeLoadsInFlight = 0;
+
+  constructor(private readonly page: Page) {
+    // --- The async-load race, closed once, here ---------------------------
+    //
+    // Every wizard step loads its resource *after* mounting
+    // (`useCurrentResource` fires `load(...).then(result => setState(result))`),
+    // so a load landing after a journey has typed replaces what was typed with
+    // what was stored. Rendering the step is therefore not the same as the step
+    // being ready to type into.
+    //
+    // Watching the pre-smoke load lets the entry points (`goto`, `reload`,
+    // `openPreSmokeStep`) hand back a step whose load has already landed,
+    // instead of one that is about to overwrite the next thing typed. Mutating
+    // helpers still go through `throughAsyncLoad` as a second line of defence,
+    // for the loads no entry point can foresee.
+    page.on('request', request => {
+      if (isPreSmokeLoad(request)) this.preSmokeLoadsInFlight++;
+    });
+    const settled = (request: Request) => {
+      if (!isPreSmokeLoad(request)) return;
+      this.preSmokeLoadsInFlight--;
+      // A failed load counts as landed: it resolves the in-flight window and,
+      // having no result, can no longer overwrite anything either.
+      this.preSmokeLoadsLanded++;
+    };
+    page.on('requestfinished', settled);
+    page.on('requestfailed', settled);
+  }
 
   async goto(): Promise<void> {
+    const landed = this.preSmokeLoadsLanded;
     await this.page.goto('/');
     await expect(this.stepButton('Pre-Smoke')).toBeVisible();
+    await this.waitForPreSmokeLoad(landed);
+  }
+
+  /**
+   * Wait for a pre-smoke load newer than `landed` to complete.
+   *
+   * Used after a page render, where the pre-smoke step always mounts (the
+   * wizard starts on step 0), so a load is always issued and this is a
+   * deterministic wait rather than a hopeful one.
+   */
+  private async waitForPreSmokeLoad(landed: number): Promise<void> {
+    await expect
+      .poll(() => this.preSmokeLoadsLanded, {
+        timeout: 15_000,
+        message: 'the pre-smoke step never issued its load',
+      })
+      .toBeGreaterThan(landed);
+  }
+
+  /**
+   * Wait until no pre-smoke load is outstanding.
+   *
+   * Used where a load may or may not be issued: re-entering the pre-smoke step
+   * remounts it (and so reloads) only when the wizard was showing another step.
+   */
+  private async waitForPreSmokeLoadsSettled(): Promise<void> {
+    await expect
+      .poll(() => this.preSmokeLoadsLanded > 0 && this.preSmokeLoadsInFlight === 0, {
+        timeout: 15_000,
+        message: 'a pre-smoke load never completed',
+      })
+      .toBe(true);
+  }
+
+  /**
+   * Retry a wizard mutation until it sticks.
+   *
+   * The single defence every mutating helper shares: a step's load landing
+   * mid-edit restores the stored value over the typed one, so an edit is
+   * applied-and-verified as a unit and replayed if the verification fails.
+   * Each `attempt` must therefore be safe to run twice — express it as
+   * "converge on this state", never as "click once".
+   */
+  private async throughAsyncLoad(attempt: () => Promise<void>, timeout = 15_000): Promise<void> {
+    await expect(attempt).toPass({ timeout });
   }
 
   private stepButton(label: 'Pre-Smoke' | 'Smoke' | 'Post-Smoke'): Locator {
@@ -27,22 +127,28 @@ export class FrontendApp {
     return this.page.getByTestId('presmoke-name-input');
   }
 
+  private get preSmokeMeatType(): Locator {
+    return this.page.getByTestId('presmoke-meat-type-input');
+  }
+
   private get preSmokeWeight(): Locator {
     return this.page.getByTestId('presmoke-weight-input');
   }
 
-  /**
-   * Type into a wizard field and make sure the value stuck.
-   *
-   * A step loads its current resource asynchronously after mounting, so a load
-   * landing *after* a field was typed would overwrite it. Retrying the fill
-   * until the value survives keeps the journey from racing that load.
-   */
+  private get preSmokeWeightUnit(): Locator {
+    return this.page.getByTestId('presmoke-weight-unit-select');
+  }
+
+  private get preSmokeNotes(): Locator {
+    return this.page.getByTestId('presmoke-notes-input');
+  }
+
+  /** Type into a wizard field and make sure the value stuck. */
   private async fillField(field: Locator, value: string): Promise<void> {
-    await expect(async () => {
+    await this.throughAsyncLoad(async () => {
       await field.fill(value);
       await expect(field).toHaveValue(value, { timeout: 1_000 });
-    }).toPass({ timeout: 15_000 });
+    });
   }
 
   /**
@@ -59,16 +165,172 @@ export class FrontendApp {
    * The weight is not optional even when a journey only cares about the name:
    * the backend rejects a pre-smoke without a numeric weight, so a name-only
    * form never persists at all.
+   *
+   * The meat type is a free-solo autocomplete, so any string a pitmaster types
+   * is accepted — including cuts absent from the suggestion list.
    */
-  async fillPreSmoke(fields: { name: string; weightLb: number }): Promise<void> {
+  async fillPreSmoke(fields: PreSmokeFields): Promise<void> {
     await this.fillField(this.preSmokeName, fields.name);
-    await this.fillField(this.preSmokeWeight, String(fields.weightLb));
+    await this.fillField(this.preSmokeMeatType, fields.meatType);
+    await this.fillField(this.preSmokeWeight, String(fields.weight));
+    await this.selectPreSmokeWeightUnit(fields.weightUnit);
+    await this.fillDynamicList(PRE_SMOKE_STEPS, fields.steps);
+    await this.fillField(this.preSmokeNotes, fields.notes);
   }
 
-  /** Return to the pre-smoke step (e.g. after a reload) and wait for it to render. */
+  /** Pick the weight's unit from its dropdown. */
+  private async selectPreSmokeWeightUnit(unit: WeightUnit): Promise<void> {
+    await this.throughAsyncLoad(async () => {
+      await this.preSmokeWeightUnit.click();
+      await this.page.getByTestId(`presmoke-weight-unit-option-${unit}`).click();
+      await expect(this.preSmokeWeightUnit).toHaveText(unit, { timeout: 1_000 });
+    });
+  }
+
+  /**
+   * Drop one prep step by position, as a pitmaster revising the plan does.
+   *
+   * The last step of the list has no remove button (it carries the one that
+   * adds a step), so it cannot be dropped this way; asking for it fails with
+   * that explanation.
+   */
+  async removePreSmokeStep(index: number): Promise<void> {
+    await this.removeDynamicListRow(PRE_SMOKE_STEPS, index);
+  }
+
+  /**
+   * Assert the pre-smoke step shows the given values — the read half of the
+   * fill/expect pair, used after a reload to prove the backend supplied them.
+   */
+  async expectPreSmokeShows(fields: PreSmokeFields): Promise<void> {
+    await expect(this.preSmokeName).toHaveValue(fields.name);
+    await expect(this.preSmokeMeatType).toHaveValue(fields.meatType);
+    await expect(this.preSmokeWeight).toHaveValue(String(fields.weight));
+    await expect(this.preSmokeWeightUnit).toHaveText(fields.weightUnit);
+    await this.expectDynamicList(PRE_SMOKE_STEPS, fields.steps);
+    await expect(this.preSmokeNotes).toHaveValue(fields.notes);
+  }
+
+  // --- Dynamic steps lists -------------------------------------------------
+  //
+  // The add/remove row list the pre-smoke and post-smoke steps share. Rows are
+  // addressed by a caller-chosen test-id prefix: `<prefix>-row` per row, and
+  // within it `<prefix>-input`, `<prefix>-add-button` (last row only) and
+  // `<prefix>-remove-button` (every other row).
+
+  private dynamicListRows(prefix: string): Locator {
+    return this.page.getByTestId(`${prefix}-row`);
+  }
+
+  /** The values a dynamic steps list currently holds, in row order. */
+  private async dynamicListValues(prefix: string): Promise<string[]> {
+    return this.dynamicListRows(prefix)
+      .getByTestId(`${prefix}-input`)
+      .evaluateAll(inputs =>
+        inputs.map(input => (input as HTMLInputElement | HTMLTextAreaElement).value)
+      );
+  }
+
+  /**
+   * Drive a dynamic steps list to hold exactly `values`.
+   *
+   * Such a list starts as a single empty row, grows when the last row's "+" is
+   * clicked and shrinks when any earlier row's "-" is. The row count is driven
+   * to the target in *both* directions, so the fill converges from whatever the
+   * list currently holds — including a stored list longer than `values`, which
+   * a step's load can restore mid-fill (see `throughAsyncLoad`, which replays
+   * this whole sequence when that happens).
+   */
+  private async fillDynamicList(prefix: string, values: string[]): Promise<void> {
+    if (values.length < 1) {
+      throw new Error('a dynamic steps list always renders at least one row; got none to fill');
+    }
+    const rows = this.dynamicListRows(prefix);
+    await this.throughAsyncLoad(async () => {
+      let count = await rows.count();
+      // Surplus rows go first: with a target of at least one row, a list that
+      // is too long has two or more rows, so its first row is never the last
+      // one — the only row that carries "+" instead of "-".
+      while (count > values.length) {
+        await rows.first().getByTestId(`${prefix}-remove-button`).click();
+        await expect(rows).toHaveCount(count - 1, { timeout: 2_000 });
+        count--;
+      }
+      while (count < values.length) {
+        await rows.last().getByTestId(`${prefix}-add-button`).click();
+        await expect(rows).toHaveCount(count + 1, { timeout: 2_000 });
+        count++;
+      }
+      for (const [index, value] of values.entries()) {
+        await rows.nth(index).getByTestId(`${prefix}-input`).fill(value);
+      }
+      await this.expectDynamicList(prefix, values, 1_000);
+    }, 20_000);
+  }
+
+  /** Assert a dynamic steps list shows exactly `values`, in order. */
+  private async expectDynamicList(
+    prefix: string,
+    values: string[],
+    timeout?: number
+  ): Promise<void> {
+    const rows = this.dynamicListRows(prefix);
+    await expect(rows).toHaveCount(values.length, { timeout });
+    for (const [index, value] of values.entries()) {
+      await expect(rows.nth(index).getByTestId(`${prefix}-input`)).toHaveValue(value, { timeout });
+    }
+  }
+
+  /**
+   * Remove one row of a dynamic steps list via its "-" button.
+   *
+   * Only rows *before* the last carry a "-": the last row carries the "+" that
+   * grows the list instead. Removing the final row is therefore not something
+   * the UI offers, and asking for it is a spec bug — reported as one here
+   * rather than surfacing later as an unexplained click timeout.
+   *
+   * Expressed as "converge on the rows that should survive" rather than "click
+   * once", because the retry may replay it: a second unconditional click would
+   * drop a second row.
+   */
+  private async removeDynamicListRow(prefix: string, index: number): Promise<void> {
+    const before = await this.dynamicListValues(prefix);
+    if (index < 0 || index >= before.length) {
+      throw new Error(
+        `cannot remove row ${index} of the "${prefix}" list: it holds ${before.length} row(s)`
+      );
+    }
+    if (index === before.length - 1) {
+      throw new Error(
+        `cannot remove the last row (${index}) of the "${prefix}" list: it carries the add ` +
+          `button, not a remove button`
+      );
+    }
+    const survivors = before.filter((_, position) => position !== index);
+    await this.throughAsyncLoad(async () => {
+      // Only click while the list is still too long: once it holds as many rows
+      // as should survive, the removal has happened and a replay must not
+      // remove another. Any row addressable here is one a longer-than-target
+      // list keeps before its last, so it always carries a "-".
+      if ((await this.dynamicListRows(prefix).count()) > survivors.length) {
+        await this.dynamicListRows(prefix)
+          .nth(index)
+          .getByTestId(`${prefix}-remove-button`)
+          .click();
+      }
+      await this.expectDynamicList(prefix, survivors, 1_000);
+    });
+  }
+
+  /**
+   * Return to the pre-smoke step (e.g. after a reload) and wait for it to be
+   * ready to work with: rendered *and* holding what the backend has, so a
+   * journey's first keystroke cannot be undone by the step's own load.
+   */
   async openPreSmokeStep(): Promise<void> {
     await this.stepButton('Pre-Smoke').click();
     await expect(this.preSmokeName).toBeVisible();
+    await this.waitForPreSmokeLoadsSettled();
   }
 
   /**
@@ -296,7 +558,12 @@ export class FrontendApp {
   }
 
   async reload(): Promise<void> {
+    const landed = this.preSmokeLoadsLanded;
     await this.page.reload();
     await expect(this.stepButton('Pre-Smoke')).toBeVisible();
+    // A reload restarts the wizard on the pre-smoke step, so its load is always
+    // issued; waiting for it here means the values read back after a reload are
+    // the backend's, not the blank form the step renders until the load lands.
+    await this.waitForPreSmokeLoad(landed);
   }
 }

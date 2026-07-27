@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { ApiClientProvider, SnackbarProvider, createApiClient } from '../../../api';
 import { createFakeBackend, FakeBackend } from '../../../api/fakeBackend';
@@ -89,6 +89,95 @@ describe('PreSmokeStep', () => {
     unmount();
 
     await waitFor(() => expect(backend.store.preSmoke.current?.weight.weight).toBe(12));
+  });
+
+  test('persists a custom meat type typed into the addressable meat-type field', async () => {
+    // The meat type is a free-solo autocomplete: a pitmaster may type a cut that
+    // is not in the suggestion list at all, and that string must be what gets
+    // saved. The input is addressed by test id (as the e2e journey does) because
+    // the autocomplete wraps its input in MUI markup.
+    const backend = createFakeBackend({ preSmoke: { current: seededPreSmoke } });
+
+    const { unmount } = renderStep(backend);
+
+    await screen.findByDisplayValue('Test Smoke');
+    fireEvent.change(screen.getByTestId('presmoke-meat-type-input'), {
+      target: { value: 'Wagyu Chuck Roll' },
+    });
+
+    unmount();
+
+    await waitFor(() => expect(backend.store.preSmoke.current?.meatType).toBe('Wagyu Chuck Roll'));
+  });
+
+  test('persists a weight unit switched from the LB default to OZ', async () => {
+    // Small cuts are recorded in ounces. The unit control is a select whose
+    // label ("Age", a copy/paste leftover) says nothing about what it does, so
+    // the control and its options carry test ids.
+    const backend = createFakeBackend({ preSmoke: { current: seededPreSmoke } });
+
+    const { unmount } = renderStep(backend);
+
+    await screen.findByDisplayValue('Test Smoke');
+    fireEvent.mouseDown(screen.getByTestId('presmoke-weight-unit-select'));
+    fireEvent.click(screen.getByTestId('presmoke-weight-unit-option-OZ'));
+    expect(screen.getByTestId('presmoke-weight-unit-select')).toHaveTextContent('OZ');
+
+    unmount();
+
+    await waitFor(() => expect(backend.store.preSmoke.current?.weight.unit).toBe(WeightUnits.OZ));
+  });
+
+  test('adds, fills and removes prep-step rows, persisting the survivors in order', async () => {
+    // Prep steps are a dynamic list: every row looks the same to a label-based
+    // query, so each row and its controls carry test ids scoped by the row.
+    const backend = createFakeBackend({
+      preSmoke: { current: { ...seededPreSmoke, steps: ['Step 1'] } },
+    });
+
+    const { unmount } = renderStep(backend);
+
+    await screen.findByDisplayValue('Test Smoke');
+    const rows = () => screen.getAllByTestId('presmoke-step-row');
+    const stepInput = (index: number) => within(rows()[index]).getByTestId('presmoke-step-input');
+    const addRow = () =>
+      fireEvent.click(within(rows()[rows().length - 1]).getByTestId('presmoke-step-add-button'));
+
+    fireEvent.change(stepInput(0), { target: { value: 'Trim the fat' } });
+    addRow();
+    fireEvent.change(stepInput(1), { target: { value: 'Dry brine overnight' } });
+    addRow();
+    fireEvent.change(stepInput(2), { target: { value: 'Rub two hours ahead' } });
+
+    fireEvent.click(within(rows()[1]).getByTestId('presmoke-step-remove-button'));
+    expect(rows()).toHaveLength(2);
+
+    unmount();
+
+    await waitFor(() =>
+      expect(backend.store.preSmoke.current?.steps).toEqual(['Trim the fat', 'Rub two hours ahead'])
+    );
+  });
+
+  test('persists multiline notes typed into the addressable notes field', async () => {
+    // Notes are free text spanning several lines, and "Notes" is a label the
+    // post-smoke step reuses — so the field is addressed by test id.
+    const backend = createFakeBackend({ preSmoke: { current: seededPreSmoke } });
+
+    const { unmount } = renderStep(backend);
+
+    await screen.findByDisplayValue('Test Smoke');
+    fireEvent.change(screen.getByTestId('presmoke-notes-input'), {
+      target: { value: 'Picked up at the butcher\nDry brined overnight' },
+    });
+
+    unmount();
+
+    await waitFor(() =>
+      expect(backend.store.preSmoke.current?.notes).toBe(
+        'Picked up at the butcher\nDry brined overnight'
+      )
+    );
   });
 
   test('renders empty fields for a blank current pre-smoke document', async () => {

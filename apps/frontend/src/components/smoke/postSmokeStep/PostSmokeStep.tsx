@@ -51,6 +51,7 @@ export const PostSmokeStep: React.FC<PostSmokeStepProps> = ({ nextButton }) => {
             })
           }
           steps={postSmokeState.steps}
+          testIdPrefix="postsmoke-step"
           onListChange={(step, index) =>
             setPostSmokeState({
               ...postSmokeState,
