@@ -11,16 +11,49 @@ GNOME/XWayland display through the Playwright MCP server, surviving reboots:
 ## Contents
 
 - **`provision-box.sh`** — one-time, idempotent box provisioning. Verifies (and
-  installs when absent) real Chrome, Playwright browsers + system deps, and the
-  agent user's docker access, then **verifies** both harness MCP servers
-  (`playwright-chrome` → `chrome-mcp-wrapper.sh`, `playwright-electron` →
-  `electron-cdp-mcp-wrapper.sh`). Those two entries are **committed** to
-  `.mcp.json` (issue #388), so a healthy box has nothing to do: the run logs
-  `verified` and leaves the file byte-identical. Only a hand-edited, deleted, or
-  cwd-dependent entry is `repaired`, and the repair reproduces exactly the
-  committed, cwd-independent launch form (see below) — so a repair converges on
-  the tracked bytes instead of dirtying them. Running it twice changes nothing
-  the second time.
+  installs when absent) real Chrome, Playwright browsers + system deps, the
+  agent user's docker access, and the smoker shell's own prerequisites — the
+  workspace dependencies including the Electron binary the launcher executes,
+  and the **built** main-process bundle (issue #390). That last one matters
+  because the app's `package.json` `main` points at the gitignored
+  `.webpack/main` build artifact: an unbuilt checkout gives the launcher nothing
+  to run, and a bundle older than the shell sources starts fine and answers CDP
+  while running the OLD main process, so it would silently ignore the renderer
+  URL the harness exports. Absent or stale ⇒ rebuild, otherwise no-op. Because
+  the launcher invokes Electron by name (its `ELECTRON_BIN` default is a bare
+  `electron`) while the workspace install lands the binary under `node_modules`,
+  provisioning also installs a small **wrapper shim** under that name in a PATH
+  directory (`~/.local/bin` by default, `SMOKER_ELECTRON_SHIM_DIR` to override)
+  which `exec`s the workspace binary — `exec`, so the PID the launcher records
+  is the Electron process and its `stop` still kills the shell. Already correct
+  ⇒ no-op, stale (wrong target or wrong sandbox mode) ⇒ rewritten, a foreign
+  `electron` already on PATH ⇒ left alone. The shim exists because the
+  **sandbox** has to be handled where the launcher invokes the name, which
+  leaves `electron-launcher.sh` byte-for-byte as shipped: an npm-unpacked
+  `chrome-sandbox` is owned by the installing user without the setuid bit, and
+  Chromium refuses to run that way, while its user-namespace fallback is off on
+  modern distros (`kernel.apparmor_restrict_unprivileged_userns=1`) — so the
+  shell aborted at startup on a box that had just reported itself provisioned.
+  Provisioning prefers the correct fix and degrades deliberately: helper already
+  `root:root 4755` ⇒ sandbox stays on; repairable with **non-interactive** sudo
+  (`sudo -n`, never a bare `sudo` that could hang an unattended round on a
+  password prompt) ⇒ repaired, sandbox stays on; otherwise the shim exports
+  `ELECTRON_DISABLE_SANDBOX=1` for the harness process only, and says so loudly.
+  Finally the name is **launch-probed** (`timeout 60 <cmd> --version`,
+  `SMOKER_ELECTRON_PROBE_CMD` to override — `--version` is dispatched after
+  Chromium's sandbox setup, so it aborts exactly where the shell would, with no
+  display or app needed): resolving is not starting, and an Electron that cannot
+  start fails the run rather than reporting a box the launcher would die on. So
+  `electron-launcher.sh start` works with no `ELECTRON_BIN` and no
+  `ELECTRON_DISABLE_SANDBOX` prefix after provisioning. It then **verifies**
+  both harness MCP servers (`playwright-chrome` → `chrome-mcp-wrapper.sh`,
+  `playwright-electron` → `electron-cdp-mcp-wrapper.sh`). Those two entries are
+  **committed** to `.mcp.json` (issue #388), so a healthy box has nothing to do:
+  the run logs `verified` and leaves the file byte-identical. Only a
+  hand-edited, deleted, or cwd-dependent entry is `repaired`, and the repair
+  reproduces exactly the committed, cwd-independent launch form (see below) — so
+  a repair converges on the tracked bytes instead of dirtying them. Running it
+  twice changes nothing the second time.
 - **`lib/resolve-display-env.sh`** — shared, sourced helper that resolves
   `DISPLAY` + the rotating X-authority file (mutter writes a fresh
   `.mutter-Xwaylandauth.XXXXXX` under the user runtime dir every boot) **by glob
@@ -111,10 +144,11 @@ tsx scripts/stack-runner/cli.ts down --pr <n>
 ## Tests
 
 Shell script-test style (prior art: the deploy scripts' `.test.sh` pattern).
-System boundaries (`npx`, `docker`, `apt-get`, `usermod`, the X-authority glob,
-the Electron binary, the CDP readiness probe) are injected via env-var overrides
-or a PATH-prepended stub bin; no real browser, Electron, daemon, CDP endpoint,
-or desktop session is required.
+System boundaries (`npx`, `docker`, `apt-get`, `usermod`, `sudo`, `stat`, the
+X-authority glob, the Electron binary and its launch probe, the CDP readiness
+probe) are injected via env-var overrides or a PATH-prepended stub bin; no real
+browser, Electron, daemon, CDP endpoint, desktop session, privileged user, or
+write to the real `~/.local/bin` is required.
 
 ```bash
 bash scripts/verify-pr/chrome-mcp-wrapper.test.sh
@@ -148,13 +182,18 @@ hermetic URL/CDP-port wiring, the CDP-ready bounded wait (ready vs. timeout →
 cleanup), the PID-file lifecycle (kill + clean, idempotent stop, stale-file
 handling), the CDP wrapper's retry-then-register-anyway behavior (endpoint down
 → still hands off, with a warning, inside a wait short enough for the MCP
-runtime's startup timeout), and provisioning idempotency (second run is a no-op)
-for both MCP entries — plus the committed-entry contract: the shipped config
-carries both harness servers, each launching its wrapper **from a subdirectory
-cwd**, a fresh checkout verifies with zero repairs and zero bytes changed, a
-missing / wrong / cwd-dependent-relative entry is repaired to exactly the
-committed form (with a diagnostic saying why relative is wrong), an uncomputable
-expectation fails loudly instead of reporting "verified", the other six servers
-are untouched in both states, and neither entry fails at parse time (Chrome:
-startup error without a desktop session; Electron: warn + register when no CDP
-endpoint answers).
+runtime's startup timeout), the launcher-shim sandbox ladder (working SUID
+helper ⇒ nothing disabled and no escalation attempted; unfixable helper with no
+passwordless sudo ⇒ shim degrades loudly, and never a bare `sudo`), the launch
+probe (an Electron that resolves but dies on exec fails the run, which never
+reports "provisioning complete") and the shim's `exec` (the PID the launcher
+would record is the Electron process), and provisioning idempotency (second run
+is a no-op — the shim included) for both MCP entries — plus the committed-entry
+contract: the shipped config carries both harness servers, each launching its
+wrapper **from a subdirectory cwd**, a fresh checkout verifies with zero repairs
+and zero bytes changed, a missing / wrong / cwd-dependent-relative entry is
+repaired to exactly the committed form (with a diagnostic saying why relative is
+wrong), an uncomputable expectation fails loudly instead of reporting
+"verified", the other six servers are untouched in both states, and neither
+entry fails at parse time (Chrome: startup error without a desktop session;
+Electron: warn + register when no CDP endpoint answers).
