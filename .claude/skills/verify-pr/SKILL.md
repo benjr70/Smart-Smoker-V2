@@ -170,6 +170,9 @@ registered, but it only connects on the first tool call. Do not call an
 connection, the app is not up — launch it and retry, do not report a missing
 tool.
 
+Follow the **Electron runbook** below for the full chain, the display-truth
+rule, and the shell-drift check before you launch.
+
 ### 6. Spawn the manual-verifier agent
 
 Spawn the `manual-verifier` subagent (definition in
@@ -240,6 +243,111 @@ was cited in the comment.
 Return to the original branch after teardown (`git checkout -` / the branch you
 started on) so you do not strand the checkout on the PR branch.
 
+## Electron runbook
+
+Every round wires the Electron chain identically. These rules are load-bearing:
+`bash scripts/verify-pr/check-harness-runbook.sh` fails if any of them
+disappears from this skill or from `.claude/agents/manual-verifier.md`. They
+exist because a round on PR #382 deferred its three most valuable items as "no
+tool available" while the box had a live desktop session the whole time.
+
+### Display truth
+
+Display truth comes only from the shared display-resolution library
+`scripts/verify-pr/lib/resolve-display-env.sh`, which both launchers that touch
+the display — `scripts/verify-pr/chrome-mcp-wrapper.sh` (launches headful
+Chrome) and `scripts/verify-pr/electron-launcher.sh` (launches the shell) —
+source. It resolves the box's live GNOME/XWayland session, including the
+X-authority file whose path rotates on every boot. An unset shell `$DISPLAY` is
+never evidence of a headless sandbox — the round's shell simply does not inherit
+the desktop session's variables. The library returning non-zero (no active
+session) is the one and only legitimate "no display" signal, and it is an
+infrastructure finding, not an item verdict.
+
+### Electron lifecycle
+
+The Electron path is always launcher-start → CDP-attach → drive → launcher-stop:
+
+1. **launcher-start** — `scripts/verify-pr/electron-launcher.sh start` resolves
+   the display, launches the smoker shell against this stack's renderer URL, and
+   blocks until its CDP endpoint answers.
+2. **CDP-attach** — the `playwright-electron` MCP server
+   (`scripts/verify-pr/electron-cdp-mcp-wrapper.sh`) dials that fixed CDP
+   endpoint lazily, on the agent's first `mcp__playwright-electron__*` call.
+3. **drive** — the agent snapshots, clicks, types, and reads network/console in
+   the real shell, capturing evidence into `ARTIFACT_DIR`.
+4. **launcher-stop** — `scripts/verify-pr/electron-launcher.sh stop` runs on
+   every exit path (pass, FAIL, infra-error, or crash), from the §8 teardown
+   block. It is idempotent, so it is safe even when step 5 never launched.
+
+There is no other route to the shell: no `npm start`, no manual `electron .`, no
+hand-rolled CDP client.
+
+### Shell drift
+
+The Electron shell's main process runs from the provisioned daemon checkout (its
+dependencies and the Electron binary are installed there by
+`scripts/verify-pr/provision-box.sh`); the renderer content always comes from
+the PR's hermetic stack. Before launching, check whether the PR touches the
+shell itself. These are its real tracked paths — the main process
+(`electron-app/index.ts`, the forge `entryPoints` main), the preload, the
+renderer-URL module slice 3 added, every build input the provisioner treats as a
+shell source (`SMOKER_SHELL_SOURCES` in `provision-box.sh`: the forge config and
+all three webpack configs, since the renderer/rules pair compiles the preload),
+the thin-mode entry document the forge config loads in thin mode, and the thin
+shell image — matched literally, so a rename shows up as a check failure rather
+than as silent under-matching:
+
+```bash
+gh pr diff "$PR" --name-only | grep -F \
+  -e apps/smoker/electron-app/ \
+  -e apps/smoker/src/electron/ \
+  -e apps/smoker/config.forge.js \
+  -e apps/smoker/webpack.main.config.js \
+  -e apps/smoker/webpack.renderer.config.js \
+  -e apps/smoker/webpack.rules.js \
+  -e apps/smoker/public/thin.html \
+  -e apps/smoker/shell.dockerfile \
+  -e apps/smoker/package.json || true
+```
+
+If anything matches, note the drift in the evidence comment and defer
+shell-specific behavior for that round — renderer-side behavior is still
+verified, because that content is the PR's own build.
+
+### Stack-mutation authority
+
+The verifier may `docker stop` and `docker start` containers strictly within the
+current per-PR compose project namespace (`$STACK_PROJECT_NAME`) — that is how
+offline batching and reconnect flush are exercised against a real connectivity
+loss (stop the backend, drive the shell, start it again, watch the flush).
+Nothing outside that namespace may be stopped, started, built, pulled, or
+pruned: no other PR's stack, no host containers, no dev or prod anything.
+
+### Live temperature feed
+
+Live temperature data comes from the device-service emulator mode already wired
+into the hermetic compose definition (`NODE_ENV=local` on the `device-service`
+service in `e2e/docker/docker-compose.e2e.yml` — synthetic ramping temps every
+500 ms). No hardware and no extra simulation code are needed, so "no probe
+attached" is never a reason to defer a temperature item; temps not arriving is a
+real finding.
+
+### Both-direction propagation
+
+Rename and start/stop propagation is verified by driving the cloud frontend in
+headful Chrome and the smoker shell in Electron simultaneously — one MCP server
+each, both pointed at the same per-PR stack — and asserting the change in both
+directions: made in Chrome, observed in the shell; made in the shell, observed
+in Chrome.
+
+### Wifi indicator bound
+
+The wifi adapter stays off in hermetic builds (the environment is intentionally
+not production), so the wifi indicator is verified through the store snapshot
+flag and wifi-screen navigation rather than by joining a network. State that
+bound explicitly in the evidence instead of claiming a full pass.
+
 ## Hard rules
 
 - **Never fabricate a verdict.** If the stack never booted, there are zero item
@@ -252,6 +360,8 @@ started on) so you do not strand the checkout on the PR branch.
   leave the stack, its volumes, the Electron app, or the browser profile behind.
 - **Do not install anything or touch other projects' containers.** All docker is
   scoped to the `smoker-pr-<n>` project (the stack-runner enforces the name).
+  Within that namespace the verifier is authorised to stop and start containers
+  (see the Electron runbook); outside it, nothing.
 - **You do not verify.** The agent tests; you orchestrate and reconcile. Do not
   substitute your own judgment for a missing agent verdict.
 

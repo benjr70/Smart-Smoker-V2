@@ -157,6 +157,7 @@ bash scripts/verify-pr/electron-cdp-mcp-wrapper.test.sh
 bash scripts/verify-pr/provision-box.test.sh
 bash scripts/verify-pr/parse-checklist.test.sh
 bash scripts/verify-pr/tick-checklist.test.sh
+bash scripts/verify-pr/check-harness-runbook.test.sh
 ```
 
 The checklist helpers are pure text transforms, so their tests need no injected
@@ -175,6 +176,32 @@ ticks the passing boxes, posts one evidence comment, emits a
 `manual-verify: <pass>/<total> PASS, <deferred> deferred, <fail> FAIL` line, and
 tears everything down unconditionally. The end-to-end demo runs on the always-on
 verify-pr box (see the skill's "Demo" section) — not from CI or a dev laptop.
+
+### The Electron runbook check (slice #391)
+
+Both documents carry the same Electron runbook — display truth from
+`lib/resolve-display-env.sh` only (an unset shell `$DISPLAY` proves nothing),
+the launcher-start → CDP-attach → drive → launcher-stop chain, the shell-drift
+note for PRs touching the shell's own code or any build input the provisioner
+rebuilds it from, `docker stop`/`docker start` allowed strictly inside the
+per-PR compose project, the device-service emulator feed, the dual-driver
+both-directions procedure, and the hermetic wifi bound. Those rules are what
+turn "the harness has an Electron chain" into "the round actually drives it", so
+a text check guards them:
+
+```bash
+bash scripts/verify-pr/check-harness-runbook.sh          # 0 = every rule present in both docs
+bash scripts/verify-pr/check-harness-runbook.sh --list   # the enforced rule table
+```
+
+Matching runs over a whitespace-normalized copy of each document, so Prettier's
+80-column re-wrap can never break a multi-word phrase. CI runs the suite via
+`.github/workflows/harness-runbook.yml` whenever either definition or the check
+itself changes; the test suite deletes each rule phrase in turn (from either
+document) and requires the checker to fail naming that rule, and pins the
+shell-drift path list to `provision-box.sh`'s `SMOKER_SHELL_SOURCES` plus the
+forge thin-mode entry document so a new shell build input cannot be added
+without teaching the runbook about it.
 
 Covered: display-env resolution (found / rotated / absent → clear error),
 headful real-Chrome argument construction, fresh-unique-profile-per-run,

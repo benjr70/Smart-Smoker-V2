@@ -52,6 +52,67 @@ endpoints that exist:
   `localhost:27017`). If an item needs the DB and `E2E_MONGO_URL` is absent,
   that is an infrastructure problem — report it, do not improvise a connection.
 
+## Electron runbook — the rules that stop false "no tool" deferrals
+
+A previous round on PR #382 deferred its three most valuable items claiming a
+"headless sandbox" and missing tools, while the box ran a live desktop session
+the whole time. These rules exist so that never repeats; they are mirrored in
+the `/verify-pr` skill and enforced by
+`bash scripts/verify-pr/check-harness-runbook.sh`.
+
+- **Display truth comes only from the shared display-resolution library**
+  `scripts/verify-pr/lib/resolve-display-env.sh`, which
+  `scripts/verify-pr/chrome-mcp-wrapper.sh` and
+  `scripts/verify-pr/electron-launcher.sh` both source; it resolves the box's
+  GNOME/XWayland session and its per-boot rotating X-authority file. An unset
+  shell `$DISPLAY` is never evidence of a headless sandbox — your Bash tool
+  simply does not inherit the desktop session's variables. Never run
+  `echo $DISPLAY`, find it empty, and conclude "headless". Only that library
+  failing (no active session) is a display problem, and it is an infrastructure
+  finding you report — not an item verdict.
+- **The launcher and the CDP wrapper are the only Electron path.** The chain is
+  launcher-start → CDP-attach → drive → launcher-stop:
+  `scripts/verify-pr/electron-launcher.sh` starts the shell (the skill does this
+  before spawning you) and `scripts/verify-pr/electron-cdp-mcp-wrapper.sh` backs
+  the `playwright-electron` MCP server that attaches over CDP on your first tool
+  call. Never `npm start` the smoker, never launch `electron` yourself, never
+  hand-roll a CDP client. The skill owns the lifecycle —
+  `scripts/verify-pr/electron-launcher.sh stop` runs on every exit path of the
+  round — so do not stop or restart the shell.
+- **Shell drift.** The shell's main process runs from the provisioned daemon
+  checkout while the renderer content comes from the PR's hermetic stack. So
+  check the PR diff for the shell's own tracked paths —
+  `apps/smoker/electron-app/` (main + preload), `apps/smoker/src/electron/` (the
+  renderer-URL module), the build inputs the provisioner rebuilds the shell from
+  — `apps/smoker/config.forge.js`, `apps/smoker/webpack.main.config.js`,
+  `apps/smoker/webpack.renderer.config.js`, `apps/smoker/webpack.rules.js` —
+  plus `apps/smoker/public/thin.html` (the thin-mode entry document),
+  `apps/smoker/shell.dockerfile`, and `apps/smoker/package.json`. If any is
+  touched (or the skill tells you it is), note the drift in your evidence and
+  defer shell-specific behavior for that round; renderer-side behavior is still
+  yours to verify, because that content is the PR's own build.
+- **Stack-mutation authority.** You may `docker stop` and `docker start`
+  containers strictly within the current per-PR compose project namespace
+  (`STACK_PROJECT_NAME`) — that is how you exercise offline batching and
+  reconnect flush against a real connectivity loss: stop the backend container,
+  keep driving the shell, start it again, then show the buffered temps flushing.
+  Cite the container name and the timestamps. Nothing outside that namespace may
+  be stopped or started.
+- **Live temperature data comes from the device-service emulator mode** already
+  wired into the hermetic compose definition (`NODE_ENV=local` on the
+  `device-service` service — synthetic ramping temps every 500 ms). No probe, no
+  hardware, no extra simulation: "no hardware attached" is never a reason to
+  defer a temperature-chain item.
+- **Both-direction propagation** (rename, start/stop) is verified by driving the
+  cloud frontend in headful Chrome and the smoker shell in Electron
+  simultaneously — one MCP server each, both on the same stack — and asserting
+  the change in both directions: made in Chrome, observed in the shell; made in
+  the shell, observed in Chrome.
+- **Wifi bound.** The wifi adapter stays off in hermetic builds (the environment
+  is intentionally not production). Verify the wifi indicator through the store
+  snapshot flag and wifi-screen navigation, and state that bound in your
+  evidence rather than claiming a network actually connected.
+
 ## Classify every item into exactly one of three buckets
 
 For each checklist item, decide which bucket it falls in, then act as the bucket
@@ -123,11 +184,12 @@ evidence to the load-bearing lines.
   (slice 2). No `apt-get`, no `npm install`, no `pip`, no `playwright install`,
   no global tool fetches. If a tool you need is missing, that is an
   infrastructure finding — report it, do not install it.
-- **Scope every build/pull to the namespaced project.** Any `docker` you run is
-  scoped to `STACK_PROJECT_NAME` (e.g.
-  `docker compose -p "$STACK_PROJECT_NAME" logs`). Never build, pull, restart,
-  or prune outside that project; never touch another PR's stack or the host's
-  other containers.
+- **Scope every docker command to the namespaced project.** Any `docker` you run
+  is scoped to `STACK_PROJECT_NAME` (e.g.
+  `docker compose -p "$STACK_PROJECT_NAME" logs`). Inside that namespace you may
+  stop and start containers (see the Electron runbook); outside it you may never
+  build, pull, stop, start, restart, or prune anything — not another PR's stack,
+  not the host's other containers.
 - **DB access is hermetic-only.** The single legal Mongo target is
   `E2E_MONGO_URL`. Never a hardcoded host/port, never dev, never prod.
 - **Do not tear the stack down.** The skill owns teardown (on pass, fail, and

@@ -1,0 +1,39 @@
+# Guards the /verify-pr harness "brain" (issue #391, PRD #387). The Electron
+# runbook rules — display truth from the shared display-resolution library, the
+# launcher-start → CDP-attach → drive → launcher-stop chain, the shell-drift
+# note, the namespace-scoped docker stop/start allowance, the emulator feed, the
+# dual-driver both-directions procedure, and the hermetic wifi bound — live in
+# BOTH .claude/skills/verify-pr/SKILL.md and .claude/agents/manual-verifier.md.
+# Dropping one silently regresses the harness back to "no tool available"
+# deferrals, so a text check asserts every rule is present in both documents.
+# Pure text: needs only bash + coreutils, no Node install, no docker, no display.
+
+name: Harness Runbook Check
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - '.claude/skills/verify-pr/SKILL.md'
+      - '.claude/agents/manual-verifier.md'
+      - 'scripts/verify-pr/check-harness-runbook.sh'
+      - 'scripts/verify-pr/check-harness-runbook.test.sh'
+      - '.github/workflows/harness-runbook.yml'
+  push:
+    branches: [master]
+    paths:
+      - '.claude/skills/verify-pr/SKILL.md'
+      - '.claude/agents/manual-verifier.md'
+      - 'scripts/verify-pr/check-harness-runbook.sh'
+      - 'scripts/verify-pr/check-harness-runbook.test.sh'
+      - '.github/workflows/harness-runbook.yml'
+
+jobs:
+  harness-runbook:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run the harness runbook check suite
+        run: bash scripts/verify-pr/check-harness-runbook.test.sh
