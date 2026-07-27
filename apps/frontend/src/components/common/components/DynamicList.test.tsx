@@ -1,30 +1,32 @@
 import '@testing-library/jest-dom';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import React from 'react';
 import { DynamicList } from './DynamicList';
 
 // Mock Material-UI components.
 //
-// These stubs address elements by their own synthetic test ids (`button-+`,
-// `textfield-Step`, `grid`), so they are applied *after* the component's props:
-// the component's own `data-testid` (used by the e2e page object) must not
-// shadow the ids this suite queries by. `inputProps` is forwarded to the input
-// as real MUI does, rather than spread onto the DOM node as an unknown prop.
+// Like real MUI, these stubs let a caller's `data-testid` win: it is applied
+// last (via the props spread), over a synthetic fallback id used only where the
+// component asks for no id of its own. That keeps this suite querying the very
+// test ids the component ships — the ones the e2e page object addresses — so a
+// regression in the test-id wiring fails here rather than only in the e2e run.
+// `inputProps` is forwarded to the input as real MUI does, rather than spread
+// onto the DOM node as an unknown prop.
 jest.mock('@mui/material', () => ({
   Button: ({ children, onClick, className, variant, size, ...props }: any) => (
     <button
+      data-testid={`button-${children}`}
       onClick={onClick}
       className={className}
       data-variant={variant}
       data-size={size}
       {...props}
-      data-testid={`button-${children}`}
     >
       {children}
     </button>
   ),
   Grid: ({ children, className, ...props }: any) => (
-    <div className={className} {...props} data-testid="grid">
+    <div data-testid="grid" className={className} {...props}>
       {children}
     </div>
   ),
@@ -40,6 +42,7 @@ jest.mock('@mui/material', () => ({
     ...props
   }: any) => (
     <input
+      data-testid={`textfield-${label || 'input'}`}
       type="text"
       value={value}
       onChange={onChange}
@@ -47,9 +50,8 @@ jest.mock('@mui/material', () => ({
       data-label={label}
       data-multiline={multiline}
       data-id={id}
-      {...inputProps}
       {...props}
-      data-testid={`textfield-${label || 'input'}`}
+      {...inputProps}
     />
   ),
 }));
@@ -63,6 +65,7 @@ describe('DynamicList', () => {
     newline: jest.Mock;
     removeLine: jest.Mock;
     steps: string[];
+    testIdPrefix: string;
   };
 
   beforeEach(() => {
@@ -71,6 +74,7 @@ describe('DynamicList', () => {
       newline: jest.fn(),
       removeLine: jest.fn(),
       steps: ['Step 1', 'Step 2', 'Step 3'],
+      testIdPrefix: 'prep-steps',
     };
   });
 
@@ -78,14 +82,15 @@ describe('DynamicList', () => {
     test('should render DynamicList component successfully', () => {
       render(<DynamicList {...defaultProps} />);
 
-      expect(screen.getAllByTestId('grid')).toHaveLength(6); // 3 items * 2 grids each
-      expect(screen.getAllByTestId(/textfield-Step/)).toHaveLength(3);
+      expect(screen.getAllByTestId('prep-steps-row')).toHaveLength(3); // one row per step
+      expect(screen.getAllByTestId('grid')).toHaveLength(3); // the step-number grid per row
+      expect(screen.getAllByTestId(/prep-steps-input/)).toHaveLength(3);
     });
 
     test('should render correct number of steps', () => {
       render(<DynamicList {...defaultProps} />);
 
-      const textFields = screen.getAllByTestId('textfield-Step');
+      const textFields = screen.getAllByTestId('prep-steps-input');
       expect(textFields).toHaveLength(3);
       expect(textFields[0]).toHaveValue('Step 1');
       expect(textFields[1]).toHaveValue('Step 2');
@@ -122,9 +127,38 @@ describe('DynamicList', () => {
       render(<DynamicList {...defaultProps} steps={['Single step']} />);
 
       expect(screen.getByText('1.')).toBeInTheDocument();
-      expect(screen.getByTestId('textfield-Step')).toHaveValue('Single step');
-      expect(screen.getByTestId('button-+')).toBeInTheDocument();
-      expect(screen.queryByTestId('button--')).not.toBeInTheDocument();
+      expect(screen.getByTestId('prep-steps-input')).toHaveValue('Single step');
+      expect(screen.getByTestId('prep-steps-add-button')).toBeInTheDocument();
+      expect(screen.queryByTestId('prep-steps-remove-button')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Test-id namespacing', () => {
+    test('names every row and its controls with the caller-chosen prefix', () => {
+      render(<DynamicList {...defaultProps} steps={['Trim the fat', 'Dry brine overnight']} />);
+
+      const rows = screen.getAllByTestId('prep-steps-row');
+      expect(rows).toHaveLength(2);
+      expect(within(rows[0]).getByTestId('prep-steps-input')).toHaveValue('Trim the fat');
+      expect(within(rows[0]).getByTestId('prep-steps-remove-button')).toBeInTheDocument();
+      expect(within(rows[1]).getByTestId('prep-steps-add-button')).toBeInTheDocument();
+    });
+
+    test('keeps two lists rendered together separately addressable', () => {
+      render(
+        <>
+          <DynamicList {...defaultProps} steps={['Trim the fat']} />
+          <DynamicList
+            {...defaultProps}
+            steps={['Slice against the grain']}
+            testIdPrefix="rest-steps"
+          />
+        </>
+      );
+
+      expect(screen.getByTestId('prep-steps-input')).toHaveValue('Trim the fat');
+      expect(screen.getByTestId('rest-steps-input')).toHaveValue('Slice against the grain');
+      expect(screen.getByTestId('prep-steps-row')).not.toBe(screen.getByTestId('rest-steps-row'));
     });
   });
 
@@ -132,8 +166,8 @@ describe('DynamicList', () => {
     test('should show + button only on the last item', () => {
       render(<DynamicList {...defaultProps} />);
 
-      const addButtons = screen.getAllByTestId('button-+');
-      const removeButtons = screen.getAllByTestId('button--');
+      const addButtons = screen.getAllByTestId('prep-steps-add-button');
+      const removeButtons = screen.getAllByTestId('prep-steps-remove-button');
 
       expect(addButtons).toHaveLength(1);
       expect(removeButtons).toHaveLength(2);
@@ -142,8 +176,8 @@ describe('DynamicList', () => {
     test('should show - button on all items except the last one', () => {
       render(<DynamicList {...defaultProps} steps={['Step 1', 'Step 2', 'Step 3', 'Step 4']} />);
 
-      const addButtons = screen.getAllByTestId('button-+');
-      const removeButtons = screen.getAllByTestId('button--');
+      const addButtons = screen.getAllByTestId('prep-steps-add-button');
+      const removeButtons = screen.getAllByTestId('prep-steps-remove-button');
 
       expect(addButtons).toHaveLength(1);
       expect(removeButtons).toHaveLength(3);
@@ -152,8 +186,8 @@ describe('DynamicList', () => {
     test('should have correct button properties', () => {
       render(<DynamicList {...defaultProps} />);
 
-      const addButton = screen.getByTestId('button-+');
-      const removeButtons = screen.getAllByTestId('button--');
+      const addButton = screen.getByTestId('prep-steps-add-button');
+      const removeButtons = screen.getAllByTestId('prep-steps-remove-button');
 
       expect(addButton).toHaveAttribute('data-variant', 'outlined');
       expect(addButton).toHaveAttribute('data-size', 'small');
@@ -171,7 +205,7 @@ describe('DynamicList', () => {
     test('should render TextFields with correct properties', () => {
       render(<DynamicList {...defaultProps} />);
 
-      const textFields = screen.getAllByTestId('textfield-Step');
+      const textFields = screen.getAllByTestId('prep-steps-input');
 
       textFields.forEach(field => {
         expect(field).toHaveAttribute('data-label', 'Step');
@@ -193,7 +227,7 @@ describe('DynamicList', () => {
     test('should call onListChange when text is changed', () => {
       render(<DynamicList {...defaultProps} />);
 
-      const firstTextField = screen.getAllByTestId('textfield-Step')[0];
+      const firstTextField = screen.getAllByTestId('prep-steps-input')[0];
       fireEvent.change(firstTextField, { target: { value: 'Updated step 1' } });
 
       expect(defaultProps.onListChange).toHaveBeenCalledWith('Updated step 1', 0);
@@ -202,7 +236,7 @@ describe('DynamicList', () => {
     test('should call onListChange with correct index for different steps', () => {
       render(<DynamicList {...defaultProps} />);
 
-      const textFields = screen.getAllByTestId('textfield-Step');
+      const textFields = screen.getAllByTestId('prep-steps-input');
 
       fireEvent.change(textFields[1], { target: { value: 'Updated step 2' } });
       expect(defaultProps.onListChange).toHaveBeenCalledWith('Updated step 2', 1);
@@ -214,7 +248,7 @@ describe('DynamicList', () => {
     test('should call newline when + button is clicked', () => {
       render(<DynamicList {...defaultProps} />);
 
-      const addButton = screen.getByTestId('button-+');
+      const addButton = screen.getByTestId('prep-steps-add-button');
       fireEvent.click(addButton);
 
       expect(defaultProps.newline).toHaveBeenCalledTimes(1);
@@ -223,7 +257,7 @@ describe('DynamicList', () => {
     test('should call removeLine when - button is clicked', () => {
       render(<DynamicList {...defaultProps} />);
 
-      const removeButtons = screen.getAllByTestId('button--');
+      const removeButtons = screen.getAllByTestId('prep-steps-remove-button');
       fireEvent.click(removeButtons[0]);
 
       expect(defaultProps.removeLine).toHaveBeenCalledWith(0);
@@ -232,7 +266,7 @@ describe('DynamicList', () => {
     test('should call removeLine with correct index for different buttons', () => {
       render(<DynamicList {...defaultProps} />);
 
-      const removeButtons = screen.getAllByTestId('button--');
+      const removeButtons = screen.getAllByTestId('prep-steps-remove-button');
 
       fireEvent.click(removeButtons[1]);
       expect(defaultProps.removeLine).toHaveBeenCalledWith(1);
@@ -241,9 +275,9 @@ describe('DynamicList', () => {
     test('should handle multiple interactions correctly', () => {
       render(<DynamicList {...defaultProps} />);
 
-      const textFields = screen.getAllByTestId('textfield-Step');
-      const addButton = screen.getByTestId('button-+');
-      const removeButtons = screen.getAllByTestId('button--');
+      const textFields = screen.getAllByTestId('prep-steps-input');
+      const addButton = screen.getByTestId('prep-steps-add-button');
+      const removeButtons = screen.getAllByTestId('prep-steps-remove-button');
 
       // Change text
       fireEvent.change(textFields[0], { target: { value: 'Changed text' } });
@@ -264,7 +298,7 @@ describe('DynamicList', () => {
     test('should handle empty string steps', () => {
       render(<DynamicList {...defaultProps} steps={['', 'Step 2', '']} />);
 
-      const textFields = screen.getAllByTestId('textfield-Step');
+      const textFields = screen.getAllByTestId('prep-steps-input');
       expect(textFields[0]).toHaveValue('');
       expect(textFields[1]).toHaveValue('Step 2');
       expect(textFields[2]).toHaveValue('');
@@ -276,6 +310,7 @@ describe('DynamicList', () => {
         newline: undefined as any,
         removeLine: undefined as any,
         steps: ['Step 1'],
+        testIdPrefix: 'prep-steps',
       };
 
       expect(() => {
@@ -289,6 +324,7 @@ describe('DynamicList', () => {
         newline: null as any,
         removeLine: null as any,
         steps: ['Step 1'],
+        testIdPrefix: 'prep-steps',
       };
 
       expect(() => {
@@ -300,7 +336,7 @@ describe('DynamicList', () => {
       const longText = 'A'.repeat(1000);
       render(<DynamicList {...defaultProps} steps={[longText]} />);
 
-      const textField = screen.getByTestId('textfield-Step');
+      const textField = screen.getByTestId('prep-steps-input');
       expect(textField).toHaveValue(longText);
     });
 
@@ -308,7 +344,7 @@ describe('DynamicList', () => {
       const specialText = '!@#$%^&*()_+-=[]{}|;:,.<>?';
       render(<DynamicList {...defaultProps} steps={[specialText]} />);
 
-      const textField = screen.getByTestId('textfield-Step');
+      const textField = screen.getByTestId('prep-steps-input');
       expect(textField).toHaveValue(specialText);
     });
 
@@ -316,11 +352,11 @@ describe('DynamicList', () => {
       const manySteps = Array.from({ length: 100 }, (_, i) => `Step ${i + 1}`);
       render(<DynamicList {...defaultProps} steps={manySteps} />);
 
-      const textFields = screen.getAllByTestId('textfield-Step');
+      const textFields = screen.getAllByTestId('prep-steps-input');
       expect(textFields).toHaveLength(100);
 
-      const addButtons = screen.getAllByTestId('button-+');
-      const removeButtons = screen.getAllByTestId('button--');
+      const addButtons = screen.getAllByTestId('prep-steps-add-button');
+      const removeButtons = screen.getAllByTestId('prep-steps-remove-button');
 
       expect(addButtons).toHaveLength(1);
       expect(removeButtons).toHaveLength(99);
@@ -348,7 +384,7 @@ describe('DynamicList', () => {
 
       dynamicListElements.forEach((element, index) => {
         const stepNumber = element.querySelector('.stepNumber');
-        const textField = element.querySelector('[data-testid="textfield-Step"]');
+        const textField = element.querySelector('[data-testid="prep-steps-input"]');
         const button = element.querySelector('button');
 
         expect(stepNumber).toBeInTheDocument();
@@ -370,12 +406,12 @@ describe('DynamicList', () => {
     test('should properly update when steps prop changes', () => {
       const { rerender } = render(<DynamicList {...defaultProps} />);
 
-      expect(screen.getAllByTestId('textfield-Step')).toHaveLength(3);
+      expect(screen.getAllByTestId('prep-steps-input')).toHaveLength(3);
 
       // Update steps
       rerender(<DynamicList {...defaultProps} steps={['New Step 1', 'New Step 2']} />);
 
-      const updatedTextFields = screen.getAllByTestId('textfield-Step');
+      const updatedTextFields = screen.getAllByTestId('prep-steps-input');
       expect(updatedTextFields).toHaveLength(2);
       expect(updatedTextFields[0]).toHaveValue('New Step 1');
       expect(updatedTextFields[1]).toHaveValue('New Step 2');
@@ -384,29 +420,29 @@ describe('DynamicList', () => {
     test('should handle steps being added dynamically', () => {
       const { rerender } = render(<DynamicList {...defaultProps} steps={['Step 1']} />);
 
-      expect(screen.getAllByTestId('textfield-Step')).toHaveLength(1);
-      expect(screen.getByTestId('button-+')).toBeInTheDocument();
-      expect(screen.queryByTestId('button--')).not.toBeInTheDocument();
+      expect(screen.getAllByTestId('prep-steps-input')).toHaveLength(1);
+      expect(screen.getByTestId('prep-steps-add-button')).toBeInTheDocument();
+      expect(screen.queryByTestId('prep-steps-remove-button')).not.toBeInTheDocument();
 
       // Add more steps
       rerender(<DynamicList {...defaultProps} steps={['Step 1', 'Step 2']} />);
 
-      expect(screen.getAllByTestId('textfield-Step')).toHaveLength(2);
-      expect(screen.getByTestId('button-+')).toBeInTheDocument();
-      expect(screen.getByTestId('button--')).toBeInTheDocument();
+      expect(screen.getAllByTestId('prep-steps-input')).toHaveLength(2);
+      expect(screen.getByTestId('prep-steps-add-button')).toBeInTheDocument();
+      expect(screen.getByTestId('prep-steps-remove-button')).toBeInTheDocument();
     });
 
     test('should handle steps being removed dynamically', () => {
       const { rerender } = render(<DynamicList {...defaultProps} />);
 
-      expect(screen.getAllByTestId('textfield-Step')).toHaveLength(3);
+      expect(screen.getAllByTestId('prep-steps-input')).toHaveLength(3);
 
       // Remove steps
       rerender(<DynamicList {...defaultProps} steps={['Step 1']} />);
 
-      expect(screen.getAllByTestId('textfield-Step')).toHaveLength(1);
-      expect(screen.getByTestId('button-+')).toBeInTheDocument();
-      expect(screen.queryByTestId('button--')).not.toBeInTheDocument();
+      expect(screen.getAllByTestId('prep-steps-input')).toHaveLength(1);
+      expect(screen.getByTestId('prep-steps-add-button')).toBeInTheDocument();
+      expect(screen.queryByTestId('prep-steps-remove-button')).not.toBeInTheDocument();
     });
   });
 });

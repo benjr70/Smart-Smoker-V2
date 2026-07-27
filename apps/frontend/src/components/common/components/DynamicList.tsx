@@ -11,12 +11,16 @@ interface dynamicListProps {
    * Prefix for the rows' test ids, so a caller's list is addressable on a page
    * that renders more than one (e.g. `presmoke-step`). Every row shares the same
    * ids; tests scope them by row.
+   *
+   * Required rather than defaulted: two lists sharing one generic prefix are
+   * indistinguishable to a test, and a default is exactly how that collision
+   * gets shipped unnoticed. Naming the list is the caller's job.
    */
-  testIdPrefix?: string;
+  testIdPrefix: string;
 }
 
 export function DynamicList(props: dynamicListProps): JSX.Element {
-  const testId = (suffix: string) => `${props.testIdPrefix ?? 'dynamic-list'}-${suffix}`;
+  const testId = (suffix: string) => `${props.testIdPrefix}-${suffix}`;
 
   if (props.steps) {
     return (
