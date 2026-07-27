@@ -140,24 +140,44 @@ export class BackendFixture {
    * for the exact-delete cascade in `cleanup()`. The prefix sweep stays as the
    * crash safety net for runs that die before their teardown.
    *
-   * Two refusals, both leaving nothing tracked:
+   * Three failures, none of which tracks the smoke for deletion, and each of
+   * which reads as itself rather than as one of the others:
    *   - no current smoke exists (the UI save never landed) — a clear error
    *     rather than a silently empty cleanup;
    *   - the current pre-smoke's name is not `smoke-test-*` — the fixture must
    *     never be able to delete a real cook, so an unprefixed record is never
-   *     adopted (this is the same guarantee `sweep()` gets from the prefix).
+   *     adopted (this is the same guarantee `sweep()` gets from the prefix);
+   *   - a lookup could not be read at all — see `resolveForAdopt`. Deletion
+   *     still needs the prefix proof it never got, but the state clear is
+   *     registered anyway so the unverified smoke does not stay *current* and
+   *     poison every spec that follows.
    *
    * The adopted smoke is still the *current* one, so cleanup also clears the
    * state: deleting a current smoke without clearing it leaves a stale
    * `preSmokeId` that 404s every later pre-smoke save.
    */
-  async adoptCurrentSmoke(options: { timeoutMs?: number } = {}): Promise<AdoptedSmoke> {
+  async adoptCurrentSmoke(
+    options: { timeoutMs?: number; lookupTimeoutMs?: number } = {}
+  ): Promise<AdoptedSmoke> {
     const smokeId = await this.waitForCurrentSmoke('the UI-created pre-smoke', options.timeoutMs);
-    const smoke = await this.http.get<SmokeDoc>(`${SMOKE_PATH}/${smokeId}`).catch(() => null);
+    const lookupTimeoutMs = options.lookupTimeoutMs ?? 5_000;
+    const smoke = await this.resolveForAdopt<SmokeDoc>(
+      `${SMOKE_PATH}/${smokeId}`,
+      smokeId,
+      lookupTimeoutMs
+    );
     const preSmokeId = smoke?.preSmokeId ?? '';
-    const pre = preSmokeId
-      ? await this.http.get<NamedDoc>(`${PRESMOKE_PATH}/${preSmokeId}`).catch(() => null)
-      : null;
+    if (!preSmokeId) {
+      throw this.unverifiableAdopt(
+        smokeId,
+        'it links no pre-smoke, so there is no name to check the prefix against'
+      );
+    }
+    const pre = await this.resolveForAdopt<NamedDoc>(
+      `${PRESMOKE_PATH}/${preSmokeId}`,
+      smokeId,
+      lookupTimeoutMs
+    );
     const name = pre?.name ?? '';
     if (!isTestEntityName(name)) {
       throw new Error(
@@ -166,10 +186,57 @@ export class BackendFixture {
       );
     }
     this.created.push({ resource: 'smoke', id: smokeId, name });
+    this.registerClearSmoke();
+    return { smokeId, preSmokeId, name };
+  }
+
+  /**
+   * Read one of the documents adopt's safety decision depends on.
+   *
+   * A read that fails must never collapse into the "not a `smoke-test-` entity"
+   * refusal: that message sends whoever reads the CI failure hunting a naming
+   * bug when the real cause was the transport. So a failure is retried for a
+   * short window first (a blip under Playwright load is ordinary), and if it
+   * stays broken it surfaces as its own diagnosis, carrying the path and the
+   * underlying error.
+   */
+  private async resolveForAdopt<T>(path: string, smokeId: string, timeoutMs: number): Promise<T> {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      try {
+        return await this.http.get<T>(path);
+      } catch (error) {
+        if (Date.now() >= deadline) {
+          throw this.unverifiableAdopt(
+            smokeId,
+            `GET ${path} failed (${error instanceof Error ? error.message : String(error)})`
+          );
+        }
+      }
+      await new Promise(r => setTimeout(r, 250));
+    }
+  }
+
+  /**
+   * Fail an adopt that could not prove what it was looking at. The smoke stays
+   * untracked — deleting without the prefix proof is exactly what the fixture
+   * may never do — but the state clear is registered first, because leaving an
+   * unverified smoke *current* makes every later spec's pre-smoke save update
+   * this smoke instead of opening its own.
+   */
+  private unverifiableAdopt(smokeId: string, detail: string): Error {
+    this.registerClearSmoke();
+    return new Error(
+      `Could not adopt current smoke ${smokeId}: ${detail}. Nothing was tracked for deletion; ` +
+        `cleanup() will clear the current smoke and the ${TEST_ENTITY_PREFIX} sweep reclaims the rest`
+    );
+  }
+
+  /** Defer the current-smoke state clear to `cleanup()`. */
+  private registerClearSmoke(): void {
     this.teardowns.push(async () => {
       await this.http.put(`${STATE_PATH}/clearSmoke`);
     });
-    return { smokeId, preSmokeId, name };
   }
 
   /**

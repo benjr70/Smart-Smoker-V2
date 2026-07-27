@@ -78,13 +78,25 @@ export class FrontendApp {
    * and the save is fire-and-forget, so a reload issued straight after the click
    * can outrun it. Wait for the pre-smoke write to land before returning, so a
    * following reload reads the backend's record rather than racing it.
+   *
+   * "Landed" means accepted, not merely answered: the response is matched by URL
+   * and method (so a rejected save is still awaited rather than timing out on a
+   * silent predicate) and then asserted to be ok, so a payload the backend
+   * refuses fails here — at the write — instead of surfacing later as a
+   * misleading "the data didn't load" assertion.
    */
   async leavePreSmokeStep(): Promise<void> {
     const saved = this.page.waitForResponse(
       res => res.url().endsWith('/api/presmoke') && res.request().method() === 'POST'
     );
     await this.openSmokeStep();
-    await saved;
+    const response = await saved;
+    expect(
+      response.ok(),
+      `pre-smoke save was rejected: POST /api/presmoke -> ${response.status()} ${await response
+        .text()
+        .catch(() => '')}`
+    ).toBeTruthy();
   }
 
   /** Move from the pre-smoke step to the live Smoke step. */
