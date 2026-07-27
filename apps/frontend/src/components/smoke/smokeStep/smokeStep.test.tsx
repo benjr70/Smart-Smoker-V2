@@ -43,7 +43,13 @@ jest.mock('@mui/material', () => ({
   Input: ({ value, onChange, defaultValue: _dv, disableUnderline: _du, sx: _sx }: any) => (
     <input data-testid="input" value={value || ''} onChange={onChange} />
   ),
-  TextField: ({ label, value, onChange, multiline, rows, ...props }: any) => (
+  // `inputProps` (MUI's escape hatch onto the inner input element, which is
+  // where the fields' e2e test ids live) is swallowed rather than forwarded:
+  // this stub is a flat `<input>`, so it has no inner element to model, and
+  // spreading the object onto the DOM would only earn a React warning. Whether
+  // those ids reach the element a browser types into is proven against real MUI
+  // in `smokeStep.fields.test.tsx`.
+  TextField: ({ label, value, onChange, multiline, rows, inputProps: _ip, ...props }: any) => (
     <input
       data-testid="text-field"
       data-label={label}

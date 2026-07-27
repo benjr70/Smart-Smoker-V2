@@ -45,6 +45,7 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
             onChange={event => session.setName('chamber', event.target.value)}
             sx={{ fontSize: 24, fontWeight: 700, color: '#1f4f2d', width: '75%' }}
             disableUnderline={true}
+            inputProps={{ 'data-testid': 'smoke-chamber-name-input' }}
           />
           <Grid item className="text">
             {session.chamberTemp}
@@ -64,6 +65,7 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
             onChange={event => session.setName('probe1', event.target.value)}
             sx={{ fontSize: 24, fontWeight: 700, color: '#2a475e', width: '75%' }}
             disableUnderline={true}
+            inputProps={{ 'data-testid': 'smoke-probe1-name-input' }}
           />
           <Grid item className="text">
             {session.probeTemp1}
@@ -83,6 +85,7 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
             onChange={event => session.setName('probe2', event.target.value)}
             sx={{ fontSize: 24, fontWeight: 700, color: '#118cd8', width: '75%' }}
             disableUnderline={true}
+            inputProps={{ 'data-testid': 'smoke-probe2-name-input' }}
           />
           <Grid item className="text">
             {session.probeTemp2}
@@ -102,6 +105,7 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
             onChange={event => session.setName('probe3', event.target.value)}
             sx={{ fontSize: 24, fontWeight: 700, color: '#5582a7', width: '75%' }}
             disableUnderline={true}
+            inputProps={{ 'data-testid': 'smoke-probe3-name-input' }}
           />
           <Grid item className="text">
             {session.probeTemp3}
@@ -146,6 +150,7 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
                 sx={{ marginTop: '10px', marginBottom: '10px', width: '95%' }}
                 {...params}
                 label="Wood Type"
+                inputProps={{ ...params.inputProps, 'data-testid': 'smoke-wood-type-input' }}
               />
             </Grid>
           )}
@@ -156,6 +161,7 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
             id="outlined-multiline-static"
             label="Notes"
             multiline
+            inputProps={{ 'data-testid': 'smoke-notes-input' }}
             value={session.notes}
             onChange={event => session.setNotes(event.target.value)}
             rows={4}
