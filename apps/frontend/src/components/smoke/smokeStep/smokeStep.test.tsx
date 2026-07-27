@@ -48,7 +48,7 @@ jest.mock('@mui/material', () => ({
   // this stub is a flat `<input>`, so it has no inner element to model, and
   // spreading the object onto the DOM would only earn a React warning. Whether
   // those ids reach the element a browser types into is proven against real MUI
-  // in `smokeStep.fields.test.tsx`.
+  // by the full-smoke e2e journey.
   TextField: ({ label, value, onChange, multiline, rows, inputProps: _ip, ...props }: any) => (
     <input
       data-testid="text-field"

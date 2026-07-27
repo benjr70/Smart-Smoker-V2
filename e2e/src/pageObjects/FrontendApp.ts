@@ -57,41 +57,65 @@ const isSmokeProfileLoad = (request: Request): boolean =>
  * Counting a step's loads lets a journey wait for the specific load its own
  * click provoked ({@link waitForLoadSince}) or simply for quiet
  * ({@link waitUntilSettled}), instead of guessing with a sleep.
+ *
+ * Only a load that came back *ok* counts as having hydrated the step: a load
+ * answered with an error status (or not answered at all) leaves the step
+ * rendered but empty, which is precisely the state its save path refuses to
+ * write from. Counting such a load as arrival would hand a journey a step that
+ * silently drops everything typed into it, and the failure would surface far
+ * downstream as a save that never happens.
  */
 class LoadWatcher {
-  private landed = 0;
+  /** Loads that came back ok — the only ones that can have hydrated the step. */
+  private hydrated = 0;
+  /** Loads that came back with an error status, or never came back at all. */
+  private failed = 0;
   private inFlight = 0;
 
   constructor(
     page: Page,
-    /** Named in timeout messages, e.g. "the pre-smoke step never issued its load". */
+    /** Named in timeout messages, e.g. "the pre-smoke step never hydrated". */
     private readonly stepName: string,
     matches: (request: Request) => boolean
   ) {
     page.on('request', request => {
       if (matches(request)) this.inFlight++;
     });
-    const settled = (request: Request) => {
+    page.on('requestfinished', request => {
       if (!matches(request)) return;
+      // The response decides which counter moves, so the outcome is recorded
+      // *before* the in-flight window closes: a waiter must never see a quiet
+      // watcher whose last load has not been judged yet.
+      void request
+        .response()
+        .then(response => {
+          if (response?.ok()) this.hydrated++;
+          else this.failed++;
+        })
+        .catch(() => {
+          this.failed++;
+        })
+        .finally(() => {
+          this.inFlight--;
+        });
+    });
+    page.on('requestfailed', request => {
+      if (!matches(request)) return;
+      this.failed++;
       this.inFlight--;
-      // A failed load counts as landed: it resolves the in-flight window and,
-      // having no result, can no longer overwrite anything either.
-      this.landed++;
-    };
-    page.on('requestfinished', settled);
-    page.on('requestfailed', settled);
+    });
   }
 
   /**
-   * How many loads have landed so far — taken *before* an action that provokes
-   * a new one, and handed to {@link waitForLoadSince} afterwards.
+   * How many loads have hydrated the step so far — taken *before* an action
+   * that provokes a new one, and handed to {@link waitForLoadSince} afterwards.
    */
   mark(): number {
-    return this.landed;
+    return this.hydrated;
   }
 
   /**
-   * Wait for a load newer than `mark` to complete.
+   * Wait for a load newer than `mark` to hydrate the step.
    *
    * Used after an action that always mounts the step (a page render, a click
    * onto a step the wizard was not showing), so a load is always issued and
@@ -99,26 +123,38 @@ class LoadWatcher {
    */
   async waitForLoadSince(mark: number): Promise<void> {
     await expect
-      .poll(() => this.landed, {
+      .poll(() => this.hydrationSince(mark), {
         timeout: 15_000,
-        message: `the ${this.stepName} step never issued its load`,
+        message: `the ${this.stepName} step never hydrated`,
       })
-      .toBeGreaterThan(mark);
+      .toBe('hydrated');
   }
 
   /**
-   * Wait until no load is outstanding.
+   * Wait until no load is outstanding and the step holds what the backend has.
    *
    * Used where a load may or may not be issued: re-entering a step remounts it
    * (and so reloads) only when the wizard was showing another step.
    */
   async waitUntilSettled(): Promise<void> {
     await expect
-      .poll(() => this.landed > 0 && this.inFlight === 0, {
+      .poll(() => this.hydrated > 0 && this.inFlight === 0, {
         timeout: 15_000,
         message: `a ${this.stepName} load never completed`,
       })
       .toBe(true);
+  }
+
+  /**
+   * Whether the step has hydrated since `mark`, phrased as the polled value so
+   * a timeout reports *why* — a failed load reads as "the step never hydrated",
+   * not as an unexplained wait.
+   */
+  private hydrationSince(mark: number): string {
+    if (this.hydrated > mark) return 'hydrated';
+    return this.failed > 0
+      ? `not hydrated: ${this.failed} load(s) came back failed`
+      : 'not hydrated: no load has come back';
   }
 }
 
@@ -376,9 +412,29 @@ export class FrontendApp {
    * journey's first keystroke cannot be undone by the step's own load.
    */
   async openPreSmokeStep(): Promise<void> {
+    await this.clickPreSmokeStep();
+    await this.preSmokeLoads.waitUntilSettled();
+  }
+
+  /**
+   * Return to the pre-smoke step from a step the wizard is currently showing.
+   *
+   * Distinct from {@link openPreSmokeStep} because the click is *known* to
+   * unmount that step and remount pre-smoke, so a load is always issued —
+   * exactly the case "wait until nothing is in flight" cannot serve, since it
+   * is satisfied by the earlier loads in the instant before this one hits the
+   * wire. Waiting for a load newer than the mark instead means the step handed
+   * back is hydrated, not merely rendered.
+   */
+  private async returnToPreSmokeStep(): Promise<void> {
+    const landed = this.preSmokeLoads.mark();
+    await this.clickPreSmokeStep();
+    await this.preSmokeLoads.waitForLoadSince(landed);
+  }
+
+  private async clickPreSmokeStep(): Promise<void> {
     await this.stepButton('Pre-Smoke').click();
     await expect(this.preSmokeName).toBeVisible();
-    await this.preSmokeLoads.waitUntilSettled();
   }
 
   /** Leave the pre-smoke step for the Smoke step, committing the typed values. */
@@ -502,7 +558,7 @@ export class FrontendApp {
    * and notes) when it unmounts, so stepping away is what persists them.
    */
   async leaveSmokeStep(): Promise<void> {
-    await this.leaveStepCommitting('/api/smokeProfile/current', () => this.openPreSmokeStep());
+    await this.leaveStepCommitting('/api/smokeProfile/current', () => this.returnToPreSmokeStep());
   }
 
   private get chart(): Locator {
