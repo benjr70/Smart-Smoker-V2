@@ -2,6 +2,7 @@ import { test } from '@playwright/test';
 import { BackendFixture } from '../src/api/backend-fixture';
 import { testEntityName } from '../src/api/test-entity';
 import { FrontendApp } from '../src/pageObjects/FrontendApp';
+import { SmokerApp } from '../src/pageObjects/SmokerApp';
 
 /**
  * The full-smoke journey (PRD #393) — every field entered the way a pitmaster
@@ -16,6 +17,14 @@ import { FrontendApp } from '../src/pageObjects/FrontendApp';
  * The same proof is applied step by step: first to the pre-smoke step, then to
  * the smoke step, whose names, wood type and notes ride the smoke-profile
  * resource.
+ *
+ * With the paperwork done the cook actually starts, from where a pitmaster
+ * starts it: the smoker's touchscreen, driven in its own browser context
+ * because the smoker only relays temperatures while its page is open. What
+ * follows is the live half of the journey — the emulator's synthetic
+ * temperatures have to travel device-service -> smoker -> backend -> frontend
+ * and land on every surface that shows them: the smoker's own readout, all four
+ * of the frontend's (chamber and three probes), and the chart.
  *
  * Every value is deliberately non-default, so no assertion can pass on an
  * untouched form: a meat type absent from the suggestion list, a weight in OZ
@@ -35,10 +44,17 @@ import { FrontendApp } from '../src/pageObjects/FrontendApp';
  *
  * The existing lifecycle spec stays as-is: it remains the lean deploy probe.
  */
-test('full smoke: every wizard field entered by hand survives a full reload', async ({ page }) => {
+test('full smoke: hand-entered fields survive a reload, then the cook goes live', async ({
+  page,
+  browser,
+}) => {
   const smokeName = testEntityName('full-smoke');
   const fixture = new BackendFixture();
   const frontend = new FrontendApp(page);
+  // The smoker is a separate device in real life, so it gets its own context:
+  // its relay lives or dies with its page, independently of the frontend's.
+  const smokerContext = await browser.newContext();
+  const smoker = new SmokerApp(await smokerContext.newPage());
 
   // A cut the wizard never suggests, weighed in ounces rather than the default
   // pounds, with notes spanning two lines.
@@ -97,7 +113,24 @@ test('full smoke: every wizard field entered by hand survives a full reload', as
     await frontend.reload();
     await frontend.openSmokeStep();
     await frontend.expectSmokeStepShows(smokeStep);
+
+    // 8. The cook begins where a pitmaster begins it: the smoker touchscreen.
+    //    The frontend stays parked on the Smoke step, so it is watching live.
+    await smoker.goto();
+    await smoker.startSmoke();
+
+    // 9. Every surface that shows temperatures must go live: the smoker's own
+    //    readout, all four frontend readouts, and the chart. The chart is the
+    //    one that also proves the *start* took: readouts show whatever the open
+    //    smoker relays, smoking or not, but the chart only plots a running
+    //    smoke — so it fails if the touchscreen never actually started the cook.
+    await smoker.waitForLiveTemps();
+    await frontend.waitForLiveReadouts();
+    await frontend.waitForGrowingChart();
   } finally {
+    // Close the smoker before cleanup: its relay keeps writing temperatures to
+    // the very smoke the fixture is about to delete.
+    await smokerContext.close();
     await fixture.cleanup();
   }
 });

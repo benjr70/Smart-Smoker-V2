@@ -47,7 +47,7 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
             disableUnderline={true}
             inputProps={{ 'data-testid': 'smoke-chamber-name-input' }}
           />
-          <Grid item className="text">
+          <Grid item className="text" data-testid="smoke-chamber-temp">
             {session.chamberTemp}
           </Grid>
         </Grid>
@@ -67,7 +67,7 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
             disableUnderline={true}
             inputProps={{ 'data-testid': 'smoke-probe1-name-input' }}
           />
-          <Grid item className="text">
+          <Grid item className="text" data-testid="smoke-probe1-temp">
             {session.probeTemp1}
           </Grid>
         </Grid>
@@ -87,7 +87,7 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
             disableUnderline={true}
             inputProps={{ 'data-testid': 'smoke-probe2-name-input' }}
           />
-          <Grid item className="text">
+          <Grid item className="text" data-testid="smoke-probe2-temp">
             {session.probeTemp2}
           </Grid>
         </Grid>
@@ -107,7 +107,7 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
             disableUnderline={true}
             inputProps={{ 'data-testid': 'smoke-probe3-name-input' }}
           />
-          <Grid item className="text">
+          <Grid item className="text" data-testid="smoke-probe3-temp">
             {session.probeTemp3}
           </Grid>
         </Grid>

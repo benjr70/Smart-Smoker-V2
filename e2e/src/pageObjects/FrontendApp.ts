@@ -27,6 +27,29 @@ export type SmokeStepFields = {
 const PRE_SMOKE_STEPS = 'presmoke-step';
 
 /**
+ * The smoke step's four temperature readouts, named as the test ids that
+ * address them (`smoke-<readout>-temp`): the chamber and the three meat probes.
+ */
+const TEMP_READOUTS = ['chamber', 'probe1', 'probe2', 'probe3'] as const;
+
+type TempReadout = (typeof TEMP_READOUTS)[number];
+
+/** What every readout displays right now, verbatim. */
+type ReadoutTemps = Record<TempReadout, string>;
+
+/**
+ * Whether a readout's text is a temperature at all.
+ *
+ * Every readout starts at the session's `0` default and shows a plain number
+ * once frames arrive, so "a number greater than zero" separates a live display
+ * from both the never-updated one and one rendering something that is not a
+ * temperature (an empty string, `NaN`, `undefined`).
+ */
+function isTemperature(displayed: string): boolean {
+  return Number(displayed) > 0;
+}
+
+/**
  * The pre-smoke step's load: `GET /api/presmoke/` (the trailing slash is what
  * separates the *current* pre-smoke from `GET /api/presmoke/:id`, which the
  * review screens use).
@@ -559,6 +582,84 @@ export class FrontendApp {
    */
   async leaveSmokeStep(): Promise<void> {
     await this.leaveStepCommitting('/api/smokeProfile/current', () => this.returnToPreSmokeStep());
+  }
+
+  // --- Live temperatures ---------------------------------------------------
+
+  private tempReadout(readout: TempReadout): Locator {
+    return this.page.getByTestId(`smoke-${readout}-temp`);
+  }
+
+  /** Read all four readouts as displayed, so one sample is one point in time. */
+  private async readoutTemps(): Promise<ReadoutTemps> {
+    const entries = await Promise.all(
+      TEMP_READOUTS.map(
+        async readout => [readout, (await this.tempReadout(readout).innerText()).trim()] as const
+      )
+    );
+    return Object.fromEntries(entries) as ReadoutTemps;
+  }
+
+  /**
+   * Which readouts are not showing a temperature — reported as `name=value` so a
+   * timeout says *which* probe is dark and what it holds, rather than stalling
+   * on an anonymous boolean.
+   */
+  private async darkReadouts(): Promise<string[]> {
+    const temps = await this.readoutTemps();
+    return TEMP_READOUTS.filter(readout => !isTemperature(temps[readout])).map(
+      readout => `${readout}=${JSON.stringify(temps[readout])}`
+    );
+  }
+
+  /**
+   * Which readouts have not landed a *new* temperature since `previous` — either
+   * still showing exactly what was sampled, or no longer showing a temperature
+   * at all. Going dark after one good frame is a regression, not progress, so it
+   * has to keep failing this check rather than count as a change.
+   */
+  private async unrefreshedReadouts(previous: ReadoutTemps): Promise<string[]> {
+    const temps = await this.readoutTemps();
+    return TEMP_READOUTS.filter(
+      readout => !isTemperature(temps[readout]) || temps[readout] === previous[readout]
+    ).map(readout => `${readout}=${JSON.stringify(temps[readout])}`);
+  }
+
+  /**
+   * Resolve once all four readouts are showing *live* temperatures.
+   *
+   * Live is proven in two stages, because either alone is passable by a display
+   * that is not connected to anything: a readout holding a number greater than
+   * zero could be a value the session loaded once and froze on, and a readout
+   * that changes could be doing so from — or to — a non-temperature. So every
+   * readout must first carry a temperature, and then every one of them must move
+   * off the value it was sampled at *and still be a temperature* — which only
+   * the emulator -> device-service -> smoker -> backend -> frontend pipeline
+   * delivering fresh frames can do.
+   *
+   * All four are checked as a set rather than one at a time: a probe wired to
+   * the wrong field of the frame is exactly the bug this guards, and it hides
+   * whenever a single readout is taken as proof for the rest.
+   *
+   * This proves frames are *arriving*, not that a smoke is running: an open
+   * smoker relays temperatures whether or not it has been started. Only the
+   * chart plots exclusively while smoking, so {@link waitForGrowingChart} is
+   * what a journey pairs this with to prove the cook itself started.
+   */
+  async waitForLiveReadouts(): Promise<void> {
+    await expect
+      .poll(async () => this.darkReadouts(), {
+        timeout: 30_000,
+        message: 'these readouts never showed a temperature',
+      })
+      .toEqual([]);
+    const sampled = await this.readoutTemps();
+    await expect
+      .poll(async () => this.unrefreshedReadouts(sampled), {
+        timeout: 30_000,
+        message: 'these readouts never showed a new temperature, so nothing live reached them',
+      })
+      .toEqual([]);
   }
 
   private get chart(): Locator {

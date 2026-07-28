@@ -128,16 +128,22 @@ function fakeApiClient() {
   };
 }
 
-/** A frozen `events` frame carrying the given chamber temperature. */
-function eventsFrame(chamberTemp: string): string {
+/**
+ * A frozen `events` frame carrying the given temperatures. The probes default
+ * to zero for the frames that only care about the chamber.
+ */
+function eventsFrame(
+  chamberTemp: string,
+  probeTemps: [string, string, string] = ['0', '0', '0']
+): string {
   return encodeEvents({
     chamberName: 'Chamber',
     probe1Name: 'probe 1',
     probe2Name: 'probe 2',
     probe3Name: 'probe 3',
-    probeTemp1: '0',
-    probeTemp2: '0',
-    probeTemp3: '0',
+    probeTemp1: probeTemps[0],
+    probeTemp2: probeTemps[1],
+    probeTemp3: probeTemps[2],
     chamberTemp,
     smoking: false,
     date: new Date('2026-07-18T12:00:00.000Z'),
@@ -178,6 +184,26 @@ describe('SmokeStepView', () => {
     await waitFor(() => {
       expect(screen.getByTestId('temp-chart')).toHaveAttribute('data-chamber-temp', '213');
     });
+  });
+
+  test('shows each inbound temperature on its own readout, chamber and three probes', async () => {
+    const { socket } = renderView();
+
+    await act(async () => {
+      await flushPromises();
+    });
+
+    // Four distinct values, so a readout wired to the wrong probe cannot pass.
+    await act(async () => {
+      socket.injectEvents(eventsFrame('213', ['145', '92', '78']));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('smoke-chamber-temp')).toHaveTextContent('213');
+    });
+    expect(screen.getByTestId('smoke-probe1-temp')).toHaveTextContent('145');
+    expect(screen.getByTestId('smoke-probe2-temp')).toHaveTextContent('92');
+    expect(screen.getByTestId('smoke-probe3-temp')).toHaveTextContent('78');
   });
 
   test('editing the chamber name broadcasts the full five-field smokeUpdate', async () => {
