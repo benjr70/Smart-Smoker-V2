@@ -78,6 +78,15 @@ const isSmokeProfileLoad = (request: Request): boolean =>
   request.method() === 'GET' && request.url().endsWith('/api/smokeProfile/current');
 
 /**
+ * The smoke step's other load: `GET /api/state`, which is where the step learns
+ * whether a smoke is running at all. The only other `state` routes are the
+ * `toggleSmoking` and `clearSmoke` writes, both PUTs, so a GET is unambiguously
+ * this read.
+ */
+const isSmokeStateLoad = (request: Request): boolean =>
+  request.method() === 'GET' && request.url().endsWith('/api/state');
+
+/**
  * Tracks one wizard step's resource loads, so an entry point can hand back a
  * step that has *finished* loading.
  *
@@ -203,16 +212,21 @@ class LoadWatcher {
  */
 export class FrontendApp {
   /**
-   * The two step loads a journey has to wait out. Mutating helpers still go
-   * through `throughAsyncLoad` as a second line of defence, for the loads no
-   * entry point can foresee.
+   * The step loads a journey has to wait out. The smoke step has two of them —
+   * the stored profile it renders and the smoking state it reports — and both
+   * are tracked, because either one arriving late hands back a step that
+   * misrepresents the backend. Mutating helpers still go through
+   * `throughAsyncLoad` as a second line of defence, for the loads no entry point
+   * can foresee.
    */
   private readonly preSmokeLoads: LoadWatcher;
   private readonly smokeProfileLoads: LoadWatcher;
+  private readonly smokeStateLoads: LoadWatcher;
 
   constructor(private readonly page: Page) {
     this.preSmokeLoads = new LoadWatcher(page, 'pre-smoke', isPreSmokeLoad);
-    this.smokeProfileLoads = new LoadWatcher(page, 'smoke', isSmokeProfileLoad);
+    this.smokeProfileLoads = new LoadWatcher(page, 'smoke profile', isSmokeProfileLoad);
+    this.smokeStateLoads = new LoadWatcher(page, 'smoking state', isSmokeStateLoad);
   }
 
   async goto(): Promise<void> {
@@ -516,12 +530,25 @@ export class FrontendApp {
    * The step's profile load must land before a journey types: not only would a
    * late load overwrite what was typed, the step also refuses to save a draft it
    * never hydrated — so typing too early is discarded without a trace.
+   *
+   * The smoking-state load is waited out for the journey's *reader* rather than
+   * its typist. Until `GET /api/state` answers, the session simply assumes no
+   * smoke is running, and the step dutifully renders that assumption — so a step
+   * handed back any earlier says nothing about the backend, and reading it would
+   * pass on the guess. That is exactly the regression the stopped-state checks
+   * exist to catch: a backend that never actually stopped the smoke would still
+   * be read as stopped, and the assertion would prove nothing while going green.
+   *
+   * The one mount issues both loads, so both marks are taken before the click
+   * and both waits are deterministic rather than hopeful.
    */
   async openSmokeStep(): Promise<void> {
-    const landed = this.smokeProfileLoads.mark();
+    const profileLanded = this.smokeProfileLoads.mark();
+    const stateLanded = this.smokeStateLoads.mark();
     await this.stepButton('Smoke').click();
     await expect(this.chart).toBeVisible();
-    await this.smokeProfileLoads.waitForLoadSince(landed);
+    await this.smokeProfileLoads.waitForLoadSince(profileLanded);
+    await this.smokeStateLoads.waitForLoadSince(stateLanded);
   }
 
   private get smokeChamberName(): Locator {
@@ -687,6 +714,12 @@ export class FrontendApp {
    * Read after a reload, this is a statement about the backend rather than
    * about the page: a freshly loaded step holds no memory of any click, so the
    * only thing that can label this control is the state it loaded.
+   *
+   * "Loaded" is the load-bearing word, and it is {@link openSmokeStep} that
+   * earns it by waiting for the step's smoking-state load. A step read before
+   * that lands is still showing the session's not-smoking default, which wears
+   * the same label — so this would agree with itself no matter what the backend
+   * said.
    */
   async expectSmokeStopped(): Promise<void> {
     await expect(this.startButton).toHaveText(/start smoking/i);
