@@ -38,6 +38,18 @@ type TempReadout = (typeof TEMP_READOUTS)[number];
 type ReadoutTemps = Record<TempReadout, string>;
 
 /**
+ * Whether a readout's text is a temperature at all.
+ *
+ * Every readout starts at the session's `0` default and shows a plain number
+ * once frames arrive, so "a number greater than zero" separates a live display
+ * from both the never-updated one and one rendering something that is not a
+ * temperature (an empty string, `NaN`, `undefined`).
+ */
+function isTemperature(displayed: string): boolean {
+  return Number(displayed) > 0;
+}
+
+/**
  * The pre-smoke step's load: `GET /api/presmoke/` (the trailing slash is what
  * separates the *current* pre-smoke from `GET /api/presmoke/:id`, which the
  * review screens use).
@@ -592,25 +604,25 @@ export class FrontendApp {
    * Which readouts are not showing a temperature — reported as `name=value` so a
    * timeout says *which* probe is dark and what it holds, rather than stalling
    * on an anonymous boolean.
-   *
-   * Every readout starts at the session's `0` default and shows a plain number
-   * once frames arrive, so "not a number greater than zero" covers both the
-   * never-updated readout and one rendering something that is not a temperature
-   * at all.
    */
   private async darkReadouts(): Promise<string[]> {
     const temps = await this.readoutTemps();
-    return TEMP_READOUTS.filter(readout => !(Number(temps[readout]) > 0)).map(
+    return TEMP_READOUTS.filter(readout => !isTemperature(temps[readout])).map(
       readout => `${readout}=${JSON.stringify(temps[readout])}`
     );
   }
 
-  /** Which readouts still show exactly what `previous` sampled. */
-  private async frozenReadouts(previous: ReadoutTemps): Promise<string[]> {
+  /**
+   * Which readouts have not landed a *new* temperature since `previous` — either
+   * still showing exactly what was sampled, or no longer showing a temperature
+   * at all. Going dark after one good frame is a regression, not progress, so it
+   * has to keep failing this check rather than count as a change.
+   */
+  private async unrefreshedReadouts(previous: ReadoutTemps): Promise<string[]> {
     const temps = await this.readoutTemps();
-    return TEMP_READOUTS.filter(readout => temps[readout] === previous[readout]).map(
-      readout => `${readout}=${JSON.stringify(temps[readout])}`
-    );
+    return TEMP_READOUTS.filter(
+      readout => !isTemperature(temps[readout]) || temps[readout] === previous[readout]
+    ).map(readout => `${readout}=${JSON.stringify(temps[readout])}`);
   }
 
   /**
@@ -619,10 +631,11 @@ export class FrontendApp {
    * Live is proven in two stages, because either alone is passable by a display
    * that is not connected to anything: a readout holding a number greater than
    * zero could be a value the session loaded once and froze on, and a readout
-   * that changes could be doing so from a non-temperature. So every readout must
-   * first carry a temperature, and then every one of them must move off the
-   * value it was sampled at — which only the emulator -> device-service ->
-   * smoker -> backend -> frontend pipeline delivering fresh frames can do.
+   * that changes could be doing so from — or to — a non-temperature. So every
+   * readout must first carry a temperature, and then every one of them must move
+   * off the value it was sampled at *and still be a temperature* — which only
+   * the emulator -> device-service -> smoker -> backend -> frontend pipeline
+   * delivering fresh frames can do.
    *
    * All four are checked as a set rather than one at a time: a probe wired to
    * the wrong field of the frame is exactly the bug this guards, and it hides
@@ -642,9 +655,9 @@ export class FrontendApp {
       .toEqual([]);
     const sampled = await this.readoutTemps();
     await expect
-      .poll(async () => this.frozenReadouts(sampled), {
+      .poll(async () => this.unrefreshedReadouts(sampled), {
         timeout: 30_000,
-        message: 'these readouts never changed, so no live temperatures reached them',
+        message: 'these readouts never showed a new temperature, so nothing live reached them',
       })
       .toEqual([]);
   }
