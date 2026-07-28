@@ -100,6 +100,10 @@ HEALTHCHECK --interval=10s --timeout=5s --retries=15 --start-period=10s \
 # the remapped host URLs as build args and this stage rewrites the env file and
 # recompiles the bundle before it is served.
 #
+# The rewrite itself lives in `bake-smoker-env.sh` rather than inline here: a
+# wrong edit produces a silently misconfigured bundle instead of a failed build,
+# so it is worth unit-testing (scripts/stack-runner/bake-smoker-env.test.ts).
+#
 # With no args supplied — the default e2e stack — the rewrite is skipped
 # entirely and the bundle is the one `build` already produced, so the served
 # image is unchanged. Keeping this in its own stage also leaves the shared
@@ -111,18 +115,13 @@ ARG SMOKER_CLOUD_URL=
 ARG SMOKER_CLOUD_URL_API=
 ARG SMOKER_DEVICE_URL=
 WORKDIR /workspace
+COPY e2e/docker/bake-smoker-env.sh /usr/local/bin/bake-smoker-env.sh
 RUN set -eu; \
     if [ -z "${SMOKER_CLOUD_URL}${SMOKER_CLOUD_URL_API}${SMOKER_DEVICE_URL}" ]; then exit 0; fi; \
-    env_file=apps/smoker/.env.prod; \
-    upsert() { \
-    [ -n "$2" ] || return 0; \
-    if grep -q "^$1=" "$env_file"; then \
-    sed -i "s|^$1=.*|$1=$2|" "$env_file"; \
-    else printf '%s=%s\n' "$1" "$2" >> "$env_file"; fi; \
-    }; \
-    upsert REACT_APP_CLOUD_URL "$SMOKER_CLOUD_URL"; \
-    upsert REACT_APP_CLOUD_URL_API "$SMOKER_CLOUD_URL_API"; \
-    upsert REACT_APP_DEVICE_URL "$SMOKER_DEVICE_URL"; \
+    sh /usr/local/bin/bake-smoker-env.sh apps/smoker/.env.prod \
+    "REACT_APP_CLOUD_URL=$SMOKER_CLOUD_URL" \
+    "REACT_APP_CLOUD_URL_API=$SMOKER_CLOUD_URL_API" \
+    "REACT_APP_DEVICE_URL=$SMOKER_DEVICE_URL"; \
     npm run build -w smoker
 
 # ---------------------------------------------------------------------------
