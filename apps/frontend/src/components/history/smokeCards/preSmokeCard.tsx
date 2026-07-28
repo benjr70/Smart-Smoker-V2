@@ -41,12 +41,22 @@ export function PreSmokeCard(props: preSmokeCardProps): JSX.Element {
             </Typography>
             {props.preSmoke.steps.map((step, index) => {
               return (
-                <Typography sx={{ fontSize: 18 }} key={`pre-smoker-card-${index}`}>
+                <Typography
+                  sx={{ fontSize: 18 }}
+                  key={`pre-smoker-card-${index}`}
+                  data-testid="review-presmoke-step"
+                >
                   {index + 1}. {step}
                 </Typography>
               );
             })}
-            <Typography padding={1} sx={{ fontSize: 14 }} paragraph={true} color="text.secondary">
+            <Typography
+              padding={1}
+              sx={{ fontSize: 14 }}
+              paragraph={true}
+              color="text.secondary"
+              data-testid="review-presmoke-notes"
+            >
               {props.preSmoke.notes}
             </Typography>
           </CardContent>

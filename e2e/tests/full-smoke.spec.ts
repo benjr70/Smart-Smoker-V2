@@ -34,11 +34,21 @@ import { SmokerApp } from '../src/pageObjects/SmokerApp';
  * is held to the product's pause-not-reset rule: the chart keeps the cook it
  * was already holding and adds to it.
  *
+ * The meat finally comes off: the post-smoke paperwork is filled in under the
+ * same fill/leave/reload proof, the smoke is archived, and the journey ends on
+ * the check everything before it was building to — the finished smoke is in
+ * history under the name it was given at the very first step, and its review
+ * cards render *every* value entered across the whole journey. That is the only
+ * assertion that can catch a value the app carried through the wizard happily
+ * and then lost on the way to the surfaces a pitmaster actually reviews it on.
+ *
  * Every value is deliberately non-default, so no assertion can pass on an
  * untouched form: a meat type absent from the suggestion list, a weight in OZ
  * rather than the default LB, a prep list grown to three rows and then cut to
  * two, multiline notes, a chamber and three probes all renamed off their "Probe
- * N" defaults, and a wood the suggestion list does not offer.
+ * N" defaults, a wood the suggestion list does not offer, a rest time that is
+ * not the empty masked input, and a wrap-up list grown and cut the same way the
+ * prep list was.
  *
  * Deliberately untagged, so it runs only in the `hermetic` project (which runs
  * every spec) and never against a deployed stack: unlike the secondary flows,
@@ -52,7 +62,7 @@ import { SmokerApp } from '../src/pageObjects/SmokerApp';
  *
  * The existing lifecycle spec stays as-is: it remains the lean deploy probe.
  */
-test('full smoke: hand-entered fields survive a reload, then the cook goes live', async ({
+test('full smoke: hand-entered fields survive a reload, the cook runs, and the review shows it all', async ({
   page,
   browser,
 }) => {
@@ -74,6 +84,14 @@ test('full smoke: hand-entered fields survive a reload, then the cook goes live'
     notes: 'Picked up at the butcher\nFat cap on, deckle trimmed',
   } as const;
   const preppedSteps = ['Trim the fat cap', 'Dry brine overnight', 'Rub two hours ahead'];
+
+  // The wrap-up, in a rest time no untouched form shows (the masked input
+  // starts empty, and a pitmaster who rested nothing would leave it that way).
+  const postSmoke = {
+    restTime: '02:45',
+    notes: 'Rested in a dry cooler\nBark stayed crisp under the butcher paper',
+  } as const;
+  const wrapUpSteps = ['Rest in a dry cooler', 'Slice across the grain', 'Save the burnt ends'];
 
   // Every probe labelled with what it is actually measuring, and a wood blend
   // the suggestion list never offers.
@@ -169,6 +187,59 @@ test('full smoke: hand-entered fields survive a reload, then the cook goes live'
     //     start adding to them again, rather than beginning a second cook.
     await smoker.startSmoke();
     await frontend.expectChartResumesGrowing(cookSoFar);
+
+    // 16. The meat comes off, and the last of the paperwork is filled in the way
+    //     all of it was: how long it rested, what was done to it afterwards
+    //     (three wrap-up steps: the starting row plus two added ones), and how
+    //     it went.
+    await frontend.openPostSmokeStep();
+    await frontend.fillPostSmoke({ ...postSmoke, steps: wrapUpSteps });
+
+    // 17. Plans change here too: drop the middle step, and the first and last
+    //     must stay in that order.
+    await frontend.removePostSmokeStep(1);
+    const survivingWrapUp = [wrapUpSteps[0], wrapUpSteps[2]];
+
+    // 18. The same proof the rest of the journey ran on, one last time: leaving
+    //     commits the post-smoke, and after a reload only the backend can be
+    //     supplying what the step reads back.
+    await frontend.leavePostSmokeStep();
+    await frontend.reload();
+    await frontend.openPostSmokeStep();
+    await frontend.expectPostSmokeShows({ ...postSmoke, steps: survivingWrapUp });
+
+    // 19. The cook is done: finish it, which archives the smoke and resets the
+    //     wizard for the next one.
+    await frontend.finishSmoke();
+
+    // 20. An archived smoke belongs in history, under the name the pitmaster
+    //     gave it back at the very first step.
+    await frontend.openHistory();
+    await frontend.expectHistoryContains(smokeName);
+
+    // 21. The truth check the whole journey has been building to: open the
+    //     finished smoke's review and hold all three cards to *every* value
+    //     entered along the way — the pre-smoke as it stood after the step was
+    //     dropped, the renamed readouts and custom wood from the smoke step, and
+    //     the wrap-up just entered. Anything the app quietly failed to carry
+    //     from a form to storage to the review surfaces fails here.
+    await frontend.openReview(smokeName);
+    await frontend.expectReviewShows({
+      name: smokeName,
+      meatType: preSmoke.meatType,
+      weight: `${preSmoke.weight} ${preSmoke.weightUnit}`,
+      preSmokeSteps: survivingSteps,
+      preSmokeNotes: preSmoke.notes,
+      chamberName: smokeStep.chamberName,
+      probe1Name: smokeStep.probe1Name,
+      probe2Name: smokeStep.probe2Name,
+      probe3Name: smokeStep.probe3Name,
+      woodType: smokeStep.woodType,
+      smokeNotes: smokeStep.notes,
+      restTime: postSmoke.restTime,
+      postSmokeSteps: survivingWrapUp,
+      postSmokeNotes: postSmoke.notes,
+    });
   } finally {
     // Close the smoker before cleanup: its relay keeps writing temperatures to
     // the very smoke the fixture is about to delete.

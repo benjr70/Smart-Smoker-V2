@@ -129,6 +129,23 @@ describe('SmokeProfileCard Component', () => {
       expect(screen.getByText('Ambient')).toBeInTheDocument();
     });
 
+    test('should render each renamed readout under its own test id', () => {
+      // The chart is handed the very same names, so the e2e review check needs
+      // an id per readout to read the card rather than the chart.
+      render(<SmokeProfileCard {...mockProps} />);
+
+      expect(screen.getByTestId('review-smoke-chambername')).toHaveTextContent('Main Chamber');
+      expect(screen.getByTestId('review-smoke-probe1name')).toHaveTextContent('Point');
+      expect(screen.getByTestId('review-smoke-probe2name')).toHaveTextContent('Flat');
+      expect(screen.getByTestId('review-smoke-probe3name')).toHaveTextContent('Ambient');
+    });
+
+    test('should render notes under their own test id', () => {
+      render(<SmokeProfileCard {...mockProps} />);
+
+      expect(screen.getByTestId('review-smoke-notes')).toHaveTextContent('Great smoke session');
+    });
+
     test('should render wood type and notes', () => {
       render(<SmokeProfileCard {...mockProps} />);
       expect(screen.getByText('Hickory Wood')).toBeInTheDocument();
@@ -191,11 +208,22 @@ describe('SmokeProfileCard Component', () => {
 
     test('should have correct typography for probe and chamber names', () => {
       render(<SmokeProfileCard {...mockProps} />);
-      const typographies = screen.getAllByTestId('typography');
-      expect(typographies.some(t => t.textContent === 'Main Chamber')).toBe(true);
-      expect(typographies.some(t => t.textContent === 'Point')).toBe(true);
-      expect(typographies.some(t => t.textContent === 'Flat')).toBe(true);
-      expect(typographies.some(t => t.textContent === 'Ambient')).toBe(true);
+      // The names carry e2e test ids, so query them directly rather than
+      // through the shared `typography` test id.
+      const named = [
+        ['review-smoke-chambername', '#1f4f2d'],
+        ['review-smoke-probe1name', '#2a475e'],
+        ['review-smoke-probe2name', '#118cd8'],
+        ['review-smoke-probe3name', '#5582a7'],
+      ];
+      named.forEach(([testId, color]) => {
+        expect(JSON.parse(screen.getByTestId(testId).getAttribute('data-sx') || '{}')).toEqual({
+          fontSize: 16,
+          fontWeight: 600,
+          color,
+          width: '75%',
+        });
+      });
     });
   });
 

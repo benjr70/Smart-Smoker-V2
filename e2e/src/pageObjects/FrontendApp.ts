@@ -23,8 +23,46 @@ export type SmokeStepFields = {
   notes: string;
 };
 
+/** Every value the post-smoke step holds, as a journey enters (and re-reads) them. */
+export type PostSmokeFields = {
+  /** `HH:MM`, as the step's masked input accepts it. */
+  restTime: string;
+  steps: string[];
+  notes: string;
+};
+
+/**
+ * What a review is expected to show.
+ *
+ * The five required fields are what every caller has always asserted. The rest
+ * are optional so the secondary specs — which seed a smoke through the API and
+ * therefore only set a handful of values — keep asserting exactly what they
+ * seeded, while the full journey can hold the review to every value it entered.
+ * A misspelled field is a compile error rather than a silently skipped
+ * assertion, because the object literal is checked against this type.
+ */
+export type ReviewFields = {
+  name: string;
+  meatType: string;
+  weight: string;
+  woodType: string;
+  restTime: string;
+  preSmokeSteps?: string[];
+  preSmokeNotes?: string;
+  chamberName?: string;
+  probe1Name?: string;
+  probe2Name?: string;
+  probe3Name?: string;
+  smokeNotes?: string;
+  postSmokeSteps?: string[];
+  postSmokeNotes?: string;
+};
+
 /** Test-id prefix of the pre-smoke step's prep-steps list. */
 const PRE_SMOKE_STEPS = 'presmoke-step';
+
+/** Test-id prefix of the post-smoke step's wrap-up-steps list. */
+const POST_SMOKE_STEPS = 'postsmoke-step';
 
 /**
  * The smoke step's four temperature readouts, named as the test ids that
@@ -85,6 +123,13 @@ const isSmokeProfileLoad = (request: Request): boolean =>
  */
 const isSmokeStateLoad = (request: Request): boolean =>
   request.method() === 'GET' && request.url().endsWith('/api/state');
+
+/**
+ * The post-smoke step's load: `GET /api/postSmoke/current`. Distinct from
+ * `GET /api/postSmoke/:id`, which only the review screens issue.
+ */
+const isPostSmokeLoad = (request: Request): boolean =>
+  request.method() === 'GET' && request.url().endsWith('/api/postSmoke/current');
 
 /**
  * Tracks one wizard step's resource loads, so an entry point can hand back a
@@ -222,11 +267,13 @@ export class FrontendApp {
   private readonly preSmokeLoads: LoadWatcher;
   private readonly smokeProfileLoads: LoadWatcher;
   private readonly smokeStateLoads: LoadWatcher;
+  private readonly postSmokeLoads: LoadWatcher;
 
   constructor(private readonly page: Page) {
     this.preSmokeLoads = new LoadWatcher(page, 'pre-smoke', isPreSmokeLoad);
     this.smokeProfileLoads = new LoadWatcher(page, 'smoke profile', isSmokeProfileLoad);
     this.smokeStateLoads = new LoadWatcher(page, 'smoking state', isSmokeStateLoad);
+    this.postSmokeLoads = new LoadWatcher(page, 'post-smoke', isPostSmokeLoad);
   }
 
   async goto(): Promise<void> {
@@ -870,13 +917,112 @@ export class FrontendApp {
     return previous;
   }
 
+  // --- Post-smoke step -----------------------------------------------------
+
+  private get postSmokeRestTime(): Locator {
+    return this.page.getByTestId('postsmoke-rest-time-input');
+  }
+
+  private get postSmokeNotes(): Locator {
+    return this.page.getByTestId('postsmoke-notes-input');
+  }
+
+  /**
+   * Move to the Post-Smoke step and wait for it to be ready to work with.
+   *
+   * Like every other step it loads its resource after mounting, so a load
+   * landing late would replace what a journey typed with what was stored — and,
+   * worse at the end of the wizard, the step saves whatever it is holding when
+   * it unmounts, so *finishing* from a step that never hydrated would overwrite
+   * the stored post-smoke with an empty form.
+   *
+   * Meant to be entered from another step (which is what the wizard is showing
+   * whenever a journey comes here), so the click always remounts the step and
+   * the wait is for a load newer than the mark rather than for mere quiet.
+   */
+  async openPostSmokeStep(): Promise<void> {
+    const landed = this.postSmokeLoads.mark();
+    await this.stepButton('Post-Smoke').click();
+    await expect(this.postSmokeRestTime).toBeVisible();
+    await this.postSmokeLoads.waitForLoadSince(landed);
+  }
+
+  /**
+   * Fill in the post-smoke step, as a pitmaster wrapping up a cook does: how
+   * long the meat rested, what was done to it afterwards, and how it went.
+   *
+   * The rest time rides a masked `HH:MM` input, which rewrites what is typed
+   * into it — so it goes through the same fill-and-verify as every other field
+   * rather than a bare fill that would not notice the mask rejecting a value.
+   */
+  async fillPostSmoke(fields: PostSmokeFields): Promise<void> {
+    await this.fillField(this.postSmokeRestTime, fields.restTime);
+    await this.fillDynamicList(POST_SMOKE_STEPS, fields.steps);
+    await this.fillField(this.postSmokeNotes, fields.notes);
+  }
+
+  /**
+   * Drop one wrap-up step by position. As on the pre-smoke step, the last row
+   * carries the add button rather than a remove one, so it cannot be dropped
+   * this way.
+   */
+  async removePostSmokeStep(index: number): Promise<void> {
+    await this.removeDynamicListRow(POST_SMOKE_STEPS, index);
+  }
+
+  /**
+   * Assert the post-smoke step shows the given values — the read half of the
+   * fill/expect pair, used after a reload to prove the backend supplied them.
+   */
+  async expectPostSmokeShows(fields: PostSmokeFields): Promise<void> {
+    await expect(this.postSmokeRestTime).toHaveValue(fields.restTime);
+    await this.expectDynamicList(POST_SMOKE_STEPS, fields.steps);
+    await expect(this.postSmokeNotes).toHaveValue(fields.notes);
+  }
+
+  /**
+   * Leave the Post-Smoke step for the pre-smoke step, committing the typed
+   * values.
+   *
+   * Worth doing before finishing rather than leaning on the unmount save that
+   * Finish itself triggers: finishing archives the smoke and clears the session
+   * a beat later, so a save still in flight can land after the clear and be
+   * lost. Committing here proves the values are stored *before* the archive.
+   */
+  async leavePostSmokeStep(): Promise<void> {
+    await this.leaveStepCommitting('/api/postSmoke/current', () => this.returnToPreSmokeStep());
+  }
+
+  /**
+   * Finish the smoke from the Post-Smoke step: archive it and let the wizard
+   * reset for the next cook.
+   *
+   * The archive is awaited and asserted accepted, so a rejected finish fails
+   * here — at the archive — instead of surfacing later as a smoke mysteriously
+   * absent from history. The wizard returning to the pre-smoke step's *content*
+   * is what says the whole sequence (archive, then clear) ran: the step buttons
+   * are on screen throughout, but only step 0 renders the pre-smoke form.
+   */
+  async finishSmoke(): Promise<void> {
+    const archived = this.page.waitForResponse(
+      res => res.url().endsWith('/api/smoke/finish') && res.request().method() === 'POST'
+    );
+    await this.nextButton.click();
+    const response = await archived;
+    expect(
+      response.ok(),
+      `archiving the smoke was rejected: POST /api/smoke/finish -> ${response.status()} ${await response
+        .text()
+        .catch(() => '')}`
+    ).toBeTruthy();
+    await expect(this.preSmokeName).toBeVisible();
+  }
+
   /** Advance to the Post-Smoke step, enter a rest time, and finish the smoke. */
   async completePostSmoke(restTime: string): Promise<void> {
-    await this.stepButton('Post-Smoke').click();
-    await this.page.getByTestId('postsmoke-rest-time-input').fill(restTime);
-    await this.nextButton.click();
-    // Finish triggers archive + clear; wait for the wizard to reset to step 0.
-    await expect(this.stepButton('Pre-Smoke')).toBeVisible();
+    await this.openPostSmokeStep();
+    await this.fillField(this.postSmokeRestTime, restTime);
+    await this.finishSmoke();
   }
 
   async openHistory(): Promise<void> {
@@ -944,19 +1090,83 @@ export class FrontendApp {
    * Assert the review cards render the values a smoke was finished with. Covers
    * the pre-smoke, smoke-profile and post-smoke cards in one intent-revealing
    * check; ratings have their own accessor because they are interactive.
+   *
+   * Every assertion is scoped to a card's own test id rather than to the page's
+   * text. The profile card hands the chamber and probe names straight on to the
+   * chart it draws, so the same strings appear twice on screen — a page-wide
+   * text check would pass on the chart alone and prove nothing about the card.
    */
-  async expectReviewShows(fields: {
-    name: string;
-    meatType: string;
-    weight: string;
-    woodType: string;
-    restTime: string;
-  }): Promise<void> {
+  async expectReviewShows(fields: ReviewFields): Promise<void> {
     await expect(this.page.getByTestId('review-presmoke-name')).toHaveText(fields.name);
     await expect(this.page.getByTestId('review-presmoke-details')).toContainText(fields.meatType);
     await expect(this.page.getByTestId('review-presmoke-details')).toContainText(fields.weight);
+    if (fields.preSmokeSteps !== undefined) {
+      await this.expectReviewSteps('review-presmoke-step', fields.preSmokeSteps);
+    }
+    if (fields.preSmokeNotes !== undefined) {
+      await this.expectReviewNotes('review-presmoke-notes', fields.preSmokeNotes);
+    }
+    if (fields.chamberName !== undefined) {
+      await expect(this.page.getByTestId('review-smoke-chambername')).toHaveText(
+        fields.chamberName
+      );
+    }
+    for (const probe of [1, 2, 3] as const) {
+      const name = fields[`probe${probe}Name`];
+      if (name !== undefined) {
+        await expect(this.page.getByTestId(`review-smoke-probe${probe}name`)).toHaveText(name);
+      }
+    }
     await expect(this.page.getByTestId('review-smoke-woodtype')).toContainText(fields.woodType);
+    if (fields.smokeNotes !== undefined) {
+      await this.expectReviewNotes('review-smoke-notes', fields.smokeNotes);
+    }
     await expect(this.page.getByTestId('review-postsmoke-resttime')).toContainText(fields.restTime);
+    if (fields.postSmokeSteps !== undefined) {
+      await this.expectReviewSteps('review-postsmoke-step', fields.postSmokeSteps);
+    }
+    if (fields.postSmokeNotes !== undefined) {
+      await this.expectReviewNotes('review-postsmoke-notes', fields.postSmokeNotes);
+    }
+  }
+
+  /**
+   * Assert a review card lists exactly `steps`, in order.
+   *
+   * A card numbers each step as it renders it, so the expected text carries the
+   * position too — which is what makes this an assertion about *order* rather
+   * than about a set of strings that happen to be present.
+   */
+  private async expectReviewSteps(testId: string, steps: string[]): Promise<void> {
+    const rendered = this.page.getByTestId(testId);
+    await expect(rendered).toHaveCount(steps.length);
+    for (const [index, step] of steps.entries()) {
+      await expect(rendered.nth(index)).toHaveText(`${index + 1}. ${step}`);
+    }
+  }
+
+  /**
+   * Assert a review card's notes carry the whole note that was entered.
+   *
+   * A card renders notes as flowing text, so the line breaks a journey typed are
+   * not in the rendering — but the note can still be matched whole, because a
+   * text assertion normalises whitespace on *both* sides: the typed `\n` and the
+   * rendered line wrap both collapse to a single space before they are compared.
+   * Asserting it in one call is what makes this a check that the lines are
+   * present, contiguous and in order, which checking them one at a time would
+   * not be.
+   *
+   * (The wizard-side reads are the opposite case: `toHaveValue` does not
+   * normalise, so those keep asserting the exact text including its newlines.)
+   */
+  private async expectReviewNotes(testId: string, notes: string): Promise<void> {
+    if (notes === '') {
+      throw new Error(
+        `cannot assert the "${testId}" notes against an empty string: every card contains one, ` +
+          `so the check would pass no matter what the card shows`
+      );
+    }
+    await expect(this.page.getByTestId(testId)).toContainText(notes);
   }
 
   private get overallTasteRating(): Locator {

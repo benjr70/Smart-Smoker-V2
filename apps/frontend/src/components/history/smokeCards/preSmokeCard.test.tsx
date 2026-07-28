@@ -110,6 +110,28 @@ describe('PreSmokeCard Component', () => {
       render(<PreSmokeCard {...mockProps} />);
       expect(screen.getByText(/Make sure to keep the fat cap on for moisture/)).toBeInTheDocument();
     });
+
+    test('should render each prep step under its own test id, in order', () => {
+      // The e2e review check reads the steps back positionally, so each step
+      // needs an id of its own rather than one shared block of text.
+      render(<PreSmokeCard {...mockProps} />);
+
+      const steps = screen.getAllByTestId('review-presmoke-step');
+
+      expect(steps.map(step => step.textContent)).toEqual([
+        '1. Trim excess fat',
+        '2. Apply dry rub',
+        '3. Let rest for 2 hours',
+      ]);
+    });
+
+    test('should render notes under their own test id', () => {
+      render(<PreSmokeCard {...mockProps} />);
+
+      expect(screen.getByTestId('review-presmoke-notes')).toHaveTextContent(
+        'Make sure to keep the fat cap on for moisture'
+      );
+    });
   });
 
   describe('Props Validation', () => {
@@ -297,29 +319,26 @@ describe('PreSmokeCard Component', () => {
     test('should have correct typography for steps', () => {
       render(<PreSmokeCard {...mockProps} />);
 
-      const typographies = screen.getAllByTestId('typography');
-
-      const stepTypographies = typographies.filter(t => {
-        const sx = JSON.parse(t.getAttribute('data-sx') || '{}');
-        return sx.fontSize === 18;
-      });
+      // The steps carry an e2e test id, so query them directly rather than
+      // through the shared `typography` test id.
+      const stepTypographies = screen.getAllByTestId('review-presmoke-step');
 
       expect(stepTypographies).toHaveLength(3);
+      stepTypographies.forEach(step => {
+        expect(JSON.parse(step.getAttribute('data-sx') || '{}')).toEqual({ fontSize: 18 });
+      });
     });
 
     test('should have correct typography for notes', () => {
       render(<PreSmokeCard {...mockProps} />);
 
-      const typographies = screen.getAllByTestId('typography');
-
-      const notesTypography = typographies.find(
-        t =>
-          t.getAttribute('data-padding') === '1' &&
-          t.getAttribute('data-paragraph') === 'true' &&
-          t.getAttribute('data-color') === 'text.secondary' &&
-          t.textContent === 'Make sure to keep the fat cap on for moisture'
-      );
-      expect(notesTypography).toBeInTheDocument();
+      // The notes carry an e2e test id, so query them directly rather than
+      // through the shared `typography` test id.
+      const notesTypography = screen.getByTestId('review-presmoke-notes');
+      expect(notesTypography).toHaveAttribute('data-padding', '1');
+      expect(notesTypography).toHaveAttribute('data-paragraph', 'true');
+      expect(notesTypography).toHaveAttribute('data-color', 'text.secondary');
+      expect(notesTypography).toHaveTextContent('Make sure to keep the fat cap on for moisture');
     });
   });
 
