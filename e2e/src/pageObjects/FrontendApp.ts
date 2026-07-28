@@ -50,6 +50,19 @@ function isTemperature(displayed: string): boolean {
 }
 
 /**
+ * How often the chart is sampled while watching it. The emulator relays a frame
+ * every 500ms, so a chart that is still recording changes between samples.
+ */
+const CHART_SAMPLE_INTERVAL_MS = 500;
+
+/**
+ * How long a stopped chart must hold still to count as stopped: a dozen relayed
+ * frames, and longer than the interval at which the backend persists them — so
+ * a smoke that was still running could not slip through the window unrecorded.
+ */
+const CHART_STOPPED_OBSERVATION_MS = 6_000;
+
+/**
  * The pre-smoke step's load: `GET /api/presmoke/` (the trailing slash is what
  * separates the *current* pre-smoke from `GET /api/presmoke/:id`, which the
  * review screens use).
@@ -63,6 +76,15 @@ const isPreSmokeLoad = (request: Request): boolean =>
  */
 const isSmokeProfileLoad = (request: Request): boolean =>
   request.method() === 'GET' && request.url().endsWith('/api/smokeProfile/current');
+
+/**
+ * The smoke step's other load: `GET /api/state`, which is where the step learns
+ * whether a smoke is running at all. The only other `state` routes are the
+ * `toggleSmoking` and `clearSmoke` writes, both PUTs, so a GET is unambiguously
+ * this read.
+ */
+const isSmokeStateLoad = (request: Request): boolean =>
+  request.method() === 'GET' && request.url().endsWith('/api/state');
 
 /**
  * Tracks one wizard step's resource loads, so an entry point can hand back a
@@ -190,16 +212,21 @@ class LoadWatcher {
  */
 export class FrontendApp {
   /**
-   * The two step loads a journey has to wait out. Mutating helpers still go
-   * through `throughAsyncLoad` as a second line of defence, for the loads no
-   * entry point can foresee.
+   * The step loads a journey has to wait out. The smoke step has two of them —
+   * the stored profile it renders and the smoking state it reports — and both
+   * are tracked, because either one arriving late hands back a step that
+   * misrepresents the backend. Mutating helpers still go through
+   * `throughAsyncLoad` as a second line of defence, for the loads no entry point
+   * can foresee.
    */
   private readonly preSmokeLoads: LoadWatcher;
   private readonly smokeProfileLoads: LoadWatcher;
+  private readonly smokeStateLoads: LoadWatcher;
 
   constructor(private readonly page: Page) {
     this.preSmokeLoads = new LoadWatcher(page, 'pre-smoke', isPreSmokeLoad);
-    this.smokeProfileLoads = new LoadWatcher(page, 'smoke', isSmokeProfileLoad);
+    this.smokeProfileLoads = new LoadWatcher(page, 'smoke profile', isSmokeProfileLoad);
+    this.smokeStateLoads = new LoadWatcher(page, 'smoking state', isSmokeStateLoad);
   }
 
   async goto(): Promise<void> {
@@ -503,12 +530,25 @@ export class FrontendApp {
    * The step's profile load must land before a journey types: not only would a
    * late load overwrite what was typed, the step also refuses to save a draft it
    * never hydrated — so typing too early is discarded without a trace.
+   *
+   * The smoking-state load is waited out for the journey's *reader* rather than
+   * its typist. Until `GET /api/state` answers, the session simply assumes no
+   * smoke is running, and the step dutifully renders that assumption — so a step
+   * handed back any earlier says nothing about the backend, and reading it would
+   * pass on the guess. That is exactly the regression the stopped-state checks
+   * exist to catch: a backend that never actually stopped the smoke would still
+   * be read as stopped, and the assertion would prove nothing while going green.
+   *
+   * The one mount issues both loads, so both marks are taken before the click
+   * and both waits are deterministic rather than hopeful.
    */
   async openSmokeStep(): Promise<void> {
-    const landed = this.smokeProfileLoads.mark();
+    const profileLanded = this.smokeProfileLoads.mark();
+    const stateLanded = this.smokeStateLoads.mark();
     await this.stepButton('Smoke').click();
     await expect(this.chart).toBeVisible();
-    await this.smokeProfileLoads.waitForLoadSince(landed);
+    await this.smokeProfileLoads.waitForLoadSince(profileLanded);
+    await this.smokeStateLoads.waitForLoadSince(stateLanded);
   }
 
   private get smokeChamberName(): Locator {
@@ -662,6 +702,29 @@ export class FrontendApp {
       .toEqual([]);
   }
 
+  /** The smoke step's start/stop control, whose label is the smoke's state. */
+  private get startButton(): Locator {
+    return this.page.getByTestId('smoke-start-button');
+  }
+
+  /**
+   * Assert the web app is showing a stopped smoke: the step's one smoking
+   * control offers to *start* one.
+   *
+   * Read after a reload, this is a statement about the backend rather than
+   * about the page: a freshly loaded step holds no memory of any click, so the
+   * only thing that can label this control is the state it loaded.
+   *
+   * "Loaded" is the load-bearing word, and it is {@link openSmokeStep} that
+   * earns it by waiting for the step's smoking-state load. A step read before
+   * that lands is still showing the session's not-smoking default, which wears
+   * the same label — so this would agree with itself no matter what the backend
+   * said.
+   */
+  async expectSmokeStopped(): Promise<void> {
+    await expect(this.startButton).toHaveText(/start smoking/i);
+  }
+
   private get chart(): Locator {
     return this.page.getByTestId('smoke-chart');
   }
@@ -671,15 +734,24 @@ export class FrontendApp {
   }
 
   /**
-   * Total length of every drawn line's `d` geometry. The chart keeps a fixed
-   * set of `path.line` elements; a live smoke shows up as their point data
-   * growing, so this sum increases as temperatures accumulate.
+   * How many temperature readings the chart is plotting, totalled across its
+   * lines (the chart keeps a fixed set of `path.line` elements).
+   *
+   * Counted off each line's own geometry: a `d` path opens at its first reading
+   * (`M`) and carries one command per reading after it — `L` for the straight
+   * probe lines, `C` for the chamber's cardinal curve — so the commands are the
+   * readings. This is what makes the measure comparable *across a reload*,
+   * unlike the raw length of `d`, which changes with the axis scaling even when
+   * the very same readings are drawn.
    */
-  async chartDataSize(): Promise<number> {
-    const ds = await this.chartLines.evaluateAll(paths =>
-      paths.map(p => (p.getAttribute('d') ?? '').length)
+  async chartPointCount(): Promise<number> {
+    const perLine = await this.chartLines.evaluateAll(paths =>
+      paths.map(path => {
+        const geometry = path.getAttribute('d') ?? '';
+        return geometry === '' ? 0 : 1 + (geometry.match(/[LC]/g)?.length ?? 0);
+      })
     );
-    return ds.reduce((sum, len) => sum + len, 0);
+    return perLine.reduce((sum, points) => sum + points, 0);
   }
 
   /**
@@ -688,9 +760,114 @@ export class FrontendApp {
    */
   async waitForGrowingChart(): Promise<void> {
     await expect(this.chartLines.first()).toBeVisible({ timeout: 30_000 });
-    await expect.poll(async () => this.chartDataSize(), { timeout: 30_000 }).toBeGreaterThan(0);
-    const first = await this.chartDataSize();
-    await expect.poll(async () => this.chartDataSize(), { timeout: 30_000 }).toBeGreaterThan(first);
+    await expect.poll(async () => this.chartPointCount(), { timeout: 30_000 }).toBeGreaterThan(0);
+    const first = await this.chartPointCount();
+    await expect
+      .poll(async () => this.chartPointCount(), { timeout: 30_000 })
+      .toBeGreaterThan(first);
+  }
+
+  /**
+   * Assert the chart has stopped recording: its plotted readings must hold
+   * still for an observation window many frames long.
+   *
+   * Stopping is only meaningful if it stops the *recording*: an open smoker
+   * page keeps relaying temperatures whether or not a smoke is running, so
+   * frames go on arriving throughout this window and a chart that is still
+   * plotting them grows visibly within a second. The window is therefore the
+   * assertion — a single sample after the stop would pass on a chart that
+   * simply had not been sent its next frame yet.
+   *
+   * A frame already in flight when the stop landed can still add one last
+   * reading, so the window is measured from a settled count rather than from
+   * the instant of the click.
+   */
+  async expectChartStopsGrowing(): Promise<void> {
+    const settled = await this.settledChartPointCount();
+    const deadline = Date.now() + CHART_STOPPED_OBSERVATION_MS;
+    while (Date.now() < deadline) {
+      await this.page.waitForTimeout(CHART_SAMPLE_INTERVAL_MS);
+      expect(
+        await this.chartPointCount(),
+        'the chart kept plotting after the smoke was stopped, so temperatures are still being recorded'
+      ).toBe(settled);
+    }
+  }
+
+  /**
+   * Resolve once the chart is drawing the cook the backend has stored, and
+   * answer with how many readings that is.
+   *
+   * Meant for a freshly loaded page, where the chart can only be drawing what
+   * the backend handed it: the count is therefore the stored cook, and a
+   * journey holds it as the baseline a later restart must build on rather than
+   * replace. An empty chart never settles into a baseline here — it fails,
+   * because a reload that lost the cook is the very regression this guards.
+   */
+  async waitForStoredCookOnChart(): Promise<number> {
+    await expect
+      .poll(async () => this.chartPointCount(), {
+        timeout: 30_000,
+        message: 'the chart never drew the cook the backend had already stored',
+      })
+      .toBeGreaterThan(0);
+    return this.chartPointCount();
+  }
+
+  /**
+   * Assert the chart takes up where it left off: it must grow past `retained`
+   * without ever having dropped below it.
+   *
+   * The low-water mark is the point of this. Growth alone cannot tell a resumed
+   * cook from a restarted one, because a chart that was reset to empty climbs
+   * back past a modest baseline within seconds — so every sample taken while
+   * waiting for growth is also kept, and a chart that ever held fewer readings
+   * than it started with fails, whatever it does afterwards.
+   */
+  async expectChartResumesGrowing(retained: number): Promise<void> {
+    let lowest = Number.POSITIVE_INFINITY;
+    await expect
+      .poll(
+        async () => {
+          const points = await this.chartPointCount();
+          lowest = Math.min(lowest, points);
+          return points;
+        },
+        {
+          intervals: [CHART_SAMPLE_INTERVAL_MS],
+          timeout: 30_000,
+          message: 'the chart never resumed recording after the smoke was restarted',
+        }
+      )
+      .toBeGreaterThan(retained);
+    expect(
+      lowest,
+      'the chart dropped readings it was already holding, so the stop reset the cook instead of pausing it'
+    ).toBeGreaterThanOrEqual(retained);
+  }
+
+  /**
+   * The chart's plotted-reading count, once two consecutive samples agree —
+   * i.e. once the last frame the running smoke had already sent has landed.
+   */
+  private async settledChartPointCount(): Promise<number> {
+    let previous = -1;
+    await expect
+      .poll(
+        async () => {
+          const points = await this.chartPointCount();
+          const unchanged = points === previous;
+          previous = points;
+          return unchanged;
+        },
+        {
+          intervals: [CHART_SAMPLE_INTERVAL_MS],
+          timeout: 15_000,
+          message: 'the chart never stopped plotting new temperatures after the smoke was stopped',
+        }
+      )
+      .toBe(true);
+    return previous;
   }
 
   /** Advance to the Post-Smoke step, enter a rest time, and finish the smoke. */

@@ -40,6 +40,31 @@ export class SmokerApp {
     await expect(this.startButton).toHaveText(/stop smoking/i);
   }
 
+  /**
+   * Toggle smoking off from the smoker home screen — where a pitmaster ends a
+   * cook, the same control they started it with.
+   *
+   * Expressed as "converge on stopped" rather than "click once", so it is a
+   * no-op against a smoke that is already stopped and can never toggle a cook
+   * back on by clicking a second time.
+   */
+  async stopSmoke(): Promise<void> {
+    if (await this.isSmoking()) {
+      await this.startButton.click();
+    }
+    await this.expectStopped();
+  }
+
+  /**
+   * Assert the touchscreen is showing a stopped smoke: its one control offers
+   * to *start* one. The control's label is the state, so this reads the state
+   * off the element rather than off the absence of another one — a control that
+   * still says "Stop Smoking" fails saying exactly that.
+   */
+  async expectStopped(): Promise<void> {
+    await expect(this.startButton).toHaveText(/start smoking/i);
+  }
+
   /** Resolve once the device-service emulator temps reach the readout. */
   async waitForLiveTemps(): Promise<void> {
     await expect

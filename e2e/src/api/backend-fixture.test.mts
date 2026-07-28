@@ -27,6 +27,12 @@ class FakeTransport implements HttpTransport {
   readonly deletes: string[] = [];
   getResponses: Record<string, unknown> = {};
   /**
+   * Canned GET responses that advance one step per call and then stay on the
+   * last one — for the fixture's polling waits, where the point of the test is
+   * that the answer changes between looks.
+   */
+  getSequences: Record<string, unknown[]> = {};
+  /**
    * Transport failures to inject per path: how many consecutive GETs throw
    * before the canned response is served again (`Infinity` = never recovers).
    */
@@ -49,6 +55,10 @@ class FakeTransport implements HttpTransport {
     if (failuresLeft > 0) {
       this.failGetTimes[path] = failuresLeft - 1;
       throw new Error(`GET ${path} failed (503): backend hiccup`);
+    }
+    const sequence = this.getSequences[path];
+    if (sequence?.length) {
+      return (sequence.length > 1 ? sequence.shift() : sequence[0]) as T;
     }
     return (this.getResponses[path] ?? []) as T;
   }
@@ -309,6 +319,30 @@ describe('BackendFixture.adoptCurrentSmoke', () => {
     await fixture.cleanup();
     assert.deepEqual(http.deletes, []);
     assert.deepEqual(http.puts, []);
+  });
+});
+
+describe('BackendFixture.waitForStoredTemps', () => {
+  const reading = { ChamberTemp: 210, MeatTemp: 150, Meat2Temp: 0, Meat3Temp: 0, date: '' };
+
+  it('answers straight away once the backend already holds enough of the cook', async () => {
+    http.getResponses['/api/temps'] = [reading, reading];
+
+    assert.equal(await fixture.waitForStoredTemps(2), 2);
+  });
+
+  it('keeps polling until enough of the cook has been stored', async () => {
+    // The backend stores roughly one reading per eleven relayed frames, so the
+    // first look can find a cook that is live on screen but barely written.
+    http.getSequences['/api/temps'] = [[], [reading], [reading, reading]];
+
+    assert.equal(await fixture.waitForStoredTemps(2, 5_000), 2);
+  });
+
+  it('fails naming what was stored when the cook never reaches the backend', async () => {
+    http.getResponses['/api/temps'] = [reading];
+
+    await assert.rejects(() => fixture.waitForStoredTemps(2, 0), /stored 1 of the 2/);
   });
 });
 

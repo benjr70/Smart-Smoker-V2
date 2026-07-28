@@ -132,6 +132,7 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
           className="button"
           variant="contained"
           size="small"
+          data-testid="smoke-start-button"
           onClick={() => void session.toggleSmoking()}
         >
           {session.smoking ? 'Stop Smoking' : 'Start Smoking'}
