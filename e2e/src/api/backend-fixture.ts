@@ -25,6 +25,7 @@ const PRESMOKE_PATH = '/api/presmoke';
 const PRESMOKE_ALL_PATH = '/api/presmoke/all';
 const SMOKE_PATH = '/api/smoke';
 const STATE_PATH = '/api/state';
+const TEMPS_PATH = '/api/temps';
 const NOTIFICATION_SETTINGS_PATH = '/api/notifications/settings';
 
 /** A record the fixture created, retained so `cleanup()` can delete it exactly. */
@@ -343,6 +344,38 @@ export class BackendFixture {
       }
       if (Date.now() >= deadline) {
         throw new Error(`There is no current smoke: none was set by ${source}`);
+      }
+      await new Promise(r => setTimeout(r, 250));
+    }
+  }
+
+  /**
+   * Wait until the backend has stored at least `minimum` readings of the current
+   * cook, and answer with how many it holds.
+   *
+   * A cook is visibly live on every screen long before any of it is *stored*:
+   * the smoker relays a frame twice a second, but the backend persists only
+   * every eleventh one, so the first seconds of a smoke exist solely in the open
+   * pages' memory. Any proof that reads the cook back from the backend — a
+   * reload, above all — therefore has to wait for that write, or it races the
+   * persistence and fails against an empty chart.
+   *
+   * Times out naming what was actually stored, so a stall reads as "the cook
+   * never reached the backend" rather than as an anonymous wait.
+   */
+  async waitForStoredTemps(minimum = 1, timeoutMs = 30_000): Promise<number> {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      const temps = await this.http.get<unknown[]>(TEMPS_PATH).catch(() => null);
+      const stored = Array.isArray(temps) ? temps.length : 0;
+      if (stored >= minimum) {
+        return stored;
+      }
+      if (Date.now() >= deadline) {
+        throw new Error(
+          `The backend stored ${stored} of the ${minimum} reading(s) the cook needed: ` +
+            `no smoke is running, or nothing is relaying temperatures to it`
+        );
       }
       await new Promise(r => setTimeout(r, 250));
     }

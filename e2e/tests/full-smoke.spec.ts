@@ -26,6 +26,14 @@ import { SmokerApp } from '../src/pageObjects/SmokerApp';
  * and land on every surface that shows them: the smoker's own readout, all four
  * of the frontend's (chamber and three probes), and the chart.
  *
+ * The cook then ends the way cooks actually end and resume: stopped from the
+ * touchscreen, and started again. Stopping is held to all three of its
+ * meanings — the control flips, the recording halts (the chart holds still
+ * while the open smoker goes on relaying frames), and the stopped state is the
+ * backend's, proven by throwing the page's memory away in a reload. Restarting
+ * is held to the product's pause-not-reset rule: the chart keeps the cook it
+ * was already holding and adds to it.
+ *
  * Every value is deliberately non-default, so no assertion can pass on an
  * untouched form: a meat type absent from the suggestion list, a weight in OZ
  * rather than the default LB, a prep list grown to three rows and then cut to
@@ -127,6 +135,40 @@ test('full smoke: hand-entered fields survive a reload, then the cook goes live'
     await smoker.waitForLiveTemps();
     await frontend.waitForLiveReadouts();
     await frontend.waitForGrowingChart();
+
+    // 10. A cook is live on screen long before any of it is *stored*: the smoker
+    //     relays twice a second, the backend keeps every eleventh frame. The
+    //     stop is proven by reading the cook back from the backend, so let it
+    //     write enough of one to draw with (a line needs two points).
+    await fixture.waitForStoredTemps(2);
+
+    // 11. The pitmaster stops the cook from the same touchscreen they started it
+    //     from, and the control flips back to offering a start.
+    await smoker.stopSmoke();
+
+    // 12. Stopping has to stop the *recording*, not just the label: the smoker
+    //     page stays open and keeps relaying temperatures either way, so the
+    //     proof is the frontend's chart holding still while those frames keep
+    //     arriving.
+    await frontend.expectChartStopsGrowing();
+
+    // 13. Stopped has to be the backend's truth rather than the open page's
+    //     memory of a click, so throw that memory away: reload the whole app and
+    //     come back to the step, which can now only show what it was told.
+    await frontend.reload();
+    await frontend.openSmokeStep();
+    await frontend.expectSmokeStopped();
+
+    // 14. Stopping is a pause, not a reset: the freshly loaded chart is drawing
+    //     the cook the backend stored before the stop, and that is the baseline
+    //     the restart has to build on.
+    const cookSoFar = await frontend.waitForStoredCookOnChart();
+
+    // 15. Back on again from the touchscreen — a pitmaster's stop is routinely
+    //     temporary. The same chart must keep every reading it was holding and
+    //     start adding to them again, rather than beginning a second cook.
+    await smoker.startSmoke();
+    await frontend.expectChartResumesGrowing(cookSoFar);
   } finally {
     // Close the smoker before cleanup: its relay keeps writing temperatures to
     // the very smoke the fixture is about to delete.

@@ -323,6 +323,33 @@ describe('SmokeStepView', () => {
     expect(await screen.findByText('Stop Smoking')).toBeInTheDocument();
   });
 
+  test('the start/stop control is addressable by a stable id and labels the smoking state', async () => {
+    const { socket } = renderView();
+
+    await act(async () => {
+      await flushPromises();
+    });
+
+    // The control's label *is* the state it offers, so a journey that stops a
+    // cook reads the stopped state off this one element rather than off the
+    // absence of another.
+    expect(screen.getByTestId('smoke-start-button')).toHaveTextContent('Start Smoking');
+
+    await act(async () => {
+      socket.injectSmokeUpdate({
+        smoking: true,
+        chamberName: 'Chamber',
+        probe1Name: 'probe 1',
+        probe2Name: 'probe 2',
+        probe3Name: 'probe 3',
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('smoke-start-button')).toHaveTextContent('Stop Smoking');
+    });
+  });
+
   test('a refresh signal reloads the chart baseline', async () => {
     const kit = harness();
     kit.api.seedTemps([
