@@ -66,6 +66,30 @@ const productionDotenvPlugin = (): webpack.WebpackPluginInstance => {
 };
 
 /**
+ * The value `.env.prod` gives `BAKED_KEY`, read straight from the file.
+ *
+ * Throws rather than returning `undefined` when the key is missing or blank: the
+ * assertion below compares the bundle against this value, so a silently absent
+ * key would make `expect(undefined).toBe(undefined)` pass while proving nothing —
+ * exactly the hole this second test exists to close.
+ */
+const bakedValueFromEnvFile = (): string => {
+  const envFile = join(__dirname, '..', '..', '.env.prod');
+  const prefix = `${BAKED_KEY}=`;
+  const line = readFileSync(envFile, 'utf-8')
+    .split('\n')
+    .find(candidate => candidate.startsWith(prefix));
+  const value = line?.slice(prefix.length).trim();
+  if (!value) {
+    throw new Error(
+      `apps/smoker/.env.prod no longer defines a non-empty ${BAKED_KEY} — this guard ` +
+        'needs a key the production env file actually bakes in, so point BAKED_KEY at one'
+    );
+  }
+  return value;
+};
+
+/**
  * Compile a module that reads both keys, using the production Dotenv plugin and
  * target, and return the emitted bundle source.
  */
@@ -127,11 +151,6 @@ describe('smoker production bundle — unbaked REACT_APP_* reads', () => {
 
     // Without this the test above would pass even if the env wiring were removed
     // wholesale — everything undefined, nothing thrown.
-    expect(exported.baked).toBe(
-      readFileSync(join(__dirname, '..', '..', '.env.prod'), 'utf-8')
-        .split('\n')
-        .find(line => line.startsWith(`${BAKED_KEY}=`))
-        ?.slice(`${BAKED_KEY}=`.length)
-    );
+    expect(exported.baked).toBe(bakedValueFromEnvFile());
   });
 });
