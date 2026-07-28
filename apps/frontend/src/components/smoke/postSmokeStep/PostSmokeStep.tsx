@@ -70,6 +70,7 @@ export const PostSmokeStep: React.FC<PostSmokeStepProps> = ({ nextButton }) => {
           id="outlined-multiline-static"
           label="Notes"
           multiline
+          inputProps={{ 'data-testid': 'postsmoke-notes-input' }}
           value={postSmokeState.notes}
           onChange={(event: any) =>
             setPostSmokeState({ ...postSmokeState, notes: event.target.value })

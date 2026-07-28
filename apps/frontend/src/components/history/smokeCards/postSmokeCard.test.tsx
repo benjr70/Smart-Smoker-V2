@@ -100,6 +100,28 @@ describe('PostSmokeCard Component', () => {
 
       expect(screen.getByText('Resting is crucial for juicy meat')).toBeInTheDocument();
     });
+
+    test('should render each post-smoke step under its own test id, in order', () => {
+      // The e2e review check reads the steps back positionally, so each step
+      // needs an id of its own rather than one shared block of text.
+      render(<PostSmokeCard {...mockProps} />);
+
+      const steps = screen.getAllByTestId('review-postsmoke-step');
+
+      expect(steps.map(step => step.textContent)).toEqual([
+        '1. Wrap in butcher paper',
+        '2. Let rest in cooler',
+        '3. Slice against the grain',
+      ]);
+    });
+
+    test('should render notes under their own test id', () => {
+      render(<PostSmokeCard {...mockProps} />);
+
+      expect(screen.getByTestId('review-postsmoke-notes')).toHaveTextContent(
+        'Resting is crucial for juicy meat'
+      );
+    });
   });
 
   describe('Props Validation', () => {
@@ -232,29 +254,26 @@ describe('PostSmokeCard Component', () => {
     test('should have correct typography for steps', () => {
       render(<PostSmokeCard {...mockProps} />);
 
-      const typographies = screen.getAllByTestId('typography');
-
-      const stepTypographies = typographies.filter(t => {
-        const sx = JSON.parse(t.getAttribute('data-sx') || '{}');
-        return sx.fontSize === 18;
-      });
+      // The steps carry an e2e test id, so query them directly rather than
+      // through the shared `typography` test id.
+      const stepTypographies = screen.getAllByTestId('review-postsmoke-step');
 
       expect(stepTypographies).toHaveLength(3);
+      stepTypographies.forEach(step => {
+        expect(JSON.parse(step.getAttribute('data-sx') || '{}')).toEqual({ fontSize: 18 });
+      });
     });
 
     test('should have correct typography for notes', () => {
       render(<PostSmokeCard {...mockProps} />);
 
-      const typographies = screen.getAllByTestId('typography');
-
-      const notesTypography = typographies.find(
-        t =>
-          t.getAttribute('data-padding') === '1' &&
-          t.getAttribute('data-paragraph') === 'true' &&
-          t.getAttribute('data-color') === 'text.secondary' &&
-          t.textContent === 'Resting is crucial for juicy meat'
-      );
-      expect(notesTypography).toBeInTheDocument();
+      // The notes carry an e2e test id, so query them directly rather than
+      // through the shared `typography` test id.
+      const notesTypography = screen.getByTestId('review-postsmoke-notes');
+      expect(notesTypography).toHaveAttribute('data-padding', '1');
+      expect(notesTypography).toHaveAttribute('data-paragraph', 'true');
+      expect(notesTypography).toHaveAttribute('data-color', 'text.secondary');
+      expect(notesTypography).toHaveTextContent('Resting is crucial for juicy meat');
     });
   });
 

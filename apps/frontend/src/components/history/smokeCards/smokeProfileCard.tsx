@@ -46,6 +46,7 @@ export function SmokeProfileCard(props: SmokeProfileCardProps): JSX.Element {
                 color: '#1f4f2d',
                 width: '75%',
               }}
+              data-testid="review-smoke-chambername"
             >
               {props.smokeProfile.chamberName ?? 'Chamber'}
             </Typography>
@@ -56,6 +57,7 @@ export function SmokeProfileCard(props: SmokeProfileCardProps): JSX.Element {
                 color: '#2a475e',
                 width: '75%',
               }}
+              data-testid="review-smoke-probe1name"
             >
               {props.smokeProfile.probe1Name ?? 'Probe 1'}
             </Typography>
@@ -66,6 +68,7 @@ export function SmokeProfileCard(props: SmokeProfileCardProps): JSX.Element {
                 color: '#118cd8',
                 width: '75%',
               }}
+              data-testid="review-smoke-probe2name"
             >
               {props.smokeProfile.probe2Name ?? 'Probe 2'}
             </Typography>
@@ -76,6 +79,7 @@ export function SmokeProfileCard(props: SmokeProfileCardProps): JSX.Element {
                 color: '#5582a7',
                 width: '75%',
               }}
+              data-testid="review-smoke-probe3name"
             >
               {props.smokeProfile.probe3Name ?? 'Probe 3'}
             </Typography>
@@ -98,7 +102,13 @@ export function SmokeProfileCard(props: SmokeProfileCardProps): JSX.Element {
             <Typography sx={{ fontSize: 18 }} data-testid="review-smoke-woodtype">
               {props.smokeProfile.woodType} Wood
             </Typography>
-            <Typography padding={1} sx={{ fontSize: 14 }} paragraph={true} color="text.secondary">
+            <Typography
+              padding={1}
+              sx={{ fontSize: 14 }}
+              paragraph={true}
+              color="text.secondary"
+              data-testid="review-smoke-notes"
+            >
               {props.smokeProfile.notes}
             </Typography>
           </CardContent>

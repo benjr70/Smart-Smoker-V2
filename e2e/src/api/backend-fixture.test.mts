@@ -227,6 +227,38 @@ describe('BackendFixture.adoptCurrentSmoke', () => {
     ]);
   });
 
+  it('deletes the post-smoke and rating the journey linked after the adopt', async () => {
+    // Adopt happens early, when the journey has only its pre-smoke — but cleanup
+    // re-reads the smoke at teardown, so the children linked later are reclaimed
+    // too. That is what leaves nothing behind once a journey has run to the end
+    // and archived its smoke: finishing marks the *same* document Complete
+    // rather than creating a new one, so the adopted id is still the right one.
+    // (`status` is carried here because it is what teardown really sees; the
+    // cleanup path never reads it.)
+    givenUiCreatedCurrentSmoke();
+    await fixture.adoptCurrentSmoke();
+    http.getResponses['/api/smoke/smoke-7'] = {
+      _id: 'smoke-7',
+      status: 'Complete',
+      preSmokeId: 'pre-7',
+      smokeProfileId: 'prof-7',
+      tempsId: 'temps-7',
+      postSmokeId: 'post-7',
+      ratingId: 'rate-7',
+    };
+
+    await fixture.cleanup();
+
+    assert.deepEqual(http.deletes, [
+      '/api/presmoke/pre-7',
+      '/api/smokeProfile/prof-7',
+      '/api/temps/temps-7',
+      '/api/postSmoke/post-7',
+      '/api/ratings/rate-7',
+      '/api/smoke/smoke-7',
+    ]);
+  });
+
   it('clears the current smoke on cleanup so the next journey starts fresh', async () => {
     // The adopted smoke is still *current*; deleting it without clearing the
     // state would leave every later POST /api/presmoke 404ing on a stale ref.

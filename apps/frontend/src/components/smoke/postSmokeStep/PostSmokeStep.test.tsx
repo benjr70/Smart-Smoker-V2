@@ -39,13 +39,38 @@ describe('PostSmokeStep', () => {
 
     const { unmount } = renderStep(backend);
 
-    const notesField = await screen.findByDisplayValue('Post-smoke notes');
+    await screen.findByDisplayValue('Post-smoke notes');
+    // Addressed the way the e2e journey addresses it: by its stable test id,
+    // not by the value it happens to be holding.
+    const notesField = screen.getByTestId('postsmoke-notes-input');
     fireEvent.change(notesField, { target: { value: 'Updated notes' } });
     expect(notesField).toHaveValue('Updated notes');
 
     unmount();
 
     await waitFor(() => expect(backend.store.postSmoke.current?.notes).toBe('Updated notes'));
+  });
+
+  test('enters a rest time through the masked input and persists it on unmount', async () => {
+    // The field is masked (HH:MM), so what a pitmaster types is rewritten before
+    // it ever reaches state — the value that gets stored is the mask's, and the
+    // e2e journey reads that value back from the backend after a reload.
+    const backend = createFakeBackend({ postSmoke: { current: seededPostSmoke } });
+
+    const { unmount } = renderStep(backend);
+
+    // Driven with an `input` event, which is what typing (and Playwright's
+    // `fill`) raises: the mask only rewrites what it is told about that way, and
+    // a bare `change` event slips past it, leaving the field showing a value the
+    // step would never save.
+    await screen.findByDisplayValue('01:30');
+    const restTime = screen.getByTestId('postsmoke-rest-time-input');
+    fireEvent.input(restTime, { target: { value: '0245' } });
+    expect(restTime).toHaveValue('02:45');
+
+    unmount();
+
+    await waitFor(() => expect(backend.store.postSmoke.current?.restTime).toBe('02:45'));
   });
 
   test('edits a step and persists the updated steps on unmount', async () => {
