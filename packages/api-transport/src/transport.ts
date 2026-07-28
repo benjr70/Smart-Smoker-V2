@@ -2,12 +2,13 @@
  * Transport port — the only seam that knows HTTP exists.
  *
  * Four methods over resource-relative path strings returning typed JSON.
- * Deliberately path-level (not resource-level) so URL construction stays inside
- * the deep client where the in-memory fake backend exercises the real paths.
- * Production implements this with a single axios instance (see httpAdapter);
- * tests implement it with an in-memory fake backend. The smoker consumes TWO
- * transports — one bound to the cloud API base URL, one bound to the local
- * device-service base URL — so a resource call always lands on the right host.
+ * Deliberately path-level (not resource-level) so that URL construction stays
+ * inside each app's deep client where the in-memory fake backend exercises the
+ * real paths. Production implements this with a single axios instance (see
+ * httpAdapter); tests implement it with an in-memory fake backend. An app that
+ * talks to more than one host (the smoker: cloud API + local device service)
+ * holds one transport per base URL, so a resource call always lands on the
+ * right host.
  */
 export type HttpMethod = 'get' | 'post' | 'put' | 'delete';
 
@@ -21,8 +22,11 @@ export interface TransportPort {
 /**
  * Typed API error. Every transport failure maps to this shape so callers can
  * handle or report failures deliberately instead of receiving a silent
- * `undefined`. The client throws it and never resolves `undefined` — killing the
- * legacy swallowed-error catch-resolve-undefined path.
+ * `undefined`. Clients throw it and never resolve `undefined`.
+ *
+ * This is the ONE definition shared by every app: a single class identity keeps
+ * `instanceof` checks meaningful in helpers that see errors from more than one
+ * app's client.
  */
 export class ApiError extends Error {
   readonly status: number | undefined;
@@ -39,8 +43,9 @@ export class ApiError extends Error {
   }) {
     super(
       params.message ??
-        `API ${params.method.toUpperCase()} ${params.path} failed` +
-          (params.status !== undefined ? ` (status ${params.status})` : '')
+        `API ${params.method.toUpperCase()} ${params.path} failed${
+          params.status !== undefined ? ` (status ${params.status})` : ''
+        }`
     );
     this.name = 'ApiError';
     this.status = params.status;

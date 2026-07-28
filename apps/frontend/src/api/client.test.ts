@@ -6,7 +6,7 @@
 import { NotificationSettings, Smoke, SmokeHistory, SmokeProfile, TempData, rating } from './types';
 import { createApiClient } from './client';
 import { createFakeBackend } from './fakeBackend';
-import { ApiError } from './transport';
+import { ApiError } from 'api-transport/src';
 import { SmokeEventPort } from './events';
 
 const sampleTemps: TempData[] = [
@@ -110,6 +110,24 @@ describe('state client — clear smoke side-effect', () => {
     expect(error.status).toBe(500);
     expect(error.method).toBe('put');
     expect(error.path).toBe('state/toggleSmoking');
+  });
+
+  // `GET state` on a fresh or reset database and `PUT state/toggleSmoking` with
+  // no current smoke both answer with an EMPTY body. This app opts its transport
+  // into mapping that to `null` (see createProductionApiClient), so "no state"
+  // reads as `null` here rather than as the raw `''` axios hands back.
+  test('a state read with no state document resolves null, never an empty string', async () => {
+    const backend = createFakeBackend({ state: null });
+    const client = createApiClient(backend);
+
+    await expect(client.state.get()).resolves.toBeNull();
+  });
+
+  test('toggling with no current smoke resolves null, never an empty string', async () => {
+    const backend = createFakeBackend({ state: null });
+    const client = createApiClient(backend);
+
+    await expect(client.state.toggleSmoking()).resolves.toBeNull();
   });
 });
 

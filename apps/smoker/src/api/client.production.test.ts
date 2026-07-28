@@ -1,12 +1,12 @@
 /**
  * Base-URL wiring of the production client: which origin each transport is bound
- * to. The transports themselves are mocked at the axios boundary (httpAdapter)
- * so the assertion is about URLs, not HTTP.
+ * to. The transports themselves are mocked at the shared-package boundary so the
+ * assertion is about URLs, not HTTP.
  */
+import { createHttpTransport } from 'api-transport/src';
 import { createProductionApiClient } from './client';
-import { createHttpTransport } from './httpAdapter';
 
-jest.mock('./httpAdapter', () => ({
+jest.mock('api-transport/src', () => ({
   createHttpTransport: jest.fn(),
 }));
 
@@ -59,5 +59,21 @@ describe('createProductionApiClient — transport base URLs', () => {
     createProductionApiClient();
 
     expect(constructedBaseUrls()[1]).toBe('http://localhost:3003');
+  });
+
+  it('leaves both transports on the default empty-body passthrough', () => {
+    // The smoker must NOT map an empty-body 200 to null. `GET state` (no state
+    // document yet) and `PUT state/toggleSmoking` (no current smoke) both answer
+    // with an empty body, and every call site dereferences the result unguarded
+    // — `home.tsx` does `state.smoking` inside a `.then()` with no `.catch()`.
+    // With `''` that reads as `undefined` and the flow continues; with `null` it
+    // would throw in an unhandled rejection, so the websocket `smokeUpdate`
+    // emit and the `setState` after it would never run.
+    createProductionApiClient();
+
+    const optedIn = mockCreateHttpTransport.mock.calls.filter(
+      call => call[1]?.emptyBodyAsNull === true
+    );
+    expect(optedIn).toEqual([]);
   });
 });

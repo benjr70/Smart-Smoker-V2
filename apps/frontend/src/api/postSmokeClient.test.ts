@@ -6,7 +6,7 @@
 import { PostSmoke } from './types';
 import { createApiClient } from './client';
 import { createFakeBackend } from './fakeBackend';
-import { ApiError } from './transport';
+import { ApiError } from 'api-transport/src';
 
 const samplePostSmoke: PostSmoke = {
   restTime: '30 minutes',

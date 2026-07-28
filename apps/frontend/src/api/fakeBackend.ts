@@ -1,12 +1,19 @@
 /**
- * In-memory fake backend implementing the transport port.
+ * In-memory fake backend for the frontend's backend routes.
  *
- * A seeded record store plus a path router mirroring backend routing, with a
- * fault-injection hook to return chosen statuses per method/path. Tests seed
- * it, run real client code, and assert on the store (and the recorded
- * requests) afterward — no axios mocking required.
+ * A seeded record store plus a route table mirroring backend routing, mounted
+ * on the shared fake-backend kernel (which records requests, injects faults and
+ * 404s unrouted paths). Tests seed it, run real client code, and assert on the
+ * store (and the recorded requests) afterward — no axios mocking required.
  */
-import { ApiError, HttpMethod, TransportPort } from './transport';
+import {
+  ApiError,
+  FakeBackendKernel,
+  FakeRequest,
+  NO_ROUTE,
+  clone,
+  createFakeBackendKernel,
+} from 'api-transport/src';
 import {
   NotificationSettings,
   PostSmoke,
@@ -28,18 +35,6 @@ export type StoredSmokeProfile = Partial<SmokeProfile> & {
   _id?: string;
   __v?: number;
 };
-
-export interface RecordedRequest {
-  method: HttpMethod;
-  path: string;
-  body: unknown;
-}
-
-export interface FaultInjection {
-  method: HttpMethod;
-  path: string;
-  status: number;
-}
 
 export interface FakeBackendSeed {
   temps?: {
@@ -65,7 +60,14 @@ export interface FakeBackendSeed {
   notifications?: {
     settings?: NotificationSettings[];
   };
-  state?: State;
+  /**
+   * The persisted state document. Seed `null` to model a backend with no state:
+   * `GET state` resolves `undefined` on a fresh or reset database and
+   * `PUT state/toggleSmoking` returns an explicit `null` when there is no
+   * current smoke. Nest serializes both as an EMPTY body, which this app's
+   * transport maps to `null` (it opts into `emptyBodyAsNull`).
+   */
+  state?: State | null;
   smoke?: {
     records?: Record<string, Smoke>;
     all?: Smoke[];
@@ -73,6 +75,13 @@ export interface FakeBackendSeed {
   };
   history?: SmokeHistory[];
 }
+
+/**
+ * What this app's transport yields for an empty-body 200: axios surfaces `''`
+ * and the frontend transport maps it to `null` (see `emptyBodyAsNull`), so the
+ * fake — which stands in for the transport — hands back the mapped value.
+ */
+const EMPTY_BODY = null;
 
 interface FakeStore {
   temps: {
@@ -98,7 +107,7 @@ interface FakeStore {
   notifications: {
     settings: NotificationSettings[];
   };
-  state: State;
+  state: State | null;
   smoke: {
     records: Record<string, Smoke>;
     all: Smoke[];
@@ -107,28 +116,7 @@ interface FakeStore {
   history: SmokeHistory[];
 }
 
-export interface FakeBackend extends TransportPort {
-  readonly requests: RecordedRequest[];
-  readonly store: FakeStore;
-  injectFault(fault: FaultInjection): void;
-}
-
-const clone = <T>(value: T): T => {
-  if (value === null || typeof value !== 'object') {
-    return value;
-  }
-  if (value instanceof Date) {
-    return new Date(value.getTime()) as unknown as T;
-  }
-  if (Array.isArray(value)) {
-    return value.map(item => clone(item)) as unknown as T;
-  }
-  const result: Record<string, unknown> = {};
-  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
-    result[key] = clone(item);
-  }
-  return result as T;
-};
+export type FakeBackend = FakeBackendKernel<FakeStore>;
 
 export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
   const store: FakeStore = {
@@ -155,7 +143,7 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
     notifications: {
       settings: seed.notifications?.settings ?? [],
     },
-    state: seed.state ?? { smokeId: '', smoking: false },
+    state: seed.state === undefined ? { smokeId: '', smoking: false } : seed.state,
     smoke: {
       records: seed.smoke?.records ?? {},
       all: seed.smoke?.all ?? [],
@@ -163,58 +151,45 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
     },
     history: seed.history ?? [],
   };
-  const requests: RecordedRequest[] = [];
-  const faults: FaultInjection[] = [];
-
-  const findFault = (method: HttpMethod, path: string): FaultInjection | undefined =>
-    faults.find(fault => fault.method === method && fault.path === path);
-
-  const route = <T>(method: HttpMethod, path: string, body: unknown): T => {
-    requests.push({ method, path, body });
-
-    const fault = findFault(method, path);
-    if (fault) {
-      throw new ApiError({ status: fault.status, path, method });
-    }
-
+  const route = ({ method, path, body }: FakeRequest): unknown => {
     const segments = path.split('/');
     const [resource, id] = segments;
 
     if (resource === 'temps') {
       if (method === 'get' && id === undefined) {
-        return clone(store.temps.current) as unknown as T;
+        return clone(store.temps.current);
       }
       if (method === 'get' && id !== undefined) {
         const record = store.temps.records[id];
         if (!record) {
           throw new ApiError({ status: 404, path, method });
         }
-        return clone(record) as unknown as T;
+        return clone(record);
       }
       if (method === 'delete' && id !== undefined) {
         delete store.temps.records[id];
-        return {} as unknown as T;
+        return {};
       }
     }
 
     if (resource === 'smokeProfile') {
       if (method === 'get' && id === 'current') {
-        return clone(store.smokeProfile.current) as unknown as T;
+        return clone(store.smokeProfile.current);
       }
       if (method === 'get' && id !== undefined) {
         const record = store.smokeProfile.records[id];
         if (!record) {
           throw new ApiError({ status: 404, path, method });
         }
-        return clone(record) as unknown as T;
+        return clone(record);
       }
       if (method === 'post' && id === 'current') {
         store.smokeProfile.current = clone(body) as StoredSmokeProfile;
-        return clone(store.smokeProfile.current) as unknown as T;
+        return clone(store.smokeProfile.current);
       }
       if (method === 'delete' && id !== undefined) {
         delete store.smokeProfile.records[id];
-        return {} as unknown as T;
+        return {};
       }
     }
 
@@ -226,49 +201,49 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
         if (store.preSmoke.current === undefined) {
           throw new ApiError({ status: 404, path, method });
         }
-        return clone(store.preSmoke.current) as unknown as T;
+        return clone(store.preSmoke.current);
       }
       if (method === 'post' && id === undefined) {
         store.preSmoke.current = clone(body) as PreSmoke;
-        return clone(store.preSmoke.current) as unknown as T;
+        return clone(store.preSmoke.current);
       }
       if (method === 'get' && id !== undefined && id !== '') {
         const record = store.preSmoke.records[id];
         if (!record) {
           throw new ApiError({ status: 404, path, method });
         }
-        return clone(record) as unknown as T;
+        return clone(record);
       }
       if (method === 'delete' && id !== undefined && id !== '') {
         delete store.preSmoke.records[id];
-        return {} as unknown as T;
+        return {};
       }
     }
 
     if (resource === 'ratings') {
       if (method === 'get' && id === undefined) {
-        return clone(store.ratings.current) as unknown as T;
+        return clone(store.ratings.current);
       }
       if (method === 'get' && id !== undefined) {
         const record = store.ratings.records[id];
         if (!record) {
           throw new ApiError({ status: 404, path, method });
         }
-        return clone(record) as unknown as T;
+        return clone(record);
       }
       if (method === 'post' && id === undefined) {
         // Create: the new current rating.
         store.ratings.current = clone(body) as rating;
-        return clone(body) as unknown as T;
+        return clone(body);
       }
       if (method === 'post' && id !== undefined) {
         // Update the id-scoped record.
         store.ratings.records[id] = clone(body) as rating;
-        return clone(body) as unknown as T;
+        return clone(body);
       }
       if (method === 'delete' && id !== undefined) {
         delete store.ratings.records[id];
-        return {} as unknown as T;
+        return {};
       }
     }
 
@@ -279,64 +254,69 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
         if (store.postSmoke.current === undefined) {
           throw new ApiError({ status: 404, path, method });
         }
-        return clone(store.postSmoke.current) as unknown as T;
+        return clone(store.postSmoke.current);
       }
       if (method === 'post' && id === 'current') {
         store.postSmoke.current = clone(body) as PostSmoke;
-        return clone(store.postSmoke.current) as unknown as T;
+        return clone(store.postSmoke.current);
       }
       if (method === 'get' && id !== undefined && id !== 'current') {
         const record = store.postSmoke.records[id];
         if (!record) {
           throw new ApiError({ status: 404, path, method });
         }
-        return clone(record) as unknown as T;
+        return clone(record);
       }
       if (method === 'delete' && id !== undefined && id !== 'current') {
         delete store.postSmoke.records[id];
-        return {} as unknown as T;
+        return {};
       }
     }
 
     if (resource === 'notifications' && id === 'settings') {
       if (method === 'get') {
         // The wire response nests the array under `settings`.
-        return clone({ settings: store.notifications.settings }) as unknown as T;
+        return clone({ settings: store.notifications.settings });
       }
       if (method === 'post') {
         const settings = (body as { settings?: NotificationSettings[] })?.settings ?? [];
         store.notifications.settings = clone(settings);
-        return clone({ settings: store.notifications.settings }) as unknown as T;
+        return clone({ settings: store.notifications.settings });
       }
     }
 
     if (resource === 'state') {
       if (method === 'get' && id === undefined) {
-        return clone(store.state) as unknown as T;
+        return store.state === null ? EMPTY_BODY : clone(store.state);
       }
       if (method === 'put' && id === 'toggleSmoking') {
+        // With no state (or no smokeId) the backend toggles nothing and returns
+        // null, which reaches this port as the mapped empty body.
+        if (store.state === null) {
+          return EMPTY_BODY;
+        }
         store.state = { ...store.state, smoking: !store.state.smoking };
-        return clone(store.state) as unknown as T;
+        return clone(store.state);
       }
       if (method === 'put' && id === 'clearSmoke') {
         store.state = { smokeId: '', smoking: false };
-        return clone(store.state) as unknown as T;
+        return clone(store.state);
       }
     }
 
     if (resource === 'smoke') {
       if (method === 'get' && id === 'all') {
-        return clone(store.smoke.all) as unknown as T;
+        return clone(store.smoke.all);
       }
       if (method === 'post' && id === 'finish') {
-        return clone(store.smoke.finish) as unknown as T;
+        return clone(store.smoke.finish);
       }
       if (method === 'get' && id !== undefined) {
         const record = store.smoke.records[id];
         if (!record) {
           throw new ApiError({ status: 404, path, method });
         }
-        return clone(record) as unknown as T;
+        return clone(record);
       }
       if (method === 'delete' && id !== undefined) {
         delete store.smoke.records[id];
@@ -344,33 +324,16 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
         // smoke removes its history row too; mirror that here so a cascade
         // delete is reflected in the refreshed list.
         store.history = store.history.filter(row => row.smokeId !== id);
-        return {} as unknown as T;
+        return {};
       }
     }
 
     if (resource === 'history' && method === 'get' && id === undefined) {
-      return clone(store.history) as unknown as T;
+      return clone(store.history);
     }
 
-    throw new ApiError({
-      status: 404,
-      path,
-      method,
-      message: `No fake route for ${method} ${path}`,
-    });
+    return NO_ROUTE;
   };
 
-  return {
-    get: <T>(path: string) => Promise.resolve().then(() => route<T>('get', path, undefined)),
-    post: <T>(path: string, body?: unknown) =>
-      Promise.resolve().then(() => route<T>('post', path, body)),
-    put: <T>(path: string, body?: unknown) =>
-      Promise.resolve().then(() => route<T>('put', path, body)),
-    delete: <T>(path: string) => Promise.resolve().then(() => route<T>('delete', path, undefined)),
-    requests,
-    store,
-    injectFault: (fault: FaultInjection) => {
-      faults.push(fault);
-    },
-  };
+  return createFakeBackendKernel({ store, route });
 };

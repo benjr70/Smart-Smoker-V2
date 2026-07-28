@@ -14,7 +14,8 @@
  * behavior-preserving contract, not an implementation snapshot.
  */
 import { createApiClient } from './client';
-import { createFakeBackend, FakeBackend, RecordedRequest } from './fakeBackend';
+import { RecordedRequest } from 'api-transport/src';
+import { createFakeBackend, FakeBackend } from './fakeBackend';
 import { NotificationSettings, PostSmoke, PreSmoke, Smoke, SmokeProfile, rating } from './types';
 import { WeightUnits } from '../components/common/interfaces/enums';
 

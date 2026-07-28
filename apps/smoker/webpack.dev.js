@@ -25,11 +25,14 @@ module.exports = {
         exclude: [/node_modules/, /\.test\.(ts|tsx)$/, /\.spec\.(ts|tsx)$/],
       },
       {
-        // Build TS/TSX sources from the workspace package "temperaturechart"
+        // Build TS/TSX sources from the workspace packages "temperaturechart"
+        // and "api-transport", which ship TS/TSX sources (no prebuilt dist).
         test: /\.tsx?$/,
         include: [
           path.resolve(__dirname, '../../packages/TemperatureChart/src'),
           path.resolve(__dirname, '../../node_modules/temperaturechart/src'),
+          path.resolve(__dirname, '../../packages/api-transport/src'),
+          path.resolve(__dirname, '../../node_modules/api-transport/src'),
         ],
         use: 'ts-loader',
       },

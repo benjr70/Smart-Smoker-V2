@@ -25,14 +25,17 @@ module.exports = env = {
         exclude: /node_modules/,
       },
       {
-        // Build TS/TSX sources from the workspace packages "temperaturechart"
-        // and "smoke-session" which ship TS/TSX sources (no prebuilt dist).
+        // Build TS/TSX sources from the workspace packages "temperaturechart",
+        // "smoke-session" and "api-transport" which ship TS/TSX sources (no
+        // prebuilt dist).
         test: /\.tsx?$/,
         include: [
           path.resolve(__dirname, '../../packages/TemperatureChart/src'),
           path.resolve(__dirname, '../../node_modules/temperaturechart/src'),
           path.resolve(__dirname, '../../packages/smoke-session/src'),
           path.resolve(__dirname, '../../node_modules/smoke-session/src'),
+          path.resolve(__dirname, '../../packages/api-transport/src'),
+          path.resolve(__dirname, '../../node_modules/api-transport/src'),
         ],
         use: 'ts-loader',
       },

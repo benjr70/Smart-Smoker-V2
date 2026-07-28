@@ -78,6 +78,9 @@ jobs:
             "smoke-session")
               echo "path=packages/smoke-session" >> $GITHUB_OUTPUT
               ;;
+            "api-transport")
+              echo "path=packages/api-transport" >> $GITHUB_OUTPUT
+              ;;
             *)
               echo "path=apps/${{ matrix.app }}" >> $GITHUB_OUTPUT
               ;;

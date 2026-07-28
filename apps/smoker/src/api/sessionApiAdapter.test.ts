@@ -1,7 +1,7 @@
 import { createApiClient } from './client';
 import { createFakeBackend } from './fakeBackend';
 import { createSessionApi } from './sessionApiAdapter';
-import { ApiError } from './transport';
+import { ApiError } from 'api-transport/src';
 
 const buildPort = (seed?: Parameters<typeof createFakeBackend>[0]) => {
   const cloud = createFakeBackend(seed);
@@ -67,6 +67,21 @@ describe('session API adapter (SessionApiPort over the deep client)', () => {
     const result = await port.toggleSmoking();
 
     expect(result).toEqual({ smoking: true });
+  });
+
+  // The port projects `{ smoking: state.smoking }` off the raw result, so an
+  // empty-body state response (no state document / no current smoke) must
+  // project rather than throw.
+  it('getSmokingState projects an unknown smoking flag when no state exists', async () => {
+    const { port } = buildPort({ state: null });
+
+    await expect(port.getSmokingState()).resolves.toEqual({ smoking: undefined });
+  });
+
+  it('toggleSmoking projects an unknown smoking flag when there is no current smoke', async () => {
+    const { port } = buildPort({ state: null });
+
+    await expect(port.toggleSmoking()).resolves.toEqual({ smoking: undefined });
   });
 
   it('getCurrentTemps returns the current temperature series', async () => {
