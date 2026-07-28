@@ -223,7 +223,10 @@ test('full smoke: hand-entered fields survive a reload, the cook runs, and the r
     //     dropped, the renamed readouts and custom wood from the smoke step, and
     //     the wrap-up just entered. Anything the app quietly failed to carry
     //     from a form to storage to the review surfaces fails here.
-    await frontend.openReview(smokeName);
+    //
+    //     Nothing in this journey ever rated the cook, so opening the review is
+    //     a read: there is no load-time rating write to wait out.
+    await frontend.openReview(smokeName, { hasRating: false });
     await frontend.expectReviewShows({
       name: smokeName,
       meatType: preSmoke.meatType,

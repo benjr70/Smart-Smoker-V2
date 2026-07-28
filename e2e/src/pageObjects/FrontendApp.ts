@@ -1064,18 +1064,34 @@ export class FrontendApp {
     }).toPass({ timeout: 20_000 });
   }
 
-  /** Open a completed smoke's review from its history card. */
-  async openReview(name: string): Promise<void> {
-    // The ratings card re-persists its value once it loads. Capture that
-    // load-time write here (listener set before the click that triggers it) so
-    // a later re-rating is the last write and isn't clobbered by this one
-    // landing late.
-    const ratingsPersisted = this.page
-      .waitForResponse(
-        res => res.url().includes('/api/ratings/') && res.request().method() === 'POST',
-        { timeout: 15_000 }
-      )
-      .catch(() => undefined);
+  /**
+   * Open a completed smoke's review from its history card.
+   *
+   * `hasRating` says whether the smoke carries a stored rating, because that is
+   * what decides whether opening the review *writes*. A rated smoke makes the
+   * ratings card re-persist its value as soon as the card loads, so a caller
+   * about to re-rate has to let that load-time write land first — otherwise it
+   * arrives late and clobbers the newer value. Hence the wait, armed before the
+   * click that triggers it.
+   *
+   * A smoke finished through the wizard has no rating at all (finishing copies
+   * the smoke's rating id, and nothing ever created one), so the card's persist
+   * effect — guarded on that id — never fires and no write is ever issued.
+   * Waiting there would spend the entire timeout to prove nothing, out of the
+   * journey's own budget, so such callers say so and skip the wait.
+   */
+  async openReview(
+    name: string,
+    { hasRating = true }: { hasRating?: boolean } = {}
+  ): Promise<void> {
+    const ratingsPersisted = hasRating
+      ? this.page
+          .waitForResponse(
+            res => res.url().includes('/api/ratings/') && res.request().method() === 'POST',
+            { timeout: 15_000 }
+          )
+          .catch(() => undefined)
+      : undefined;
     await this.historyCardFor(name).getByTestId('smoke-card-view-button').click();
     await expect(this.page.getByTestId('review-presmoke-name')).toBeVisible();
     await ratingsPersisted;
