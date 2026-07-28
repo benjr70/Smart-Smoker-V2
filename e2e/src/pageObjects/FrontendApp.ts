@@ -13,6 +13,16 @@ export type PreSmokeFields = {
   notes: string;
 };
 
+/** Every value the smoke step holds, as a journey enters (and re-reads) them. */
+export type SmokeStepFields = {
+  chamberName: string;
+  probe1Name: string;
+  probe2Name: string;
+  probe3Name: string;
+  woodType: string;
+  notes: string;
+};
+
 /** Test-id prefix of the pre-smoke step's prep-steps list. */
 const PRE_SMOKE_STEPS = 'presmoke-step';
 
@@ -25,6 +35,130 @@ const isPreSmokeLoad = (request: Request): boolean =>
   request.method() === 'GET' && /\/api\/presmoke\/$/.test(request.url());
 
 /**
+ * The smoke step's load: `GET /api/smokeProfile/current`. Distinct from
+ * `GET /api/smokeProfile/:id`, which only the review screens issue.
+ */
+const isSmokeProfileLoad = (request: Request): boolean =>
+  request.method() === 'GET' && request.url().endsWith('/api/smokeProfile/current');
+
+/**
+ * Tracks one wizard step's resource loads, so an entry point can hand back a
+ * step that has *finished* loading.
+ *
+ * --- The async-load race, closed once, here -------------------------------
+ *
+ * Every wizard step loads its resource *after* mounting (a load fires on mount
+ * and its result is written into state when it resolves), so a load landing
+ * after a journey has typed replaces what was typed with what was stored.
+ * Rendering the step is therefore not the same as the step being ready to type
+ * into. Worse on the smoke step, which refuses to save a draft it never
+ * hydrated — typing before the load lands is silently discarded.
+ *
+ * Counting a step's loads lets a journey wait for the specific load its own
+ * click provoked ({@link waitForLoadSince}) or simply for quiet
+ * ({@link waitUntilSettled}), instead of guessing with a sleep.
+ *
+ * Only a load that came back *ok* counts as having hydrated the step: a load
+ * answered with an error status (or not answered at all) leaves the step
+ * rendered but empty, which is precisely the state its save path refuses to
+ * write from. Counting such a load as arrival would hand a journey a step that
+ * silently drops everything typed into it, and the failure would surface far
+ * downstream as a save that never happens.
+ */
+class LoadWatcher {
+  /** Loads that came back ok — the only ones that can have hydrated the step. */
+  private hydrated = 0;
+  /** Loads that came back with an error status, or never came back at all. */
+  private failed = 0;
+  private inFlight = 0;
+
+  constructor(
+    page: Page,
+    /** Named in timeout messages, e.g. "the pre-smoke step never hydrated". */
+    private readonly stepName: string,
+    matches: (request: Request) => boolean
+  ) {
+    page.on('request', request => {
+      if (matches(request)) this.inFlight++;
+    });
+    page.on('requestfinished', request => {
+      if (!matches(request)) return;
+      // The response decides which counter moves, so the outcome is recorded
+      // *before* the in-flight window closes: a waiter must never see a quiet
+      // watcher whose last load has not been judged yet.
+      void request
+        .response()
+        .then(response => {
+          if (response?.ok()) this.hydrated++;
+          else this.failed++;
+        })
+        .catch(() => {
+          this.failed++;
+        })
+        .finally(() => {
+          this.inFlight--;
+        });
+    });
+    page.on('requestfailed', request => {
+      if (!matches(request)) return;
+      this.failed++;
+      this.inFlight--;
+    });
+  }
+
+  /**
+   * How many loads have hydrated the step so far — taken *before* an action
+   * that provokes a new one, and handed to {@link waitForLoadSince} afterwards.
+   */
+  mark(): number {
+    return this.hydrated;
+  }
+
+  /**
+   * Wait for a load newer than `mark` to hydrate the step.
+   *
+   * Used after an action that always mounts the step (a page render, a click
+   * onto a step the wizard was not showing), so a load is always issued and
+   * this is a deterministic wait rather than a hopeful one.
+   */
+  async waitForLoadSince(mark: number): Promise<void> {
+    await expect
+      .poll(() => this.hydrationSince(mark), {
+        timeout: 15_000,
+        message: `the ${this.stepName} step never hydrated`,
+      })
+      .toBe('hydrated');
+  }
+
+  /**
+   * Wait until no load is outstanding and the step holds what the backend has.
+   *
+   * Used where a load may or may not be issued: re-entering a step remounts it
+   * (and so reloads) only when the wizard was showing another step.
+   */
+  async waitUntilSettled(): Promise<void> {
+    await expect
+      .poll(() => this.hydrated > 0 && this.inFlight === 0, {
+        timeout: 15_000,
+        message: `a ${this.stepName} load never completed`,
+      })
+      .toBe(true);
+  }
+
+  /**
+   * Whether the step has hydrated since `mark`, phrased as the polled value so
+   * a timeout reports *why* — a failed load reads as "the step never hydrated",
+   * not as an unexplained wait.
+   */
+  private hydrationSince(mark: number): string {
+    if (this.hydrated > mark) return 'hydrated';
+    return this.failed > 0
+      ? `not hydrated: ${this.failed} load(s) came back failed`
+      : 'not hydrated: no load has come back';
+  }
+}
+
+/**
  * Page object for the React web frontend.
  *
  * Encapsulates the pre-smoke wizard, the live smoke step + chart, the
@@ -32,74 +166,24 @@ const isPreSmokeLoad = (request: Request): boolean =>
  * selector lives here so Material-UI class churn never reaches a test.
  */
 export class FrontendApp {
-  /** Pre-smoke loads that have completed, and how many are still in flight. */
-  private preSmokeLoadsLanded = 0;
-  private preSmokeLoadsInFlight = 0;
+  /**
+   * The two step loads a journey has to wait out. Mutating helpers still go
+   * through `throughAsyncLoad` as a second line of defence, for the loads no
+   * entry point can foresee.
+   */
+  private readonly preSmokeLoads: LoadWatcher;
+  private readonly smokeProfileLoads: LoadWatcher;
 
   constructor(private readonly page: Page) {
-    // --- The async-load race, closed once, here ---------------------------
-    //
-    // Every wizard step loads its resource *after* mounting
-    // (`useCurrentResource` fires `load(...).then(result => setState(result))`),
-    // so a load landing after a journey has typed replaces what was typed with
-    // what was stored. Rendering the step is therefore not the same as the step
-    // being ready to type into.
-    //
-    // Watching the pre-smoke load lets the entry points (`goto`, `reload`,
-    // `openPreSmokeStep`) hand back a step whose load has already landed,
-    // instead of one that is about to overwrite the next thing typed. Mutating
-    // helpers still go through `throughAsyncLoad` as a second line of defence,
-    // for the loads no entry point can foresee.
-    page.on('request', request => {
-      if (isPreSmokeLoad(request)) this.preSmokeLoadsInFlight++;
-    });
-    const settled = (request: Request) => {
-      if (!isPreSmokeLoad(request)) return;
-      this.preSmokeLoadsInFlight--;
-      // A failed load counts as landed: it resolves the in-flight window and,
-      // having no result, can no longer overwrite anything either.
-      this.preSmokeLoadsLanded++;
-    };
-    page.on('requestfinished', settled);
-    page.on('requestfailed', settled);
+    this.preSmokeLoads = new LoadWatcher(page, 'pre-smoke', isPreSmokeLoad);
+    this.smokeProfileLoads = new LoadWatcher(page, 'smoke', isSmokeProfileLoad);
   }
 
   async goto(): Promise<void> {
-    const landed = this.preSmokeLoadsLanded;
+    const landed = this.preSmokeLoads.mark();
     await this.page.goto('/');
     await expect(this.stepButton('Pre-Smoke')).toBeVisible();
-    await this.waitForPreSmokeLoad(landed);
-  }
-
-  /**
-   * Wait for a pre-smoke load newer than `landed` to complete.
-   *
-   * Used after a page render, where the pre-smoke step always mounts (the
-   * wizard starts on step 0), so a load is always issued and this is a
-   * deterministic wait rather than a hopeful one.
-   */
-  private async waitForPreSmokeLoad(landed: number): Promise<void> {
-    await expect
-      .poll(() => this.preSmokeLoadsLanded, {
-        timeout: 15_000,
-        message: 'the pre-smoke step never issued its load',
-      })
-      .toBeGreaterThan(landed);
-  }
-
-  /**
-   * Wait until no pre-smoke load is outstanding.
-   *
-   * Used where a load may or may not be issued: re-entering the pre-smoke step
-   * remounts it (and so reloads) only when the wizard was showing another step.
-   */
-  private async waitForPreSmokeLoadsSettled(): Promise<void> {
-    await expect
-      .poll(() => this.preSmokeLoadsLanded > 0 && this.preSmokeLoadsInFlight === 0, {
-        timeout: 15_000,
-        message: 'a pre-smoke load never completed',
-      })
-      .toBe(true);
+    await this.preSmokeLoads.waitForLoadSince(landed);
   }
 
   /**
@@ -328,18 +412,44 @@ export class FrontendApp {
    * journey's first keystroke cannot be undone by the step's own load.
    */
   async openPreSmokeStep(): Promise<void> {
-    await this.stepButton('Pre-Smoke').click();
-    await expect(this.preSmokeName).toBeVisible();
-    await this.waitForPreSmokeLoadsSettled();
+    await this.clickPreSmokeStep();
+    await this.preSmokeLoads.waitUntilSettled();
   }
 
   /**
-   * Leave the pre-smoke step for the Smoke step, committing the typed values.
+   * Return to the pre-smoke step from a step the wizard is currently showing.
    *
-   * The wizard saves on unmount, so stepping away is what persists the form —
+   * Distinct from {@link openPreSmokeStep} because the click is *known* to
+   * unmount that step and remount pre-smoke, so a load is always issued —
+   * exactly the case "wait until nothing is in flight" cannot serve, since it
+   * is satisfied by the earlier loads in the instant before this one hits the
+   * wire. Waiting for a load newer than the mark instead means the step handed
+   * back is hydrated, not merely rendered.
+   */
+  private async returnToPreSmokeStep(): Promise<void> {
+    const landed = this.preSmokeLoads.mark();
+    await this.clickPreSmokeStep();
+    await this.preSmokeLoads.waitForLoadSince(landed);
+  }
+
+  private async clickPreSmokeStep(): Promise<void> {
+    await this.stepButton('Pre-Smoke').click();
+    await expect(this.preSmokeName).toBeVisible();
+  }
+
+  /** Leave the pre-smoke step for the Smoke step, committing the typed values. */
+  async leavePreSmokeStep(): Promise<void> {
+    await this.leaveStepCommitting('/api/presmoke', () => this.openSmokeStep());
+  }
+
+  /**
+   * Navigate away from a step and wait for the save that unmounting it triggers
+   * to be accepted. `resourcePath` is the POST the leaving step issues.
+   *
+   * A wizard step saves on unmount, so stepping away is what persists the form —
    * and the save is fire-and-forget, so a reload issued straight after the click
-   * can outrun it. Wait for the pre-smoke write to land before returning, so a
-   * following reload reads the backend's record rather than racing it.
+   * can outrun it. Waiting for the write here means "leave, then reload" proves
+   * persistence rather than racing it.
    *
    * "Landed" means accepted, not merely answered: the response is matched by URL
    * and method (so a rejected save is still awaited rather than timing out on a
@@ -347,24 +457,108 @@ export class FrontendApp {
    * refuses fails here — at the write — instead of surfacing later as a
    * misleading "the data didn't load" assertion.
    */
-  async leavePreSmokeStep(): Promise<void> {
+  private async leaveStepCommitting(
+    resourcePath: string,
+    leave: () => Promise<void>
+  ): Promise<void> {
     const saved = this.page.waitForResponse(
-      res => res.url().endsWith('/api/presmoke') && res.request().method() === 'POST'
+      res => res.url().endsWith(resourcePath) && res.request().method() === 'POST'
     );
-    await this.openSmokeStep();
+    await leave();
     const response = await saved;
     expect(
       response.ok(),
-      `pre-smoke save was rejected: POST /api/presmoke -> ${response.status()} ${await response
+      `save was rejected: POST ${resourcePath} -> ${response.status()} ${await response
         .text()
         .catch(() => '')}`
     ).toBeTruthy();
   }
 
-  /** Move from the pre-smoke step to the live Smoke step. */
+  /**
+   * Move to the live Smoke step and wait for it to be ready to work with.
+   *
+   * The step's profile load must land before a journey types: not only would a
+   * late load overwrite what was typed, the step also refuses to save a draft it
+   * never hydrated — so typing too early is discarded without a trace.
+   */
   async openSmokeStep(): Promise<void> {
+    const landed = this.smokeProfileLoads.mark();
     await this.stepButton('Smoke').click();
     await expect(this.chart).toBeVisible();
+    await this.smokeProfileLoads.waitForLoadSince(landed);
+  }
+
+  private get smokeChamberName(): Locator {
+    return this.page.getByTestId('smoke-chamber-name-input');
+  }
+
+  private smokeProbeName(probe: 1 | 2 | 3): Locator {
+    return this.page.getByTestId(`smoke-probe${probe}-name-input`);
+  }
+
+  private get smokeWoodType(): Locator {
+    return this.page.getByTestId('smoke-wood-type-input');
+  }
+
+  private get smokeNotes(): Locator {
+    return this.page.getByTestId('smoke-notes-input');
+  }
+
+  /**
+   * Fill in the smoke step's editable fields, as a pitmaster settling in for a
+   * cook does: label each probe by what it is actually measuring, record the
+   * wood, and start a running log.
+   *
+   * The chamber and probe names are unlabelled inline inputs styled as headings,
+   * and the wood type is a free-solo autocomplete that accepts any wood a
+   * pitmaster names, list or no list.
+   */
+  async fillSmokeStep(fields: SmokeStepFields): Promise<void> {
+    await this.fillField(this.smokeChamberName, fields.chamberName);
+    await this.fillField(this.smokeProbeName(1), fields.probe1Name);
+    await this.fillField(this.smokeProbeName(2), fields.probe2Name);
+    await this.fillField(this.smokeProbeName(3), fields.probe3Name);
+    await this.fillWoodType(fields.woodType);
+    await this.fillField(this.smokeNotes, fields.notes);
+  }
+
+  /**
+   * Enter the wood type, dismissing the suggestion popup it may open.
+   *
+   * The popup floats over the notes field directly below, so leaving it open
+   * would make the next field unclickable. Escape only closes it (the
+   * autocomplete does not clear on escape), and the re-assertion proves the
+   * typed wood survived the dismissal.
+   */
+  private async fillWoodType(value: string): Promise<void> {
+    await this.throughAsyncLoad(async () => {
+      await this.smokeWoodType.fill(value);
+      await this.smokeWoodType.press('Escape');
+      await expect(this.smokeWoodType).toHaveValue(value, { timeout: 1_000 });
+    });
+  }
+
+  /**
+   * Assert the smoke step shows the given values — the read half of the
+   * fill/expect pair, used after a reload to prove the backend supplied them.
+   */
+  async expectSmokeStepShows(fields: SmokeStepFields): Promise<void> {
+    await expect(this.smokeChamberName).toHaveValue(fields.chamberName);
+    await expect(this.smokeProbeName(1)).toHaveValue(fields.probe1Name);
+    await expect(this.smokeProbeName(2)).toHaveValue(fields.probe2Name);
+    await expect(this.smokeProbeName(3)).toHaveValue(fields.probe3Name);
+    await expect(this.smokeWoodType).toHaveValue(fields.woodType);
+    await expect(this.smokeNotes).toHaveValue(fields.notes);
+  }
+
+  /**
+   * Leave the Smoke step for the pre-smoke step, committing the typed values.
+   *
+   * Like the pre-smoke step, the smoke step saves its profile (names, wood type
+   * and notes) when it unmounts, so stepping away is what persists them.
+   */
+  async leaveSmokeStep(): Promise<void> {
+    await this.leaveStepCommitting('/api/smokeProfile/current', () => this.returnToPreSmokeStep());
   }
 
   private get chart(): Locator {
@@ -558,12 +752,12 @@ export class FrontendApp {
   }
 
   async reload(): Promise<void> {
-    const landed = this.preSmokeLoadsLanded;
+    const landed = this.preSmokeLoads.mark();
     await this.page.reload();
     await expect(this.stepButton('Pre-Smoke')).toBeVisible();
     // A reload restarts the wizard on the pre-smoke step, so its load is always
     // issued; waiting for it here means the values read back after a reload are
     // the backend's, not the blank form the step renders until the load lands.
-    await this.waitForPreSmokeLoad(landed);
+    await this.preSmokeLoads.waitForLoadSince(landed);
   }
 }
