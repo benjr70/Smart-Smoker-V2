@@ -26,6 +26,12 @@ LXC_MODULE_VARS="${SCRIPT_DIR}/terraform/modules/lxc-container/variables.tf"
 PROD_ENV_VARS="${SCRIPT_DIR}/terraform/environments/prod-cloud/variables.tf"
 PROD_DEPLOY_WF="${REPO_ROOT}/.github/workflows/prod-deploy.yml"
 
+# Workflows whose jobs run containers on the self-hosted proxmox runner.
+RUNNER_CONTAINER_WFS=(
+    "${REPO_ROOT}/.github/workflows/dev-deploy.yml"
+    "${REPO_ROOT}/.github/workflows/smoker-deploy.yml"
+)
+
 # Test counters
 TESTS_RUN=0
 TESTS_FAILED=0
@@ -260,6 +266,57 @@ test_prod_deploy_copies_helper_scripts() {
 }
 
 #-------------------------------------------------------------------------------
+# AC 6 (issue #412): every `docker run` executed ON the self-hosted proxmox
+# runner must pin an explicit --runtime.
+#
+# The runner's daemon.json sets "default-runtime": "crun" (AC 1), but the
+# runner box was provisioned before the crun 1.21 pin landed, while docker-ce
+# kept auto-upgrading. Docker 29.x writes an OCI config with ociVersion 1.2.1,
+# which the box's stale crun rejects:
+#
+#   docker: Error response from daemon: failed to create task for container:
+#   failed to create shim task: OCI runtime create failed: unknown version
+#   specified   (exit code 125)
+#
+# That killed every deployed-e2e run. crun is only the default because runc
+# trips over net.ipv4.ip_unprivileged_port_start in an unprivileged LXC — which
+# only bites containers that publish ports. These e2e containers all run with
+# --network host and publish nothing, so pinning them to runc is safe and
+# unblocks the journeys without waiting on a runner re-provision.
+#-------------------------------------------------------------------------------
+test_runner_docker_runs_pin_a_runtime() {
+    echo "TEST: self-hosted-runner 'docker run' invocations pin an OCI runtime"
+
+    local offenders=()
+    local wf
+    for wf in "${RUNNER_CONTAINER_WFS[@]}"; do
+        if [ ! -f "${wf}" ]; then
+            fail "runner workflow exists" "missing: ${wf}"
+            return
+        fi
+
+        # Join backslash-continued lines so each logical command is one line,
+        # then flag any `docker run` command with no --runtime flag.
+        local unpinned
+        unpinned=$(sed -e ':a' -e '/\\$/{N;s/\\\n//;ta' -e '}' "${wf}" \
+            | grep -E '(^|[^-[:alnum:]])docker run' \
+            | grep -vc -- '--runtime' || true)
+
+        if [ "${unpinned}" -gt 0 ]; then
+            offenders+=("$(basename "${wf}") (${unpinned})")
+        fi
+    done
+
+    if [ "${#offenders[@]}" -gt 0 ]; then
+        fail "runner 'docker run' must pass --runtime" \
+             "unpinned invocations in: ${offenders[*]} — stale crun fails with 'unknown version specified' (exit 125)"
+        return
+    fi
+
+    pass "self-hosted-runner 'docker run' invocations pin an OCI runtime"
+}
+
+#-------------------------------------------------------------------------------
 # Run the suite
 #-------------------------------------------------------------------------------
 echo "=========================================="
@@ -273,6 +330,7 @@ test_lxc_module_models_keyctl
 test_prod_env_features_accepts_keyctl
 test_prod_deploy_smoke_is_blocking
 test_prod_deploy_copies_helper_scripts
+test_runner_docker_runs_pin_a_runtime
 
 echo ""
 echo "=========================================="
