@@ -1,6 +1,6 @@
 import { createApiClient } from './client';
 import { createFakeBackend } from './fakeBackend';
-import { ApiError } from './transport';
+import { ApiError } from 'api-transport/src';
 
 const buildClient = (
   cloudSeed?: Parameters<typeof createFakeBackend>[0],
@@ -37,6 +37,29 @@ describe('smoker api client', () => {
         { method: 'put', path: 'state/toggleSmoking', body: undefined },
       ]);
       expect(device.requests).toEqual([]);
+    });
+
+    // Both state routes answer with an EMPTY body in ordinary operation:
+    // `GET state` on a fresh or reset database (StateService.GetState resolves
+    // `undefined`), and `PUT state/toggleSmoking` with no current smoke
+    // (StateService.toggleSmoking returns an explicit `null`). Every smoker call
+    // site reads the result unguarded — `home.tsx` does `state.smoking` inside a
+    // `.then()` with no `.catch()` — so the contract is that `.smoking` reads as
+    // `undefined` and nothing throws.
+    it('getState survives an empty body when no state document exists', async () => {
+      const { client } = buildClient({ state: null });
+
+      const result = await client.state.getState();
+
+      expect(result.smoking).toBeUndefined();
+    });
+
+    it('toggleSmoking survives an empty body when there is no current smoke', async () => {
+      const { client } = buildClient({ state: null });
+
+      const result = await client.state.toggleSmoking();
+
+      expect(result.smoking).toBeUndefined();
     });
   });
 

@@ -16,7 +16,7 @@ jobs:
   test-apps:
     uses: ./.github/workflows/test.yml
     with:
-      apps: '["backend", "device-service", "frontend", "smoker", "TemperatureChart", "smoke-session"]'
+      apps: '["backend", "device-service", "frontend", "smoker", "TemperatureChart", "smoke-session", "api-transport"]'
       ref: ${{ github.ref }}
 
   # Advisory typecheck gate (PRD #183, Level 6 harness). Flip `blocking: true`
@@ -24,7 +24,7 @@ jobs:
   typecheck:
     uses: ./.github/workflows/typecheck.yml
     with:
-      apps: '["backend", "device-service", "frontend", "smoker", "TemperatureChart", "smoke-session"]'
+      apps: '["backend", "device-service", "frontend", "smoker", "TemperatureChart", "smoke-session", "api-transport"]'
       ref: ${{ github.ref }}
       blocking: false
 
@@ -76,7 +76,7 @@ jobs:
           echo "" >> comment.md
 
           # Process each app first to build the arrays
-          apps=("backend" "device-service" "frontend" "smoker" "TemperatureChart" "smoke-session")
+          apps=("backend" "device-service" "frontend" "smoker" "TemperatureChart" "smoke-session" "api-transport")
           failed_apps=()
           coverage_failed_apps=()
 
@@ -174,7 +174,7 @@ jobs:
                             # Try multiple possible paths for coverage-summary.json based on app type
               coverage_summary_path=""
               case "$app" in
-                TemperatureChart|smoke-session) is_package=true ;;
+                TemperatureChart|smoke-session|api-transport) is_package=true ;;
                 *) is_package=false ;;
               esac
               if [ "$is_package" = "true" ]; then
@@ -230,7 +230,7 @@ jobs:
                 # Try multiple possible paths for lcov.info as fallback
                 lcov_path=""
                 case "$app" in
-                  TemperatureChart|smoke-session) is_package=true ;;
+                  TemperatureChart|smoke-session|api-transport) is_package=true ;;
                   *) is_package=false ;;
                 esac
                 if [ "$is_package" = "true" ]; then
@@ -321,7 +321,7 @@ jobs:
             fi
             
             # Build status (for apps that have builds)
-            if [[ "$app" == "TemperatureChart" || "$app" == "smoke-session" ]]; then
+            if [[ "$app" == "TemperatureChart" || "$app" == "smoke-session" || "$app" == "api-transport" ]]; then
               build_status_icon="N/A"
             elif [[ "$build_status" == "success" ]]; then
               build_status_icon="✅ Passed"
@@ -397,6 +397,7 @@ jobs:
             echo "- **Smoker**: 80% lines/functions/statements, 75% branches" >> comment.md
             echo "- **TemperatureChart**: 75% lines/branches/statements, 45% functions" >> comment.md
             echo "- **smoke-session**: 80% (lines, functions, branches, statements)" >> comment.md
+            echo "- **api-transport**: 80% (lines, functions, branches, statements)" >> comment.md
           fi
 
           echo "" >> comment.md

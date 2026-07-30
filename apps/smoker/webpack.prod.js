@@ -31,11 +31,14 @@ module.exports = {
         exclude: [/node_modules/, /\.test\.(ts|tsx)$/, /\.spec\.(ts|tsx)$/],
       },
       {
-        // Build TS/TSX sources from the workspace package "temperaturechart"
+        // Build TS/TSX sources from the workspace packages "temperaturechart"
+        // and "api-transport", which ship TS/TSX sources (no prebuilt dist).
         test: /\.tsx?$/,
         include: [
           path.resolve(__dirname, '../../packages/TemperatureChart/src'),
           path.resolve(__dirname, '../../node_modules/temperaturechart/src'),
+          path.resolve(__dirname, '../../packages/api-transport/src'),
+          path.resolve(__dirname, '../../node_modules/api-transport/src'),
         ],
         use: {
           loader: 'ts-loader',
@@ -52,6 +55,16 @@ module.exports = {
   },
   resolve: {
     extensions: ['.tsx', '.ts', '.js'],
+    alias: {
+      // axios is a PEER dependency of the shared "api-transport" package, which
+      // owns the only `import axios from 'axios'` in the API layer. Webpack
+      // resolves that bare specifier from the ISSUER directory
+      // (packages/api-transport/src), whose node_modules walk leaves this app's
+      // tree and lands on the repo-root hoisted axios — which would make the
+      // pin in this app's package.json inert. Alias it back to the copy npm
+      // installed for this app. Guarded by src/api/axiosBundlePin.test.ts.
+      axios: path.dirname(require.resolve('axios/package.json')),
+    },
   },
   plugins: [
     new HtmlWebpackPlugin({

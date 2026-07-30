@@ -4,7 +4,10 @@ const Dotenv = require('dotenv-webpack');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
 var webpack = require('webpack');
 
-module.exports = env = {
+// NOTE: this was `module.exports = env = {` — an accidental assignment to an
+// undeclared global, which throws in strict mode (e.g. when the config is
+// required from a test). Nothing reads that global.
+module.exports = {
   mode: 'production',
   devtool: 'source-map',
   entry: './src/index.tsx',
@@ -31,14 +34,17 @@ module.exports = env = {
         exclude: /node_modules/,
       },
       {
-        // Allow building our workspace packages "temperaturechart" and
-        // "smoke-session" which ship TS/TSX sources (no prebuilt dist).
+        // Allow building our workspace packages "temperaturechart",
+        // "smoke-session" and "api-transport" which ship TS/TSX sources (no
+        // prebuilt dist).
         test: /\.tsx?$/,
         include: [
           path.resolve(__dirname, '../../packages/TemperatureChart/src'),
           path.resolve(__dirname, '../../node_modules/temperaturechart/src'),
           path.resolve(__dirname, '../../packages/smoke-session/src'),
           path.resolve(__dirname, '../../node_modules/smoke-session/src'),
+          path.resolve(__dirname, '../../packages/api-transport/src'),
+          path.resolve(__dirname, '../../node_modules/api-transport/src'),
         ],
         use: {
           loader: 'ts-loader',
@@ -55,6 +61,16 @@ module.exports = env = {
   },
   resolve: {
     extensions: ['.tsx', '.ts', '.js'],
+    alias: {
+      // axios is a PEER dependency of the shared "api-transport" package, which
+      // owns the only `import axios from 'axios'` in the API layer. Webpack
+      // resolves that bare specifier from the ISSUER directory
+      // (packages/api-transport/src), whose node_modules walk leaves this app's
+      // tree and lands on the repo-root hoisted axios — which would make the
+      // pin in this app's package.json inert. Alias it back to the copy npm
+      // installed for this app. Guarded by src/api/axiosBundlePin.test.ts.
+      axios: path.dirname(require.resolve('axios/package.json')),
+    },
   },
   plugins: [
     new HtmlWebpackPlugin({

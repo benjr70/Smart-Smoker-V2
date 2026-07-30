@@ -7,7 +7,7 @@ import { WeightUnits } from '../components/common/interfaces/enums';
 import { PreSmoke } from './types';
 import { createApiClient } from './client';
 import { createFakeBackend } from './fakeBackend';
-import { ApiError } from './transport';
+import { ApiError } from 'api-transport/src';
 
 const samplePreSmoke: PreSmoke = {
   name: 'Test Brisket',

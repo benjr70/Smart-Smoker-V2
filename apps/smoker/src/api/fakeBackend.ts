@@ -1,17 +1,24 @@
 /**
- * In-memory fake backend implementing the transport port.
+ * In-memory fake backend for the smoker's two backends.
  *
- * A seeded record store plus a path router mirroring the smoker's two backends
- * (cloud API + local device service), with a fault-injection hook to return
- * chosen statuses per method/path. Tests seed it, run real client code, and
- * assert on the store and the recorded requests afterward — no axios mocking.
+ * A seeded record store plus a route table mirroring the cloud API and the
+ * local device service, mounted on the shared fake-backend kernel (which
+ * records requests, injects faults and 404s unrouted paths). Tests seed it, run
+ * real client code, and assert on the store and the recorded requests
+ * afterward — no axios mocking.
  *
  * The smoker uses one instance per base URL: a cloud instance handles the
  * `state`/`smokeProfile`/`temps` routes and a device instance handles the
  * `api/wifiManager` routes, so a test can prove a call landed on the correct
  * host by inspecting which instance recorded it.
  */
-import { ApiError, HttpMethod, TransportPort } from './transport';
+import {
+  FakeBackendKernel,
+  FakeRequest,
+  NO_ROUTE,
+  clone,
+  createFakeBackendKernel,
+} from 'api-transport/src';
 import { State, TempData } from './types';
 
 /**
@@ -31,20 +38,16 @@ export type StoredSmokeProfile = {
   __v?: number;
 };
 
-export interface RecordedRequest {
-  method: HttpMethod;
-  path: string;
-  body: unknown;
-}
-
-export interface FaultInjection {
-  method: HttpMethod;
-  path: string;
-  status: number;
-}
-
 export interface FakeBackendSeed {
-  state?: State;
+  /**
+   * The persisted state document. Seed `null` to model a backend with no state:
+   * `GET state` resolves `undefined` on a fresh or reset database and
+   * `PUT state/toggleSmoking` returns an explicit `null` when there is no
+   * current smoke. Nest serializes both as an EMPTY body, which the smoker's
+   * transport hands back verbatim as `''` (it does not opt into the
+   * empty-body-to-null mapping).
+   */
+  state?: State | null;
   smokeProfile?: {
     current?: StoredSmokeProfile;
   };
@@ -58,8 +61,11 @@ export interface FakeBackendSeed {
   };
 }
 
+/** What the transport yields for an empty-body 200 (axios surfaces `''`). */
+const EMPTY_BODY = '';
+
 interface FakeStore {
-  state: State;
+  state: State | null;
   smokeProfile: {
     current: StoredSmokeProfile | undefined;
   };
@@ -73,32 +79,11 @@ interface FakeStore {
   };
 }
 
-export interface FakeBackend extends TransportPort {
-  readonly requests: RecordedRequest[];
-  readonly store: FakeStore;
-  injectFault(fault: FaultInjection): void;
-}
-
-const clone = <T>(value: T): T => {
-  if (value === null || typeof value !== 'object') {
-    return value;
-  }
-  if (value instanceof Date) {
-    return new Date(value.getTime()) as unknown as T;
-  }
-  if (Array.isArray(value)) {
-    return value.map(item => clone(item)) as unknown as T;
-  }
-  const result: Record<string, unknown> = {};
-  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
-    result[key] = clone(item);
-  }
-  return result as T;
-};
+export type FakeBackend = FakeBackendKernel<FakeStore>;
 
 export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
   const store: FakeStore = {
-    state: seed.state ?? { smokeId: '', smoking: false },
+    state: seed.state === undefined ? { smokeId: '', smoking: false } : seed.state,
     smokeProfile: {
       current: seed.smokeProfile?.current,
     },
@@ -111,74 +96,47 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
       connectResult: seed.wifi?.connectResult ?? { success: true },
     },
   };
-  const requests: RecordedRequest[] = [];
-  const faults: FaultInjection[] = [];
-
-  const findFault = (method: HttpMethod, path: string): FaultInjection | undefined =>
-    faults.find(fault => fault.method === method && fault.path === path);
-
-  const route = <T>(method: HttpMethod, path: string, body: unknown): T => {
-    requests.push({ method, path, body });
-
-    const fault = findFault(method, path);
-    if (fault) {
-      throw new ApiError({ status: fault.status, path, method });
-    }
-
+  const route = ({ method, path, body }: FakeRequest): unknown => {
     // Cloud API routes.
     if (path === 'state' && method === 'get') {
-      return clone(store.state) as unknown as T;
+      return store.state === null ? EMPTY_BODY : clone(store.state);
     }
     if (path === 'state/toggleSmoking' && method === 'put') {
+      // With no state (or no smokeId) the backend toggles nothing and returns
+      // null, which reaches the transport as an empty body.
+      if (store.state === null) {
+        return EMPTY_BODY;
+      }
       store.state = { ...store.state, smoking: !store.state.smoking };
-      return clone(store.state) as unknown as T;
+      return clone(store.state);
     }
     if (path === 'smokeProfile/current' && method === 'get') {
       // An unsaved profile is represented as null on the wire, never undefined.
-      return (store.smokeProfile.current === undefined
-        ? null
-        : clone(store.smokeProfile.current)) as unknown as T;
+      return store.smokeProfile.current === undefined ? null : clone(store.smokeProfile.current);
     }
     if (path === 'smokeProfile/current' && method === 'post') {
       store.smokeProfile.current = clone(body) as StoredSmokeProfile;
-      return clone(store.smokeProfile.current) as unknown as T;
+      return clone(store.smokeProfile.current);
     }
     if (path === 'temps' && method === 'get') {
-      return clone(store.temps.current) as unknown as T;
+      return clone(store.temps.current);
     }
     if (path === 'temps/batch' && method === 'post') {
       const batch = clone(body) as TempData[];
       store.temps.batches.push(batch);
-      return { success: true, count: batch.length } as unknown as T;
+      return { success: true, count: batch.length };
     }
 
     // Device-service routes.
     if (path === 'api/wifiManager/connect' && method === 'post') {
-      return clone(store.wifi.connectResult) as unknown as T;
+      return clone(store.wifi.connectResult);
     }
     if (path === 'api/wifiManager/connection' && method === 'get') {
-      return clone(store.wifi.connection) as unknown as T;
+      return clone(store.wifi.connection);
     }
 
-    throw new ApiError({
-      status: 404,
-      path,
-      method,
-      message: `No fake route for ${method} ${path}`,
-    });
+    return NO_ROUTE;
   };
 
-  return {
-    get: <T>(path: string) => Promise.resolve().then(() => route<T>('get', path, undefined)),
-    post: <T>(path: string, body?: unknown) =>
-      Promise.resolve().then(() => route<T>('post', path, body)),
-    put: <T>(path: string, body?: unknown) =>
-      Promise.resolve().then(() => route<T>('put', path, body)),
-    delete: <T>(path: string) => Promise.resolve().then(() => route<T>('delete', path, undefined)),
-    requests,
-    store,
-    injectFault: (fault: FaultInjection) => {
-      faults.push(fault);
-    },
-  };
+  return createFakeBackendKernel({ store, route });
 };

@@ -3,7 +3,10 @@
  *
  * Ports & adapters: a tiny transport port is the only seam that knows HTTP
  * exists (production = axios adapter, tests = in-memory fake backend); a deep
- * typed client sits above it; a React provider/hook injects the client.
+ * typed client sits above it; a React provider/hook injects the client. The
+ * app-agnostic pieces — the port, the typed `ApiError`, the axios adapter and
+ * the fake-backend kernel — live in the shared `api-transport` package and are
+ * re-exported here so call sites keep importing from one place.
  */
 export type {
   NotificationSettings,
@@ -17,19 +20,12 @@ export type {
   TempData,
   rating,
 } from './types';
-export type { HttpMethod, TransportPort } from './transport';
-export { ApiError } from './transport';
-export { createHttpTransport } from './httpAdapter';
+export type { FaultInjection, HttpMethod, RecordedRequest, TransportPort } from 'api-transport/src';
+export { ApiError, createHttpTransport } from 'api-transport/src';
 export type { SmokeEventPort } from './events';
 export { noopEventPort } from './events';
 export { createSocketEventPort } from './socketEventAdapter';
-export type {
-  FakeBackend,
-  FakeBackendSeed,
-  FaultInjection,
-  RecordedRequest,
-  StoredSmokeProfile,
-} from './fakeBackend';
+export type { FakeBackend, FakeBackendSeed, StoredSmokeProfile } from './fakeBackend';
 export { createFakeBackend } from './fakeBackend';
 export type {
   ApiClient,

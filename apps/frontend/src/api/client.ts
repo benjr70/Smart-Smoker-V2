@@ -6,10 +6,9 @@
  * routing, aggregates and the ordered delete cascade. It throws typed errors —
  * it never resolves `undefined`.
  */
+import { TransportPort, createHttpTransport } from 'api-transport/src';
 import { SmokeEventPort, noopEventPort } from './events';
-import { createHttpTransport } from './httpAdapter';
 import { createSocketEventPort } from './socketEventAdapter';
-import { TransportPort } from './transport';
 import {
   NotificationSettings,
   PostSmoke,
@@ -414,14 +413,24 @@ export const createApiClient = (
   },
 });
 
+/** The cloud API base URL baked into the bundle, read once at construction. */
+const cloudBaseUrl = (): string | undefined => process.env.REACT_APP_CLOUD_URL;
+
 /**
- * Builds the production client: the HTTP (axios) transport plus the
- * socket-backed event port so `clearSmoke` broadcasts over the websocket. This
- * is the single wiring site that pairs the transport-pure client with its one
- * side-effect adapter.
+ * Builds the production client: the HTTP (axios) transport bound to the cloud
+ * API base URL, plus the socket-backed event port so `clearSmoke` broadcasts
+ * over the websocket. This is the single wiring site that pairs the
+ * transport-pure client with its one side-effect adapter, and the only place
+ * that decides where the transport points.
  */
 export const createProductionApiClient = (): ApiClient =>
-  createApiClient(createHttpTransport(), createSocketEventPort());
+  createApiClient(
+    // "No current resource" is `null` throughout this app — hooks and components
+    // branch on it — so the empty body a NestJS `null` return produces is mapped
+    // here rather than leaking `''` into component state.
+    createHttpTransport(cloudBaseUrl(), { emptyBodyAsNull: true }),
+    createSocketEventPort()
+  );
 
 let defaultClient: ApiClient | undefined;
 

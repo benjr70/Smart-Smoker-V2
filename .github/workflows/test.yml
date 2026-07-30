@@ -92,6 +92,9 @@ jobs:
             "smoke-session")
               npm run test:coverage --prefix packages/smoke-session -- --coverageReporters=json-summary --coverageReporters=lcov --coverageReporters=text 2>&1 | tee test-output.log
               ;;
+            "api-transport")
+              npm run test:coverage --prefix packages/api-transport -- --coverageReporters=json-summary --coverageReporters=lcov --coverageReporters=text 2>&1 | tee test-output.log
+              ;;
             *)
               echo "Unknown app: ${{ matrix.app }}"
               exit 1
@@ -340,7 +343,7 @@ jobs:
               # Try to find coverage summary in the correct location
               coverage_summary_path=""
               case "$app" in
-                TemperatureChart|smoke-session) is_package=true ;;
+                TemperatureChart|smoke-session|api-transport) is_package=true ;;
                 *) is_package=false ;;
               esac
               if [ "$is_package" = "true" ]; then

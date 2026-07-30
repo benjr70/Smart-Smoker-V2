@@ -7,9 +7,8 @@
  * device-service base URL — and routes each resource call to the correct one.
  * It throws typed errors; it never resolves `undefined`.
  */
+import { TransportPort, createHttpTransport } from 'api-transport/src';
 import { resolveDeviceUrl } from './deviceUrl';
-import { createHttpTransport } from './httpAdapter';
-import { TransportPort } from './transport';
 import { SmokeProfile, State, TempData, WifiManager } from './types';
 
 export interface StateResource {
