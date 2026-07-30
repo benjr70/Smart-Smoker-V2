@@ -17,7 +17,10 @@
  *
  * That is a green local build and a red Docker publish (issue #412). These
  * tests model webpack's rule matching over BOTH layouts so a workspace package
- * added to this app without an include entry fails here, not in CI.
+ * added to this app without an include entry fails here, not in CI — for the
+ * node_modules/ layout because nothing would compile it at all, and for the
+ * packages/ layout because the workspace rule, not the app's catch-all source
+ * rule, must be the one that claims it (see `includeMatchedLoadersFor`).
  */
 import fs from 'fs';
 import path from 'path';
@@ -54,17 +57,41 @@ const anyCondition = (condition: Condition | Condition[], file: string): boolean
     ? condition.some(c => conditionMatches(c, file))
     : conditionMatches(condition, file);
 
+/** The rules webpack would apply to `file`. */
+const rulesFor = (config: WebpackModuleConfig, file: string): WebpackRule[] =>
+  (config.module?.rules ?? []).filter(
+    rule =>
+      (rule.test === undefined || anyCondition(rule.test, file)) &&
+      (rule.include === undefined || anyCondition(rule.include, file)) &&
+      (rule.exclude === undefined || !anyCondition(rule.exclude, file))
+  );
+
+/** The loader names a rule configures. */
+const loaderNames = (rule: WebpackRule): string[] =>
+  (Array.isArray(rule.use) ? rule.use : [rule.use]).map(use =>
+    typeof use === 'string' ? use : (use?.loader ?? '')
+  );
+
 /** The loader names webpack would apply to `file`, across all matching rules. */
 const loadersFor = (config: WebpackModuleConfig, file: string): string[] =>
-  (config.module?.rules ?? [])
-    .filter(
-      rule =>
-        (rule.test === undefined || anyCondition(rule.test, file)) &&
-        (rule.include === undefined || anyCondition(rule.include, file)) &&
-        (rule.exclude === undefined || !anyCondition(rule.exclude, file))
-    )
-    .flatMap(rule => (Array.isArray(rule.use) ? rule.use : [rule.use]))
-    .map(use => (typeof use === 'string' ? use : (use?.loader ?? '')));
+  rulesFor(config, file).flatMap(loaderNames);
+
+/**
+ * The loader names applied to `file` by rules that matched it through an
+ * explicit `include`.
+ *
+ * The app's own source rule has no `include` and only excludes `node_modules`,
+ * so it already sweeps up every `packages/<pkg>/src` path. Asserting on
+ * `loadersFor` alone therefore says nothing about the packages/ layout: the
+ * entry could be missing from the `include` list and the assertion would still
+ * pass on the app rule's coattails. Requiring an include-matched ts-loader
+ * pins BOTH layouts to the workspace rule, which is what the layout flip
+ * between local checkouts and dereferenced CI artifacts actually depends on.
+ */
+const includeMatchedLoadersFor = (config: WebpackModuleConfig, file: string): string[] =>
+  rulesFor(config, file)
+    .filter(rule => rule.include !== undefined)
+    .flatMap(loaderNames);
 
 /** Directory names under packages/ keyed by the package name apps depend on. */
 const workspacePackageDirs = (): Map<string, string> => {
@@ -136,6 +163,10 @@ describe('workspace package sources are compiled by the smoker bundle', () => {
   ])('%s', (_configName, config) => {
     it.each(cases)('runs ts-loader over %s sources in the %s layout', (_name, _layout, file) => {
       expect(loadersFor(config, file)).toContain('ts-loader');
+    });
+
+    it.each(cases)('lists %s in an explicit include for the %s layout', (_name, _layout, file) => {
+      expect(includeMatchedLoadersFor(config, file)).toContain('ts-loader');
     });
   });
 });
