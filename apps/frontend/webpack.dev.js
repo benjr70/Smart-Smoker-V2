@@ -4,7 +4,10 @@ const Dotenv = require('dotenv-webpack');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
 var webpack = require('webpack');
 
-module.exports = env = {
+// NOTE: this was `module.exports = env = {` — an accidental assignment to an
+// undeclared global, which throws in strict mode (e.g. when the config is
+// required from a test). Nothing reads that global.
+module.exports = {
   mode: 'development',
   entry: './src/index.tsx',
   devtool: 'inline-source-map',
@@ -47,6 +50,16 @@ module.exports = env = {
   },
   resolve: {
     extensions: ['.tsx', '.ts', '.js'],
+    alias: {
+      // axios is a PEER dependency of the shared "api-transport" package, which
+      // owns the only `import axios from 'axios'` in the API layer. Webpack
+      // resolves that bare specifier from the ISSUER directory
+      // (packages/api-transport/src), whose node_modules walk leaves this app's
+      // tree and lands on the repo-root hoisted axios — which would make the
+      // pin in this app's package.json inert. Alias it back to the copy npm
+      // installed for this app. Guarded by src/api/axiosBundlePin.test.ts.
+      axios: path.dirname(require.resolve('axios/package.json')),
+    },
   },
   plugins: [
     new HtmlWebpackPlugin({

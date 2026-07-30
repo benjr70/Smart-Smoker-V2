@@ -10,6 +10,13 @@
  *
  * An app builds one of these per host it talks to (the smoker builds two: cloud
  * API and device service).
+ *
+ * CONSUMERS: axios is a PEER dependency — each app supplies its own copy. A
+ * bundler resolves the bare `axios` below from THIS directory, so the
+ * node_modules walk leaves the app's tree and lands on the repo-root hoisted
+ * copy unless the app pins it. Every consuming app's webpack config therefore
+ * carries `resolve.alias.axios` pointing at its own installed axios, guarded by
+ * an `axiosBundlePin` test in that app.
  */
 import axios from 'axios';
 import { ApiError, HttpMethod, TransportPort } from './transport';
