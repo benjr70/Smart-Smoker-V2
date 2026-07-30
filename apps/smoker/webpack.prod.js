@@ -31,12 +31,19 @@ module.exports = {
         exclude: [/node_modules/, /\.test\.(ts|tsx)$/, /\.spec\.(ts|tsx)$/],
       },
       {
-        // Build TS/TSX sources from the workspace packages "temperaturechart"
-        // and "api-transport", which ship TS/TSX sources (no prebuilt dist).
+        // Build TS/TSX sources from the workspace packages "temperaturechart",
+        // "smoke-session" and "api-transport", which ship TS/TSX sources (no
+        // prebuilt dist). Both layouts are listed on purpose: locally
+        // node_modules/<pkg> is a symlink so webpack reports the packages/
+        // real path, while CI ships the workspace as an upload-artifact, which
+        // dereferences the symlink into a real node_modules/ directory that the
+        // rule above excludes. Guarded by src/workspaceSourceLoader.test.ts.
         test: /\.tsx?$/,
         include: [
           path.resolve(__dirname, '../../packages/TemperatureChart/src'),
           path.resolve(__dirname, '../../node_modules/temperaturechart/src'),
+          path.resolve(__dirname, '../../packages/smoke-session/src'),
+          path.resolve(__dirname, '../../node_modules/smoke-session/src'),
           path.resolve(__dirname, '../../packages/api-transport/src'),
           path.resolve(__dirname, '../../node_modules/api-transport/src'),
         ],

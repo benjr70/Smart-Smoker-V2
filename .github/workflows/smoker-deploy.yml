@@ -145,7 +145,7 @@ jobs:
       - name: Forward device-service port for the smoker temp relay
         run: |
           docker rm -f e2e-device-forward 2>/dev/null || true
-          docker run -d --name e2e-device-forward --network host alpine/socat \
+          docker run -d --runtime runc --name e2e-device-forward --network host alpine/socat \
             TCP-LISTEN:3003,fork,reuseaddr TCP:${{ env.VIRTUAL_SMOKER_FQDN }}:3003
 
       # The self-hosted runner has no passwordless sudo, so
@@ -157,6 +157,13 @@ jobs:
       # --ipc host avoids chromium /dev/shm crashes; running as the runner uid
       # keeps report files owned by the runner so the next checkout's
       # `git clean` works.
+      #
+      # --runtime runc (issue #412): the runner's default crun predates the
+      # crun 1.21 pin in the docker ansible role and rejects the ociVersion
+      # 1.2.1 config that docker 29.x writes ("OCI runtime create failed:
+      # unknown version specified", exit 125). These containers run
+      # --network host and publish no ports, so runc's unprivileged-LXC
+      # low-port limitation does not apply.
       - name: Run virtual-smoker temp-chain journey (playwright container)
         env:
           CI: 'true'
@@ -169,7 +176,7 @@ jobs:
           E2E_BACKEND_URL: https://${{ env.DEV_CLOUD_FQDN }}:8443
         run: |
           PLAYWRIGHT_VERSION=$(node -p "require('./node_modules/@playwright/test/package.json').version")
-          docker run --rm --network host --ipc host \
+          docker run --rm --runtime runc --network host --ipc host \
             --user "$(id -u):$(id -g)" \
             -v "$PWD":/repo -w /repo/e2e \
             -e HOME=/tmp \

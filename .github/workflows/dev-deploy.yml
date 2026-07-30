@@ -474,6 +474,16 @@ jobs:
       # host avoids chromium /dev/shm crashes; running as the runner uid keeps
       # report/test-result files owned by the runner so the next checkout's
       # `git clean` can remove them.
+      #
+      # --runtime runc (issue #412): the runner's daemon.json sets crun as the
+      # default runtime, but the box predates the crun 1.21 pin in the docker
+      # ansible role while docker-ce kept auto-upgrading. Docker 29.x emits an
+      # OCI config with ociVersion 1.2.1, which the stale crun rejects —
+      # "OCI runtime create failed: unknown version specified", exit 125 —
+      # so every deployed-e2e run died before Playwright started. crun is only
+      # the default because runc trips over net.ipv4.ip_unprivileged_port_start
+      # in an unprivileged LXC, which only affects containers that publish
+      # ports; this one runs --network host and publishes none.
       - name: Run deployed user journeys (playwright container)
         env:
           CI: 'true'
@@ -487,7 +497,7 @@ jobs:
           E2E_DEVICE_URL: https://${{ env.DEV_FQDN }}:8443
         run: |
           PLAYWRIGHT_VERSION=$(node -p "require('./node_modules/@playwright/test/package.json').version")
-          docker run --rm --network host --ipc host \
+          docker run --rm --runtime runc --network host --ipc host \
             --user "$(id -u):$(id -g)" \
             -v "$PWD":/repo -w /repo/e2e \
             -e HOME=/tmp \
