@@ -7,6 +7,13 @@
  * component unmounts. Failures keep the safe defaults / current value in place
  * and raise the app-root error snackbar instead of failing silently.
  *
+ * The unmount save is skipped when the value still matches what the backend
+ * last gave us, because a form the user never touched has nothing to persist.
+ * That is not merely an optimization: the pre-smoke defaults carry no weight,
+ * which the strict `PreSmokeDto` edge rejects, so an unconditional save made
+ * "cold-start the app, walk away from the Pre-Smoke step" raise
+ * "Could not save pre-smoke details." for every user on every fresh launch.
+ *
  * Returns the familiar `[state, setState]` pair, so a migrating component swaps
  * its `useState` + two `useEffect`s for a single call and leaves every downstream
  * setter untouched.
@@ -29,6 +36,34 @@ export interface UseCurrentResourceOptions<T> {
   saveErrorMessage?: string;
 }
 
+/**
+ * Structural equality over the JSON-shaped values these resources carry
+ * (objects, arrays, primitives) — enough to answer "did the user change
+ * anything?" without adding a utility dependency the repo does not have.
+ *
+ * Key order is irrelevant, and a missing key compares equal to an explicit
+ * `undefined`: the form defaults omit `weight.weight` entirely while a loaded
+ * document may carry it as `undefined`, and neither is an edit.
+ */
+export function isUnchanged(a: unknown, b: unknown): boolean {
+  if (a === b) {
+    return true;
+  }
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) {
+    return false;
+  }
+  if (Array.isArray(a) !== Array.isArray(b)) {
+    return false;
+  }
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((item, index) => isUnchanged(item, b[index]));
+  }
+  const left = a as Record<string, unknown>;
+  const right = b as Record<string, unknown>;
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+  return [...keys].every(key => isUnchanged(left[key], right[key]));
+}
+
 export function useCurrentResource<T>(
   options: UseCurrentResourceOptions<T>
 ): [T, Dispatch<SetStateAction<T>>] {
@@ -41,6 +76,12 @@ export function useCurrentResource<T>(
   // into refs updated on every render.
   const latest = useRef(state);
   latest.current = state;
+
+  // The value the backend last agreed with: the initial defaults until a load
+  // succeeds, then whatever that load returned. The unmount save is measured
+  // against it, so an untouched form (and a form whose edits were reverted)
+  // writes nothing.
+  const baseline = useRef<T>(options.initialValue);
 
   const optionsRef = useRef(options);
   optionsRef.current = options;
@@ -61,6 +102,7 @@ export function useCurrentResource<T>(
         // are resources, so none should overwrite the initial value (which would
         // otherwise blank the form fields / crash on `state.field.subfield`).
         if (active && result !== null && result !== undefined && (result as unknown) !== '') {
+          baseline.current = result;
           setState(result);
         }
       })
@@ -70,6 +112,12 @@ export function useCurrentResource<T>(
 
     return () => {
       active = false;
+      // Nothing edited, nothing to save. Skipping keeps a cold start from
+      // POSTing defaults the DTO cannot accept (and from creating an empty
+      // pre-smoke document, plus its smoke session, on every app launch).
+      if (isUnchanged(latest.current, baseline.current)) {
+        return;
+      }
       Promise.resolve()
         .then(() => save(clientRef.current, latest.current))
         .catch(() => {

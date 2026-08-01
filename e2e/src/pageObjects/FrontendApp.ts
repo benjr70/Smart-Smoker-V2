@@ -269,11 +269,40 @@ export class FrontendApp {
   private readonly smokeStateLoads: LoadWatcher;
   private readonly postSmokeLoads: LoadWatcher;
 
+  /**
+   * Every pre-smoke save the page has issued. Counted so a journey can assert a
+   * write did *not* happen — an untouched wizard step must persist nothing when
+   * it unmounts, which no on-screen state can evidence.
+   */
+  private preSmokeSaves = 0;
+
   constructor(private readonly page: Page) {
     this.preSmokeLoads = new LoadWatcher(page, 'pre-smoke', isPreSmokeLoad);
     this.smokeProfileLoads = new LoadWatcher(page, 'smoke profile', isSmokeProfileLoad);
     this.smokeStateLoads = new LoadWatcher(page, 'smoking state', isSmokeStateLoad);
     this.postSmokeLoads = new LoadWatcher(page, 'post-smoke', isPostSmokeLoad);
+    page.on('request', request => {
+      if (request.method() === 'POST' && request.url().endsWith('/api/presmoke')) {
+        this.preSmokeSaves++;
+      }
+    });
+  }
+
+  /** How many pre-smoke saves the page has issued so far. */
+  countPreSmokeSaves(): number {
+    return this.preSmokeSaves;
+  }
+
+  /**
+   * Assert the app is not showing an error snackbar.
+   *
+   * Given a settling window first: the snackbar a failed save raises appears
+   * only once that save has been answered, so asserting immediately would pass
+   * before the failure it is meant to catch has arrived.
+   */
+  async expectNoErrorSnackbar(settleMs = 2_000): Promise<void> {
+    await this.page.waitForTimeout(settleMs);
+    await expect(this.page.getByRole('alert')).toHaveCount(0);
   }
 
   async goto(): Promise<void> {

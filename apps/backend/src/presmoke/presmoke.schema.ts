@@ -7,8 +7,9 @@ export class Weight {
   @Prop()
   unit: string;
 
+  /** Absent until the meat has actually been weighed — see `PreSmokeDto`. */
   @Prop()
-  weight: number;
+  weight?: number;
 }
 export const WeightSchema = SchemaFactory.createForClass(Weight);
 export type PreSmokeDocument = PreSmoke & Document;
