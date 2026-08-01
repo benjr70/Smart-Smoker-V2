@@ -7,6 +7,7 @@
  * it never resolves `undefined`.
  */
 import { TransportPort, createHttpTransport } from 'api-transport/src';
+import { PushNotConfiguredError } from './errors';
 import { SmokeEventPort, noopEventPort } from './events';
 import { createSocketEventPort } from './socketEventAdapter';
 import {
@@ -102,8 +103,10 @@ export interface NotificationsResource {
   /**
    * GET `notifications/publicKey` — the VAPID application server key, read from
    * the backend at subscribe time rather than baked into this bundle. Rejects
-   * when the deployment has no key configured, so the caller surfaces "push is
-   * not set up" instead of handing `undefined` to `PushManager.subscribe`.
+   * with a {@link PushNotConfiguredError} when the deployment has no key
+   * configured, so the caller can surface "push is not set up on the server"
+   * distinctly from a transient failure instead of handing `undefined` to
+   * `PushManager.subscribe`.
    */
   getPublicKey(): Promise<string>;
   /**
@@ -112,7 +115,13 @@ export interface NotificationsResource {
    * with an already-known endpoint succeeds and refreshes the stored keys.
    */
   registerSubscription(subscription: PushSubscriptionPayload): Promise<void>;
-  /** POST `notifications/test` — dispatch a test push to every subscription. */
+  /**
+   * POST `notifications/test` — dispatch a test push to every subscription and
+   * resolve how many browsers it actually reached. The backend answers 200 even
+   * when the push service rejected every send (it only logs those), so `sent`
+   * is the only signal that separates "it arrived" from "it reached nobody" —
+   * callers must branch on it rather than treating the call itself as success.
+   */
   sendTest(): Promise<{ sent: number }>;
 }
 
@@ -379,7 +388,7 @@ export const createApiClient = (
         'notifications/publicKey'
       );
       if (!response?.publicKey) {
-        throw new Error('Push notifications are not configured on the server.');
+        throw new PushNotConfiguredError();
       }
       return response.publicKey;
     },

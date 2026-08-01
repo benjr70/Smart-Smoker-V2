@@ -342,6 +342,184 @@ describe('NotificationsService', () => {
       );
     });
 
+    // The settings page stores the probe selector as the label the user picked
+    // ('Probe 1'), while the oldest stored rules use the legacy 'Meat1' form.
+    // Both name the same physical reading, so both must resolve to it —
+    // otherwise the rule a user builds in the UI silently never fires.
+    it('fires a rule written with the settings-page probe name "Probe 1"', async () => {
+      mockNotificationSettingsModel.findOne.mockReturnValue({
+        exec: jest.fn().mockResolvedValue({
+          settings: [
+            {
+              type: false,
+              message: 'Probe 1 is done',
+              probe1: 'Probe 1',
+              op: '>',
+              temperature: 150,
+              lastNotificationSent: new Date('2023-01-01'),
+            },
+          ],
+        }),
+      });
+
+      await service.checkForNotification(mockTempDto);
+
+      expect(service.sendPushNotification).toHaveBeenCalledWith(
+        'Probe 1 is done',
+      );
+    });
+
+    it('resolves "Probe 2" and "Probe 3" to their own readings', async () => {
+      mockNotificationSettingsModel.findOne.mockReturnValue({
+        exec: jest.fn().mockResolvedValue({
+          settings: [
+            {
+              type: false,
+              message: 'Probe 2 is done',
+              probe1: 'Probe 2',
+              op: '>',
+              temperature: 135,
+              lastNotificationSent: new Date('2023-01-01'),
+            },
+            {
+              type: false,
+              message: 'Probe 3 is done',
+              probe1: 'Probe 3',
+              op: '>',
+              temperature: 135,
+              lastNotificationSent: new Date('2023-01-01'),
+            },
+          ],
+        }),
+      });
+
+      // Meat2Temp is 140 (above 135) and Meat3Temp is 130 (below), so only the
+      // probe-2 rule may fire: each selector must read its own probe.
+      await service.checkForNotification(mockTempDto);
+
+      expect(service.sendPushNotification).toHaveBeenCalledWith(
+        'Probe 2 is done',
+      );
+      expect(service.sendPushNotification).not.toHaveBeenCalledWith(
+        'Probe 3 is done',
+      );
+    });
+
+    it('compares against a probe-2 selector written in the settings-page form', async () => {
+      mockNotificationSettingsModel.findOne.mockReturnValue({
+        exec: jest.fn().mockResolvedValue({
+          settings: [
+            {
+              type: true,
+              message: 'Probe 1 is near the chamber',
+              probe1: 'Probe 1',
+              op: '>',
+              probe2: 'Chamber',
+              // Meat 160 vs chamber 250 - 100 = 150, so the rule fires only if
+              // both selectors resolve to their real readings.
+              offset: -100,
+              lastNotificationSent: new Date('2023-01-01'),
+            },
+          ],
+        }),
+      });
+
+      await service.checkForNotification(mockTempDto);
+
+      expect(service.sendPushNotification).toHaveBeenCalledWith(
+        'Probe 1 is near the chamber',
+      );
+    });
+
+    // A selector nothing maps to used to leave the watched temperature at 0,
+    // so a '<' rule compared 0 against its threshold and pushed a false alert
+    // every ten minutes for the whole cook. An unresolvable probe skips.
+    it('skips a rule whose probe cannot be resolved instead of alerting on a 0 reading', async () => {
+      mockNotificationSettingsModel.findOne.mockReturnValue({
+        exec: jest.fn().mockResolvedValue({
+          settings: [
+            {
+              type: false,
+              message: 'ghost probe is cold',
+              probe1: 'Probe 9',
+              op: '<',
+              temperature: 250,
+              lastNotificationSent: new Date('2023-01-01'),
+            },
+          ],
+        }),
+      });
+
+      await service.checkForNotification(mockTempDto);
+
+      expect(service.sendPushNotification).not.toHaveBeenCalled();
+    });
+
+    it('skips a comparison rule whose second probe cannot be resolved', async () => {
+      mockNotificationSettingsModel.findOne.mockReturnValue({
+        exec: jest.fn().mockResolvedValue({
+          settings: [
+            {
+              type: true,
+              message: 'compares against nothing',
+              probe1: 'Chamber',
+              op: '<',
+              probe2: 'Probe 9',
+              offset: 0,
+              lastNotificationSent: new Date('2023-01-01'),
+            },
+          ],
+        }),
+      });
+
+      await service.checkForNotification(mockTempDto);
+
+      expect(service.sendPushNotification).not.toHaveBeenCalled();
+    });
+
+    it('skips a comparison rule that never got a second probe', async () => {
+      mockNotificationSettingsModel.findOne.mockReturnValue({
+        exec: jest.fn().mockResolvedValue({
+          settings: [
+            {
+              type: true,
+              message: 'half-built rule',
+              probe1: 'Chamber',
+              op: '<',
+              probe2: undefined,
+              offset: 0,
+              lastNotificationSent: new Date('2023-01-01'),
+            },
+          ],
+        }),
+      });
+
+      await service.checkForNotification(mockTempDto);
+
+      expect(service.sendPushNotification).not.toHaveBeenCalled();
+    });
+
+    it('skips a rule whose probe has no reading yet rather than treating it as 0', async () => {
+      mockNotificationSettingsModel.findOne.mockReturnValue({
+        exec: jest.fn().mockResolvedValue({
+          settings: [
+            {
+              type: false,
+              message: 'probe 1 is cold',
+              probe1: 'Probe 1',
+              op: '<',
+              temperature: 250,
+              lastNotificationSent: new Date('2023-01-01'),
+            },
+          ],
+        }),
+      });
+
+      await service.checkForNotification({ ...mockTempDto, MeatTemp: '' });
+
+      expect(service.sendPushNotification).not.toHaveBeenCalled();
+    });
+
     it('should not trigger notification if recently sent', async () => {
       const recentSettings = {
         settings: [

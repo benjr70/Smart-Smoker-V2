@@ -7,6 +7,7 @@ import { NotificationSettings, Smoke, SmokeHistory, SmokeProfile, TempData, rati
 import { createApiClient } from './client';
 import { createFakeBackend } from './fakeBackend';
 import { ApiError } from 'api-transport/src';
+import { PushNotConfiguredError } from './errors';
 import { SmokeEventPort } from './events';
 
 const sampleTemps: TempData[] = [
@@ -506,6 +507,18 @@ describe('notifications client — push delivery', () => {
     );
   });
 
+  // An operator misconfiguration and a transient network failure need different
+  // answers, so the "no key on the server" rejection carries its own type
+  // rather than only a message a caller would have to string-match.
+  test('getPublicKey rejects with a typed not-configured error', async () => {
+    const backend = createFakeBackend({ notifications: { publicKey: null } });
+    const client = createApiClient(backend);
+
+    await expect(client.notifications.getPublicKey()).rejects.toBeInstanceOf(
+      PushNotConfiguredError
+    );
+  });
+
   test('registerSubscription stores the browser subscription on the backend', async () => {
     const backend = createFakeBackend();
     const client = createApiClient(backend);
@@ -543,6 +556,17 @@ describe('notifications client — push delivery', () => {
 
     expect(result).toEqual({ sent: 1 });
     expect(backend.store.notifications.testSends).toBe(1);
+  });
+
+  // The backend answers 200 even when every send was rejected by the push
+  // service, so the delivered count is the only thing that distinguishes "it
+  // arrived" from "it reached nobody" — the client must hand it back.
+  test('sendTest reports zero delivered when the push service rejects every send', async () => {
+    const backend = createFakeBackend({ notifications: { deliveryFails: true } });
+    const client = createApiClient(backend);
+    await client.notifications.registerSubscription(browserSubscription);
+
+    await expect(client.notifications.sendTest()).resolves.toEqual({ sent: 0 });
   });
 });
 

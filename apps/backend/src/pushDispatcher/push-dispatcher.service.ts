@@ -15,6 +15,18 @@ import {
 const APP_ICON = '/logo192.png';
 
 /**
+ * The single definition of "push is configured": both halves of the VAPID pair
+ * present. Read from the environment at call time and shared by the constructor
+ * (which initialises web-push) and {@link PushDispatcherService.getPublicKey}
+ * (which hands the key to browsers), so the two can never disagree.
+ */
+const readVapidKeys = (): { publicKey: string; privateKey: string } | null => {
+  const publicKey = process.env.VAPID_PUBLIC_KEY;
+  const privateKey = process.env.VAPID_PRIVATE_KEY;
+  return publicKey && privateKey ? { publicKey, privateKey } : null;
+};
+
+/**
  * The one place in the backend that talks to the web-push library.
  *
  * Owns the send fan-out over the stored subscriptions and the prune of
@@ -28,24 +40,30 @@ export class PushDispatcherService {
     @InjectModel(NotificationSubscription.name)
     private subscriptionModel: Model<NotificationSubscriptionDocument>,
   ) {
-    const publicKey = process.env.VAPID_PUBLIC_KEY;
-    const privateKey = process.env.VAPID_PRIVATE_KEY;
-    if (publicKey && privateKey) {
+    const vapid = readVapidKeys();
+    if (vapid) {
       webpush.setVapidDetails(
         'mailto:benrolf70@gmail.com',
-        publicKey,
-        privateKey,
+        vapid.publicKey,
+        vapid.privateKey,
       );
     }
   }
 
   /**
    * The VAPID public key browsers must subscribe with, read from the backend
-   * environment at call time. `null` means the deployment has no key configured
-   * — callers surface that rather than handing `undefined` to `PushManager`.
+   * environment at call time. `null` means the deployment has no *usable* key
+   * configured — callers surface that rather than handing `undefined` to
+   * `PushManager`.
+   *
+   * "Configured" is deliberately the same condition the constructor uses (see
+   * {@link readVapidKeys}): a deployment with only the public key wired can
+   * never sign a push, so handing the key out would let a browser subscribe
+   * against a key the server cannot use and turn every later send into a
+   * server-log-only failure.
    */
   getPublicKey(): string | null {
-    return process.env.VAPID_PUBLIC_KEY || null;
+    return readVapidKeys()?.publicKey ?? null;
   }
 
   /**

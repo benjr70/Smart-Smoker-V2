@@ -23,6 +23,7 @@ export type {
 } from './types';
 export type { FaultInjection, HttpMethod, RecordedRequest, TransportPort } from 'api-transport/src';
 export { ApiError, createHttpTransport } from 'api-transport/src';
+export { PushNotConfiguredError } from './errors';
 export type { SmokeEventPort } from './events';
 export { noopEventPort } from './events';
 export { createSocketEventPort } from './socketEventAdapter';

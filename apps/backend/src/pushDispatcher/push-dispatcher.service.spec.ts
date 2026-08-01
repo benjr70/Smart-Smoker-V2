@@ -207,5 +207,27 @@ describe('PushDispatcherService', () => {
 
       expect(service.getPublicKey()).toBeNull();
     });
+
+    // A half-configured deployment (only one of the two secrets wired) cannot
+    // sign a push: web-push is never initialised, so every send would be
+    // rejected unsigned. Handing the public key out anyway would let a browser
+    // subscribe against a key the server can never use, and the failure would
+    // only ever show up in the server log.
+    it('reports no key when the private key is missing, so a browser cannot subscribe against an unusable key', async () => {
+      process.env.VAPID_PUBLIC_KEY = 'configured-public-key';
+      delete process.env.VAPID_PRIVATE_KEY;
+      const service = await buildService(createSubscriptionStore([]));
+
+      expect(webpush.setVapidDetails as jest.Mock).not.toHaveBeenCalled();
+      expect(service.getPublicKey()).toBeNull();
+    });
+
+    it('reports no key when the public key is missing even though the private one is set', async () => {
+      delete process.env.VAPID_PUBLIC_KEY;
+      process.env.VAPID_PRIVATE_KEY = 'configured-private-key';
+      const service = await buildService(createSubscriptionStore([]));
+
+      expect(service.getPublicKey()).toBeNull();
+    });
   });
 });

@@ -116,7 +116,7 @@ function Notification(props: NotificationProps): JSX.Element {
     },
     {
       value: 'Probe 3',
-      label: 'Probe 4',
+      label: 'Probe 3',
     },
   ];
 

@@ -156,6 +156,28 @@ describe('NotificationsCard', () => {
     expect(messageInputs[2]).toHaveValue('');
   });
 
+  // The probe list offered a 'Probe 4' label on the option whose stored value
+  // is 'Probe 3', so a user picking it built a rule about a different probe
+  // than the one named. Labels now match the values the rule stores.
+  test('offers each probe under the name of the reading it watches', async () => {
+    const backend = createFakeBackend({ notifications: { settings: [seededRule] } });
+
+    renderCard(backend);
+
+    const probeSelect = await screen.findByLabelText('Probe 1');
+    expect(
+      Array.from(probeSelect.querySelectorAll('option')).map(option => [
+        option.value,
+        option.textContent,
+      ])
+    ).toEqual([
+      ['Chamber', 'Chamber'],
+      ['Probe 1', 'Probe 1'],
+      ['Probe 2', 'Probe 2'],
+      ['Probe 3', 'Probe 3'],
+    ]);
+  });
+
   test('the send-test control asks permission, subscribes with the backend key, registers it and sends', async () => {
     const backend = createFakeBackend({ notifications: { publicKey: 'BRuntimeKey' } });
     const port = createFakePushPort();
@@ -213,7 +235,9 @@ describe('NotificationsCard', () => {
     expect(backend.store.notifications.testSends).toBe(0);
   });
 
-  test('surfaces a backend with no push key configured', async () => {
+  // A server with no VAPID key is an operator misconfiguration no retry fixes,
+  // so it must not read as the same generic failure a dropped request does.
+  test('surfaces a backend with no push key configured, distinctly from a generic failure', async () => {
     const backend = createFakeBackend({ notifications: { publicKey: null } });
     const port = createFakePushPort();
 
@@ -221,8 +245,38 @@ describe('NotificationsCard', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /send test notification/i }));
 
-    expect(await screen.findByText(/could not send a test notification/i)).toBeInTheDocument();
+    expect(await screen.findByText(/not set up on the server/i)).toBeInTheDocument();
+    expect(screen.queryByText(/could not send a test notification/i)).not.toBeInTheDocument();
     expect(port.calls).toEqual(['requestPermission']);
+  });
+
+  // The backend answers 200 with a delivered count even when the push service
+  // rejected every send, so ignoring the count would make "nothing arrived"
+  // look exactly like success — losing the signal this control exists to give.
+  test('reports a test send that reached no browsers instead of looking successful', async () => {
+    const backend = createFakeBackend({ notifications: { deliveryFails: true } });
+    const port = createFakePushPort();
+
+    renderCard(backend, port);
+
+    fireEvent.click(await screen.findByRole('button', { name: /send test notification/i }));
+
+    expect(await screen.findByText(/reached no browsers/i)).toBeInTheDocument();
+    // The whole chain still ran — the failure is in delivery, not in the flow.
+    expect(backend.store.notifications.testSends).toBe(1);
+    expect(port.calls).toEqual(['requestPermission', 'subscribe']);
+  });
+
+  test('says nothing when the test notification is delivered', async () => {
+    const backend = createFakeBackend();
+    const port = createFakePushPort();
+
+    renderCard(backend, port);
+
+    fireEvent.click(await screen.findByRole('button', { name: /send test notification/i }));
+
+    await waitFor(() => expect(backend.store.notifications.testSends).toBe(1));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   test('raises the snackbar when loading the notification settings fails', async () => {

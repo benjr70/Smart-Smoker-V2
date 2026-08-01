@@ -9,13 +9,27 @@
  * subscribe-on-mount block swallowed it.
  */
 import { useCallback, useState } from 'react';
-import { useApiClient, useApiSnackbar } from '../api';
+import { PushNotConfiguredError, useApiClient, useApiSnackbar } from '../api';
 import { usePushPort } from './PushPortProvider';
 
 export const BLOCKED_MESSAGE =
   'Notifications are blocked. Allow notifications for this site in your browser settings.';
 export const UNSUPPORTED_MESSAGE = 'This browser does not support push notifications.';
 export const FAILED_MESSAGE = 'Could not send a test notification.';
+/**
+ * The server has no VAPID key pair: a misconfiguration no retry will fix, so it
+ * is worth its own message rather than the generic failure above.
+ */
+export const NOT_CONFIGURED_MESSAGE =
+  'Push notifications are not set up on the server. Check its VAPID key configuration.';
+/**
+ * The send was accepted but delivered to nobody. The backend only logs a push
+ * service rejection (a mismatched VAPID private key, or a 5xx) and answers 200
+ * with a zero count, so without this the user would see no notification, no
+ * error, and no way to tell the two apart.
+ */
+export const NOT_DELIVERED_MESSAGE =
+  'The test notification reached no browsers. Check the server push configuration.';
 
 export interface UseTestNotificationResult {
   /** Runs the full permission → subscribe → register → send chain. */
@@ -45,9 +59,15 @@ export const useTestNotification = (): UseTestNotificationResult => {
       const publicKey = await client.notifications.getPublicKey();
       const subscription = await port.subscribe(publicKey);
       await client.notifications.registerSubscription(subscription);
-      await client.notifications.sendTest();
-    } catch {
-      notify(FAILED_MESSAGE);
+      // A 200 here does not mean anything arrived: the backend reports how many
+      // browsers the push service actually accepted, and zero is a failure the
+      // user has to see — it is the whole diagnostic value of this control.
+      const { sent } = await client.notifications.sendTest();
+      if (sent === 0) {
+        notify(NOT_DELIVERED_MESSAGE);
+      }
+    } catch (error) {
+      notify(error instanceof PushNotConfiguredError ? NOT_CONFIGURED_MESSAGE : FAILED_MESSAGE);
     } finally {
       setSending(false);
     }
