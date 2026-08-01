@@ -125,17 +125,16 @@ This trailer is required. A PR reviewer can scan commit bodies and see that ever
 
 ## Deploy workflow integration
 
-The smoke script runs post-deploy in three workflows:
+The smoke script runs post-deploy in these workflows:
 
 | Workflow | Target | Runs after | Artifact name |
 |----------|--------|------------|---------------|
 | `cloud-deploy.yml` | `localhost:3000` / `localhost:3001` (runner-local) | 60s startup sleep | `cloud-deploy-smoke-artifacts` |
 | `dev-deploy.yml` | `smoker-dev-cloud.tail74646.ts.net` via Tailscale | Tailscale Serve config | `dev-deploy-smoke-artifacts` |
-| `smoker-deploy.yml` | `localhost:3003` (backend-only, Electron GUI skipped) | 30s stabilize sleep | `smoker-device-smoke-artifacts` |
 
-All three steps are currently `continue-on-error: true` (advisory). They upload screenshots as GitHub Actions artifacts with 7–14 day retention so you can debug a failed probe without redeploying.
+These steps are currently `continue-on-error: true` (advisory). They upload screenshots as GitHub Actions artifacts with 7–14 day retention so you can debug a failed probe without redeploying.
 
-Each step is tagged `id: smoke` so the Week-3 blocking flip is a grep-and-edit across those three files.
+Each step is tagged `id: smoke` so the Week-3 blocking flip is a grep-and-edit across those files.
 
 ## When a probe fails
 

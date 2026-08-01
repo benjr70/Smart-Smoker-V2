@@ -50,14 +50,18 @@ The Smart Smoker v2 project uses a clean, reusable workflow architecture that el
   1. Build smoker apps (calls `build.yml` with mode="build-and-export")
   2. Build cloud apps (calls `build.yml` with mode="build-and-export") 
   3. Publish all Docker images (calls `publish.yml`)
-  4. Deploy to smoker devices (conditional)
-  5. Deploy to cloud infrastructure (conditional)
+  4. Deploy to cloud infrastructure (conditional)
+
+  Smoker devices are not deployed to here: publishing `:latest` *is* their
+  deployment, applied by Watchtower on the device.
 
 ### Deployment Workflows
 
-#### 6. `smoker-deploy.yml` - Smoker Deployment
-- **Purpose**: Deploys to smoker devices
-- **Unchanged**: Existing deployment logic
+#### 6. `device-deploy.yml` - Device Deployment
+- **Purpose**: Deploys a compose file to a smoker device (virtual or the physical Pi) over
+  SSH, with backup, health check and automatic rollback
+- **Note**: Only needed when the compose file changes. Image updates reach devices via
+  Watchtower — see [Physical Smoker Device](smoker-device.md)
 
 #### 7. `cloud-deploy.yml` - Cloud Deployment  
 - **Purpose**: Deploys to cloud infrastructure
@@ -103,9 +107,9 @@ build.yml (mode: "build") → Validates builds
 # release.yml calls:
 build.yml (smoker apps, mode: "build-and-export") → Creates artifacts
 build.yml (cloud apps, mode: "build-and-export") → Creates artifacts
-publish.yml → Pushes all Docker images
-smoker-deploy.yml → Deploys to devices (conditional)
+publish.yml → Pushes all Docker images (`:latest` + `:vX.Y.Z`)
 cloud-deploy.yml → Deploys to cloud (conditional)
+# devices: Watchtower picks up `:latest` on its next poll
 ```
 
 ## Usage Examples
@@ -152,7 +156,7 @@ secrets: inherit
 ├── release.yml              # Production release pipeline
 ├── 
 ├── # Deployment Workflows
-├── smoker-deploy.yml        # Smoker device deployment
+├── device-deploy.yml        # Smoker device deployment (compose changes only)
 ├── cloud-deploy.yml         # Cloud infrastructure deployment
 └── docs.yml                 # Documentation deployment
 ```

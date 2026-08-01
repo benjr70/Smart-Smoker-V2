@@ -23,7 +23,10 @@ This document outlines the comprehensive plan to implement Infrastructure as Cod
 - ✅ Production cloud environment accessible via Tailscale funnel (https://smokecloud.tail74646.ts.net)
 - ✅ Virtual smoker device provides full GUI testing capability via VNC
 - ✅ Zero manual infrastructure provisioning for development
-- ✅ Raspberry Pi continues auto-updating via Watchtower with improved container naming
+- ⚠️ Raspberry Pi auto-updating via Watchtower with improved container naming — the compose
+  file was migrated in #132, but the device itself was never redeployed onto it and stayed on
+  the old pinned tags until the migration was completed separately. Watchtower cannot update
+  a device that is still running immutable version tags.
 
 ## Current State Analysis
 
