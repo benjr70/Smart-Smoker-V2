@@ -1,22 +1,44 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { NotificationsService } from './notifications.service';
 import { NotificationSubscription } from './notificationSubscription.schema';
 import { NotificationSettings } from './notificationSettings.schema';
 import { TempDto } from '../temps/tempDto';
-import * as webpush from 'web-push';
+import { PushDispatcherService } from '../pushDispatcher/push-dispatcher.service';
 
-// Mock web-push
-jest.mock('web-push', () => ({
-  setVapidDetails: jest.fn(),
-  sendNotification: jest.fn().mockResolvedValue({ statusCode: 201 }),
-}));
+const createSubscriptionStore = () => {
+  let records: NotificationSubscription[] = [];
+  return {
+    findOneAndUpdate: jest.fn(
+      (filter: { endpoint: string }, update: NotificationSubscription) => ({
+        exec: () => {
+          const next = { ...update };
+          const index = records.findIndex(
+            (record) => record.endpoint === filter.endpoint,
+          );
+          if (index === -1) {
+            records.push(next);
+          } else {
+            records[index] = next;
+          }
+          return Promise.resolve(next);
+        },
+      }),
+    ),
+    find: jest.fn(() =>
+      Promise.resolve(records.map((record) => ({ ...record }))),
+    ),
+    reset: () => {
+      records = [];
+    },
+  };
+};
 
 describe('NotificationsService', () => {
   let service: NotificationsService;
   let mockNotificationSubscriptionModel: any;
   let mockNotificationSettingsModel: any;
+  let mockPushDispatcher: { notify: jest.Mock; getPublicKey: jest.Mock };
 
   const mockSubscription: NotificationSubscription = {
     endpoint: 'https://fcm.googleapis.com/fcm/send/test-endpoint',
@@ -62,18 +84,10 @@ describe('NotificationsService', () => {
   };
 
   beforeEach(async () => {
-    // Mock NotificationSubscription model
-    mockNotificationSubscriptionModel = jest.fn().mockImplementation((dto) => ({
-      ...dto,
-      save: jest.fn().mockResolvedValue({ ...dto, _id: 'new-subscription-id' }),
-    }));
-
-    mockNotificationSubscriptionModel.findOne = jest.fn().mockReturnValue({
-      exec: jest.fn().mockResolvedValue(null),
-    });
-    mockNotificationSubscriptionModel.find = jest
-      .fn()
-      .mockResolvedValue([mockSubscription]);
+    // Stand-in for the Mongoose subscription collection: a real array behind
+    // the upsert and read operations, so registration behaviour is observable
+    // as "what is stored afterwards" rather than as "which query was issued".
+    mockNotificationSubscriptionModel = createSubscriptionStore();
 
     // Mock NotificationSettings model
     mockNotificationSettingsModel = jest.fn().mockImplementation((dto) => ({
@@ -84,6 +98,11 @@ describe('NotificationsService', () => {
     mockNotificationSettingsModel.findOne = jest.fn().mockReturnValue({
       exec: jest.fn().mockResolvedValue(null),
     });
+
+    mockPushDispatcher = {
+      notify: jest.fn().mockResolvedValue(1),
+      getPublicKey: jest.fn().mockReturnValue('test-public-key'),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -96,14 +115,14 @@ describe('NotificationsService', () => {
           provide: getModelToken(NotificationSettings.name),
           useValue: mockNotificationSettingsModel,
         },
+        {
+          provide: PushDispatcherService,
+          useValue: mockPushDispatcher,
+        },
       ],
     }).compile();
 
     service = module.get<NotificationsService>(NotificationsService);
-
-    // Set up environment variables for test
-    process.env.VAPID_PUBLIC_KEY = 'test-public-key';
-    process.env.VAPID_PRIVATE_KEY = 'test-private-key';
   });
 
   afterEach(() => {
@@ -115,38 +134,53 @@ describe('NotificationsService', () => {
   });
 
   describe('setSubscription', () => {
-    it('should create a new subscription when it does not exist', async () => {
+    it('stores a subscription whose endpoint is not yet known', async () => {
       const result = await service.setSubscription(mockSubscription);
 
-      expect(mockNotificationSubscriptionModel.findOne).toHaveBeenCalledWith({
-        endpoint: mockSubscription.endpoint,
-      });
-      expect(mockNotificationSubscriptionModel).toHaveBeenCalledWith(
-        mockSubscription,
-      );
+      expect(await service.getSubscriptions()).toEqual([mockSubscription]);
       expect(result).toEqual(expect.objectContaining(mockSubscription));
     });
 
-    it('should throw ConflictException when subscription already exists', async () => {
-      mockNotificationSubscriptionModel.findOne.mockReturnValue({
-        exec: jest.fn().mockResolvedValue(mockSubscription),
-      });
+    it('replaces the stored record when the endpoint is already registered, rather than failing', async () => {
+      await service.setSubscription(mockSubscription);
+      const rotated = {
+        ...mockSubscription,
+        keys: { p256dh: 'rotated-p256dh', auth: 'rotated-auth' },
+      };
 
-      await expect(service.setSubscription(mockSubscription)).rejects.toThrow(
-        ConflictException,
-      );
-      await expect(service.setSubscription(mockSubscription)).rejects.toThrow(
-        'Subscription already exists',
-      );
+      const result = await service.setSubscription(rotated);
+
+      expect(result).toEqual(expect.objectContaining(rotated));
+      expect(await service.getSubscriptions()).toEqual([rotated]);
+    });
+
+    it('stores a subscription with a new endpoint alongside the existing ones', async () => {
+      await service.setSubscription(mockSubscription);
+      const second = {
+        ...mockSubscription,
+        endpoint: 'https://fcm.googleapis.com/fcm/send/second-endpoint',
+      };
+
+      await service.setSubscription(second);
+
+      expect(await service.getSubscriptions()).toEqual([
+        mockSubscription,
+        second,
+      ]);
     });
   });
 
   describe('getSubscriptions', () => {
     it('should return all subscriptions', async () => {
+      await service.setSubscription(mockSubscription);
+
       const result = await service.getSubscriptions();
 
-      expect(mockNotificationSubscriptionModel.find).toHaveBeenCalled();
       expect(result).toEqual([mockSubscription]);
+    });
+
+    it('returns an empty list before anything has registered', async () => {
+      expect(await service.getSubscriptions()).toEqual([]);
     });
   });
 
@@ -341,50 +375,43 @@ describe('NotificationsService', () => {
   });
 
   describe('sendPushNotification', () => {
-    beforeEach(() => {
-      jest
-        .spyOn(service, 'getSubscriptions')
-        .mockResolvedValue([mockSubscription]);
-      // Reset the webpush mock before each test
-      (webpush.sendNotification as jest.Mock).mockClear();
-    });
+    it('hands the message to the push dispatcher', async () => {
+      await service.sendPushNotification('Test notification');
 
-    it('should send push notification to all subscriptions', async () => {
-      (webpush.sendNotification as jest.Mock).mockResolvedValue({
-        statusCode: 201,
+      expect(mockPushDispatcher.notify).toHaveBeenCalledWith(
+        'Smoker',
+        'Test notification',
+      );
+    });
+  });
+
+  describe('sendTestNotification', () => {
+    it('dispatches a test notification to every stored subscription', async () => {
+      mockPushDispatcher.notify.mockResolvedValue(3);
+
+      const result = await service.sendTestNotification();
+
+      expect(mockPushDispatcher.notify).toHaveBeenCalledWith(
+        'Smoker',
+        expect.stringContaining('test'),
+      );
+      expect(result).toEqual({ sent: 3 });
+    });
+  });
+
+  describe('getPublicKey', () => {
+    it('returns the configured VAPID public key', async () => {
+      mockPushDispatcher.getPublicKey.mockReturnValue('configured-key');
+
+      expect(await service.getPublicKey()).toEqual({
+        publicKey: 'configured-key',
       });
-      const message = 'Test notification';
-
-      await service.sendPushNotification(message);
-
-      expect(service.getSubscriptions).toHaveBeenCalled();
-      expect(webpush.sendNotification).toHaveBeenCalledWith(
-        mockSubscription,
-        JSON.stringify({
-          title: 'Smoker',
-          body: message,
-          icon: '/path/to/icon.png',
-        }),
-      );
     });
 
-    it('should handle webpush errors gracefully', async () => {
-      const mockError = {
-        statusCode: 410,
-        body: 'Gone',
-        stack: 'Error stack',
-      };
+    it('reports a null key when the deployment has none configured', async () => {
+      mockPushDispatcher.getPublicKey.mockReturnValue(null);
 
-      // Mock to return a promise that rejects, but the .catch() should handle it
-      (webpush.sendNotification as jest.Mock).mockReturnValue(
-        Promise.reject(mockError).catch(() => {
-          // This simulates the error handling in the actual service
-          return Promise.resolve();
-        }),
-      );
-
-      // Should not throw an error despite the webpush failure
-      await expect(service.sendPushNotification('Test')).resolves.not.toThrow();
+      expect(await service.getPublicKey()).toEqual({ publicKey: null });
     });
   });
 });

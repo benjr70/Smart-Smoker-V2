@@ -16,7 +16,15 @@
 import { createApiClient } from './client';
 import { RecordedRequest } from 'api-transport/src';
 import { createFakeBackend, FakeBackend } from './fakeBackend';
-import { NotificationSettings, PostSmoke, PreSmoke, Smoke, SmokeProfile, rating } from './types';
+import {
+  NotificationSettings,
+  PostSmoke,
+  PreSmoke,
+  PushSubscriptionPayload,
+  Smoke,
+  SmokeProfile,
+  rating,
+} from './types';
 import { WeightUnits } from '../components/common/interfaces/enums';
 
 // A profile carrying stray persisted fields (`_id`/`__v`) that the outbound DTO
@@ -80,6 +88,14 @@ const seededNotifications: NotificationSettings[] = [
     temperature: 275,
   },
 ];
+
+// A browser push subscription in its wire form — the exact body the backend
+// upserts on `notifications/subscribe`.
+const seededSubscription: PushSubscriptionPayload = {
+  endpoint: 'https://fcm.googleapis.com/fcm/send/contract-endpoint',
+  expirationTime: null,
+  keys: { p256dh: 'contract-p256dh', auth: 'contract-auth' },
+};
 
 const seededSmoke: Smoke = {
   _id: 'smoke-1',
@@ -300,6 +316,25 @@ const rows: ContractRow[] = [
       path: 'notifications/settings',
       body: projectedNotificationsBody,
     },
+  },
+  {
+    name: 'notifications.getPublicKey → GET notifications/publicKey',
+    run: c => c.notifications.getPublicKey(),
+    expected: { method: 'get', path: 'notifications/publicKey', body: undefined },
+  },
+  {
+    name: 'notifications.registerSubscription → POST notifications/subscribe',
+    run: c => c.notifications.registerSubscription(seededSubscription),
+    expected: {
+      method: 'post',
+      path: 'notifications/subscribe',
+      body: seededSubscription,
+    },
+  },
+  {
+    name: 'notifications.sendTest → POST notifications/test',
+    run: c => c.notifications.sendTest(),
+    expected: { method: 'post', path: 'notifications/test', body: undefined },
   },
   // state
   {

@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import {
   NotificationSubscription,
@@ -7,9 +7,12 @@ import {
 import { Model } from 'mongoose';
 import { NotificationSettings } from './notificationSettings.schema';
 import { TempDto } from 'src/temps/tempDto';
-import * as webpush from 'web-push';
+import { PushDispatcherService } from '../pushDispatcher/push-dispatcher.service';
 
 const TEN_MINUTES = 10 * 60 * 1000;
+
+const TEST_NOTIFICATION_BODY =
+  'This is a test notification from your smoker. If you can read this, push is working.';
 
 @Injectable()
 export class NotificationsService {
@@ -18,26 +21,39 @@ export class NotificationsService {
     private notificationsModel: Model<NotificationSubscriptionDocument>,
     @InjectModel(NotificationSettings.name)
     private notificationSettingsModel: Model<NotificationSettings>,
-  ) {
-    webpush.setVapidDetails(
-      'mailto:benrolf70@gmail.com',
-      process.env.VAPID_PUBLIC_KEY,
-      process.env.VAPID_PRIVATE_KEY,
-    );
-  }
+    private pushDispatcher: PushDispatcherService,
+  ) {}
 
+  /**
+   * Register a browser push subscription. Keyed on the endpoint and upserted:
+   * a browser that re-subscribes (or whose subscription is rotated by the push
+   * service) replaces its stored record instead of receiving a conflict the
+   * client can only swallow.
+   */
   async setSubscription(
     subscription: NotificationSubscription,
   ): Promise<NotificationSubscription> {
-    const existingSubscription = await this.notificationsModel
-      .findOne({ endpoint: subscription.endpoint })
+    return this.notificationsModel
+      .findOneAndUpdate({ endpoint: subscription.endpoint }, subscription, {
+        upsert: true,
+        new: true,
+        setDefaultsOnInsert: true,
+      })
       .exec();
-    if (!existingSubscription) {
-      const createdSubscription = new this.notificationsModel(subscription);
-      return createdSubscription.save();
-    } else {
-      throw new ConflictException('Subscription already exists');
-    }
+  }
+
+  /** The VAPID public key browsers need to subscribe, served at runtime. */
+  async getPublicKey(): Promise<{ publicKey: string | null }> {
+    return { publicKey: this.pushDispatcher.getPublicKey() };
+  }
+
+  /** Send a test notification to every registered browser. */
+  async sendTestNotification(): Promise<{ sent: number }> {
+    const sent = await this.pushDispatcher.notify(
+      'Smoker',
+      TEST_NOTIFICATION_BODY,
+    );
+    return { sent };
   }
 
   async getSubscriptions(): Promise<NotificationSubscription[]> {
@@ -138,27 +154,6 @@ export class NotificationsService {
   }
 
   async sendPushNotification(data: string) {
-    const payload = JSON.stringify({
-      title: 'Smoker',
-      body: data,
-      icon: '/path/to/icon.png',
-    });
-    this.getSubscriptions().then((subscriptions) => {
-      subscriptions.forEach((subscription) => {
-        webpush
-          .sendNotification(subscription, payload)
-          .catch((error) => {
-            Logger.error(
-              `Status code: ${error.statusCode}`,
-              'NotificationsService',
-            );
-            Logger.error(`Body: ${error.body}`, 'NotificationsService');
-            Logger.error(error.stack, 'NotificationsService');
-          })
-          .then(() => {
-            Logger.log(`Notification Sent: ${data}`, 'NotificationsService');
-          });
-      });
-    });
+    await this.pushDispatcher.notify('Smoker', data);
   }
 }

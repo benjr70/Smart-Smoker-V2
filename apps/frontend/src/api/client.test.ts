@@ -478,6 +478,74 @@ describe('notifications client — legacy endpoint contract', () => {
   });
 });
 
+const browserSubscription = {
+  endpoint: 'https://fcm.googleapis.com/fcm/send/browser-endpoint',
+  expirationTime: null,
+  keys: { p256dh: 'browser-p256dh', auth: 'browser-auth' },
+};
+
+describe('notifications client — push delivery', () => {
+  test('getPublicKey reads the VAPID key the backend serves at runtime', async () => {
+    const backend = createFakeBackend({ notifications: { publicKey: 'BRuntimeKey' } });
+    const client = createApiClient(backend);
+
+    await expect(client.notifications.getPublicKey()).resolves.toBe('BRuntimeKey');
+    expect(backend.requests).toContainEqual({
+      method: 'get',
+      path: 'notifications/publicKey',
+      body: undefined,
+    });
+  });
+
+  test('getPublicKey rejects when the deployment has no key configured', async () => {
+    const backend = createFakeBackend({ notifications: { publicKey: null } });
+    const client = createApiClient(backend);
+
+    await expect(client.notifications.getPublicKey()).rejects.toThrow(
+      /not configured|no push key/i
+    );
+  });
+
+  test('registerSubscription stores the browser subscription on the backend', async () => {
+    const backend = createFakeBackend();
+    const client = createApiClient(backend);
+
+    await client.notifications.registerSubscription(browserSubscription);
+
+    expect(backend.store.notifications.subscriptions).toEqual([browserSubscription]);
+    expect(backend.requests).toContainEqual({
+      method: 'post',
+      path: 'notifications/subscribe',
+      body: browserSubscription,
+    });
+  });
+
+  test('registering the same endpoint twice replaces it rather than failing', async () => {
+    const backend = createFakeBackend();
+    const client = createApiClient(backend);
+
+    await client.notifications.registerSubscription(browserSubscription);
+    const rotated = {
+      ...browserSubscription,
+      keys: { p256dh: 'rotated-p256dh', auth: 'rotated-auth' },
+    };
+
+    await expect(client.notifications.registerSubscription(rotated)).resolves.not.toThrow();
+    expect(backend.store.notifications.subscriptions).toEqual([rotated]);
+  });
+
+  test('sendTest asks the backend to dispatch to every stored subscription', async () => {
+    const backend = createFakeBackend();
+    const client = createApiClient(backend);
+    await client.notifications.registerSubscription(browserSubscription);
+
+    const result = await client.notifications.sendTest();
+
+    expect(result).toEqual({ sent: 1 });
+    expect(backend.store.notifications.testSends).toBe(1);
+  });
+});
+
 // A smoke whose five child ids each point at a seeded child record, so the
 // cascade delete and review aggregate resolve every piece from the store.
 const seededSmoke: Smoke = {

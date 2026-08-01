@@ -1,5 +1,6 @@
 import AddCircleIcon from '@mui/icons-material/AddCircle';
 import DeleteIcon from '@mui/icons-material/Delete';
+import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import {
   Button,
   Card,
@@ -14,6 +15,7 @@ import {
 import React from 'react';
 import { useCurrentResource } from '../../api';
 import { NotificationSettings } from '../../api/types';
+import { useTestNotification } from '../../push';
 
 // Returns a fresh notification each call so no two rules (or the initial
 // value) share the same object reference. A single module-level constant would
@@ -35,6 +37,7 @@ export function NotificationsCard(): JSX.Element {
     loadErrorMessage: 'Could not load notification settings.',
     saveErrorMessage: 'Could not save notification settings.',
   });
+  const { sendTest, sending } = useTestNotification();
 
   const handleNewRule = () => {
     setNotifications([...Notifications, createInitialNotification()]);
@@ -71,6 +74,16 @@ export function NotificationsCard(): JSX.Element {
             <Grid padding={1}>
               <Button variant="contained" startIcon={<AddCircleIcon />} onClick={handleNewRule}>
                 New Rule
+              </Button>
+            </Grid>
+            <Grid padding={1}>
+              <Button
+                variant="outlined"
+                startIcon={<NotificationsActiveIcon />}
+                disabled={sending}
+                onClick={sendTest}
+              >
+                Send Test Notification
               </Button>
             </Grid>
           </Grid>

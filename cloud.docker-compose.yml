@@ -59,8 +59,9 @@ services:
     container_name: frontend_cloud
     restart: always
     image: benjr70/smart-smoker-frontend:${VERSION:-latest}
-    environment:
-      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
+    # No VAPID key here: this container serves a static bundle through nginx and
+    # cannot consume an environment variable. The browser reads the key from the
+    # backend at subscribe time (GET api/notifications/publicKey).
     ports:
       - 127.0.0.1:80:3000
 
