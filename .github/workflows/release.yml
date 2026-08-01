@@ -10,11 +10,6 @@ on:
         description: 'Version to release (e.g., 1.0.0 or v1.0.0)'
         type: string
         required: true
-      deploy_smoker:
-        description: 'Deploy to smoker devices'
-        type: boolean
-        required: false
-        default: true
   # New: auto-run on GitHub Release publish
   release:
     types: [published]
@@ -34,7 +29,6 @@ jobs:
       version_numeric: ${{ steps.norm.outputs.version_numeric }}
       version_tag: ${{ steps.norm.outputs.version_tag }}
       ref: ${{ steps.norm.outputs.ref }}
-      deploy_smoker_default: ${{ steps.norm.outputs.deploy_smoker_default }}
     steps:
       - id: norm
         shell: bash
@@ -44,7 +38,6 @@ jobs:
             NUM="${TAG#v}"
             VTAG="v${NUM}"
             REF="$VTAG"
-            DEPLOY_SMOKER_DEFAULT=true
           else
             IN="${{ github.event.inputs.version }}"
             # trim whitespace and normalize leading V to v
@@ -54,12 +47,10 @@ jobs:
             VTAG="v${NUM}"
             # Use the tag ref when a tag exists; otherwise this will checkout the branch/commit if it matches
             REF="$VTAG"
-            DEPLOY_SMOKER_DEFAULT=${{ github.event.inputs.deploy_smoker == 'true' && 'true' || 'false' }}
           fi
           echo "version_numeric=$NUM" >> "$GITHUB_OUTPUT"
           echo "version_tag=$VTAG" >> "$GITHUB_OUTPUT"
           echo "ref=$REF" >> "$GITHUB_OUTPUT"
-          echo "deploy_smoker_default=$DEPLOY_SMOKER_DEFAULT" >> "$GITHUB_OUTPUT"
 
   # Build smoker applications (no Docker)
   build-smoker:
@@ -87,9 +78,17 @@ jobs:
       prebuild: true
     secrets: inherit
 
-  # Deploy to smoker devices (optional; Watchtower will also update :latest)
-  deploy-smoker:
-    if: ${{ needs.set-version.outputs.deploy_smoker_default == 'true' }}
-    needs: publish-smoker
-    uses: ./.github/workflows/smoker-deploy.yml
-    secrets: inherit
+  # There is deliberately no deploy job for the smoker devices.
+  #
+  # Publishing `:latest` above IS the deployment: Watchtower on each device
+  # polls that tag and recreates its containers on the next poll after the
+  # device is powered on. A push-based deploy is the wrong shape for hardware
+  # that is offline most of the time — and the job that used to live here
+  # targeted a `Smoker` self-hosted runner that no longer exists, so every
+  # release queued for ~24h and reported a false failure.
+  #
+  # When `smoker.docker-compose.yml` itself changes, dispatch the `Device
+  # Deploy` workflow (device_host: smoker, compose_file:
+  # smoker.docker-compose.yml, version: latest). Watchtower recreates
+  # containers from the running container's config and never re-reads that
+  # file. See docs/CI-CD/smoker-device.md.

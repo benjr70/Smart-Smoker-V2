@@ -28,11 +28,13 @@ This directory contains GitHub Actions workflows for the Smart Smoker V2 project
 - `build.yml`: Application build validation (reusable)
 - `publish.yml`: Docker Hub publishing (reusable)
 - `cloud-deploy.yml`: Cloud environment deployment (reusable)
-- `smoker-deploy.yml`: Smoker environment deployment (reusable)  
+- `device-deploy.yml`: Device deployment over SSH (reusable + manual). Targets the virtual
+  smoker or the physical Pi; see [Physical Smoker Device](smoker-device.md)
 - `docs.yml`: Documentation deployment
 - `nightly.yml`: Nightly Dev Build & Deploy (publishes `:nightly` for testing)
-- `deploy-version.yml`: Manually deploy a specific version/tag to cloud and/or smoker
-- `release.yml`: Build, publish, and deploy. Supports manual version input and Release tag trigger
+- `release.yml`: Build and publish release images. Supports manual version input and Release
+  tag trigger. It deliberately has no smoker deploy job — publishing `:latest` *is* the
+  device deployment, applied by Watchtower on the device
 
 ## Branch Protection
 

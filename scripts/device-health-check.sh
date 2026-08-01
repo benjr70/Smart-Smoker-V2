@@ -58,9 +58,15 @@ check_service() {
 }
 
 # Function to check Docker container status
+#
+# The container list is caller-driven via EXPECTED_CONTAINERS (space separated)
+# because the two devices run different stacks: the physical Pi adds the
+# Electron kiosk, while the virtual smoker has that service commented out.
 check_containers() {
     local host=$1
-    local expected_containers=("device_service" "frontend_smoker" "watchtower")
+    local default_containers="device_service frontend_smoker watchtower"
+    local expected_containers
+    read -r -a expected_containers <<< "${EXPECTED_CONTAINERS:-$default_containers}"
     local healthy_count=0
     local total=${#expected_containers[@]}
 
@@ -68,11 +74,26 @@ check_containers() {
 
     for container in "${expected_containers[@]}"; do
         local status
+        # Fall back to sudo when the deploy user is not in the docker group.
+        # The physical Pi has an empty docker group but passwordless sudo, so
+        # without the fallback every container reads "not_found" and a healthy
+        # deploy gets rolled back. Kept as a fallback rather than a plain sudo
+        # so the virtual smoker, whose user *is* in the docker group, is
+        # unaffected.
+        local inspect_cmd="docker inspect --format='{{.State.Status}}' '$container' 2>/dev/null \
+            || sudo docker inspect --format='{{.State.Status}}' '$container'"
         if [ "$host" = "localhost" ] || [ "$host" = "127.0.0.1" ]; then
-            status=$(docker inspect --format='{{.State.Status}}' "$container" 2>/dev/null || echo "not_found")
+            status=$(eval "$inspect_cmd" 2>/dev/null || echo "not_found")
         else
-            status=$(ssh "${SSH_USER}@${host}" "docker inspect --format='{{.State.Status}}' '$container'" 2>/dev/null || echo "not_found")
+            status=$(ssh "${SSH_USER}@${host}" "$inspect_cmd" 2>/dev/null || echo "not_found")
         fi
+        # The denied first attempt still emits a blank line on stdout, so the
+        # captured value can arrive as "\nrunning". Keep the last non-empty
+        # line and strip whitespace, otherwise the comparison below never
+        # matches and a running container is reported as failed.
+        status=$(printf '%s' "$status" | tr -d '\r' | grep -v '^[[:space:]]*$' | tail -n1)
+        status="${status//[[:space:]]/}"
+        [ -n "$status" ] || status="not_found"
 
         if [ "$status" = "running" ]; then
             echo -e "${GREEN}  ✅ ${container}: running${NC}"
@@ -196,7 +217,7 @@ check_cloud_connectivity() {
 # Main health check logic
 main() {
     echo "=========================================="
-    echo -e "${BLUE}Virtual Smoker Device Health Check${NC}"
+    echo -e "${BLUE}Smoker Device Health Check — ${TARGET_HOST}${NC}"
     echo "=========================================="
     echo "Target: ${TARGET_HOST}"
     echo "Retries: ${RETRY_COUNT}"

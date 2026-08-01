@@ -21,27 +21,28 @@ Steps:
 
 Notes:
 - Smoker devices auto-update from `latest` via Watchtower; the release also updates `latest`.
-- Use “Deploy Version” for redeploying an existing version without rebuilding.
+  The device applies it on its next poll after it is powered on — there is no push deploy.
 
-## Option B: GitHub Actions (Deploy Version)
-- Workflow: `.github/workflows/deploy-version.yml`
-- Inputs: `version` (accepts `1.2.3`, `v1.2.3`, or `nightly`), toggles for cloud/smoker
-- Runner: Cloud uses self-hosted `SmokeCloud`; smoker uses `Smoker`
+## Option B: GitHub Actions (Device Deploy)
+
+Use this only when `smoker.docker-compose.yml` itself changed. Image updates need no deploy —
+Watchtower applies them.
+
+- Workflow: `.github/workflows/device-deploy.yml`
+- Runner: self-hosted `proxmox` runner, reaching the device over the tailnet by SSH
 
 Steps:
-1) Actions → “Deploy Version” → Run workflow
-2) Enter the version (`1.2.3`, `v1.2.3`, or `nightly`). The workflow normalizes to `vX.Y.Z` when needed.
-3) Select deploy targets (cloud and/or smoker)
-4) The workflow calls existing deploy jobs and executes on the target runners:
-   - `docker compose -f cloud.docker-compose.yml pull`
-   - `docker compose -f cloud.docker-compose.yml build`
-   - `docker compose -f cloud.docker-compose.yml down`
-   - `docker compose -f cloud.docker-compose.yml up -d --force-recreate`
+1) Actions → “Device Deploy” → Run workflow
+2) Fill the inputs from the table in [Physical Smoker Device](smoker-device.md) — in
+   particular `version: latest` (**never** `nightly`), `requires_arm_emulation: false`, and
+   the prod `cloud_backend_url`
+3) The workflow backs up the existing compose, copies the new one to `/opt/smoker-device`,
+   recreates the containers, health-checks the device and rolls back automatically on failure
 
 Notes:
-- Secrets `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` are used by the workflow
-- Ensure the target version exists in Docker Hub for both backend and frontend images
-- Smoker deploys always use `latest` images (Watchtower), so the “Deploy Version” smoker option restarts services to pull `latest`.
+- Ensure the target version exists in Docker Hub for all three device images
+- `version` also accepts a `vX.Y.Z` tag, which **pins** the device. A pinned device never
+  auto-updates again — treat it as break-glass rollback only
 
 ## Option B: Local Shell on Cloud Host
 The compose file supports a `VERSION` env var. Set it to a specific version tag to pin the deployment:

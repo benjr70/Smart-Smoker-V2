@@ -13,13 +13,24 @@ To create a new production deployment:
 ## Container Deployment
 
 ### Smoker Environment
-Containers for the smoker are handled by **watchtower**. When a new container is pushed to Docker Hub, watchtower automatically pulls it down and replaces the running container on the smoker. 
+Containers for the smoker are handled by **watchtower** on the device. It polls every 300s
+and replaces the running containers when the image behind `:latest` changes.
 
-The deployment workflow is set for manual trigger and must be used when there are updates to:
-- `smoker.docker-compose.yml` 
-- `smoker-deploy.yml` 
+Two things bound that, and both matter:
 
-Watchtower settings can be seen in the `smoker.docker-compose.yml` file.
+- **`:latest` only moves when a GitHub Release is published.** Nightly builds publish
+  `:nightly`, which the physical device must never run — those bundles are built pointing at
+  dev-cloud. Merging to master never updates the smoker.
+- **Watchtower recreates containers from the running container's config, not from the
+  compose file.** Any change to `smoker.docker-compose.yml` (mounts, devices, env, ports,
+  healthchecks, or the watchtower flags themselves) requires dispatching the **Device
+  Deploy** workflow.
+
+Watchtower settings can be seen in the `smoker.docker-compose.yml` file; it is scoped to the
+three application containers so it never restarts itself or `portainer_agent`.
+
+See [Physical Smoker Device](smoker-device.md) for the deploy inputs, verification steps and
+rollback ladder.
 
 ### Cloud Environment
 Containers for the cloud are deployed via GitHub Action workflows.

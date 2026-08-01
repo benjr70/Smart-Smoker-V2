@@ -50,6 +50,14 @@ on:
         type: boolean
         default: false
         description: 'Register qemu arm binfmt handlers on target (via tonistiigi/binfmt) before deploy (for amd64 hosts running arm/v7 images)'
+      expected_containers:
+        type: string
+        default: ''
+        description: 'Space-separated container names the health check must find. Blank uses the script default (device_service frontend_smoker watchtower); the physical Pi also runs electron_shell.'
+      wait_seconds:
+        type: string
+        default: '45'
+        description: 'Seconds to wait for services to stabilize before health checking. The Electron kiosk has a 60s start_period, so devices running it need more than the default.'
   workflow_dispatch:
     inputs:
       device_host:
@@ -81,6 +89,14 @@ on:
         type: boolean
         default: false
         description: 'Register qemu arm binfmt handlers on target (via tonistiigi/binfmt) before deploy (for amd64 hosts running arm/v7 images)'
+      expected_containers:
+        type: string
+        default: ''
+        description: 'Space-separated container names the health check must find. Blank uses the script default; the physical Pi also runs electron_shell.'
+      wait_seconds:
+        type: string
+        default: '45'
+        description: 'Seconds to wait for services to stabilize before health checking (the Electron kiosk needs >60s).'
 
 permissions:
   contents: read
@@ -116,6 +132,8 @@ jobs:
           echo "COMPOSE_FILE=${{ inputs.compose_file }}" >> $GITHUB_ENV
           echo "VERSION=${{ inputs.version }}" >> $GITHUB_ENV
           echo "CLOUD_BACKEND_URL=${{ inputs.cloud_backend_url }}" >> $GITHUB_ENV
+          echo "EXPECTED_CONTAINERS=${{ inputs.expected_containers }}" >> $GITHUB_ENV
+          echo "WAIT_SECONDS=${{ inputs.wait_seconds || '45' }}" >> $GITHUB_ENV
 
           echo "Deployment configuration:"
           echo "  Device Host: ${{ inputs.device_host }}"
@@ -123,6 +141,8 @@ jobs:
           echo "  Deploy Directory: ${{ inputs.deploy_dir }}"
           echo "  Compose File: ${{ inputs.compose_file }}"
           echo "  Version: ${{ inputs.version }}"
+          echo "  Expected Containers: ${{ inputs.expected_containers || '(script default)' }}"
+          echo "  Wait Seconds: ${{ inputs.wait_seconds || '45' }}"
           echo "  Environment: ${{ inputs.environment }}"
           echo "  Cloud Backend: ${{ inputs.cloud_backend_url }}"
 
@@ -293,8 +313,8 @@ jobs:
 
       - name: Wait for services to start
         run: |
-          echo "Waiting for services to initialize (45 seconds)..."
-          sleep 45
+          echo "Waiting for services to initialize (${WAIT_SECONDS} seconds)..."
+          sleep "${WAIT_SECONDS}"
 
       - name: Verify deployment health
         id: health_check
@@ -302,6 +322,7 @@ jobs:
           echo "Running health checks on ${DEVICE_HOST}..."
           export SSH_USER="${SSH_USER}"
           export CLOUD_BACKEND_URL="${CLOUD_BACKEND_URL}"
+          export EXPECTED_CONTAINERS="${EXPECTED_CONTAINERS}"
           if ./scripts/device-health-check.sh ${DEVICE_HOST} 3; then
             echo "✅ All health checks passed"
             echo "health_status=success" >> $GITHUB_OUTPUT
@@ -346,6 +367,7 @@ jobs:
           echo "Verifying rollback..."
           export SSH_USER="${SSH_USER}"
           export CLOUD_BACKEND_URL="${CLOUD_BACKEND_URL}"
+          export EXPECTED_CONTAINERS="${EXPECTED_CONTAINERS}"
           if ./scripts/device-health-check.sh ${DEVICE_HOST} 1; then
             echo "✅ Rollback successful, system restored"
             echo "rollback_status=success" >> $GITHUB_OUTPUT

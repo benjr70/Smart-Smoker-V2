@@ -1,4 +1,26 @@
-version: '3.1'
+# Physical smoker device (Raspberry Pi, armv7l).
+#
+# Deployed once via the `Device Deploy` workflow (device_host: smoker,
+# deploy_dir: /opt/smoker-device); after that Watchtower owns routine image
+# updates, because the device is powered off most of the time and cannot be
+# pushed to on a schedule. The operating rule:
+#
+#   image content changed  -> Watchtower picks it up on its next poll
+#   this file changed      -> dispatch Device Deploy; Watchtower recreates
+#                             containers from the *running container's* config
+#                             and never re-reads this file
+#
+# Watchtower only ever sees a new image when `:latest` moves, and `:latest`
+# moves only when a GitHub Release is published (nightly builds publish
+# `:nightly`). Never deploy `:nightly` here — those bundles are built pointing
+# at dev-cloud, so the device would look healthy while writing production cooks
+# into the dev database.
+
+# Pin the Compose project name. Without it the project is derived from the
+# directory, so moving this file creates a *second* project whose containers
+# collide with the running ones on `container_name` — which is exactly how the
+# device ended up stranded on a stale runner checkout.
+name: smoker-device
 
 services:
   deviceService:
@@ -7,26 +29,37 @@ services:
     restart: always
     privileged: true
     devices:
-      - /dev/ttyUSB0
+      # The Arduino is wired to the Pi's GPIO UART, not USB — see
+      # apps/device-service/src/serial/serial.serivce.ts, which opens
+      # /dev/ttyS0 in production mode. Docker validates this path when it
+      # *creates* the container, so naming a node that does not exist breaks
+      # every recreate — including the ones Watchtower performs, which would
+      # take device_service down permanently.
+      - /dev/ttyS0
     ports:
       - '3003:3003'
     network_mode: host
     volumes:
       - '/:/host'
       - '/var/run/dbus:/var/run/dbus'
-    image: 'benjr70/smart-smoker-device-service:latest'
+    image: 'benjr70/smart-smoker-device-service:${VERSION:-latest}'
     healthcheck:
       test: ['CMD', 'curl', '-f', 'http://localhost:3003/api/health']
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
+    logging: &default-logging
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
 
   frontend:
     container_name: frontend_smoker
     pull_policy: always
     restart: always
-    image: benjr70/smart-smoker-smoker:latest
+    image: 'benjr70/smart-smoker-smoker:${VERSION:-latest}'
     ports:
       - 8080:8080
     healthcheck:
@@ -36,6 +69,7 @@ services:
       retries: 3
       start_period: 40s
       start_interval: 5s
+    logging: *default-logging
 
   electronShell:
     container_name: electron_shell
@@ -47,7 +81,6 @@ services:
         condition: service_healthy
     volumes:
       - '/tmp/.X11-unix:/tmp/.X11-unix'
-      - './src:/app/src'
       - '/run/dbus/system_bus_socket:/run/dbus/system_bus_socket'
       - '/etc/localtime:/etc/localtime:ro'
     environment:
@@ -56,23 +89,36 @@ services:
     devices:
       - /dev/snd
       - /dev/dri:/dev/dri
-    image: 'benjr70/smart-smoker-electron-shell:latest'
+    image: 'benjr70/smart-smoker-electron-shell:${VERSION:-latest}'
     healthcheck:
       test: ['CMD-SHELL', 'pgrep -x electron >/dev/null || exit 1']
       interval: 60s
       timeout: 5s
       retries: 3
       start_period: 60s
+    logging: *default-logging
 
   watchtower:
     container_name: watchtower
     restart: always
     environment:
-      - REPO_USER=${REPO_USER}
-      - REPO_PASS=${REPO_PASS}
+      # Only smoker-deploy.yml ever injected these, and that path is gone.
+      # The images are public, so an unauthenticated pull is correct; the `:-`
+      # defaults keep Compose from warning on every command. If these repos
+      # ever go private, add /opt/smoker-device/.env (mode 600) on the device
+      # rather than plumbing secrets through the deploy workflow.
+      - REPO_USER=${REPO_USER:-}
+      - REPO_PASS=${REPO_PASS:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-    command: --interval 300 --cleanup
+    # Scoped to the three application containers on purpose. Unscoped,
+    # Watchtower also manages portainer_agent and *itself* — and an unattended
+    # self-update on armv7 is the one failure that would remove the device's
+    # ability to update anything else. Bump this image deliberately instead.
+    command: --interval 300 --cleanup device_service frontend_smoker electron_shell
+    # armhf-latest is an older client against Docker 24.0.5, which is the safe
+    # direction for API negotiation. Do NOT copy virtual-smoker's `latest-dev`
+    # tag — that one is amd64 and will not run here.
     image: containrrr/watchtower:armhf-latest
     healthcheck:
       test: ['CMD-SHELL', 'pgrep -x watchtower >/dev/null || exit 1']
@@ -80,3 +126,4 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
+    logging: *default-logging

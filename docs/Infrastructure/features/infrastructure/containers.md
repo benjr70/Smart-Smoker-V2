@@ -69,24 +69,35 @@ benjr70/smart-smoker-electron-shell:nightly
 Watchtower on Raspberry Pi devices automatically updates containers using `:latest` tags:
 
 ```yaml
-# docker-compose.yml on Raspberry Pi
+# /opt/smoker-device/smoker.docker-compose.yml on the Raspberry Pi
 services:
-  backend:
-    image: benjr70/smart-smoker-backend:latest
+  frontend:
+    image: benjr70/smart-smoker-smoker:${VERSION:-latest}
     # Watchtower monitors this and updates automatically
 ```
 
+`:latest` moves only when a GitHub Release is published, so the device updates once per
+release and never in between. It must never be pointed at `:nightly` — those bundles are
+built against dev-cloud.
+
 ### Watchtower Configuration
+
+The actual configuration on the device (see `smoker.docker-compose.yml`):
 
 ```yaml
 watchtower:
-  image: containrrr/watchtower
+  image: containrrr/watchtower:armhf-latest # armv7; latest-dev is amd64 only
   volumes:
     - /var/run/docker.sock:/var/run/docker.sock
-  environment:
-    - WATCHTOWER_CLEANUP=true
-    - WATCHTOWER_POLL_INTERVAL=3600
+  # Scoped on purpose: unscoped, Watchtower would also manage portainer_agent
+  # and itself, and an unattended self-update on armv7 is the one failure that
+  # removes the device's ability to update anything else.
+  command: --interval 300 --cleanup device_service frontend_smoker electron_shell
 ```
+
+Watchtower recreates containers from the **running container's config**, not from the
+compose file — so compose changes require a `Device Deploy` dispatch. See
+[Physical Smoker Device](../../../CI-CD/smoker-device.md).
 
 ## Environment Tag Usage
 
