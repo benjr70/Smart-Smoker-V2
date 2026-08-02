@@ -71,6 +71,13 @@ Captions come from the filenames, so the harness names its shots
 `<surface>-NN-<slug>.png` — `frontend-02-settings-page.png` becomes "Settings
 page", and a `smoker-` prefix is labelled "(smoker app)".
 
+**A fresh attachment URL 404s until the markdown referencing it is saved.**
+GitHub binds an upload to the content that first references it; until then the
+asset is an orphan and even an authenticated `GET` returns 404. So do not treat
+a 404 straight after `upload` as a failure — verify _after_ `gh pr edit`, which
+is the order `/verify-pr` step 7.2 already uses. Measured on PR #441: 404
+anonymous before the body edit, `200 image/png` (byte-exact) after it.
+
 ## Exit codes
 
 | Code | Meaning                                                           |
