@@ -97,6 +97,29 @@ GNOME/XWayland display through the Playwright MCP server, surviving reboots:
   sections, only on exact text match, never un-ticking an already-checked box —
   and emits the rewritten body. This is the mutation `/verify-pr` applies to the
   PR at the end of a round.
+- **`detect-ui-change.sh`** — the screenshot-tour gate. Reads the PR's changed
+  paths on stdin and prints the UI surfaces to screenshot (`frontend`, `smoker`,
+  or both — a shared `packages/*/src` file renders in both apps); empty output
+  means the diff moves no pixels and the round skips the tour. Only rendering
+  extensions under an app/package source root count, and test / story / snapshot
+  files never do, because a false positive costs a full browser tour on the box.
+- **`tour-viewport.sh`** — the viewport each tour surface is captured at:
+  `frontend` → `427x952` (the web app is a **mobile app**, and the customer
+  holds a **Pixel 10 Pro**: a 1280x2856 panel at DPR 3 is a 427x952 CSS viewport
+  — a desktop-width window documents a layout no user sees), `smoker` →
+  `800x480` (the device's kiosk panel). The smoker number is mirrored from the
+  kiosk `BrowserWindow` in `apps/smoker/electron-app/index.ts`, and the sibling
+  test parses that file and fails on drift — change the panel, and the tour
+  table has to follow. The Electron shell runs fullscreen on the box's much
+  larger desktop, so the verifier resizes down to the panel before capturing.
+- **`inject-screenshots.sh`** — puts the `## Screenshots` section into the PR
+  description from `caption<TAB>url` lines on stdin. It **replaces** the section
+  it owns (marked `<!-- verify-pr-screenshots -->`) rather than appending, so
+  round 3 refreshes the tour instead of stacking a third copy under the first
+  two; empty input leaves the body byte-identical, and a `## Screenshots`
+  heading a human wrote by hand is left alone. The URLs come from
+  [`scripts/pr-images`](../pr-images/README.md), which uploads the PNGs through
+  a real logged-in Chrome — GitHub has no attachment API.
 
 ## Provision the box (one-time, idempotent)
 

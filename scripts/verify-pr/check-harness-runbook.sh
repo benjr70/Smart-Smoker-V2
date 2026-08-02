@@ -67,13 +67,22 @@ rule_table() {
         "dual-driver	both directions" \
         "wifi-bound	wifi adapter stays off in hermetic builds" \
         "wifi-bound	store snapshot flag" \
-        "wifi-bound	wifi-screen navigation"
+        "wifi-bound	wifi-screen navigation" \
+        "ui-screenshots	screenshot tour" \
+        "ui-screenshots	.surface.-NN-.slug.\.png" \
+        "ui-screenshots	ui-shot:" \
+        "ui-screenshots	tour-viewport\.sh" \
+        "ui-screenshots	427x952" \
+        "ui-screenshots	800x480" \
+        "ui-screenshots	the tour documents the change, it does not verify it"
 }
 
 # Collapse a file to a single whitespace-normalized line so wrapped prose still
-# matches a multi-word phrase.
+# matches a multi-word phrase. Leading blockquote markers are stripped first:
+# several rules live inside `>` quoted agent prompts, and Prettier's 80-column
+# rewrap can drop a `> ` into the middle of any phrase.
 normalize_file() {
-    tr '\n' ' ' < "$1" | tr -s '[:space:]' ' '
+    sed -E 's/^[[:space:]]*>[[:space:]]?//' "$1" | tr '\n' ' ' | tr -s '[:space:]' ' '
 }
 
 main() {

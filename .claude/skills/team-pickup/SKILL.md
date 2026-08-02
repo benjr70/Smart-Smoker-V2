@@ -481,6 +481,13 @@ comment with the round marker:
 > `### Manual verification — round <M>/3`. Return the skill's terminal
 > `manual-verify:` line verbatim.
 
+On a PR whose diff changes UI, the harness also captures a screenshot tour in
+the real browser / Electron and posts it into the **PR description** (its
+`## Screenshots` section, refreshed each round). That is why the round can be
+worth running even for a PR with no unchecked checklist items. Record the
+harness's `screenshots:` line, when present, as `SHOTS_LINE` for the §7 block;
+it is advisory and never routes the fix loop.
+
 Wait for the agent to return and record its terminal
 `manual-verify: <pass>/<total> PASS, <deferred> deferred, <fail> FAIL` line as
 `MANUAL_LINE` (the format and §6a.3/§7 consumption are unchanged from the old
@@ -605,6 +612,7 @@ pr:       <url>                    (success only)
 pr-watch: PASS | DRAFT | ERROR — <detail>   (success only)
 review:   <verbatim pr-review terminal line>   (pr-watch PASS only)
 verify:   <pass>/<total> PASS, <n> deferred, <n> FAIL — round <M>/3 [— EXHAUSTED]   (pr-watch PASS only)
+shots:    <verbatim screenshots: line from the last /verify-pr round>   (when present)
 ```
 
 A **reconcile fire** (§1.2 picked a PR instead of an issue) emits this block
@@ -619,9 +627,13 @@ reconcile: <verbatim terminal pr-reconcile: line from the §1.2 agent>
 `pr-watch` line mirrors verbatim the final message returned by the spawned
 pr-watch agent in §6a.1; `verify:` mirrors the §6a.2 `/verify-pr` round's final
 `manual-verify:` line (from the last round), suffixed `— round <M>/3` and, on
-§6a.3 exhaustion, `— EXHAUSTED`. If §6a failed (no PR opened), omit the `pr:`,
-`pr-watch:`, and `verify:` lines; if pr-watch returned DRAFT/ERROR, omit
-`verify:`.
+§6a.3 exhaustion, `— EXHAUSTED`. `shots:` mirrors that same round's
+`screenshots:` line when the harness emitted one — it reports whether the PR
+description got its UI screenshot tour, and it is **advisory**: it never gates
+the fire, and `screenshots: SKIPPED — GitHub upload session expired` is the
+signal that a human owes the box a `cd scripts/pr-images && npm run login`. If
+§6a failed (no PR opened), omit the `pr:`, `pr-watch:`, and `verify:` lines; if
+pr-watch returned DRAFT/ERROR, omit `verify:`.
 
 **Machine skip lines (for the daemon).** When the fire does not pick — a
 concurrency skip (§1) or an empty queue (§2) — emit, in addition to the human

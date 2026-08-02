@@ -1,0 +1,73 @@
+# Guards the PR screenshot-tour pieces of the /verify-pr harness: the UI-change
+# gate and the PR-body section injector (bash suites under scripts/verify-pr/),
+# plus the pure logic of the GitHub attachment uploader (scripts/pr-images/).
+#
+# These decide what lands in a human's PR description — which surfaces get a
+# screenshot tour, which caption sits under which image, and whether a re-verify
+# round refreshes the section or stacks a duplicate on top of it. All of it is
+# pure text/argument logic, so it runs on ubuntu-latest with no browser, no
+# GitHub session, and no docker: the browser module (github-upload.ts) is the
+# thin imperative shell and is exercised live on the box, not here.
+#
+# Path-filtered — touching apps/** does not trigger it.
+
+name: PR Screenshot Tour Tests
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'scripts/pr-images/**'
+      - 'scripts/verify-pr/detect-ui-change*.sh'
+      - 'scripts/verify-pr/tour-viewport*.sh'
+      - 'scripts/verify-pr/inject-screenshots*.sh'
+      - '.github/workflows/pr-screenshots-tests.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'scripts/pr-images/**'
+      - 'scripts/verify-pr/detect-ui-change*.sh'
+      - 'scripts/verify-pr/tour-viewport*.sh'
+      - 'scripts/verify-pr/inject-screenshots*.sh'
+      - '.github/workflows/pr-screenshots-tests.yml'
+
+jobs:
+  bash-suites:
+    name: UI-change gate + body injector (bash)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: detect-ui-change.sh
+        run: bash scripts/verify-pr/detect-ui-change.test.sh
+
+      - name: inject-screenshots.sh
+        run: bash scripts/verify-pr/inject-screenshots.test.sh
+
+      - name: tour-viewport.sh (device-panel drift guard)
+        run: bash scripts/verify-pr/tour-viewport.test.sh
+
+  uploader:
+    name: pr-images uploader (pure logic)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: scripts/pr-images
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install
+        run: npm install --legacy-peer-deps
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test

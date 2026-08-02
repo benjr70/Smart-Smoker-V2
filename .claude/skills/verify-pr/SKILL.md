@@ -44,7 +44,19 @@ verifier agent's forbidden zone too):
 gh auth status >/dev/null || { echo "verify-pr: gh not authenticated"; exit 1; }
 test -f scripts/verify-pr/parse-checklist.sh
 test -f scripts/verify-pr/tick-checklist.sh
+test -f scripts/verify-pr/detect-ui-change.sh
+test -f scripts/verify-pr/inject-screenshots.sh
 test -d scripts/stack-runner/node_modules || echo "verify-pr: run 'cd scripts/stack-runner && npm install' first"
+```
+
+The **screenshot tour** (step 7.2) has one extra, _soft_ prerequisite: the
+`scripts/pr-images` uploader and its logged-in GitHub profile. It is soft on
+purpose — a missing or expired upload session degrades the tour, it never fails
+a verification round:
+
+```bash
+test -d scripts/pr-images/node_modules \
+  || echo "verify-pr: screenshots unavailable — run 'cd scripts/pr-images && npm install --legacy-peer-deps'"
 ```
 
 The `playwright-chrome` and `playwright-electron` MCP servers are **committed**
@@ -102,9 +114,44 @@ the tested helper — it reads both `## Manual verification` and
 gh pr view "$PR" --json body -q .body | scripts/verify-pr/parse-checklist.sh
 ```
 
-If the helper prints nothing, there is nothing to verify: post a short comment
-saying so, emit `manual-verify: 0/0 PASS, 0 deferred, 0 FAIL`, and stop (no
-stack needed).
+If the helper prints nothing, there is nothing to verify — but check §1b before
+concluding the round is a no-op: a UI-changing PR still earns a screenshot tour.
+With no items **and** no UI surfaces, post a short comment saying so, emit
+`manual-verify: 0/0 PASS, 0 deferred, 0 FAIL` plus
+`screenshots: none (no UI change)`, and stop (no stack needed).
+
+### 1b. Decide whether this PR needs a screenshot tour
+
+A PR whose diff changes user-visible UI gets its screenshots posted into the
+**PR description** — a reviewer should see the pixels without pulling the
+branch. Whether a diff counts as "UI" is a tested file-path judgement, not a
+call you make per round:
+
+```bash
+UI_SURFACES=$(gh pr diff "$PR" --name-only | scripts/verify-pr/detect-ui-change.sh)
+```
+
+Output is one surface per line — `frontend`, `smoker`, or both (a shared package
+under `packages/*/src` renders in both apps). Empty output means no UI change:
+skip the tour entirely, and emit `screenshots: none (no UI change)` alongside
+the summary line. Non-empty means step 6 asks the verifier for a tour of exactly
+those surfaces and step 7.2 posts it.
+
+**Each surface has a mandatory tour viewport** — neither app is a desktop app,
+so a default browser window documents a shape no user ever sees:
+
+```bash
+scripts/verify-pr/tour-viewport.sh frontend   # 427x952 — Pixel 10 Pro, portrait
+scripts/verify-pr/tour-viewport.sh smoker     # 800x480 — the device panel
+```
+
+The frontend is used on a **Pixel 10 Pro held portrait** — the customer's phone;
+its 1280x2856 panel at DPR 3 gives a 427x952 CSS viewport. The smoker shell runs
+on the device's fixed 800x480 kiosk panel, and that number is mirrored from the
+kiosk `BrowserWindow` in `apps/smoker/electron-app/index.ts` (a sibling test
+parses that file and fails on drift, so the tour can never document a panel the
+device no longer has). Resolve the viewport per surface and pass it into the
+step 6 prompt — never let the verifier pick one.
 
 ### 2. Prepare the per-PR artifact directory
 
@@ -180,12 +227,36 @@ Spawn the `manual-verifier` subagent (definition in
 
 - the full list of parsed items (with their `manual`/`human` tags);
 - the sourced stack contract (`E2E_*`, `STACK_PROJECT_NAME`);
-- the `ARTIFACT_DIR` to write screenshots/logs into.
+- the `ARTIFACT_DIR` to write screenshots/logs into;
+- the `UI_SURFACES` from §1b, when non-empty, with the **screenshot tour**
+  instruction below.
 
 The agent classifies each item (local → execute in real browser/Electron;
 deployed-env → defer + demand a spec; hardware → defer to human with a named
 blocker), gathers concrete evidence, and returns a per-item verdict block plus a
 `verifier-tally:` line. You do **not** re-test; you consume its report.
+
+**Screenshot tour (only when `UI_SURFACES` is non-empty).** Ask for it
+explicitly, in the prompt:
+
+> This PR changes UI on: \<UI_SURFACES>. In addition to your per-item evidence,
+> capture a screenshot tour of the changed surfaces in the real browser /
+> Electron shell: each screen the diff touches, in the state a reviewer would
+> want to see (populated, not an empty first-run screen), full-page, one file
+> per screen. **Set the viewport before you capture, per surface:** frontend →
+> 427x952 (a Pixel 10 Pro held portrait — it is a mobile app, never a
+> desktop-width window); smoker → 800x480 (the device's kiosk panel). Both come
+> from `scripts/verify-pr/tour-viewport.sh <surface>` — do not choose your own.
+> Name them `<surface>-NN-<slug>.png` (e.g. `frontend-01-settings-page.png`,
+> `smoker-02-smoke-screen.png`) in `ARTIFACT_DIR`, numbered in the order a
+> reviewer should read them, and list them at the end of your report as
+> `ui-shot: <filename> — <what it shows>` lines. Capture the tour even for
+> screens whose checklist items you deferred: the tour documents the change, it
+> does not verify it.
+
+The tour is **evidence for humans, not a verdict**: a screen you could not reach
+is simply absent from the tour and mentioned in your report; it never turns into
+a FAIL by itself.
 
 ### 7. Reconcile the result onto the PR
 
@@ -202,7 +273,48 @@ From the agent's verdicts:
    gh pr edit "$PR" --body-file "$ARTIFACT_DIR/body.new.md"
    ```
 
-2. **Post exactly one evidence comment for the round** (never one per item). It
+2. **Post the screenshot tour into the PR description** (only when §1b found UI
+   surfaces and the agent returned `ui-shot:` lines). Order matters: this runs
+   **after** the box-ticking push, and re-reads the body from GitHub, so the two
+   body edits cannot clobber each other.
+
+   The uploader drives a real logged-in Chrome (GitHub has no attachment API —
+   see `scripts/pr-images/README.md`) and prints `caption<TAB>url` lines; the
+   injector rewrites the body's `## Screenshots` section in place, so a
+   re-verify round **refreshes** the tour instead of stacking a new copy under
+   the old one:
+
+   ```bash
+   SHOTS=$(printf '%s\n' "$UI_SHOT_FILES")   # ARTIFACT_DIR paths, tour order
+   ( cd scripts/pr-images && npx tsx cli.ts upload --pr "$PR" $SHOTS ) \
+     > "$ARTIFACT_DIR/shots.tsv"
+   UPLOAD_RC=$?
+
+   if [ "$UPLOAD_RC" -eq 0 ]; then
+     gh pr view "$PR" --json body -q .body > "$ARTIFACT_DIR/body.shots.md"
+     scripts/verify-pr/inject-screenshots.sh "$ARTIFACT_DIR/body.shots.md" \
+       < "$ARTIFACT_DIR/shots.tsv" > "$ARTIFACT_DIR/body.shots.new.md"
+     gh pr edit "$PR" --body-file "$ARTIFACT_DIR/body.shots.new.md"
+   fi
+   ```
+
+   **A screenshot failure is never a verification failure.** Route the exit code
+   into the round's `screenshots:` line and carry on:
+
+   | `UPLOAD_RC` | `screenshots:` line                                          |
+   | ----------- | ------------------------------------------------------------ |
+   | 0           | `screenshots: <n> posted`                                    |
+   | 4           | `screenshots: SKIPPED — GitHub upload session expired`       |
+   | 3           | `screenshots: SKIPPED — no desktop session for the uploader` |
+   | 5           | `screenshots: PARTIAL — <n>/<total> uploaded`                |
+   | other       | `screenshots: SKIPPED — uploader error (see ARTIFACT_DIR)`   |
+
+   Exit 4 means the persistent profile's cookies expired; a human fixes it with
+   `cd scripts/pr-images && npm run login` on the box's desktop. Say so verbatim
+   in the evidence comment — an expired session is invisible otherwise, and the
+   daemon would quietly stop posting screenshots for weeks.
+
+3. **Post exactly one evidence comment for the round** (never one per item). It
    lists, per item: the verdict, the classification, the concrete evidence
    (status codes / request lines / DB rows / log excerpts / screenshot
    filenames), and — for deferrals — the demanded post-deploy spec or the named
@@ -212,15 +324,19 @@ From the agent's verdicts:
    gh pr comment "$PR" --body-file "$ARTIFACT_DIR/comment.md"
    ```
 
-3. **Emit the summary line** as the skill's final stdout — the machine-readable
+4. **Emit the summary lines** as the skill's final stdout — the machine-readable
    contract the caller (and slice 6's verifier hook) parses:
 
    ```
    manual-verify: <pass>/<total> PASS, <deferred> deferred, <fail> FAIL
+   screenshots: <n> posted | PARTIAL — … | SKIPPED — … | none (no UI change)
    ```
 
    `<total>` is the number of items this round acted on. An unjustified deferral
-   counts as a **FAIL** (the agent already classified it that way).
+   counts as a **FAIL** (the agent already classified it that way). The
+   `screenshots:` line is informational — it never changes the verdict, and the
+   `manual-verify:` line stays first and unchanged in format so existing parsers
+   keep working.
 
 ### 8. Teardown — UNCONDITIONALLY, on pass, fail, or error
 

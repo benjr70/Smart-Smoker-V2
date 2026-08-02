@@ -1,0 +1,22 @@
+{
+  "name": "@smart-smoker/pr-images",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Uploads local PNGs to GitHub's user-attachments CDN through a real logged-in Chrome profile, so the verify-pr harness can embed a UI screenshot tour in a PR description.",
+  "type": "module",
+  "scripts": {
+    "login": "tsx cli.ts login",
+    "status": "tsx cli.ts status",
+    "upload": "tsx cli.ts upload",
+    "test": "tsx --test *.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "playwright-core": "^1.49.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
