@@ -22,6 +22,28 @@
       Learn how to configure a non-root public URL by running `npm run build`.
     -->
     <title>Smart Smoker</title>
+    <script>
+      // The colour scheme, applied before the page paints anything.
+      //
+      // The application decides the scheme as it mounts, which is far too late:
+      // the browser would have painted a white page first and the smoker would
+      // get a flash of light in a dark garage on every reload. So the scheme the
+      // app settled on last time is applied to the document here, from the same
+      // local cache the app reads on the way up. Guarded by
+      // src/theme/preFirstPaint.test.tsx, which requires this to leave the
+      // document exactly as the running app leaves it.
+      (function () {
+        try {
+          var mode = localStorage.getItem('mui-mode') || 'system';
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var scheme = mode === 'system' ? (prefersDark ? 'dark' : 'light') : mode;
+          document.documentElement.setAttribute('data-mui-color-scheme', scheme);
+        } catch (error) {
+          // No storage, or no media queries: the app applies the scheme itself
+          // once it has mounted.
+        }
+      })();
+    </script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>

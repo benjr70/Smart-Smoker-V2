@@ -16,6 +16,7 @@
  */
 import {
   BottomNavigation,
+  Experimental_CssVarsProvider as CssVarsProvider,
   BottomNavigationAction,
   Button,
   Card,
@@ -28,7 +29,7 @@ import {
   Typography,
   createTheme,
 } from '@mui/material';
-import { Theme } from '@mui/material/styles';
+import { experimental_extendTheme as extendTheme } from '@mui/material/styles';
 import '@testing-library/jest-dom';
 import { render, screen } from '@testing-library/react';
 import React from 'react';
@@ -82,12 +83,18 @@ const Probes = (): JSX.Element => (
   </>
 );
 
-/** How every probe control is laid out, painted and typed under `theme`. */
-const appearanceUnder = (theme: Theme): Record<string, Record<string, string>> => {
+/**
+ * How every probe control is laid out, painted and typed under `theme`, mounted
+ * through the colour-scheme provider — the way the application root mounts its
+ * theme, and therefore the way these screens are really painted.
+ */
+const appearanceUnder = (
+  theme: ReturnType<typeof extendTheme>
+): Record<string, Record<string, string>> => {
   const { unmount } = render(
-    <ThemeProvider theme={theme}>
+    <CssVarsProvider theme={theme}>
       <Probes />
-    </ThemeProvider>
+    </CssVarsProvider>
   );
 
   const appearance = Object.fromEntries(
@@ -108,7 +115,9 @@ const appearanceUnder = (theme: Theme): Record<string, Record<string, string>> =
 
 describe('the application theme and the screens it does not restyle', () => {
   it('lays out, paints and types every control exactly as Material-UI does', () => {
-    expect(appearanceUnder(appTheme)).toEqual(appearanceUnder(createTheme()));
+    // Material-UI's own theme, mounted the same way: how the screens this slice
+    // does not restyle are painted today.
+    expect(appearanceUnder(appTheme)).toEqual(appearanceUnder(extendTheme()));
   });
 
   /**
@@ -116,12 +125,12 @@ describe('the application theme and the screens it does not restyle', () => {
    * feeds it the very repaint and typeface swap the design would apply.
    */
   it('notices a theme that repaints or re-types those controls', () => {
-    const restyled = createTheme({
-      palette: { primary: { main: '#DA4A2E' }, text: { primary: '#121212' } },
+    const restyled = extendTheme({
+      colorSchemes: { light: { palette: { primary: { main: '#DA4A2E' } } } },
       typography: { fontFamily: '"Plus Jakarta Sans", sans-serif' },
     });
 
-    expect(appearanceUnder(restyled)).not.toEqual(appearanceUnder(createTheme()));
+    expect(appearanceUnder(restyled)).not.toEqual(appearanceUnder(extendTheme()));
   });
 
   /**

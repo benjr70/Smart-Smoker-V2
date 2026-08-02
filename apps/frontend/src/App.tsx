@@ -1,4 +1,4 @@
-import { Grid, ThemeProvider } from '@mui/material';
+import { Experimental_CssVarsProvider as CssVarsProvider, Grid } from '@mui/material';
 import React from 'react';
 import { BottomBar } from '../src/components/bottomBar/bottombar';
 import { SnackbarProvider } from './api';
@@ -50,7 +50,12 @@ class App extends React.Component<{}, { currentScreen: Screens }> {
     }
 
     return (
-      <ThemeProvider theme={appTheme}>
+      // The application theme carries both colour schemes; this provider decides
+      // which of them is in effect, puts it on the document and emits each
+      // scheme's tokens as custom properties. `system` is the default, so a
+      // browser that has never been told otherwise follows the device — and
+      // keeps following it, live, while the page is open.
+      <CssVarsProvider theme={appTheme} defaultMode="system">
         <SnackbarProvider>
           <Grid className="App-header">
             <Grid>{screen}</Grid>
@@ -61,7 +66,7 @@ class App extends React.Component<{}, { currentScreen: Screens }> {
             ></BottomBar>
           </Grid>
         </SnackbarProvider>
-      </ThemeProvider>
+      </CssVarsProvider>
     );
   }
 }

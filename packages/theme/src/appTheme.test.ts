@@ -1,6 +1,6 @@
 import { createTheme } from '@mui/material/styles';
 import { createAppTheme, createThemeFromTokens, withDesignPalette } from './appTheme';
-import { PaletteTokens } from './tokens';
+import { PaletteTokens, carbonLight } from './tokens';
 
 /**
  * AC 1: the design's Carbon light tokens, defined once and carried by the
@@ -118,6 +118,16 @@ describe('the design palette, where a screen opts into it', () => {
     expect(theme.palette.primary.main).toBe('#DA4A2E');
     expect(theme.palette.background.default).toBe('#F6F6F5');
   });
+
+  /**
+   * A restyled screen reaches for tokens the palette does not carry — the
+   * alternate surface a segmented control sits on, the accent tint — so the
+   * subtree has to carry the token set it was painted with, whatever the theme
+   * around it does or does not provide.
+   */
+  it('carries the tokens it painted with, even under a theme that had none', () => {
+    expect(withDesignPalette(createTheme()).design).toMatchObject(carbonLight);
+  });
 });
 
 /**
@@ -134,6 +144,7 @@ describe('adding a further palette', () => {
     surfaceAlt: '#242424',
     border: '#333333',
     inputBorder: '#444444',
+    navigation: '#050505',
     text: '#F4F4F4',
     textSecondary: '#A8A8A8',
     accent: '#FF8A65',

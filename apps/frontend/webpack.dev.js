@@ -29,8 +29,8 @@ module.exports = {
       },
       {
         // Build TS/TSX sources from the workspace packages "temperaturechart",
-        // "smoke-session" and "api-transport" which ship TS/TSX sources (no
-        // prebuilt dist).
+        // "smoke-session", "api-transport" and "theme" which ship TS/TSX
+        // sources (no prebuilt dist).
         test: /\.tsx?$/,
         include: [
           path.resolve(__dirname, '../../packages/TemperatureChart/src'),
@@ -39,6 +39,8 @@ module.exports = {
           path.resolve(__dirname, '../../node_modules/smoke-session/src'),
           path.resolve(__dirname, '../../packages/api-transport/src'),
           path.resolve(__dirname, '../../node_modules/api-transport/src'),
+          path.resolve(__dirname, '../../packages/theme/src'),
+          path.resolve(__dirname, '../../node_modules/theme/src'),
         ],
         use: 'ts-loader',
       },

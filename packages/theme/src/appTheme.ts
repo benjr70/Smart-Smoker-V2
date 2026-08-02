@@ -1,4 +1,10 @@
-import { Theme, alpha, createTheme } from '@mui/material/styles';
+import {
+  Theme,
+  alpha,
+  createTheme,
+  experimental_extendTheme as extendTheme,
+} from '@mui/material/styles';
+import type { CssVarsTheme } from '@mui/material/styles';
 import { ACCENT_TINT_ALPHA, PaletteTokens, ThemeMode, carbonLight, paletteTokens } from './tokens';
 
 /**
@@ -19,6 +25,13 @@ declare module '@mui/material/styles' {
     design: DesignPalette;
   }
   interface ThemeOptions {
+    design?: DesignPalette;
+  }
+  /** The tokens each colour scheme of the application theme carries. */
+  interface ColorSystem {
+    design: DesignPalette;
+  }
+  interface ColorSystemOptions {
     design?: DesignPalette;
   }
 }
@@ -55,6 +68,40 @@ export const createAppTheme = (mode: ThemeMode): Theme =>
   createThemeFromTokens(mode, paletteTokens[mode]);
 
 /**
+ * The theme the application root provides: one theme carrying every palette as
+ * a colour scheme.
+ *
+ * Which scheme paints is decided by the colour-scheme provider, which puts the
+ * scheme on the document and emits each scheme's tokens as custom properties —
+ * so nothing has to swap a theme object to change how the application looks.
+ * A further palette is a further entry in `tokens`.
+ */
+export const createColorSchemeTheme = (
+  tokens: Record<ThemeMode, PaletteTokens> = paletteTokens
+): CssVarsTheme =>
+  extendTheme({
+    colorSchemes: {
+      light: { design: resolveDesignPalette(tokens.light) },
+      dark: { design: resolveDesignPalette(tokens.dark) },
+    },
+  });
+
+/**
+ * The theme without the custom properties a colour-scheme theme carries.
+ *
+ * Material-UI's components read their colours from those properties in
+ * preference to the palette, and the properties hold the application's
+ * unrestyled palette. A restyled subtree is painted from the values the scheme
+ * in effect resolved to, so it is handed a theme that has none.
+ */
+const withoutCustomProperties = (theme: Theme): Theme => {
+  const plain = { ...theme } as Theme & Partial<Pick<CssVarsTheme, 'vars' | 'colorSchemes'>>;
+  delete plain.vars;
+  delete plain.colorSchemes;
+  return plain;
+};
+
+/**
  * The enclosing theme, repainted and re-typed in the design's tokens.
  *
  * Applied by `DesignSurface` to the theme already in scope, so a restyled
@@ -82,7 +129,11 @@ export const withDesignPalette = (outer: Theme): Theme => {
     },
   });
 
-  return createTheme(outer, {
+  return createTheme(withoutCustomProperties(outer), {
+    // The subtree carries the tokens it was painted with, so a restyled screen
+    // can reach the ones the palette has no room for — the alternate surface, the
+    // accent tint — however the theme around it was built.
+    design,
     typography: painted.typography,
     palette: painted.palette,
     // Deliberately no `shape` override: `shape.borderRadius` reaches MuiButton

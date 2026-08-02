@@ -81,6 +81,9 @@ jobs:
             "api-transport")
               echo "path=packages/api-transport" >> $GITHUB_OUTPUT
               ;;
+            "theme")
+              echo "path=packages/theme" >> $GITHUB_OUTPUT
+              ;;
             *)
               echo "path=apps/${{ matrix.app }}" >> $GITHUB_OUTPUT
               ;;
