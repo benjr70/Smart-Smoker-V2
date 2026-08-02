@@ -75,6 +75,26 @@ test_frontend_is_portrait() {
     else
         fail "phone-width viewport (<= 480)" "got width ${w}"
     fi
+
+    # The customer's actual handset: a Pixel 10 Pro. Its 1280x2856 panel at
+    # device-pixel-ratio 3 is a 427x952 CSS viewport (2856/3 = 952 exactly,
+    # 1280/3 rounds to 427). Pinned, because "some portrait phone" drifts.
+    if [ "${out}" = "427x952" ]; then
+        pass "matches the Pixel 10 Pro logical viewport (427x952)"
+    else
+        fail "matches the Pixel 10 Pro logical viewport (427x952)" "got ${out}"
+    fi
+
+    # Sanity-check that pin against the panel it claims to come from, so a
+    # future handset change is a two-line edit with the arithmetic visible.
+    local panel_w=1280 panel_h=2856 dpr=3
+    if [ "$(( (panel_h + dpr / 2) / dpr ))" -eq "${h}" ] &&
+        [ "$(( (panel_w + dpr / 2) / dpr ))" -eq "${w}" ]; then
+        pass "viewport is the 1280x2856 panel divided by DPR ${dpr}"
+    else
+        fail "viewport is the 1280x2856 panel divided by DPR ${dpr}" \
+            "panel/${dpr} = $(( (panel_w + dpr / 2) / dpr ))x$(( (panel_h + dpr / 2) / dpr )), table says ${w}x${h}"
+    fi
 }
 
 #-------------------------------------------------------------------------------

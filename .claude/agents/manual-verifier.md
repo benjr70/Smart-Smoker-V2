@@ -184,10 +184,10 @@ same real browser / Electron shell you are already driving:
 - **the surface's viewport, set before you capture** — this is not optional and
   not yours to choose:
 
-  | Surface    | Viewport  | Why                                                                  |
-  | ---------- | --------- | -------------------------------------------------------------------- |
-  | `frontend` | `390x844` | it is a **mobile app**, held portrait — never a desktop-width window |
-  | `smoker`   | `800x480` | the device's fixed kiosk panel                                       |
+  | Surface    | Viewport  | Why                                                                                                              |
+  | ---------- | --------- | ---------------------------------------------------------------------------------------------------------------- |
+  | `frontend` | `427x952` | a **Pixel 10 Pro held portrait** (1280x2856 panel at DPR 3) — the customer's phone; never a desktop-width window |
+  | `smoker`   | `800x480` | the device's fixed kiosk panel                                                                                   |
 
   Both come from `scripts/verify-pr/tour-viewport.sh <surface>`; the smoker
   number mirrors the kiosk `BrowserWindow` in

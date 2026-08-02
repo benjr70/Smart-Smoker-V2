@@ -72,7 +72,7 @@ rule_table() {
         "ui-screenshots	.surface.-NN-.slug.\.png" \
         "ui-screenshots	ui-shot:" \
         "ui-screenshots	tour-viewport\.sh" \
-        "ui-screenshots	390x844" \
+        "ui-screenshots	427x952" \
         "ui-screenshots	800x480" \
         "ui-screenshots	the tour documents the change, it does not verify it"
 }

@@ -13,7 +13,7 @@
 # silently leave the tour capturing the old shape.
 #
 # Usage:
-#   tour-viewport.sh frontend      # -> 390x844
+#   tour-viewport.sh frontend      # -> 427x952
 #   tour-viewport.sh smoker        # -> 800x480
 #   tour-viewport.sh --list        # -> surface<TAB>WxH lines
 #
@@ -23,9 +23,13 @@
 
 set -uo pipefail
 
-# frontend: iPhone 12/13/14-class portrait logical viewport — the common shape
-# for the phone the smoker's owner actually holds. Portrait, always.
-FRONTEND_VIEWPORT="390x844"
+# frontend: the Pixel 10 Pro the smoker's owner actually holds. Its panel is
+# 1280x2856 physical at device-pixel-ratio 3, so the logical (CSS) viewport a
+# page sees is 2856/3 = 952 tall by 1280/3 ~= 427 wide. Portrait, always — a
+# landscape or desktop-width capture documents a layout that user never sees.
+# (browser_resize takes width/height only; the DPR is not settable through it,
+# which costs sharpness, not shape.)
+FRONTEND_VIEWPORT="427x952"
 
 # smoker: the device panel, mirrored from the kiosk BrowserWindow (800x480).
 SMOKER_VIEWPORT="800x480"
