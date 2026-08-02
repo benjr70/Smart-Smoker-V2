@@ -57,6 +57,14 @@ module.exports = {
         test: /\.css$/,
         use: ['style-loader', 'css-loader'],
       },
+      {
+        // The self-hosted Plus Jakarta Sans webfont: its face stylesheet points
+        // at font files with relative urls, which css-loader hands to webpack to
+        // emit alongside the bundle. Without this the build fails to resolve
+        // them and the app would have to fall back to a font CDN.
+        test: /\.(woff2?|eot|ttf|otf)$/i,
+        type: 'asset/resource',
+      },
     ],
   },
   resolve: {

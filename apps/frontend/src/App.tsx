@@ -1,4 +1,4 @@
-import { Grid } from '@mui/material';
+import { Grid, ThemeProvider } from '@mui/material';
 import React from 'react';
 import { BottomBar } from '../src/components/bottomBar/bottombar';
 import { SnackbarProvider } from './api';
@@ -7,6 +7,7 @@ import { Screens } from './components/common/interfaces/enums';
 import { History } from './components/history/history';
 import { Settings } from './components/settings/settings';
 import { Smoke } from './components/smoke/smoke';
+import { appTheme } from './theme';
 
 class App extends React.Component<{}, { currentScreen: Screens }> {
   constructor(props: any) {
@@ -49,16 +50,18 @@ class App extends React.Component<{}, { currentScreen: Screens }> {
     }
 
     return (
-      <SnackbarProvider>
-        <Grid className="App-header">
-          <Grid>{screen}</Grid>
-          <BottomBar
-            smokeOnClick={this.smokeOnClick}
-            reviewOnClick={this.reviewOnClick}
-            settingsOnClick={this.settingsOnClick}
-          ></BottomBar>
-        </Grid>
-      </SnackbarProvider>
+      <ThemeProvider theme={appTheme}>
+        <SnackbarProvider>
+          <Grid className="App-header">
+            <Grid>{screen}</Grid>
+            <BottomBar
+              smokeOnClick={this.smokeOnClick}
+              reviewOnClick={this.reviewOnClick}
+              settingsOnClick={this.settingsOnClick}
+            ></BottomBar>
+          </Grid>
+        </SnackbarProvider>
+      </ThemeProvider>
     );
   }
 }
