@@ -390,11 +390,37 @@ describe('ratings client — legacy endpoint contract', () => {
 
 const savedSettings: NotificationSettings = {
   chamber: { enabled: true, low: 225, high: 275 },
+  probeTarget: {
+    enabled: true,
+    probes: [
+      { slot: 'probe1', enabled: true, target: 203, name: 'Brisket Flat' },
+      { slot: 'probe2', enabled: false, target: 203, name: 'Probe 2' },
+      { slot: 'probe3', enabled: false, target: 203, name: 'Probe 3' },
+    ],
+  },
+};
+
+/** The same document as the backend's strict DTO accepts it: no resolved names. */
+const savedSettingsBody = {
+  chamber: { enabled: true, low: 225, high: 275 },
+  probeTarget: {
+    enabled: true,
+    probes: [
+      { slot: 'probe1', enabled: true, target: 203 },
+      { slot: 'probe2', enabled: false, target: 203 },
+      { slot: 'probe3', enabled: false, target: 203 },
+    ],
+  },
 };
 
 describe('notifications client — settings', () => {
   test('getSettings returns the stored notification settings document', async () => {
-    const backend = createFakeBackend({ appSettings: { settings: savedSettings } });
+    // Seeded as it is actually stored — by slot, without names — since the
+    // names are resolved from the cook on the way out.
+    const backend = createFakeBackend({
+      appSettings: { settings: savedSettingsBody },
+      smokeProfile: { current: { probe1Name: 'Brisket Flat' } },
+    });
     const client = createApiClient(backend);
 
     const result = await client.notifications.getSettings();
@@ -422,7 +448,10 @@ describe('notifications client — settings', () => {
     await expect(client.notifications.getSettings()).resolves.toBeUndefined();
   });
 
-  test('saveSettings sends the chamber range, stripping the persisted _id/__v it was read with', async () => {
+  // The resolved probe names ride along on the read but are not the user's to
+  // set: the backend's strict validation edge rejects a save that carries them,
+  // exactly as it rejects the persisted _id/__v a fetched document carries.
+  test('saveSettings sends the settings, stripping the resolved names and the persisted _id/__v it was read with', async () => {
     const backend = createFakeBackend();
     const client = createApiClient(backend);
 
@@ -435,7 +464,7 @@ describe('notifications client — settings', () => {
     expect(backend.requests).toContainEqual({
       method: 'post',
       path: 'appSettings',
-      body: savedSettings,
+      body: savedSettingsBody,
     });
   });
 
@@ -450,7 +479,49 @@ describe('notifications client — settings', () => {
     expect(backend.requests).toContainEqual({
       method: 'post',
       path: 'appSettings',
-      body: { chamber: { enabled: true, low: 225, high: 275 } },
+      body: {
+        chamber: { enabled: true, low: 225, high: 275 },
+        probeTarget: {
+          enabled: false,
+          probes: [
+            { slot: 'probe1', enabled: false, target: 203 },
+            { slot: 'probe2', enabled: false, target: 203 },
+            { slot: 'probe3', enabled: false, target: 203 },
+          ],
+        },
+      },
+    });
+  });
+
+  // A document saved before a slot existed (or with one dropped) must still
+  // render a row per probe and save a full list, or a probe would quietly
+  // disappear from the page it is configured on.
+  test('saveSettings fills in every probe slot the document is missing', async () => {
+    const backend = createFakeBackend();
+    const client = createApiClient(backend);
+
+    await client.notifications.saveSettings({
+      chamber: { enabled: false, low: 225, high: 275 },
+      probeTarget: {
+        enabled: true,
+        probes: [{ slot: 'probe2', enabled: true, target: 195, name: 'Pork Butt' }],
+      },
+    });
+
+    expect(backend.requests).toContainEqual({
+      method: 'post',
+      path: 'appSettings',
+      body: {
+        chamber: { enabled: false, low: 225, high: 275 },
+        probeTarget: {
+          enabled: true,
+          probes: [
+            { slot: 'probe1', enabled: false, target: 203 },
+            { slot: 'probe2', enabled: true, target: 195 },
+            { slot: 'probe3', enabled: false, target: 203 },
+          ],
+        },
+      },
     });
   });
 
@@ -460,11 +531,67 @@ describe('notifications client — settings', () => {
 
     await client.notifications.saveSettings({
       chamber: { enabled: true, low: 200, high: 300 },
+      probeTarget: {
+        enabled: true,
+        probes: [{ slot: 'probe1', enabled: true, target: 203, name: 'Brisket Flat' }],
+      },
     });
 
     await expect(client.notifications.getSettings()).resolves.toEqual({
       chamber: { enabled: true, low: 200, high: 300 },
+      probeTarget: {
+        enabled: true,
+        probes: [
+          { slot: 'probe1', enabled: true, target: 203, name: 'Probe 1' },
+          { slot: 'probe2', enabled: false, target: 203, name: 'Probe 2' },
+          { slot: 'probe3', enabled: false, target: 203, name: 'Probe 3' },
+        ],
+      },
     });
+  });
+
+  // A stored document holding a subset of the slots must still name each row
+  // after its own slot: falling back by row position would label a lone probe2
+  // "Probe 1" and silently disagree with the deployed backend.
+  test('getSettings names an unnamed row after its slot, not its position in the list', async () => {
+    const backend = createFakeBackend({
+      appSettings: {
+        settings: {
+          chamber: { enabled: false, low: 225, high: 275 },
+          probeTarget: {
+            enabled: true,
+            probes: [{ slot: 'probe2', enabled: true, target: 195 }],
+          },
+        },
+      },
+    });
+    const client = createApiClient(backend);
+
+    const result = await client.notifications.getSettings();
+
+    expect(result?.probeTarget.probes.map(probe => probe.name)).toEqual([
+      'Probe 1',
+      'Probe 2',
+      'Probe 3',
+    ]);
+  });
+
+  // Names are the backend's to resolve from the active cook, so the read has to
+  // carry them through rather than leave the page showing slot identifiers.
+  test('getSettings keeps the probe names the backend resolved for the current cook', async () => {
+    const backend = createFakeBackend({
+      appSettings: { settings: savedSettingsBody },
+      smokeProfile: { current: { probe1Name: 'Brisket Flat', probe2Name: 'Pork Butt' } },
+    });
+    const client = createApiClient(backend);
+
+    const result = await client.notifications.getSettings();
+
+    expect(result?.probeTarget.probes.map(probe => probe.name)).toEqual([
+      'Brisket Flat',
+      'Pork Butt',
+      'Probe 3',
+    ]);
   });
 });
 

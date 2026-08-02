@@ -80,6 +80,30 @@ export interface ChamberAlertSettings {
 }
 
 /**
+ * One probe's row in the Probe Target Reached alert.
+ *
+ * Stored by `slot` and never by name, because a slot outlives a cook. `name` is
+ * the display name the backend resolves from the active cook's smoke profile and
+ * serves on the read — falling back to a generic slot label when nothing is set
+ * up or the cook left that probe unnamed. It rides along on the read only; the
+ * client's save projection strips it, and the backend rejects a save carrying it.
+ */
+export interface ProbeTargetEntry {
+  slot: string;
+  /** Whether this probe is being watched. */
+  enabled: boolean;
+  /** The temperature, °F, this probe's meat is done at. */
+  target: number;
+  name: string;
+}
+
+/** The Probe Target Reached alert: switched on as a whole, plus a row per probe. */
+export interface ProbeTargetAlertSettings {
+  enabled: boolean;
+  probes: ProbeTargetEntry[];
+}
+
+/**
  * The notification settings document. Canonical here so API call sites depend
  * only on the API types module.
  *
@@ -91,6 +115,7 @@ export interface ChamberAlertSettings {
  */
 export interface NotificationSettings {
   chamber: ChamberAlertSettings;
+  probeTarget: ProbeTargetAlertSettings;
 }
 
 /** The colour schemes the application can render in. */
@@ -123,6 +148,7 @@ export interface AppearancePreference {
  */
 export interface ApplicationSettings {
   chamber: ChamberAlertSettings;
+  probeTarget: ProbeTargetAlertSettings;
   appearance: AppearancePreference;
 }
 

@@ -17,19 +17,42 @@ export interface ChamberAlertSettings {
   high: number;
 }
 
+/**
+ * One probe the cook may be watching. Stored by slot rather than by name: the
+ * name belongs to the cook (and changes with it), the slot belongs to the
+ * smoker.
+ */
+export interface ProbeTargetEntrySettings {
+  slot: string;
+  enabled: boolean;
+  /** The temperature, °F, at which this probe's meat is done. */
+  target: number;
+}
+
+/** The user-owned Probe Target Reached alert. */
+export interface ProbeTargetAlertSettings {
+  enabled: boolean;
+  probes: ProbeTargetEntrySettings[];
+}
+
 /** The user-owned notification settings the engine reads. */
 export interface AlertSettings {
   chamber: ChamberAlertSettings;
+  probeTarget: ProbeTargetAlertSettings;
 }
 
 /** The latest reading from the smoker. `null` means "nothing readable". */
 export interface AlertReading {
   chamberTemp: number | null;
+  /** The meat probes' readings by slot; an absent slot read nothing. */
+  probeTemps: Record<string, number | null | undefined>;
 }
 
 /** The names alerts refer to the smoker's probes by. */
 export interface AlertNames {
   chamber: string;
+  /** Display name by probe slot, already resolved for the active cook. */
+  probes: Record<string, string | undefined>;
 }
 
 /**
@@ -43,6 +66,12 @@ export interface AlertRuntimeState {
   chamberOutOfRangeSince: Date | null;
   /** Whether the current excursion has already alerted. */
   chamberAlertSent: boolean;
+  /**
+   * The slots whose target has already been announced this session. Scoped to
+   * the session by the caller, so clearing a smoke lets the same probe alert
+   * again on the next cook.
+   */
+  probeTargetsReached: string[];
 }
 
 /** A notification the engine decided to send. */
@@ -69,6 +98,7 @@ export const initialAlertRuntimeState = (): AlertRuntimeState => ({
   chamberArmed: false,
   chamberOutOfRangeSince: null,
   chamberAlertSent: false,
+  probeTargetsReached: [],
 });
 
 /**
@@ -83,9 +113,12 @@ const ALERT_TITLE = 'Smoker';
 
 const formatTemp = (temp: number): string => `${Math.round(temp)}°F`;
 
-export const evaluateAlerts = (
-  input: AlertEvaluationInput,
-): AlertEvaluation => {
+/**
+ * The chamber range rule, over the state it owns. Split from the probe rule so
+ * that neither can silence the other: a disabled (or unreadable) chamber must
+ * still leave the probe targets free to fire, and vice versa.
+ */
+const evaluateChamber = (input: AlertEvaluationInput): AlertEvaluation => {
   const { chamber } = input.settings;
   const chamberTemp = input.reading.chamberTemp;
   const state = input.state;
@@ -153,5 +186,67 @@ export const evaluateAlerts = (
       chamberOutOfRangeSince: since,
       chamberAlertSent: true,
     },
+  };
+};
+
+/**
+ * The Probe Target Reached rule: every watched probe that has reached the
+ * temperature its meat is done at, named as this cook named it.
+ */
+const evaluateProbeTargets = (
+  input: AlertEvaluationInput,
+  state: AlertRuntimeState,
+): AlertEvaluation => {
+  const { probeTarget } = input.settings;
+  if (!probeTarget.enabled) {
+    return { notifications: [], state };
+  }
+
+  const notifications: AlertNotification[] = [];
+  const reached: string[] = [];
+  probeTarget.probes.forEach((probe) => {
+    if (!probe.enabled || state.probeTargetsReached.includes(probe.slot)) {
+      return;
+    }
+    const temp = input.reading.probeTemps[probe.slot];
+    if (temp === null || temp === undefined || !Number.isFinite(temp)) {
+      return;
+    }
+    if (temp < probe.target) {
+      return;
+    }
+    const name = input.names.probes[probe.slot] ?? probe.slot;
+    reached.push(probe.slot);
+    notifications.push({
+      title: ALERT_TITLE,
+      body: `${name} reached ${formatTemp(temp)}.`,
+    });
+  });
+
+  if (reached.length === 0) {
+    return { notifications, state };
+  }
+  return {
+    notifications,
+    state: {
+      ...state,
+      probeTargetsReached: [...state.probeTargetsReached, ...reached],
+    },
+  };
+};
+
+/**
+ * Evaluate every alert against one reading. Each rule owns its own slice of the
+ * runtime state, and the state each returns is threaded into the next, so the
+ * caller persists a single answer.
+ */
+export const evaluateAlerts = (
+  input: AlertEvaluationInput,
+): AlertEvaluation => {
+  const chamber = evaluateChamber(input);
+  const probes = evaluateProbeTargets(input, chamber.state);
+  return {
+    notifications: [...chamber.notifications, ...probes.notifications],
+    state: probes.state,
   };
 };

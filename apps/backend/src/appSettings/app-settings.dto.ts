@@ -1,10 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsArray,
   IsBoolean,
   IsIn,
   IsNumber,
   IsOptional,
+  IsString,
   ValidateNested,
 } from 'class-validator';
 import { AppearanceMode, ColorScheme } from './appearance';
@@ -25,6 +27,40 @@ export class ChamberAlertDto {
   @ApiProperty()
   @IsNumber()
   high: number;
+}
+
+/**
+ * One probe's row as the settings page saves it.
+ *
+ * Deliberately no `name`: the name shown against the row is resolved from the
+ * active cook's smoke profile and served on the read, so it is not the user's to
+ * set — and the strict validation edge rejects a document that tries.
+ */
+export class ProbeTargetEntryDto {
+  @ApiProperty()
+  @IsString()
+  slot: string;
+
+  @ApiProperty()
+  @IsBoolean()
+  enabled: boolean;
+
+  @ApiProperty()
+  @IsNumber()
+  target: number;
+}
+
+/** The Probe Target Reached alert as the settings page sends it. */
+export class ProbeTargetAlertDto {
+  @ApiProperty()
+  @IsBoolean()
+  enabled: boolean;
+
+  @ApiProperty({ type: [ProbeTargetEntryDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProbeTargetEntryDto)
+  probes: ProbeTargetEntryDto[];
 }
 
 /**
@@ -65,6 +101,12 @@ export class ApplicationSettingsDto {
   @ValidateNested()
   @Type(() => ChamberAlertDto)
   chamber?: ChamberAlertDto;
+
+  @ApiProperty({ type: ProbeTargetAlertDto, required: false })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ProbeTargetAlertDto)
+  probeTarget?: ProbeTargetAlertDto;
 
   @ApiProperty({ type: AppearanceDto, required: false })
   @IsOptional()

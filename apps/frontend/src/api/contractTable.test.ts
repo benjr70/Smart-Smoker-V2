@@ -79,6 +79,10 @@ const seededRatingNoId: rating = {
 
 const seededNotifications: NotificationSettings = {
   chamber: { enabled: true, low: 225, high: 275 },
+  probeTarget: {
+    enabled: true,
+    probes: [{ slot: 'probe1', enabled: true, target: 203, name: 'Brisket Flat' }],
+  },
 };
 
 // A browser push subscription in its wire form — the exact body the backend
@@ -174,8 +178,18 @@ const projectedRatingCreateBody = {
   notes: 'ok',
 };
 
+// The resolved probe names are stripped and every slot is filled in: the
+// backend's strict DTO accepts neither a name nor a partial list.
 const projectedNotificationsBody = {
   chamber: { enabled: true, low: 225, high: 275 },
+  probeTarget: {
+    enabled: true,
+    probes: [
+      { slot: 'probe1', enabled: true, target: 203 },
+      { slot: 'probe2', enabled: false, target: 203 },
+      { slot: 'probe3', enabled: false, target: 203 },
+    ],
+  },
 };
 
 const rows: ContractRow[] = [

@@ -17,6 +17,8 @@ import {
 import {
   ApplicationSettings,
   PostSmoke,
+  ProbeTargetAlertSettings,
+  ProbeTargetEntry,
   PreSmoke,
   PushSubscriptionPayload,
   Smoke,
@@ -35,6 +37,17 @@ import {
 export type StoredSmokeProfile = Partial<SmokeProfile> & {
   _id?: string;
   __v?: number;
+};
+
+/**
+ * The application settings as they actually sit stored: probe rows keyed by
+ * slot, with the resolved name optional — the backend resolves names from the
+ * active cook on the way out, and rejects them on the way in.
+ */
+export type StoredApplicationSettings = Omit<ApplicationSettings, 'probeTarget'> & {
+  probeTarget: Omit<ProbeTargetAlertSettings, 'probes'> & {
+    probes: (Omit<ProbeTargetEntry, 'name'> & { name?: string })[];
+  };
 };
 
 export interface FakeBackendSeed {
@@ -62,9 +75,10 @@ export interface FakeBackendSeed {
     /**
      * The stored application settings document. Absent models an installation
      * that has never saved any; a partial one models a document that predates
-     * the block a test is not interested in.
+     * the block a test is not interested in. Seeded as it is stored — probe
+     * rows by slot, without names — since names are resolved on the way out.
      */
-    settings?: Partial<ApplicationSettings>;
+    settings?: Partial<StoredApplicationSettings>;
   };
   notifications?: {
     /**
@@ -104,24 +118,81 @@ export interface FakeBackendSeed {
  */
 const EMPTY_BODY = null;
 
+/** The smoker's probe slots, in the order the backend serves their rows. */
+const PROBE_SLOTS = ['probe1', 'probe2', 'probe3'];
+
+/** The target a probe carries until the user sets one, as the backend has it. */
+const DEFAULT_PROBE_TARGET = 203;
+
 /**
  * The settings an installation starts from, mirroring the backend's own
  * defaults. The real route answers with a complete document whether or not
  * anything has ever been saved — that is what lets the settings page render on a
  * fresh deployment — so this fake completes what it was seeded with rather than
  * handing back a half-document no real backend would produce.
+ *
+ * The probe rows are completed slot by slot for the same reason the backend
+ * does it: a document stored before a slot existed still reads back as one row
+ * per probe.
  */
 const withSettingsDefaults = (
-  stored: Partial<ApplicationSettings> | undefined
-): ApplicationSettings => ({
+  stored: Partial<StoredApplicationSettings> | undefined
+): StoredApplicationSettings => ({
   chamber: {
     enabled: stored?.chamber?.enabled ?? false,
     low: stored?.chamber?.low ?? 225,
     high: stored?.chamber?.high ?? 275,
   },
+  probeTarget: {
+    enabled: stored?.probeTarget?.enabled ?? false,
+    probes: PROBE_SLOTS.map(slot => {
+      const entry = stored?.probeTarget?.probes?.find(candidate => candidate?.slot === slot);
+      return {
+        slot,
+        enabled: entry?.enabled ?? false,
+        target: entry?.target ?? DEFAULT_PROBE_TARGET,
+      };
+    }),
+  },
   appearance: {
     mode: stored?.appearance?.mode ?? 'system',
     resolvedMode: stored?.appearance?.resolvedMode ?? 'light',
+  },
+});
+
+/** The smoke profile field naming a probe slot, as the backend reads it. */
+const PROBE_NAME_FIELDS: Record<string, keyof SmokeProfile> = {
+  probe1: 'probe1Name',
+  probe2: 'probe2Name',
+  probe3: 'probe3Name',
+};
+
+/**
+ * The label an unnamed slot falls back to. Derived from the slot rather than
+ * from the row's position, exactly as the backend does it: a document holding
+ * only `probe2` must fall back to `Probe 2`, not to `Probe 1`.
+ */
+const genericProbeName = (slot: string): string => `Probe ${slot.replace('probe', '')}`;
+
+/**
+ * The settings as the real backend serves them: each probe row carries the name
+ * the active cook's smoke profile gives that slot, falling back to a generic
+ * slot label when the profile is absent or left that name blank. Mirrored here
+ * so component tests exercise the same read the deployed app does.
+ */
+const withResolvedProbeNames = (
+  settings: StoredApplicationSettings,
+  profile: StoredSmokeProfile
+): ApplicationSettings => ({
+  ...settings,
+  probeTarget: {
+    ...settings.probeTarget,
+    probes: (settings.probeTarget?.probes ?? []).map(probe => ({
+      slot: probe.slot,
+      enabled: probe.enabled,
+      target: probe.target,
+      name: profile[PROBE_NAME_FIELDS[probe.slot]]?.trim() || genericProbeName(probe.slot),
+    })),
   },
 });
 
@@ -146,7 +217,7 @@ interface FakeStore {
     current: rating | undefined;
     records: Record<string, rating>;
   };
-  appSettings: Partial<ApplicationSettings> | undefined;
+  appSettings: Partial<StoredApplicationSettings> | undefined;
   notifications: {
     publicKey: string | null;
     subscriptions: PushSubscriptionPayload[];
@@ -335,10 +406,18 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
     // block, and a fake that did not would hide that.
     if (resource === 'appSettings' && id === undefined) {
       if (method === 'get') {
-        return clone(withSettingsDefaults(store.appSettings));
+        // Every probe row is named on the way out, from the smoke profile of
+        // the cook that is set up now — the names belong to the cook, not to
+        // the stored settings, so they are resolved here rather than seeded.
+        return clone(
+          withResolvedProbeNames(
+            withSettingsDefaults(store.appSettings),
+            store.smokeProfile.current
+          )
+        );
       }
       if (method === 'post') {
-        const incoming = clone(body) as Partial<ApplicationSettings>;
+        const incoming = clone(body) as Partial<StoredApplicationSettings>;
         store.appSettings = withSettingsDefaults({
           ...store.appSettings,
           ...incoming,

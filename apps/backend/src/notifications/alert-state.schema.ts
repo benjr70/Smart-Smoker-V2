@@ -32,6 +32,15 @@ export class AlertState {
   /** Whether the current excursion has already produced an alert. */
   @Prop({ default: false })
   chamberAlertSent: boolean;
+
+  /**
+   * The probe slots whose target has already been announced this session. Each
+   * probe is told about once per cook; this is the marker that makes it once,
+   * and being scoped to `smokeId` is what lets the same probe alert again on the
+   * next cook.
+   */
+  @Prop({ type: [String], default: [] })
+  probeTargetsReached: string[];
 }
 
 export const AlertStateSchema = SchemaFactory.createForClass(AlertState);

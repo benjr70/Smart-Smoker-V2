@@ -5,6 +5,7 @@ import { DEFAULT_APPLICATION_SETTINGS } from '../appSettings/app-settings.defaul
 import { ApplicationSettings } from '../appSettings/app-settings.schema';
 import { AppSettingsService } from '../appSettings/app-settings.service';
 import { PushDispatcherService } from '../pushDispatcher/push-dispatcher.service';
+import { SmokeProfileService } from '../smokeProfile/smokeProfile.service';
 import { TempsService } from '../temps/temps.service';
 import { AlertState } from './alert-state.schema';
 import { NotificationSubscription } from './notificationSubscription.schema';
@@ -105,6 +106,7 @@ describe('NotificationsService', () => {
   let alertState: ReturnType<typeof createSingletonStore<AlertState>>;
   let pushDispatcher: { notify: jest.Mock; getPublicKey: jest.Mock };
   let smokeSession: { GetState: jest.Mock };
+  let smokeProfile: { getCurrentSmokeProfile: jest.Mock };
   let temps: { getLatestCurrentTemp: jest.Mock };
 
   const mockSubscription: NotificationSubscription = {
@@ -130,6 +132,14 @@ describe('NotificationsService', () => {
         .fn()
         .mockResolvedValue({ smokeId: 'smoke-1', smoking: true }),
     };
+    smokeProfile = {
+      getCurrentSmokeProfile: jest.fn().mockResolvedValue({
+        chamberName: 'Chamber',
+        probe1Name: '',
+        probe2Name: '',
+        probe3Name: '',
+      }),
+    };
     temps = { getLatestCurrentTemp: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -144,6 +154,7 @@ describe('NotificationsService', () => {
         { provide: PushDispatcherService, useValue: pushDispatcher },
         { provide: StateService, useValue: smokeSession },
         { provide: TempsService, useValue: temps },
+        { provide: SmokeProfileService, useValue: smokeProfile },
       ],
     }).compile();
 
@@ -212,8 +223,122 @@ describe('NotificationsService', () => {
   describe('checkAlerts', () => {
     const chamberAt = (temp: string) => ({ ChamberTemp: temp });
 
+    /** A cook watching one probe, at the target the user set for it. */
+    const watchingProbe = (slot: string, target: number) => ({
+      chamber: { enabled: true, low: 225, high: 275 },
+      probeTarget: {
+        enabled: true,
+        probes: [{ slot, enabled: true, target }],
+      },
+    });
+
     beforeEach(() => {
       settings.seed({ chamber: { enabled: true, low: 225, high: 275 } });
+    });
+
+    it('tells the cook once when a watched probe reaches its target, naming it as this cook named it', async () => {
+      settings.seed(watchingProbe('probe2', 195));
+      smokeProfile.getCurrentSmokeProfile.mockResolvedValue({
+        probe1Name: 'Brisket Flat',
+        probe2Name: 'Pork Butt',
+        probe3Name: '',
+      });
+      temps.getLatestCurrentTemp.mockResolvedValue({
+        ChamberTemp: '240',
+        MeatTemp: '150',
+        Meat2Temp: '196',
+        Meat3Temp: '120',
+      });
+
+      await service.checkAlerts();
+      await service.checkAlerts();
+
+      expect(pushDispatcher.notify).toHaveBeenCalledTimes(1);
+      expect(pushDispatcher.notify).toHaveBeenCalledWith(
+        'Smoker',
+        'Pork Butt reached 196°F.',
+      );
+    });
+
+    // "Once per probe per session" has to mean per session: the same probe, in
+    // the same slot, at the same target, is a different piece of meat next
+    // weekend and has to be announced again.
+    it('announces a probe again on the next cook, though it already finished on the last one', async () => {
+      settings.seed(watchingProbe('probe1', 203));
+      alertState.seed({
+        smokeId: 'last-weekend',
+        chamberArmed: true,
+        chamberOutOfRangeSince: null,
+        chamberAlertSent: false,
+        probeTargetsReached: ['probe1'],
+      });
+      smokeSession.GetState.mockResolvedValue({
+        smokeId: 'this-weekend',
+        smoking: true,
+      });
+      smokeProfile.getCurrentSmokeProfile.mockResolvedValue({
+        probe1Name: 'Brisket Flat',
+      });
+      temps.getLatestCurrentTemp.mockResolvedValue({
+        ChamberTemp: '240',
+        MeatTemp: '205',
+      });
+
+      await service.checkAlerts();
+
+      expect(pushDispatcher.notify).toHaveBeenCalledWith(
+        'Smoker',
+        'Brisket Flat reached 205°F.',
+      );
+      expect(alertState.stored()).toMatchObject({
+        smokeId: 'this-weekend',
+        probeTargetsReached: ['probe1'],
+      });
+    });
+
+    // A cook started from pre-smoke has a smoke before it has a smoke profile,
+    // and the profile service fills that window with placeholders of its own. A
+    // probe can finish in that window, and the alert must not name it `Probe3`.
+    it('names a finished probe generically while the cook has no smoke profile saved yet', async () => {
+      settings.seed(watchingProbe('probe3', 165));
+      smokeProfile.getCurrentSmokeProfile.mockResolvedValue({
+        chamberName: 'Chamber',
+        probe1Name: 'Probe1',
+        probe2Name: 'Probe2',
+        probe3Name: 'Probe3',
+      });
+      temps.getLatestCurrentTemp.mockResolvedValue({
+        ChamberTemp: '240',
+        Meat3Temp: '170',
+      });
+
+      await service.checkAlerts();
+
+      expect(pushDispatcher.notify).toHaveBeenCalledWith(
+        'Smoker',
+        'Probe 3 reached 170°F.',
+      );
+    });
+
+    // A probe whose slot the cook never named still has to say something a
+    // person can act on, rather than the slot identifier or nothing at all.
+    it('falls back to the slot label for a probe this cook did not name', async () => {
+      settings.seed(watchingProbe('probe3', 165));
+      smokeProfile.getCurrentSmokeProfile.mockResolvedValue({
+        probe1Name: 'Brisket Flat',
+        probe3Name: '',
+      });
+      temps.getLatestCurrentTemp.mockResolvedValue({
+        ChamberTemp: '240',
+        Meat3Temp: '170',
+      });
+
+      await service.checkAlerts();
+
+      expect(pushDispatcher.notify).toHaveBeenCalledWith(
+        'Smoker',
+        'Probe 3 reached 170°F.',
+      );
     });
 
     it('says nothing about an idle smoker, whatever its chamber reads', async () => {
@@ -277,6 +402,7 @@ describe('NotificationsService', () => {
         chamberArmed: true,
         chamberOutOfRangeSince: new Date('2020-01-01T00:00:00Z'),
         chamberAlertSent: false,
+        probeTargetsReached: ['probe1'],
       });
       smokeSession.GetState.mockResolvedValue({
         smokeId: 'fresh-smoke',
@@ -291,6 +417,9 @@ describe('NotificationsService', () => {
         smokeId: 'fresh-smoke',
         chamberArmed: false,
         chamberOutOfRangeSince: null,
+        // The fired-once markers go with it: the same probe has to be able to
+        // announce itself again on this cook.
+        probeTargetsReached: [],
       });
     });
 

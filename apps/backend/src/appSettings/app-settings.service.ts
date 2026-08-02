@@ -10,6 +10,14 @@ import {
   ApplicationSettingsDocument,
 } from './app-settings.schema';
 import { isCoherentPreference } from './appearance';
+import {
+  ResolvedApplicationSettings,
+  resolveProbeNames,
+  withResolvedProbeNames,
+} from './probe-names';
+import { SmokeProfile } from '../smokeProfile/smokeProfile.schema';
+import { SmokeProfileService } from '../smokeProfile/smokeProfile.service';
+import { StateService } from '../State/state.service';
 
 /**
  * The one field of the deleted freeform rule schema: an array of rules, none of
@@ -22,6 +30,8 @@ export class AppSettingsService {
   constructor(
     @InjectModel(ApplicationSettings.name)
     private appSettingsModel: Model<ApplicationSettingsDocument>,
+    private stateService: StateService,
+    private smokeProfileService: SmokeProfileService,
   ) {}
 
   /**
@@ -32,6 +42,34 @@ export class AppSettingsService {
   async getSettings(): Promise<ApplicationSettings> {
     const stored = await this.appSettingsModel.findOne().exec();
     return withSettingsDefaults(stored);
+  }
+
+  /**
+   * The settings as a client displays them: the stored document, plus the name
+   * each probe row is called by in the cook that is set up right now.
+   *
+   * Names are resolved here rather than stored, because the entries are keyed by
+   * slot and outlive any one cook. With no session set up there is nothing to
+   * resolve from, so the rows fall back to their generic slot labels. A session
+   * that exists but has no smoke profile saved yet falls back the same way: the
+   * profile service answers that window with placeholders of its own, which
+   * `resolveProbeNames` treats as unresolved rather than as names.
+   */
+  async getResolvedSettings(): Promise<ResolvedApplicationSettings> {
+    const [settings, profile] = await Promise.all([
+      this.getSettings(),
+      this.currentSmokeProfile(),
+    ]);
+    return withResolvedProbeNames(settings, resolveProbeNames(profile));
+  }
+
+  /** The smoke profile of the session set up right now, if there is one. */
+  private async currentSmokeProfile(): Promise<SmokeProfile | null> {
+    const session = await this.stateService.GetState();
+    if (!session?.smokeId) {
+      return null;
+    }
+    return this.smokeProfileService.getCurrentSmokeProfile();
   }
 
   /**
@@ -73,7 +111,7 @@ export class AppSettingsService {
 
     const set: Partial<ApplicationSettings> = {};
     const setOnInsert: Partial<ApplicationSettings> = {};
-    (['chamber', 'appearance'] as const).forEach((block) => {
+    (['chamber', 'probeTarget', 'appearance'] as const).forEach((block) => {
       if (incoming[block]) {
         Object.assign(set, { [block]: complete[block] });
       } else {

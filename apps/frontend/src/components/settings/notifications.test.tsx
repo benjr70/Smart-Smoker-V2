@@ -7,8 +7,24 @@ import { NotificationSettings, PushSubscriptionPayload } from '../../api/types';
 import { PushPermission, PushPort, PushPortProvider } from '../../push';
 import { NotificationsCard } from './notifications';
 
+/** The probe rows as they are stored: by slot, with no names. */
+const probeRows = (
+  watched: Record<string, number> = {}
+): NotificationSettings['probeTarget']['probes'] =>
+  ['probe1', 'probe2', 'probe3'].map((slot, index) => ({
+    slot,
+    enabled: watched[slot] !== undefined,
+    target: watched[slot] ?? 203,
+    name: `Probe ${index + 1}`,
+  }));
+
+/** The same rows as they go back over the wire: the names are not saved. */
+const savedProbeRows = (watched: Record<string, number> = {}) =>
+  probeRows(watched).map(({ slot, enabled, target }) => ({ slot, enabled, target }));
+
 const chamberAlertOn: NotificationSettings = {
   chamber: { enabled: true, low: 225, high: 275 },
+  probeTarget: { enabled: false, probes: probeRows() },
 };
 
 const browserSubscription: PushSubscriptionPayload = {
@@ -114,6 +130,7 @@ describe('NotificationsCard', () => {
     await waitFor(() =>
       expect(backend.store.appSettings).toMatchObject({
         chamber: { enabled: true, low: 200, high: 300 },
+        probeTarget: { enabled: false, probes: savedProbeRows() },
       })
     );
   });
@@ -129,6 +146,7 @@ describe('NotificationsCard', () => {
     await waitFor(() =>
       expect(backend.store.appSettings).toMatchObject({
         chamber: { enabled: true, low: 225, high: 275 },
+        probeTarget: { enabled: false, probes: savedProbeRows() },
       })
     );
   });
@@ -232,6 +250,133 @@ describe('NotificationsCard', () => {
 
     await waitFor(() => expect(backend.store.notifications.testSends).toBe(1));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  test('reveals a row per probe only while the Probe Target Reached alert is switched on', async () => {
+    const backend = createFakeBackend({ appSettings: { settings: chamberAlertOn } });
+
+    renderCard(backend);
+
+    const toggle = await screen.findByLabelText('Probe Target Reached');
+    expect(screen.queryByTestId('settings-probe-row-probe1')).not.toBeInTheDocument();
+
+    fireEvent.click(toggle);
+
+    expect(await screen.findByTestId('settings-probe-row-probe1')).toBeInTheDocument();
+    expect(screen.getByTestId('settings-probe-row-probe2')).toBeInTheDocument();
+    expect(screen.getByTestId('settings-probe-row-probe3')).toBeInTheDocument();
+
+    fireEvent.click(toggle);
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('settings-probe-row-probe1')).not.toBeInTheDocument()
+    );
+  });
+
+  // The rows are stored by slot; the names come from the cook that is set up
+  // now. A row reading "probe1" would be the bug this slice exists to fix.
+  test('names each probe row after the active cook, falling back to the slot label', async () => {
+    const backend = createFakeBackend({
+      appSettings: {
+        settings: {
+          chamber: { enabled: false, low: 225, high: 275 },
+          probeTarget: { enabled: true, probes: probeRows({ probe1: 203 }) },
+        },
+      },
+      smokeProfile: { current: { probe1Name: 'Brisket Flat', probe2Name: 'Pork Butt' } },
+    });
+
+    renderCard(backend);
+
+    expect(await screen.findByText('Brisket Flat')).toBeInTheDocument();
+    expect(screen.getByText('Pork Butt')).toBeInTheDocument();
+    // The cook named neither probe 3 nor anything in that slot.
+    expect(screen.getByText('Probe 3')).toBeInTheDocument();
+  });
+
+  test('names the probes being watched, and tags the first of them', async () => {
+    const backend = createFakeBackend({
+      appSettings: {
+        settings: {
+          chamber: { enabled: false, low: 225, high: 275 },
+          probeTarget: { enabled: true, probes: probeRows({ probe2: 195, probe3: 165 }) },
+        },
+      },
+      smokeProfile: { current: { probe2Name: 'Pork Butt', probe3Name: 'Ribs' } },
+    });
+
+    renderCard(backend);
+
+    const summary = await screen.findByTestId('settings-probe-target-summary');
+    await waitFor(() => expect(summary).toHaveTextContent(/Pork Butt at 195°F/));
+    expect(summary).toHaveTextContent(/Ribs at 165°F/);
+    // The unwatched probe is not something the cook is being told about.
+    expect(summary).not.toHaveTextContent(/Probe 1/);
+
+    // The mock tags the first watched probe, which is the second row here.
+    const tagged = screen.getByTestId('settings-probe-eta');
+    expect(screen.getByTestId('settings-probe-row-probe2')).toContainElement(tagged);
+  });
+
+  test('persists a probe newly watched and its edited target when the settings page is left', async () => {
+    const backend = createFakeBackend({
+      appSettings: {
+        settings: {
+          chamber: { enabled: false, low: 225, high: 275 },
+          probeTarget: { enabled: true, probes: probeRows() },
+        },
+      },
+      smokeProfile: { current: { probe1Name: 'Brisket Flat' } },
+    });
+
+    const { unmount } = renderCard(backend);
+
+    fireEvent.click(await screen.findByLabelText('Watch Brisket Flat'));
+    fireEvent.change(screen.getByLabelText('Brisket Flat target'), {
+      target: { value: '198' },
+    });
+
+    unmount();
+
+    await waitFor(() =>
+      expect(backend.store.appSettings?.probeTarget).toEqual({
+        enabled: true,
+        probes: savedProbeRows({ probe1: 198 }),
+      })
+    );
+  });
+
+  // Settings are the one screen whose whole job is to still be there tomorrow,
+  // so what it saved on the way out has to be what it shows on the way back in.
+  test('shows the watch state and targets it saved after a reload', async () => {
+    const backend = createFakeBackend({
+      appSettings: {
+        settings: {
+          chamber: { enabled: false, low: 225, high: 275 },
+          probeTarget: { enabled: true, probes: probeRows() },
+        },
+      },
+      smokeProfile: { current: { probe2Name: 'Pork Butt' } },
+    });
+
+    const { unmount } = renderCard(backend);
+    fireEvent.click(await screen.findByLabelText('Watch Pork Butt'));
+    fireEvent.change(screen.getByLabelText('Pork Butt target'), { target: { value: '195' } });
+    unmount();
+    await waitFor(() =>
+      expect(backend.store.appSettings?.probeTarget?.probes[1]).toEqual({
+        slot: 'probe2',
+        enabled: true,
+        target: 195,
+      })
+    );
+
+    // A reload is a fresh mount against the same backend.
+    renderCard(backend);
+
+    const watch = await screen.findByLabelText('Watch Pork Butt');
+    expect(watch).toBeChecked();
+    expect(screen.getByLabelText('Pork Butt target')).toHaveValue(195);
   });
 
   test('raises the snackbar when loading the notification settings fails', async () => {

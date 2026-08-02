@@ -13,6 +13,8 @@ export type {
   NotificationSettings,
   PostSmoke,
   PreSmoke,
+  ProbeTargetAlertSettings,
+  ProbeTargetEntry,
   PushSubscriptionPayload,
   Smoke,
   SmokeHistory,

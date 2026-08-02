@@ -1,9 +1,21 @@
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
-import { Button, Card, CardContent, Stack, Switch, TextField, Typography } from '@mui/material';
+import {
+  Button,
+  Card,
+  CardContent,
+  Checkbox,
+  Chip,
+  Stack,
+  Switch,
+  TextField,
+  Typography,
+} from '@mui/material';
 import React from 'react';
 import {
   ChamberAlertSettings,
   NotificationSettings,
+  ProbeTargetAlertSettings,
+  ProbeTargetEntry,
   defaultNotificationSettings,
   useCurrentResource,
 } from '../../api';
@@ -35,6 +47,29 @@ export const describeChamberAlert = (chamber: ChamberAlertSettings): string => {
 };
 
 /**
+ * What the Probe Target Reached alert will actually do, in a sentence — naming
+ * the probes it is watching, so "which probes am I being told about" needs no
+ * cross-referencing of the rows above it.
+ */
+export const describeProbeTargets = (probeTarget: ProbeTargetAlertSettings): string => {
+  if (!probeTarget.enabled) {
+    return 'Off — you will not be told when a probe reaches its target.';
+  }
+  const watched = probeTarget.probes.filter(probe => probe.enabled);
+  if (watched.length === 0) {
+    return 'No probes are being watched — check one to be told when it is done.';
+  }
+  const names = watched.map(probe => `${probe.name} at ${degrees(probe.target)}`);
+  return `You will be told once when each of ${listOf(names)} reaches its target.`;
+};
+
+/** `a`, `a and b`, `a, b and c` — as a person would say the list out loud. */
+const listOf = (items: string[]): string =>
+  items.length <= 1
+    ? (items[0] ?? '')
+    : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+
+/**
  * Read a temperature field. An empty or half-typed value stays out of the
  * settings (the previous number is kept) rather than being saved as NaN, which
  * the backend's strict validation would reject on unmount.
@@ -57,7 +92,28 @@ export function NotificationsCard(): JSX.Element {
   const updateChamber = (change: Partial<ChamberAlertSettings>) =>
     setSettings(current => ({ ...current, chamber: { ...current.chamber, ...change } }));
 
-  const { chamber } = settings;
+  const updateProbeTarget = (change: Partial<ProbeTargetAlertSettings>) =>
+    setSettings(current => ({
+      ...current,
+      probeTarget: { ...current.probeTarget, ...change },
+    }));
+
+  /** Change one probe's row, leaving every other row exactly as it was. */
+  const updateProbe = (slot: string, change: Partial<ProbeTargetEntry>) =>
+    setSettings(current => ({
+      ...current,
+      probeTarget: {
+        ...current.probeTarget,
+        probes: current.probeTarget.probes.map(probe =>
+          probe.slot === slot ? { ...probe, ...change } : probe
+        ),
+      },
+    }));
+
+  const { chamber, probeTarget } = settings;
+  // The mock tags the first watched probe with the cook's ETA. Which probe that
+  // is follows from the watch list, so it is derived here rather than stored.
+  const firstWatchedSlot = probeTarget.probes.find(probe => probe.enabled)?.slot;
 
   return (
     // No spacing wrapper: the settings page stacks its cards and owns the gap
@@ -123,6 +179,43 @@ export function NotificationsCard(): JSX.Element {
             {describeChamberAlert(chamber)}
           </Typography>
 
+          <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
+            <Stack>
+              <Typography variant="body1" fontWeight={600}>
+                Probe Target Reached
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Tell me when the meat is done.
+              </Typography>
+            </Stack>
+            <Switch
+              checked={probeTarget.enabled}
+              onChange={event => updateProbeTarget({ enabled: event.target.checked })}
+              inputProps={{ 'aria-label': 'Probe Target Reached' }}
+            />
+          </Stack>
+
+          {probeTarget.enabled && (
+            <Stack spacing={1} data-testid="settings-probe-rows">
+              {probeTarget.probes.map(probe => (
+                <ProbeRow
+                  key={probe.slot}
+                  probe={probe}
+                  showEta={probe.slot === firstWatchedSlot}
+                  onChange={change => updateProbe(probe.slot, change)}
+                />
+              ))}
+            </Stack>
+          )}
+
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            data-testid="settings-probe-target-summary"
+          >
+            {describeProbeTargets(probeTarget)}
+          </Typography>
+
           <Button
             variant="outlined"
             startIcon={<NotificationsActiveIcon />}
@@ -137,3 +230,52 @@ export function NotificationsCard(): JSX.Element {
     </Card>
   );
 }
+
+/**
+ * One probe's row: watch it or not, what this cook calls it, and the
+ * temperature its meat is done at.
+ *
+ * The name is read-only here — it is resolved from the active cook's smoke
+ * profile and is edited on the smoke step, not in settings.
+ */
+const ProbeRow = ({
+  probe,
+  showEta,
+  onChange,
+}: {
+  probe: ProbeTargetEntry;
+  showEta: boolean;
+  onChange: (change: Partial<ProbeTargetEntry>) => void;
+}): JSX.Element => (
+  <Stack
+    direction="row"
+    alignItems="center"
+    spacing={1}
+    data-testid={`settings-probe-row-${probe.slot}`}
+  >
+    <Checkbox
+      checked={probe.enabled}
+      onChange={event => onChange({ enabled: event.target.checked })}
+      inputProps={{ 'aria-label': `Watch ${probe.name}` }}
+    />
+    <Typography variant="body2" sx={{ flexGrow: 1 }}>
+      {probe.name}
+    </Typography>
+    {/* The mock tags the first watched probe with the cook's ETA. The estimate
+        itself is not computed anywhere yet, so the tag marks which probe it will
+        describe rather than claiming a time the app does not know. */}
+    {showEta && <Chip size="small" label="ETA" data-testid="settings-probe-eta" />}
+    <TextField
+      label={`${probe.name} target`}
+      type="number"
+      size="small"
+      variant="outlined"
+      value={probe.target}
+      onChange={event =>
+        onChange({ target: readTemperatureInput(event.target.value, probe.target) })
+      }
+      inputProps={{ 'data-testid': `settings-probe-target-${probe.slot}` }}
+      sx={{ width: 120 }}
+    />
+  </Stack>
+);
