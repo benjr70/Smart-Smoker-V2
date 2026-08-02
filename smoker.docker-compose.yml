@@ -44,7 +44,17 @@ services:
       - '/var/run/dbus:/var/run/dbus'
     image: 'benjr70/smart-smoker-device-service:${VERSION:-latest}'
     healthcheck:
-      test: ['CMD', 'curl', '-f', 'http://localhost:3003/api/health']
+      # Probed with node, which is the image's runtime — the runtime stage is
+      # node:20-bookworm-slim and ships neither curl nor wget, so the previous
+      # `curl -f` check could only ever fail. The container reported unhealthy
+      # for its whole life while the endpoint answered normally.
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "require('http').get('http://localhost:3003/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))",
+        ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -91,7 +101,13 @@ services:
       - /dev/dri:/dev/dri
     image: 'benjr70/smart-smoker-electron-shell:${VERSION:-latest}'
     healthcheck:
-      test: ['CMD-SHELL', 'pgrep -x electron >/dev/null || exit 1']
+      # The Electron binary is `smoker-shell` (shell.dockerfile builds
+      # smoker-shell-linux-armv7l), so `pgrep -x electron` never matched and
+      # the kiosk always reported unhealthy. Matching the real process name
+      # makes this a genuine liveness check: every Electron child (zygote,
+      # renderer, utility) also runs under that name, so a crashed main
+      # process still fails once its children are reaped.
+      test: ['CMD-SHELL', 'pgrep -x smoker-shell >/dev/null || exit 1']
       interval: 60s
       timeout: 5s
       retries: 3
@@ -120,10 +136,11 @@ services:
     # direction for API negotiation. Do NOT copy virtual-smoker's `latest-dev`
     # tag — that one is amd64 and will not run here.
     image: containrrr/watchtower:armhf-latest
-    healthcheck:
-      test: ['CMD-SHELL', 'pgrep -x watchtower >/dev/null || exit 1']
-      interval: 60s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
+    # No healthcheck on purpose. The watchtower image is built FROM scratch —
+    # it contains the static binary and CA certificates and nothing else, so
+    # there is no shell and no pgrep for a check to run. Every probe failed to
+    # exec, which reported the container unhealthy for its entire life. Docker
+    # shows no health state at all without this block, which is the honest
+    # answer; watchtower's own liveness is visible in its logs ("Session done
+    # ... Scanned=3"), and restart: always covers a crash.
     logging: *default-logging
