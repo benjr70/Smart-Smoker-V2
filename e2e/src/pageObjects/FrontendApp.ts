@@ -1242,21 +1242,30 @@ export class FrontendApp {
 
   async openSettings(): Promise<void> {
     await this.page.getByTestId('nav-settings').click();
-    await expect(this.notificationMessage).toBeVisible();
+    await expect(this.page.getByTestId('settings-notifications-card')).toBeVisible();
   }
 
-  private get notificationMessage(): Locator {
-    // The first notification rule's message field; the suite only exercises one.
-    return this.page.getByTestId('settings-notification-message').first();
+  private get chamberLow(): Locator {
+    return this.page.getByTestId('settings-chamber-low');
   }
 
-  /** Type a notification message in Settings (persisted when the tab unmounts). */
-  async setNotificationMessage(message: string): Promise<void> {
-    await this.notificationMessage.fill(message);
+  private get chamberHigh(): Locator {
+    return this.page.getByTestId('settings-chamber-high');
   }
 
-  async expectNotificationMessage(message: string): Promise<void> {
-    await expect(this.notificationMessage).toHaveValue(message);
+  /**
+   * Type a chamber range in Settings (persisted when the tab unmounts). The
+   * range control exists only while the Temperature Alert is switched on, which
+   * is what the fixture seeds.
+   */
+  async setChamberRange(range: { low: number; high: number }): Promise<void> {
+    await this.chamberLow.fill(String(range.low));
+    await this.chamberHigh.fill(String(range.high));
+  }
+
+  async expectChamberRange(range: { low: number; high: number }): Promise<void> {
+    await expect(this.chamberLow).toHaveValue(String(range.low));
+    await expect(this.chamberHigh).toHaveValue(String(range.high));
   }
 
   /**

@@ -69,20 +69,28 @@ export interface rating {
 }
 
 /**
- * A single notification rule. Canonical here (relocated from the settings
- * component in an earlier slice) so API call sites depend only on the API types
- * module. Rules fetched from the backend also carry a persisted subdocument
- * `_id`/`__v` (and a server-managed `lastNotificationSent`) that are handled by
- * the client's notifications save projection.
+ * The chamber Temperature Alert: whether it is on, and the range the chamber is
+ * expected to hold. The alert stays silent until the chamber first reaches this
+ * range, so the bounds describe the cook, not the preheat.
+ */
+export interface ChamberAlertSettings {
+  enabled: boolean;
+  low: number;
+  high: number;
+}
+
+/**
+ * The notification settings document. Canonical here so API call sites depend
+ * only on the API types module.
+ *
+ * It carries only what the user configures — the armed flags and fired markers
+ * the server keeps while evaluating alerts live in a document of their own, and
+ * never ride along on a save from the settings page. A document read back from
+ * the backend also carries a persisted `_id`/`__v`, which the client's save
+ * projection strips.
  */
 export interface NotificationSettings {
-  type: boolean;
-  message: string;
-  probe1: string;
-  op: string;
-  probe2?: string;
-  offset?: number;
-  temperature?: number;
+  chamber: ChamberAlertSettings;
 }
 
 /**

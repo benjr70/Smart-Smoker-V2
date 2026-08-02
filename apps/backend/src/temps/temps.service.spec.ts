@@ -161,6 +161,71 @@ describe('TempsService', () => {
     });
   });
 
+  describe('getLatestCurrentTemp', () => {
+    // Whoever is watching the cook (today: alert evaluation, on its own
+    // interval) needs the reading the smoker took most recently, not the series.
+    const series: Temp[] = [
+      {
+        ...mockTempRows[0],
+        ChamberTemp: '210',
+        date: new Date('2026-08-02T10:00:00Z'),
+      },
+      {
+        ...mockTempRows[0],
+        ChamberTemp: '250',
+        date: new Date('2026-08-02T12:00:00Z'),
+      },
+      {
+        ...mockTempRows[0],
+        ChamberTemp: '230',
+        date: new Date('2026-08-02T11:00:00Z'),
+      },
+    ];
+
+    beforeEach(() => {
+      // A query object that really orders and truncates, so "the newest row" is
+      // a fact about the service's query and not about the stub's seeding order.
+      model.find = jest.fn().mockImplementation(() => {
+        let rows = [...series];
+        const chain: any = {
+          sort: (order: Record<string, number>) => {
+            const [[field, direction]] = Object.entries(order);
+            rows = [...rows].sort(
+              (a, b) =>
+                (new Date(a[field]).getTime() - new Date(b[field]).getTime()) *
+                direction,
+            );
+            return chain;
+          },
+          limit: (count: number) => {
+            rows = rows.slice(0, count);
+            return chain;
+          },
+          exec: () => Promise.resolve(rows),
+        };
+        return chain;
+      });
+    });
+
+    it('returns the most recent reading of the current smoke', async () => {
+      currentSmoke.readCurrent.mockImplementation((key, load) =>
+        load('temps-group-1'),
+      );
+
+      const result = await service.getLatestCurrentTemp();
+
+      expect(result?.ChamberTemp).toBe('250');
+    });
+
+    it('returns nothing when no smoke is active', async () => {
+      currentSmoke.readCurrent.mockImplementation(
+        (key, load, fallback) => fallback,
+      );
+
+      expect(await service.getLatestCurrentTemp()).toBeUndefined();
+    });
+  });
+
   describe('GetTempID', () => {
     it('returns the current smoke tempsId group', async () => {
       currentSmoke.readCurrent.mockImplementation((key, load) =>

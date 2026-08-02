@@ -24,8 +24,9 @@ Device Service (3003) → Smoker App (8080) → Backend (3001)
 **Subscribes to:**
 
 - `identity` -- Echo test
-- `events` -- Temperature data relay (persists to DB when smoking=true, checks
-  notifications every 11th event)
+- `events` -- Temperature data relay (persists one reading to the DB per eleven
+  messages, when smoking=true). The gateway does not evaluate notifications:
+  alerts run on the notifications service's own interval.
 - `smokeUpdate` -- Smoke session state changes
 - `clear` -- Clear smoke session
 - `refresh` -- UI refresh trigger

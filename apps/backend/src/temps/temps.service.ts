@@ -45,6 +45,27 @@ export class TempsService extends BaseService<TempDocument> {
     );
   }
 
+  /**
+   * The most recent reading of the current smoke, or `undefined` when no smoke
+   * is active. The stored series is the smoker's latest-reading cache: readings
+   * are already persisted as they arrive, so a watcher that wakes on its own
+   * schedule reads the newest row instead of needing the producer to push to it.
+   */
+  async getLatestCurrentTemp(): Promise<Temp | undefined> {
+    return this.currentSmoke.readCurrent<Temp | undefined>(
+      'tempsId',
+      async (tempsId) => {
+        const [latest] = await this.model
+          .find({ tempsId })
+          .sort({ date: -1 })
+          .limit(1)
+          .exec();
+        return latest;
+      },
+      undefined,
+    );
+  }
+
   async getAllTempsById(id: string): Promise<Temp[]> {
     return this.model.find({ tempsId: id }).exec();
   }

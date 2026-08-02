@@ -4,6 +4,7 @@ import { NotificationsService } from './notifications.service';
 import { NotificationSubscription } from './notificationSubscription.schema';
 import { NotificationSettings } from './notificationSettings.schema';
 import { NotificationSettingsDto } from './notificationSettingsDto';
+import { DEFAULT_NOTIFICATION_SETTINGS } from './notification-settings.defaults';
 
 describe('NotificationsController', () => {
   let controller: NotificationsController;
@@ -19,18 +20,7 @@ describe('NotificationsController', () => {
   };
 
   const mockNotificationSettings: NotificationSettings = {
-    settings: [
-      {
-        type: false,
-        message: 'Chamber temp too high',
-        probe1: 'Chamber',
-        op: '>',
-        temperature: 300,
-        lastNotificationSent: new Date('2023-01-01'),
-        probe2: undefined,
-        offset: undefined,
-      },
-    ],
+    chamber: { enabled: true, low: 225, high: 275 },
   };
 
   const mockNotificationsService = {
@@ -159,13 +149,17 @@ describe('NotificationsController', () => {
       expect(result).toEqual(mockNotificationSettings);
     });
 
-    it('should return null when no settings exist', async () => {
-      mockNotificationsService.getSettings.mockResolvedValue(null);
+    // Nothing saved yet (or a document of the deleted rule shape, which is not
+    // migrated) must still render the settings page, so the endpoint answers
+    // with defaults rather than with an empty body the client has to guess at.
+    it('serves defaults when nothing has ever been saved', async () => {
+      mockNotificationsService.getSettings.mockResolvedValue(
+        DEFAULT_NOTIFICATION_SETTINGS,
+      );
 
-      const result = await controller.getSettings();
-
-      expect(service.getSettings).toHaveBeenCalled();
-      expect(result).toBeNull();
+      expect(await controller.getSettings()).toEqual(
+        DEFAULT_NOTIFICATION_SETTINGS,
+      );
     });
 
     it('should handle service errors', async () => {

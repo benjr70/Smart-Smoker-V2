@@ -7,13 +7,8 @@ import { NotificationSettings, PushSubscriptionPayload } from '../../api/types';
 import { PushPermission, PushPort, PushPortProvider } from '../../push';
 import { NotificationsCard } from './notifications';
 
-const seededRule: NotificationSettings = {
-  type: false,
-  message: 'Chamber too hot',
-  probe1: 'Chamber',
-  op: '>',
-  probe2: 'Probe 1',
-  temperature: 250,
+const chamberAlertOn: NotificationSettings = {
+  chamber: { enabled: true, low: 225, high: 275 },
 };
 
 const browserSubscription: PushSubscriptionPayload = {
@@ -64,118 +59,78 @@ const renderCard = (backend: FakeBackend, pushPort: PushPort = createFakePushPor
 };
 
 describe('NotificationsCard', () => {
-  test('loads the seeded notification rules from the injected client on mount', async () => {
-    const backend = createFakeBackend({ notifications: { settings: [seededRule] } });
+  test('shows the chamber range the smoker is configured to hold', async () => {
+    const backend = createFakeBackend({ notifications: { settings: chamberAlertOn } });
 
     renderCard(backend);
 
-    expect(await screen.findByDisplayValue('Chamber too hot')).toBeInTheDocument();
-    expect(screen.getByText('New Rule')).toBeInTheDocument();
+    expect(await screen.findByDisplayValue('225')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('275')).toBeInTheDocument();
   });
 
-  test('adds a new rule and persists the latest rules to the backend on unmount', async () => {
-    const backend = createFakeBackend({ notifications: { settings: [seededRule] } });
+  test('reveals the range only while the alert is switched on', async () => {
+    const backend = createFakeBackend();
 
-    const { unmount } = renderCard(backend);
-    await screen.findByDisplayValue('Chamber too hot');
+    renderCard(backend);
 
-    fireEvent.click(screen.getByText('New Rule'));
+    // A smoker that has never configured anything starts with the alert off,
+    // and an off alert shows no controls that would do nothing.
+    const toggle = await screen.findByLabelText('Temperature Alert');
+    expect(screen.queryByLabelText('Low')).not.toBeInTheDocument();
 
-    unmount();
+    fireEvent.click(toggle);
+    expect(await screen.findByLabelText('Low')).toBeInTheDocument();
+    expect(screen.getByLabelText('High')).toBeInTheDocument();
 
-    await waitFor(() => expect(backend.store.notifications.settings).toHaveLength(2));
-    expect(backend.store.notifications.settings[0].message).toBe('Chamber too hot');
+    fireEvent.click(toggle);
+    await waitFor(() => expect(screen.queryByLabelText('Low')).not.toBeInTheDocument());
   });
 
-  test('edits a rule message and persists the edited rules on unmount', async () => {
-    const backend = createFakeBackend({ notifications: { settings: [seededRule] } });
+  test('states in plain language what the configuration will do, and what an off alert will not', async () => {
+    const backend = createFakeBackend({ notifications: { settings: chamberAlertOn } });
+
+    renderCard(backend);
+
+    const summary = await screen.findByTestId('settings-chamber-summary');
+    await waitFor(() => expect(summary).toHaveTextContent(/225°F–275°F/));
+    expect(summary).toHaveTextContent(/2 minutes/);
+    expect(summary).toHaveTextContent(/one alert per excursion/i);
+
+    fireEvent.click(screen.getByLabelText('Temperature Alert'));
+
+    await waitFor(() => expect(summary).toHaveTextContent(/will not be told/i));
+  });
+
+  test('persists an edited range when the settings page is left', async () => {
+    const backend = createFakeBackend({ notifications: { settings: chamberAlertOn } });
 
     const { unmount } = renderCard(backend);
 
-    const messageField = await screen.findByDisplayValue('Chamber too hot');
-    fireEvent.change(messageField, { target: { value: 'Chamber way too hot' } });
-    expect(messageField).toHaveValue('Chamber way too hot');
+    fireEvent.change(await screen.findByLabelText('Low'), { target: { value: '200' } });
+    fireEvent.change(screen.getByLabelText('High'), { target: { value: '300' } });
 
     unmount();
 
     await waitFor(() =>
-      expect(backend.store.notifications.settings[0].message).toBe('Chamber way too hot')
+      expect(backend.store.notifications.settings).toEqual({
+        chamber: { enabled: true, low: 200, high: 300 },
+      })
     );
   });
 
-  test('toggling the temp switch reveals the probe-2 comparison fields', async () => {
-    const backend = createFakeBackend({ notifications: { settings: [seededRule] } });
-
-    renderCard(backend);
-    await screen.findByDisplayValue('Chamber too hot');
-
-    // A temperature rule (type=false) shows a Temperature input; flipping the
-    // switch to a probe-vs-probe rule (type=true) swaps in the offset field.
-    expect(screen.getByLabelText('Temperature')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('checkbox'));
-
-    expect(await screen.findByLabelText('offset')).toBeInTheDocument();
-  });
-
-  test('deletes a rule, leaving none, and persists the empty set on unmount', async () => {
-    const backend = createFakeBackend({ notifications: { settings: [seededRule] } });
+  test('persists switching the alert on for a smoker that had none configured', async () => {
+    const backend = createFakeBackend();
 
     const { unmount } = renderCard(backend);
-    await screen.findByDisplayValue('Chamber too hot');
 
-    fireEvent.click(screen.getByLabelText('delete'));
-
-    await waitFor(() =>
-      expect(screen.queryByDisplayValue('Chamber too hot')).not.toBeInTheDocument()
-    );
-
+    fireEvent.click(await screen.findByLabelText('Temperature Alert'));
     unmount();
 
-    await waitFor(() => expect(backend.store.notifications.settings).toHaveLength(0));
-  });
-
-  test('new rules are independent objects — editing one does not corrupt another', async () => {
-    const backend = createFakeBackend({ notifications: { settings: [seededRule] } });
-
-    renderCard(backend);
-    await screen.findByDisplayValue('Chamber too hot');
-
-    // Two fresh rules must not share a single object reference; if they did,
-    // the row editor's in-place mutation would corrupt every rule at once.
-    const newRule = screen.getByText('New Rule');
-    fireEvent.click(newRule);
-    fireEvent.click(newRule);
-
-    const messageInputs = screen.getAllByTestId('settings-notification-message');
-    expect(messageInputs).toHaveLength(3);
-
-    fireEvent.change(messageInputs[1], { target: { value: 'first new rule only' } });
-
-    expect(messageInputs[1]).toHaveValue('first new rule only');
-    expect(messageInputs[2]).toHaveValue('');
-  });
-
-  // The probe list offered a 'Probe 4' label on the option whose stored value
-  // is 'Probe 3', so a user picking it built a rule about a different probe
-  // than the one named. Labels now match the values the rule stores.
-  test('offers each probe under the name of the reading it watches', async () => {
-    const backend = createFakeBackend({ notifications: { settings: [seededRule] } });
-
-    renderCard(backend);
-
-    const probeSelect = await screen.findByLabelText('Probe 1');
-    expect(
-      Array.from(probeSelect.querySelectorAll('option')).map(option => [
-        option.value,
-        option.textContent,
-      ])
-    ).toEqual([
-      ['Chamber', 'Chamber'],
-      ['Probe 1', 'Probe 1'],
-      ['Probe 2', 'Probe 2'],
-      ['Probe 3', 'Probe 3'],
-    ]);
+    await waitFor(() =>
+      expect(backend.store.notifications.settings).toEqual({
+        chamber: { enabled: true, low: 225, high: 275 },
+      })
+    );
   });
 
   test('the send-test control asks permission, subscribes with the backend key, registers it and sends', async () => {
@@ -280,7 +235,7 @@ describe('NotificationsCard', () => {
   });
 
   test('raises the snackbar when loading the notification settings fails', async () => {
-    const backend = createFakeBackend({ notifications: { settings: [seededRule] } });
+    const backend = createFakeBackend({ notifications: { settings: chamberAlertOn } });
     backend.injectFault({ method: 'get', path: 'notifications/settings', status: 500 });
 
     renderCard(backend);

@@ -38,14 +38,18 @@ export class NotificationsController {
   setSettings(
     @Body() settings: NotificationSettingsDto,
   ): Promise<NotificationSettings> {
-    // The DTO carries client-typed fields (e.g. lastNotificationSent as an ISO
-    // string); Mongoose coerces them on save, so hand the validated body to the
-    // schema-typed service unchanged.
+    // The validated body is exactly the settings document — it carries only
+    // user-owned fields, so it goes to the schema-typed service unchanged.
     return this.notificationsService.setSettings(
       settings as unknown as NotificationSettings,
     );
   }
 
+  /**
+   * The current settings, always a complete document: a deployment that has
+   * never saved (or that still holds the deleted rule shape, which is not
+   * migrated) reads as defaults rather than as an error.
+   */
   @Get('/settings')
   getSettings(): Promise<NotificationSettings> {
     return this.notificationsService.getSettings();

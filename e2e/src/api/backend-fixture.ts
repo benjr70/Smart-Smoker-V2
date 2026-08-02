@@ -108,10 +108,16 @@ interface NamedDoc {
   name?: string | null;
 }
 
-/** A single notification rule as stored in the global settings document. */
-interface NotificationRule {
-  message?: string | null;
-  [key: string]: unknown;
+/** The chamber Temperature Alert block of the global settings document. */
+export interface ChamberAlertRange {
+  enabled: boolean;
+  low: number;
+  high: number;
+}
+
+/** Shape of `GET /api/notifications/settings`. */
+interface NotificationSettingsDoc {
+  chamber?: Partial<ChamberAlertRange> | null;
 }
 
 /** Shape of `GET /api/smoke/:id` — the sub-entity ids a cascade delete needs. */
@@ -362,28 +368,35 @@ export class BackendFixture {
   }
 
   /**
-   * Seed a single notification rule so the Settings notifications card has a
-   * message field to edit. Notification settings are global singleton config,
-   * not a `smoke-test-*` entity, so deployed safety comes from snapshotting the
+   * Seed the chamber Temperature Alert so the Settings notifications card has a
+   * range to edit. Notification settings are global singleton config, not a
+   * `smoke-test-*` entity, so deployed safety comes from snapshotting the
    * settings that existed before this run and restoring them on `cleanup()`.
-   * The seeded message is still prefixed so a UI assertion can identify it.
-   * Returns the seeded (prefixed) message.
+   * Returns the seeded range.
    */
-  async seedNotificationRule(options: { label?: string } = {}): Promise<string> {
-    const message = testEntityName(options.label ?? 'notification');
+  async seedChamberAlert(range: Partial<ChamberAlertRange> = {}): Promise<ChamberAlertRange> {
+    const seeded: ChamberAlertRange = {
+      enabled: range.enabled ?? true,
+      low: range.low ?? 210,
+      high: range.high ?? 260,
+    };
     const prior = await this.http
-      .get<{ settings?: unknown[] }>(NOTIFICATION_SETTINGS_PATH)
+      .get<NotificationSettingsDoc>(NOTIFICATION_SETTINGS_PATH)
       .catch(() => null);
-    const priorSettings = Array.isArray(prior?.settings) ? prior!.settings : [];
+    // The backend answers with a complete document (defaults when it has never
+    // been saved), so the snapshot is always restorable as-is.
+    const priorChamber: ChamberAlertRange = {
+      enabled: prior?.chamber?.enabled ?? false,
+      low: prior?.chamber?.low ?? 225,
+      high: prior?.chamber?.high ?? 275,
+    };
     // Register the restore before mutating, so cleanup always puts it back even
     // if seeding throws partway.
     this.teardowns.push(async () => {
-      await this.http.post(NOTIFICATION_SETTINGS_PATH, { settings: priorSettings });
+      await this.http.post(NOTIFICATION_SETTINGS_PATH, { chamber: priorChamber });
     });
-    await this.http.post(NOTIFICATION_SETTINGS_PATH, {
-      settings: [{ type: false, message, probe1: 'Chamber', op: '>', probe2: 'Probe 1' }],
-    });
-    return message;
+    await this.http.post(NOTIFICATION_SETTINGS_PATH, { chamber: seeded });
+    return seeded;
   }
 
   /**
@@ -517,7 +530,12 @@ export class BackendFixture {
       await this.http.delete(`${PRESMOKE_PATH}/${doc._id}`);
     }
     await this.clearDanglingCurrentSmoke();
-    await this.sweepNotificationSettings();
+    // Notification settings are deliberately not swept. The settings document
+    // holds a chamber range and nothing else — no name, so nothing a sweep
+    // could recognise as this suite's. A crashed settings run therefore leaves
+    // a range behind rather than being cleaned up by guesswork that could just
+    // as easily overwrite the operator's real configuration. Each run seeds its
+    // own range and restores the previous one on cleanup.
   }
 
   /**
@@ -576,23 +594,6 @@ export class BackendFixture {
       return !pre?._id;
     } catch (error) {
       return NOT_FOUND_RESPONSE.test(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  /**
-   * Notification settings are global config a crashed settings-spec run can
-   * leave a `smoke-test-*` rule in. There is no per-rule delete endpoint, so
-   * re-POST the settings with the prefixed rules filtered out — but only when
-   * one is actually present, to avoid needlessly rewriting real config.
-   */
-  private async sweepNotificationSettings(): Promise<void> {
-    const current = await this.http
-      .get<{ settings?: NotificationRule[] }>(NOTIFICATION_SETTINGS_PATH)
-      .catch(() => null);
-    const rules = Array.isArray(current?.settings) ? current!.settings : [];
-    const kept = rules.filter(rule => !isTestEntityName(rule?.message));
-    if (kept.length !== rules.length) {
-      await this.http.post(NOTIFICATION_SETTINGS_PATH, { settings: kept });
     }
   }
 }
