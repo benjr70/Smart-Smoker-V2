@@ -19,6 +19,7 @@ on:
     paths:
       - 'scripts/pr-images/**'
       - 'scripts/verify-pr/detect-ui-change*.sh'
+      - 'scripts/verify-pr/tour-viewport*.sh'
       - 'scripts/verify-pr/inject-screenshots*.sh'
       - '.github/workflows/pr-screenshots-tests.yml'
   push:
@@ -26,6 +27,7 @@ on:
     paths:
       - 'scripts/pr-images/**'
       - 'scripts/verify-pr/detect-ui-change*.sh'
+      - 'scripts/verify-pr/tour-viewport*.sh'
       - 'scripts/verify-pr/inject-screenshots*.sh'
       - '.github/workflows/pr-screenshots-tests.yml'
 
@@ -42,6 +44,9 @@ jobs:
 
       - name: inject-screenshots.sh
         run: bash scripts/verify-pr/inject-screenshots.test.sh
+
+      - name: tour-viewport.sh (device-panel drift guard)
+        run: bash scripts/verify-pr/tour-viewport.test.sh
 
   uploader:
     name: pr-images uploader (pure logic)

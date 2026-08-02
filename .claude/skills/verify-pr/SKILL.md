@@ -137,6 +137,21 @@ skip the tour entirely, and emit `screenshots: none (no UI change)` alongside
 the summary line. Non-empty means step 6 asks the verifier for a tour of exactly
 those surfaces and step 7.2 posts it.
 
+**Each surface has a mandatory tour viewport** — neither app is a desktop app,
+so a default browser window documents a shape no user ever sees:
+
+```bash
+scripts/verify-pr/tour-viewport.sh frontend   # 390x844 — phone, portrait
+scripts/verify-pr/tour-viewport.sh smoker     # 800x480 — the device panel
+```
+
+The frontend is used on a **phone held portrait**; the smoker shell runs on the
+device's fixed 800x480 kiosk panel, and that number is mirrored from the kiosk
+`BrowserWindow` in `apps/smoker/electron-app/index.ts` (a sibling test parses
+that file and fails on drift, so the tour can never document a panel the device
+no longer has). Resolve the viewport per surface and pass it into the step 6
+prompt — never let the verifier pick one.
+
 ### 2. Prepare the per-PR artifact directory
 
 One timestamped directory per round, on the box, holding screenshots and full
@@ -227,12 +242,16 @@ explicitly, in the prompt:
 > capture a screenshot tour of the changed surfaces in the real browser /
 > Electron shell: each screen the diff touches, in the state a reviewer would
 > want to see (populated, not an empty first-run screen), full-page, one file
-> per screen. Name them `<surface>-NN-<slug>.png` (e.g.
-> `frontend-01-settings-page.png`, `smoker-02-smoke-screen.png`) in
-> `ARTIFACT_DIR`, numbered in the order a reviewer should read them, and list
-> them at the end of your report as `ui-shot: <filename> — <what it shows>`
-> lines. Capture the tour even for screens whose checklist items you deferred —
-> the tour documents the change, it does not verify it.
+> per screen. **Set the viewport before you capture, per surface:** frontend →
+> 390x844 (phone, portrait — it is a mobile app, never a desktop-width window);
+> smoker → 800x480 (the device's kiosk panel). Both come from
+> `scripts/verify-pr/tour-viewport.sh <surface>` — do not choose your own. Name
+> them `<surface>-NN-<slug>.png` (e.g. `frontend-01-settings-page.png`,
+> `smoker-02-smoke-screen.png`) in `ARTIFACT_DIR`, numbered in the order a
+> reviewer should read them, and list them at the end of your report as
+> `ui-shot: <filename> — <what it shows>` lines. Capture the tour even for
+> screens whose checklist items you deferred: the tour documents the change, it
+> does not verify it.
 
 The tour is **evidence for humans, not a verdict**: a screen you could not reach
 is simply absent from the tour and mentioned in your report; it never turns into

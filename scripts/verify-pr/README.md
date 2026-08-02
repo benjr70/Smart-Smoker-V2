@@ -103,6 +103,14 @@ GNOME/XWayland display through the Playwright MCP server, surviving reboots:
   means the diff moves no pixels and the round skips the tour. Only rendering
   extensions under an app/package source root count, and test / story / snapshot
   files never do, because a false positive costs a full browser tour on the box.
+- **`tour-viewport.sh`** — the viewport each tour surface is captured at:
+  `frontend` → `390x844` (the web app is a **mobile app**, held portrait — a
+  desktop-width window documents a layout no user sees), `smoker` → `800x480`
+  (the device's kiosk panel). The smoker number is mirrored from the kiosk
+  `BrowserWindow` in `apps/smoker/electron-app/index.ts`, and the sibling test
+  parses that file and fails on drift — change the panel, and the tour table has
+  to follow. The Electron shell runs fullscreen on the box's much larger
+  desktop, so the verifier resizes down to the panel before capturing.
 - **`inject-screenshots.sh`** — puts the `## Screenshots` section into the PR
   description from `caption<TAB>url` lines on stdin. It **replaces** the section
   it owns (marked `<!-- verify-pr-screenshots -->`) rather than appending, so

@@ -181,6 +181,23 @@ PR changes user-visible UI and its screenshots go into the **PR description**,
 where a reviewer sees them without pulling the branch. Capture the tour in the
 same real browser / Electron shell you are already driving:
 
+- **the surface's viewport, set before you capture** — this is not optional and
+  not yours to choose:
+
+  | Surface    | Viewport  | Why                                                                  |
+  | ---------- | --------- | -------------------------------------------------------------------- |
+  | `frontend` | `390x844` | it is a **mobile app**, held portrait — never a desktop-width window |
+  | `smoker`   | `800x480` | the device's fixed kiosk panel                                       |
+
+  Both come from `scripts/verify-pr/tour-viewport.sh <surface>`; the smoker
+  number mirrors the kiosk `BrowserWindow` in
+  `apps/smoker/electron-app/index.ts`. Resize with `browser_resize` (web) before
+  the first shot of a surface. The Electron shell runs fullscreen on the box's
+  desktop, which is **larger than the device panel** — resize it to `800x480`
+  too, so the tour shows what the smoker's screen actually shows. If a resize is
+  refused, say so in your report and capture anyway; a wrong-shape shot noted as
+  such beats no shot.
+
 - one **full-page** screenshot per screen the diff touches, in the state a
   reviewer would want to see — populated with realistic data, not an empty
   first-run screen;
