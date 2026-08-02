@@ -22,6 +22,49 @@
       Learn how to configure a non-root public URL by running `npm run build`.
     -->
     <title>Smart Smoker</title>
+    <style>
+      /* The page, painted in the colour scheme the script below settles on.
+         Recording the scheme is not enough on its own: the application's palette
+         arrives as custom properties emitted by its bundle, so until that bundle
+         has run there is nothing in the document painting anything — and the
+         white page the flash consists of is painted anyway.
+
+         The two colours are the Carbon background tokens, written out because
+         the page has no bundle to read them from. Guarded by
+         src/theme/preFirstPaint.test.tsx, which paints the served page in
+         isolation and compares what comes out against the shared token set. */
+      html[data-mui-color-scheme='light'] {
+        background-color: #f6f6f5;
+        color-scheme: light;
+      }
+
+      html[data-mui-color-scheme='dark'] {
+        background-color: #0c0c0c;
+        color-scheme: dark;
+      }
+    </style>
+    <script>
+      // The colour scheme, applied before the page paints anything.
+      //
+      // The application decides the scheme as it mounts, which is far too late:
+      // the browser would have painted a white page first and the smoker would
+      // get a flash of light in a dark garage on every reload. So the scheme the
+      // app settled on last time is applied to the document here, from the same
+      // local cache the app reads on the way up. Guarded by
+      // src/theme/preFirstPaint.test.tsx, which requires this to leave the
+      // document exactly as the running app leaves it.
+      (function () {
+        try {
+          var mode = localStorage.getItem('mui-mode') || 'system';
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var scheme = mode === 'system' ? (prefersDark ? 'dark' : 'light') : mode;
+          document.documentElement.setAttribute('data-mui-color-scheme', scheme);
+        } catch (error) {
+          // No storage, or no media queries: the app applies the scheme itself
+          // once it has mounted.
+        }
+      })();
+    </script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>

@@ -248,6 +248,15 @@ class LoadWatcher {
   }
 }
 
+/** The options the Settings page's Appearance card offers. */
+export type AppearanceOption = 'Light' | 'Dark' | 'Auto';
+
+/** A design token as the browser reports it back from a computed style. */
+const toRgb = (hex: string): string => {
+  const [, r, g, b] = /^#(\w{2})(\w{2})(\w{2})$/.exec(hex) ?? [];
+  return `rgb(${parseInt(r, 16)}, ${parseInt(g, 16)}, ${parseInt(b, 16)})`;
+};
+
 /**
  * Page object for the React web frontend.
  *
@@ -1240,9 +1249,18 @@ export class FrontendApp {
     );
   }
 
+  /**
+   * Open Settings, waiting on a card the page renders from nothing but itself.
+   *
+   * Deliberately not a field inside the notifications card: those controls come
+   * and go with what the backend has stored — the chamber range, for one, is on
+   * screen only while the Temperature Alert is switched on — so a journey that
+   * merely wants to reach Settings would hang on them. The Appearance card is
+   * always there, and it needs no backend read to render.
+   */
   async openSettings(): Promise<void> {
     await this.page.getByTestId('nav-settings').click();
-    await expect(this.page.getByTestId('settings-notifications-card')).toBeVisible();
+    await expect(this.page.getByTestId('settings-appearance-card')).toBeVisible();
   }
 
   private get chamberLow(): Locator {
@@ -1266,6 +1284,35 @@ export class FrontendApp {
   async expectChamberRange(range: { low: number; high: number }): Promise<void> {
     await expect(this.chamberLow).toHaveValue(String(range.low));
     await expect(this.chamberHigh).toHaveValue(String(range.high));
+  }
+
+  /** Choose how the app looks, from the Appearance card in Settings. */
+  async chooseAppearance(option: AppearanceOption): Promise<void> {
+    await this.page.getByRole('button', { name: option, exact: true }).click();
+    await this.expectAppearanceChosen(option);
+  }
+
+  /** Assert which Appearance option the card shows as active. */
+  async expectAppearanceChosen(option: AppearanceOption): Promise<void> {
+    await expect(this.page.getByRole('button', { name: option, exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+  }
+
+  /**
+   * Assert the colour the settings page is actually painted, as the browser
+   * computes it — the one thing about a theme worth pinning to a value, because
+   * it is what the operator is looking at.
+   */
+  async expectSettingsBackground(hex: string): Promise<void> {
+    await expect
+      .poll(() =>
+        this.page
+          .getByTestId('settings-page')
+          .evaluate(element => getComputedStyle(element).backgroundColor)
+      )
+      .toBe(toRgb(hex));
   }
 
   /**

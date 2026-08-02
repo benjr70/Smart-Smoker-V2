@@ -1,4 +1,4 @@
-import { Grid, ThemeProvider } from '@mui/material';
+import { Experimental_CssVarsProvider as CssVarsProvider, Grid } from '@mui/material';
 import React from 'react';
 import { BottomBar } from '../src/components/bottomBar/bottombar';
 import { SnackbarProvider } from './api';
@@ -7,7 +7,15 @@ import { Screens } from './components/common/interfaces/enums';
 import { History } from './components/history/history';
 import { Settings } from './components/settings/settings';
 import { Smoke } from './components/smoke/smoke';
-import { appTheme } from './theme';
+import { UnrestyledScreen, appTheme } from './theme';
+
+/**
+ * The screens the design has reached. Everything else is still painted by hand,
+ * against the light-grey shell `App.css` gives it, so it is held on the light
+ * palette rather than handed the scheme in effect — a screen is taken off this
+ * list's other side as the slice that recolours it lands.
+ */
+const RESTYLED_SCREENS: ReadonlySet<Screens> = new Set([Screens.SETTINGS]);
 
 class App extends React.Component<{}, { currentScreen: Screens }> {
   constructor(props: any) {
@@ -50,18 +58,34 @@ class App extends React.Component<{}, { currentScreen: Screens }> {
     }
 
     return (
-      <ThemeProvider theme={appTheme}>
+      // The application theme carries both colour schemes; this provider decides
+      // which of them is in effect, puts it on the document and emits each
+      // scheme's tokens as custom properties. `system` is the default, so a
+      // browser that has never been told otherwise follows the device — and
+      // keeps following it, live, while the page is open.
+      <CssVarsProvider theme={appTheme} defaultMode="system">
         <SnackbarProvider>
           <Grid className="App-header">
-            <Grid>{screen}</Grid>
-            <BottomBar
-              smokeOnClick={this.smokeOnClick}
-              reviewOnClick={this.reviewOnClick}
-              settingsOnClick={this.settingsOnClick}
-            ></BottomBar>
+            <Grid>
+              {RESTYLED_SCREENS.has(this.state.currentScreen) ? (
+                screen
+              ) : (
+                <UnrestyledScreen>{screen}</UnrestyledScreen>
+              )}
+            </Grid>
+            {/* The bottom navigation is restyled in a later slice too, so it
+                stays on the light palette alongside the screens it switches
+                between — including while a restyled screen is open. */}
+            <UnrestyledScreen>
+              <BottomBar
+                smokeOnClick={this.smokeOnClick}
+                reviewOnClick={this.reviewOnClick}
+                settingsOnClick={this.settingsOnClick}
+              ></BottomBar>
+            </UnrestyledScreen>
           </Grid>
         </SnackbarProvider>
-      </ThemeProvider>
+      </CssVarsProvider>
     );
   }
 }

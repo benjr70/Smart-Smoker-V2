@@ -1,0 +1,79 @@
+{
+  "name": "theme",
+  "version": "1.0.0",
+  "description": "Shared design tokens and Material-UI theme adapter for smart smoker (Carbon light/dark)",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "bootstrap": "npm install --legacy-peer-deps",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" --fix",
+    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,md}\""
+  },
+  "author": "Ben Rolf",
+  "license": "ISC",
+  "peerDependencies": {
+    "@mui/material": "^5.3.0",
+    "react": "^18.0.0"
+  },
+  "devDependencies": {
+    "@emotion/react": "^11.7.1",
+    "@emotion/styled": "^11.6.0",
+    "@mui/material": "^5.3.0",
+    "@testing-library/jest-dom": "^5.16.5",
+    "@testing-library/react": "^13.4.0",
+    "@testing-library/user-event": "^14.4.3",
+    "@types/jest": "28.1.8",
+    "@types/node": "^24.3.0",
+    "@types/react": "^18.0.28",
+    "@types/react-dom": "^18.0.11",
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "@typescript-eslint/parser": "^6.21.0",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "jest": "28.0.3",
+    "jest-environment-jsdom": "28.0.2",
+    "prettier": "^3.2.5",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "ts-jest": "28.0.8",
+    "typescript": "^4.9.5"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "jsdom",
+    "setupFilesAfterEnv": [
+      "<rootDir>/jest.setup.js"
+    ],
+    "testMatch": [
+      "<rootDir>/src/**/__tests__/**/*.{ts,tsx}",
+      "<rootDir>/src/**/*.{test,spec}.{ts,tsx}"
+    ],
+    "collectCoverageFrom": [
+      "src/**/*.{ts,tsx}",
+      "!src/**/*.d.ts",
+      "!src/**/index.ts",
+      "!src/testing/**"
+    ],
+    "coverageDirectory": "coverage",
+    "coverageReporters": [
+      "json-summary",
+      "lcov",
+      "text",
+      "html",
+      "clover"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "statements": 80,
+        "branches": 80,
+        "lines": 80,
+        "functions": 80
+      }
+    }
+  }
+}

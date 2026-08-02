@@ -1,4 +1,5 @@
-import { ThemeProvider, createTheme } from '@mui/material';
+import { Experimental_CssVarsProvider as CssVarsProvider } from '@mui/material';
+import { experimental_extendTheme as extendTheme } from '@mui/material/styles';
 import '@testing-library/jest-dom';
 import { render, screen } from '@testing-library/react';
 import React from 'react';
@@ -9,16 +10,20 @@ import { Settings } from './settings';
 
 /**
  * Settings is rendered whole — real Material-UI, the real notifications card,
- * and the in-memory fake backend behind the injected API client — so these
- * assertions describe the page an operator sees rather than the components it
- * happens to be built from.
+ * the colour-scheme provider the application root mounts, and the in-memory fake
+ * backend behind the injected API client — so these assertions describe the page
+ * an operator sees rather than the components it happens to be built from.
  */
-const renderSettings = (wrap: (page: JSX.Element) => JSX.Element = page => page) => {
+const renderSettings = (theme: ReturnType<typeof extendTheme> = appTheme) => {
   const client = createApiClient(createFakeBackend());
   return render(
-    <ApiClientProvider client={client}>
-      <SnackbarProvider>{wrap(<Settings />)}</SnackbarProvider>
-    </ApiClientProvider>
+    <CssVarsProvider theme={theme}>
+      <ApiClientProvider client={client}>
+        <SnackbarProvider>
+          <Settings />
+        </SnackbarProvider>
+      </ApiClientProvider>
+    </CssVarsProvider>
   );
 };
 
@@ -55,20 +60,20 @@ describe('Settings page', () => {
    * would never reach the cards.
    */
   it('takes its card styling from the enclosing application theme', async () => {
-    const markedTheme = createTheme({
+    const markedTheme = extendTheme({
       components: {
         MuiCardContent: { defaultProps: { 'data-testid': 'styled-by-application-theme' } as never },
       },
     });
 
-    renderSettings(page => <ThemeProvider theme={markedTheme}>{page}</ThemeProvider>);
+    renderSettings(markedTheme);
     await screen.findByText('Notifications');
 
-    expect(screen.getAllByTestId('styled-by-application-theme')).toHaveLength(2);
+    expect(screen.getAllByTestId('styled-by-application-theme')).toHaveLength(3);
   });
 
   it('paints the page with the design background and typeface', async () => {
-    renderSettings(page => <ThemeProvider theme={appTheme}>{page}</ThemeProvider>);
+    renderSettings();
     await screen.findByText('Notifications');
 
     const page = screen.getByTestId('settings-page');
@@ -82,7 +87,7 @@ describe('Settings page', () => {
    * leaving that card flush against the one above and widening its own gap.
    */
   it('gives every card the same gap, taken from the page stack', async () => {
-    renderSettings(page => <ThemeProvider theme={appTheme}>{page}</ThemeProvider>);
+    renderSettings();
     await screen.findByText('Notifications');
 
     expect(screen.getByTestId('settings-notifications-card')).toHaveStyle({ marginTop: '16px' });
@@ -90,7 +95,7 @@ describe('Settings page', () => {
   });
 
   it("renders its cards as the mock's flat, hairline-bordered white surface", async () => {
-    renderSettings(page => <ThemeProvider theme={appTheme}>{page}</ThemeProvider>);
+    renderSettings();
     await screen.findByText('Notifications');
 
     expect(screen.getByTestId('settings-version-card')).toHaveStyle({

@@ -16,6 +16,7 @@
  */
 import {
   BottomNavigation,
+  Experimental_CssVarsProvider as CssVarsProvider,
   BottomNavigationAction,
   Button,
   Card,
@@ -28,11 +29,11 @@ import {
   Typography,
   createTheme,
 } from '@mui/material';
-import { Theme } from '@mui/material/styles';
+import { experimental_extendTheme as extendTheme } from '@mui/material/styles';
 import '@testing-library/jest-dom';
 import { render, screen } from '@testing-library/react';
 import React from 'react';
-import { appTheme } from './index';
+import { UnrestyledScreen, appTheme } from './index';
 
 /** Everything about a control a theme can change: its box, its paint, its type. */
 const APPEARANCE: string[] = [
@@ -82,13 +83,9 @@ const Probes = (): JSX.Element => (
   </>
 );
 
-/** How every probe control is laid out, painted and typed under `theme`. */
-const appearanceUnder = (theme: Theme): Record<string, Record<string, string>> => {
-  const { unmount } = render(
-    <ThemeProvider theme={theme}>
-      <Probes />
-    </ThemeProvider>
-  );
+/** How every probe control is laid out, painted and typed in `tree`. */
+const appearanceOf = (tree: JSX.Element): Record<string, Record<string, string>> => {
+  const { unmount } = render(tree);
 
   const appearance = Object.fromEntries(
     CONTROLS.map(control => {
@@ -106,9 +103,52 @@ const appearanceUnder = (theme: Theme): Record<string, Record<string, string>> =
   return appearance;
 };
 
+/** The probes under `theme`, mounted the way the application root mounts it. */
+const appearanceUnder = (
+  theme: ReturnType<typeof extendTheme>
+): Record<string, Record<string, string>> =>
+  appearanceOf(
+    <CssVarsProvider theme={theme}>
+      <Probes />
+    </CssVarsProvider>
+  );
+
+/**
+ * The probes as an unrestyled screen really renders them: inside the
+ * application's colour-scheme provider, with `scheme` in effect, wrapped the way
+ * the application root wraps the screens the design has not reached.
+ */
+const unrestyledScreenUnder = (
+  scheme: 'light' | 'dark'
+): Record<string, Record<string, string>> => {
+  localStorage.clear();
+  return appearanceOf(
+    <CssVarsProvider theme={appTheme} defaultMode={scheme}>
+      <UnrestyledScreen>
+        <Probes />
+      </UnrestyledScreen>
+    </CssVarsProvider>
+  );
+};
+
+/**
+ * How Material-UI paints these controls out of the box, in literal colours
+ * rather than in references to whichever scheme is in effect — which is what an
+ * unrestyled screen, painted against a hand-written light-grey shell, has to
+ * keep looking like.
+ */
+const materialUiOutOfTheBox = (): Record<string, Record<string, string>> =>
+  appearanceOf(
+    <ThemeProvider theme={createTheme()}>
+      <Probes />
+    </ThemeProvider>
+  );
+
 describe('the application theme and the screens it does not restyle', () => {
   it('lays out, paints and types every control exactly as Material-UI does', () => {
-    expect(appearanceUnder(appTheme)).toEqual(appearanceUnder(createTheme()));
+    // Material-UI's own theme, mounted the same way: how the screens this slice
+    // does not restyle are painted today.
+    expect(appearanceUnder(appTheme)).toEqual(appearanceUnder(extendTheme()));
   });
 
   /**
@@ -116,12 +156,28 @@ describe('the application theme and the screens it does not restyle', () => {
    * feeds it the very repaint and typeface swap the design would apply.
    */
   it('notices a theme that repaints or re-types those controls', () => {
-    const restyled = createTheme({
-      palette: { primary: { main: '#DA4A2E' }, text: { primary: '#121212' } },
+    const restyled = extendTheme({
+      colorSchemes: { light: { palette: { primary: { main: '#DA4A2E' } } } },
       typography: { fontFamily: '"Plus Jakarta Sans", sans-serif' },
     });
 
-    expect(appearanceUnder(restyled)).not.toEqual(appearanceUnder(createTheme()));
+    expect(appearanceUnder(restyled)).not.toEqual(appearanceUnder(extendTheme()));
+  });
+
+  /**
+   * The scheme is chosen for the whole application, but the design has only
+   * reached Settings: every other screen is still painted by hand, on the
+   * light-grey shell `App.css` gives it. A dark scheme reaching those controls
+   * would paint near-white body text, step labels and input outlines onto that
+   * light grey — unreadable. The slice defers recolouring them, which means they
+   * have to keep the light palette until it does.
+   */
+  it('keeps the light palette on those screens even when the dark scheme is in effect', () => {
+    expect(unrestyledScreenUnder('dark')).toEqual(materialUiOutOfTheBox());
+  });
+
+  it('keeps the very same palette when the light scheme is in effect', () => {
+    expect(unrestyledScreenUnder('light')).toEqual(materialUiOutOfTheBox());
   });
 
   /**

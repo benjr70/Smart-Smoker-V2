@@ -1,6 +1,7 @@
 import { Card, CardContent, ScopedCssBaseline, Stack, Typography } from '@mui/material';
 import React from 'react';
 import { DesignSurface } from '../../theme';
+import { AppearanceCard } from './appearance';
 import { NotificationsCard } from './notifications';
 
 declare const VERSION: string;
@@ -39,6 +40,7 @@ export const Settings = (): JSX.Element => (
         <Typography variant="h4" component="h1" sx={{ fontWeight: 700, paddingX: 0.5 }}>
           Settings
         </Typography>
+        <AppearanceCard />
         <NotificationsCard />
         <VersionCard version={readVersion()} />
       </Stack>

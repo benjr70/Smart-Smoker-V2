@@ -24,6 +24,7 @@
     "socket.io": "^4.5.1",
     "socket.io-client": "^4.5.1",
     "temperaturechart": "^1.0.0",
+    "theme": "^1.0.0",
     "web-push": "^3.6.6",
     "web-vitals": "^1.1.2"
   },
