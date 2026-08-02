@@ -37,6 +37,8 @@ describe('NotificationsController', () => {
     setSubscription: jest.fn(),
     setSettings: jest.fn(),
     getSettings: jest.fn(),
+    getPublicKey: jest.fn(),
+    sendTestNotification: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -60,6 +62,39 @@ describe('NotificationsController', () => {
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
+  });
+
+  describe('getPublicKey', () => {
+    it('serves the configured VAPID public key', async () => {
+      mockNotificationsService.getPublicKey.mockResolvedValue({
+        publicKey: 'BConfiguredKey',
+      });
+
+      expect(await controller.getPublicKey()).toEqual({
+        publicKey: 'BConfiguredKey',
+      });
+    });
+
+    it('reports a null key rather than failing when none is configured', async () => {
+      mockNotificationsService.getPublicKey.mockResolvedValue({
+        publicKey: null,
+      });
+
+      expect(await controller.getPublicKey()).toEqual({ publicKey: null });
+    });
+  });
+
+  describe('sendTestNotification', () => {
+    it('dispatches a test notification and reports how many were sent', async () => {
+      mockNotificationsService.sendTestNotification.mockResolvedValue({
+        sent: 2,
+      });
+
+      const result = await controller.sendTestNotification();
+
+      expect(service.sendTestNotification).toHaveBeenCalled();
+      expect(result).toEqual({ sent: 2 });
+    });
   });
 
   describe('setSubscription', () => {

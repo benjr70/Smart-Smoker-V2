@@ -7,12 +7,14 @@
  * it never resolves `undefined`.
  */
 import { TransportPort, createHttpTransport } from 'api-transport/src';
+import { PushNotConfiguredError } from './errors';
 import { SmokeEventPort, noopEventPort } from './events';
 import { createSocketEventPort } from './socketEventAdapter';
 import {
   NotificationSettings,
   PostSmoke,
   PreSmoke,
+  PushSubscriptionPayload,
   Smoke,
   SmokeHistory,
   SmokeProfile,
@@ -98,6 +100,29 @@ export interface NotificationsResource {
    * envelope.
    */
   saveSettings(input: unknown): Promise<NotificationSettingsEnvelope>;
+  /**
+   * GET `notifications/publicKey` — the VAPID application server key, read from
+   * the backend at subscribe time rather than baked into this bundle. Rejects
+   * with a {@link PushNotConfiguredError} when the deployment has no key
+   * configured, so the caller can surface "push is not set up on the server"
+   * distinctly from a transient failure instead of handing `undefined` to
+   * `PushManager.subscribe`.
+   */
+  getPublicKey(): Promise<string>;
+  /**
+   * POST `notifications/subscribe` — register (or re-register) this browser's
+   * push subscription. The backend upserts on the endpoint, so calling this
+   * with an already-known endpoint succeeds and refreshes the stored keys.
+   */
+  registerSubscription(subscription: PushSubscriptionPayload): Promise<void>;
+  /**
+   * POST `notifications/test` — dispatch a test push to every subscription and
+   * resolve how many browsers it actually reached. The backend answers 200 even
+   * when the push service rejected every send (it only logs those), so `sent`
+   * is the only signal that separates "it arrived" from "it reached nobody" —
+   * callers must branch on it rather than treating the call itself as success.
+   */
+  sendTest(): Promise<{ sent: number }>;
 }
 
 export interface StateResource {
@@ -358,6 +383,19 @@ export const createApiClient = (
         'notifications/settings',
         toNotificationSettingsPayload(input)
       ),
+    getPublicKey: async () => {
+      const response = await transport.get<{ publicKey: string | null } | null>(
+        'notifications/publicKey'
+      );
+      if (!response?.publicKey) {
+        throw new PushNotConfiguredError();
+      }
+      return response.publicKey;
+    },
+    registerSubscription: async (subscription: PushSubscriptionPayload) => {
+      await transport.post<PushSubscriptionPayload>('notifications/subscribe', subscription);
+    },
+    sendTest: () => transport.post<{ sent: number }>('notifications/test'),
   },
   state: {
     get: () => transport.get<State>('state'),

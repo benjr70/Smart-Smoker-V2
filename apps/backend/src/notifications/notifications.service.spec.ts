@@ -1,22 +1,44 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { NotificationsService } from './notifications.service';
 import { NotificationSubscription } from './notificationSubscription.schema';
 import { NotificationSettings } from './notificationSettings.schema';
 import { TempDto } from '../temps/tempDto';
-import * as webpush from 'web-push';
+import { PushDispatcherService } from '../pushDispatcher/push-dispatcher.service';
 
-// Mock web-push
-jest.mock('web-push', () => ({
-  setVapidDetails: jest.fn(),
-  sendNotification: jest.fn().mockResolvedValue({ statusCode: 201 }),
-}));
+const createSubscriptionStore = () => {
+  let records: NotificationSubscription[] = [];
+  return {
+    findOneAndUpdate: jest.fn(
+      (filter: { endpoint: string }, update: NotificationSubscription) => ({
+        exec: () => {
+          const next = { ...update };
+          const index = records.findIndex(
+            (record) => record.endpoint === filter.endpoint,
+          );
+          if (index === -1) {
+            records.push(next);
+          } else {
+            records[index] = next;
+          }
+          return Promise.resolve(next);
+        },
+      }),
+    ),
+    find: jest.fn(() =>
+      Promise.resolve(records.map((record) => ({ ...record }))),
+    ),
+    reset: () => {
+      records = [];
+    },
+  };
+};
 
 describe('NotificationsService', () => {
   let service: NotificationsService;
   let mockNotificationSubscriptionModel: any;
   let mockNotificationSettingsModel: any;
+  let mockPushDispatcher: { notify: jest.Mock; getPublicKey: jest.Mock };
 
   const mockSubscription: NotificationSubscription = {
     endpoint: 'https://fcm.googleapis.com/fcm/send/test-endpoint',
@@ -62,18 +84,10 @@ describe('NotificationsService', () => {
   };
 
   beforeEach(async () => {
-    // Mock NotificationSubscription model
-    mockNotificationSubscriptionModel = jest.fn().mockImplementation((dto) => ({
-      ...dto,
-      save: jest.fn().mockResolvedValue({ ...dto, _id: 'new-subscription-id' }),
-    }));
-
-    mockNotificationSubscriptionModel.findOne = jest.fn().mockReturnValue({
-      exec: jest.fn().mockResolvedValue(null),
-    });
-    mockNotificationSubscriptionModel.find = jest
-      .fn()
-      .mockResolvedValue([mockSubscription]);
+    // Stand-in for the Mongoose subscription collection: a real array behind
+    // the upsert and read operations, so registration behaviour is observable
+    // as "what is stored afterwards" rather than as "which query was issued".
+    mockNotificationSubscriptionModel = createSubscriptionStore();
 
     // Mock NotificationSettings model
     mockNotificationSettingsModel = jest.fn().mockImplementation((dto) => ({
@@ -84,6 +98,11 @@ describe('NotificationsService', () => {
     mockNotificationSettingsModel.findOne = jest.fn().mockReturnValue({
       exec: jest.fn().mockResolvedValue(null),
     });
+
+    mockPushDispatcher = {
+      notify: jest.fn().mockResolvedValue(1),
+      getPublicKey: jest.fn().mockReturnValue('test-public-key'),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -96,14 +115,14 @@ describe('NotificationsService', () => {
           provide: getModelToken(NotificationSettings.name),
           useValue: mockNotificationSettingsModel,
         },
+        {
+          provide: PushDispatcherService,
+          useValue: mockPushDispatcher,
+        },
       ],
     }).compile();
 
     service = module.get<NotificationsService>(NotificationsService);
-
-    // Set up environment variables for test
-    process.env.VAPID_PUBLIC_KEY = 'test-public-key';
-    process.env.VAPID_PRIVATE_KEY = 'test-private-key';
   });
 
   afterEach(() => {
@@ -115,38 +134,53 @@ describe('NotificationsService', () => {
   });
 
   describe('setSubscription', () => {
-    it('should create a new subscription when it does not exist', async () => {
+    it('stores a subscription whose endpoint is not yet known', async () => {
       const result = await service.setSubscription(mockSubscription);
 
-      expect(mockNotificationSubscriptionModel.findOne).toHaveBeenCalledWith({
-        endpoint: mockSubscription.endpoint,
-      });
-      expect(mockNotificationSubscriptionModel).toHaveBeenCalledWith(
-        mockSubscription,
-      );
+      expect(await service.getSubscriptions()).toEqual([mockSubscription]);
       expect(result).toEqual(expect.objectContaining(mockSubscription));
     });
 
-    it('should throw ConflictException when subscription already exists', async () => {
-      mockNotificationSubscriptionModel.findOne.mockReturnValue({
-        exec: jest.fn().mockResolvedValue(mockSubscription),
-      });
+    it('replaces the stored record when the endpoint is already registered, rather than failing', async () => {
+      await service.setSubscription(mockSubscription);
+      const rotated = {
+        ...mockSubscription,
+        keys: { p256dh: 'rotated-p256dh', auth: 'rotated-auth' },
+      };
 
-      await expect(service.setSubscription(mockSubscription)).rejects.toThrow(
-        ConflictException,
-      );
-      await expect(service.setSubscription(mockSubscription)).rejects.toThrow(
-        'Subscription already exists',
-      );
+      const result = await service.setSubscription(rotated);
+
+      expect(result).toEqual(expect.objectContaining(rotated));
+      expect(await service.getSubscriptions()).toEqual([rotated]);
+    });
+
+    it('stores a subscription with a new endpoint alongside the existing ones', async () => {
+      await service.setSubscription(mockSubscription);
+      const second = {
+        ...mockSubscription,
+        endpoint: 'https://fcm.googleapis.com/fcm/send/second-endpoint',
+      };
+
+      await service.setSubscription(second);
+
+      expect(await service.getSubscriptions()).toEqual([
+        mockSubscription,
+        second,
+      ]);
     });
   });
 
   describe('getSubscriptions', () => {
     it('should return all subscriptions', async () => {
+      await service.setSubscription(mockSubscription);
+
       const result = await service.getSubscriptions();
 
-      expect(mockNotificationSubscriptionModel.find).toHaveBeenCalled();
       expect(result).toEqual([mockSubscription]);
+    });
+
+    it('returns an empty list before anything has registered', async () => {
+      expect(await service.getSubscriptions()).toEqual([]);
     });
   });
 
@@ -308,6 +342,184 @@ describe('NotificationsService', () => {
       );
     });
 
+    // The settings page stores the probe selector as the label the user picked
+    // ('Probe 1'), while the oldest stored rules use the legacy 'Meat1' form.
+    // Both name the same physical reading, so both must resolve to it —
+    // otherwise the rule a user builds in the UI silently never fires.
+    it('fires a rule written with the settings-page probe name "Probe 1"', async () => {
+      mockNotificationSettingsModel.findOne.mockReturnValue({
+        exec: jest.fn().mockResolvedValue({
+          settings: [
+            {
+              type: false,
+              message: 'Probe 1 is done',
+              probe1: 'Probe 1',
+              op: '>',
+              temperature: 150,
+              lastNotificationSent: new Date('2023-01-01'),
+            },
+          ],
+        }),
+      });
+
+      await service.checkForNotification(mockTempDto);
+
+      expect(service.sendPushNotification).toHaveBeenCalledWith(
+        'Probe 1 is done',
+      );
+    });
+
+    it('resolves "Probe 2" and "Probe 3" to their own readings', async () => {
+      mockNotificationSettingsModel.findOne.mockReturnValue({
+        exec: jest.fn().mockResolvedValue({
+          settings: [
+            {
+              type: false,
+              message: 'Probe 2 is done',
+              probe1: 'Probe 2',
+              op: '>',
+              temperature: 135,
+              lastNotificationSent: new Date('2023-01-01'),
+            },
+            {
+              type: false,
+              message: 'Probe 3 is done',
+              probe1: 'Probe 3',
+              op: '>',
+              temperature: 135,
+              lastNotificationSent: new Date('2023-01-01'),
+            },
+          ],
+        }),
+      });
+
+      // Meat2Temp is 140 (above 135) and Meat3Temp is 130 (below), so only the
+      // probe-2 rule may fire: each selector must read its own probe.
+      await service.checkForNotification(mockTempDto);
+
+      expect(service.sendPushNotification).toHaveBeenCalledWith(
+        'Probe 2 is done',
+      );
+      expect(service.sendPushNotification).not.toHaveBeenCalledWith(
+        'Probe 3 is done',
+      );
+    });
+
+    it('compares against a probe-2 selector written in the settings-page form', async () => {
+      mockNotificationSettingsModel.findOne.mockReturnValue({
+        exec: jest.fn().mockResolvedValue({
+          settings: [
+            {
+              type: true,
+              message: 'Probe 1 is near the chamber',
+              probe1: 'Probe 1',
+              op: '>',
+              probe2: 'Chamber',
+              // Meat 160 vs chamber 250 - 100 = 150, so the rule fires only if
+              // both selectors resolve to their real readings.
+              offset: -100,
+              lastNotificationSent: new Date('2023-01-01'),
+            },
+          ],
+        }),
+      });
+
+      await service.checkForNotification(mockTempDto);
+
+      expect(service.sendPushNotification).toHaveBeenCalledWith(
+        'Probe 1 is near the chamber',
+      );
+    });
+
+    // A selector nothing maps to used to leave the watched temperature at 0,
+    // so a '<' rule compared 0 against its threshold and pushed a false alert
+    // every ten minutes for the whole cook. An unresolvable probe skips.
+    it('skips a rule whose probe cannot be resolved instead of alerting on a 0 reading', async () => {
+      mockNotificationSettingsModel.findOne.mockReturnValue({
+        exec: jest.fn().mockResolvedValue({
+          settings: [
+            {
+              type: false,
+              message: 'ghost probe is cold',
+              probe1: 'Probe 9',
+              op: '<',
+              temperature: 250,
+              lastNotificationSent: new Date('2023-01-01'),
+            },
+          ],
+        }),
+      });
+
+      await service.checkForNotification(mockTempDto);
+
+      expect(service.sendPushNotification).not.toHaveBeenCalled();
+    });
+
+    it('skips a comparison rule whose second probe cannot be resolved', async () => {
+      mockNotificationSettingsModel.findOne.mockReturnValue({
+        exec: jest.fn().mockResolvedValue({
+          settings: [
+            {
+              type: true,
+              message: 'compares against nothing',
+              probe1: 'Chamber',
+              op: '<',
+              probe2: 'Probe 9',
+              offset: 0,
+              lastNotificationSent: new Date('2023-01-01'),
+            },
+          ],
+        }),
+      });
+
+      await service.checkForNotification(mockTempDto);
+
+      expect(service.sendPushNotification).not.toHaveBeenCalled();
+    });
+
+    it('skips a comparison rule that never got a second probe', async () => {
+      mockNotificationSettingsModel.findOne.mockReturnValue({
+        exec: jest.fn().mockResolvedValue({
+          settings: [
+            {
+              type: true,
+              message: 'half-built rule',
+              probe1: 'Chamber',
+              op: '<',
+              probe2: undefined,
+              offset: 0,
+              lastNotificationSent: new Date('2023-01-01'),
+            },
+          ],
+        }),
+      });
+
+      await service.checkForNotification(mockTempDto);
+
+      expect(service.sendPushNotification).not.toHaveBeenCalled();
+    });
+
+    it('skips a rule whose probe has no reading yet rather than treating it as 0', async () => {
+      mockNotificationSettingsModel.findOne.mockReturnValue({
+        exec: jest.fn().mockResolvedValue({
+          settings: [
+            {
+              type: false,
+              message: 'probe 1 is cold',
+              probe1: 'Probe 1',
+              op: '<',
+              temperature: 250,
+              lastNotificationSent: new Date('2023-01-01'),
+            },
+          ],
+        }),
+      });
+
+      await service.checkForNotification({ ...mockTempDto, MeatTemp: '' });
+
+      expect(service.sendPushNotification).not.toHaveBeenCalled();
+    });
+
     it('should not trigger notification if recently sent', async () => {
       const recentSettings = {
         settings: [
@@ -341,50 +553,43 @@ describe('NotificationsService', () => {
   });
 
   describe('sendPushNotification', () => {
-    beforeEach(() => {
-      jest
-        .spyOn(service, 'getSubscriptions')
-        .mockResolvedValue([mockSubscription]);
-      // Reset the webpush mock before each test
-      (webpush.sendNotification as jest.Mock).mockClear();
-    });
+    it('hands the message to the push dispatcher', async () => {
+      await service.sendPushNotification('Test notification');
 
-    it('should send push notification to all subscriptions', async () => {
-      (webpush.sendNotification as jest.Mock).mockResolvedValue({
-        statusCode: 201,
+      expect(mockPushDispatcher.notify).toHaveBeenCalledWith(
+        'Smoker',
+        'Test notification',
+      );
+    });
+  });
+
+  describe('sendTestNotification', () => {
+    it('dispatches a test notification to every stored subscription', async () => {
+      mockPushDispatcher.notify.mockResolvedValue(3);
+
+      const result = await service.sendTestNotification();
+
+      expect(mockPushDispatcher.notify).toHaveBeenCalledWith(
+        'Smoker',
+        expect.stringContaining('test'),
+      );
+      expect(result).toEqual({ sent: 3 });
+    });
+  });
+
+  describe('getPublicKey', () => {
+    it('returns the configured VAPID public key', async () => {
+      mockPushDispatcher.getPublicKey.mockReturnValue('configured-key');
+
+      expect(await service.getPublicKey()).toEqual({
+        publicKey: 'configured-key',
       });
-      const message = 'Test notification';
-
-      await service.sendPushNotification(message);
-
-      expect(service.getSubscriptions).toHaveBeenCalled();
-      expect(webpush.sendNotification).toHaveBeenCalledWith(
-        mockSubscription,
-        JSON.stringify({
-          title: 'Smoker',
-          body: message,
-          icon: '/path/to/icon.png',
-        }),
-      );
     });
 
-    it('should handle webpush errors gracefully', async () => {
-      const mockError = {
-        statusCode: 410,
-        body: 'Gone',
-        stack: 'Error stack',
-      };
+    it('reports a null key when the deployment has none configured', async () => {
+      mockPushDispatcher.getPublicKey.mockReturnValue(null);
 
-      // Mock to return a promise that rejects, but the .catch() should handle it
-      (webpush.sendNotification as jest.Mock).mockReturnValue(
-        Promise.reject(mockError).catch(() => {
-          // This simulates the error handling in the actual service
-          return Promise.resolve();
-        }),
-      );
-
-      // Should not throw an error despite the webpush failure
-      await expect(service.sendPushNotification('Test')).resolves.not.toThrow();
+      expect(await service.getPublicKey()).toEqual({ publicKey: null });
     });
   });
 });

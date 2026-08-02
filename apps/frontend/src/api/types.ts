@@ -143,3 +143,17 @@ export interface SmokeHistory {
   smokeId: string;
   overAllRating: string;
 }
+
+/**
+ * A browser push subscription as it goes over the wire to
+ * `notifications/subscribe` — the JSON form of the browser's `PushSubscription`
+ * (`subscription.toJSON()`), which is exactly what the backend stores.
+ */
+export interface PushSubscriptionPayload {
+  endpoint: string;
+  expirationTime: number | null;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+}

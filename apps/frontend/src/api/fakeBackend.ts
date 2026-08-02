@@ -18,6 +18,7 @@ import {
   NotificationSettings,
   PostSmoke,
   PreSmoke,
+  PushSubscriptionPayload,
   Smoke,
   SmokeHistory,
   SmokeProfile,
@@ -59,6 +60,19 @@ export interface FakeBackendSeed {
   };
   notifications?: {
     settings?: NotificationSettings[];
+    /**
+     * The VAPID key the backend serves at runtime. `null` models a deployment
+     * with no key configured.
+     */
+    publicKey?: string | null;
+    subscriptions?: PushSubscriptionPayload[];
+    /**
+     * Models a push service that rejects every send (a mismatched VAPID private
+     * key, or a 5xx from the push endpoint). `POST notifications/test` still
+     * succeeds — the backend only logs those failures — but reports zero
+     * delivered, which is the only signal a caller gets that nothing arrived.
+     */
+    deliveryFails?: boolean;
   };
   /**
    * The persisted state document. Seed `null` to model a backend with no state:
@@ -106,6 +120,12 @@ interface FakeStore {
   };
   notifications: {
     settings: NotificationSettings[];
+    publicKey: string | null;
+    subscriptions: PushSubscriptionPayload[];
+    /** Bodies dispatched through `notifications/test`. */
+    testSends: number;
+    /** When true, a dispatched test reaches nobody (see the seed field). */
+    deliveryFails: boolean;
   };
   state: State | null;
   smoke: {
@@ -142,6 +162,13 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
     },
     notifications: {
       settings: seed.notifications?.settings ?? [],
+      publicKey:
+        seed.notifications?.publicKey === undefined
+          ? 'BSeededTestVapidPublicKey'
+          : seed.notifications.publicKey,
+      subscriptions: seed.notifications?.subscriptions ?? [],
+      testSends: 0,
+      deliveryFails: seed.notifications?.deliveryFails ?? false,
     },
     state: seed.state === undefined ? { smokeId: '', smoking: false } : seed.state,
     smoke: {
@@ -283,6 +310,32 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
         store.notifications.settings = clone(settings);
         return clone({ settings: store.notifications.settings });
       }
+    }
+
+    if (resource === 'notifications' && id === 'publicKey' && method === 'get') {
+      return clone({ publicKey: store.notifications.publicKey });
+    }
+
+    // Registration is an upsert keyed on the endpoint, mirroring the backend:
+    // re-registering the same browser replaces its record instead of failing.
+    if (resource === 'notifications' && id === 'subscribe' && method === 'post') {
+      const subscription = clone(body) as PushSubscriptionPayload;
+      const existing = store.notifications.subscriptions.findIndex(
+        stored => stored.endpoint === subscription.endpoint
+      );
+      if (existing === -1) {
+        store.notifications.subscriptions.push(subscription);
+      } else {
+        store.notifications.subscriptions[existing] = subscription;
+      }
+      return clone(subscription);
+    }
+
+    if (resource === 'notifications' && id === 'test' && method === 'post') {
+      store.notifications.testSends += 1;
+      return clone({
+        sent: store.notifications.deliveryFails ? 0 : store.notifications.subscriptions.length,
+      });
     }
 
     if (resource === 'state') {
