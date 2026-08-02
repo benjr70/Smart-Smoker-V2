@@ -59,7 +59,8 @@ export interface FakeBackendSeed {
     records?: Record<string, rating>;
   };
   notifications?: {
-    settings?: NotificationSettings[];
+    /** The stored settings document; absent models a backend that has none. */
+    settings?: NotificationSettings;
     /**
      * The VAPID key the backend serves at runtime. `null` models a deployment
      * with no key configured.
@@ -119,7 +120,7 @@ interface FakeStore {
     records: Record<string, rating>;
   };
   notifications: {
-    settings: NotificationSettings[];
+    settings: NotificationSettings | undefined;
     publicKey: string | null;
     subscriptions: PushSubscriptionPayload[];
     /** Bodies dispatched through `notifications/test`. */
@@ -161,7 +162,7 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
       records: seed.ratings?.records ?? {},
     },
     notifications: {
-      settings: seed.notifications?.settings ?? [],
+      settings: seed.notifications?.settings,
       publicKey:
         seed.notifications?.publicKey === undefined
           ? 'BSeededTestVapidPublicKey'
@@ -302,13 +303,15 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
 
     if (resource === 'notifications' && id === 'settings') {
       if (method === 'get') {
-        // The wire response nests the array under `settings`.
-        return clone({ settings: store.notifications.settings });
+        // A backend with no settings document answers with an empty body, which
+        // this app's transport maps to null (see EMPTY_BODY).
+        return store.notifications.settings === undefined
+          ? EMPTY_BODY
+          : clone(store.notifications.settings);
       }
       if (method === 'post') {
-        const settings = (body as { settings?: NotificationSettings[] })?.settings ?? [];
-        store.notifications.settings = clone(settings);
-        return clone({ settings: store.notifications.settings });
+        store.notifications.settings = clone(body) as NotificationSettings;
+        return clone(store.notifications.settings);
       }
     }
 

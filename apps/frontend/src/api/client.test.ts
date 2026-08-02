@@ -383,24 +383,18 @@ describe('ratings client — legacy endpoint contract', () => {
   });
 });
 
-const editableRule: NotificationSettings = {
-  type: false,
-  message: 'Meat done',
-  probe1: 'Chamber',
-  op: '>',
-  probe2: 'Probe 1',
-  offset: 5,
-  temperature: 165,
+const savedSettings: NotificationSettings = {
+  chamber: { enabled: true, low: 225, high: 275 },
 };
 
-describe('notifications client — legacy endpoint contract', () => {
-  test('getSettings returns the plain settings array although the wire nests it', async () => {
-    const backend = createFakeBackend({ notifications: { settings: [editableRule] } });
+describe('notifications client — settings', () => {
+  test('getSettings returns the stored notification settings document', async () => {
+    const backend = createFakeBackend({ notifications: { settings: savedSettings } });
     const client = createApiClient(backend);
 
     const result = await client.notifications.getSettings();
 
-    expect(result).toEqual([editableRule]);
+    expect(result).toEqual(savedSettings);
     expect(backend.requests).toContainEqual({
       method: 'get',
       path: 'notifications/settings',
@@ -409,10 +403,9 @@ describe('notifications client — legacy endpoint contract', () => {
   });
 
   test('getSettings resolves undefined (not a throw) when the wire body is empty', async () => {
-    // The backend serializes "no settings document yet" as a 200 with an empty
-    // body, which the transport normalizes to `null`. getSettings must unwrap
-    // that defensively rather than dereferencing `null.settings` — so consumers
-    // (via useCurrentResource) keep their safe defaults instead of crashing.
+    // A backend that has never had settings saved serializes the read as a 200
+    // with an empty body, which the transport normalizes to `null`. That must
+    // reach the caller as "nothing yet" so it keeps its defaults, not as a throw.
     const emptyBodyTransport = {
       get: async () => null as never,
       post: async () => undefined as never,
@@ -424,57 +417,48 @@ describe('notifications client — legacy endpoint contract', () => {
     await expect(client.notifications.getSettings()).resolves.toBeUndefined();
   });
 
-  test('saveSettings wraps the projected rules in the legacy envelope, stripping _id/__v', async () => {
+  test('saveSettings sends the chamber range, stripping the persisted _id/__v it was read with', async () => {
     const backend = createFakeBackend();
     const client = createApiClient(backend);
 
-    const fetched = {
-      settings: [{ ...editableRule, _id: 'rule-1', __v: 0 }],
-    };
-    await client.notifications.saveSettings(fetched);
-
-    expect(backend.requests).toContainEqual({
-      method: 'post',
-      path: 'notifications/settings',
-      body: { settings: [editableRule] },
-    });
-    const sentRule = (
-      backend.requests.find(r => r.method === 'post')?.body as {
-        settings: Record<string, unknown>[];
-      }
-    ).settings[0];
-    expect(sentRule).not.toHaveProperty('_id');
-    expect(sentRule).not.toHaveProperty('__v');
-  });
-
-  test('saveSettings preserves lastNotificationSent only when present', async () => {
-    const backend = createFakeBackend();
-    const client = createApiClient(backend);
-
-    const sent = '2026-07-10T00:00:00.000Z';
     await client.notifications.saveSettings({
-      settings: [{ ...editableRule, _id: 'rule-1', lastNotificationSent: sent }],
+      ...savedSettings,
+      _id: 'settings-1',
+      __v: 0,
     });
-
-    const sentRule = (
-      backend.requests.find(r => r.method === 'post')?.body as {
-        settings: Record<string, unknown>[];
-      }
-    ).settings[0];
-    expect(sentRule.lastNotificationSent).toBe(sent);
-    expect(sentRule).not.toHaveProperty('_id');
-  });
-
-  test('saveSettings sends an empty settings array when given no settings', async () => {
-    const backend = createFakeBackend();
-    const client = createApiClient(backend);
-
-    await client.notifications.saveSettings({});
 
     expect(backend.requests).toContainEqual({
       method: 'post',
       path: 'notifications/settings',
-      body: { settings: [] },
+      body: savedSettings,
+    });
+  });
+
+  test('saveSettings fills in defaults for a partially-specified document', async () => {
+    // The backend validates strictly, so a half-filled chamber block would 400
+    // and the settings page's save-on-unmount would fail silently.
+    const backend = createFakeBackend();
+    const client = createApiClient(backend);
+
+    await client.notifications.saveSettings({ chamber: { enabled: true } });
+
+    expect(backend.requests).toContainEqual({
+      method: 'post',
+      path: 'notifications/settings',
+      body: { chamber: { enabled: true, low: 225, high: 275 } },
+    });
+  });
+
+  test('round-trips settings saved by the client back through a read', async () => {
+    const backend = createFakeBackend();
+    const client = createApiClient(backend);
+
+    await client.notifications.saveSettings({
+      chamber: { enabled: true, low: 200, high: 300 },
+    });
+
+    await expect(client.notifications.getSettings()).resolves.toEqual({
+      chamber: { enabled: true, low: 200, high: 300 },
     });
   });
 });

@@ -9,6 +9,7 @@
  * re-exported here so call sites keep importing from one place.
  */
 export type {
+  ChamberAlertSettings,
   NotificationSettings,
   PostSmoke,
   PreSmoke,
@@ -41,7 +42,12 @@ export type {
   StateResource,
   TempsResource,
 } from './client';
-export { createApiClient, createProductionApiClient, getDefaultApiClient } from './client';
+export {
+  createApiClient,
+  createProductionApiClient,
+  defaultNotificationSettings,
+  getDefaultApiClient,
+} from './client';
 export { ApiClientProvider, useApiClient } from './ApiClientProvider';
 export type { SnackbarNotifier, SnackbarProviderProps } from './SnackbarProvider';
 export { SnackbarProvider, useApiSnackbar } from './SnackbarProvider';

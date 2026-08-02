@@ -86,9 +86,9 @@ export const withDesignPalette = (outer: Theme): Theme => {
     typography: painted.typography,
     palette: painted.palette,
     // Deliberately no `shape` override: `shape.borderRadius` reaches MuiButton
-    // and MuiOutlinedInput, and this theme is inherited by the notification rule
-    // builder, which is replaced wholesale in a later slice. The card radius the
-    // design asks for is set on MuiCard alone.
+    // and MuiOutlinedInput, whose radii the design specifies per control rather
+    // than globally. The card radius the design asks for is set on MuiCard
+    // alone.
     components: {
       MuiCard: {
         defaultProps: { elevation: 0 },

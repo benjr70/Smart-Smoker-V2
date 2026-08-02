@@ -1,67 +1,87 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { StateService } from '../State/state.service';
+import { PushDispatcherService } from '../pushDispatcher/push-dispatcher.service';
+import { TempsService } from '../temps/temps.service';
+import {
+  AlertRuntimeState,
+  evaluateAlerts,
+  initialAlertRuntimeState,
+} from './alert-engine';
+import { AlertState, AlertStateDocument } from './alert-state.schema';
+import { withSettingsDefaults } from './notification-settings.defaults';
+import {
+  NotificationSettings,
+  NotificationSettingsDocument,
+} from './notificationSettings.schema';
 import {
   NotificationSubscription,
   NotificationSubscriptionDocument,
 } from './notificationSubscription.schema';
-import { Model } from 'mongoose';
-import { NotificationSettings } from './notificationSettings.schema';
-import { TempDto } from 'src/temps/tempDto';
-import { PushDispatcherService } from '../pushDispatcher/push-dispatcher.service';
-
-const TEN_MINUTES = 10 * 60 * 1000;
 
 const TEST_NOTIFICATION_BODY =
   'This is a test notification from your smoker. If you can read this, push is working.';
 
 /**
- * The one place a rule's probe selector is turned into a reading.
- *
- * A rule stores the selector as a string, and two vocabularies are in the wild:
- * the settings page writes the probe labels ('Probe 1'…'Probe 3'), while rules
- * saved by older builds use the legacy 'Meat1'…'Meat3' form. Both name the same
- * physical probe, so both map to the same field here — a rule built in the UI
- * used to match nothing and never fire.
+ * How often alerts are evaluated. Owned here rather than driven by websocket
+ * traffic, so "sustained for two minutes" means two minutes of wall-clock time
+ * instead of however long the device takes to send its next thirty readings.
  */
-const PROBE_READINGS: Record<string, (temps: TempDto) => string> = {
-  Chamber: (temps) => temps.ChamberTemp,
-  'Probe 1': (temps) => temps.MeatTemp,
-  Meat1: (temps) => temps.MeatTemp,
-  'Probe 2': (temps) => temps.Meat2Temp,
-  Meat2: (temps) => temps.Meat2Temp,
-  'Probe 3': (temps) => temps.Meat3Temp,
-  Meat3: (temps) => temps.Meat3Temp,
-};
+export const ALERT_EVALUATION_INTERVAL_MS = 30 * 1000;
 
 /**
- * Resolve a probe selector to its current numeric reading, or `null` when the
- * selector names nothing this smoker reports (or the probe has no reading yet).
- * `null` means "skip this rule": treating an unresolvable probe as 0 — which is
- * what the old inline switch did by leaving the watched temperature at its
- * initial value — makes every '<' rule true and pushes a false alert every ten
- * minutes for the whole cook.
+ * The name alerts call the chamber by. Resolving live names from the active
+ * smoke profile is a later slice; until then every deployment's chamber is
+ * simply "Chamber".
  */
-const resolveProbeTemp = (
-  probe: string | undefined,
-  temps: TempDto,
-): number | null => {
-  const read = probe ? PROBE_READINGS[probe] : undefined;
-  if (!read) {
+const CHAMBER_NAME = 'Chamber';
+
+/** A temperature the device reported, or `null` when it reported nothing. */
+const readTemperature = (raw: string | undefined): number | null => {
+  if (raw === undefined || raw === null || raw === '') {
     return null;
   }
-  const reading = parseFloat(read(temps));
+  const reading = parseFloat(raw);
   return Number.isNaN(reading) ? null : reading;
 };
 
 @Injectable()
-export class NotificationsService {
+export class NotificationsService implements OnModuleInit, OnModuleDestroy {
+  private evaluationTimer?: ReturnType<typeof setInterval>;
+
   constructor(
     @InjectModel(NotificationSubscription.name)
     private notificationsModel: Model<NotificationSubscriptionDocument>,
     @InjectModel(NotificationSettings.name)
-    private notificationSettingsModel: Model<NotificationSettings>,
+    private notificationSettingsModel: Model<NotificationSettingsDocument>,
+    @InjectModel(AlertState.name)
+    private alertStateModel: Model<AlertStateDocument>,
     private pushDispatcher: PushDispatcherService,
+    private stateService: StateService,
+    private tempsService: TempsService,
   ) {}
+
+  /** Start the evaluation interval this service owns. */
+  onModuleInit(): void {
+    this.evaluationTimer = setInterval(() => {
+      this.checkAlerts().catch((error) =>
+        Logger.error(`Alert evaluation failed: ${error}`, 'Notifications'),
+      );
+    }, ALERT_EVALUATION_INTERVAL_MS);
+  }
+
+  onModuleDestroy(): void {
+    if (this.evaluationTimer) {
+      clearInterval(this.evaluationTimer);
+      this.evaluationTimer = undefined;
+    }
+  }
 
   /**
    * Register a browser push subscription. Keyed on the endpoint and upserted:
@@ -99,74 +119,101 @@ export class NotificationsService {
     return this.notificationsModel.find();
   }
 
-  async setSettings(settings: NotificationSettings): Promise<any> {
-    const existingSettings = await this.notificationSettingsModel
-      .findOne()
+  /**
+   * Replace the single settings document.
+   *
+   * A replace rather than an update: the whole document is user-owned, so there
+   * is nothing to merge — and a `$set`-style update would leave the deleted rule
+   * list sitting in the document forever, since the first save after this slice
+   * deploys lands on a document of the old shape.
+   */
+  async setSettings(
+    settings: NotificationSettings,
+  ): Promise<NotificationSettings> {
+    const saved = await this.notificationSettingsModel
+      .findOneAndReplace({}, withSettingsDefaults(settings), {
+        upsert: true,
+        new: true,
+      })
       .exec();
-    if (existingSettings) {
-      Object.assign(existingSettings, settings);
-      return existingSettings.save();
-    } else {
-      const createdSettings = await new this.notificationSettingsModel(
-        settings,
-      );
-      return createdSettings.save();
-    }
+    return withSettingsDefaults(saved);
   }
 
+  /**
+   * The current settings, always complete. A deployment with no document — or
+   * with a document of the deleted rule shape, which is not migrated — reads as
+   * fresh defaults rather than as an error.
+   */
   async getSettings(): Promise<NotificationSettings> {
-    return this.notificationSettingsModel.findOne().exec();
+    const stored = await this.notificationSettingsModel.findOne().exec();
+    return withSettingsDefaults(stored);
   }
 
-  async checkForNotification(temps: TempDto) {
-    const notificationsSettings = await this.notificationSettingsModel
-      .findOne()
-      .exec();
-    if (notificationsSettings) {
-      const test = notificationsSettings.settings.map((setting) => {
-        const watchTemp = resolveProbeTemp(setting.probe1, temps);
-        if (watchTemp === null) {
-          // Nothing to compare: leave the rule untouched rather than alerting
-          // on a reading this smoker never produced.
-          return setting;
-        }
-        let compareTemp = setting.temperature;
-        if (setting.type) {
-          const otherTemp = resolveProbeTemp(setting.probe2, temps);
-          if (otherTemp === null) {
-            return setting;
-          }
-          compareTemp = otherTemp + setting.offset;
-        }
-        switch (setting.op) {
-          case '>': {
-            if (watchTemp > compareTemp) {
-              const tenMinutesAgo = new Date(Date.now() - TEN_MINUTES);
-              if (setting.lastNotificationSent < tenMinutesAgo) {
-                this.sendPushNotification(setting.message);
-                setting.lastNotificationSent = new Date();
-              }
-            }
-            break;
-          }
-          case '<': {
-            if (watchTemp < compareTemp) {
-              const tenMinutesAgo = new Date(Date.now() - TEN_MINUTES);
-              if (setting.lastNotificationSent < tenMinutesAgo) {
-                this.sendPushNotification(setting.message);
-                setting.lastNotificationSent = new Date();
-              }
-            }
-            break;
-          }
-        }
-        return setting;
-      });
-      this.setSettings({ settings: test });
+  async sendPushNotification(data: string): Promise<void> {
+    await this.pushDispatcher.notify('Smoker', data);
+  }
+
+  /**
+   * One evaluation tick: load the documents, hand them to the pure engine with
+   * the current time, persist the state it returns and dispatch whatever it
+   * decided to send. All the alert rules live in the engine; this is only the
+   * shell that gives it a reading and takes its answer away.
+   */
+  async checkAlerts(): Promise<void> {
+    const session = await this.stateService.GetState();
+    if (!session?.smoking) {
+      // An idle smoker never notifies: nothing is cooking to have an opinion
+      // about, and the chamber cooling down is not an excursion.
+      return;
+    }
+
+    const latest = await this.tempsService.getLatestCurrentTemp();
+    if (!latest) {
+      return;
+    }
+
+    const [settings, state] = await Promise.all([
+      this.getSettings(),
+      this.loadAlertState(session.smokeId),
+    ]);
+
+    const evaluation = evaluateAlerts({
+      reading: { chamberTemp: readTemperature(latest.ChamberTemp) },
+      settings,
+      state,
+      names: { chamber: CHAMBER_NAME },
+      now: new Date(),
+    });
+
+    await this.saveAlertState(session.smokeId, evaluation.state);
+    for (const notification of evaluation.notifications) {
+      await this.pushDispatcher.notify(notification.title, notification.body);
     }
   }
 
-  async sendPushNotification(data: string) {
-    await this.pushDispatcher.notify('Smoker', data);
+  /**
+   * The bookkeeping for this session. State recorded against another smoke is
+   * discarded: clearing a session changes the current smoke id, so the next cook
+   * starts disarmed and preheats in silence.
+   */
+  private async loadAlertState(smokeId: string): Promise<AlertRuntimeState> {
+    const stored = await this.alertStateModel.findOne().exec();
+    if (!stored || stored.smokeId !== smokeId) {
+      return initialAlertRuntimeState();
+    }
+    return {
+      chamberArmed: stored.chamberArmed ?? false,
+      chamberOutOfRangeSince: stored.chamberOutOfRangeSince ?? null,
+      chamberAlertSent: stored.chamberAlertSent ?? false,
+    };
+  }
+
+  private async saveAlertState(
+    smokeId: string,
+    state: AlertRuntimeState,
+  ): Promise<void> {
+    await this.alertStateModel
+      .findOneAndReplace({}, { smokeId, ...state }, { upsert: true, new: true })
+      .exec();
   }
 }

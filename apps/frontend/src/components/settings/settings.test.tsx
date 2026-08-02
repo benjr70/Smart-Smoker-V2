@@ -14,7 +14,7 @@ import { Settings } from './settings';
  * happens to be built from.
  */
 const renderSettings = (wrap: (page: JSX.Element) => JSX.Element = page => page) => {
-  const client = createApiClient(createFakeBackend({ notifications: { settings: [] } }));
+  const client = createApiClient(createFakeBackend());
   return render(
     <ApiClientProvider client={client}>
       <SnackbarProvider>{wrap(<Settings />)}</SnackbarProvider>

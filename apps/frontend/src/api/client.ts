@@ -11,6 +11,7 @@ import { PushNotConfiguredError } from './errors';
 import { SmokeEventPort, noopEventPort } from './events';
 import { createSocketEventPort } from './socketEventAdapter';
 import {
+  ChamberAlertSettings,
   NotificationSettings,
   PostSmoke,
   PreSmoke,
@@ -24,10 +25,14 @@ import {
   rating,
 } from './types';
 
-/** The wire envelope wrapping the notification rules on both get and save. */
-interface NotificationSettingsEnvelope {
-  settings: NotificationSettings[];
-}
+/**
+ * The notification settings a smoker starts from — the same defaults the
+ * backend serves for a deployment that has never saved any. Held here so the
+ * settings page and the save projection agree about what "unset" means.
+ */
+export const defaultNotificationSettings = (): NotificationSettings => ({
+  chamber: { enabled: false, low: 225, high: 275 },
+});
 
 export interface TempsResource {
   /** GET `temps` — the current smoke's temperature series. */
@@ -89,17 +94,18 @@ export interface RatingsResource {
 
 export interface NotificationsResource {
   /**
-   * GET `notifications/settings` — returns the plain rules array, unwrapping the
-   * `{ settings }` envelope the backend nests them in.
+   * GET `notifications/settings` — the notification settings document, or
+   * `undefined` when the backend has none yet (callers keep their defaults).
    */
-  getSettings(): Promise<NotificationSettings[] | undefined>;
+  getSettings(): Promise<NotificationSettings | undefined>;
   /**
-   * POST `notifications/settings` — projects each rule to the backend DTO
-   * whitelist, keeps `lastNotificationSent` only when present, strips the
-   * persisted `_id`/`__v`, and wraps the result in the legacy `{ settings }`
-   * envelope.
+   * POST `notifications/settings` — projects the document to the backend DTO
+   * whitelist, filling any missing block with its default and stripping the
+   * persisted `_id`/`__v` a fetched-then-saved document carries. Both matter:
+   * the backend validates strictly, so either a stray field or a half-filled
+   * block is a 400 the save-on-unmount could only swallow.
    */
-  saveSettings(input: unknown): Promise<NotificationSettingsEnvelope>;
+  saveSettings(input: unknown): Promise<NotificationSettings>;
   /**
    * GET `notifications/publicKey` — the VAPID application server key, read from
    * the backend at subscribe time rather than baked into this bundle. Rejects
@@ -262,32 +268,22 @@ const toRatingsPayload = (rating: rating): rating => ({
 });
 
 /**
- * Project the notification rules onto the backend NotificationSettingsDto
- * whitelist. Rules fetched from the backend carry a persisted subdocument
- * `_id`/`__v` that the strict validation edge (forbidNonWhitelisted, PR #323)
- * rejects on save; `lastNotificationSent` is server-managed but validated, so it
- * is preserved when present to avoid resetting the notification throttle.
+ * Project a notification settings document onto the backend
+ * NotificationSettingsDto whitelist: exactly the blocks the user owns, each
+ * completed from the defaults. A document read from the backend carries a
+ * persisted `_id`/`__v` that the strict validation edge (forbidNonWhitelisted,
+ * PR #323) rejects on save, and a partially-filled block fails its own
+ * validation — this is the one place both are handled.
  */
-const toNotificationSettingsPayload = (input: unknown): NotificationSettingsEnvelope => {
-  const settings = (input as { settings?: unknown })?.settings;
+const toNotificationSettingsPayload = (input: unknown): NotificationSettings => {
+  const chamber = (input as { chamber?: Partial<ChamberAlertSettings> })?.chamber;
+  const defaults = defaultNotificationSettings();
   return {
-    settings: Array.isArray(settings)
-      ? settings.map(rule => {
-          const projected: NotificationSettings & { lastNotificationSent?: unknown } = {
-            type: rule.type,
-            message: rule.message,
-            probe1: rule.probe1,
-            op: rule.op,
-            probe2: rule.probe2,
-            offset: rule.offset,
-            temperature: rule.temperature,
-          };
-          if (rule.lastNotificationSent !== undefined) {
-            projected.lastNotificationSent = rule.lastNotificationSent;
-          }
-          return projected;
-        })
-      : [],
+    chamber: {
+      enabled: chamber?.enabled ?? defaults.chamber.enabled,
+      low: chamber?.low ?? defaults.chamber.low,
+      high: chamber?.high ?? defaults.chamber.high,
+    },
   };
 };
 
@@ -370,16 +366,13 @@ export const createApiClient = (
   notifications: {
     getSettings: async () => {
       // An empty-body 200 (no notification settings document yet) is normalized
-      // to `null` by the transport; unwrap defensively so "nothing yet" resolves
-      // to `undefined` (callers keep their safe defaults) instead of throwing on
-      // `null.settings`.
-      const response = await transport.get<NotificationSettingsEnvelope | null>(
-        'notifications/settings'
-      );
-      return response?.settings;
+      // to `null` by the transport; map it to `undefined` so "nothing yet"
+      // leaves callers on their safe defaults rather than blanking the form.
+      const response = await transport.get<NotificationSettings | null>('notifications/settings');
+      return response ?? undefined;
     },
     saveSettings: (input: unknown) =>
-      transport.post<NotificationSettingsEnvelope>(
+      transport.post<NotificationSettings>(
         'notifications/settings',
         toNotificationSettingsPayload(input)
       ),

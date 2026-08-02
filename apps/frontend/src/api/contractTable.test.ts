@@ -77,17 +77,9 @@ const seededRatingNoId: rating = {
   notes: 'ok',
 };
 
-const seededNotifications: NotificationSettings[] = [
-  {
-    type: true,
-    message: 'chamber hot',
-    probe1: 'ChamberTemp',
-    op: '>',
-    probe2: undefined,
-    offset: undefined,
-    temperature: 275,
-  },
-];
+const seededNotifications: NotificationSettings = {
+  chamber: { enabled: true, low: 225, high: 275 },
+};
 
 // A browser push subscription in its wire form — the exact body the backend
 // upserts on `notifications/subscribe`.
@@ -183,17 +175,7 @@ const projectedRatingCreateBody = {
 };
 
 const projectedNotificationsBody = {
-  settings: [
-    {
-      type: true,
-      message: 'chamber hot',
-      probe1: 'ChamberTemp',
-      op: '>',
-      probe2: undefined,
-      offset: undefined,
-      temperature: 275,
-    },
-  ],
+  chamber: { enabled: true, low: 225, high: 275 },
 };
 
 const rows: ContractRow[] = [
@@ -309,8 +291,8 @@ const rows: ContractRow[] = [
     expected: { method: 'get', path: 'notifications/settings', body: undefined },
   },
   {
-    name: 'notifications.saveSettings → POST notifications/settings (projected, enveloped body)',
-    run: c => c.notifications.saveSettings({ settings: seededNotifications }),
+    name: 'notifications.saveSettings → POST notifications/settings (projected body)',
+    run: c => c.notifications.saveSettings(seededNotifications),
     expected: {
       method: 'post',
       path: 'notifications/settings',

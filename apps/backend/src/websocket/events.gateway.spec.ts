@@ -1,10 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventsGateway } from './events.gateway';
 import { StateService } from '../State/state.service';
-import { NotificationsService } from '../notifications/notifications.service';
 import { TempsService } from '../temps/temps.service';
 import { TempDto } from '../temps/tempDto';
 import { Logger } from '@nestjs/common';
+
+/** Let the promise chain `handleEvent` starts settle. */
+const settle = () => new Promise((resolve) => setImmediate(resolve));
 
 // Mock the socket.io Server type
 interface MockServer {
@@ -14,7 +16,6 @@ interface MockServer {
 describe('EventsGateway', () => {
   let gateway: EventsGateway;
   let mockStateService: Partial<StateService>;
-  let mockNotificationsService: Partial<NotificationsService>;
   let mockTempsService: Partial<TempsService>;
   let mockServer: MockServer;
 
@@ -32,24 +33,20 @@ describe('EventsGateway', () => {
       GetState: jest.fn().mockResolvedValue(mockState),
     };
 
-    mockNotificationsService = {
-      checkForNotification: jest.fn(),
-    };
-
     mockTempsService = {
       saveNewTemp: jest.fn(),
     };
 
+    // Deliberately only the two collaborators the gateway is allowed to have.
+    // Alert evaluation is owned by the notifications service on its own
+    // interval, so a gateway that still reached for it could not be constructed
+    // here at all.
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EventsGateway,
         {
           provide: StateService,
           useValue: mockStateService,
-        },
-        {
-          provide: NotificationsService,
-          useValue: mockNotificationsService,
         },
         {
           provide: TempsService,
@@ -102,6 +99,36 @@ describe('EventsGateway', () => {
 
       expect(mockServer.emit).toHaveBeenCalledWith('events', testData);
       expect(mockStateService.GetState).toHaveBeenCalled();
+    });
+
+    // The every-eleventh-message counter gated two things: the notification call
+    // (removed with this slice) and the temperature write. Only the first was
+    // meant to go — a smoke's temperature series must keep exactly the sampling
+    // rate it has always had.
+    it('still persists one reading per eleven messages', async () => {
+      const testData = JSON.stringify({
+        probeTemp1: '150',
+        probeTemp2: '160',
+        probeTemp3: '170',
+        chamberTemp: '225',
+        date: new Date(),
+      });
+
+      for (let i = 0; i < 10; i++) {
+        gateway.handleEvent(testData);
+      }
+      await settle();
+      expect(mockTempsService.saveNewTemp).not.toHaveBeenCalled();
+
+      gateway.handleEvent(testData);
+      await settle();
+      expect(mockTempsService.saveNewTemp).toHaveBeenCalledTimes(1);
+
+      for (let i = 0; i < 11; i++) {
+        gateway.handleEvent(testData);
+      }
+      await settle();
+      expect(mockTempsService.saveNewTemp).toHaveBeenCalledTimes(2);
     });
 
     it('should emit events but not handle temperature when not smoking', async () => {

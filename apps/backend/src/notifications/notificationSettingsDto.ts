@@ -1,67 +1,36 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import {
-  IsArray,
-  IsBoolean,
-  IsNumber,
-  IsOptional,
-  IsString,
-  ValidateNested,
-} from 'class-validator';
+import { IsBoolean, IsNumber, ValidateNested } from 'class-validator';
 
 /**
- * A single notification rule. Mirrors `NotificationSetting` in the schema, with
- * class-validator decorators so the global whitelist/forbidNonWhitelisted pipe
- * accepts it. `_id` and `lastNotificationSent` are optional because the client
- * re-sends rules it previously loaded (which carry those persisted fields).
+ * The chamber Temperature Alert as the settings page sends it: on or off, and
+ * the range the chamber is expected to hold.
  */
-export class NotificationSettingDto {
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsString()
-  _id?: string;
-
+export class ChamberAlertDto {
   @ApiProperty()
   @IsBoolean()
-  type: boolean;
+  enabled: boolean;
 
   @ApiProperty()
-  @IsString()
-  message: string;
-
-  @ApiProperty()
-  @IsString()
-  probe1: string;
-
-  @ApiProperty()
-  @IsString()
-  op: string;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsString()
-  probe2?: string;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
   @IsNumber()
-  offset?: number;
+  low: number;
 
-  @ApiProperty({ required: false })
-  @IsOptional()
+  @ApiProperty()
   @IsNumber()
-  temperature?: number;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsString()
-  lastNotificationSent?: string;
+  high: number;
 }
 
+/**
+ * The notification settings document.
+ *
+ * Carries only what the user owns. The machine's own bookkeeping (armed flags,
+ * excursion timing, fired markers) is a separate document, so a save from the
+ * settings page can never be a partial write of something evaluation also
+ * touches.
+ */
 export class NotificationSettingsDto {
-  @ApiProperty({ type: [NotificationSettingDto] })
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => NotificationSettingDto)
-  settings: NotificationSettingDto[];
+  @ApiProperty({ type: ChamberAlertDto })
+  @ValidateNested()
+  @Type(() => ChamberAlertDto)
+  chamber: ChamberAlertDto;
 }

@@ -1,295 +1,139 @@
-import AddCircleIcon from '@mui/icons-material/AddCircle';
-import DeleteIcon from '@mui/icons-material/Delete';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
-import {
-  Button,
-  Card,
-  CardContent,
-  Grid,
-  IconButton,
-  Stack,
-  Switch,
-  TextField,
-  Typography,
-} from '@mui/material';
+import { Button, Card, CardContent, Stack, Switch, TextField, Typography } from '@mui/material';
 import React from 'react';
-import { useCurrentResource } from '../../api';
-import { NotificationSettings } from '../../api/types';
+import {
+  ChamberAlertSettings,
+  NotificationSettings,
+  defaultNotificationSettings,
+  useCurrentResource,
+} from '../../api';
 import { useTestNotification } from '../../push';
 
-// Returns a fresh notification each call so no two rules (or the initial
-// value) share the same object reference. A single module-level constant would
-// be aliased across the initial state and every 'New Rule', and the row editor
-// mutates its notification, corrupting every rule that shared the reference.
-const createInitialNotification = (): NotificationSettings => ({
-  type: false,
-  message: '',
-  probe1: 'Chamber',
-  op: '>',
-  probe2: 'Probe 1',
-});
+/**
+ * How long the chamber must stay outside its range before the backend alerts.
+ * Stated here only to describe the behaviour in words; the rule itself lives in
+ * the backend's alert engine.
+ */
+const SUSTAINED_EXCURSION_MINUTES = 2;
+
+/** A temperature as the summary sentence and the mock spell it. */
+const degrees = (value: number): string => `${value}°F`;
+
+/**
+ * What the current configuration will actually do, in a sentence — so the whole
+ * arming/debounce behaviour can be confirmed without mentally simulating it.
+ */
+export const describeChamberAlert = (chamber: ChamberAlertSettings): string => {
+  if (!chamber.enabled) {
+    return 'Off — you will not be told when the chamber drifts out of range.';
+  }
+  return (
+    `Once the chamber first reaches ${degrees(chamber.low)}–${degrees(chamber.high)}, ` +
+    `you will be told if it stays outside that range for more than ` +
+    `${SUSTAINED_EXCURSION_MINUTES} minutes. One alert per excursion.`
+  );
+};
+
+/**
+ * Read a temperature field. An empty or half-typed value stays out of the
+ * settings (the previous number is kept) rather than being saved as NaN, which
+ * the backend's strict validation would reject on unmount.
+ */
+const readTemperatureInput = (raw: string, fallback: number): number => {
+  const parsed = Number(raw);
+  return raw.trim() === '' || Number.isNaN(parsed) ? fallback : parsed;
+};
 
 export function NotificationsCard(): JSX.Element {
-  const [Notifications, setNotifications] = useCurrentResource<NotificationSettings[]>({
-    initialValue: [createInitialNotification()],
+  const [settings, setSettings] = useCurrentResource<NotificationSettings>({
+    initialValue: defaultNotificationSettings(),
     load: client => client.notifications.getSettings(),
-    save: (client, value) => client.notifications.saveSettings({ settings: value }),
+    save: (client, value) => client.notifications.saveSettings(value),
     loadErrorMessage: 'Could not load notification settings.',
     saveErrorMessage: 'Could not save notification settings.',
   });
   const { sendTest, sending } = useTestNotification();
 
-  const handleNewRule = () => {
-    setNotifications([...Notifications, createInitialNotification()]);
-  };
+  const updateChamber = (change: Partial<ChamberAlertSettings>) =>
+    setSettings(current => ({ ...current, chamber: { ...current.chamber, ...change } }));
 
-  const handleDelete = (index: number) => {
-    setNotifications(Notifications.filter((_, i) => i !== index));
-  };
-
-  const handleNotificationChange = (notification: NotificationSettings, index: number) => {
-    setNotifications(Notifications.map((current, i) => (i === index ? notification : current)));
-  };
+  const { chamber } = settings;
 
   return (
     // No spacing wrapper: the settings page stacks its cards and owns the gap
     // between them.
     <Card data-testid="settings-notifications-card">
       <CardContent>
-        <Grid>
-          <Typography variant="h5" component="div" align={'center'}>
+        <Stack spacing={2}>
+          <Typography variant="h6" component="h2" fontWeight={700}>
             Notifications
           </Typography>
-          {Notifications &&
-            Notifications.map((notification, index) => {
-              return (
-                <Notification
-                  notification={notification}
-                  handleDelete={handleDelete}
-                  index={index}
-                  onNotificationChange={handleNotificationChange}
-                  key={`notification-${index}`}
-                />
-              );
-            })}
-          <Grid padding={1}>
-            <Button variant="contained" startIcon={<AddCircleIcon />} onClick={handleNewRule}>
-              New Rule
-            </Button>
-          </Grid>
-          <Grid padding={1}>
-            <Button
-              variant="outlined"
-              startIcon={<NotificationsActiveIcon />}
-              disabled={sending}
-              onClick={sendTest}
-            >
-              Send Test Notification
-            </Button>
-          </Grid>
-        </Grid>
+
+          <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
+            <Stack>
+              <Typography variant="body1" fontWeight={600}>
+                Temperature Alert
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Tell me when the fire is dying or running away.
+              </Typography>
+            </Stack>
+            <Switch
+              checked={chamber.enabled}
+              onChange={event => updateChamber({ enabled: event.target.checked })}
+              // The accessible name is the handle every caller uses — component
+              // tests and the end-to-end suite alike — so the control needs no
+              // test-only attribute of its own.
+              inputProps={{ 'aria-label': 'Temperature Alert' }}
+            />
+          </Stack>
+
+          {/* Detail controls appear only for an alert that is switched on, so
+              the page is not a wall of inputs that do nothing. */}
+          {chamber.enabled && (
+            <Stack direction="row" spacing={2} data-testid="settings-chamber-range">
+              <TextField
+                label="Low"
+                type="number"
+                size="small"
+                variant="outlined"
+                value={chamber.low}
+                onChange={event =>
+                  updateChamber({ low: readTemperatureInput(event.target.value, chamber.low) })
+                }
+                inputProps={{ 'data-testid': 'settings-chamber-low' }}
+                sx={{ width: '50%' }}
+              />
+              <TextField
+                label="High"
+                type="number"
+                size="small"
+                variant="outlined"
+                value={chamber.high}
+                onChange={event =>
+                  updateChamber({ high: readTemperatureInput(event.target.value, chamber.high) })
+                }
+                inputProps={{ 'data-testid': 'settings-chamber-high' }}
+                sx={{ width: '50%' }}
+              />
+            </Stack>
+          )}
+
+          <Typography variant="body2" color="text.secondary" data-testid="settings-chamber-summary">
+            {describeChamberAlert(chamber)}
+          </Typography>
+
+          <Button
+            variant="outlined"
+            startIcon={<NotificationsActiveIcon />}
+            disabled={sending}
+            onClick={sendTest}
+            sx={{ alignSelf: 'flex-start' }}
+          >
+            Send Test Notification
+          </Button>
+        </Stack>
       </CardContent>
     </Card>
-  );
-}
-
-interface NotificationProps {
-  notification: NotificationSettings;
-  handleDelete: (index: number) => void;
-  onNotificationChange?: (notification: NotificationSettings, index: number) => void;
-  index: number;
-}
-
-function Notification(props: NotificationProps): JSX.Element {
-  const Probes = [
-    {
-      value: 'Chamber',
-      label: 'Chamber',
-    },
-    {
-      value: 'Probe 1',
-      label: 'Probe 1',
-    },
-    {
-      value: 'Probe 2',
-      label: 'Probe 2',
-    },
-    {
-      value: 'Probe 3',
-      label: 'Probe 3',
-    },
-  ];
-
-  const operations = [
-    {
-      value: '>',
-      label: '>',
-    },
-    {
-      value: '<',
-      label: '<',
-    },
-  ];
-
-  const handleSwitchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const temp = { ...props.notification, type: event.target.checked };
-    props.onNotificationChange && props.onNotificationChange(temp, props.index);
-  };
-
-  const onMessageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const temp = { ...props.notification, message: event.target.value };
-    props.onNotificationChange && props.onNotificationChange(temp, props.index);
-  };
-
-  const onProbe1Change = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const temp = { ...props.notification, probe1: event.target.value };
-    props.onNotificationChange && props.onNotificationChange(temp, props.index);
-  };
-
-  const onOpsChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const temp = { ...props.notification, op: event.target.value };
-    props.onNotificationChange && props.onNotificationChange(temp, props.index);
-  };
-
-  const onProbe2Change = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const temp = { ...props.notification, probe2: event.target.value };
-    props.onNotificationChange && props.onNotificationChange(temp, props.index);
-  };
-
-  const offsetChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const temp = { ...props.notification, offset: Number(event.target.value) };
-    props.onNotificationChange && props.onNotificationChange(temp, props.index);
-  };
-
-  const onTemperatureChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const temp = { ...props.notification, temperature: Number(event.target.value) };
-    props.onNotificationChange && props.onNotificationChange(temp, props.index);
-  };
-
-  return (
-    <Grid
-      item
-      sx={{
-        p: 0.5,
-        border: '0.5px solid black',
-        borderRadius: 1,
-        padding: '4px',
-        margin: '5px',
-        paddingBottom: '8px',
-      }}
-    >
-      <Grid>
-        <Stack direction="row" alignItems="center" justifyContent={'space-between'}>
-          <Stack direction="row" alignItems="center" justifyContent={'flex-start'}>
-            <Typography>Temp</Typography>
-            <Switch checked={props.notification.type} onChange={handleSwitchChange} />
-            <Typography>Probe</Typography>
-          </Stack>
-          <IconButton
-            aria-label="delete"
-            onClick={e => {
-              props.handleDelete(props.index);
-            }}
-          >
-            <DeleteIcon />
-          </IconButton>
-        </Stack>
-      </Grid>
-      <Grid>
-        <TextField
-          id="outlined-basic"
-          label="Message"
-          variant="standard"
-          value={props.notification.message}
-          onChange={onMessageChange}
-          inputProps={{ 'data-testid': 'settings-notification-message' }}
-          sx={{ width: '100%' }}
-        />
-      </Grid>
-      <Grid paddingTop={2}>
-        <TextField
-          id="outlined-select-currency-native"
-          select
-          label="Probe 1"
-          value={props.notification.probe1}
-          InputLabelProps={{ shrink: true }}
-          onChange={onProbe1Change}
-          sx={{ width: '34%' }}
-          variant="standard"
-          SelectProps={{
-            native: true,
-          }}
-        >
-          {Probes.map(option => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </TextField>
-        <TextField
-          id="outlined-select-currency-native"
-          select
-          label="Op"
-          value={props.notification.op}
-          onChange={onOpsChange}
-          InputLabelProps={{ shrink: true }}
-          variant="standard"
-          sx={{ width: '16%' }}
-          SelectProps={{
-            native: true,
-          }}
-        >
-          {operations.map(option => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </TextField>
-        {props.notification.type ? (
-          <>
-            <TextField
-              id="outlined-select-currency-native"
-              select
-              label="Probe 2"
-              value={props.notification.probe2}
-              onChange={onProbe2Change}
-              InputLabelProps={{ shrink: true }}
-              variant="standard"
-              sx={{ width: '34%' }}
-              SelectProps={{
-                native: true,
-              }}
-            >
-              {Probes.map(option => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </TextField>
-            <TextField
-              id="outlined-basic"
-              label="offset"
-              variant="standard"
-              value={props.notification.offset}
-              InputLabelProps={{ shrink: true }}
-              onChange={offsetChange}
-              type="number"
-              sx={{ width: '15%' }}
-            />{' '}
-          </>
-        ) : (
-          <TextField
-            id="outlined-basic"
-            label="Temperature"
-            variant="standard"
-            value={props.notification.temperature}
-            InputLabelProps={{ shrink: true }}
-            onChange={onTemperatureChange}
-            type="number"
-            sx={{ width: '34%' }}
-          />
-        )}
-      </Grid>
-    </Grid>
   );
 }

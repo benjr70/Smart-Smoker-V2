@@ -7,11 +7,16 @@ import {
 } from '@nestjs/websockets';
 import { Server } from 'socket.io';
 import { StateService } from '../State/state.service';
-import { NotificationsService } from '../notifications/notifications.service';
 import { TempDto } from '../temps/tempDto';
 import { TempsService } from '../temps/temps.service';
 
-let count = 0;
+/**
+ * One temperature row is persisted per this many websocket messages. The device
+ * is far chattier than the series needs to be; this is the sampling rate the
+ * stored graph has always had.
+ */
+const MESSAGES_PER_STORED_READING = 11;
+
 @WebSocketGateway({
   cors: {
     origin: '*',
@@ -19,10 +24,13 @@ let count = 0;
 })
 @Injectable()
 export class EventsGateway {
+  // Per-instance rather than module-level: the sampling rate belongs to the
+  // gateway, and a module-level counter leaks between instances.
+  private messagesSinceStore = 0;
+
   constructor(
     private tempsService: TempsService,
     private stateService: StateService,
-    private notificationsService: NotificationsService,
   ) {}
 
   @WebSocketServer()
@@ -37,8 +45,8 @@ export class EventsGateway {
   @SubscribeMessage('events')
   handleEvent(@MessageBody() data: string) {
     this.server.emit('events', data);
-    count++;
-    if (count > 10) {
+    this.messagesSinceStore++;
+    if (this.messagesSinceStore >= MESSAGES_PER_STORED_READING) {
       this.stateService.GetState().then((state) => {
         if (state.smoking) {
           const tempObj = JSON.parse(data);
@@ -51,10 +59,9 @@ export class EventsGateway {
           };
           this.handleTempLogging(tempDto);
           this.tempsService.saveNewTemp(tempDto);
-          this.notificationsService.checkForNotification(tempDto);
         }
       });
-      count = 0;
+      this.messagesSinceStore = 0;
     }
   }
 
