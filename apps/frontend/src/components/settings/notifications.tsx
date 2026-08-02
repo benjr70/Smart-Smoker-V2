@@ -52,44 +52,44 @@ export function NotificationsCard(): JSX.Element {
   };
 
   return (
-    <Grid paddingBottom={1}>
-      <Card>
-        <CardContent>
-          <Grid>
-            <Typography variant="h5" component="div" align={'center'}>
-              Notifications
-            </Typography>
-            {Notifications &&
-              Notifications.map((notification, index) => {
-                return (
-                  <Notification
-                    notification={notification}
-                    handleDelete={handleDelete}
-                    index={index}
-                    onNotificationChange={handleNotificationChange}
-                    key={`notification-${index}`}
-                  />
-                );
-              })}
-            <Grid padding={1}>
-              <Button variant="contained" startIcon={<AddCircleIcon />} onClick={handleNewRule}>
-                New Rule
-              </Button>
-            </Grid>
-            <Grid padding={1}>
-              <Button
-                variant="outlined"
-                startIcon={<NotificationsActiveIcon />}
-                disabled={sending}
-                onClick={sendTest}
-              >
-                Send Test Notification
-              </Button>
-            </Grid>
+    // No spacing wrapper: the settings page stacks its cards and owns the gap
+    // between them.
+    <Card data-testid="settings-notifications-card">
+      <CardContent>
+        <Grid>
+          <Typography variant="h5" component="div" align={'center'}>
+            Notifications
+          </Typography>
+          {Notifications &&
+            Notifications.map((notification, index) => {
+              return (
+                <Notification
+                  notification={notification}
+                  handleDelete={handleDelete}
+                  index={index}
+                  onNotificationChange={handleNotificationChange}
+                  key={`notification-${index}`}
+                />
+              );
+            })}
+          <Grid padding={1}>
+            <Button variant="contained" startIcon={<AddCircleIcon />} onClick={handleNewRule}>
+              New Rule
+            </Button>
           </Grid>
-        </CardContent>
-      </Card>
-    </Grid>
+          <Grid padding={1}>
+            <Button
+              variant="outlined"
+              startIcon={<NotificationsActiveIcon />}
+              disabled={sending}
+              onClick={sendTest}
+            >
+              Send Test Notification
+            </Button>
+          </Grid>
+        </Grid>
+      </CardContent>
+    </Card>
   );
 }
 
