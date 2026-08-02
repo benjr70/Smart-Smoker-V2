@@ -29,6 +29,15 @@ const STALE_REFERENCE_404 =
   'POST /api/presmoke failed (404): {"statusCode":404,"error":"NOT_FOUND",' +
   '"message":"PreSmoke 6a6e724286717d230c98162a not found","path":"/api/presmoke"}';
 
+/**
+ * The 404 `GET /api/presmoke/:id` answers with for a document that is really
+ * gone (the backend's `getByIdOrThrow`) — the only answer that proves a current
+ * smoke is orphaned rather than merely unreadable.
+ */
+const missing404 = (path: string) =>
+  `GET ${path} failed (404): {"statusCode":404,"error":"NOT_FOUND",` +
+  `"message":"PreSmoke not found","path":"${path}"}`;
+
 /** In-memory HTTP double that records requests and serves canned GET data. */
 class FakeTransport implements HttpTransport {
   readonly posts: PostCall[] = [];
@@ -51,6 +60,13 @@ class FakeTransport implements HttpTransport {
    * before the canned response is served again (`Infinity` = never recovers).
    */
   failGetTimes: Record<string, number> = {};
+  /**
+   * What an injected GET failure throws, per path. Defaults to a 5xx blip,
+   * because that is the failure most tests want; a test that is reproducing a
+   * document which is genuinely *gone* has to say so with a 404, since the two
+   * are exactly what the heal must tell apart.
+   */
+  getFailures: Record<string, string> = {};
   /**
    * The same, for POSTs: how many consecutive POSTs to a path throw before the
    * request is recorded normally (`Infinity` = never recovers). Each failure
@@ -103,7 +119,7 @@ class FakeTransport implements HttpTransport {
     const failuresLeft = this.failGetTimes[path] ?? 0;
     if (failuresLeft > 0) {
       this.failGetTimes[path] = failuresLeft - 1;
-      throw new Error(`GET ${path} failed (503): backend hiccup`);
+      throw new Error(this.getFailures[path] ?? `GET ${path} failed (503): backend hiccup`);
     }
     const sequence = this.getSequences[path];
     if (sequence?.length) {
@@ -140,8 +156,9 @@ const givenPoisonedCurrentSmoke = (failedSaves = 1) => {
     tempsId: 'temps-crashed',
   };
   // The crashed run deleted that pre-smoke, so reading it fails the way the
-  // backend fails it — which is what the heal's `.catch(() => null)` carries.
+  // backend fails a document that is really gone: 404, not a transport blip.
   http.failGetTimes['/api/presmoke/pre-gone'] = Infinity;
+  http.getFailures['/api/presmoke/pre-gone'] = missing404('/api/presmoke/pre-gone');
   http.failPostTimes['/api/presmoke'] = failedSaves;
 };
 
@@ -216,6 +233,20 @@ describe('BackendFixture.createPreSmoke', () => {
     );
   });
 
+  it('never destroys a real in-progress smoke it merely could not read', async () => {
+    // Same live cook, but the read that would have vouched for it blips. An
+    // unreadable pre-smoke is not a deleted one, so the save must fail on its
+    // own 404 rather than clearing the way by deleting somebody's cook.
+    givenLiveCurrentSmoke();
+    http.failGetTimes['/api/presmoke/pre-live'] = Infinity;
+    http.failPostTimes['/api/presmoke'] = Infinity;
+
+    await assert.rejects(() => fixture.createPreSmoke(), /PreSmoke 6a6e724286717d230c98162a not/);
+
+    assert.deepEqual(http.deletes, [], "a live cook's records must survive a blip");
+    assert.deepEqual(http.puts, [], 'and it must stay the current smoke');
+  });
+
   it('never destroys a real in-progress smoke to make its own save work', async () => {
     // The stale-reference 404 can also be answered while somebody's cook is
     // genuinely running. Its pre-smoke still exists, so there is nothing to
@@ -238,6 +269,20 @@ describe('BackendFixture.clearDanglingCurrentSmoke', () => {
 
     assert.deepEqual(http.deletes, []);
     assert.deepEqual(await http.get('/api/state'), { smokeId: 'smoke-live', smoking: true });
+  });
+
+  it('refuses to heal on a pre-smoke read that only blipped', async () => {
+    // The deployed projects share dev-cloud over a flaky tailnet link, so a
+    // 502/timeout on this read is ordinary — and it is *not* evidence that the
+    // document is gone. Reading it as such would cascade-delete somebody's live
+    // cook, which no prefix check on this path would catch.
+    givenLiveCurrentSmoke();
+    http.failGetTimes['/api/presmoke/pre-live'] = Infinity;
+
+    assert.equal(await fixture.clearDanglingCurrentSmoke(), false);
+
+    assert.deepEqual(http.deletes, [], 'an unreadable pre-smoke proves nothing');
+    assert.deepEqual(http.puts, [], 'and its smoke must stay current');
   });
 
   it('is a harmless no-op when there is no current smoke at all', async () => {
@@ -595,6 +640,24 @@ describe('BackendFixture.cleanup', () => {
     await fixture.cleanup();
 
     assert.deepEqual(http.deletes, []);
+  });
+
+  it('leaves a live current smoke alone when its pre-smoke read blips at teardown', async () => {
+    // Teardown runs after every spec on the shared deployed backend, where a
+    // real cook can be current and the tailnet link is flaky. Healing on a blip
+    // here would cascade-delete that cook — with no prefix check anywhere on
+    // the path to stop it — for a run that never touched it.
+    givenLiveCurrentSmoke();
+    http.failGetTimes['/api/presmoke/pre-live'] = Infinity;
+
+    await fixture.cleanup();
+
+    assert.deepEqual(http.deletes, [], 'a run must not delete a cook it cannot even read');
+    assert.deepEqual(
+      await http.get('/api/state'),
+      { smokeId: 'smoke-live', smoking: true },
+      'and must leave the live cook current'
+    );
   });
 
   it('heals a dangling current smoke on the way out, not just on the way in', async () => {
