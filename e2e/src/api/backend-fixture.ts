@@ -8,6 +8,12 @@
  *   - `sweep()` deletes only `smoke-test-*` leftovers from prior crashed runs,
  *     for use once at suite start.
  *
+ * Both end by healing a *dangling current smoke* — the state a crashed run
+ * leaves pointing at a pre-smoke it deleted, which 404s every later
+ * `POST /api/presmoke`. Both seeds that make that call — `createPreSmoke()` and
+ * `seedCompletedSmoke()` — heal it inline as well, so a run that walks into the
+ * poison recovers instead of failing at fixture setup.
+ *
  * All backend I/O goes through an injected `HttpTransport`, which keeps the
  * seed/cleanup/sweep logic unit-testable without a live stack.
  */
@@ -27,6 +33,14 @@ const SMOKE_PATH = '/api/smoke';
 const STATE_PATH = '/api/state';
 const TEMPS_PATH = '/api/temps';
 const NOTIFICATION_SETTINGS_PATH = '/api/notifications/settings';
+
+/**
+ * The one failure a pre-smoke save is allowed to heal and retry: the 404 the
+ * backend answers with while the *current* smoke references a pre-smoke
+ * document that no longer exists (`PreSmoke <id> not found`). Any other 404 is
+ * somebody else's bug and must reach the report intact.
+ */
+const STALE_PRESMOKE_REFERENCE = /\(404\)[\s\S]*PreSmoke\s+\S+\s+not found/i;
 
 /** A record the fixture created, retained so `cleanup()` can delete it exactly. */
 export interface SeededEntity {
@@ -124,10 +138,39 @@ export class BackendFixture {
       steps: [''],
       notes: '',
     };
-    const doc = await this.http.post<NamedDoc>(PRESMOKE_PATH, body);
+    const doc = await this.savePreSmoke(body);
     const entity: SeededEntity = { resource: 'presmoke', id: doc._id, name };
     this.created.push(entity);
     return entity;
+  }
+
+  /**
+   * Save the pre-smoke, healing a poisoned current smoke if that is what the
+   * save failed on. A crashed run can leave the state pointing at a smoke whose
+   * pre-smoke was deleted, and from then on every `POST /api/presmoke` 404s on
+   * the stale reference — including this run's own retries. So a failed save
+   * heals *once* and retries *once*.
+   */
+  private async savePreSmoke(body: Record<string, unknown>): Promise<NamedDoc> {
+    try {
+      return await this.http.post<NamedDoc>(PRESMOKE_PATH, body);
+    } catch (error) {
+      if (!STALE_PRESMOKE_REFERENCE.test(error instanceof Error ? error.message : String(error))) {
+        throw error;
+      }
+      const healed = await this.clearDanglingCurrentSmoke().catch(() => false);
+      if (!healed) {
+        throw error;
+      }
+      try {
+        return await this.http.post<NamedDoc>(PRESMOKE_PATH, body);
+      } catch {
+        // The heal was a hypothesis and it was wrong: report the failure the
+        // run actually started with rather than the retry's echo of it, and
+        // stop here — one heal, one retry, never a loop.
+        throw error;
+      }
+    }
   }
 
   /**
@@ -269,7 +312,11 @@ export class BackendFixture {
       },
     };
 
-    await this.http.post(PRESMOKE_PATH, {
+    // Through `savePreSmoke`, not the transport directly: this is the fixture
+    // setup most specs open with, so it is the path a crashed run's poison is
+    // likeliest to hit — and here there is no earlier `cleanup()` to have
+    // healed it.
+    await this.savePreSmoke({
       name: resolved.name,
       meatType: resolved.meatType,
       weight: { unit: resolved.weightUnit, weight: resolved.weightLb },
@@ -409,6 +456,15 @@ export class BackendFixture {
         /* best-effort restore */
       }
     }
+    // Heal on the way out as well as on the way in: the deletions above are
+    // themselves what can leave the state pointing at a smoke whose pre-smoke
+    // is gone, and a run that hands that on fails the *next* run at fixture
+    // setup — a false negative that reads as a product bug.
+    try {
+      await this.clearDanglingCurrentSmoke();
+    } catch {
+      /* best-effort heal — the suite-start sweep is the remaining safety net */
+    }
   }
 
   /**
@@ -464,21 +520,24 @@ export class BackendFixture {
    * Detect exactly that shape, cascade-delete the orphaned smoke, and clear the
    * state. A real in-progress smoke still has its pre-smoke document, so it is
    * never touched.
+   *
+   * Answers whether it healed anything, so a caller can tell "the poison is
+   * gone, worth another go" from "this failure was something else".
    */
-  private async clearDanglingCurrentSmoke(): Promise<void> {
+  async clearDanglingCurrentSmoke(): Promise<boolean> {
     const state = await this.http.get<{ smokeId?: string }>(STATE_PATH).catch(() => null);
     if (!state?.smokeId) {
-      return;
+      return false;
     }
     const smoke = await this.http.get<SmokeDoc>(`${SMOKE_PATH}/${state.smokeId}`).catch(() => null);
     if (!smoke?.preSmokeId) {
-      return;
+      return false;
     }
     const pre = await this.http
       .get<NamedDoc>(`${PRESMOKE_PATH}/${smoke.preSmokeId}`)
       .catch(() => null);
     if (pre?._id) {
-      return;
+      return false;
     }
     try {
       await this.deleteCompletedSmoke(state.smokeId);
@@ -486,6 +545,7 @@ export class BackendFixture {
       /* best-effort — clearing the state below is what unblocks pre-smoke saves */
     }
     await this.http.put(`${STATE_PATH}/clearSmoke`);
+    return true;
   }
 
   /**

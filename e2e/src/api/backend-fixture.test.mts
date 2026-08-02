@@ -20,11 +20,25 @@ interface PostCall {
   body: Record<string, unknown>;
 }
 
+/**
+ * The 404 the deployed backend answers a pre-smoke save with while the current
+ * smoke references a pre-smoke document that no longer exists — the exact
+ * poison a crashed run leaves behind (issue #438).
+ */
+const STALE_REFERENCE_404 =
+  'POST /api/presmoke failed (404): {"statusCode":404,"error":"NOT_FOUND",' +
+  '"message":"PreSmoke 6a6e724286717d230c98162a not found","path":"/api/presmoke"}';
+
 /** In-memory HTTP double that records requests and serves canned GET data. */
 class FakeTransport implements HttpTransport {
   readonly posts: PostCall[] = [];
   readonly puts: PostCall[] = [];
   readonly deletes: string[] = [];
+  /**
+   * Every request in order, as `METHOD path`. The per-verb logs above cannot
+   * show that a heal happened *between* a failed save and its retry.
+   */
+  readonly calls: string[] = [];
   getResponses: Record<string, unknown> = {};
   /**
    * Canned GET responses that advance one step per call and then stay on the
@@ -37,20 +51,55 @@ class FakeTransport implements HttpTransport {
    * before the canned response is served again (`Infinity` = never recovers).
    */
   failGetTimes: Record<string, number> = {};
+  /**
+   * The same, for POSTs: how many consecutive POSTs to a path throw before the
+   * request is recorded normally (`Infinity` = never recovers). Each failure
+   * throws the next of `postFailures`, so a test says which failure it is
+   * reproducing — and can make a retry fail differently from the save it
+   * retried, which is what the "healing did not fix it" case turns on.
+   */
+  failPostTimes: Record<string, number> = {};
+  /**
+   * The errors injected POST failures throw, advancing one step per failure and
+   * then staying on the last — so a test can make a retry fail *differently*
+   * from the save it retried.
+   */
+  postFailures: string[] = [STALE_REFERENCE_404];
   private seq = 0;
 
   async post<T>(path: string, body: unknown): Promise<T> {
+    this.calls.push(`POST ${path}`);
+    const failuresLeft = this.failPostTimes[path] ?? 0;
+    if (failuresLeft > 0) {
+      this.failPostTimes[path] = failuresLeft - 1;
+      throw new Error(
+        this.postFailures.length > 1 ? this.postFailures.shift()! : this.postFailures[0]
+      );
+    }
     const record = body as Record<string, unknown>;
     this.posts.push({ path, body: record });
-    return { _id: `id-${++this.seq}`, name: record.name } as T;
+    const doc = { _id: `id-${++this.seq}`, name: record.name };
+    if (path === '/api/presmoke') {
+      // Mirror the backend: saving a pre-smoke opens a smoke and makes it the
+      // current one — which is why a healed state does not stay empty.
+      this.getResponses['/api/state'] = { smokeId: `smoke-of-${doc._id}`, smoking: true };
+    }
+    return doc as T;
   }
 
   async put<T>(path: string, body: unknown = {}): Promise<T> {
+    this.calls.push(`PUT ${path}`);
     this.puts.push({ path, body: body as Record<string, unknown> });
+    if (path === '/api/state/clearSmoke') {
+      // Mirror the backend: clearing the current smoke is what makes the state
+      // stop pointing at the smoke whose pre-smoke was deleted.
+      this.getResponses['/api/state'] = { smokeId: '', smoking: false };
+    }
     return { _id: `id-${++this.seq}` } as T;
   }
 
   async get<T>(path: string): Promise<T> {
+    this.calls.push(`GET ${path}`);
     const failuresLeft = this.failGetTimes[path] ?? 0;
     if (failuresLeft > 0) {
       this.failGetTimes[path] = failuresLeft - 1;
@@ -64,6 +113,7 @@ class FakeTransport implements HttpTransport {
   }
 
   async delete(path: string): Promise<void> {
+    this.calls.push(`DELETE ${path}`);
     this.deletes.push(path);
   }
 }
@@ -76,6 +126,32 @@ beforeEach(() => {
   fixture = new BackendFixture(http);
 });
 
+/**
+ * Wire the fake as a backend a crashed run poisoned: the state still holds an
+ * in-progress smoke, but the pre-smoke that smoke links was deleted, so every
+ * `POST /api/presmoke` 404s on the stale reference until the state is cleared.
+ * `failPostTimes` says how many saves 404 before the backend accepts one again.
+ */
+const givenPoisonedCurrentSmoke = (failedSaves = 1) => {
+  http.getResponses['/api/state'] = { smokeId: 'smoke-crashed', smoking: true };
+  http.getResponses['/api/smoke/smoke-crashed'] = {
+    _id: 'smoke-crashed',
+    preSmokeId: 'pre-gone',
+    tempsId: 'temps-crashed',
+  };
+  // The crashed run deleted that pre-smoke, so reading it fails the way the
+  // backend fails it — which is what the heal's `.catch(() => null)` carries.
+  http.failGetTimes['/api/presmoke/pre-gone'] = Infinity;
+  http.failPostTimes['/api/presmoke'] = failedSaves;
+};
+
+/** Wire the fake as a backend running somebody's real, intact cook. */
+const givenLiveCurrentSmoke = () => {
+  http.getResponses['/api/state'] = { smokeId: 'smoke-live', smoking: true };
+  http.getResponses['/api/smoke/smoke-live'] = { _id: 'smoke-live', preSmokeId: 'pre-live' };
+  http.getResponses['/api/presmoke/pre-live'] = { _id: 'pre-live', name: 'Sunday Brisket' };
+};
+
 describe('BackendFixture.createPreSmoke', () => {
   it('POSTs a pre-smoke whose name carries the smoke-test- prefix', async () => {
     await fixture.createPreSmoke();
@@ -83,6 +159,94 @@ describe('BackendFixture.createPreSmoke', () => {
     assert.equal(http.posts.length, 1);
     assert.equal(http.posts[0].path, '/api/presmoke');
     assert.equal(isTestEntityName(http.posts[0].body.name), true);
+  });
+
+  it('heals the current smoke a crashed run left dangling, then saves', async () => {
+    // Without this, every spec of every later run dies here: the state points
+    // at a smoke whose pre-smoke was deleted, and the save 404s on it forever.
+    givenPoisonedCurrentSmoke();
+
+    const seeded = await fixture.createPreSmoke();
+
+    assert.ok(seeded.id, 'the save must succeed once the poison is cleared');
+    assert.deepEqual(
+      http.calls.filter(call => call.endsWith('/api/presmoke') || call.endsWith('/clearSmoke')),
+      ['POST /api/presmoke', 'PUT /api/state/clearSmoke', 'POST /api/presmoke'],
+      'the heal must happen between the failed save and its one retry'
+    );
+    assert.ok(
+      http.deletes.includes('/api/smoke/smoke-crashed'),
+      'the orphaned smoke must be reclaimed, not just unlinked'
+    );
+  });
+
+  it('lets a 404 from any other cause fail the run rather than healing over it', async () => {
+    // The heal deletes a smoke and clears the state. Doing that on the strength
+    // of a 404 it cannot account for would destroy evidence of a real bug — the
+    // failure this whole fix exists to stop masking.
+    givenPoisonedCurrentSmoke(Infinity);
+    http.postFailures = [
+      'POST /api/presmoke failed (404): {"statusCode":404,"error":"NOT_FOUND",' +
+        '"message":"Smoke not found","path":"/api/presmoke"}',
+    ];
+
+    await assert.rejects(() => fixture.createPreSmoke(), /Smoke not found/);
+
+    assert.deepEqual(
+      http.calls.filter(call => call.endsWith('/api/presmoke')),
+      ['POST /api/presmoke'],
+      'an unexplained failure must not be retried'
+    );
+    assert.deepEqual(http.puts, [], "and must not clear anyone else's current smoke");
+  });
+
+  it('surfaces the original failure, once, when healing does not fix the save', async () => {
+    // The heal is a hypothesis. When it turns out to be wrong the run must fail
+    // on the failure it actually started with — not on the retry's echo of it,
+    // and not by healing and retrying round and round.
+    givenPoisonedCurrentSmoke(Infinity);
+    http.postFailures = [STALE_REFERENCE_404, 'POST /api/presmoke failed (503): backend down'];
+
+    await assert.rejects(() => fixture.createPreSmoke(), /PreSmoke 6a6e724286717d230c98162a not/);
+
+    assert.deepEqual(
+      http.calls.filter(call => call.endsWith('/api/presmoke') || call.endsWith('/clearSmoke')),
+      ['POST /api/presmoke', 'PUT /api/state/clearSmoke', 'POST /api/presmoke'],
+      'exactly one heal and one retry, then give up'
+    );
+  });
+
+  it('never destroys a real in-progress smoke to make its own save work', async () => {
+    // The stale-reference 404 can also be answered while somebody's cook is
+    // genuinely running. Its pre-smoke still exists, so there is nothing to
+    // heal and nothing of theirs may be deleted.
+    givenLiveCurrentSmoke();
+    http.failPostTimes['/api/presmoke'] = Infinity;
+
+    await assert.rejects(() => fixture.createPreSmoke(), /PreSmoke 6a6e724286717d230c98162a not/);
+
+    assert.deepEqual(http.deletes, [], "a live cook's records must survive");
+    assert.deepEqual(http.puts, [], 'and it must stay the current smoke');
+  });
+});
+
+describe('BackendFixture.clearDanglingCurrentSmoke', () => {
+  it('leaves a live current smoke alone and reports that it healed nothing', async () => {
+    givenLiveCurrentSmoke();
+
+    assert.equal(await fixture.clearDanglingCurrentSmoke(), false);
+
+    assert.deepEqual(http.deletes, []);
+    assert.deepEqual(await http.get('/api/state'), { smokeId: 'smoke-live', smoking: true });
+  });
+
+  it('is a harmless no-op when there is no current smoke at all', async () => {
+    http.getResponses['/api/state'] = { smokeId: '', smoking: false };
+
+    assert.equal(await fixture.clearDanglingCurrentSmoke(), false);
+
+    assert.deepEqual(http.deletes, []);
+    assert.deepEqual(http.puts, []);
   });
 });
 
@@ -110,6 +274,32 @@ describe('BackendFixture.seedCompletedSmoke', () => {
     assert.deepEqual(
       http.puts.map(p => p.path),
       ['/api/state/clearSmoke']
+    );
+  });
+
+  it('heals the current smoke a crashed run left dangling, then seeds', async () => {
+    // This is the fixture-setup path most specs open with, so the poison a
+    // crashed worker leaves has to be survivable here above all — there is no
+    // intervening cleanup() to heal it mid-run.
+    givenPoisonedCurrentSmoke();
+
+    const seeded = await fixture.seedCompletedSmoke();
+
+    assert.ok(seeded.smokeId, 'the seed must complete once the poison is cleared');
+    assert.deepEqual(
+      http.calls.filter(call => call.endsWith('/api/presmoke') || call.endsWith('/clearSmoke')),
+      [
+        'POST /api/presmoke',
+        'PUT /api/state/clearSmoke',
+        'POST /api/presmoke',
+        // ...and the seed's own clear, once the finished smoke is archived.
+        'PUT /api/state/clearSmoke',
+      ],
+      'the heal must happen between the failed save and its one retry'
+    );
+    assert.ok(
+      http.deletes.includes('/api/smoke/smoke-crashed'),
+      'the orphaned smoke must be reclaimed, not just unlinked'
     );
   });
 
@@ -405,6 +595,25 @@ describe('BackendFixture.cleanup', () => {
     await fixture.cleanup();
 
     assert.deepEqual(http.deletes, []);
+  });
+
+  it('heals a dangling current smoke on the way out, not just on the way in', async () => {
+    // A suite that finishes must not hand the poison to the next one: the sweep
+    // that heals runs at suite *start*, which is far too late for the run that
+    // has already failed on it.
+    givenPoisonedCurrentSmoke(0);
+
+    await fixture.cleanup();
+
+    assert.deepEqual(
+      await http.get('/api/state'),
+      { smokeId: '', smoking: false },
+      'the run must leave no smoke current behind it'
+    );
+    assert.ok(
+      http.deletes.includes('/api/smoke/smoke-crashed'),
+      'the orphaned smoke must be reclaimed too'
+    );
   });
 });
 
