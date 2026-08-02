@@ -10,26 +10,15 @@
  */
 import { useCallback, useState } from 'react';
 import { PushNotConfiguredError, useApiClient, useApiSnackbar } from '../api';
+import {
+  BLOCKED_MESSAGE,
+  NOT_CONFIGURED_MESSAGE,
+  NOT_DELIVERED_MESSAGE,
+  TEST_FAILED_MESSAGE,
+  UNSUPPORTED_MESSAGE,
+} from './messages';
 import { usePushPort } from './PushPortProvider';
-
-export const BLOCKED_MESSAGE =
-  'Notifications are blocked. Allow notifications for this site in your browser settings.';
-export const UNSUPPORTED_MESSAGE = 'This browser does not support push notifications.';
-export const FAILED_MESSAGE = 'Could not send a test notification.';
-/**
- * The server has no VAPID key pair: a misconfiguration no retry will fix, so it
- * is worth its own message rather than the generic failure above.
- */
-export const NOT_CONFIGURED_MESSAGE =
-  'Push notifications are not set up on the server. Check its VAPID key configuration.';
-/**
- * The send was accepted but delivered to nobody. The backend only logs a push
- * service rejection (a mismatched VAPID private key, or a 5xx) and answers 200
- * with a zero count, so without this the user would see no notification, no
- * error, and no way to tell the two apart.
- */
-export const NOT_DELIVERED_MESSAGE =
-  'The test notification reached no browsers. Check the server push configuration.';
+import { registerForPush } from './registerForPush';
 
 export interface UseTestNotificationResult {
   /** Runs the full permission → subscribe → register → send chain. */
@@ -47,6 +36,9 @@ export const useTestNotification = (): UseTestNotificationResult => {
   const sendTest = useCallback(async () => {
     setSending(true);
     try {
+      // The card only offers this control once permission is granted, but the
+      // grant can be revoked in browser settings without a reload, so confirm
+      // it here rather than failing later with a confusing subscribe error.
       const permission = await port.requestPermission();
       if (permission === 'unsupported') {
         notify(UNSUPPORTED_MESSAGE);
@@ -56,9 +48,7 @@ export const useTestNotification = (): UseTestNotificationResult => {
         notify(BLOCKED_MESSAGE);
         return;
       }
-      const publicKey = await client.notifications.getPublicKey();
-      const subscription = await port.subscribe(publicKey);
-      await client.notifications.registerSubscription(subscription);
+      await registerForPush(client, port);
       // A 200 here does not mean anything arrived: the backend reports how many
       // browsers the push service actually accepted, and zero is a failure the
       // user has to see — it is the whole diagnostic value of this control.
@@ -67,7 +57,9 @@ export const useTestNotification = (): UseTestNotificationResult => {
         notify(NOT_DELIVERED_MESSAGE);
       }
     } catch (error) {
-      notify(error instanceof PushNotConfiguredError ? NOT_CONFIGURED_MESSAGE : FAILED_MESSAGE);
+      notify(
+        error instanceof PushNotConfiguredError ? NOT_CONFIGURED_MESSAGE : TEST_FAILED_MESSAGE
+      );
     } finally {
       setSending(false);
     }

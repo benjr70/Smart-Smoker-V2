@@ -1,5 +1,7 @@
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import {
+  Alert,
+  AlertTitle,
   Button,
   Card,
   CardContent,
@@ -20,7 +22,14 @@ import {
   defaultNotificationSettings,
   useCurrentResource,
 } from '../../api';
-import { useTestNotification } from '../../push';
+import {
+  BLOCKED_BANNER_BODY,
+  BLOCKED_BANNER_TITLE,
+  UNSUPPORTED_BANNER_BODY,
+  UNSUPPORTED_BANNER_TITLE,
+  usePushEnablement,
+  useTestNotification,
+} from '../../push';
 
 /**
  * How long the chamber must stay outside its range before the backend alerts.
@@ -112,6 +121,7 @@ export function NotificationsCard(): JSX.Element {
     saveErrorMessage: 'Could not save notification settings.',
   });
   const { sendTest, sending } = useTestNotification();
+  const { permission, enable } = usePushEnablement();
 
   const updateChamber = (change: Partial<ChamberAlertSettings>) =>
     setSettings(current => ({ ...current, chamber: { ...current.chamber, ...change } }));
@@ -140,6 +150,23 @@ export function NotificationsCard(): JSX.Element {
       smokeComplete: { ...current.smokeComplete, ...change },
     }));
 
+  /**
+   * Switching an alert on is the user gesture the permission prompt needs, so
+   * the setting is recorded and the browser is enlisted in the same handler.
+   * Every alert routes through here: whichever one the user reaches for first
+   * has to be the one that asks, or the single alert they chose would sit there
+   * armed against a browser that was never enlisted.
+   *
+   * The setting is saved either way: a user who unblocks notifications later
+   * should find the alert they configured still switched on.
+   */
+  const setAlertEnabled = (enabled: boolean, record: (change: { enabled: boolean }) => void) => {
+    record({ enabled });
+    if (enabled) {
+      void enable();
+    }
+  };
+
   const { chamber, probeTarget, smokeComplete } = settings;
   // The mock tags the first watched probe with the cook's ETA. Which probe that
   // is follows from the watch list, so it is derived here rather than stored.
@@ -155,6 +182,22 @@ export function NotificationsCard(): JSX.Element {
             Notifications
           </Typography>
 
+          {permission === 'unsupported' && (
+            <Alert severity="info" data-testid="settings-push-unsupported">
+              <AlertTitle>{UNSUPPORTED_BANNER_TITLE}</AlertTitle>
+              {UNSUPPORTED_BANNER_BODY}
+            </Alert>
+          )}
+
+          {permission === 'denied' && (
+            // Severity, not a hand-picked colour: the palette comes from the
+            // shared theme so this reads correctly in either colour scheme.
+            <Alert severity="warning" data-testid="settings-push-blocked">
+              <AlertTitle>{BLOCKED_BANNER_TITLE}</AlertTitle>
+              {BLOCKED_BANNER_BODY}
+            </Alert>
+          )}
+
           <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
             <Stack>
               <Typography variant="body1" fontWeight={600}>
@@ -166,7 +209,7 @@ export function NotificationsCard(): JSX.Element {
             </Stack>
             <Switch
               checked={chamber.enabled}
-              onChange={event => updateChamber({ enabled: event.target.checked })}
+              onChange={event => setAlertEnabled(event.target.checked, updateChamber)}
               // The accessible name is the handle every caller uses — component
               // tests and the end-to-end suite alike — so the control needs no
               // test-only attribute of its own.
@@ -220,7 +263,7 @@ export function NotificationsCard(): JSX.Element {
             </Stack>
             <Switch
               checked={probeTarget.enabled}
-              onChange={event => updateProbeTarget({ enabled: event.target.checked })}
+              onChange={event => setAlertEnabled(event.target.checked, updateProbeTarget)}
               inputProps={{ 'aria-label': 'Probe Target Reached' }}
             />
           </Stack>
@@ -262,7 +305,7 @@ export function NotificationsCard(): JSX.Element {
             </Stack>
             <Switch
               checked={smokeComplete.enabled}
-              onChange={event => updateSmokeComplete({ enabled: event.target.checked })}
+              onChange={event => setAlertEnabled(event.target.checked, updateSmokeComplete)}
               inputProps={{ 'aria-label': 'Smoke Complete' }}
             />
           </Stack>
@@ -275,15 +318,20 @@ export function NotificationsCard(): JSX.Element {
             {describeSmokeComplete(smokeComplete, probeTarget)}
           </Typography>
 
-          <Button
-            variant="outlined"
-            startIcon={<NotificationsActiveIcon />}
-            disabled={sending}
-            onClick={sendTest}
-            sx={{ alignSelf: 'flex-start' }}
-          >
-            Send Test Notification
-          </Button>
+          {/* Only worth offering once a notification could actually arrive: in
+              any other permission state this control can only ever report the
+              same failure the banner above already explains. */}
+          {permission === 'granted' && (
+            <Button
+              variant="outlined"
+              startIcon={<NotificationsActiveIcon />}
+              disabled={sending}
+              onClick={sendTest}
+              sx={{ alignSelf: 'flex-start' }}
+            >
+              Send Test Notification
+            </Button>
+          )}
         </Stack>
       </CardContent>
     </Card>

@@ -81,6 +81,8 @@ const bytesMatch = (a: ArrayBuffer | null | undefined, b: Uint8Array): boolean =
 };
 
 export const createBrowserPushPort = (): PushPort => ({
+  getPermission: () =>
+    isSupported() ? (window.Notification.permission as PushPermission) : 'unsupported',
   requestPermission: async () => {
     if (!isSupported()) {
       return 'unsupported';

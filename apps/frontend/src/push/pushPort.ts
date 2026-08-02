@@ -21,6 +21,14 @@ export type PushPermission = 'default' | 'granted' | 'denied' | 'unsupported';
 
 export interface PushPort {
   /**
+   * The browser's current answer, without prompting: `default` when it has
+   * never been asked, `granted`/`denied` once it has, `unsupported` when this
+   * browser cannot do push at all. Synchronous because the browser exposes it
+   * as a plain property — a component can read it while rendering, which is
+   * what lets the blocked banner appear on mount rather than a tick later.
+   */
+  getPermission(): PushPermission;
+  /**
    * Prompt for notification permission and resolve the resulting state. Must be
    * called from a user gesture — browsers ignore (or auto-deny) a prompt that
    * is not. Never rejects: an unsupported browser resolves `unsupported`.
