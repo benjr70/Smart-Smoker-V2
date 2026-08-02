@@ -8,7 +8,14 @@ import '@fontsource/plus-jakarta-sans/latin-700.css';
 
 import { createAppTheme } from './appTheme';
 
-export { createAppTheme, createThemeFromTokens } from './appTheme';
+export { DesignSurface } from './DesignSurface';
+export {
+  createAppTheme,
+  createThemeFromTokens,
+  resolveDesignPalette,
+  withDesignPalette,
+} from './appTheme';
+export type { DesignPalette } from './appTheme';
 export { ACCENT_TINT_ALPHA, carbonLight, paletteTokens } from './tokens';
 export type { PaletteTokens, ThemeMode } from './tokens';
 

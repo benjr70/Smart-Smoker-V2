@@ -1,17 +1,25 @@
 /**
  * The theme is provided by the application root, not by any one screen.
  *
- * Each screen is replaced with the same probe — an ordinary Material-UI surface
- * — so the assertion is about what the app hands its children rather than about
- * what any particular screen builds for itself.
+ * Each screen is replaced with the same probe, which reports the design tokens
+ * the theme it is handed carries — so the assertion is about what the app gives
+ * its children rather than about what any particular screen builds for itself.
+ * A screen mounted outside a provider would see Material-UI's default theme,
+ * which carries no tokens at all.
  */
-import { Card } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import App from './App';
+import { carbonLight } from './theme';
 
-const Probe = (): JSX.Element => <Card data-testid="probe">probe</Card>;
+const Probe = (): JSX.Element => {
+  const { design } = useTheme();
+  return (
+    <div data-testid="probe" data-accent={design?.accent} data-background={design?.background} />
+  );
+};
 
 jest.mock('./components/smoke/smoke', () => ({ Smoke: () => <Probe /> }));
 jest.mock('./components/history/history', () => ({ History: () => <Probe /> }));
@@ -24,25 +32,24 @@ jest.mock('../src/components/bottomBar/bottombar', () => ({
   ),
 }));
 
-const designSurface = {
-  backgroundColor: '#FFFFFF',
-  borderColor: '#E2E2DF',
-  borderRadius: '16px',
-  boxShadow: 'none',
+const carriesTheDesignTokens = (): void => {
+  const probe = screen.getByTestId('probe');
+  expect(probe).toHaveAttribute('data-accent', carbonLight.accent);
+  expect(probe).toHaveAttribute('data-background', carbonLight.background);
 };
 
 describe('App theming', () => {
-  it('styles the screen it renders with the application theme', () => {
+  it('hands the application theme to the screen it renders', () => {
     render(<App />);
 
-    expect(screen.getByTestId('probe')).toHaveStyle(designSurface);
+    carriesTheDesignTokens();
   });
 
-  it('keeps styling screens with it after navigating away from the first one', () => {
+  it('keeps handing it to screens after navigating away from the first one', () => {
     render(<App />);
 
     fireEvent.click(screen.getByTestId('settings-button'));
 
-    expect(screen.getByTestId('probe')).toHaveStyle(designSurface);
+    carriesTheDesignTokens();
   });
 });
