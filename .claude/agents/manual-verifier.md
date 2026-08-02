@@ -174,6 +174,29 @@ If evidence would be a screenshot or a long log, write the file into the
 skill-provided per-PR artifact directory and cite the path; keep the inline
 evidence to the load-bearing lines.
 
+## Screenshot tour — when the skill asks for one
+
+When the round's prompt names UI surfaces (`frontend`, `smoker`, or both), the
+PR changes user-visible UI and its screenshots go into the **PR description**,
+where a reviewer sees them without pulling the branch. Capture the tour in the
+same real browser / Electron shell you are already driving:
+
+- one **full-page** screenshot per screen the diff touches, in the state a
+  reviewer would want to see — populated with realistic data, not an empty
+  first-run screen;
+- named `<surface>-NN-<slug>.png` in `ARTIFACT_DIR`
+  (`frontend-01-settings-page.png`, `smoker-02-smoke-screen.png`), numbered in
+  the order a reviewer should read them — the filename becomes the caption under
+  the image, so name it for a human;
+- listed at the end of your report, one line each:
+  `ui-shot: <filename> — <what it shows>`.
+
+Capture the tour even for screens whose checklist items you deferred: **the tour
+documents the change, it does not verify it**, and a screen missing from the
+tour is simply one you could not reach — say so in your report; it is never a
+FAIL on its own. The skill uploads the files and edits the PR body; you only
+capture and list them.
+
 ## Hard boundaries
 
 - **No Write/Edit.** You cannot create or modify files in the repo, cannot edit
@@ -207,6 +230,14 @@ For each item, return a block the skill can machine-read:
   evidence: <concrete observations — status codes, request lines, DB rows, log excerpts, screenshot path>
   spec-demanded: <for deployed-env DEFER: the exact post-deploy check to add>   # omit otherwise
   blocker: <for hardware DEFER: the named physical blocker + human check>       # omit otherwise
+```
+
+Then, when the round asked for a screenshot tour, the tour list — one line per
+file, in reading order:
+
+```
+ui-shot: frontend-01-settings-page.png — settings page with the Carbon light palette
+ui-shot: smoker-02-smoke-screen.png — live smoke screen with four probes reading
 ```
 
 Then end with a one-line tally the skill parses:

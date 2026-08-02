@@ -67,7 +67,11 @@ rule_table() {
         "dual-driver	both directions" \
         "wifi-bound	wifi adapter stays off in hermetic builds" \
         "wifi-bound	store snapshot flag" \
-        "wifi-bound	wifi-screen navigation"
+        "wifi-bound	wifi-screen navigation" \
+        "ui-screenshots	screenshot tour" \
+        "ui-screenshots	.surface.-NN-.slug.\.png" \
+        "ui-screenshots	ui-shot:" \
+        "ui-screenshots	the tour documents the change, it does not verify it"
 }
 
 # Collapse a file to a single whitespace-normalized line so wrapped prose still
