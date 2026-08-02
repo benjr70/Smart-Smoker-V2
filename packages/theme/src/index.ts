@@ -1,12 +1,14 @@
 import { createColorSchemeTheme } from './appTheme';
 
 export { DesignSurface } from './DesignSurface';
+export { UnrestyledScreen } from './UnrestyledScreen';
 export {
   createAppTheme,
   createColorSchemeTheme,
   createThemeFromTokens,
   resolveDesignPalette,
   withDesignPalette,
+  withLightColorScheme,
 } from './appTheme';
 export type { DesignPalette } from './appTheme';
 export { resolveAppearance } from './appearance';

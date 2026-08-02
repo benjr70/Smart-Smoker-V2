@@ -102,6 +102,25 @@ const withoutCustomProperties = (theme: Theme): Theme => {
 };
 
 /**
+ * The enclosing theme, pinned to its light colour scheme.
+ *
+ * Applied by `UnrestyledScreen` to the theme already in scope. The colour scheme
+ * is chosen for the whole application, but only a restyled screen is painted
+ * from the design's tokens: the rest are still painted by hand, against a
+ * light-hardcoded shell, so the dark scheme reaching them would put near-white
+ * text and outlines onto light grey. Handing such a screen the light scheme's
+ * palette — as literal colours, since the custom properties follow whichever
+ * scheme is in effect — keeps it looking exactly as it does today, and nothing
+ * else about the theme changes.
+ */
+export const withLightColorScheme = (outer: Theme): Theme => {
+  const light = (outer as Theme & Partial<CssVarsTheme>).colorSchemes?.light;
+  const plain = withoutCustomProperties(outer);
+
+  return light ? createTheme(plain, { palette: light.palette, design: light.design }) : plain;
+};
+
+/**
  * The enclosing theme, repainted and re-typed in the design's tokens.
  *
  * Applied by `DesignSurface` to the theme already in scope, so a restyled

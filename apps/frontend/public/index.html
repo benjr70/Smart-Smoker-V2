@@ -22,6 +22,27 @@
       Learn how to configure a non-root public URL by running `npm run build`.
     -->
     <title>Smart Smoker</title>
+    <style>
+      /* The page, painted in the colour scheme the script below settles on.
+         Recording the scheme is not enough on its own: the application's palette
+         arrives as custom properties emitted by its bundle, so until that bundle
+         has run there is nothing in the document painting anything — and the
+         white page the flash consists of is painted anyway.
+
+         The two colours are the Carbon background tokens, written out because
+         the page has no bundle to read them from. Guarded by
+         src/theme/preFirstPaint.test.tsx, which paints the served page in
+         isolation and compares what comes out against the shared token set. */
+      html[data-mui-color-scheme='light'] {
+        background-color: #f6f6f5;
+        color-scheme: light;
+      }
+
+      html[data-mui-color-scheme='dark'] {
+        background-color: #0c0c0c;
+        color-scheme: dark;
+      }
+    </style>
     <script>
       // The colour scheme, applied before the page paints anything.
       //
