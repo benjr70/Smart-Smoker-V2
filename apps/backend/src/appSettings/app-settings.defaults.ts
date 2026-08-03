@@ -2,6 +2,7 @@ import {
   ApplicationSettings,
   ProbeTargetEntry,
   TargetPresets,
+  TargetSource,
 } from './app-settings.schema';
 import { PROBE_SLOTS } from './probe-names';
 
@@ -15,11 +16,11 @@ export const DEFAULT_PROBE_TARGET = 203;
 /**
  * The temperature each category of meat is taken to be done at until the user
  * says otherwise: brisket and other beef pulled at 203°F, pork shoulder at
- * 200°F, poultry at the 165°F it is safe to eat at.
+ * 195°F, poultry at the 165°F it is safe to eat at.
  */
 export const DEFAULT_TARGET_PRESETS: TargetPresets = {
   beef: 203,
-  pork: 200,
+  pork: 195,
   poultry: 165,
 };
 
@@ -60,16 +61,28 @@ const withProbeEntryPerSlot = (
 ): ProbeTargetEntry[] =>
   PROBE_SLOTS.map((slot) => {
     const entry = stored?.find((candidate) => candidate?.slot === slot);
+    const target = entry?.target ?? DEFAULT_PROBE_TARGET;
     return {
       slot,
       enabled: entry?.enabled ?? false,
-      target: entry?.target ?? DEFAULT_PROBE_TARGET,
-      // A row stored before targets had a provenance counts as untouched: the
-      // target on it is whatever the shipped default was, and seeding is free
-      // to replace it.
-      targetSource: entry?.targetSource ?? 'default',
+      target,
+      targetSource: entry?.targetSource ?? inheritedProvenance(target),
     };
   });
+
+/**
+ * What a target stored before provenance was recorded has to be read as.
+ *
+ * Editable per-probe targets shipped a slice before seeding did, so every
+ * installation upgrading into this one carries targets a person typed with
+ * nothing on the row saying so. A temperature that is not the shipped default
+ * could only have got there by hand, and is read as the user's: seeding must
+ * never quietly replace a 145°F pork loin with a category's 195°F. One still
+ * sitting on the default is indistinguishable from a row nobody ever opened,
+ * so it is read as untouched and the upgraded installation still gets presets.
+ */
+const inheritedProvenance = (target: number): TargetSource =>
+  target === DEFAULT_PROBE_TARGET ? 'default' : 'user';
 
 /**
  * A stored (or client-supplied) document read as complete settings: every field

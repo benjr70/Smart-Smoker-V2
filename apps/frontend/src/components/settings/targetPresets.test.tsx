@@ -19,14 +19,14 @@ const renderCard = (backend: FakeBackend) => {
 describe('TargetPresetsCard', () => {
   test('shows the stored default target temperature for each meat category', async () => {
     const backend = createFakeBackend({
-      appSettings: { settings: { targetPresets: { beef: 210, pork: 195, poultry: 170 } } },
+      appSettings: { settings: { targetPresets: { beef: 210, pork: 190, poultry: 170 } } },
     });
 
     renderCard(backend);
 
     await screen.findByDisplayValue('210');
     expect(screen.getByLabelText('Beef')).toHaveValue(210);
-    expect(screen.getByLabelText('Pork')).toHaveValue(195);
+    expect(screen.getByLabelText('Pork')).toHaveValue(190);
     expect(screen.getByLabelText('Poultry')).toHaveValue(170);
   });
 
@@ -36,7 +36,7 @@ describe('TargetPresetsCard', () => {
     renderCard(createFakeBackend());
 
     expect(await screen.findByLabelText('Beef')).toHaveValue(203);
-    expect(screen.getByLabelText('Pork')).toHaveValue(200);
+    expect(screen.getByLabelText('Pork')).toHaveValue(195);
     expect(screen.getByLabelText('Poultry')).toHaveValue(165);
   });
 
@@ -51,7 +51,7 @@ describe('TargetPresetsCard', () => {
     await waitFor(() =>
       expect(backend.store.appSettings?.targetPresets).toEqual({
         beef: 203,
-        pork: 200,
+        pork: 195,
         poultry: 175,
       })
     );
@@ -74,13 +74,13 @@ describe('TargetPresetsCard', () => {
     fireEvent.change(beef, { target: { value: '' } });
     expect(beef).toHaveValue(203);
 
-    fireEvent.change(screen.getByLabelText('Pork'), { target: { value: '195' } });
+    fireEvent.change(screen.getByLabelText('Pork'), { target: { value: '190' } });
     unmount();
 
     await waitFor(() =>
       expect(backend.store.appSettings?.targetPresets).toEqual({
         beef: 203,
-        pork: 195,
+        pork: 190,
         poultry: 165,
       })
     );

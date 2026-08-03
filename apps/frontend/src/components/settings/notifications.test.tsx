@@ -34,7 +34,7 @@ const chamberAlertOn: NotificationSettings = {
   chamber: { enabled: true, low: 225, high: 275 },
   probeTarget: { enabled: false, probes: probeRows() },
   smokeComplete: { enabled: false },
-  targetPresets: { beef: 203, pork: 200, poultry: 165 },
+  targetPresets: { beef: 203, pork: 195, poultry: 165 },
 };
 
 const browserSubscription: PushSubscriptionPayload = {
@@ -357,6 +357,43 @@ describe('NotificationsCard', () => {
           { slot: 'probe1', enabled: true, target: 198, targetSource: 'user' },
           ...savedProbeRows().slice(1),
         ],
+      })
+    );
+  });
+
+  /**
+   * Clearing the field is how anyone retypes a number, and abandoning that
+   * half-edit is not a decision about the temperature. The row keeps the target
+   * it had and stays the app's to seed — pinning it out of seeding here would
+   * leave a chicken cook on the 203°F beef default with nothing on screen to
+   * say why.
+   */
+  test('a target field cleared mid-edit claims nothing for the user', async () => {
+    const backend = createFakeBackend({
+      appSettings: {
+        settings: {
+          chamber: { enabled: false, low: 225, high: 275 },
+          probeTarget: { enabled: true, probes: probeRows() },
+        },
+      },
+      smokeProfile: { current: { probe1Name: 'Brisket Flat' } },
+    });
+
+    const { unmount } = renderCard(backend);
+
+    fireEvent.click(await screen.findByLabelText('Watch Brisket Flat'));
+    const target = screen.getByLabelText('Brisket Flat target');
+    fireEvent.change(target, { target: { value: '' } });
+    expect(target).toHaveValue(203);
+
+    unmount();
+
+    await waitFor(() =>
+      expect(backend.store.appSettings?.probeTarget?.probes[0]).toEqual({
+        slot: 'probe1',
+        enabled: true,
+        target: 203,
+        targetSource: 'default',
       })
     );
   });

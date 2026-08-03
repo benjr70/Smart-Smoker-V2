@@ -27,7 +27,7 @@ describe('AppSettingsController', () => {
       ],
     },
     smokeComplete: { enabled: true },
-    targetPresets: { beef: 203, pork: 200, poultry: 165 },
+    targetPresets: { beef: 203, pork: 195, poultry: 165 },
     appearance: { mode: 'dark', resolvedMode: 'dark' },
   };
 

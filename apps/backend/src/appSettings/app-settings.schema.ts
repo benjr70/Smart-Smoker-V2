@@ -121,7 +121,7 @@ export class TargetPresets {
   beef: number;
 
   @ApiProperty()
-  @Prop({ default: 200 })
+  @Prop({ default: 195 })
   pork: number;
 
   @ApiProperty()

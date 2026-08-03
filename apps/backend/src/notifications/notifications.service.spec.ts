@@ -503,7 +503,7 @@ describe('NotificationsService', () => {
         await service.checkAlerts();
 
         await settings.saveSettings({
-          targetPresets: { beef: 203, pork: 200, poultry: 175 },
+          targetPresets: { beef: 203, pork: 195, poultry: 175 },
         });
         await service.checkAlerts();
 

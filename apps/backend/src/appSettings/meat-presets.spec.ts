@@ -27,6 +27,30 @@ describe('matching a meat type to a preset category', () => {
     expect(matchMeatCategory(meatType)).toBe(category);
   });
 
+  // Ribs belong to whichever animal the description names. Reading every rib as
+  // pork would put 195°F on a prime rib somebody wanted pulled at 130°F.
+  it.each([
+    ['Prime rib', 'beef'],
+    ['Short ribs', 'beef'],
+    ['Beef back ribs', 'beef'],
+    ['Baby back ribs', 'pork'],
+    ['Spare ribs', 'pork'],
+    ['St louis ribs', 'pork'],
+  ])('reads %s as %s', (meatType, category) => {
+    expect(matchMeatCategory(meatType)).toBe(category);
+  });
+
+  // A cut can belong to more than one animal, and the one the cook named is the
+  // one that counts — the description says so outright.
+  it.each([
+    ['Pork sirloin roast', 'pork'],
+    ['Turkey bacon', 'poultry'],
+    ['Beef sausage', 'beef'],
+    ['Chicken sausage', 'poultry'],
+  ])('reads %s as the animal it names, not the cut', (meatType, category) => {
+    expect(matchMeatCategory(meatType)).toBe(category);
+  });
+
   // Nothing is seeded from a meat this list has never heard of: guessing would
   // put somebody else's done temperature on a cook the user never checked.
   it.each([
@@ -35,6 +59,16 @@ describe('matching a meat type to a preset category', () => {
     // A keyword buried inside another word is not that meat: a hamburger is
     // not a ham, and a ribeye is not a rack of ribs.
     ['Hamburgers'],
+    // A cut on its own says nothing about the animal it came off. Lamb and fish
+    // are not categories this app keeps a temperature for, and seeding them
+    // with beef's or pork's would ruin the cook it was guessing at.
+    ['Lamb shoulder'],
+    ['Rack of lamb'],
+    ['Tuna steak'],
+    ['Venison steaks'],
+    // Ribs unqualified could be either animal, 65°F apart. Silence beats a
+    // coin toss.
+    ['Ribs'],
     [''],
     [undefined],
     [null],

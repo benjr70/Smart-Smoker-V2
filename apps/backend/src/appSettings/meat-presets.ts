@@ -15,36 +15,53 @@ export const MEAT_CATEGORIES = ['beef', 'pork', 'poultry'] as const;
 export type MeatCategory = (typeof MEAT_CATEGORIES)[number];
 
 /**
- * The words that give a category away.
+ * The words that name the animal outright.
  *
- * Cuts rather than categories, because nobody types "pork" into the pre-smoke
- * form when they are cooking a rack of ribs. Categories are scanned in the
- * order above, so a description naming two of them — "beef short ribs" — reads
- * as the earlier one; beef is listed first for exactly that case.
+ * Checked before any cut, because the animal settles the question whatever cut
+ * follows it: "pork sirloin" is pork and "turkey bacon" is poultry, though both
+ * cuts otherwise belong to another category's list.
  */
-const CATEGORY_KEYWORDS: Record<MeatCategory, readonly string[]> = {
+const CATEGORY_ANIMALS: Record<MeatCategory, readonly string[]> = {
+  beef: ['beef'],
+  pork: ['pork'],
+  poultry: ['poultry', 'chicken', 'turkey', 'duck'],
+};
+
+/**
+ * The cuts that give a category away on their own.
+ *
+ * Cuts as well as animals, because nobody types "pork" into the pre-smoke form
+ * when they are cooking a rack of baby backs. Only cuts that come off one of
+ * these three animals are listed: a bare "steak", "shoulder" or "rib" is also a
+ * lamb, venison or tuna cut, and matching one would seed a temperature from a
+ * category the meat does not belong to — worse than the nothing an unrecognised
+ * meat gets, because the number would look deliberate.
+ */
+const CATEGORY_CUTS: Record<MeatCategory, readonly string[]> = {
   beef: [
-    'beef',
     'brisket',
+    'packer',
     'chuck',
     'tri-tip',
     'tritip',
     'ribeye',
-    'sirloin',
-    'steak',
+    'rib eye',
+    'prime rib',
+    'short rib',
     'burnt ends',
   ],
   pork: [
-    'pork',
-    'rib',
     'baby back',
-    'butt',
-    'shoulder',
+    'spare rib',
+    'st louis',
+    'boston butt',
+    'pork butt',
+    'picnic shoulder',
     'bacon',
     'ham',
     'sausage',
   ],
-  poultry: ['poultry', 'chicken', 'turkey', 'duck', 'wing', 'thigh'],
+  poultry: ['wing', 'thigh', 'drumstick', 'spatchcock'],
 };
 
 /**
@@ -68,11 +85,11 @@ export const matchMeatCategory = (
   meatType: string | null | undefined,
 ): MeatCategory | null => {
   const text = (meatType ?? '').toLowerCase();
-  return (
+  const matching = (words: Record<MeatCategory, readonly string[]>) =>
     MEAT_CATEGORIES.find((category) =>
-      CATEGORY_KEYWORDS[category].some((keyword) => namesCut(text, keyword)),
-    ) ?? null
-  );
+      words[category].some((keyword) => namesCut(text, keyword)),
+    );
+  return matching(CATEGORY_ANIMALS) ?? matching(CATEGORY_CUTS) ?? null;
 };
 
 /**

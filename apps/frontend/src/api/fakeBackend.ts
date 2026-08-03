@@ -125,7 +125,7 @@ const PROBE_SLOTS = ['probe1', 'probe2', 'probe3'];
 const DEFAULT_PROBE_TARGET = 203;
 
 /** The default target temps an installation starts from, as the backend has them. */
-const DEFAULT_TARGET_PRESETS = { beef: 203, pork: 200, poultry: 165 };
+const DEFAULT_TARGET_PRESETS = { beef: 203, pork: 195, poultry: 165 };
 
 /**
  * The settings an installation starts from, mirroring the backend's own
@@ -150,11 +150,15 @@ const withSettingsDefaults = (
     enabled: stored?.probeTarget?.enabled ?? false,
     probes: PROBE_SLOTS.map(slot => {
       const entry = stored?.probeTarget?.probes?.find(candidate => candidate?.slot === slot);
+      const target = entry?.target ?? DEFAULT_PROBE_TARGET;
       return {
         slot,
         enabled: entry?.enabled ?? false,
-        target: entry?.target ?? DEFAULT_PROBE_TARGET,
-        targetSource: entry?.targetSource ?? 'default',
+        target,
+        // As the backend reads a row saved before targets had a provenance: a
+        // temperature that is not the shipped default was typed by hand, so it
+        // is the user's and a session start never seeds over it.
+        targetSource: entry?.targetSource ?? (target === DEFAULT_PROBE_TARGET ? 'default' : 'user'),
       };
     }),
   },

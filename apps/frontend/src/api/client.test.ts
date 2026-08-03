@@ -402,7 +402,7 @@ const savedSettings: NotificationSettings = {
     ],
   },
   smokeComplete: { enabled: true },
-  targetPresets: { beef: 203, pork: 200, poultry: 165 },
+  targetPresets: { beef: 203, pork: 195, poultry: 165 },
 };
 
 /**
@@ -562,7 +562,7 @@ describe('notifications client — settings', () => {
         ],
       },
       smokeComplete: { enabled: false },
-      targetPresets: { beef: 203, pork: 200, poultry: 165 },
+      targetPresets: { beef: 203, pork: 195, poultry: 165 },
     });
   });
 
@@ -592,6 +592,41 @@ describe('notifications client — settings', () => {
     ]);
   });
 
+  /**
+   * Per-probe targets shipped a release before seeding did, so a stored row can
+   * carry a temperature somebody typed with nothing recording that they did.
+   * The page has to read those rows as theirs, or the next cook would seed a
+   * category's temperature over a number the user chose.
+   */
+  describe('targets stored before they carried a provenance', () => {
+    const storedRow = (target: number) => ({
+      appSettings: {
+        settings: {
+          chamber: { enabled: false, low: 225, high: 275 },
+          probeTarget: { enabled: true, probes: [{ slot: 'probe1', enabled: true, target }] },
+        },
+      },
+    });
+
+    test('reads a target that is not the shipped default as the user’s own', async () => {
+      const client = createApiClient(createFakeBackend(storedRow(145)));
+
+      const result = await client.notifications.getSettings();
+
+      expect(result?.probeTarget.probes[0]).toMatchObject({ target: 145, targetSource: 'user' });
+    });
+
+    // A row left on the shipped 203°F is indistinguishable from one nobody ever
+    // opened, so it stays seedable and an upgraded deployment still gets presets.
+    test('reads a target still on the shipped default as untouched', async () => {
+      const client = createApiClient(createFakeBackend(storedRow(203)));
+
+      const result = await client.notifications.getSettings();
+
+      expect(result?.probeTarget.probes[0]).toMatchObject({ target: 203, targetSource: 'default' });
+    });
+  });
+
   // Names are the backend's to resolve from the active cook, so the read has to
   // carry them through rather than leave the page showing slot identifiers.
   test('getSettings keeps the probe names the backend resolved for the current cook', async () => {
@@ -615,14 +650,14 @@ describe('notifications client — default target temps', () => {
   test('getSettings carries the stored default target temps', async () => {
     const backend = createFakeBackend({
       appSettings: {
-        settings: { ...savedSettingsBody, targetPresets: { beef: 210, pork: 200, poultry: 165 } },
+        settings: { ...savedSettingsBody, targetPresets: { beef: 210, pork: 190, poultry: 170 } },
       },
     });
     const client = createApiClient(backend);
 
     const result = await client.notifications.getSettings();
 
-    expect(result?.targetPresets).toEqual({ beef: 210, pork: 200, poultry: 165 });
+    expect(result?.targetPresets).toEqual({ beef: 210, pork: 190, poultry: 170 });
   });
 
   // A deployment that has never opened the card — and one older than the card
@@ -633,19 +668,19 @@ describe('notifications client — default target temps', () => {
 
     const result = await client.notifications.getSettings();
 
-    expect(result?.targetPresets).toEqual({ beef: 203, pork: 200, poultry: 165 });
+    expect(result?.targetPresets).toEqual({ beef: 203, pork: 195, poultry: 165 });
   });
 
   test('saveTargetPresets sends the presets block on its own', async () => {
     const backend = createFakeBackend();
     const client = createApiClient(backend);
 
-    await client.notifications.saveTargetPresets({ beef: 210, pork: 195, poultry: 170 });
+    await client.notifications.saveTargetPresets({ beef: 210, pork: 190, poultry: 170 });
 
     expect(backend.requests).toContainEqual({
       method: 'post',
       path: 'appSettings',
-      body: { targetPresets: { beef: 210, pork: 195, poultry: 170 } },
+      body: { targetPresets: { beef: 210, pork: 190, poultry: 170 } },
     });
   });
 
@@ -657,13 +692,13 @@ describe('notifications client — default target temps', () => {
   test('saving the alerts leaves edited presets exactly as they were', async () => {
     const backend = createFakeBackend();
     const client = createApiClient(backend);
-    await client.notifications.saveTargetPresets({ beef: 210, pork: 195, poultry: 170 });
+    await client.notifications.saveTargetPresets({ beef: 210, pork: 190, poultry: 170 });
 
     await client.notifications.saveSettings({ chamber: { enabled: true, low: 200, high: 300 } });
 
     await expect(client.notifications.getSettings()).resolves.toMatchObject({
       chamber: { enabled: true, low: 200, high: 300 },
-      targetPresets: { beef: 210, pork: 195, poultry: 170 },
+      targetPresets: { beef: 210, pork: 190, poultry: 170 },
     });
   });
 
@@ -671,10 +706,10 @@ describe('notifications client — default target temps', () => {
     const backend = createFakeBackend();
     const client = createApiClient(backend);
 
-    await client.notifications.saveTargetPresets({ beef: 210, pork: 195, poultry: 170 });
+    await client.notifications.saveTargetPresets({ beef: 210, pork: 190, poultry: 170 });
 
     await expect(client.notifications.getSettings()).resolves.toMatchObject({
-      targetPresets: { beef: 210, pork: 195, poultry: 170 },
+      targetPresets: { beef: 210, pork: 190, poultry: 170 },
     });
   });
 });

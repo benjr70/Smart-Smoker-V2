@@ -62,7 +62,7 @@ const DEFAULT_PROBE_TARGET = 203;
  * says otherwise, mirroring the backend's own defaults so a deployment that has
  * never saved any renders the same three numbers the backend would seed from.
  */
-const DEFAULT_TARGET_PRESETS: TargetPresets = { beef: 203, pork: 200, poultry: 165 };
+const DEFAULT_TARGET_PRESETS: TargetPresets = { beef: 203, pork: 195, poultry: 165 };
 
 /**
  * The settings document as it goes over the wire on a save: the same shape
@@ -396,16 +396,28 @@ const probeEntriesWithDefaults = (
 ): ProbeTargetEntry[] =>
   PROBE_SLOTS.map((slot, index) => {
     const entry = probes?.find(candidate => candidate?.slot === slot);
+    const target = entry?.target ?? DEFAULT_PROBE_TARGET;
     return {
       slot,
       enabled: entry?.enabled ?? false,
-      target: entry?.target ?? DEFAULT_PROBE_TARGET,
-      // A row stored before targets had a provenance is one nobody has typed
-      // into, which is exactly what the shipped default means.
-      targetSource: entry?.targetSource ?? 'default',
+      target,
+      targetSource: entry?.targetSource ?? inheritedProvenance(target),
       name: entry?.name?.trim() || `Probe ${index + 1}`,
     };
   });
+
+/**
+ * What a target stored before provenance was recorded has to be read as,
+ * mirroring the backend's own rule.
+ *
+ * Editable per-probe targets shipped a release before seeding did, so a stored
+ * row can carry a temperature somebody typed with nothing saying they did. Any
+ * temperature that is not the shipped default got there by hand and is read as
+ * theirs, so a session start never seeds over it; one still on the default is
+ * indistinguishable from a row nobody opened and stays seedable.
+ */
+const inheritedProvenance = (target: number): TargetSource =>
+  target === DEFAULT_PROBE_TARGET ? 'default' : 'user';
 
 /**
  * The three default target temps, filling in any the document is missing — a

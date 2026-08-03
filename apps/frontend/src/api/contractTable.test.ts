@@ -92,7 +92,7 @@ const seededNotifications: NotificationSettings = {
     ],
   },
   smokeComplete: { enabled: true },
-  targetPresets: { beef: 203, pork: 200, poultry: 165 },
+  targetPresets: { beef: 203, pork: 195, poultry: 165 },
 };
 
 // A browser push subscription in its wire form — the exact body the backend
@@ -326,11 +326,11 @@ const rows: ContractRow[] = [
   },
   {
     name: 'notifications.saveTargetPresets → POST appSettings (presets block alone)',
-    run: c => c.notifications.saveTargetPresets({ beef: 210, pork: 195, poultry: 170 }),
+    run: c => c.notifications.saveTargetPresets({ beef: 210, pork: 190, poultry: 170 }),
     expected: {
       method: 'post',
       path: 'appSettings',
-      body: { targetPresets: { beef: 210, pork: 195, poultry: 170 } },
+      body: { targetPresets: { beef: 210, pork: 190, poultry: 170 } },
     },
   },
   {

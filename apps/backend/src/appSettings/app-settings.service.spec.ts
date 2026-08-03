@@ -240,9 +240,63 @@ describe('AppSettingsService', () => {
         enabled: true,
         probes: [
           { slot: 'probe1', enabled: false, target: 203, ...untouched },
-          { slot: 'probe2', enabled: true, target: 195, ...untouched },
+          // 195°F on a document that predates provenance: see the upgrade
+          // tests below for why that reads as the user's own.
+          { slot: 'probe2', enabled: true, target: 195, ...byHand },
           { slot: 'probe3', enabled: false, target: 203, ...untouched },
         ],
+      });
+    });
+
+    /**
+     * Per-probe targets shipped before this slice did, so every installation
+     * already carries targets somebody typed with nothing recording that they
+     * did. Seeding must not treat those as its own to overwrite — a probe set
+     * to 145°F for a pork loin that came back as 195°F on the next cook would
+     * be the upgrade quietly ruining dinner.
+     */
+    describe('reading targets stored before they had a provenance', () => {
+      const legacyDocument = (target: number) =>
+        ({
+          probeTarget: {
+            enabled: true,
+            probes: [{ slot: 'probe1', enabled: true, target }],
+          },
+        }) as unknown as ApplicationSettings;
+
+      it('treats a target that is not the shipped default as the user’s own', async () => {
+        const reading = await serviceReading(legacyDocument(145));
+
+        expect((await reading.getSettings()).probeTarget.probes[0]).toEqual({
+          slot: 'probe1',
+          enabled: true,
+          target: 145,
+          ...byHand,
+        });
+      });
+
+      // Nothing distinguishes a row left on the shipped 203°F from one nobody
+      // ever opened, so it is read as untouched and an upgraded installation
+      // still gets the presets this slice exists to apply.
+      it('treats a target still on the shipped default as untouched', async () => {
+        const reading = await serviceReading(legacyDocument(203));
+
+        expect((await reading.getSettings()).probeTarget.probes[0]).toEqual({
+          slot: 'probe1',
+          enabled: true,
+          target: 203,
+          ...untouched,
+        });
+      });
+
+      it('seeds nothing over a hand-typed target it inherited', async () => {
+        const reading = await serviceReading(legacyDocument(145));
+
+        await reading.seedProbeTargets('Pork shoulder');
+
+        expect((await reading.getSettings()).probeTarget.probes[0].target).toBe(
+          145,
+        );
       });
     });
 
@@ -267,7 +321,7 @@ describe('AppSettingsService', () => {
           slot: 'probe2',
           enabled: true,
           target: 195,
-          ...untouched,
+          ...byHand,
           name: 'Pork Butt',
         },
         {
@@ -436,6 +490,26 @@ describe('AppSettingsService', () => {
         ),
       ).toEqual([180, 165, 165]);
     });
+
+    // The temperatures shipped are the ones the PRD's operator should not have
+    // to remember: a pork butt at 195°F, poultry at the 165°F it is safe at,
+    // beef at the 203°F a brisket is done at.
+    it.each([
+      ['Pork shoulder', 195],
+      ['Whole chicken', 165],
+      ['Packer brisket', 203],
+    ])(
+      'takes a cook of %s to %d°F out of the box',
+      async (meatType, target) => {
+        await service.saveSettings({ probeTarget: watchingEveryProbe });
+
+        await service.seedProbeTargets(meatType);
+
+        expect((await service.getSettings()).probeTarget.probes[0].target).toBe(
+          target,
+        );
+      },
+    );
 
     // A probe nobody is watching is a row that was switched off deliberately.
     // Writing a temperature onto it would be an alert waiting to happen the
