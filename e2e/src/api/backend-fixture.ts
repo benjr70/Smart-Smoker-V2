@@ -115,9 +115,22 @@ export interface ChamberAlertRange {
   high: number;
 }
 
-/** Shape of `GET /api/appSettings` — only the block this fixture seeds. */
+/** One probe's row in the Probe Target Reached alert, as it is stored. */
+interface ProbeTargetEntryDoc {
+  slot: string;
+  enabled: boolean;
+  target: number;
+  /** Resolved from the active cook and served on the read only; never saved. */
+  name?: string;
+}
+
+/** Shape of `GET /api/appSettings` — only the blocks this fixture reads. */
 interface ApplicationSettingsDoc {
   chamber?: Partial<ChamberAlertRange> | null;
+  probeTarget?: {
+    enabled?: boolean;
+    probes?: ProbeTargetEntryDoc[];
+  } | null;
 }
 
 /** Shape of `GET /api/smoke/:id` — the sub-entity ids a cascade delete needs. */
@@ -388,6 +401,9 @@ export class BackendFixture {
       low: prior?.chamber?.low ?? 225,
       high: prior?.chamber?.high ?? 275,
     };
+    // Only the chamber block is posted: the backend merges block by block, so a
+    // deployed run leaves the operator's probe watch list and the installation's
+    // appearance exactly as it found them.
     // Register the restore before mutating, so cleanup always puts it back even
     // if seeding throws partway.
     this.teardowns.push(async () => {

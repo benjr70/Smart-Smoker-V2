@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { SmokeProfileModule } from '../smokeProfile/smokeProfile.module';
+import { StateModule } from '../State/state.module';
 import { AppSettingsController } from './app-settings.controller';
 import {
   ApplicationSettings,
@@ -9,6 +11,11 @@ import { AppSettingsService } from './app-settings.service';
 
 @Module({
   imports: [
+    // Probe rows are named as the active cook named them, which is the session
+    // and its smoke profile to answer. No cycle: nothing in the profile's own
+    // dependency chain (smoke, ratings, common, state) knows about settings.
+    StateModule,
+    SmokeProfileModule,
     MongooseModule.forFeature([
       {
         name: ApplicationSettings.name,

@@ -24,6 +24,56 @@ describe('ApplicationSettingsDto validation', () => {
     expect(result.chamber).toEqual({ enabled: true, low: 225, high: 275 });
   });
 
+  it('accepts the probe watch list and targets the settings page saves', async () => {
+    const body = {
+      chamber: { enabled: true, low: 225, high: 275 },
+      probeTarget: {
+        enabled: true,
+        probes: [
+          { slot: 'probe1', enabled: true, target: 203 },
+          { slot: 'probe2', enabled: false, target: 195 },
+        ],
+      },
+    };
+
+    const result = await pipe.transform(body, metadata);
+
+    expect(result.probeTarget).toEqual(body.probeTarget);
+  });
+
+  // The names shown against each row are resolved from the active cook and
+  // served on the read, so a document read then saved carries them back. They
+  // are not the user's to set, and forbidNonWhitelisted would 400 the save.
+  it('rejects a resolved probe name sent back on a save', async () => {
+    const body = {
+      chamber: { enabled: true, low: 225, high: 275 },
+      probeTarget: {
+        enabled: true,
+        probes: [
+          { slot: 'probe1', enabled: true, target: 203, name: 'Brisket Flat' },
+        ],
+      },
+    };
+
+    await expect(pipe.transform(body, metadata)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
+  it('rejects a probe target that is not a number', async () => {
+    const body = {
+      chamber: { enabled: true, low: 225, high: 275 },
+      probeTarget: {
+        enabled: true,
+        probes: [{ slot: 'probe1', enabled: true, target: 'done' }],
+      },
+    };
+
+    await expect(pipe.transform(body, metadata)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
   /**
    * A browser that repaints itself sends nothing but the appearance — sending
    * the alert block back would make every repaint a save of settings the

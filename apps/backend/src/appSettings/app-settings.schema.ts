@@ -29,6 +29,53 @@ export const ChamberAlertSettingsSchema =
   SchemaFactory.createForClass(ChamberAlertSettings);
 
 /**
+ * One probe's entry in the Probe Target Reached alert.
+ *
+ * Keyed by `slot` — the smoker's physical probe — and never by name: names
+ * belong to the cook and are resolved live from the active smoke profile (see
+ * `probe-names.ts`), so a watch list configured last weekend survives a profile
+ * that renames every probe.
+ */
+@Schema({ _id: false })
+export class ProbeTargetEntry {
+  @ApiProperty()
+  @Prop()
+  slot: string;
+
+  /** Whether this probe is being watched. */
+  @ApiProperty()
+  @Prop({ default: false })
+  enabled: boolean;
+
+  /** The temperature, °F, this probe's meat is done at. */
+  @ApiProperty()
+  @Prop({ default: 203 })
+  target: number;
+}
+
+export const ProbeTargetEntrySchema =
+  SchemaFactory.createForClass(ProbeTargetEntry);
+
+/**
+ * The Probe Target Reached alert: switched on or off as a whole, plus one entry
+ * per probe slot.
+ */
+@Schema({ _id: false })
+export class ProbeTargetAlertSettings {
+  @ApiProperty()
+  @Prop({ default: false })
+  enabled: boolean;
+
+  @ApiProperty({ type: [ProbeTargetEntry] })
+  @Prop({ type: [ProbeTargetEntrySchema], default: () => [] })
+  probes: ProbeTargetEntry[];
+}
+
+export const ProbeTargetAlertSettingsSchema = SchemaFactory.createForClass(
+  ProbeTargetAlertSettings,
+);
+
+/**
  * How the installation looks: the mode an operator chose, and what that choice
  * resolved to on the client that last wrote it.
  *
@@ -64,6 +111,10 @@ export class ApplicationSettings {
   @ApiProperty({ type: ChamberAlertSettings })
   @Prop({ type: ChamberAlertSettingsSchema, default: () => ({}) })
   chamber: ChamberAlertSettings;
+
+  @ApiProperty({ type: ProbeTargetAlertSettings })
+  @Prop({ type: ProbeTargetAlertSettingsSchema, default: () => ({}) })
+  probeTarget: ProbeTargetAlertSettings;
 
   @ApiProperty({ type: AppearanceSettings })
   @Prop({ type: AppearanceSettingsSchema, default: () => ({}) })

@@ -1,7 +1,34 @@
 import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
+import { StateService } from '../State/state.service';
+import { SmokeProfileService } from '../smokeProfile/smokeProfile.service';
+import { DEFAULT_APPLICATION_SETTINGS } from './app-settings.defaults';
 import { ApplicationSettings } from './app-settings.schema';
 import { AppSettingsService } from './app-settings.service';
+
+/** The probe rows a deployment that has configured nothing reads back as. */
+const DEFAULT_PROBE_TARGET_BLOCK = DEFAULT_APPLICATION_SETTINGS.probeTarget;
+
+/**
+ * The session and the cook the probe rows are named from. A stand-in: this
+ * service only has to know whether there is a session and what its profile calls
+ * each slot, which is what these two answer.
+ */
+const createCook = () => ({
+  state: {
+    GetState: jest
+      .fn()
+      .mockResolvedValue({ smokeId: 'smoke-1', smoking: true }),
+  },
+  profile: {
+    getCurrentSmokeProfile: jest.fn().mockResolvedValue({
+      chamberName: 'Chamber',
+      probe1Name: '',
+      probe2Name: '',
+      probe3Name: '',
+    }),
+  },
+});
 
 /** The update operators this collection understands, as Mongo names them. */
 interface UpdateOperators<T> {
@@ -73,9 +100,11 @@ describe('AppSettingsService', () => {
   let settings: ReturnType<
     typeof createSettingsCollection<ApplicationSettings>
   >;
+  let cook: ReturnType<typeof createCook>;
 
   beforeEach(async () => {
     settings = createSettingsCollection<ApplicationSettings>();
+    cook = createCook();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -84,6 +113,8 @@ describe('AppSettingsService', () => {
           provide: getModelToken(ApplicationSettings.name),
           useValue: settings,
         },
+        { provide: StateService, useValue: cook.state },
+        { provide: SmokeProfileService, useValue: cook.profile },
       ],
     }).compile();
 
@@ -94,6 +125,7 @@ describe('AppSettingsService', () => {
     it('answers with the documented defaults rather than an error', async () => {
       expect(await service.getSettings()).toEqual({
         chamber: { enabled: false, low: 225, high: 275 },
+        probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
         appearance: { mode: 'system', resolvedMode: 'light' },
       });
     });
@@ -123,6 +155,8 @@ describe('AppSettingsService', () => {
               ),
             } as unknown as ApplicationSettings),
           },
+          { provide: StateService, useValue: createCook().state },
+          { provide: SmokeProfileService, useValue: createCook().profile },
         ],
       }).compile();
 
@@ -130,6 +164,174 @@ describe('AppSettingsService', () => {
         await module.get<AppSettingsService>(AppSettingsService).getSettings(),
       ).toEqual({
         chamber: { enabled: true, low: 200, high: 300 },
+        probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
+        appearance: { mode: 'dark', resolvedMode: 'dark' },
+      });
+    });
+  });
+
+  describe('reading the probe rows of the Probe Target Reached alert', () => {
+    /** The stored document of a cook watching one probe. */
+    const watchingProbe2 = {
+      chamber: { enabled: false, low: 225, high: 275 },
+      probeTarget: {
+        enabled: true,
+        probes: [{ slot: 'probe2', enabled: true, target: 195 }],
+      },
+    } as unknown as ApplicationSettings;
+
+    /** A service reading one seeded document, with the cook it is named from. */
+    const serviceReading = async (
+      seed: ApplicationSettings,
+      cookNames: ReturnType<typeof createCook> = createCook(),
+    ) => {
+      const module = await Test.createTestingModule({
+        providers: [
+          AppSettingsService,
+          {
+            provide: getModelToken(ApplicationSettings.name),
+            useValue: createSettingsCollection<ApplicationSettings>(seed),
+          },
+          { provide: StateService, useValue: cookNames.state },
+          { provide: SmokeProfileService, useValue: cookNames.profile },
+        ],
+      }).compile();
+      return module.get<AppSettingsService>(AppSettingsService);
+    };
+
+    // The settings page renders a row per probe and the alert engine walks the
+    // same list, so neither can be left guessing which slots exist: a document
+    // saved before a slot was known — or with a slot dropped — still reads as
+    // one entry per probe, in slot order.
+    it('serves one entry per probe slot, whatever subset the stored document carries', async () => {
+      const reading = await serviceReading(watchingProbe2);
+
+      expect((await reading.getSettings()).probeTarget).toEqual({
+        enabled: true,
+        probes: [
+          { slot: 'probe1', enabled: false, target: 203 },
+          { slot: 'probe2', enabled: true, target: 195 },
+          { slot: 'probe3', enabled: false, target: 203 },
+        ],
+      });
+    });
+
+    it('names each probe row as the active cook names it', async () => {
+      const cookNames = createCook();
+      cookNames.profile.getCurrentSmokeProfile.mockResolvedValue({
+        probe1Name: 'Brisket Flat',
+        probe2Name: 'Pork Butt',
+        probe3Name: '',
+      });
+      const reading = await serviceReading(watchingProbe2, cookNames);
+
+      expect((await reading.getResolvedSettings()).probeTarget.probes).toEqual([
+        { slot: 'probe1', enabled: false, target: 203, name: 'Brisket Flat' },
+        { slot: 'probe2', enabled: true, target: 195, name: 'Pork Butt' },
+        { slot: 'probe3', enabled: false, target: 203, name: 'Probe 3' },
+      ]);
+    });
+
+    // The settings page is reachable with nothing cooking, and the profile
+    // service answers a no-session read with placeholder names of its own —
+    // which are not the labels this feature shows.
+    it('shows generic slot labels when no session is active', async () => {
+      const cookNames = createCook();
+      cookNames.state.GetState.mockResolvedValue({
+        smokeId: '',
+        smoking: false,
+      });
+      cookNames.profile.getCurrentSmokeProfile.mockResolvedValue({
+        probe1Name: 'Brisket Flat',
+        probe2Name: 'Pork Butt',
+        probe3Name: 'Ribs',
+      });
+      const reading = await serviceReading(watchingProbe2, cookNames);
+
+      const resolved = await reading.getResolvedSettings();
+
+      expect(resolved.probeTarget.probes.map((probe) => probe.name)).toEqual([
+        'Probe 1',
+        'Probe 2',
+        'Probe 3',
+      ]);
+    });
+
+    // A cook started from pre-smoke has a smoke before it has a smoke profile,
+    // and the profile service fills that window with placeholders of its own.
+    it('shows generic slot labels while the cook has no smoke profile saved yet', async () => {
+      const cookNames = createCook();
+      cookNames.profile.getCurrentSmokeProfile.mockResolvedValue({
+        chamberName: 'Chamber',
+        probe1Name: 'Probe1',
+        probe2Name: 'Probe2',
+        probe3Name: 'Probe3',
+      });
+      const reading = await serviceReading(watchingProbe2, cookNames);
+
+      const resolved = await reading.getResolvedSettings();
+
+      expect(resolved.probeTarget.probes.map((probe) => probe.name)).toEqual([
+        'Probe 1',
+        'Probe 2',
+        'Probe 3',
+      ]);
+    });
+
+    it('serves the settings themselves unchanged alongside the names', async () => {
+      const reading = await serviceReading(watchingProbe2);
+
+      const resolved = await reading.getResolvedSettings();
+
+      expect(resolved.chamber).toEqual({
+        enabled: false,
+        low: 225,
+        high: 275,
+      });
+      expect(resolved.probeTarget.enabled).toBe(true);
+    });
+
+    // Watch state and targets are the user's, and outlive both the cook that
+    // was running when they were set and the browser that set them.
+    it('reads back the watch list and targets a save stored', async () => {
+      await service.saveSettings({
+        probeTarget: {
+          enabled: true,
+          probes: [
+            { slot: 'probe1', enabled: true, target: 203 },
+            { slot: 'probe2', enabled: false, target: 195 },
+            { slot: 'probe3', enabled: false, target: 203 },
+          ],
+        },
+      });
+
+      expect((await service.getSettings()).probeTarget).toEqual({
+        enabled: true,
+        probes: [
+          { slot: 'probe1', enabled: true, target: 203 },
+          { slot: 'probe2', enabled: false, target: 195 },
+          { slot: 'probe3', enabled: false, target: 203 },
+        ],
+      });
+    });
+
+    // The document's three writers are independent: saving probe targets must
+    // not reset the appearance a browser chose, nor the chamber alert.
+    it('leaves the other blocks alone when only the probe rows are saved', async () => {
+      await service.saveSettings({
+        chamber: { enabled: true, low: 200, high: 250 },
+        appearance: { mode: 'dark', resolvedMode: 'dark' },
+      });
+
+      await service.saveSettings({
+        probeTarget: {
+          enabled: true,
+          probes: [{ slot: 'probe1', enabled: true, target: 203 }],
+        },
+      });
+
+      expect(await service.getSettings()).toMatchObject({
+        chamber: { enabled: true, low: 200, high: 250 },
         appearance: { mode: 'dark', resolvedMode: 'dark' },
       });
     });
@@ -159,6 +361,7 @@ describe('AppSettingsService', () => {
 
       expect(await service.getSettings()).toEqual({
         chamber: { enabled: true, low: 200, high: 250 },
+        probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
         appearance: { mode: 'dark', resolvedMode: 'dark' },
       });
       expect(settings.all()).toHaveLength(1);
@@ -174,6 +377,7 @@ describe('AppSettingsService', () => {
 
       expect(await service.getSettings()).toEqual({
         chamber: { enabled: false, low: 225, high: 275 },
+        probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
         appearance: { mode: 'system', resolvedMode: 'light' },
       });
     });
@@ -210,6 +414,7 @@ describe('AppSettingsService', () => {
 
       expect(await service.getSettings()).toEqual({
         chamber: { enabled: true, low: 200, high: 250 },
+        probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
         appearance: { mode: 'dark', resolvedMode: 'dark' },
       });
     });
@@ -225,6 +430,7 @@ describe('AppSettingsService', () => {
 
       expect(await service.getSettings()).toEqual({
         chamber: { enabled: true, low: 200, high: 250 },
+        probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
         appearance: { mode: 'light', resolvedMode: 'light' },
       });
     });
@@ -250,6 +456,7 @@ describe('AppSettingsService', () => {
 
       expect(await service.getSettings()).toEqual({
         chamber: { enabled: true, low: 200, high: 250 },
+        probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
         appearance: { mode: 'dark', resolvedMode: 'dark' },
       });
       expect(settings.all()).toHaveLength(1);
@@ -273,6 +480,8 @@ describe('AppSettingsService', () => {
             provide: getModelToken(ApplicationSettings.name),
             useValue: legacy,
           },
+          { provide: StateService, useValue: createCook().state },
+          { provide: SmokeProfileService, useValue: createCook().profile },
         ],
       }).compile();
 
@@ -284,6 +493,7 @@ describe('AppSettingsService', () => {
       expect(legacy.all()[0]).not.toHaveProperty('settings');
       expect(await service.getSettings()).toEqual({
         chamber: { enabled: false, low: 225, high: 275 },
+        probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
         appearance: { mode: 'dark', resolvedMode: 'dark' },
       });
     });

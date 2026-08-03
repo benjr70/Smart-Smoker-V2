@@ -12,16 +12,36 @@ import { ApplicationSettingsDto } from './app-settings.dto';
  */
 describe('AppSettingsController', () => {
   let controller: AppSettingsController;
-  let service: { getSettings: jest.Mock; saveSettings: jest.Mock };
+  let service: {
+    getSettings: jest.Mock;
+    getResolvedSettings: jest.Mock;
+    saveSettings: jest.Mock;
+  };
 
   const settings: ApplicationSettings = {
     chamber: { enabled: true, low: 200, high: 250 },
+    probeTarget: {
+      enabled: true,
+      probes: [{ slot: 'probe1', enabled: true, target: 203 }],
+    },
     appearance: { mode: 'dark', resolvedMode: 'dark' },
+  };
+
+  /** The same document as the read serves it: every probe row named. */
+  const resolved = {
+    ...settings,
+    probeTarget: {
+      enabled: true,
+      probes: [
+        { slot: 'probe1', enabled: true, target: 203, name: 'Brisket Flat' },
+      ],
+    },
   };
 
   beforeEach(async () => {
     service = {
       getSettings: jest.fn().mockResolvedValue(settings),
+      getResolvedSettings: jest.fn().mockResolvedValue(resolved),
       saveSettings: jest.fn().mockResolvedValue(settings),
     };
 
@@ -33,8 +53,21 @@ describe('AppSettingsController', () => {
     controller = module.get<AppSettingsController>(AppSettingsController);
   });
 
-  it('serves the whole settings document, alerts and appearance alike', async () => {
-    expect(await controller.getSettings()).toEqual(settings);
+  // The settings page renders a name against every probe row, and those names
+  // belong to the cook rather than to the stored settings — so the read has to
+  // carry them, or the page would have nothing but slot identifiers to show.
+  it('serves the whole settings document, with each probe row named for the current cook', async () => {
+    expect(await controller.getSettings()).toEqual(resolved);
+  });
+
+  it('propagates a failed read rather than swallowing it', async () => {
+    service.getResolvedSettings.mockRejectedValue(
+      new Error('Database connection failed'),
+    );
+
+    await expect(controller.getSettings()).rejects.toThrow(
+      'Database connection failed',
+    );
   });
 
   it('saves the blocks it was given', async () => {

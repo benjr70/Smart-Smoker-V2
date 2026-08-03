@@ -362,6 +362,47 @@ describe('useCurrentResource', () => {
     expect(await screen.findByText('Could not save pre-smoke.')).toBeInTheDocument();
   });
 
+  test('saves nothing on unmount when the load failed', async () => {
+    // Data-loss guard: a failed load leaves the component showing defaults it
+    // invented, not the document the backend holds. Saving an edit made on top
+    // of those defaults would post a whole document assembled from them —
+    // silently overwriting settings blocks (a probe watch list, say) the user
+    // never saw. A transient 5xx must cost the edit, not the stored state.
+    const backend = createFakeBackend();
+    const client = createApiClient(backend);
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <ApiClientProvider client={client}>
+        <SnackbarProvider>{children}</SnackbarProvider>
+      </ApiClientProvider>
+    );
+
+    const load = jest.fn().mockRejectedValue(new Error('boom'));
+    const save = jest.fn().mockResolvedValue(undefined);
+    const { result, unmount } = renderHook(
+      () =>
+        useCurrentResource<PreSmoke>({
+          initialValue: preSmokeDefaults,
+          load,
+          save: (_c, value) => save(value),
+          loadErrorMessage: 'Could not load pre-smoke.',
+          saveErrorMessage: 'Could not save pre-smoke.',
+        }),
+      { wrapper }
+    );
+
+    expect(await screen.findByText('Could not load pre-smoke.')).toBeInTheDocument();
+
+    act(() => {
+      result.current[1](prev => ({ ...prev, name: 'Edited after a failed load' }));
+    });
+    unmount();
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(save).not.toHaveBeenCalled();
+  });
+
   test('falls back to a generic load message when none is supplied', async () => {
     const backend = createFakeBackend({ preSmoke: { current: undefined } });
     backend.injectFault({ method: 'get', path: 'presmoke/', status: 500 });

@@ -15,6 +15,8 @@ import {
   ApplicationSettings,
   ChamberAlertSettings,
   NotificationSettings,
+  ProbeTargetAlertSettings,
+  ProbeTargetEntry,
   PostSmoke,
   PreSmoke,
   PushSubscriptionPayload,
@@ -34,7 +36,32 @@ import {
  */
 export const defaultNotificationSettings = (): NotificationSettings => ({
   chamber: { enabled: false, low: 225, high: 275 },
+  probeTarget: {
+    enabled: false,
+    probes: PROBE_SLOTS.map((slot, index) => ({
+      slot,
+      enabled: false,
+      target: DEFAULT_PROBE_TARGET,
+      name: `Probe ${index + 1}`,
+    })),
+  },
 });
+
+/** The smoker's meat probe slots, in the order the settings page lists them. */
+const PROBE_SLOTS = ['probe1', 'probe2', 'probe3'];
+
+/** The target a probe carries until the user sets one — where a brisket is done. */
+const DEFAULT_PROBE_TARGET = 203;
+
+/**
+ * The settings document as it goes over the wire on a save: the same shape
+ * without the resolved probe names, which the backend serves but will not accept.
+ */
+type NotificationSettingsPayload = Omit<NotificationSettings, 'probeTarget'> & {
+  probeTarget: Omit<ProbeTargetAlertSettings, 'probes'> & {
+    probes: Omit<ProbeTargetEntry, 'name'>[];
+  };
+};
 
 export interface TempsResource {
   /** GET `temps` — the current smoke's temperature series. */
@@ -306,14 +333,15 @@ const toRatingsPayload = (rating: rating): rating => ({
 
 /**
  * Project a notification settings document onto the backend
- * NotificationSettingsDto whitelist: exactly the blocks the user owns, each
+ * ApplicationSettingsDto whitelist: exactly the alert blocks the user owns, each
  * completed from the defaults. A document read from the backend carries a
  * persisted `_id`/`__v` that the strict validation edge (forbidNonWhitelisted,
  * PR #323) rejects on save, and a partially-filled block fails its own
  * validation — this is the one place both are handled.
  */
-const toNotificationSettingsPayload = (input: unknown): NotificationSettings => {
-  const chamber = (input as { chamber?: Partial<ChamberAlertSettings> })?.chamber;
+const toNotificationSettingsPayload = (input: unknown): NotificationSettingsPayload => {
+  const document = input as Partial<NotificationSettings> | null | undefined;
+  const chamber = document?.chamber as Partial<ChamberAlertSettings> | undefined;
   const defaults = defaultNotificationSettings();
   return {
     chamber: {
@@ -321,8 +349,36 @@ const toNotificationSettingsPayload = (input: unknown): NotificationSettings => 
       low: chamber?.low ?? defaults.chamber.low,
       high: chamber?.high ?? defaults.chamber.high,
     },
+    probeTarget: {
+      enabled: document?.probeTarget?.enabled ?? defaults.probeTarget.enabled,
+      // Named without a spread: the resolved `name` is the backend's to serve
+      // and not the user's to save, and the strict edge 400s a body carrying it.
+      probes: probeEntriesWithDefaults(document?.probeTarget?.probes).map(probe => ({
+        slot: probe.slot,
+        enabled: probe.enabled,
+        target: probe.target,
+      })),
+    },
   };
 };
+
+/**
+ * Exactly one entry per probe slot, in slot order, whatever subset was given —
+ * mirroring the backend's own read, so a half-filled document neither saves as
+ * a shorter list nor renders as fewer rows.
+ */
+const probeEntriesWithDefaults = (
+  probes: ProbeTargetEntry[] | null | undefined
+): ProbeTargetEntry[] =>
+  PROBE_SLOTS.map((slot, index) => {
+    const entry = probes?.find(candidate => candidate?.slot === slot);
+    return {
+      slot,
+      enabled: entry?.enabled ?? false,
+      target: entry?.target ?? DEFAULT_PROBE_TARGET,
+      name: entry?.name?.trim() || `Probe ${index + 1}`,
+    };
+  });
 
 /**
  * Per-piece typed defaults for the review aggregate. Any child resource that is
@@ -406,13 +462,24 @@ export const createApiClient = (
       // the transport; map it to `undefined` so "nothing yet" leaves callers on
       // their safe defaults rather than blanking the form.
       const response = await transport.get<Partial<ApplicationSettings> | null>('appSettings');
-      if (!response) {
+      if (!response?.chamber) {
         return undefined;
       }
       // The route serves the whole application settings document. This resource
       // is the alert half of it, so the appearance block is left where it
       // belongs rather than carried through the settings page and posted back.
-      return response.chamber ? { chamber: response.chamber } : undefined;
+      //
+      // The probe rows are normalized on the way in so every caller renders a
+      // row per probe: a document stored before a slot existed reads back as a
+      // full list, and a row the backend could not name reads back with its
+      // generic label rather than with `undefined`.
+      return {
+        chamber: response.chamber,
+        probeTarget: {
+          enabled: response.probeTarget?.enabled ?? false,
+          probes: probeEntriesWithDefaults(response.probeTarget?.probes),
+        },
+      };
     },
     saveSettings: (input: unknown) =>
       transport.post<NotificationSettings>('appSettings', toNotificationSettingsPayload(input)),

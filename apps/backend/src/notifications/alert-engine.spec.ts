@@ -1,6 +1,8 @@
 import {
+  AlertNames,
   AlertRuntimeState,
   ChamberAlertSettings,
+  ProbeTargetAlertSettings,
   evaluateAlerts,
   initialAlertRuntimeState,
 } from './alert-engine';
@@ -14,29 +16,74 @@ const chamberRange = (
   ...overrides,
 });
 
+/** The smoker's three meat probes, and the target each carries when unwatched. */
+const RESTING_TARGETS: Record<string, number> = {
+  probe1: 203,
+  probe2: 195,
+  probe3: 165,
+};
+
+/**
+ * The Probe Target Reached alert watching exactly the probes named, at the
+ * targets given. Every other slot is still present and still carries a target —
+ * as it does in a real settings document — so a test that expects silence from
+ * an unwatched probe is actually testing the watch flag.
+ */
+const watching = (
+  watched: Record<string, number>,
+  overrides: Partial<ProbeTargetAlertSettings> = {},
+): ProbeTargetAlertSettings => ({
+  enabled: true,
+  probes: Object.keys(RESTING_TARGETS).map((slot) => ({
+    slot,
+    enabled: watched[slot] !== undefined,
+    target: watched[slot] ?? RESTING_TARGETS[slot],
+  })),
+  ...overrides,
+});
+
+/** The names this cook's smoke profile gives the smoker's probes. */
+const COOK_NAMES: AlertNames = {
+  chamber: 'Chamber',
+  probes: {
+    probe1: 'Brisket Flat',
+    probe2: 'Pork Butt',
+    probe3: 'Probe 3',
+  },
+};
+
 const START = new Date('2026-08-02T10:00:00.000Z');
 const minutesAfterStart = (minutes: number): Date =>
   new Date(START.getTime() + minutes * 60 * 1000);
 
 /**
  * Feed a cook to the engine one reading at a time and collect everything it
- * decided to send. Each entry is `[minutes since the cook started, chamber °F]`,
- * so a test reads as the shape of the cook rather than as a pile of state
- * plumbing — and the engine is exercised exactly as the service drives it:
- * hand it the state it returned last tick.
+ * decided to send. Each entry is
+ * `[minutes since the cook started, chamber °F, probe °F by slot]`, so a test
+ * reads as the shape of the cook rather than as a pile of state plumbing — and
+ * the engine is exercised exactly as the service drives it: hand it the state it
+ * returned last tick.
  */
 const runCook = (
-  readings: Array<[number, number | null]>,
-  options: { chamber?: ChamberAlertSettings; state?: AlertRuntimeState } = {},
+  readings: Array<[number, number | null, Record<string, number | null>?]>,
+  options: {
+    chamber?: ChamberAlertSettings;
+    probeTarget?: ProbeTargetAlertSettings;
+    state?: AlertRuntimeState;
+    names?: AlertNames;
+  } = {},
 ) => {
   let state = options.state ?? initialAlertRuntimeState();
   const bodies: string[] = [];
-  readings.forEach(([minutes, chamberTemp]) => {
+  readings.forEach(([minutes, chamberTemp, probeTemps]) => {
     const evaluation = evaluateAlerts({
-      reading: { chamberTemp },
-      settings: { chamber: options.chamber ?? chamberRange() },
+      reading: { chamberTemp, probeTemps: probeTemps ?? {} },
+      settings: {
+        chamber: options.chamber ?? chamberRange(),
+        probeTarget: options.probeTarget ?? watching({}, { enabled: false }),
+      },
       state,
-      names: { chamber: 'Chamber' },
+      names: options.names ?? COOK_NAMES,
       now: minutesAfterStart(minutes),
     });
     bodies.push(...evaluation.notifications.map((sent) => sent.body));
@@ -160,19 +207,165 @@ describe('alert engine — chamber temperature alert', () => {
   // settings are being edited in the UI, and the runtime state is persisted by
   // the caller only after it decides to.
   it('leaves the settings and the state it was handed untouched, answering with a new state', () => {
-    const settings = { chamber: chamberRange() };
+    const settings = {
+      chamber: chamberRange(),
+      probeTarget: watching({ probe1: 203 }),
+    };
     const state = initialAlertRuntimeState();
 
     const evaluation = evaluateAlerts({
-      reading: { chamberTemp: 240 },
+      reading: { chamberTemp: 240, probeTemps: { probe1: 210 } },
       settings,
       state,
-      names: { chamber: 'Chamber' },
+      names: COOK_NAMES,
       now: START,
     });
 
-    expect(settings).toEqual({ chamber: chamberRange() });
+    expect(settings).toEqual({
+      chamber: chamberRange(),
+      probeTarget: watching({ probe1: 203 }),
+    });
     expect(state).toEqual(initialAlertRuntimeState());
     expect(evaluation.state.chamberArmed).toBe(true);
+  });
+});
+
+describe('alert engine — probe target alerts', () => {
+  it('tells the cook when a watched probe reaches its target, by the name this cook gave it', () => {
+    const { bodies } = runCook(
+      [
+        [0, null, { probe1: 68 }],
+        [180, null, { probe1: 190 }],
+        [240, null, { probe1: 203 }],
+      ],
+      { probeTarget: watching({ probe1: 203 }) },
+    );
+
+    expect(bodies).toEqual(['Brisket Flat reached 203°F.']);
+  });
+
+  // A probe that reaches target stays there (or climbs) for the rest of the
+  // cook, so a rule without a fired marker would notify on every tick until the
+  // meat comes off — thirty seconds apart, for the whole rest.
+  it('says it once, however long the probe then sits at or above its target', () => {
+    const { bodies } = runCook(
+      [
+        [180, null, { probe1: 190 }],
+        [240, null, { probe1: 203 }],
+        [245, null, { probe1: 204 }],
+        [300, null, { probe1: 210 }],
+        [360, null, { probe1: 203 }],
+      ],
+      { probeTarget: watching({ probe1: 203 }) },
+    );
+
+    expect(bodies).toEqual(['Brisket Flat reached 203°F.']);
+  });
+
+  // An unused probe left dangling in open air sits at chamber temperature all
+  // cook, which is well past any meat target — so "watched" has to be the only
+  // thing that lets a probe speak.
+  it('ignores a probe the cook is not watching, however hot it reads', () => {
+    const { bodies } = runCook(
+      [
+        [60, null, { probe1: 203, probe2: 260, probe3: 300 }],
+        [120, null, { probe1: 210, probe2: 265, probe3: 310 }],
+      ],
+      { probeTarget: watching({ probe1: 203 }) },
+    );
+
+    expect(bodies).toEqual(['Brisket Flat reached 203°F.']);
+  });
+
+  it('gives two meats cooking together their own targets and their own alerts', () => {
+    const { bodies } = runCook(
+      [
+        [180, null, { probe1: 190, probe2: 180 }],
+        // The pork butt finishes first, and the brisket is not done yet.
+        [240, null, { probe1: 198, probe2: 196 }],
+        [300, null, { probe1: 203, probe2: 199 }],
+      ],
+      { probeTarget: watching({ probe1: 203, probe2: 195 }) },
+    );
+
+    expect(bodies).toEqual([
+      'Pork Butt reached 196°F.',
+      'Brisket Flat reached 203°F.',
+    ]);
+  });
+
+  it('is inert while switched off, however many watched probes finish', () => {
+    const { bodies } = runCook(
+      [
+        [240, null, { probe1: 210, probe2: 200 }],
+        [300, null, { probe1: 215, probe2: 205 }],
+      ],
+      {
+        probeTarget: watching({ probe1: 203, probe2: 195 }, { enabled: false }),
+      },
+    );
+
+    expect(bodies).toEqual([]);
+  });
+
+  // Switching the alert back on mid-cook must not release a backlog: a probe
+  // that passed its target while the alert was off has to announce itself on the
+  // next reading, not be silently marked as already announced.
+  it('leaves no bookkeeping behind while switched off, so switching it on still works', () => {
+    const off = runCook([[240, null, { probe1: 210 }]], {
+      probeTarget: watching({ probe1: 203 }, { enabled: false }),
+    });
+
+    const { bodies } = runCook([[300, null, { probe1: 212 }]], {
+      probeTarget: watching({ probe1: 203 }),
+      state: off.state,
+    });
+
+    expect(bodies).toEqual(['Brisket Flat reached 212°F.']);
+  });
+
+  // An unplugged probe reports nothing. Read as 0°F it would be below every
+  // target and stay silent, but read as any target-or-above value it would
+  // announce meat that is not cooking — so "nothing" must mean nothing.
+  it('ignores a watched probe the smoker reported no reading for', () => {
+    const { bodies } = runCook(
+      [
+        [60, null, { probe1: null }],
+        [120, null, {}],
+        [180, null, { probe1: null }],
+      ],
+      { probeTarget: watching({ probe1: 203 }) },
+    );
+
+    expect(bodies).toEqual([]);
+  });
+
+  // The two rules are independent: a dying fire while the brisket finishes is
+  // two separate things the cook needs to be told, on the same tick.
+  it('reports a chamber excursion and a finished probe from the same reading', () => {
+    const { bodies } = runCook(
+      [
+        [0, 240, { probe1: 150 }],
+        [40, 180, { probe1: 190 }],
+        [45, 175, { probe1: 205 }],
+      ],
+      { probeTarget: watching({ probe1: 203 }) },
+    );
+
+    expect(bodies).toEqual([
+      'Chamber dropped to 175°F, below your 225°F low.',
+      'Brisket Flat reached 205°F.',
+    ]);
+  });
+
+  // The resolver always supplies a name, but a notification that reads
+  // "undefined reached 205°F" would be worse than useless if it ever did not.
+  it('names the slot itself rather than nothing when no name was resolved for it', () => {
+    const { bodies } = runCook([[240, null, { probe3: 170 }]], {
+      probeTarget: watching({ probe3: 165 }),
+      names: { chamber: 'Chamber', probes: {} },
+    });
+
+    expect(bodies).toEqual(['probe3 reached 170°F.']);
   });
 });

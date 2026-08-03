@@ -8,7 +8,14 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { StateService } from '../State/state.service';
 import { AppSettingsService } from '../appSettings/app-settings.service';
+import {
+  PROBE_SLOTS,
+  ProbeSlot,
+  resolveProbeNames,
+} from '../appSettings/probe-names';
 import { PushDispatcherService } from '../pushDispatcher/push-dispatcher.service';
+import { SmokeProfileService } from '../smokeProfile/smokeProfile.service';
+import { Temp } from '../temps/temps.schema';
 import { TempsService } from '../temps/temps.service';
 import {
   AlertRuntimeState,
@@ -47,6 +54,25 @@ const readTemperature = (raw: string | undefined): number | null => {
   return Number.isNaN(reading) ? null : reading;
 };
 
+/**
+ * Which reading on the device's record belongs to which probe slot. The device
+ * has always named the first meat probe `MeatTemp` and the rest `Meat2Temp`/
+ * `Meat3Temp`; the alert settings are keyed by slot. This is the one place the
+ * two vocabularies meet.
+ */
+const PROBE_READINGS: Record<ProbeSlot, keyof Temp> = {
+  probe1: 'MeatTemp',
+  probe2: 'Meat2Temp',
+  probe3: 'Meat3Temp',
+};
+
+/** The meat probes' readings by slot, as the engine takes them. */
+const readProbeTemps = (latest: Temp): Record<string, number | null> =>
+  PROBE_SLOTS.reduce<Record<string, number | null>>((temps, slot) => {
+    temps[slot] = readTemperature(latest[PROBE_READINGS[slot]] as string);
+    return temps;
+  }, {});
+
 @Injectable()
 export class NotificationsService implements OnModuleInit, OnModuleDestroy {
   private evaluationTimer?: ReturnType<typeof setInterval>;
@@ -60,6 +86,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     private stateService: StateService,
     private tempsService: TempsService,
     private appSettingsService: AppSettingsService,
+    private smokeProfileService: SmokeProfileService,
   ) {}
 
   /** Start the evaluation interval this service owns. */
@@ -141,16 +168,20 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     // read here and never written: what evaluation records goes to the separate
     // alert-state document, so an edit typed on the settings page during a cook
     // survives.
-    const [settings, state] = await Promise.all([
+    const [settings, state, profile] = await Promise.all([
       this.appSettingsService.getSettings(),
       this.loadAlertState(session.smokeId),
+      this.smokeProfileService.getCurrentSmokeProfile(),
     ]);
 
     const evaluation = evaluateAlerts({
-      reading: { chamberTemp: readTemperature(latest.ChamberTemp) },
+      reading: {
+        chamberTemp: readTemperature(latest.ChamberTemp),
+        probeTemps: readProbeTemps(latest),
+      },
       settings,
       state,
-      names: { chamber: CHAMBER_NAME },
+      names: { chamber: CHAMBER_NAME, probes: resolveProbeNames(profile) },
       now: new Date(),
     });
 
@@ -174,6 +205,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
       chamberArmed: stored.chamberArmed ?? false,
       chamberOutOfRangeSince: stored.chamberOutOfRangeSince ?? null,
       chamberAlertSent: stored.chamberAlertSent ?? false,
+      probeTargetsReached: stored.probeTargetsReached ?? [],
     };
   }
 

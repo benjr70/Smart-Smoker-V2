@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { SmokeProfileModule } from '../smokeProfile/smokeProfile.module';
 import { StateModule } from '../State/state.module';
 import { AppSettingsModule } from '../appSettings/app-settings.module';
 import { PushDispatcherModule } from '../pushDispatcher/push-dispatcher.module';
@@ -15,6 +16,10 @@ import { NotificationSubscriptionSchema } from './notificationSubscription.schem
     PushDispatcherModule,
     StateModule,
     TempModule,
+    // Alerts name probes as the active cook named them, which is the smoke
+    // profile's to answer. No cycle: nothing in the profile's own dependency
+    // chain (smoke, ratings, common, state) knows about notifications.
+    SmokeProfileModule,
     MongooseModule.forFeature([
       {
         name: 'NotificationSubscription',

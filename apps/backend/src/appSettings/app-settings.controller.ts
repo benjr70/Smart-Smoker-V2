@@ -3,6 +3,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { ApplicationSettingsDto } from './app-settings.dto';
 import { ApplicationSettings } from './app-settings.schema';
 import { AppSettingsService } from './app-settings.service';
+import { ResolvedApplicationSettings } from './probe-names';
 
 /**
  * The installation's settings.
@@ -21,10 +22,14 @@ export class AppSettingsController {
    * The current settings, always a complete document: a deployment that has
    * never saved (or that still holds the deleted rule shape, which is not
    * migrated) reads as defaults rather than as an error.
+   *
+   * Each probe row carries the name the active cook gives that slot. The names
+   * are served, never stored — the save DTO rejects them — because a slot's name
+   * belongs to what is cooking rather than to the setting.
    */
   @Get()
-  getSettings(): Promise<ApplicationSettings> {
-    return this.appSettingsService.getSettings();
+  getSettings(): Promise<ResolvedApplicationSettings> {
+    return this.appSettingsService.getResolvedSettings();
   }
 
   /**
