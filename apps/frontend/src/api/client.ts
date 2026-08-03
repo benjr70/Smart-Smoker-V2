@@ -25,6 +25,7 @@ import {
   SmokeProfile,
   SmokeReview,
   State,
+  TargetPresets,
   TempData,
   rating,
 } from './types';
@@ -42,10 +43,12 @@ export const defaultNotificationSettings = (): NotificationSettings => ({
       slot,
       enabled: false,
       target: DEFAULT_PROBE_TARGET,
+      targetSource: 'default',
       name: `Probe ${index + 1}`,
     })),
   },
   smokeComplete: { enabled: false },
+  targetPresets: DEFAULT_TARGET_PRESETS,
 });
 
 /** The smoker's meat probe slots, in the order the settings page lists them. */
@@ -55,10 +58,17 @@ const PROBE_SLOTS = ['probe1', 'probe2', 'probe3'];
 const DEFAULT_PROBE_TARGET = 203;
 
 /**
+ * The temperature each category of meat is taken to be done at until the user
+ * says otherwise, mirroring the backend's own defaults so a deployment that has
+ * never saved any renders the same three numbers the backend would seed from.
+ */
+const DEFAULT_TARGET_PRESETS: TargetPresets = { beef: 203, pork: 200, poultry: 165 };
+
+/**
  * The settings document as it goes over the wire on a save: the same shape
  * without the resolved probe names, which the backend serves but will not accept.
  */
-type NotificationSettingsPayload = Omit<NotificationSettings, 'probeTarget'> & {
+type NotificationSettingsPayload = Omit<NotificationSettings, 'probeTarget' | 'targetPresets'> & {
   probeTarget: Omit<ProbeTargetAlertSettings, 'probes'> & {
     probes: Omit<ProbeTargetEntry, 'name'>[];
   };
@@ -138,6 +148,15 @@ export interface NotificationsResource {
    * saving alerts never disturbs the appearance.
    */
   saveSettings(input: unknown): Promise<NotificationSettings>;
+  /**
+   * POST `appSettings` — store the default target temps, and nothing else.
+   *
+   * Its own operation rather than part of {@link saveSettings} because the
+   * Default target temps card and the alerts card are two writers of one
+   * document, both on screen together: a save that carried the whole document
+   * would undo whichever edit the other card had just made.
+   */
+  saveTargetPresets(presets: TargetPresets): Promise<TargetPresets>;
   /**
    * GET `notifications/publicKey` — the VAPID application server key, read from
    * the backend at subscribe time rather than baked into this bundle. Rejects
@@ -358,6 +377,7 @@ const toNotificationSettingsPayload = (input: unknown): NotificationSettingsPayl
         slot: probe.slot,
         enabled: probe.enabled,
         target: probe.target,
+        targetSource: probe.targetSource,
       })),
     },
     smokeComplete: {
@@ -380,9 +400,25 @@ const probeEntriesWithDefaults = (
       slot,
       enabled: entry?.enabled ?? false,
       target: entry?.target ?? DEFAULT_PROBE_TARGET,
+      // A row stored before targets had a provenance is one nobody has typed
+      // into, which is exactly what the shipped default means.
+      targetSource: entry?.targetSource ?? 'default',
       name: entry?.name?.trim() || `Probe ${index + 1}`,
     };
   });
+
+/**
+ * The three default target temps, filling in any the document is missing — a
+ * deployment older than the card has none stored, and its fields still have to
+ * render numbers rather than blanks.
+ */
+const presetsWithDefaults = (
+  presets: Partial<TargetPresets> | null | undefined
+): TargetPresets => ({
+  beef: presets?.beef ?? DEFAULT_TARGET_PRESETS.beef,
+  pork: presets?.pork ?? DEFAULT_TARGET_PRESETS.pork,
+  poultry: presets?.poultry ?? DEFAULT_TARGET_PRESETS.poultry,
+});
 
 /**
  * Per-piece typed defaults for the review aggregate. Any child resource that is
@@ -484,10 +520,21 @@ export const createApiClient = (
           probes: probeEntriesWithDefaults(response.probeTarget?.probes),
         },
         smokeComplete: { enabled: response.smokeComplete?.enabled ?? false },
+        targetPresets: presetsWithDefaults(response.targetPresets),
       };
     },
     saveSettings: (input: unknown) =>
       transport.post<NotificationSettings>('appSettings', toNotificationSettingsPayload(input)),
+    saveTargetPresets: async (presets: TargetPresets) => {
+      const saved = await transport.post<{ targetPresets?: TargetPresets }>('appSettings', {
+        targetPresets: {
+          beef: presets.beef,
+          pork: presets.pork,
+          poultry: presets.poultry,
+        },
+      });
+      return saved?.targetPresets ?? presets;
+    },
     getPublicKey: async () => {
       const response = await transport.get<{ publicKey: string | null } | null>(
         'notifications/publicKey'

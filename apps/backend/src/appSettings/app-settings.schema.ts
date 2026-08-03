@@ -29,6 +29,16 @@ export const ChamberAlertSettingsSchema =
   SchemaFactory.createForClass(ChamberAlertSettings);
 
 /**
+ * Where a probe's target came from: nobody (the shipped default), the preset
+ * seeded when the session started, or the user typing one in.
+ *
+ * Recorded because seeding must never overwrite a temperature a person chose,
+ * and the value alone cannot tell the two apart — a hand-typed 203 looks
+ * exactly like the default 203.
+ */
+export type TargetSource = 'default' | 'preset' | 'user';
+
+/**
  * One probe's entry in the Probe Target Reached alert.
  *
  * Keyed by `slot` — the smoker's physical probe — and never by name: names
@@ -51,6 +61,11 @@ export class ProbeTargetEntry {
   @ApiProperty()
   @Prop({ default: 203 })
   target: number;
+
+  /** Where that target came from — see {@link TargetSource}. */
+  @ApiProperty({ enum: ['default', 'preset', 'user'] })
+  @Prop({ default: 'default' })
+  targetSource: TargetSource;
 }
 
 export const ProbeTargetEntrySchema =
@@ -92,6 +107,29 @@ export class SmokeCompleteAlertSettings {
 export const SmokeCompleteAlertSettingsSchema = SchemaFactory.createForClass(
   SmokeCompleteAlertSettings,
 );
+/**
+ * The default target temperature, °F, per meat category.
+ *
+ * One field per category rather than a free-form map: the categories are the
+ * ones the matcher knows about, and a stored key it has never heard of could
+ * only ever be dead weight the settings page still had to render.
+ */
+@Schema({ _id: false })
+export class TargetPresets {
+  @ApiProperty()
+  @Prop({ default: 203 })
+  beef: number;
+
+  @ApiProperty()
+  @Prop({ default: 200 })
+  pork: number;
+
+  @ApiProperty()
+  @Prop({ default: 165 })
+  poultry: number;
+}
+
+export const TargetPresetsSchema = SchemaFactory.createForClass(TargetPresets);
 
 /**
  * How the installation looks: the mode an operator chose, and what that choice
@@ -137,6 +175,10 @@ export class ApplicationSettings {
   @ApiProperty({ type: SmokeCompleteAlertSettings })
   @Prop({ type: SmokeCompleteAlertSettingsSchema, default: () => ({}) })
   smokeComplete: SmokeCompleteAlertSettings;
+
+  @ApiProperty({ type: TargetPresets })
+  @Prop({ type: TargetPresetsSchema, default: () => ({}) })
+  targetPresets: TargetPresets;
 
   @ApiProperty({ type: AppearanceSettings })
   @Prop({ type: AppearanceSettingsSchema, default: () => ({}) })

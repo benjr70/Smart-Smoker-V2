@@ -11,6 +11,7 @@ import {
   ApplicationSettingsDocument,
 } from './app-settings.schema';
 import { isCoherentPreference } from './appearance';
+import { withSeededTargets } from './meat-presets';
 import {
   ResolvedApplicationSettings,
   resolveProbeNames,
@@ -75,6 +76,42 @@ export class AppSettingsService {
   }
 
   /**
+   * Apply the default target of the meat being cooked to the probes that are
+   * being watched, and answer with the settings as they now stand.
+   *
+   * Only a probe whose target nobody set by hand is touched: a temperature the
+   * user typed is theirs, and a preset overwriting it would be the app quietly
+   * disagreeing with the person at the smoker. A probe that is not being
+   * watched is left alone for the same reason — seeding it would put a number
+   * on a row the user turned off.
+   *
+   * A meat type the matcher does not recognise seeds nothing and writes
+   * nothing, so an unusual cook keeps whatever was configured rather than being
+   * given somebody else's done temperature.
+   */
+  async seedProbeTargets(
+    meatType: string | null | undefined,
+  ): Promise<ApplicationSettings> {
+    const settings = await this.getSettings();
+    const seeded = withSeededTargets(
+      settings.probeTarget.probes,
+      settings.targetPresets,
+      meatType,
+    );
+    // Nothing to apply — an unrecognised meat, or probes that already hold this
+    // preset. No write at all: the document is shared with whoever is editing
+    // the settings page, so a write that changes nothing is only a chance to
+    // lose their edit.
+    if (!seeded) {
+      return settings;
+    }
+
+    return this.saveSettings({
+      probeTarget: { ...settings.probeTarget, probes: seeded },
+    });
+  }
+
+  /**
    * Write the blocks the caller supplied, leaving the others as they are.
    *
    * Block-wise rather than whole-document, because the document now serves two
@@ -114,7 +151,13 @@ export class AppSettingsService {
     const set: Partial<ApplicationSettings> = {};
     const setOnInsert: Partial<ApplicationSettings> = {};
     (
-      ['chamber', 'probeTarget', 'smokeComplete', 'appearance'] as const
+      [
+        'chamber',
+        'probeTarget',
+        'smokeComplete',
+        'targetPresets',
+        'appearance',
+      ] as const
     ).forEach((block) => {
       if (incoming[block]) {
         Object.assign(set, { [block]: complete[block] });

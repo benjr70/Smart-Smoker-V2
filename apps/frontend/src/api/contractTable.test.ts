@@ -81,9 +81,18 @@ const seededNotifications: NotificationSettings = {
   chamber: { enabled: true, low: 225, high: 275 },
   probeTarget: {
     enabled: true,
-    probes: [{ slot: 'probe1', enabled: true, target: 203, name: 'Brisket Flat' }],
+    probes: [
+      {
+        slot: 'probe1',
+        enabled: true,
+        target: 203,
+        targetSource: 'user',
+        name: 'Brisket Flat',
+      },
+    ],
   },
   smokeComplete: { enabled: true },
+  targetPresets: { beef: 203, pork: 200, poultry: 165 },
 };
 
 // A browser push subscription in its wire form — the exact body the backend
@@ -186,9 +195,9 @@ const projectedNotificationsBody = {
   probeTarget: {
     enabled: true,
     probes: [
-      { slot: 'probe1', enabled: true, target: 203 },
-      { slot: 'probe2', enabled: false, target: 203 },
-      { slot: 'probe3', enabled: false, target: 203 },
+      { slot: 'probe1', enabled: true, target: 203, targetSource: 'user' },
+      { slot: 'probe2', enabled: false, target: 203, targetSource: 'default' },
+      { slot: 'probe3', enabled: false, target: 203, targetSource: 'default' },
     ],
   },
   smokeComplete: { enabled: true },
@@ -313,6 +322,15 @@ const rows: ContractRow[] = [
       method: 'post',
       path: 'appSettings',
       body: projectedNotificationsBody,
+    },
+  },
+  {
+    name: 'notifications.saveTargetPresets → POST appSettings (presets block alone)',
+    run: c => c.notifications.saveTargetPresets({ beef: 210, pork: 195, poultry: 170 }),
+    expected: {
+      method: 'post',
+      path: 'appSettings',
+      body: { targetPresets: { beef: 210, pork: 195, poultry: 170 } },
     },
   },
   {

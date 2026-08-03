@@ -330,8 +330,15 @@ const ProbeRow = ({
       size="small"
       variant="outlined"
       value={probe.target}
+      // Typing here makes the target theirs: the backend seeds a session's
+      // probes from the meat being cooked, and only ever over a target nobody
+      // chose. The mark is set at the moment of the edit because the number
+      // alone cannot say it — a hand-typed 203 looks exactly like the default.
       onChange={event =>
-        onChange({ target: readTemperatureInput(event.target.value, probe.target) })
+        onChange({
+          target: readTemperatureInput(event.target.value, probe.target),
+          targetSource: 'user',
+        })
       }
       inputProps={{ 'data-testid': `settings-probe-target-${probe.slot}` }}
       sx={{ width: 120 }}

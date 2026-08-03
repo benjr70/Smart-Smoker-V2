@@ -1,12 +1,27 @@
-import { ApplicationSettings, ProbeTargetEntry } from './app-settings.schema';
+import {
+  ApplicationSettings,
+  ProbeTargetEntry,
+  TargetPresets,
+} from './app-settings.schema';
 import { PROBE_SLOTS } from './probe-names';
 
 /**
- * The target a probe carries until the user (or, from the preset-seeding slice,
- * a matched meat category) sets one. 203°F is where a brisket is done, which is
- * the cook this smoker is built around.
+ * The target a probe carries until the user — or the preset matched to what is
+ * cooking — sets one. 203°F is where a brisket is done, which is the cook this
+ * smoker is built around.
  */
 export const DEFAULT_PROBE_TARGET = 203;
+
+/**
+ * The temperature each category of meat is taken to be done at until the user
+ * says otherwise: brisket and other beef pulled at 203°F, pork shoulder at
+ * 200°F, poultry at the 165°F it is safe to eat at.
+ */
+export const DEFAULT_TARGET_PRESETS: TargetPresets = {
+  beef: 203,
+  pork: 200,
+  poultry: 165,
+};
 
 /**
  * The settings an installation starts from.
@@ -25,9 +40,11 @@ export const DEFAULT_APPLICATION_SETTINGS: ApplicationSettings = {
       slot,
       enabled: false,
       target: DEFAULT_PROBE_TARGET,
+      targetSource: 'default',
     })),
   },
   smokeComplete: { enabled: false },
+  targetPresets: DEFAULT_TARGET_PRESETS,
   appearance: { mode: 'system', resolvedMode: 'light' },
 };
 
@@ -47,6 +64,10 @@ const withProbeEntryPerSlot = (
       slot,
       enabled: entry?.enabled ?? false,
       target: entry?.target ?? DEFAULT_PROBE_TARGET,
+      // A row stored before targets had a provenance counts as untouched: the
+      // target on it is whatever the shipped default was, and seeding is free
+      // to replace it.
+      targetSource: entry?.targetSource ?? 'default',
     };
   });
 
@@ -68,6 +89,7 @@ export const withSettingsDefaults = (
   const chamber = stored?.chamber;
   const probeTarget = stored?.probeTarget;
   const smokeComplete = stored?.smokeComplete;
+  const targetPresets = stored?.targetPresets;
   const appearance = stored?.appearance;
   const defaults = DEFAULT_APPLICATION_SETTINGS;
   return {
@@ -82,6 +104,11 @@ export const withSettingsDefaults = (
     },
     smokeComplete: {
       enabled: smokeComplete?.enabled ?? defaults.smokeComplete.enabled,
+    },
+    targetPresets: {
+      beef: targetPresets?.beef ?? defaults.targetPresets.beef,
+      pork: targetPresets?.pork ?? defaults.targetPresets.pork,
+      poultry: targetPresets?.poultry ?? defaults.targetPresets.poultry,
     },
     appearance: {
       mode: appearance?.mode ?? defaults.appearance.mode,

@@ -388,28 +388,36 @@ describe('ratings client — legacy endpoint contract', () => {
   });
 });
 
+/** A target nobody has typed in: the shipped default, which seeding may replace. */
+const untouched = { targetSource: 'default' } as const;
+
 const savedSettings: NotificationSettings = {
   chamber: { enabled: true, low: 225, high: 275 },
   probeTarget: {
     enabled: true,
     probes: [
-      { slot: 'probe1', enabled: true, target: 203, name: 'Brisket Flat' },
-      { slot: 'probe2', enabled: false, target: 203, name: 'Probe 2' },
-      { slot: 'probe3', enabled: false, target: 203, name: 'Probe 3' },
+      { slot: 'probe1', enabled: true, target: 203, ...untouched, name: 'Brisket Flat' },
+      { slot: 'probe2', enabled: false, target: 203, ...untouched, name: 'Probe 2' },
+      { slot: 'probe3', enabled: false, target: 203, ...untouched, name: 'Probe 3' },
     ],
   },
   smokeComplete: { enabled: true },
+  targetPresets: { beef: 203, pork: 200, poultry: 165 },
 };
 
-/** The same document as the backend's strict DTO accepts it: no resolved names. */
+/**
+ * The same document as the backend's strict DTO accepts it: no resolved names,
+ * and no presets — the Default target temps card saves its own block, so an
+ * alert save never carries one browser's presets over another's edit.
+ */
 const savedSettingsBody = {
   chamber: { enabled: true, low: 225, high: 275 },
   probeTarget: {
     enabled: true,
     probes: [
-      { slot: 'probe1', enabled: true, target: 203 },
-      { slot: 'probe2', enabled: false, target: 203 },
-      { slot: 'probe3', enabled: false, target: 203 },
+      { slot: 'probe1', enabled: true, target: 203, ...untouched },
+      { slot: 'probe2', enabled: false, target: 203, ...untouched },
+      { slot: 'probe3', enabled: false, target: 203, ...untouched },
     ],
   },
   smokeComplete: { enabled: true },
@@ -486,9 +494,9 @@ describe('notifications client — settings', () => {
         probeTarget: {
           enabled: false,
           probes: [
-            { slot: 'probe1', enabled: false, target: 203 },
-            { slot: 'probe2', enabled: false, target: 203 },
-            { slot: 'probe3', enabled: false, target: 203 },
+            { slot: 'probe1', enabled: false, target: 203, ...untouched },
+            { slot: 'probe2', enabled: false, target: 203, ...untouched },
+            { slot: 'probe3', enabled: false, target: 203, ...untouched },
           ],
         },
         smokeComplete: { enabled: false },
@@ -507,7 +515,7 @@ describe('notifications client — settings', () => {
       chamber: { enabled: false, low: 225, high: 275 },
       probeTarget: {
         enabled: true,
-        probes: [{ slot: 'probe2', enabled: true, target: 195, name: 'Pork Butt' }],
+        probes: [{ slot: 'probe2', enabled: true, target: 195, ...untouched, name: 'Pork Butt' }],
       },
     });
 
@@ -519,9 +527,9 @@ describe('notifications client — settings', () => {
         probeTarget: {
           enabled: true,
           probes: [
-            { slot: 'probe1', enabled: false, target: 203 },
-            { slot: 'probe2', enabled: true, target: 195 },
-            { slot: 'probe3', enabled: false, target: 203 },
+            { slot: 'probe1', enabled: false, target: 203, ...untouched },
+            { slot: 'probe2', enabled: true, target: 195, ...untouched },
+            { slot: 'probe3', enabled: false, target: 203, ...untouched },
           ],
         },
         smokeComplete: { enabled: false },
@@ -537,7 +545,9 @@ describe('notifications client — settings', () => {
       chamber: { enabled: true, low: 200, high: 300 },
       probeTarget: {
         enabled: true,
-        probes: [{ slot: 'probe1', enabled: true, target: 203, name: 'Brisket Flat' }],
+        probes: [
+          { slot: 'probe1', enabled: true, target: 203, ...untouched, name: 'Brisket Flat' },
+        ],
       },
     });
 
@@ -546,12 +556,13 @@ describe('notifications client — settings', () => {
       probeTarget: {
         enabled: true,
         probes: [
-          { slot: 'probe1', enabled: true, target: 203, name: 'Probe 1' },
-          { slot: 'probe2', enabled: false, target: 203, name: 'Probe 2' },
-          { slot: 'probe3', enabled: false, target: 203, name: 'Probe 3' },
+          { slot: 'probe1', enabled: true, target: 203, ...untouched, name: 'Probe 1' },
+          { slot: 'probe2', enabled: false, target: 203, ...untouched, name: 'Probe 2' },
+          { slot: 'probe3', enabled: false, target: 203, ...untouched, name: 'Probe 3' },
         ],
       },
       smokeComplete: { enabled: false },
+      targetPresets: { beef: 203, pork: 200, poultry: 165 },
     });
   });
 
@@ -565,7 +576,7 @@ describe('notifications client — settings', () => {
           chamber: { enabled: false, low: 225, high: 275 },
           probeTarget: {
             enabled: true,
-            probes: [{ slot: 'probe2', enabled: true, target: 195 }],
+            probes: [{ slot: 'probe2', enabled: true, target: 195, ...untouched }],
           },
         },
       },
@@ -597,6 +608,74 @@ describe('notifications client — settings', () => {
       'Pork Butt',
       'Probe 3',
     ]);
+  });
+});
+
+describe('notifications client — default target temps', () => {
+  test('getSettings carries the stored default target temps', async () => {
+    const backend = createFakeBackend({
+      appSettings: {
+        settings: { ...savedSettingsBody, targetPresets: { beef: 210, pork: 200, poultry: 165 } },
+      },
+    });
+    const client = createApiClient(backend);
+
+    const result = await client.notifications.getSettings();
+
+    expect(result?.targetPresets).toEqual({ beef: 210, pork: 200, poultry: 165 });
+  });
+
+  // A deployment that has never opened the card — and one older than the card
+  // itself — still has to render three temperatures rather than blank fields.
+  test('getSettings falls back to the shipped defaults when none are stored', async () => {
+    const backend = createFakeBackend({ appSettings: { settings: savedSettingsBody } });
+    const client = createApiClient(backend);
+
+    const result = await client.notifications.getSettings();
+
+    expect(result?.targetPresets).toEqual({ beef: 203, pork: 200, poultry: 165 });
+  });
+
+  test('saveTargetPresets sends the presets block on its own', async () => {
+    const backend = createFakeBackend();
+    const client = createApiClient(backend);
+
+    await client.notifications.saveTargetPresets({ beef: 210, pork: 195, poultry: 170 });
+
+    expect(backend.requests).toContainEqual({
+      method: 'post',
+      path: 'appSettings',
+      body: { targetPresets: { beef: 210, pork: 195, poultry: 170 } },
+    });
+  });
+
+  /**
+   * The presets card and the alerts card are two writers of one document, both
+   * on screen at once. Either one sending the other's block would undo an edit
+   * the user made in it moments earlier.
+   */
+  test('saving the alerts leaves edited presets exactly as they were', async () => {
+    const backend = createFakeBackend();
+    const client = createApiClient(backend);
+    await client.notifications.saveTargetPresets({ beef: 210, pork: 195, poultry: 170 });
+
+    await client.notifications.saveSettings({ chamber: { enabled: true, low: 200, high: 300 } });
+
+    await expect(client.notifications.getSettings()).resolves.toMatchObject({
+      chamber: { enabled: true, low: 200, high: 300 },
+      targetPresets: { beef: 210, pork: 195, poultry: 170 },
+    });
+  });
+
+  test('edited presets are read back after the save', async () => {
+    const backend = createFakeBackend();
+    const client = createApiClient(backend);
+
+    await client.notifications.saveTargetPresets({ beef: 210, pork: 195, poultry: 170 });
+
+    await expect(client.notifications.getSettings()).resolves.toMatchObject({
+      targetPresets: { beef: 210, pork: 195, poultry: 170 },
+    });
   });
 });
 

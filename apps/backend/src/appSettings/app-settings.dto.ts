@@ -9,6 +9,7 @@ import {
   IsString,
   ValidateNested,
 } from 'class-validator';
+import { TargetSource } from './app-settings.schema';
 import { AppearanceMode, ColorScheme } from './appearance';
 
 /**
@@ -48,6 +49,34 @@ export class ProbeTargetEntryDto {
   @ApiProperty()
   @IsNumber()
   target: number;
+
+  /**
+   * Where that target came from. Optional: a client older than preset seeding
+   * sends a row without it, which reads back as the shipped default — the same
+   * thing an untouched row means.
+   */
+  @ApiProperty({ enum: ['default', 'preset', 'user'], required: false })
+  @IsOptional()
+  @IsIn(['default', 'preset', 'user'])
+  targetSource?: TargetSource;
+}
+
+/**
+ * The default target temperature per meat category, as the settings page's
+ * Default target temps card saves it.
+ */
+export class TargetPresetsDto {
+  @ApiProperty()
+  @IsNumber()
+  beef: number;
+
+  @ApiProperty()
+  @IsNumber()
+  pork: number;
+
+  @ApiProperty()
+  @IsNumber()
+  poultry: number;
 }
 
 /** The Probe Target Reached alert as the settings page sends it. */
@@ -103,10 +132,10 @@ export class AppearanceDto {
  * settings page can never be a partial write of something evaluation also
  * touches.
  *
- * Both blocks are optional because the document has two independent writers: the
- * settings page saves the chamber alert, and a browser that repaints itself
- * saves the appearance. Each sends its own block and the service leaves the
- * other alone.
+ * Every block is optional because the document has several independent writers:
+ * the settings page saves the alerts, its Default target temps card saves the
+ * presets, and a browser that repaints itself saves the appearance. Each sends
+ * its own block and the service leaves the others alone.
  */
 export class ApplicationSettingsDto {
   @ApiProperty({ type: ChamberAlertDto, required: false })
@@ -126,6 +155,12 @@ export class ApplicationSettingsDto {
   @ValidateNested()
   @Type(() => SmokeCompleteAlertDto)
   smokeComplete?: SmokeCompleteAlertDto;
+
+  @ApiProperty({ type: TargetPresetsDto, required: false })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => TargetPresetsDto)
+  targetPresets?: TargetPresetsDto;
 
   @ApiProperty({ type: AppearanceDto, required: false })
   @IsOptional()

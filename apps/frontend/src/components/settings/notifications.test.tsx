@@ -15,17 +15,26 @@ const probeRows = (
     slot,
     enabled: watched[slot] !== undefined,
     target: watched[slot] ?? 203,
+    // Watched or not, these are targets nobody has typed in: the temperature is
+    // whatever the app put there, which is what lets a session start seed it.
+    targetSource: 'default' as const,
     name: `Probe ${index + 1}`,
   }));
 
 /** The same rows as they go back over the wire: the names are not saved. */
 const savedProbeRows = (watched: Record<string, number> = {}) =>
-  probeRows(watched).map(({ slot, enabled, target }) => ({ slot, enabled, target }));
+  probeRows(watched).map(({ slot, enabled, target, targetSource }) => ({
+    slot,
+    enabled,
+    target,
+    targetSource,
+  }));
 
 const chamberAlertOn: NotificationSettings = {
   chamber: { enabled: true, low: 225, high: 275 },
   probeTarget: { enabled: false, probes: probeRows() },
   smokeComplete: { enabled: false },
+  targetPresets: { beef: 203, pork: 200, poultry: 165 },
 };
 
 const browserSubscription: PushSubscriptionPayload = {
@@ -342,7 +351,12 @@ describe('NotificationsCard', () => {
     await waitFor(() =>
       expect(backend.store.appSettings?.probeTarget).toEqual({
         enabled: true,
-        probes: savedProbeRows({ probe1: 198 }),
+        probes: [
+          // The temperature was typed in, so it is the user's: a session start
+          // seeds the other rows and leaves this one exactly here.
+          { slot: 'probe1', enabled: true, target: 198, targetSource: 'user' },
+          ...savedProbeRows().slice(1),
+        ],
       })
     );
   });
@@ -369,6 +383,7 @@ describe('NotificationsCard', () => {
         slot: 'probe2',
         enabled: true,
         target: 195,
+        targetSource: 'user',
       })
     );
 

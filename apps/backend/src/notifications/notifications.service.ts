@@ -7,12 +7,14 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { StateService } from '../State/state.service';
+import { ApplicationSettings } from '../appSettings/app-settings.schema';
 import { AppSettingsService } from '../appSettings/app-settings.service';
 import {
   PROBE_SLOTS,
   ProbeSlot,
   resolveProbeNames,
 } from '../appSettings/probe-names';
+import { PreSmokeService } from '../presmoke/presmoke.service';
 import { PushDispatcherService } from '../pushDispatcher/push-dispatcher.service';
 import { SmokeProfileService } from '../smokeProfile/smokeProfile.service';
 import { Temp } from '../temps/temps.schema';
@@ -87,6 +89,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     private tempsService: TempsService,
     private appSettingsService: AppSettingsService,
     private smokeProfileService: SmokeProfileService,
+    private preSmokeService: PreSmokeService,
   ) {}
 
   /** Start the evaluation interval this service owns. */
@@ -164,13 +167,19 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
+    // The bookkeeping is loaded first, because whether this is the session's
+    // first evaluation is what decides if the probe targets are seeded — and
+    // the targets seeded here are the ones this very reading is judged against.
+    const { state, sessionStart } = await this.loadAlertState(session.smokeId);
+
     // The alert settings are one block of the installation's settings document,
-    // read here and never written: what evaluation records goes to the separate
-    // alert-state document, so an edit typed on the settings page during a cook
-    // survives.
-    const [settings, state, profile] = await Promise.all([
-      this.appSettingsService.getSettings(),
-      this.loadAlertState(session.smokeId),
+    // read here and otherwise never written: what evaluation records goes to
+    // the separate alert-state document, so an edit typed on the settings page
+    // during a cook survives.
+    const [settings, profile] = await Promise.all([
+      sessionStart
+        ? this.seedTargetsForSession()
+        : this.appSettingsService.getSettings(),
       this.smokeProfileService.getCurrentSmokeProfile(),
     ]);
 
@@ -192,22 +201,44 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * The bookkeeping for this session. State recorded against another smoke is
-   * discarded: clearing a session changes the current smoke id, so the next cook
-   * starts disarmed and preheats in silence.
+   * Put the default target of whatever is being cooked onto the probes, and
+   * answer with the settings that leaves.
+   *
+   * The meat type is the free text the cook typed into pre-smoke — the only
+   * place this application is ever told what is on the smoker.
    */
-  private async loadAlertState(smokeId: string): Promise<AlertRuntimeState> {
+  private async seedTargetsForSession(): Promise<ApplicationSettings> {
+    const preSmoke = await this.preSmokeService.GetByCurrent();
+    return this.appSettingsService.seedProbeTargets(preSmoke?.meatType);
+  }
+
+  /**
+   * The bookkeeping for this session, and whether this is the first evaluation
+   * of it. State recorded against another smoke is discarded: clearing a
+   * session changes the current smoke id, so the next cook starts disarmed and
+   * preheats in silence.
+   *
+   * That same "recorded against another smoke" test is what makes a session
+   * start recognisable — every evaluation writes this document back under the
+   * current smoke id, so only the first one of a cook finds it absent or stale.
+   */
+  private async loadAlertState(
+    smokeId: string,
+  ): Promise<{ state: AlertRuntimeState; sessionStart: boolean }> {
     const stored = await this.alertStateModel.findOne().exec();
     if (!stored || stored.smokeId !== smokeId) {
-      return initialAlertRuntimeState();
+      return { state: initialAlertRuntimeState(), sessionStart: true };
     }
     return {
-      chamberArmed: stored.chamberArmed ?? false,
-      chamberOutOfRangeSince: stored.chamberOutOfRangeSince ?? null,
-      chamberAlertSent: stored.chamberAlertSent ?? false,
-      probeTargetsReached: stored.probeTargetsReached ?? [],
-      smokeCompleteProbesDone: stored.smokeCompleteProbesDone ?? [],
-      smokeCompleteFired: stored.smokeCompleteFired ?? false,
+      state: {
+        chamberArmed: stored.chamberArmed ?? false,
+        chamberOutOfRangeSince: stored.chamberOutOfRangeSince ?? null,
+        chamberAlertSent: stored.chamberAlertSent ?? false,
+        probeTargetsReached: stored.probeTargetsReached ?? [],
+        smokeCompleteProbesDone: stored.smokeCompleteProbesDone ?? [],
+        smokeCompleteFired: stored.smokeCompleteFired ?? false,
+      },
+      sessionStart: false,
     };
   }
 

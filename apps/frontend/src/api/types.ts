@@ -94,7 +94,27 @@ export interface ProbeTargetEntry {
   enabled: boolean;
   /** The temperature, °F, this probe's meat is done at. */
   target: number;
+  /**
+   * Where that target came from. A row marked `user` is one somebody typed a
+   * temperature into, and the backend never seeds over it when a cook starts —
+   * so the settings page marks the row it edits rather than leaving the backend
+   * to guess from a number that looks exactly like the default.
+   */
+  targetSource: TargetSource;
   name: string;
+}
+
+/** Where a probe's target came from: shipped, seeded from a preset, or typed. */
+export type TargetSource = 'default' | 'preset' | 'user';
+
+/**
+ * The default target temperature, °F, per meat category — what the backend puts
+ * on the watched probes when a cook whose meat matches that category starts.
+ */
+export interface TargetPresets {
+  beef: number;
+  pork: number;
+  poultry: number;
 }
 
 /** The Probe Target Reached alert: switched on as a whole, plus a row per probe. */
@@ -130,6 +150,12 @@ export interface NotificationSettings {
   chamber: ChamberAlertSettings;
   probeTarget: ProbeTargetAlertSettings;
   smokeComplete: SmokeCompleteAlertSettings;
+  /**
+   * The Default target temps card's block. It rides on the same read as the
+   * alerts because it is the same document, but it is saved on its own — see
+   * the notifications resource's `saveTargetPresets`.
+   */
+  targetPresets: TargetPresets;
 }
 
 /** The colour schemes the application can render in. */
@@ -164,6 +190,7 @@ export interface ApplicationSettings {
   chamber: ChamberAlertSettings;
   probeTarget: ProbeTargetAlertSettings;
   smokeComplete: SmokeCompleteAlertSettings;
+  targetPresets: TargetPresets;
   appearance: AppearancePreference;
 }
 

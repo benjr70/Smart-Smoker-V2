@@ -95,6 +95,7 @@ export const withResolvedProbeNames = (
       slot: probe.slot,
       enabled: probe.enabled,
       target: probe.target,
+      targetSource: probe.targetSource,
       name: names[probe.slot] ?? probe.slot,
     })),
   },

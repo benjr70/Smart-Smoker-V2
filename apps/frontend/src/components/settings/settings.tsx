@@ -2,6 +2,7 @@ import { Card, CardContent, ScopedCssBaseline, Stack, Typography } from '@mui/ma
 import React from 'react';
 import { AppearanceCard } from './appearance';
 import { NotificationsCard } from './notifications';
+import { TargetPresetsCard } from './targetPresets';
 
 declare const VERSION: string;
 
@@ -40,6 +41,7 @@ export const Settings = (): JSX.Element => (
       </Typography>
       <AppearanceCard />
       <NotificationsCard />
+      <TargetPresetsCard />
       <VersionCard version={readVersion()} />
     </Stack>
   </ScopedCssBaseline>
