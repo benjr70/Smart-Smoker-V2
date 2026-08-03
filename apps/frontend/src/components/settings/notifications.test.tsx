@@ -60,7 +60,7 @@ const renderCard = (backend: FakeBackend, pushPort: PushPort = createFakePushPor
 
 describe('NotificationsCard', () => {
   test('shows the chamber range the smoker is configured to hold', async () => {
-    const backend = createFakeBackend({ notifications: { settings: chamberAlertOn } });
+    const backend = createFakeBackend({ appSettings: { settings: chamberAlertOn } });
 
     renderCard(backend);
 
@@ -87,7 +87,7 @@ describe('NotificationsCard', () => {
   });
 
   test('states in plain language what the configuration will do, and what an off alert will not', async () => {
-    const backend = createFakeBackend({ notifications: { settings: chamberAlertOn } });
+    const backend = createFakeBackend({ appSettings: { settings: chamberAlertOn } });
 
     renderCard(backend);
 
@@ -102,7 +102,7 @@ describe('NotificationsCard', () => {
   });
 
   test('persists an edited range when the settings page is left', async () => {
-    const backend = createFakeBackend({ notifications: { settings: chamberAlertOn } });
+    const backend = createFakeBackend({ appSettings: { settings: chamberAlertOn } });
 
     const { unmount } = renderCard(backend);
 
@@ -112,7 +112,7 @@ describe('NotificationsCard', () => {
     unmount();
 
     await waitFor(() =>
-      expect(backend.store.notifications.settings).toEqual({
+      expect(backend.store.appSettings).toMatchObject({
         chamber: { enabled: true, low: 200, high: 300 },
       })
     );
@@ -127,7 +127,7 @@ describe('NotificationsCard', () => {
     unmount();
 
     await waitFor(() =>
-      expect(backend.store.notifications.settings).toEqual({
+      expect(backend.store.appSettings).toMatchObject({
         chamber: { enabled: true, low: 225, high: 275 },
       })
     );
@@ -235,8 +235,8 @@ describe('NotificationsCard', () => {
   });
 
   test('raises the snackbar when loading the notification settings fails', async () => {
-    const backend = createFakeBackend({ notifications: { settings: chamberAlertOn } });
-    backend.injectFault({ method: 'get', path: 'notifications/settings', status: 500 });
+    const backend = createFakeBackend({ appSettings: { settings: chamberAlertOn } });
+    backend.injectFault({ method: 'get', path: 'appSettings', status: 500 });
 
     renderCard(backend);
 

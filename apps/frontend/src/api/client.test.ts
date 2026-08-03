@@ -389,7 +389,7 @@ const savedSettings: NotificationSettings = {
 
 describe('notifications client — settings', () => {
   test('getSettings returns the stored notification settings document', async () => {
-    const backend = createFakeBackend({ notifications: { settings: savedSettings } });
+    const backend = createFakeBackend({ appSettings: { settings: savedSettings } });
     const client = createApiClient(backend);
 
     const result = await client.notifications.getSettings();
@@ -397,7 +397,7 @@ describe('notifications client — settings', () => {
     expect(result).toEqual(savedSettings);
     expect(backend.requests).toContainEqual({
       method: 'get',
-      path: 'notifications/settings',
+      path: 'appSettings',
       body: undefined,
     });
   });
@@ -429,7 +429,7 @@ describe('notifications client — settings', () => {
 
     expect(backend.requests).toContainEqual({
       method: 'post',
-      path: 'notifications/settings',
+      path: 'appSettings',
       body: savedSettings,
     });
   });
@@ -444,7 +444,7 @@ describe('notifications client — settings', () => {
 
     expect(backend.requests).toContainEqual({
       method: 'post',
-      path: 'notifications/settings',
+      path: 'appSettings',
       body: { chamber: { enabled: true, low: 225, high: 275 } },
     });
   });
@@ -459,6 +459,69 @@ describe('notifications client — settings', () => {
 
     await expect(client.notifications.getSettings()).resolves.toEqual({
       chamber: { enabled: true, low: 200, high: 300 },
+    });
+  });
+});
+
+describe('appearance client — the installation-wide preference', () => {
+  test('reads the preference the installation has stored', async () => {
+    const backend = createFakeBackend({
+      appSettings: { settings: { appearance: { mode: 'dark', resolvedMode: 'dark' } } },
+    });
+    const client = createApiClient(backend);
+
+    await expect(client.appearance.get()).resolves.toEqual({
+      mode: 'dark',
+      resolvedMode: 'dark',
+    });
+  });
+
+  // An installation nobody has chosen an appearance on yet answers with the
+  // default rather than with an error, and "nothing chosen" has to reach the
+  // caller as such so that it keeps rendering what its own cache says.
+  test('resolves undefined when the wire body is empty', async () => {
+    const emptyBodyTransport = {
+      get: async () => null as never,
+      post: async () => undefined as never,
+      put: async () => undefined as never,
+      delete: async () => undefined as never,
+    };
+    const client = createApiClient(emptyBodyTransport);
+
+    await expect(client.appearance.get()).resolves.toBeUndefined();
+  });
+
+  /**
+   * Sending the alert block back on every repaint would make a colour choice a
+   * save of settings the operator may be editing in another tab.
+   */
+  test('writes the preference alone, leaving the alert settings alone', async () => {
+    const backend = createFakeBackend({
+      appSettings: { settings: { chamber: { enabled: true, low: 200, high: 300 } } },
+    });
+    const client = createApiClient(backend);
+
+    await client.appearance.save({ mode: 'light', resolvedMode: 'light' });
+
+    expect(backend.requests).toContainEqual({
+      method: 'post',
+      path: 'appSettings',
+      body: { appearance: { mode: 'light', resolvedMode: 'light' } },
+    });
+    await expect(client.notifications.getSettings()).resolves.toMatchObject({
+      chamber: { enabled: true, low: 200, high: 300 },
+    });
+  });
+
+  test('round-trips a preference it wrote back through a read', async () => {
+    const backend = createFakeBackend();
+    const client = createApiClient(backend);
+
+    await client.appearance.save({ mode: 'system', resolvedMode: 'dark' });
+
+    await expect(client.appearance.get()).resolves.toEqual({
+      mode: 'system',
+      resolvedMode: 'dark',
     });
   });
 });

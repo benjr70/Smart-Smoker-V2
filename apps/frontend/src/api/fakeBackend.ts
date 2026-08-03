@@ -15,7 +15,7 @@ import {
   createFakeBackendKernel,
 } from 'api-transport/src';
 import {
-  NotificationSettings,
+  ApplicationSettings,
   PostSmoke,
   PreSmoke,
   PushSubscriptionPayload,
@@ -58,9 +58,15 @@ export interface FakeBackendSeed {
     current?: rating;
     records?: Record<string, rating>;
   };
+  appSettings?: {
+    /**
+     * The stored application settings document. Absent models an installation
+     * that has never saved any; a partial one models a document that predates
+     * the block a test is not interested in.
+     */
+    settings?: Partial<ApplicationSettings>;
+  };
   notifications?: {
-    /** The stored settings document; absent models a backend that has none. */
-    settings?: NotificationSettings;
     /**
      * The VAPID key the backend serves at runtime. `null` models a deployment
      * with no key configured.
@@ -98,6 +104,27 @@ export interface FakeBackendSeed {
  */
 const EMPTY_BODY = null;
 
+/**
+ * The settings an installation starts from, mirroring the backend's own
+ * defaults. The real route answers with a complete document whether or not
+ * anything has ever been saved — that is what lets the settings page render on a
+ * fresh deployment — so this fake completes what it was seeded with rather than
+ * handing back a half-document no real backend would produce.
+ */
+const withSettingsDefaults = (
+  stored: Partial<ApplicationSettings> | undefined
+): ApplicationSettings => ({
+  chamber: {
+    enabled: stored?.chamber?.enabled ?? false,
+    low: stored?.chamber?.low ?? 225,
+    high: stored?.chamber?.high ?? 275,
+  },
+  appearance: {
+    mode: stored?.appearance?.mode ?? 'system',
+    resolvedMode: stored?.appearance?.resolvedMode ?? 'light',
+  },
+});
+
 interface FakeStore {
   temps: {
     current: TempData[];
@@ -119,8 +146,8 @@ interface FakeStore {
     current: rating | undefined;
     records: Record<string, rating>;
   };
+  appSettings: Partial<ApplicationSettings> | undefined;
   notifications: {
-    settings: NotificationSettings | undefined;
     publicKey: string | null;
     subscriptions: PushSubscriptionPayload[];
     /** Bodies dispatched through `notifications/test`. */
@@ -161,8 +188,8 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
       current: seed.ratings?.current,
       records: seed.ratings?.records ?? {},
     },
+    appSettings: seed.appSettings?.settings,
     notifications: {
-      settings: seed.notifications?.settings,
       publicKey:
         seed.notifications?.publicKey === undefined
           ? 'BSeededTestVapidPublicKey'
@@ -301,17 +328,22 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
       }
     }
 
-    if (resource === 'notifications' && id === 'settings') {
+    // The application settings document: the chamber alert the settings page
+    // saves and the appearance any browser saves when it repaints, on one
+    // route. A write merges block by block, mirroring the backend — either
+    // writer replacing the whole document would silently reset the other's
+    // block, and a fake that did not would hide that.
+    if (resource === 'appSettings' && id === undefined) {
       if (method === 'get') {
-        // A backend with no settings document answers with an empty body, which
-        // this app's transport maps to null (see EMPTY_BODY).
-        return store.notifications.settings === undefined
-          ? EMPTY_BODY
-          : clone(store.notifications.settings);
+        return clone(withSettingsDefaults(store.appSettings));
       }
       if (method === 'post') {
-        store.notifications.settings = clone(body) as NotificationSettings;
-        return clone(store.notifications.settings);
+        const incoming = clone(body) as Partial<ApplicationSettings>;
+        store.appSettings = withSettingsDefaults({
+          ...store.appSettings,
+          ...incoming,
+        });
+        return clone(store.appSettings);
       }
     }
 

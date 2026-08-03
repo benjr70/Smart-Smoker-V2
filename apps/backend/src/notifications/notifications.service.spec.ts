@@ -1,11 +1,12 @@
 import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { StateService } from '../State/state.service';
+import { DEFAULT_APPLICATION_SETTINGS } from '../appSettings/app-settings.defaults';
+import { ApplicationSettings } from '../appSettings/app-settings.schema';
+import { AppSettingsService } from '../appSettings/app-settings.service';
 import { PushDispatcherService } from '../pushDispatcher/push-dispatcher.service';
 import { TempsService } from '../temps/temps.service';
 import { AlertState } from './alert-state.schema';
-import { DEFAULT_NOTIFICATION_SETTINGS } from './notification-settings.defaults';
-import { NotificationSettings } from './notificationSettings.schema';
 import { NotificationSubscription } from './notificationSubscription.schema';
 import {
   ALERT_EVALUATION_INTERVAL_MS,
@@ -77,10 +78,30 @@ const createSingletonStore = <T>(seed: T | null = null) => {
   };
 };
 
+/**
+ * Stand-in for the application settings the alert rules are configured by. The
+ * real service is exercised by its own tests; here it only has to hold a
+ * document, so that "what the cook saved is what evaluation reads" is a fact
+ * about stored values rather than about a mock's call log.
+ */
+const createAppSettings = () => {
+  let document: ApplicationSettings = DEFAULT_APPLICATION_SETTINGS;
+  return {
+    getSettings: jest.fn(() => Promise.resolve(document)),
+    saveSettings: jest.fn((incoming: Partial<ApplicationSettings>) => {
+      document = { ...document, ...incoming };
+      return Promise.resolve(document);
+    }),
+    seed: (value: Partial<ApplicationSettings>) => {
+      document = { ...DEFAULT_APPLICATION_SETTINGS, ...value };
+    },
+  };
+};
+
 describe('NotificationsService', () => {
   let service: NotificationsService;
   let subscriptions: ReturnType<typeof createSubscriptionStore>;
-  let settings: ReturnType<typeof createSingletonStore<NotificationSettings>>;
+  let settings: ReturnType<typeof createAppSettings>;
   let alertState: ReturnType<typeof createSingletonStore<AlertState>>;
   let pushDispatcher: { notify: jest.Mock; getPublicKey: jest.Mock };
   let smokeSession: { GetState: jest.Mock };
@@ -97,7 +118,7 @@ describe('NotificationsService', () => {
 
   beforeEach(async () => {
     subscriptions = createSubscriptionStore();
-    settings = createSingletonStore<NotificationSettings>();
+    settings = createAppSettings();
     alertState = createSingletonStore<AlertState>();
 
     pushDispatcher = {
@@ -118,10 +139,7 @@ describe('NotificationsService', () => {
           provide: getModelToken(NotificationSubscription.name),
           useValue: subscriptions,
         },
-        {
-          provide: getModelToken(NotificationSettings.name),
-          useValue: settings,
-        },
+        { provide: AppSettingsService, useValue: settings },
         { provide: getModelToken(AlertState.name), useValue: alertState },
         { provide: PushDispatcherService, useValue: pushDispatcher },
         { provide: StateService, useValue: smokeSession },
@@ -191,34 +209,6 @@ describe('NotificationsService', () => {
     });
   });
 
-  describe('getSettings', () => {
-    // Mongoose hands back documents, not plain objects: a nested block is a
-    // subdocument carrying `$__`/`_doc` internals. Copying one wholesale would
-    // publish those over the API *and* lose the fields themselves, so the read
-    // has to name the fields it serves.
-    it('serves exactly the settings fields, never the persistence internals riding on them', async () => {
-      settings.seed({
-        chamber: Object.assign(
-          Object.create({ enabled: true, low: 200, high: 300 }),
-          { $__: 'mongoose-internal', _doc: {} },
-        ),
-      } as unknown as NotificationSettings);
-
-      expect(await service.getSettings()).toEqual({
-        chamber: { enabled: true, low: 200, high: 300 },
-      });
-    });
-
-    // A deployment upgrading into this slice has either no settings document or
-    // one holding the deleted rule list. Neither is migrated, so the first read
-    // has to answer with fresh defaults instead of failing the settings page.
-    it('answers with defaults when nothing has ever been saved', async () => {
-      expect(await service.getSettings()).toEqual(
-        DEFAULT_NOTIFICATION_SETTINGS,
-      );
-    });
-  });
-
   describe('checkAlerts', () => {
     const chamberAt = (temp: string) => ({ ChamberTemp: temp });
 
@@ -272,10 +262,10 @@ describe('NotificationsService', () => {
       const edited = { chamber: { enabled: true, low: 200, high: 300 } };
       temps.getLatestCurrentTemp.mockResolvedValue(chamberAt('240'));
 
-      await Promise.all([service.checkAlerts(), service.setSettings(edited)]);
+      await Promise.all([service.checkAlerts(), settings.saveSettings(edited)]);
       await service.checkAlerts();
 
-      expect(await service.getSettings()).toEqual(edited);
+      expect(await settings.getSettings()).toMatchObject(edited);
       expect(alertState.stored()).toMatchObject({ chamberArmed: true });
     });
 

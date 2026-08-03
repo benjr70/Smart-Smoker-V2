@@ -2,10 +2,16 @@ import { Body, Controller, Get, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
 import { NotificationSubscription } from './notificationSubscription.schema';
-import { NotificationSettings } from './notificationSettings.schema';
 import { NotificationSubscriptionDto } from './notificationSubscriptionDto';
-import { NotificationSettingsDto } from './notificationSettingsDto';
 
+/**
+ * Push plumbing: the key browsers subscribe with, the subscriptions themselves
+ * and a test send.
+ *
+ * The alert settings are not here. They are one block of the installation's
+ * settings document, served by the application settings route alongside the
+ * appearance every client renders in.
+ */
 @ApiTags('Notifications')
 @Controller('api/notifications')
 export class NotificationsController {
@@ -32,26 +38,5 @@ export class NotificationsController {
   @Post('/test')
   sendTestNotification(): Promise<{ sent: number }> {
     return this.notificationsService.sendTestNotification();
-  }
-
-  @Post('/settings')
-  setSettings(
-    @Body() settings: NotificationSettingsDto,
-  ): Promise<NotificationSettings> {
-    // The validated body is exactly the settings document — it carries only
-    // user-owned fields, so it goes to the schema-typed service unchanged.
-    return this.notificationsService.setSettings(
-      settings as unknown as NotificationSettings,
-    );
-  }
-
-  /**
-   * The current settings, always a complete document: a deployment that has
-   * never saved (or that still holds the deleted rule shape, which is not
-   * migrated) reads as defaults rather than as an error.
-   */
-  @Get('/settings')
-  getSettings(): Promise<NotificationSettings> {
-    return this.notificationsService.getSettings();
   }
 }

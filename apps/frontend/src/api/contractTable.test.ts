@@ -116,7 +116,7 @@ const fullySeededBackend = (): FakeBackend =>
       current: seededRatingNoId,
       records: { r1: seededRatingWithId, 'rate-1': seededRatingWithId },
     },
-    notifications: { settings: seededNotifications },
+    appSettings: { settings: seededNotifications },
     state: { smokeId: 'smoke-1', smoking: false },
     smoke: {
       records: { 'smoke-1': seededSmoke },
@@ -286,16 +286,16 @@ const rows: ContractRow[] = [
   },
   // notifications
   {
-    name: 'notifications.getSettings → GET notifications/settings',
+    name: 'notifications.getSettings → GET appSettings',
     run: c => c.notifications.getSettings(),
-    expected: { method: 'get', path: 'notifications/settings', body: undefined },
+    expected: { method: 'get', path: 'appSettings', body: undefined },
   },
   {
-    name: 'notifications.saveSettings → POST notifications/settings (projected body)',
+    name: 'notifications.saveSettings → POST appSettings (projected body)',
     run: c => c.notifications.saveSettings(seededNotifications),
     expected: {
       method: 'post',
-      path: 'notifications/settings',
+      path: 'appSettings',
       body: projectedNotificationsBody,
     },
   },

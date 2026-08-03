@@ -9,8 +9,9 @@ export {
   withDesignPalette,
 } from './appTheme';
 export type { DesignPalette } from './appTheme';
-export { resolveAppearance } from './appearance';
+export { resolveAppearance, resolveChoice } from './appearance';
 export type {
+  AppearanceChoiceInput,
   AppearanceInput,
   AppearanceMode,
   AppearancePreference,

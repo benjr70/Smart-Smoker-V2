@@ -32,7 +32,7 @@ const PRESMOKE_ALL_PATH = '/api/presmoke/all';
 const SMOKE_PATH = '/api/smoke';
 const STATE_PATH = '/api/state';
 const TEMPS_PATH = '/api/temps';
-const NOTIFICATION_SETTINGS_PATH = '/api/notifications/settings';
+const APP_SETTINGS_PATH = '/api/appSettings';
 
 /**
  * The one failure a pre-smoke save is allowed to heal and retry: the 404 the
@@ -115,8 +115,8 @@ export interface ChamberAlertRange {
   high: number;
 }
 
-/** Shape of `GET /api/notifications/settings`. */
-interface NotificationSettingsDoc {
+/** Shape of `GET /api/appSettings` — only the block this fixture seeds. */
+interface ApplicationSettingsDoc {
   chamber?: Partial<ChamberAlertRange> | null;
 }
 
@@ -380,9 +380,7 @@ export class BackendFixture {
       low: range.low ?? 210,
       high: range.high ?? 260,
     };
-    const prior = await this.http
-      .get<NotificationSettingsDoc>(NOTIFICATION_SETTINGS_PATH)
-      .catch(() => null);
+    const prior = await this.http.get<ApplicationSettingsDoc>(APP_SETTINGS_PATH).catch(() => null);
     // The backend answers with a complete document (defaults when it has never
     // been saved), so the snapshot is always restorable as-is.
     const priorChamber: ChamberAlertRange = {
@@ -393,9 +391,9 @@ export class BackendFixture {
     // Register the restore before mutating, so cleanup always puts it back even
     // if seeding throws partway.
     this.teardowns.push(async () => {
-      await this.http.post(NOTIFICATION_SETTINGS_PATH, { chamber: priorChamber });
+      await this.http.post(APP_SETTINGS_PATH, { chamber: priorChamber });
     });
-    await this.http.post(NOTIFICATION_SETTINGS_PATH, { chamber: seeded });
+    await this.http.post(APP_SETTINGS_PATH, { chamber: seeded });
     return seeded;
   }
 

@@ -11,6 +11,8 @@ import { PushNotConfiguredError } from './errors';
 import { SmokeEventPort, noopEventPort } from './events';
 import { createSocketEventPort } from './socketEventAdapter';
 import {
+  AppearancePreference,
+  ApplicationSettings,
   ChamberAlertSettings,
   NotificationSettings,
   PostSmoke,
@@ -94,16 +96,18 @@ export interface RatingsResource {
 
 export interface NotificationsResource {
   /**
-   * GET `notifications/settings` — the notification settings document, or
-   * `undefined` when the backend has none yet (callers keep their defaults).
+   * GET `appSettings` — the alert settings, or `undefined` when the backend has
+   * none yet (callers keep their defaults). The settings document is
+   * application-scoped: this reads the block of it the settings page edits.
    */
   getSettings(): Promise<NotificationSettings | undefined>;
   /**
-   * POST `notifications/settings` — projects the document to the backend DTO
-   * whitelist, filling any missing block with its default and stripping the
-   * persisted `_id`/`__v` a fetched-then-saved document carries. Both matter:
-   * the backend validates strictly, so either a stray field or a half-filled
-   * block is a 400 the save-on-unmount could only swallow.
+   * POST `appSettings` — projects the document to the backend DTO whitelist,
+   * filling any missing field with its default and stripping the persisted
+   * `_id`/`__v` a fetched-then-saved document carries. Both matter: the backend
+   * validates strictly, so either a stray field or a half-filled block is a 400
+   * the save-on-unmount could only swallow. Only the alert block is sent, so
+   * saving alerts never disturbs the appearance.
    */
   saveSettings(input: unknown): Promise<NotificationSettings>;
   /**
@@ -129,6 +133,21 @@ export interface NotificationsResource {
    * callers must branch on it rather than treating the call itself as success.
    */
   sendTest(): Promise<{ sent: number }>;
+}
+
+export interface AppearanceResource {
+  /**
+   * GET `appSettings` — the installation's stored appearance preference, or
+   * `undefined` when nothing has been stored yet, which leaves a client
+   * rendering whatever its own cache says rather than blanking the page.
+   */
+  get(): Promise<AppearancePreference | undefined>;
+  /**
+   * POST `appSettings` — store the preference. Sends the appearance block
+   * alone, so a browser repainting itself never writes back alert settings the
+   * operator may be editing elsewhere.
+   */
+  save(preference: AppearancePreference): Promise<AppearancePreference>;
 }
 
 export interface StateResource {
@@ -184,6 +203,7 @@ export interface ApiClient {
   postSmoke: PostSmokeResource;
   ratings: RatingsResource;
   notifications: NotificationsResource;
+  appearance: AppearanceResource;
   state: StateResource;
   smoke: SmokeResource;
   history: HistoryResource;
@@ -365,17 +385,20 @@ export const createApiClient = (
   },
   notifications: {
     getSettings: async () => {
-      // An empty-body 200 (no notification settings document yet) is normalized
-      // to `null` by the transport; map it to `undefined` so "nothing yet"
-      // leaves callers on their safe defaults rather than blanking the form.
-      const response = await transport.get<NotificationSettings | null>('notifications/settings');
-      return response ?? undefined;
+      // An empty-body 200 (no settings document yet) is normalized to `null` by
+      // the transport; map it to `undefined` so "nothing yet" leaves callers on
+      // their safe defaults rather than blanking the form.
+      const response = await transport.get<Partial<ApplicationSettings> | null>('appSettings');
+      if (!response) {
+        return undefined;
+      }
+      // The route serves the whole application settings document. This resource
+      // is the alert half of it, so the appearance block is left where it
+      // belongs rather than carried through the settings page and posted back.
+      return response.chamber ? { chamber: response.chamber } : undefined;
     },
     saveSettings: (input: unknown) =>
-      transport.post<NotificationSettings>(
-        'notifications/settings',
-        toNotificationSettingsPayload(input)
-      ),
+      transport.post<NotificationSettings>('appSettings', toNotificationSettingsPayload(input)),
     getPublicKey: async () => {
       const response = await transport.get<{ publicKey: string | null } | null>(
         'notifications/publicKey'
@@ -389,6 +412,23 @@ export const createApiClient = (
       await transport.post<PushSubscriptionPayload>('notifications/subscribe', subscription);
     },
     sendTest: () => transport.post<{ sent: number }>('notifications/test'),
+  },
+  appearance: {
+    get: async () => {
+      // An installation nobody has chosen an appearance on answers with an
+      // empty body, mapped to `null` by the transport. That reaches the caller
+      // as "nothing stored", which leaves it rendering what its own cache says.
+      const response = await transport.get<{
+        appearance?: AppearancePreference;
+      } | null>('appSettings');
+      return response?.appearance ?? undefined;
+    },
+    save: async (preference: AppearancePreference) => {
+      const saved = await transport.post<{ appearance?: AppearancePreference }>('appSettings', {
+        appearance: { mode: preference.mode, resolvedMode: preference.resolvedMode },
+      });
+      return saved?.appearance ?? preference;
+    },
   },
   state: {
     get: () => transport.get<State>('state'),

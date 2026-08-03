@@ -2,9 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotificationsController } from './notifications.controller';
 import { NotificationsService } from './notifications.service';
 import { NotificationSubscription } from './notificationSubscription.schema';
-import { NotificationSettings } from './notificationSettings.schema';
-import { NotificationSettingsDto } from './notificationSettingsDto';
-import { DEFAULT_NOTIFICATION_SETTINGS } from './notification-settings.defaults';
 
 describe('NotificationsController', () => {
   let controller: NotificationsController;
@@ -19,14 +16,8 @@ describe('NotificationsController', () => {
     },
   };
 
-  const mockNotificationSettings: NotificationSettings = {
-    chamber: { enabled: true, low: 225, high: 275 },
-  };
-
   const mockNotificationsService = {
     setSubscription: jest.fn(),
-    setSettings: jest.fn(),
-    getSettings: jest.fn(),
     getPublicKey: jest.fn(),
     sendTestNotification: jest.fn(),
   };
@@ -109,66 +100,17 @@ describe('NotificationsController', () => {
     });
   });
 
-  describe('setSettings', () => {
-    it('should call service setSettings method', async () => {
-      mockNotificationsService.setSettings.mockResolvedValue(
-        mockNotificationSettings,
-      );
-
-      const result = await controller.setSettings(
-        mockNotificationSettings as unknown as NotificationSettingsDto,
-      );
-
-      expect(service.setSettings).toHaveBeenCalledWith(
-        mockNotificationSettings,
-      );
-      expect(result).toEqual(mockNotificationSettings);
-    });
-
-    it('should handle service errors', async () => {
-      const error = new Error('Database error');
-      mockNotificationsService.setSettings.mockRejectedValue(error);
-
-      await expect(
-        controller.setSettings(
-          mockNotificationSettings as unknown as NotificationSettingsDto,
-        ),
-      ).rejects.toThrow('Database error');
-    });
-  });
-
-  describe('getSettings', () => {
-    it('should call service getSettings method', async () => {
-      mockNotificationsService.getSettings.mockResolvedValue(
-        mockNotificationSettings,
-      );
-
-      const result = await controller.getSettings();
-
-      expect(service.getSettings).toHaveBeenCalled();
-      expect(result).toEqual(mockNotificationSettings);
-    });
-
-    // Nothing saved yet (or a document of the deleted rule shape, which is not
-    // migrated) must still render the settings page, so the endpoint answers
-    // with defaults rather than with an empty body the client has to guess at.
-    it('serves defaults when nothing has ever been saved', async () => {
-      mockNotificationsService.getSettings.mockResolvedValue(
-        DEFAULT_NOTIFICATION_SETTINGS,
-      );
-
-      expect(await controller.getSettings()).toEqual(
-        DEFAULT_NOTIFICATION_SETTINGS,
-      );
-    });
-
-    it('should handle service errors', async () => {
-      const error = new Error('Database connection failed');
-      mockNotificationsService.getSettings.mockRejectedValue(error);
-
-      await expect(controller.getSettings()).rejects.toThrow(
-        'Database connection failed',
-      );
-    });
+  /**
+   * The alert settings moved to the application settings route when the
+   * document they live on grew a block that has nothing to do with
+   * notifications. This controller is push plumbing only.
+   */
+  it('does not serve settings', () => {
+    expect(controller as unknown as Record<string, unknown>).not.toHaveProperty(
+      'getSettings',
+    );
+    expect(controller as unknown as Record<string, unknown>).not.toHaveProperty(
+      'setSettings',
+    );
   });
 });

@@ -9,6 +9,7 @@ import { APP_FILTER } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
+import { AppSettingsModule } from './appSettings/app-settings.module';
 import { PostSmokeModule } from './postSmoke/postSmoke.module';
 import { PreSmokeModule } from './presmoke/presmoke.module';
 import { SettingsModule } from './settings/settings.module';
@@ -39,6 +40,7 @@ console.log(process.env.NODE_ENV);
       },
     }),
     SettingsModule,
+    AppSettingsModule,
     PreSmokeModule,
     StateModule,
     SmokeModule,

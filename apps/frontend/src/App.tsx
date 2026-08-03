@@ -8,6 +8,7 @@ import { History } from './components/history/history';
 import { Settings } from './components/settings/settings';
 import { Smoke } from './components/smoke/smoke';
 import { DesignSurface, appTheme } from './theme';
+import { SharedAppearanceProvider } from './theme/SharedAppearance';
 
 class App extends React.Component<{}, { currentScreen: Screens }> {
   constructor(props: any) {
@@ -56,20 +57,28 @@ class App extends React.Component<{}, { currentScreen: Screens }> {
       // browser that has never been told otherwise follows the device — and
       // keeps following it, live, while the page is open.
       <CssVarsProvider theme={appTheme} defaultMode="system">
-        {/* Every screen is recoloured now, so the design's palette is applied
-            once, here, rather than opted into a screen at a time. */}
-        <DesignSurface>
-          <SnackbarProvider>
-            <Grid className="App-header">
-              <Grid>{screen}</Grid>
-              <BottomBar
-                smokeOnClick={this.smokeOnClick}
-                reviewOnClick={this.reviewOnClick}
-                settingsOnClick={this.settingsOnClick}
-              ></BottomBar>
-            </Grid>
-          </SnackbarProvider>
-        </DesignSurface>
+        {/* The appearance is one installation-wide preference, not a
+            per-browser one: this reconciles what the backend holds with what
+            this browser already painted, and publishes a choice made here. It
+            sits inside the colour-scheme provider because that is what it
+            reconciles with, and outside the screens so that every one of them
+            is themed by the outcome. */}
+        <SharedAppearanceProvider>
+          {/* Every screen is recoloured now, so the design's palette is applied
+              once, here, rather than opted into a screen at a time. */}
+          <DesignSurface>
+            <SnackbarProvider>
+              <Grid className="App-header">
+                <Grid>{screen}</Grid>
+                <BottomBar
+                  smokeOnClick={this.smokeOnClick}
+                  reviewOnClick={this.reviewOnClick}
+                  settingsOnClick={this.settingsOnClick}
+                ></BottomBar>
+              </Grid>
+            </SnackbarProvider>
+          </DesignSurface>
+        </SharedAppearanceProvider>
       </CssVarsProvider>
     );
   }
