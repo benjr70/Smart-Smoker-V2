@@ -63,6 +63,38 @@ export const resolveChoice = ({
 };
 
 /**
+ * Whether a preference says the same thing twice.
+ *
+ * A preference is two halves of one statement — what was asked for, and what it
+ * resolved to on the client that wrote it — so the halves can contradict each
+ * other. "Always light, currently dark" could never have come from the rule
+ * above, and anything asked to store a preference refuses it rather than leaving
+ * every reader to guess which half was meant.
+ *
+ * Asked *through* the resolver rather than restated beside it: a preference is
+ * coherent exactly when resolving its own mode, on a device set the way it
+ * claims, gives back what it claims. Whatever the resolver learns next, this
+ * learns with it — which is the whole point of there being one rule.
+ */
+export const isCoherentPreference = ({ mode, resolvedMode }: AppearancePreference): boolean =>
+  resolveChoice({ chosen: mode, stored: null, systemDark: resolvedMode === 'dark' }).colorScheme ===
+  resolvedMode;
+
+/**
+ * What an installation nobody has chosen an appearance on is taken to have
+ * chosen.
+ *
+ * "Follow the device", resolved the way a client with no device preference of
+ * its own resolves it. Storage, the API and every client start from this one
+ * value, so "nothing chosen yet" cannot mean something different in each of
+ * them.
+ */
+export const DEFAULT_APPEARANCE_PREFERENCE: AppearancePreference = {
+  mode: 'system',
+  resolvedMode: 'light',
+};
+
+/**
  * Turn a stored preference and the system's preference into a rendered scheme.
  *
  * Loading is choosing what is already stored — or "follow the device" when

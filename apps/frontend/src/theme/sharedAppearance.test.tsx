@@ -106,6 +106,45 @@ describe('choosing an option', () => {
   });
 });
 
+/**
+ * "Follow the device" is the one choice whose resolved half comes from the
+ * machine in front of the operator, and the touchscreen — which cannot ask its
+ * own browser — renders from that half. So what a browser records here is what
+ * every other client will paint.
+ */
+describe('choosing "follow the device" on a device set to dark', () => {
+  it('records the dark the device asks for, whatever this browser was showing', async () => {
+    system.setDark(true);
+    const backend = createFakeBackend();
+    renderApp(backend);
+    await screen.findByText('Appearance');
+
+    // Pinned to a scheme first: nothing is following the device at the moment
+    // Auto is chosen, which is exactly when what the device wants is easy to
+    // lose track of.
+    await userEvent.click(option('Light'));
+    await userEvent.click(option('Auto'));
+
+    await waitFor(() =>
+      expect(backend.store.appSettings).toMatchObject({
+        appearance: { mode: 'system', resolvedMode: 'dark' },
+      })
+    );
+  });
+
+  it('paints this browser dark to match what it recorded', async () => {
+    system.setDark(true);
+    const backend = createFakeBackend();
+    renderApp(backend);
+    await screen.findByText('Appearance');
+
+    await userEvent.click(option('Light'));
+    await userEvent.click(option('Auto'));
+
+    await waitFor(() => expect(page()).toHaveStyle({ backgroundColor: carbonDark.background }));
+  });
+});
+
 describe('an installation whose backend cannot be reached', () => {
   it('still themes the page from the cached scheme', async () => {
     const backend = createFakeBackend();

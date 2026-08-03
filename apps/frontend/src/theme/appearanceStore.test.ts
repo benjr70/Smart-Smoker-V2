@@ -8,7 +8,7 @@
  * the backend hears about a choice exactly when there is something new to tell
  * it.
  */
-import { AppearanceMode, AppearancePreference } from 'theme/src';
+import { AppearanceMode, AppearancePreference, DEFAULT_APPEARANCE_PREFERENCE } from 'theme/src';
 import { createAppearanceStore } from './appearanceStore';
 
 /**
@@ -32,14 +32,20 @@ const createCache = (mode: AppearanceMode | null = null, systemDark = false) => 
   };
 };
 
-/** A backend whose read this test resolves by hand. */
-const createPendingClient = (stored: AppearancePreference | null = null) => {
-  let settle: (value: AppearancePreference | undefined) => void = () => undefined;
+/**
+ * A backend whose read this test resolves by hand.
+ *
+ * Its read answers with a preference or fails, exactly as the real one can: an
+ * installation nobody has chosen an appearance on holds the documented default,
+ * so there is no third "nothing stored" answer to model.
+ */
+const createPendingClient = (stored: AppearancePreference = DEFAULT_APPEARANCE_PREFERENCE) => {
+  let settle: (value: AppearancePreference) => void = () => undefined;
   let fail: (reason: Error) => void = () => undefined;
   const written: AppearancePreference[] = [];
   return {
     get: () =>
-      new Promise<AppearancePreference | undefined>((resolve, reject) => {
+      new Promise<AppearancePreference>((resolve, reject) => {
         settle = resolve;
         fail = reject;
       }),
@@ -48,8 +54,7 @@ const createPendingClient = (stored: AppearancePreference | null = null) => {
       return preference;
     },
     /** Answer the pending read with what the installation has stored. */
-    answer: (preference: AppearancePreference | undefined = stored ?? undefined) =>
-      settle(preference),
+    answer: (preference: AppearancePreference = stored) => settle(preference),
     /** Fail the pending read, as an unreachable backend would. */
     reject: (reason = new Error('unreachable')) => fail(reason),
     /** Every preference written to the backend, in order. */
@@ -190,6 +195,83 @@ describe('a backend this client cannot reach', () => {
   });
 });
 
+/**
+ * The load is not instant, and an operator on the settings page has no idea it
+ * is happening. Whatever they do while it is in flight is the newer statement of
+ * what the installation should look like, so an answer that was already on its
+ * way must not undo it.
+ */
+describe('a choice made while the load is still on its way', () => {
+  it('keeps the chosen scheme when the load answers with the older value', async () => {
+    const cache = createCache('light');
+    const client = createPendingClient();
+    const store = createAppearanceStore({ cache, client, subscription: noSubscription });
+
+    store.start();
+    await store.choose('dark');
+    client.answer({ mode: 'light', resolvedMode: 'light' });
+    await flush();
+
+    expect(cache.inEffect()).toBe('dark');
+  });
+
+  it('leaves the backend holding the choice rather than the value it answered with', async () => {
+    const cache = createCache('light');
+    const client = createPendingClient();
+    const store = createAppearanceStore({ cache, client, subscription: noSubscription });
+
+    store.start();
+    await store.choose('dark');
+    client.answer({ mode: 'light', resolvedMode: 'light' });
+    await flush();
+
+    expect(client.written).toEqual([{ mode: 'dark', resolvedMode: 'dark' }]);
+  });
+
+  /**
+   * The choice is what the backend now holds, so choosing it again afterwards
+   * is not news — the store must not have gone on believing the value the stale
+   * load carried.
+   */
+  it('writes nothing when that same option is chosen again', async () => {
+    const cache = createCache('light');
+    const client = createPendingClient();
+    const store = createAppearanceStore({ cache, client, subscription: noSubscription });
+
+    store.start();
+    await store.choose('dark');
+    client.answer({ mode: 'light', resolvedMode: 'light' });
+    await flush();
+
+    await store.choose('dark');
+
+    expect(client.written).toEqual([{ mode: 'dark', resolvedMode: 'dark' }]);
+  });
+
+  it('keeps a preference another client announced while the load was on its way', async () => {
+    const cache = createCache('light');
+    const client = createPendingClient();
+    const listeners: Array<(preference: AppearancePreference) => void> = [];
+    const store = createAppearanceStore({
+      cache,
+      client,
+      subscription: {
+        subscribe: listener => {
+          listeners.push(listener);
+          return () => undefined;
+        },
+      },
+    });
+
+    store.start();
+    listeners.forEach(listener => listener({ mode: 'dark', resolvedMode: 'dark' }));
+    client.answer({ mode: 'light', resolvedMode: 'light' });
+    await flush();
+
+    expect(cache.inEffect()).toBe('dark');
+  });
+});
+
 describe('choosing an option', () => {
   it('repaints the page and tells the backend', async () => {
     const cache = createCache('system');
@@ -228,7 +310,7 @@ describe('choosing an option', () => {
     const store = createAppearanceStore({
       cache,
       client: {
-        get: async () => undefined,
+        get: async () => DEFAULT_APPEARANCE_PREFERENCE,
         save: async () => {
           throw new Error('unreachable');
         },

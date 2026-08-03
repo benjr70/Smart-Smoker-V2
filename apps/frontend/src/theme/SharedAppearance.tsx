@@ -21,6 +21,22 @@ import {
 /** Choosing a mode: repaint now, publish if the installation does not know. */
 export type AppearanceChoice = (mode: AppearanceMode) => void;
 
+/** The media query that is the device's own colour preference. */
+const DARK_QUERY = '(prefers-color-scheme: dark)';
+
+/**
+ * Whether the device asks for a dark interface, asked of the device.
+ *
+ * Deliberately not the colour-scheme hook's `systemMode`, which is only defined
+ * while the mode in effect already *is* "follow the device" — that is, never at
+ * the moment an operator on a fixed scheme chooses Auto. A browser that believed
+ * it would record light for a dark device, and since the touchscreen renders
+ * from the recorded half rather than asking its own screen, it would paint light
+ * in a dark room until some other client happened to correct it.
+ */
+const devicePrefersDark = (): boolean =>
+  typeof window.matchMedia === 'function' && window.matchMedia(DARK_QUERY).matches;
+
 const SharedAppearanceContext = createContext<AppearanceChoice | null>(null);
 
 export interface SharedAppearanceProviderProps {
@@ -37,21 +53,21 @@ export const SharedAppearanceProvider = ({
   children,
 }: SharedAppearanceProviderProps): JSX.Element => {
   const client = useApiClient().appearance;
-  const { mode, setMode, systemMode } = useColorScheme();
+  const { mode, setMode } = useColorScheme();
 
   // The colour-scheme hook hands back fresh values on every render, while the
   // store holds its cache for as long as it lives. Reading through refs is what
   // lets the store ask "what is on screen *now*" instead of closing over what
   // was on screen when it was built.
-  const latest = useRef({ mode, setMode, systemMode });
-  latest.current = { mode, setMode, systemMode };
+  const latest = useRef({ mode, setMode });
+  latest.current = { mode, setMode };
 
   const store = useMemo(
     () =>
       createAppearanceStore({
         cache: {
           readMode: () => (latest.current.mode as AppearanceMode | undefined) ?? null,
-          systemDark: () => latest.current.systemMode === 'dark',
+          systemDark: devicePrefersDark,
           apply: chosen => latest.current.setMode(chosen),
         },
         client,

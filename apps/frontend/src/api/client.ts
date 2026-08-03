@@ -135,13 +135,30 @@ export interface NotificationsResource {
   sendTest(): Promise<{ sent: number }>;
 }
 
+/**
+ * What an installation nobody has chosen an appearance on is taken to have
+ * chosen: follow the device, resolved the way a client with no device
+ * preference of its own resolves it.
+ *
+ * The API layer's copy of the value the appearance resolver and the backend both
+ * start from — kept here rather than imported so the wire types stay free of
+ * domain imports, and pinned to the shared one by the client's tests.
+ */
+export const DEFAULT_APPEARANCE_PREFERENCE: AppearancePreference = {
+  mode: 'system',
+  resolvedMode: 'light',
+};
+
 export interface AppearanceResource {
   /**
-   * GET `appSettings` — the installation's stored appearance preference, or
-   * `undefined` when nothing has been stored yet, which leaves a client
-   * rendering whatever its own cache says rather than blanking the page.
+   * GET `appSettings` — the installation's stored appearance preference.
+   *
+   * Always a preference: an installation nobody has chosen an appearance on
+   * holds {@link DEFAULT_APPEARANCE_PREFERENCE}, so a caller has a scheme to
+   * render rather than an absence to interpret. A read that cannot be made
+   * rejects, which is a different thing entirely.
    */
-  get(): Promise<AppearancePreference | undefined>;
+  get(): Promise<AppearancePreference>;
   /**
    * POST `appSettings` — store the preference. Sends the appearance block
    * alone, so a browser repainting itself never writes back alert settings the
@@ -415,13 +432,15 @@ export const createApiClient = (
   },
   appearance: {
     get: async () => {
-      // An installation nobody has chosen an appearance on answers with an
-      // empty body, mapped to `null` by the transport. That reaches the caller
-      // as "nothing stored", which leaves it rendering what its own cache says.
+      // The route answers with a complete document whether or not anything has
+      // ever been chosen, so the only body without an appearance block comes
+      // from a deployment older than the block itself. Both mean "nothing
+      // chosen here", which is the documented default rather than an absence
+      // every caller would have to have its own opinion about.
       const response = await transport.get<{
         appearance?: AppearancePreference;
       } | null>('appSettings');
-      return response?.appearance ?? undefined;
+      return response?.appearance ?? DEFAULT_APPEARANCE_PREFERENCE;
     },
     save: async (preference: AppearancePreference) => {
       const saved = await transport.post<{ appearance?: AppearancePreference }>('appSettings', {

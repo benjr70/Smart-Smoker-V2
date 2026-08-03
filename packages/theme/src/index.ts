@@ -9,7 +9,12 @@ export {
   withDesignPalette,
 } from './appTheme';
 export type { DesignPalette } from './appTheme';
-export { resolveAppearance, resolveChoice } from './appearance';
+export {
+  DEFAULT_APPEARANCE_PREFERENCE,
+  isCoherentPreference,
+  resolveAppearance,
+  resolveChoice,
+} from './appearance';
 export type {
   AppearanceChoiceInput,
   AppearanceInput,

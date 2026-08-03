@@ -29,9 +29,16 @@ export interface AppearanceCachePort {
   apply(mode: AppearanceMode): void;
 }
 
-/** Reading and writing the installation's stored preference. */
+/**
+ * Reading and writing the installation's stored preference.
+ *
+ * The read always answers with a preference: an installation nobody has chosen
+ * an appearance on holds the documented default rather than nothing at all, so
+ * "no preference" is not a state a caller has to have an opinion about. A read
+ * that could not be made rejects, which is a different thing entirely.
+ */
 export interface AppearanceClientPort {
-  get(): Promise<AppearancePreference | undefined>;
+  get(): Promise<AppearancePreference>;
   save(preference: AppearancePreference): Promise<AppearancePreference>;
 }
 
@@ -94,6 +101,19 @@ export const createAppearanceStore = ({
   let stored: AppearancePreference | null = null;
 
   /**
+   * How many times something newer than a load has settled the appearance: an
+   * operator choosing an option, or another client announcing one.
+   *
+   * A load takes as long as the backend takes, and the operator in front of the
+   * settings page has no idea it is happening. Anything they do meanwhile is the
+   * later word on what the installation should look like, so a read that was
+   * already on its way when it happened is stale by the time it lands — applying
+   * it would repaint away from the choice they just made and leave the screen
+   * disagreeing with the backend until the next reload.
+   */
+  let settlements = 0;
+
+  /**
    * Paint a resolution and, if it is news to the backend, publish it.
    *
    * Publishing is deliberately last and deliberately awaited separately from
@@ -122,6 +142,7 @@ export const createAppearanceStore = ({
    * clients would answer each other's announcements forever.
    */
   const adopt = (preference: AppearancePreference): void => {
+    settlements += 1;
     stored = preference;
     applyIfDifferent(preference.mode);
   };
@@ -130,30 +151,29 @@ export const createAppearanceStore = ({
 
   const start = async (): Promise<void> => {
     unsubscribe = unsubscribe ?? subscription.subscribe(adopt);
+    const began = settlements;
     // A backend this client cannot reach is not an error the operator can do
     // anything about, and not a reason to change what is on screen: the cached
     // scheme goes on applying and the page themes correctly. Swallowing the
     // read is therefore the behaviour, not a shortcut — nothing downstream has
     // a use for the failure.
-    stored = (await client.get().catch(() => undefined)) ?? null;
-    if (stored === null && cache.readMode() === null) {
-      // Nothing stored anywhere: "follow the device" is the documented starting
-      // point, and this is the one load that has something to tell the backend.
-      await reconcile('system');
+    const fetched = await client.get().catch(() => null);
+    if (fetched === null || settlements !== began) {
+      // The read failed, or something newer settled the appearance while it was
+      // in flight. Either way this answer has nothing left to say: the scheme on
+      // screen stands, and a choice made from here still publishes normally.
       return;
     }
-    if (stored === null) {
-      // Either the read failed or the installation has no preference yet. Leave
-      // this browser painting what it already was; a choice made from here still
-      // publishes normally.
-      return;
-    }
-    await reconcile(stored.mode);
+    stored = fetched;
+    await reconcile(fetched.mode);
   };
 
   return {
     start,
-    choose: (mode: AppearanceMode) => reconcile(mode),
+    choose: (mode: AppearanceMode) => {
+      settlements += 1;
+      return reconcile(mode);
+    },
     stop: () => {
       unsubscribe?.();
       unsubscribe = undefined;

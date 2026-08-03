@@ -3,6 +3,13 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ApplicationSettings } from './app-settings.schema';
 import { AppSettingsService } from './app-settings.service';
 
+/** The update operators this collection understands, as Mongo names them. */
+interface UpdateOperators<T> {
+  $set?: Partial<T>;
+  $setOnInsert?: Partial<T>;
+  $unset?: Record<string, ''>;
+}
+
 /**
  * Stand-in for a Mongoose model, backed by a real collection of documents.
  *
@@ -11,6 +18,11 @@ import { AppSettingsService } from './app-settings.service';
  * second document is something that could have happened. A write that does not
  * ask to upsert therefore stores nothing when the collection is empty, exactly
  * as Mongo behaves, and `all()` shows how many documents ended up there.
+ *
+ * The update is applied inside the one turn that runs it, the way the server
+ * applies it: two overlapping writes each see the document as the other left
+ * it. A fake that read, merged and wrote back across turns would let a
+ * lost-update bug pass.
  */
 const createSettingsCollection = <T>(seed: T | null = null) => {
   const documents: T[] = seed === null ? [] : [{ ...seed }];
@@ -21,16 +33,31 @@ const createSettingsCollection = <T>(seed: T | null = null) => {
           documents.length === 0 ? null : { ...(documents[0] as object) },
         ),
     })),
-    findOneAndReplace: jest.fn(
-      (_filter: unknown, replacement: T, options?: { upsert?: boolean }) => ({
+    findOneAndUpdate: jest.fn(
+      (
+        _filter: unknown,
+        update: UpdateOperators<T>,
+        options?: { upsert?: boolean },
+      ) => ({
         exec: () => {
-          if (documents.length === 0) {
-            if (!options?.upsert) {
-              return Promise.resolve(null);
-            }
-            documents.push({ ...(replacement as object) } as T);
+          const inserting = documents.length === 0;
+          if (inserting && !options?.upsert) {
+            return Promise.resolve(null);
+          }
+          const base = inserting
+            ? { ...(update.$setOnInsert as object) }
+            : { ...(documents[0] as object) };
+          const next = { ...base, ...(update.$set as object) } as Record<
+            string,
+            unknown
+          >;
+          Object.keys(update.$unset ?? {}).forEach((field) => {
+            delete next[field];
+          });
+          if (inserting) {
+            documents.push(next as T);
           } else {
-            documents[0] = { ...(replacement as object) } as T;
+            documents[0] = next as T;
           }
           return Promise.resolve({ ...(documents[0] as object) });
         },
@@ -124,6 +151,33 @@ describe('AppSettingsService', () => {
       });
     });
 
+    it('creates it complete when the write carries both blocks at once', async () => {
+      await service.saveSettings({
+        chamber: { enabled: true, low: 200, high: 250 },
+        appearance: { mode: 'dark', resolvedMode: 'dark' },
+      });
+
+      expect(await service.getSettings()).toEqual({
+        chamber: { enabled: true, low: 200, high: 250 },
+        appearance: { mode: 'dark', resolvedMode: 'dark' },
+      });
+      expect(settings.all()).toHaveLength(1);
+    });
+
+    /**
+     * A body carrying no block at all asks for nothing in particular, which on
+     * an empty database is still a document — the defaults — rather than a
+     * malformed write.
+     */
+    it('creates the defaults when the write carries no block at all', async () => {
+      await service.saveSettings({});
+
+      expect(await service.getSettings()).toEqual({
+        chamber: { enabled: false, low: 225, high: 275 },
+        appearance: { mode: 'system', resolvedMode: 'light' },
+      });
+    });
+
     it('updates that document on the next write rather than adding another', async () => {
       await service.saveSettings({
         appearance: { mode: 'dark', resolvedMode: 'dark' },
@@ -172,6 +226,65 @@ describe('AppSettingsService', () => {
       expect(await service.getSettings()).toEqual({
         chamber: { enabled: true, low: 200, high: 250 },
         appearance: { mode: 'light', resolvedMode: 'light' },
+      });
+    });
+
+    /**
+     * The two writers are two people at two screens, so their saves overlap:
+     * an operator turns the alert on in the settings page while another browser
+     * repaints itself. Neither save is told about the other, so a write that
+     * read the document first and wrote the whole thing back would quietly undo
+     * whichever change landed while it was reading.
+     */
+    it('keeps both blocks when the two writers save at the same time', async () => {
+      const saves = Promise.all([
+        service.saveSettings({
+          chamber: { enabled: true, low: 200, high: 250 },
+        }),
+        service.saveSettings({
+          appearance: { mode: 'dark', resolvedMode: 'dark' },
+        }),
+      ]);
+
+      await saves;
+
+      expect(await service.getSettings()).toEqual({
+        chamber: { enabled: true, low: 200, high: 250 },
+        appearance: { mode: 'dark', resolvedMode: 'dark' },
+      });
+      expect(settings.all()).toHaveLength(1);
+    });
+  });
+
+  /**
+   * The freeform rule documents of the previous schema are not migrated, so a
+   * deployment upgrading into this one has a document whose fields mean nothing
+   * here. A save must not leave them behind for a later reader to trip over.
+   */
+  describe('a document of the deleted rule shape', () => {
+    it('loses that shape the first time anything is saved', async () => {
+      const legacy = createSettingsCollection<ApplicationSettings>({
+        settings: [{ type: true, message: 'probe1 is done' }],
+      } as unknown as ApplicationSettings);
+      const module = await Test.createTestingModule({
+        providers: [
+          AppSettingsService,
+          {
+            provide: getModelToken(ApplicationSettings.name),
+            useValue: legacy,
+          },
+        ],
+      }).compile();
+
+      const service = module.get<AppSettingsService>(AppSettingsService);
+      await service.saveSettings({
+        appearance: { mode: 'dark', resolvedMode: 'dark' },
+      });
+
+      expect(legacy.all()[0]).not.toHaveProperty('settings');
+      expect(await service.getSettings()).toEqual({
+        chamber: { enabled: false, low: 225, high: 275 },
+        appearance: { mode: 'dark', resolvedMode: 'dark' },
       });
     });
   });
