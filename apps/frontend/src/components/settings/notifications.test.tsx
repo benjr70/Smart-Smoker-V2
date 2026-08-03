@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { ApiClientProvider, SnackbarProvider, createApiClient } from '../../api';
 import { createFakeBackend, FakeBackend } from '../../api/fakeBackend';
@@ -54,9 +54,17 @@ const createFakePushPort = (
 ) => {
   const calls: string[] = [];
   let permission: PushPermission = overrides.permission ?? 'granted';
-  const port: PushPort & { calls: string[]; subscribedWith: string[] } = {
+  const port: PushPort & {
+    calls: string[];
+    subscribedWith: string[];
+    /** The browser's answer changing under an open page, as a site-settings change does. */
+    browserNowReports: (next: PushPermission) => void;
+  } = {
     calls,
     subscribedWith: [],
+    browserNowReports: (next: PushPermission) => {
+      permission = next;
+    },
     getPermission: () => permission,
     requestPermission: async () => {
       calls.push('requestPermission');
@@ -230,6 +238,65 @@ describe('NotificationsCard', () => {
     expect(port.subscribedWith).toEqual(['BRuntimeKey']);
   });
 
+  // Notification settings are one document for the whole smoker, so an alert
+  // switched on from one device is already on everywhere. A browser meeting it
+  // for the first time never sees an off→on toggle, so without a way in of its
+  // own it would never be prompted and never subscribe — the toggle would read
+  // as armed while nothing could reach this browser at all.
+  test('offers a way in when an alert is already on in a browser that has never been asked', async () => {
+    const backend = createFakeBackend({
+      appSettings: { settings: chamberAlertOn },
+      notifications: { publicKey: 'BRuntimeKey' },
+    });
+    const port = createFakePushPort({ permission: 'default', onRequest: 'granted' });
+
+    renderCard(backend, port);
+
+    const banner = await screen.findByTestId('settings-push-not-enabled');
+    expect(banner).toHaveTextContent(/this browser/i);
+    // Not the test control: nothing could be delivered here yet, so offering it
+    // would only produce a failure the user cannot act on.
+    expect(screen.queryByRole('button', { name: /send test/i })).not.toBeInTheDocument();
+    expect(port.calls).toEqual([]);
+
+    fireEvent.click(within(banner).getByRole('button', { name: /turn on/i }));
+
+    await waitFor(() =>
+      expect(backend.store.notifications.subscriptions).toEqual([browserSubscription])
+    );
+    expect(port.calls).toEqual(['requestPermission', 'subscribe']);
+    expect(port.subscribedWith).toEqual(['BRuntimeKey']);
+    await waitFor(() =>
+      expect(screen.queryByTestId('settings-push-not-enabled')).not.toBeInTheDocument()
+    );
+    expect(screen.getByRole('button', { name: /send test/i })).toBeInTheDocument();
+  });
+
+  // The same gap, reached through the other alert: a smoker whose only alert is
+  // Probe Target Reached is just as unable to hear from a browser that was
+  // never asked, so the way in cannot be the chamber alert's alone.
+  test('offers the same way in when the alert already on is the probe target one', async () => {
+    const backend = createFakeBackend({
+      appSettings: {
+        settings: {
+          chamber: { enabled: false, low: 225, high: 275 },
+          probeTarget: { enabled: true, probes: probeRows({ probe1: 203 }) },
+        },
+      },
+    });
+    const port = createFakePushPort({ permission: 'default', onRequest: 'granted' });
+
+    renderCard(backend, port);
+
+    const banner = await screen.findByTestId('settings-push-not-enabled');
+    fireEvent.click(within(banner).getByRole('button', { name: /turn on/i }));
+
+    await waitFor(() =>
+      expect(backend.store.notifications.subscriptions).toEqual([browserSubscription])
+    );
+    expect(port.calls).toEqual(['requestPermission', 'subscribe']);
+  });
+
   // Without this the toggles would sit there looking armed while nothing could
   // ever arrive, which is exactly the silence this whole overhaul is about.
   test('explains the dead end, and the way out of it, when the user denies the prompt', async () => {
@@ -281,6 +348,9 @@ describe('NotificationsCard', () => {
 
     await screen.findByLabelText('Temperature Alert');
     expect(screen.queryByTestId('settings-push-blocked')).not.toBeInTheDocument();
+    // Nor the way in: with every alert off there is nothing this browser is
+    // missing, and switching one on is the gesture that asks.
+    expect(screen.queryByTestId('settings-push-not-enabled')).not.toBeInTheDocument();
   });
 
   // The configuration is worth keeping even when it cannot be delivered today:
@@ -349,6 +419,40 @@ describe('NotificationsCard', () => {
     expect(await screen.findByRole('button', { name: /send test/i })).toBeInTheDocument();
   });
 
+  // Subscribing takes seconds on a first visit — service worker registration,
+  // activation, then `pushManager.subscribe` — and a grant arrives well before
+  // any of it finishes. Offering the test control inside that window invites a
+  // second chain against the same registration: overlapping subscribes can make
+  // one of them reject, and each would register its own copy with the backend.
+  test('does not offer the test control mid-subscribe, and never subscribes this browser twice', async () => {
+    const backend = createFakeBackend();
+    let completeSubscribe: () => void = () => undefined;
+    const port = createFakePushPort({
+      permission: 'default',
+      onRequest: 'granted',
+      subscribe: () =>
+        new Promise<PushSubscriptionPayload>(resolve => {
+          completeSubscribe = () => resolve(browserSubscription);
+        }),
+    });
+
+    renderCard(backend, port);
+
+    fireEvent.click(await screen.findByLabelText('Temperature Alert'));
+    // Permission granted, so the card knows push is possible — but this browser
+    // has no subscription yet, and the chain that is taking one out is running.
+    await waitFor(() => expect(port.calls).toEqual(['requestPermission', 'subscribe']));
+    expect(screen.queryByRole('button', { name: /send test/i })).not.toBeInTheDocument();
+
+    completeSubscribe();
+
+    fireEvent.click(await screen.findByRole('button', { name: /send test notification/i }));
+
+    await waitFor(() => expect(backend.store.notifications.testSends).toBe(1));
+    expect(port.calls).toEqual(['requestPermission', 'subscribe']);
+    expect(backend.store.notifications.subscriptions).toEqual([browserSubscription]);
+  });
+
   // Silence here is how the old subscribe-on-mount block hid this exact
   // failure, leaving a browser that looked armed and was not.
   test('reports a browser that could not be subscribed when the alert was switched on', async () => {
@@ -380,7 +484,7 @@ describe('NotificationsCard', () => {
     expect(port.calls).toEqual(['requestPermission']);
   });
 
-  test('the send-test control asks permission, subscribes with the backend key, registers it and sends', async () => {
+  test('the send-test control subscribes with the backend key, registers it and sends', async () => {
     const backend = createFakeBackend({ notifications: { publicKey: 'BRuntimeKey' } });
     const port = createFakePushPort();
 
@@ -389,38 +493,52 @@ describe('NotificationsCard', () => {
     fireEvent.click(await screen.findByRole('button', { name: /send test notification/i }));
 
     await waitFor(() => expect(backend.store.notifications.testSends).toBe(1));
-    // Permission must be asked before subscribing: the prompt needs the click.
-    expect(port.calls).toEqual(['requestPermission', 'subscribe']);
+    // No prompt: this browser has already granted permission, and re-asking
+    // would be a browser call that can only return the answer already held.
+    expect(port.calls).toEqual(['subscribe']);
     // The key comes from the backend at subscribe time, not a bundled constant.
     expect(port.subscribedWith).toEqual(['BRuntimeKey']);
     expect(backend.store.notifications.subscriptions).toEqual([browserSubscription]);
   });
 
-  // Permission can be withdrawn in browser settings while the page stays open,
-  // so the control that was offered on a granted state can still meet a denial.
-  test('a permission revoked since the card rendered stops before subscribing and tells the user', async () => {
+  // Permission can be withdrawn in browser site settings while the page stays
+  // open, so the control offered on a granted state can still meet a denial —
+  // and afterwards the card has to keep telling the truth. A snackbar the user
+  // can re-trigger for ever is not the same as saying the site is blocked.
+  test('a grant revoked while the page is open stops the send and leaves the blocked banner behind', async () => {
     const backend = createFakeBackend();
-    const port = createFakePushPort({ permission: 'granted', onRequest: 'denied' });
+    const port = createFakePushPort({ permission: 'granted' });
 
     renderCard(backend, port);
 
-    fireEvent.click(await screen.findByRole('button', { name: /send test notification/i }));
+    const button = await screen.findByRole('button', { name: /send test notification/i });
+    port.browserNowReports('denied');
+    fireEvent.click(button);
 
-    expect(await screen.findByText(/notifications are blocked/i)).toBeInTheDocument();
-    expect(port.calls).toEqual(['requestPermission']);
+    expect(await screen.findByText(/allow notifications for this site/i)).toBeInTheDocument();
+    expect(await screen.findByTestId('settings-push-blocked')).toHaveTextContent(/address bar/i);
+    // And the control that can no longer do anything goes with it.
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /send test/i })).not.toBeInTheDocument()
+    );
+    // Nothing to prompt for: a blocked browser auto-denies a second prompt.
+    expect(port.calls).toEqual([]);
     expect(backend.store.notifications.testSends).toBe(0);
   });
 
   test('tells the user when the browser turns out not to do push at all', async () => {
     const backend = createFakeBackend();
-    const port = createFakePushPort({ permission: 'granted', onRequest: 'unsupported' });
+    const port = createFakePushPort({ permission: 'granted' });
 
     renderCard(backend, port);
 
-    fireEvent.click(await screen.findByRole('button', { name: /send test notification/i }));
+    const button = await screen.findByRole('button', { name: /send test notification/i });
+    port.browserNowReports('unsupported');
+    fireEvent.click(button);
 
     expect(await screen.findByText(/does not support push notifications/i)).toBeInTheDocument();
-    expect(port.calls).toEqual(['requestPermission']);
+    expect(await screen.findByTestId('settings-push-unsupported')).toBeInTheDocument();
+    expect(port.calls).toEqual([]);
   });
 
   test('surfaces a failure to subscribe rather than swallowing it', async () => {
@@ -451,7 +569,9 @@ describe('NotificationsCard', () => {
 
     expect(await screen.findByText(/not set up on the server/i)).toBeInTheDocument();
     expect(screen.queryByText(/could not send a test notification/i)).not.toBeInTheDocument();
-    expect(port.calls).toEqual(['requestPermission']);
+    // The key is fetched before the browser is asked to subscribe, so a server
+    // with none configured never reaches the browser at all.
+    expect(port.calls).toEqual([]);
   });
 
   // The backend answers 200 with a delivered count even when the push service
@@ -468,7 +588,7 @@ describe('NotificationsCard', () => {
     expect(await screen.findByText(/reached no browsers/i)).toBeInTheDocument();
     // The whole chain still ran — the failure is in delivery, not in the flow.
     expect(backend.store.notifications.testSends).toBe(1);
-    expect(port.calls).toEqual(['requestPermission', 'subscribe']);
+    expect(port.calls).toEqual(['subscribe']);
   });
 
   test('says nothing when the test notification is delivered', async () => {

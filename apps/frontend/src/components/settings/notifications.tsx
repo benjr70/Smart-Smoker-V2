@@ -25,10 +25,12 @@ import {
 import {
   BLOCKED_BANNER_BODY,
   BLOCKED_BANNER_TITLE,
+  NOT_ENABLED_BANNER_ACTION,
+  NOT_ENABLED_BANNER_BODY,
+  NOT_ENABLED_BANNER_TITLE,
   UNSUPPORTED_BANNER_BODY,
   UNSUPPORTED_BANNER_TITLE,
-  usePushEnablement,
-  useTestNotification,
+  usePushNotifications,
 } from '../../push';
 
 /**
@@ -120,8 +122,7 @@ export function NotificationsCard(): JSX.Element {
     loadErrorMessage: 'Could not load notification settings.',
     saveErrorMessage: 'Could not save notification settings.',
   });
-  const { sendTest, sending } = useTestNotification();
-  const { permission, enable } = usePushEnablement();
+  const { permission, enabling, enable, sendTest, sending } = usePushNotifications();
 
   const updateChamber = (change: Partial<ChamberAlertSettings>) =>
     setSettings(current => ({ ...current, chamber: { ...current.chamber, ...change } }));
@@ -171,6 +172,10 @@ export function NotificationsCard(): JSX.Element {
   // The mock tags the first watched probe with the cook's ETA. Which probe that
   // is follows from the watch list, so it is derived here rather than stored.
   const firstWatchedSlot = probeTarget.probes.find(probe => probe.enabled)?.slot;
+  // Any alert switched on is something this browser is expected to deliver, so
+  // any of them is reason enough to offer the way in below. Reading only the
+  // chamber alert would strand a smoker whose alerts are all about the meat.
+  const anyAlertEnabled = chamber.enabled || probeTarget.enabled;
 
   return (
     // No spacing wrapper: the settings page stacks its cards and owns the gap
@@ -186,6 +191,27 @@ export function NotificationsCard(): JSX.Element {
             <Alert severity="info" data-testid="settings-push-unsupported">
               <AlertTitle>{UNSUPPORTED_BANNER_TITLE}</AlertTitle>
               {UNSUPPORTED_BANNER_BODY}
+            </Alert>
+          )}
+
+          {/* An alert switched on elsewhere arrives already on here, so there is
+              no off→on toggle left to carry the prompt. This is that gesture.
+              Hidden while a chain is running, so switching an alert on does not
+              flash a "not set up" banner at the user mid-prompt. */}
+          {permission === 'default' && anyAlertEnabled && !enabling && (
+            <Alert severity="info" data-testid="settings-push-not-enabled">
+              <AlertTitle>{NOT_ENABLED_BANNER_TITLE}</AlertTitle>
+              <Stack alignItems="flex-start" spacing={1}>
+                <span>{NOT_ENABLED_BANNER_BODY}</span>
+                <Button
+                  variant="outlined"
+                  color="inherit"
+                  size="small"
+                  onClick={() => void enable()}
+                >
+                  {NOT_ENABLED_BANNER_ACTION}
+                </Button>
+              </Stack>
             </Alert>
           )}
 
@@ -320,8 +346,10 @@ export function NotificationsCard(): JSX.Element {
 
           {/* Only worth offering once a notification could actually arrive: in
               any other permission state this control can only ever report the
-              same failure the banner above already explains. */}
-          {permission === 'granted' && (
+              same failure the banner above already explains. Held back until
+              the enabling chain finishes too — offered mid-subscribe it would
+              start a second one against the same registration. */}
+          {permission === 'granted' && !enabling && (
             <Button
               variant="outlined"
               startIcon={<NotificationsActiveIcon />}

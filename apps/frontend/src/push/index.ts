@@ -10,13 +10,14 @@ export type { PushPermission, PushPort } from './pushPort';
 export { createBrowserPushPort, getDefaultPushPort } from './browserPushAdapter';
 export type { PushPortProviderProps } from './PushPortProvider';
 export { PushPortProvider, usePushPort } from './PushPortProvider';
-export type { PushEnablement } from './usePushEnablement';
-export { usePushEnablement } from './usePushEnablement';
-export type { UseTestNotificationResult } from './useTestNotification';
-export { useTestNotification } from './useTestNotification';
+export type { PushNotifications } from './usePushNotifications';
+export { usePushNotifications } from './usePushNotifications';
 export {
   BLOCKED_BANNER_BODY,
   BLOCKED_BANNER_TITLE,
+  NOT_ENABLED_BANNER_ACTION,
+  NOT_ENABLED_BANNER_BODY,
+  NOT_ENABLED_BANNER_TITLE,
   UNSUPPORTED_BANNER_BODY,
   UNSUPPORTED_BANNER_TITLE,
 } from './messages';

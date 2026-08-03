@@ -40,6 +40,19 @@ export const BLOCKED_BANNER_BODY =
   'To unblock, open the padlock or site-settings icon next to the address bar, set ' +
   'Notifications to Allow, then reload this page. Your alert settings are saved either way.';
 
+/**
+ * The inline banner shown when an alert is switched on but this browser has
+ * never been asked for permission. Alert settings are one document for the whole
+ * smoker, so an alert switched on elsewhere arrives already on here, with no
+ * off→on toggle left to carry the permission prompt — this banner is the gesture
+ * instead, and without it such a browser could never be subscribed.
+ */
+export const NOT_ENABLED_BANNER_TITLE = 'This browser is not set up for notifications yet';
+export const NOT_ENABLED_BANNER_BODY =
+  'Your alerts are switched on, but this browser has not been asked whether it may show ' +
+  'notifications, so nothing will reach you here until it is.';
+export const NOT_ENABLED_BANNER_ACTION = 'Turn on notifications';
+
 /** The inline banner shown when the browser has no push support at all. */
 export const UNSUPPORTED_BANNER_TITLE = 'This browser cannot show notifications';
 export const UNSUPPORTED_BANNER_BODY =
