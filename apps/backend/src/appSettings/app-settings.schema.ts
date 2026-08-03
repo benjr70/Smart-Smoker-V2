@@ -62,9 +62,20 @@ export class ProbeTargetEntry {
   @Prop({ default: 203 })
   target: number;
 
-  /** Where that target came from — see {@link TargetSource}. */
+  /**
+   * Where that target came from — see {@link TargetSource}.
+   *
+   * Deliberately without a schema default, unlike every other field here. A
+   * default is applied while hydrating a stored document too, so one here would
+   * put `'default'` on the rows of an installation that saved its targets
+   * before provenance was recorded — asserting the app chose temperatures the
+   * user typed, and handing seeding permission to overwrite them. Absent, those
+   * rows read as what they are: unknown, to be inferred from the target itself
+   * (see `inheritedProvenance`). Every write names the provenance explicitly,
+   * so no row this application stores is left needing that inference twice.
+   */
   @ApiProperty({ enum: ['default', 'preset', 'user'] })
-  @Prop({ default: 'default' })
+  @Prop({ type: String })
   targetSource: TargetSource;
 }
 

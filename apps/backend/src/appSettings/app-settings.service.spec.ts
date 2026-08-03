@@ -417,6 +417,34 @@ describe('AppSettingsService', () => {
       });
     });
 
+    /**
+     * The stored row says where its target came from; nothing downstream is
+     * left to work it out again.
+     *
+     * Provenance is inferred only for rows written before it existed, and that
+     * inference cannot tell a deliberate 203°F from an untouched one. A save
+     * that stored a row without provenance would leave every later read
+     * guessing — so a client too old to send one still has its rows stored with
+     * one worked out here, once.
+     */
+    it('stores an explicit provenance for a row saved without one', async () => {
+      await service.saveSettings({
+        probeTarget: {
+          enabled: true,
+          probes: [
+            { slot: 'probe1', enabled: true, target: 145 },
+            { slot: 'probe2', enabled: true, target: 203 },
+          ],
+        } as ApplicationSettings['probeTarget'],
+      });
+
+      expect(settings.all()[0].probeTarget.probes).toEqual([
+        { slot: 'probe1', enabled: true, target: 145, ...byHand },
+        { slot: 'probe2', enabled: true, target: 203, ...untouched },
+        { slot: 'probe3', enabled: false, target: 203, ...untouched },
+      ]);
+    });
+
     // The document's three writers are independent: saving probe targets must
     // not reset the appearance a browser chose, nor the chamber alert.
     it('leaves the other blocks alone when only the probe rows are saved', async () => {
