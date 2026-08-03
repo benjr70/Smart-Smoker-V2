@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { EventsGateway } from '../websocket/events.gateway';
 import {
   DEFAULT_APPLICATION_SETTINGS,
   withSettingsDefaults,
@@ -32,6 +33,7 @@ export class AppSettingsService {
     private appSettingsModel: Model<ApplicationSettingsDocument>,
     private stateService: StateService,
     private smokeProfileService: SmokeProfileService,
+    private readonly events: EventsGateway,
   ) {}
 
   /**
@@ -135,6 +137,17 @@ export class AppSettingsService {
         { upsert: true, new: true },
       )
       .exec();
-    return withSettingsDefaults(saved);
+    const stored = withSettingsDefaults(saved);
+
+    // The appearance is installation-wide, so the client that wrote it is not
+    // the only one it applies to: whoever is connected is told at once rather
+    // than left showing the old scheme until something reloads them. Only the
+    // appearance is announced — a chamber alert changes nothing anyone is
+    // looking at.
+    if (incoming.appearance) {
+      this.events.broadcastAppearance(stored.appearance);
+    }
+
+    return stored;
   }
 }

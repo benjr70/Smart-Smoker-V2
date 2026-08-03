@@ -264,6 +264,30 @@ describe('EventsGateway', () => {
     });
   });
 
+  /**
+   * The appearance is one installation-wide preference, so a change made in one
+   * browser has to reach every other client that is already open. It rides the
+   * gateway the application already has rather than a second transport, as its
+   * own event: nothing that was listening for temperatures or smoke updates has
+   * to learn about it.
+   */
+  describe('broadcastAppearance', () => {
+    it('announces the preference to every connected client', () => {
+      gateway.broadcastAppearance({ mode: 'dark', resolvedMode: 'dark' });
+
+      expect(mockServer.emit).toHaveBeenCalledWith('appearance', {
+        mode: 'dark',
+        resolvedMode: 'dark',
+      });
+    });
+
+    it('announces nothing else', () => {
+      gateway.broadcastAppearance({ mode: 'system', resolvedMode: 'light' });
+
+      expect(mockServer.emit).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('handleRefresh', () => {
     it('should emit refresh event and log it', () => {
       const logSpy = jest.spyOn(Logger, 'log').mockImplementation();

@@ -41,8 +41,9 @@ const SharedAppearanceContext = createContext<AppearanceChoice | null>(null);
 
 export interface SharedAppearanceProviderProps {
   /**
-   * How this client hears that another one changed the preference. What carries
-   * it is wired in a later slice; until then nothing is announced.
+   * How this client hears that another one changed the preference. The
+   * application root supplies the websocket-backed channel; a tree assembled
+   * without one simply hears nothing announced.
    */
   subscription?: AppearanceSubscriptionPort;
   children: React.ReactNode;

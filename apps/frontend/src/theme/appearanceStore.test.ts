@@ -324,9 +324,9 @@ describe('choosing an option', () => {
 });
 
 /**
- * The channel other clients announce changes on. What carries it is wired in a
- * later slice; the seam is injected, so what the store does with an announcement
- * is stated here rather than left until there is a socket to observe it through.
+ * The channel other clients announce changes on. The seam is injected, so what
+ * the store does with an announcement is stated here rather than through the
+ * socket that carries it in production.
  */
 describe('a preference another client changed', () => {
   const createChannel = () => {
@@ -358,6 +358,29 @@ describe('a preference another client changed', () => {
 
     expect(cache.inEffect()).toBe('dark');
     expect(client.written).toEqual([]);
+  });
+
+  /**
+   * The announcement goes to every connected client, including the one whose
+   * write caused it. That client painted the scheme before the write left, so
+   * the announcement coming back has nothing to tell it — repainting again would
+   * be the visible flicker of a change that already happened.
+   */
+  it('changes nothing on the client that chose it', async () => {
+    const cache = createCache('light');
+    const client = createPendingClient();
+    const channel = createChannel();
+    const store = createAppearanceStore({ cache, client, subscription: channel });
+    store.start();
+    client.answer({ mode: 'light', resolvedMode: 'light' });
+    await flush();
+    await store.choose('dark');
+
+    channel.announce({ mode: 'dark', resolvedMode: 'dark' });
+    await flush();
+
+    expect(cache.applied).toEqual(['dark']);
+    expect(client.written).toEqual([{ mode: 'dark', resolvedMode: 'dark' }]);
   });
 
   it('stops reaching a store that has been stopped', async () => {

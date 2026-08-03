@@ -43,16 +43,16 @@ export interface AppearanceClientPort {
 }
 
 /**
- * How this client hears that another one changed the preference. The channel
- * itself (a websocket event) is wired in a later slice; the seam is here so the
- * store's response to a change is testable without one.
+ * How this client hears that another one changed the preference. Carried in
+ * production by the appearance event on the application's websocket; the seam is
+ * here so the store's response to a change is testable without a socket.
  */
 export interface AppearanceSubscriptionPort {
   /** Register a listener, and hand back the way to stop listening. */
   subscribe(listener: (preference: AppearancePreference) => void): () => void;
 }
 
-/** A channel that never delivers anything — the default until one is wired. */
+/** A channel that never delivers anything, for a client assembled without one. */
 export const noAppearanceSubscription: AppearanceSubscriptionPort = {
   subscribe: () => () => undefined,
 };
