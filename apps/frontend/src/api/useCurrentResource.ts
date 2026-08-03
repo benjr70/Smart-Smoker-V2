@@ -14,6 +14,13 @@
  * "cold-start the app, walk away from the Pre-Smoke step" raise
  * "Could not save pre-smoke details." for every user on every fresh launch.
  *
+ * It is also skipped when the load failed, because then the component is
+ * showing defaults it invented rather than the document the backend holds.
+ * These resources save whole documents, so persisting an edit layered on those
+ * defaults would overwrite everything the failed load never told us about — a
+ * transient 5xx would quietly wipe, say, a saved probe watch list. Losing the
+ * one edit is the cheaper failure, and the load error is already on screen.
+ *
  * Returns the familiar `[state, setState]` pair, so a migrating component swaps
  * its `useState` + two `useEffect`s for a single call and leaves every downstream
  * setter untouched.
@@ -83,6 +90,10 @@ export function useCurrentResource<T>(
   // writes nothing.
   const baseline = useRef<T>(options.initialValue);
 
+  // Set when the load rejects: the baseline is then a guess rather than the
+  // server's state, so the unmount save has no safe document to write.
+  const loadFailed = useRef(false);
+
   const optionsRef = useRef(options);
   optionsRef.current = options;
   const clientRef = useRef(client);
@@ -107,11 +118,18 @@ export function useCurrentResource<T>(
         }
       })
       .catch(() => {
+        loadFailed.current = true;
         notifyRef.current(loadErrorMessage ?? 'Failed to load.');
       });
 
     return () => {
       active = false;
+      // The load failed, so we never learned the server's state: a save here
+      // would write a document assembled from guessed defaults and clobber
+      // stored data the user never saw.
+      if (loadFailed.current) {
+        return;
+      }
       // Nothing edited, nothing to save. Skipping keeps a cold start from
       // POSTing defaults the DTO cannot accept (and from creating an empty
       // pre-smoke document, plus its smoke session, on every app launch).
