@@ -93,6 +93,39 @@ export interface NotificationSettings {
   chamber: ChamberAlertSettings;
 }
 
+/** The colour schemes the application can render in. */
+export type ColorScheme = 'light' | 'dark';
+
+/** What an operator can ask for: a fixed scheme, or "follow the device". */
+export type AppearanceMode = ColorScheme | 'system';
+
+/**
+ * The installation-wide appearance preference as it goes over the wire: the
+ * mode that was chosen, and what that choice resolved to on the client that
+ * last wrote it.
+ *
+ * The resolved half is stored because a client with no colour preference of its
+ * own cannot resolve "follow the device" — the touchscreen's browser reports
+ * light whatever the garage looks like, so it reads this value instead of
+ * asking. Declared here, alongside the other wire types, so the client and its
+ * callers never import a domain type from the theme package through the API
+ * layer; it is structurally the preference the shared appearance resolver reads
+ * and writes.
+ */
+export interface AppearancePreference {
+  mode: AppearanceMode;
+  resolvedMode: ColorScheme;
+}
+
+/**
+ * The application settings document: everything the installation configures,
+ * whether or not it has anything to do with notifications.
+ */
+export interface ApplicationSettings {
+  chamber: ChamberAlertSettings;
+  appearance: AppearancePreference;
+}
+
 /**
  * The central smoke-session state singleton as seen by the frontend: which
  * smoke is current and whether it is actively smoking. Canonical here so

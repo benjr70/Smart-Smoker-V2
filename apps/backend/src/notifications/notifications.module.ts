@@ -1,16 +1,17 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { StateModule } from '../State/state.module';
+import { AppSettingsModule } from '../appSettings/app-settings.module';
 import { PushDispatcherModule } from '../pushDispatcher/push-dispatcher.module';
 import { TempModule } from '../temps/temps.module';
 import { AlertStateSchema } from './alert-state.schema';
 import { NotificationsController } from './notifications.controller';
 import { NotificationsService } from './notifications.service';
-import { NotificationSettingsSchema } from './notificationSettings.schema';
 import { NotificationSubscriptionSchema } from './notificationSubscription.schema';
 
 @Module({
   imports: [
+    AppSettingsModule,
     PushDispatcherModule,
     StateModule,
     TempModule,
@@ -19,7 +20,6 @@ import { NotificationSubscriptionSchema } from './notificationSubscription.schem
         name: 'NotificationSubscription',
         schema: NotificationSubscriptionSchema,
       },
-      { name: 'NotificationSettings', schema: NotificationSettingsSchema },
       { name: 'AlertState', schema: AlertStateSchema },
     ]),
   ],

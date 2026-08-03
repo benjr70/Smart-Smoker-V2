@@ -1,0 +1,102 @@
+import { BadRequestException, Injectable } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import {
+  DEFAULT_APPLICATION_SETTINGS,
+  withSettingsDefaults,
+} from './app-settings.defaults';
+import {
+  ApplicationSettings,
+  ApplicationSettingsDocument,
+} from './app-settings.schema';
+import { isCoherentPreference } from './appearance';
+
+/**
+ * The one field of the deleted freeform rule schema: an array of rules, none of
+ * which ever fired correctly. Named here so a save can clear it.
+ */
+const LEGACY_RULES_FIELD = 'settings';
+
+@Injectable()
+export class AppSettingsService {
+  constructor(
+    @InjectModel(ApplicationSettings.name)
+    private appSettingsModel: Model<ApplicationSettingsDocument>,
+  ) {}
+
+  /**
+   * The current settings, always complete. A deployment with no document — or
+   * with a document of the deleted rule shape, which is not migrated — reads as
+   * fresh defaults rather than as an error.
+   */
+  async getSettings(): Promise<ApplicationSettings> {
+    const stored = await this.appSettingsModel.findOne().exec();
+    return withSettingsDefaults(stored);
+  }
+
+  /**
+   * Write the blocks the caller supplied, leaving the others as they are.
+   *
+   * Block-wise rather than whole-document, because the document now serves two
+   * unrelated writers: the settings page saves the chamber alert, and any
+   * browser that repaints itself saves the appearance. Either one replacing the
+   * whole document would silently reset the other's block.
+   *
+   * The write is a single update the server applies as one operation, naming
+   * only the blocks it was given. Reading the document first and writing the
+   * whole thing back would leave a window in which the other writer's change
+   * landed and was then undone — an operator saving an alert while another
+   * browser repaints is exactly that window, and neither of them would be told.
+   *
+   * The fields of a supplied block are still named one by one, so a partial
+   * block cannot store half a setting, and the deleted freeform rule shape is
+   * removed outright rather than carried alongside.
+   *
+   * An upsert, so the first write needs no separate create step — the browser
+   * that chooses an appearance on a fresh installation is writing into an empty
+   * database, and the blocks it did not send are created at their defaults.
+   */
+  async saveSettings(
+    incoming: Partial<ApplicationSettings>,
+  ): Promise<ApplicationSettings> {
+    const defaults = DEFAULT_APPLICATION_SETTINGS;
+    const complete = withSettingsDefaults(incoming);
+
+    // Every client reads this document to decide what to paint, so a preference
+    // that says two different things is refused rather than stored and left for
+    // each reader to interpret its own way.
+    if (incoming.appearance && !isCoherentPreference(complete.appearance)) {
+      throw new BadRequestException(
+        `Appearance mode "${complete.appearance.mode}" cannot resolve to "${complete.appearance.resolvedMode}"`,
+      );
+    }
+
+    const set: Partial<ApplicationSettings> = {};
+    const setOnInsert: Partial<ApplicationSettings> = {};
+    (['chamber', 'appearance'] as const).forEach((block) => {
+      if (incoming[block]) {
+        Object.assign(set, { [block]: complete[block] });
+      } else {
+        Object.assign(setOnInsert, { [block]: defaults[block] });
+      }
+    });
+
+    const saved = await this.appSettingsModel
+      .findOneAndUpdate(
+        {},
+        {
+          ...(Object.keys(set).length > 0 ? { $set: set } : {}),
+          ...(Object.keys(setOnInsert).length > 0
+            ? { $setOnInsert: setOnInsert }
+            : {}),
+          // The freeform rule documents of the previous schema are not
+          // migrated. Anything saved onto one drops that shape rather than
+          // leaving it beside the settings that replaced it.
+          $unset: { [LEGACY_RULES_FIELD]: '' },
+        },
+        { upsert: true, new: true },
+      )
+      .exec();
+    return withSettingsDefaults(saved);
+  }
+}

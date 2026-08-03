@@ -9,6 +9,7 @@ import {
 import { useColorScheme, useTheme } from '@mui/material/styles';
 import React from 'react';
 import { AppearanceMode, resolveAppearance } from '../../theme';
+import { useAppearanceChoice } from '../../theme/SharedAppearance';
 
 /** The three choices, in the order the mock lays them out. */
 const OPTIONS: ReadonlyArray<{ mode: AppearanceMode; label: string }> = [
@@ -23,10 +24,13 @@ const OPTIONS: ReadonlyArray<{ mode: AppearanceMode; label: string }> = [
  *
  * The choice is held by the colour-scheme provider, which persists it locally
  * and applies it to the document, so choosing here re-paints the app at once and
- * the choice is still in effect after a reload.
+ * the choice is still in effect after a reload. It is also published, so that
+ * every other client of this installation picks it up rather than each browser
+ * keeping an opinion of its own.
  */
 export function AppearanceCard(): JSX.Element {
-  const { mode, setMode, systemMode, colorScheme } = useColorScheme();
+  const { mode, systemMode, colorScheme } = useColorScheme();
+  const choose = useAppearanceChoice();
   const { design } = useTheme();
 
   // What is rendered right now, decided by the one rule the whole product
@@ -53,7 +57,7 @@ export function AppearanceCard(): JSX.Element {
             exclusive
             fullWidth
             value={mode ?? 'system'}
-            onChange={(_event, chosen: AppearanceMode | null) => chosen && setMode(chosen)}
+            onChange={(_event, chosen: AppearanceMode | null) => chosen && choose(chosen)}
             aria-label="Appearance"
             sx={{ backgroundColor: design.surfaceAlt, borderRadius: 2, padding: 0.5, gap: 0.5 }}
           >

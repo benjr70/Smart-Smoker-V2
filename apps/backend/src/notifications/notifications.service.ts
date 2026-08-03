@@ -7,6 +7,7 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { StateService } from '../State/state.service';
+import { AppSettingsService } from '../appSettings/app-settings.service';
 import { PushDispatcherService } from '../pushDispatcher/push-dispatcher.service';
 import { TempsService } from '../temps/temps.service';
 import {
@@ -15,11 +16,6 @@ import {
   initialAlertRuntimeState,
 } from './alert-engine';
 import { AlertState, AlertStateDocument } from './alert-state.schema';
-import { withSettingsDefaults } from './notification-settings.defaults';
-import {
-  NotificationSettings,
-  NotificationSettingsDocument,
-} from './notificationSettings.schema';
 import {
   NotificationSubscription,
   NotificationSubscriptionDocument,
@@ -58,13 +54,12 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
   constructor(
     @InjectModel(NotificationSubscription.name)
     private notificationsModel: Model<NotificationSubscriptionDocument>,
-    @InjectModel(NotificationSettings.name)
-    private notificationSettingsModel: Model<NotificationSettingsDocument>,
     @InjectModel(AlertState.name)
     private alertStateModel: Model<AlertStateDocument>,
     private pushDispatcher: PushDispatcherService,
     private stateService: StateService,
     private tempsService: TempsService,
+    private appSettingsService: AppSettingsService,
   ) {}
 
   /** Start the evaluation interval this service owns. */
@@ -119,36 +114,6 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     return this.notificationsModel.find();
   }
 
-  /**
-   * Replace the single settings document.
-   *
-   * A replace rather than an update: the whole document is user-owned, so there
-   * is nothing to merge — and a `$set`-style update would leave the deleted rule
-   * list sitting in the document forever, since the first save after this slice
-   * deploys lands on a document of the old shape.
-   */
-  async setSettings(
-    settings: NotificationSettings,
-  ): Promise<NotificationSettings> {
-    const saved = await this.notificationSettingsModel
-      .findOneAndReplace({}, withSettingsDefaults(settings), {
-        upsert: true,
-        new: true,
-      })
-      .exec();
-    return withSettingsDefaults(saved);
-  }
-
-  /**
-   * The current settings, always complete. A deployment with no document — or
-   * with a document of the deleted rule shape, which is not migrated — reads as
-   * fresh defaults rather than as an error.
-   */
-  async getSettings(): Promise<NotificationSettings> {
-    const stored = await this.notificationSettingsModel.findOne().exec();
-    return withSettingsDefaults(stored);
-  }
-
   async sendPushNotification(data: string): Promise<void> {
     await this.pushDispatcher.notify('Smoker', data);
   }
@@ -172,8 +137,12 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
+    // The alert settings are one block of the installation's settings document,
+    // read here and never written: what evaluation records goes to the separate
+    // alert-state document, so an edit typed on the settings page during a cook
+    // survives.
     const [settings, state] = await Promise.all([
-      this.getSettings(),
+      this.appSettingsService.getSettings(),
       this.loadAlertState(session.smokeId),
     ]);
 

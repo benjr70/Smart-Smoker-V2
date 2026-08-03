@@ -7,6 +7,11 @@ import { NotificationSettings, Smoke, SmokeHistory, SmokeProfile, TempData, rati
 import { createApiClient } from './client';
 import { createFakeBackend } from './fakeBackend';
 import { ApiError } from 'api-transport/src';
+// The product's own statement of "nothing chosen yet", asserted against rather
+// than restated here: the API layer keeps its own wire copy, and these two
+// drifting apart is exactly what would make a fresh installation disagree with
+// itself about what colour it starts in.
+import { DEFAULT_APPEARANCE_PREFERENCE } from 'theme/src';
 import { PushNotConfiguredError } from './errors';
 import { SmokeEventPort } from './events';
 
@@ -389,7 +394,7 @@ const savedSettings: NotificationSettings = {
 
 describe('notifications client — settings', () => {
   test('getSettings returns the stored notification settings document', async () => {
-    const backend = createFakeBackend({ notifications: { settings: savedSettings } });
+    const backend = createFakeBackend({ appSettings: { settings: savedSettings } });
     const client = createApiClient(backend);
 
     const result = await client.notifications.getSettings();
@@ -397,7 +402,7 @@ describe('notifications client — settings', () => {
     expect(result).toEqual(savedSettings);
     expect(backend.requests).toContainEqual({
       method: 'get',
-      path: 'notifications/settings',
+      path: 'appSettings',
       body: undefined,
     });
   });
@@ -429,7 +434,7 @@ describe('notifications client — settings', () => {
 
     expect(backend.requests).toContainEqual({
       method: 'post',
-      path: 'notifications/settings',
+      path: 'appSettings',
       body: savedSettings,
     });
   });
@@ -444,7 +449,7 @@ describe('notifications client — settings', () => {
 
     expect(backend.requests).toContainEqual({
       method: 'post',
-      path: 'notifications/settings',
+      path: 'appSettings',
       body: { chamber: { enabled: true, low: 225, high: 275 } },
     });
   });
@@ -459,6 +464,84 @@ describe('notifications client — settings', () => {
 
     await expect(client.notifications.getSettings()).resolves.toEqual({
       chamber: { enabled: true, low: 200, high: 300 },
+    });
+  });
+});
+
+describe('appearance client — the installation-wide preference', () => {
+  test('reads the preference the installation has stored', async () => {
+    const backend = createFakeBackend({
+      appSettings: { settings: { appearance: { mode: 'dark', resolvedMode: 'dark' } } },
+    });
+    const client = createApiClient(backend);
+
+    await expect(client.appearance.get()).resolves.toEqual({
+      mode: 'dark',
+      resolvedMode: 'dark',
+    });
+  });
+
+  /**
+   * An installation nobody has chosen an appearance on answers with the
+   * documented default rather than with an error or an absence — the same value
+   * the resolver and the backend start from, so a fresh installation cannot
+   * disagree with itself about what "nothing chosen" looks like.
+   */
+  test('reads the default the whole product shares when nothing has been chosen', async () => {
+    const client = createApiClient(createFakeBackend());
+
+    await expect(client.appearance.get()).resolves.toEqual(DEFAULT_APPEARANCE_PREFERENCE);
+  });
+
+  /**
+   * A frontend can outrun the backend it talks to: a deployment still serving
+   * the document as it was before the appearance block existed answers without
+   * one. That is the same "nothing chosen here" and reaches the caller as a
+   * preference it can render, not as an absence it has to interpret.
+   */
+  test('reads the default from a document served without an appearance block', async () => {
+    const olderBackend = {
+      get: async () => ({ chamber: { enabled: true, low: 200, high: 300 } }) as never,
+      post: async () => undefined as never,
+      put: async () => undefined as never,
+      delete: async () => undefined as never,
+    };
+    const client = createApiClient(olderBackend);
+
+    await expect(client.appearance.get()).resolves.toEqual(DEFAULT_APPEARANCE_PREFERENCE);
+  });
+
+  /**
+   * Sending the alert block back on every repaint would make a colour choice a
+   * save of settings the operator may be editing in another tab.
+   */
+  test('writes the preference alone, leaving the alert settings alone', async () => {
+    const backend = createFakeBackend({
+      appSettings: { settings: { chamber: { enabled: true, low: 200, high: 300 } } },
+    });
+    const client = createApiClient(backend);
+
+    await client.appearance.save({ mode: 'light', resolvedMode: 'light' });
+
+    expect(backend.requests).toContainEqual({
+      method: 'post',
+      path: 'appSettings',
+      body: { appearance: { mode: 'light', resolvedMode: 'light' } },
+    });
+    await expect(client.notifications.getSettings()).resolves.toMatchObject({
+      chamber: { enabled: true, low: 200, high: 300 },
+    });
+  });
+
+  test('round-trips a preference it wrote back through a read', async () => {
+    const backend = createFakeBackend();
+    const client = createApiClient(backend);
+
+    await client.appearance.save({ mode: 'system', resolvedMode: 'dark' });
+
+    await expect(client.appearance.get()).resolves.toEqual({
+      mode: 'system',
+      resolvedMode: 'dark',
     });
   });
 });
