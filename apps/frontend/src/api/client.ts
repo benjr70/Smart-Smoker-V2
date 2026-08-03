@@ -45,6 +45,7 @@ export const defaultNotificationSettings = (): NotificationSettings => ({
       name: `Probe ${index + 1}`,
     })),
   },
+  smokeComplete: { enabled: false },
 });
 
 /** The smoker's meat probe slots, in the order the settings page lists them. */
@@ -359,6 +360,9 @@ const toNotificationSettingsPayload = (input: unknown): NotificationSettingsPayl
         target: probe.target,
       })),
     },
+    smokeComplete: {
+      enabled: document?.smokeComplete?.enabled ?? defaults.smokeComplete.enabled,
+    },
   };
 };
 
@@ -479,6 +483,7 @@ export const createApiClient = (
           enabled: response.probeTarget?.enabled ?? false,
           probes: probeEntriesWithDefaults(response.probeTarget?.probes),
         },
+        smokeComplete: { enabled: response.smokeComplete?.enabled ?? false },
       };
     },
     saveSettings: (input: unknown) =>

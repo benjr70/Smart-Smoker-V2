@@ -16,6 +16,7 @@ import {
   NotificationSettings,
   ProbeTargetAlertSettings,
   ProbeTargetEntry,
+  SmokeCompleteAlertSettings,
   defaultNotificationSettings,
   useCurrentResource,
 } from '../../api';
@@ -110,7 +111,13 @@ export function NotificationsCard(): JSX.Element {
       },
     }));
 
-  const { chamber, probeTarget } = settings;
+  const updateSmokeComplete = (change: Partial<SmokeCompleteAlertSettings>) =>
+    setSettings(current => ({
+      ...current,
+      smokeComplete: { ...current.smokeComplete, ...change },
+    }));
+
+  const { chamber, probeTarget, smokeComplete } = settings;
   // The mock tags the first watched probe with the cook's ETA. Which probe that
   // is follows from the watch list, so it is derived here rather than stored.
   const firstWatchedSlot = probeTarget.probes.find(probe => probe.enabled)?.slot;
@@ -215,6 +222,24 @@ export function NotificationsCard(): JSX.Element {
           >
             {describeProbeTargets(probeTarget)}
           </Typography>
+
+          {/* No detail controls: what counts as complete is the watch list
+              above, so there is nothing else here to configure. */}
+          <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
+            <Stack>
+              <Typography variant="body1" fontWeight={600}>
+                Smoke Complete
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Tell me when every probe I am watching has hit its target.
+              </Typography>
+            </Stack>
+            <Switch
+              checked={smokeComplete.enabled}
+              onChange={event => updateSmokeComplete({ enabled: event.target.checked })}
+              inputProps={{ 'aria-label': 'Smoke Complete' }}
+            />
+          </Stack>
 
           <Button
             variant="outlined"

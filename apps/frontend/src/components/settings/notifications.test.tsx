@@ -379,6 +379,39 @@ describe('NotificationsCard', () => {
     expect(screen.getByLabelText('Pork Butt target')).toHaveValue(195);
   });
 
+  test('offers the Smoke Complete alert with the hint that says what it does', async () => {
+    const backend = createFakeBackend();
+
+    renderCard(backend);
+
+    const toggle = await screen.findByLabelText('Smoke Complete');
+    expect(toggle).not.toBeChecked();
+    expect(
+      screen.getByText(/tell me when every probe i am watching has hit its target/i)
+    ).toBeInTheDocument();
+  });
+
+  // Settings are the one screen whose whole job is to still be there tomorrow,
+  // and a toggle that quietly forgets is worse than one that was never offered.
+  test('shows the Smoke Complete alert still switched on after a reload', async () => {
+    const backend = createFakeBackend();
+
+    const { unmount } = renderCard(backend);
+    fireEvent.click(await screen.findByLabelText('Smoke Complete'));
+    unmount();
+
+    await waitFor(() =>
+      expect(backend.store.appSettings).toMatchObject({ smokeComplete: { enabled: true } })
+    );
+
+    // A reload is a fresh mount against the same backend. The toggle is painted
+    // before the settings arrive, so this waits for what was stored rather than
+    // for the control to exist.
+    renderCard(backend);
+
+    await waitFor(() => expect(screen.getByLabelText('Smoke Complete')).toBeChecked());
+  });
+
   test('raises the snackbar when loading the notification settings fails', async () => {
     const backend = createFakeBackend({ appSettings: { settings: chamberAlertOn } });
     backend.injectFault({ method: 'get', path: 'appSettings', status: 500 });

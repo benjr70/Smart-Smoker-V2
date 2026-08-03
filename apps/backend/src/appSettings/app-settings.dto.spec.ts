@@ -79,6 +79,32 @@ describe('ApplicationSettingsDto validation', () => {
    * the alert block back would make every repaint a save of settings the
    * operator may be editing in another tab.
    */
+  // The settings page saves every alert block it owns in one body, so a block
+  // the DTO does not declare is a 400 the save-on-unmount can only swallow —
+  // which is exactly how a toggle silently fails to persist.
+  it('accepts the Smoke Complete alert alongside the other alerts', async () => {
+    const body = {
+      chamber: { enabled: true, low: 225, high: 275 },
+      probeTarget: {
+        enabled: true,
+        probes: [{ slot: 'probe1', enabled: true, target: 203 }],
+      },
+      smokeComplete: { enabled: true },
+    };
+
+    const result = await pipe.transform(body, metadata);
+
+    expect(result.smokeComplete).toEqual({ enabled: true });
+  });
+
+  it('rejects a Smoke Complete alert that is switched on with something other than a boolean', async () => {
+    const body = { smokeComplete: { enabled: 'yes' } };
+
+    await expect(pipe.transform(body, metadata)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
   it('accepts an appearance on its own, with no alert block', async () => {
     const body = { appearance: { mode: 'dark', resolvedMode: 'dark' } };
 

@@ -398,6 +398,7 @@ const savedSettings: NotificationSettings = {
       { slot: 'probe3', enabled: false, target: 203, name: 'Probe 3' },
     ],
   },
+  smokeComplete: { enabled: true },
 };
 
 /** The same document as the backend's strict DTO accepts it: no resolved names. */
@@ -411,6 +412,7 @@ const savedSettingsBody = {
       { slot: 'probe3', enabled: false, target: 203 },
     ],
   },
+  smokeComplete: { enabled: true },
 };
 
 describe('notifications client — settings', () => {
@@ -489,6 +491,7 @@ describe('notifications client — settings', () => {
             { slot: 'probe3', enabled: false, target: 203 },
           ],
         },
+        smokeComplete: { enabled: false },
       },
     });
   });
@@ -521,6 +524,7 @@ describe('notifications client — settings', () => {
             { slot: 'probe3', enabled: false, target: 203 },
           ],
         },
+        smokeComplete: { enabled: false },
       },
     });
   });
@@ -547,6 +551,7 @@ describe('notifications client — settings', () => {
           { slot: 'probe3', enabled: false, target: 203, name: 'Probe 3' },
         ],
       },
+      smokeComplete: { enabled: false },
     });
   });
 

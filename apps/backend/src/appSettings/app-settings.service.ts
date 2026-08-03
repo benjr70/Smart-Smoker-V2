@@ -111,7 +111,9 @@ export class AppSettingsService {
 
     const set: Partial<ApplicationSettings> = {};
     const setOnInsert: Partial<ApplicationSettings> = {};
-    (['chamber', 'probeTarget', 'appearance'] as const).forEach((block) => {
+    (
+      ['chamber', 'probeTarget', 'smokeComplete', 'appearance'] as const
+    ).forEach((block) => {
       if (incoming[block]) {
         Object.assign(set, { [block]: complete[block] });
       } else {

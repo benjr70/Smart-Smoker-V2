@@ -64,6 +64,19 @@ export class ProbeTargetAlertDto {
 }
 
 /**
+ * The Smoke Complete alert as the settings page sends it.
+ *
+ * Only a switch: the cook it describes is the probe watch list above, so there
+ * is nothing else for the page to send and nothing here that could contradict
+ * it.
+ */
+export class SmokeCompleteAlertDto {
+  @ApiProperty()
+  @IsBoolean()
+  enabled: boolean;
+}
+
+/**
  * The installation's appearance as a client sends it: the mode that was chosen,
  * and what that choice resolved to on the client writing it.
  *
@@ -107,6 +120,12 @@ export class ApplicationSettingsDto {
   @ValidateNested()
   @Type(() => ProbeTargetAlertDto)
   probeTarget?: ProbeTargetAlertDto;
+
+  @ApiProperty({ type: SmokeCompleteAlertDto, required: false })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => SmokeCompleteAlertDto)
+  smokeComplete?: SmokeCompleteAlertDto;
 
   @ApiProperty({ type: AppearanceDto, required: false })
   @IsOptional()

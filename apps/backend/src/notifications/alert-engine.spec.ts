@@ -3,6 +3,7 @@ import {
   AlertRuntimeState,
   ChamberAlertSettings,
   ProbeTargetAlertSettings,
+  SmokeCompleteAlertSettings,
   evaluateAlerts,
   initialAlertRuntimeState,
 } from './alert-engine';
@@ -69,6 +70,7 @@ const runCook = (
   options: {
     chamber?: ChamberAlertSettings;
     probeTarget?: ProbeTargetAlertSettings;
+    smokeComplete?: SmokeCompleteAlertSettings;
     state?: AlertRuntimeState;
     names?: AlertNames;
   } = {},
@@ -81,6 +83,10 @@ const runCook = (
       settings: {
         chamber: options.chamber ?? chamberRange(),
         probeTarget: options.probeTarget ?? watching({}, { enabled: false }),
+        // Off unless a test asks for it, exactly as an installation that has
+        // never configured it reads — so the chamber and probe cases below are
+        // about the rule they name and nothing else.
+        smokeComplete: options.smokeComplete ?? { enabled: false },
       },
       state,
       names: options.names ?? COOK_NAMES,
@@ -210,6 +216,7 @@ describe('alert engine — chamber temperature alert', () => {
     const settings = {
       chamber: chamberRange(),
       probeTarget: watching({ probe1: 203 }),
+      smokeComplete: { enabled: true },
     };
     const state = initialAlertRuntimeState();
 
@@ -224,6 +231,7 @@ describe('alert engine — chamber temperature alert', () => {
     expect(settings).toEqual({
       chamber: chamberRange(),
       probeTarget: watching({ probe1: 203 }),
+      smokeComplete: { enabled: true },
     });
     expect(state).toEqual(initialAlertRuntimeState());
     expect(evaluation.state.chamberArmed).toBe(true);
@@ -367,5 +375,161 @@ describe('alert engine — probe target alerts', () => {
     });
 
     expect(bodies).toEqual(['probe3 reached 170°F.']);
+  });
+});
+
+describe('alert engine — smoke complete alert', () => {
+  /** The Smoke Complete alert, switched on. */
+  const smokeCompleteOn: SmokeCompleteAlertSettings = { enabled: true };
+
+  it('says nothing while one of the two meats on the smoker is still cooking', () => {
+    const { bodies } = runCook(
+      [
+        [180, null, { probe1: 190, probe2: 180 }],
+        // The pork butt is done; the brisket has another hour in it.
+        [240, null, { probe1: 190, probe2: 196 }],
+      ],
+      {
+        probeTarget: watching({ probe1: 203, probe2: 195 }),
+        smokeComplete: smokeCompleteOn,
+      },
+    );
+
+    expect(bodies).toEqual(['Pork Butt reached 196°F.']);
+  });
+  it('tells the cook the smoke is complete when the last watched probe reaches its target', () => {
+    const { bodies } = runCook(
+      [
+        [180, null, { probe1: 190, probe2: 180 }],
+        [240, null, { probe1: 190, probe2: 196 }],
+        [300, null, { probe1: 204, probe2: 197 }],
+      ],
+      {
+        probeTarget: watching({ probe1: 203, probe2: 195 }),
+        smokeComplete: smokeCompleteOn,
+      },
+    );
+
+    expect(bodies).toEqual([
+      'Pork Butt reached 196°F.',
+      'Brisket Flat reached 204°F.',
+      'Smoke complete — every probe you are watching has reached its target.',
+    ]);
+  });
+  // Meat sits at or above its target for the rest of the cook, so a rule with no
+  // fired marker would announce the smoke complete every thirty seconds until
+  // someone takes it off.
+  it('says it once, however long the meat then rests on the smoker', () => {
+    const { bodies } = runCook(
+      [
+        [300, null, { probe1: 204, probe2: 197 }],
+        [330, null, { probe1: 206, probe2: 198 }],
+        [360, null, { probe1: 205, probe2: 197 }],
+      ],
+      {
+        probeTarget: watching({ probe1: 203, probe2: 195 }),
+        smokeComplete: smokeCompleteOn,
+      },
+    );
+
+    expect(
+      bodies.filter((body) => body.startsWith('Smoke complete')),
+    ).toHaveLength(1);
+  });
+  it('is inert while switched off, however finished the cook is', () => {
+    const { bodies, state } = runCook(
+      [
+        [300, null, { probe1: 204, probe2: 197 }],
+        [360, null, { probe1: 205, probe2: 198 }],
+      ],
+      {
+        probeTarget: watching({ probe1: 203, probe2: 195 }),
+        smokeComplete: { enabled: false },
+      },
+    );
+
+    expect(bodies).toEqual([
+      'Brisket Flat reached 204°F.',
+      'Pork Butt reached 197°F.',
+    ]);
+    // And it leaves no marker behind, so switching it on mid-rest is not
+    // silenced by a completion nobody was ever told about.
+    expect(state.smokeCompleteFired).toBe(false);
+  });
+  // Every probe left dangling in open air sits at chamber temperature, which is
+  // past any meat target — so "all of them are done" over an empty watch list
+  // would announce a complete smoke to someone who never told it what to watch.
+  it('never completes a cook that is watching no probes at all', () => {
+    const { bodies } = runCook(
+      [
+        [60, null, { probe1: 260, probe2: 265, probe3: 300 }],
+        [300, null, { probe1: 280, probe2: 285, probe3: 310 }],
+      ],
+      { probeTarget: watching({}), smokeComplete: smokeCompleteOn },
+    );
+
+    expect(bodies).toEqual([]);
+  });
+  // Only the watch list decides. A probe left in the smoker but not watched is
+  // not meat anyone is waiting on, so it must not hold the cook open.
+  it('completes on the watched probes alone, ignoring a cold probe nobody is watching', () => {
+    const { bodies } = runCook(
+      [[300, null, { probe1: 204, probe2: 100, probe3: 80 }]],
+      {
+        probeTarget: watching({ probe1: 203 }),
+        smokeComplete: smokeCompleteOn,
+      },
+    );
+
+    expect(bodies).toEqual([
+      'Brisket Flat reached 204°F.',
+      'Smoke complete — every probe you are watching has reached its target.',
+    ]);
+  });
+
+  // The two probe alerts are switched on and off separately, so silencing the
+  // per-probe chatter must not silence the one alert that says the cook is over.
+  // The watch list is still what completion is measured against — it just is not
+  // the Probe Target Reached alert's to take with it when it goes quiet.
+  it('completes even with the per-probe alert switched off, on the same watch list', () => {
+    const { bodies } = runCook(
+      [
+        [180, null, { probe1: 190, probe2: 180 }],
+        [300, null, { probe1: 204, probe2: 197 }],
+      ],
+      {
+        probeTarget: watching({ probe1: 203, probe2: 195 }, { enabled: false }),
+        smokeComplete: smokeCompleteOn,
+      },
+    );
+
+    expect(bodies).toEqual([
+      'Smoke complete — every probe you are watching has reached its target.',
+    ]);
+  });
+
+  // Meat that has been announced as done stays done. A probe re-seated into a
+  // cooler part of the meat (or one whose reading dips after wrapping) reads
+  // below its target again, and judging completion on the current reading alone
+  // would leave the cook waiting on meat they were already told about.
+  it('holds a probe done once it has been announced, though it reads cooler later', () => {
+    const { bodies } = runCook(
+      [
+        [240, null, { probe1: 204, probe2: 180 }],
+        // Wrapped and re-seated: the brisket reads below its target again while
+        // the pork butt finishes.
+        [300, null, { probe1: 198, probe2: 196 }],
+      ],
+      {
+        probeTarget: watching({ probe1: 203, probe2: 195 }),
+        smokeComplete: smokeCompleteOn,
+      },
+    );
+
+    expect(bodies).toEqual([
+      'Brisket Flat reached 204°F.',
+      'Pork Butt reached 196°F.',
+      'Smoke complete — every probe you are watching has reached its target.',
+    ]);
   });
 });

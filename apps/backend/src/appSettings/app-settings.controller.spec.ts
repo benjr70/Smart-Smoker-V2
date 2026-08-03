@@ -24,6 +24,7 @@ describe('AppSettingsController', () => {
       enabled: true,
       probes: [{ slot: 'probe1', enabled: true, target: 203 }],
     },
+    smokeComplete: { enabled: true },
     appearance: { mode: 'dark', resolvedMode: 'dark' },
   };
 

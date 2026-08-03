@@ -41,6 +41,14 @@ export class AlertState {
    */
   @Prop({ type: [String], default: [] })
   probeTargetsReached: string[];
+
+  /**
+   * Whether this session has already been announced as complete. One per cook,
+   * for the same reason and with the same `smokeId` scoping: the meat that
+   * finished last weekend must not silence the next cook's completion.
+   */
+  @Prop({ default: false })
+  smokeCompleteFired: boolean;
 }
 
 export const AlertStateSchema = SchemaFactory.createForClass(AlertState);
