@@ -2,6 +2,7 @@ import { Card, CardContent, Grid, Typography } from '@mui/material';
 import React from 'react';
 import { SmokeProfile } from '../../../api/types';
 import TempChart, { TempData } from 'temperaturechart/src/tempChart';
+import { useChartColors } from '../../../theme';
 
 interface SmokeProfileCardProps {
   smokeProfile: SmokeProfile;
@@ -9,6 +10,8 @@ interface SmokeProfileCardProps {
 }
 
 export function SmokeProfileCard(props: SmokeProfileCardProps): JSX.Element {
+  const chartColors = useChartColors();
+
   return (
     <Grid paddingBottom={1}>
       <Card data-testid="review-smoke-card">
@@ -26,15 +29,16 @@ export function SmokeProfileCard(props: SmokeProfileCardProps): JSX.Element {
             Probes
           </Typography>
           {/* Each probe name is painted in its own probe's colour, from the
-              scheme in effect. The light set is the one the chart draws its
-              lines in, so a name and its line still match on a light card; the
-              dark set keeps each hue and lifts it until the name reads on a
-              near-black one. The chart's own strokes stay outside this
-              recolour. */}
+              scheme in effect — the same colours the chart below draws that
+              probe's line in, so a name and its line match in either scheme.
+              They are set large and bold because that is the size their colours
+              are chosen to be readable at: two of the light ones are chart
+              colours first, and do not clear the threshold for small text on a
+              white card. */}
           <Typography
             sx={theme => ({
-              fontSize: 16,
-              fontWeight: 600,
+              fontSize: 20,
+              fontWeight: 700,
               color: theme.design.probes.chamber,
               width: '75%',
             })}
@@ -44,8 +48,8 @@ export function SmokeProfileCard(props: SmokeProfileCardProps): JSX.Element {
           </Typography>
           <Typography
             sx={theme => ({
-              fontSize: 16,
-              fontWeight: 600,
+              fontSize: 20,
+              fontWeight: 700,
               color: theme.design.probes.probe1,
               width: '75%',
             })}
@@ -55,8 +59,8 @@ export function SmokeProfileCard(props: SmokeProfileCardProps): JSX.Element {
           </Typography>
           <Typography
             sx={theme => ({
-              fontSize: 16,
-              fontWeight: 600,
+              fontSize: 20,
+              fontWeight: 700,
               color: theme.design.probes.probe2,
               width: '75%',
             })}
@@ -66,8 +70,8 @@ export function SmokeProfileCard(props: SmokeProfileCardProps): JSX.Element {
           </Typography>
           <Typography
             sx={theme => ({
-              fontSize: 16,
-              fontWeight: 600,
+              fontSize: 20,
+              fontWeight: 700,
               color: theme.design.probes.probe3,
               width: '75%',
             })}
@@ -90,6 +94,7 @@ export function SmokeProfileCard(props: SmokeProfileCardProps): JSX.Element {
             date={props.temps.length > 0 ? props.temps[props.temps.length - 1].date : new Date()}
             smoking={false}
             initData={props.temps}
+            colors={chartColors}
           />
           <Typography sx={{ fontSize: 18 }} data-testid="review-smoke-woodtype">
             {props.smokeProfile.woodType} Wood

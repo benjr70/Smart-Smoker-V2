@@ -9,6 +9,52 @@ export type TempData = {
   date: Date;
 };
 
+/** One colour per temperature reading, for the line each of them is drawn as. */
+export type ChartProbeColors = {
+  chamber: string;
+  probe1: string;
+  probe2: string;
+  probe3: string;
+};
+
+/**
+ * Every colour the chart paints with.
+ *
+ * The chart knows how to draw temperatures over time; it does not know which
+ * colour scheme the application around it is in. A consumer that follows a
+ * scheme hands it that scheme's colours, and a consumer that does not gets the
+ * ones below.
+ */
+export type ChartColors = {
+  /** The panel the plot is drawn on. */
+  surface: string;
+  /** The line colour of each reading. */
+  probes: ChartProbeColors;
+  /** The hover callout's own surface. */
+  tooltipSurface: string;
+  /** The outline around that callout. */
+  tooltipBorder: string;
+  /** The readings written inside it. */
+  tooltipText: string;
+};
+
+/**
+ * The colours the chart has drawn since it was written, so a consumer that
+ * passes none is painted exactly as it is today.
+ */
+export const defaultChartColors: ChartColors = {
+  surface: '#d3d3d3',
+  probes: {
+    chamber: '#1f4f2d',
+    probe1: '#2a475e',
+    probe2: '#118cd8',
+    probe3: '#5582a7',
+  },
+  tooltipSurface: 'white',
+  tooltipBorder: 'black',
+  tooltipText: 'black',
+};
+
 interface props {
   ChamberName: string;
   Probe1Name: string;
@@ -21,9 +67,12 @@ interface props {
   date: Date;
   smoking: boolean;
   initData: TempData[];
+  /** The palette to draw in; the chart's historical colours when omitted. */
+  colors?: ChartColors;
 }
 
 function TempChart(props: props): JSX.Element {
+  const colors = props.colors ?? defaultChartColors;
   const svgRef = useRef() as React.RefObject<SVGSVGElement>;
   const [data, setData] = useState(props.initData);
   const [initialized, setInitialized] = useState(false);
@@ -69,7 +118,7 @@ function TempChart(props: props): JSX.Element {
       .attr('width', '100%')
       .attr('height', '100%')
       .attr('viewBox', `0 0 ${width} ${height}`)
-      .style('background', '#d3d3d3')
+      .style('background', colors.surface)
       .attr('preserveAspectRatio', 'xMinYMin')
       .style('overflow', 'visible')
       .on('pointerenter pointermove', pointerMoved)
@@ -98,6 +147,30 @@ function TempChart(props: props): JSX.Element {
     reDrawGraph(props.initData);
   }, []);
 
+  /**
+   * Repaint when the palette changes under the chart.
+   *
+   * Switching colour scheme hands the chart new colours but produces no new
+   * readings, and everything the chart draws is drawn imperatively — so without
+   * this the panel and the four lines would stay in the previous scheme's
+   * colours until the next temperature arrived. The panel is restyled in place
+   * rather than through `setupSVGChart`, which would append a second tooltip
+   * group.
+   */
+  useEffect(() => {
+    const svg = d3.select(svgRef.current);
+    if (svg && !svg.empty()) {
+      svg.style('background', colors.surface);
+      reDrawGraph(data);
+    }
+  }, [
+    colors.surface,
+    colors.probes.chamber,
+    colors.probes.probe1,
+    colors.probes.probe2,
+    colors.probes.probe3,
+  ]);
+
   // Add the event listeners that show or hide the tooltip.
   function pointerMoved(event) {
     const i = d3
@@ -114,13 +187,14 @@ function TempChart(props: props): JSX.Element {
       .selectAll('path')
       .data([,])
       .join('path')
-      .attr('fill', 'white')
-      .attr('stroke', 'black');
+      .attr('fill', colors.tooltipSurface)
+      .attr('stroke', colors.tooltipBorder);
 
     const text = tooltip.current
       .selectAll('text')
       .data([,])
       .join('text')
+      .attr('fill', colors.tooltipText)
       .call(text =>
         text
           .selectAll('tspan')
@@ -242,7 +316,7 @@ function TempChart(props: props): JSX.Element {
         .join('path')
         .attr('class', 'line')
         .attr('fill', 'none')
-        .attr('stroke', '#1f4f2d')
+        .attr('stroke', colors.probes.chamber)
         .attr('stroke-width', 1.5)
         // @ts-ignore
         .attr('d', generateScaledLineChamber.current);
@@ -253,7 +327,7 @@ function TempChart(props: props): JSX.Element {
         // .join('path')
         .attr('class', 'line')
         .attr('fill', 'none')
-        .attr('stroke', '#2a475e')
+        .attr('stroke', colors.probes.probe1)
         .attr('stroke-width', 1.5)
         // @ts-ignore
         .attr('d', generateScaledLineProbe1.current);
@@ -264,7 +338,7 @@ function TempChart(props: props): JSX.Element {
         // .join('path')
         .attr('class', 'line')
         .attr('fill', 'none')
-        .attr('stroke', '#118cd8')
+        .attr('stroke', colors.probes.probe2)
         .attr('stroke-width', 1.5)
         // @ts-ignore
         .attr('d', generateScaledLineProbe2.current);
@@ -275,7 +349,7 @@ function TempChart(props: props): JSX.Element {
         // .join('path')
         .attr('class', 'line')
         .attr('fill', 'none')
-        .attr('stroke', '#5582a7')
+        .attr('stroke', colors.probes.probe3)
         .attr('stroke-width', 1.5)
         // @ts-ignore
         .attr('d', generateScaledLineProbe3.current);

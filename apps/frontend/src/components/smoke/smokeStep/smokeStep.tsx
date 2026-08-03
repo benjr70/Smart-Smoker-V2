@@ -7,6 +7,7 @@ import { SmokeSessionProvider, useSmokeSession } from 'smoke-session/src/react';
 import { CloudSocketAdapter, createCloudSocketAdapter, SessionConfig } from 'smoke-session/src';
 import { getDefaultApiClient } from '../../../api';
 import { createSessionApiPort } from '../../../api/sessionApiAdapter';
+import { useChartColors } from '../../../theme';
 
 const woodType = ['Hickory', 'Post Oak', 'Pecan', 'Cherry', 'Apple'];
 
@@ -28,6 +29,7 @@ type SmokeStepProps = {
  */
 export function SmokeStepView(props: SmokeStepProps): JSX.Element {
   const session = useSmokeSession({ flushProfileOnUnmount: true });
+  const chartColors = useChartColors();
 
   return (
     <Grid item xs={12}>
@@ -141,6 +143,7 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
           date={session.date}
           smoking={session.smoking}
           initData={session.initialTemps}
+          colors={chartColors}
         ></TempChart>
       </Grid>
       <Grid container className="buttonContainer" justifyContent="space-around">

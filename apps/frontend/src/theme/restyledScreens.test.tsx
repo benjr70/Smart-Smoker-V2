@@ -16,6 +16,7 @@ import { createFakeBackend } from '../api/fakeBackend';
 import { PostSmoke, PreSmoke, SmokeHistory, SmokeProfile, rating } from '../api/types';
 import { SmokeSessionProvider } from 'smoke-session/src/react';
 import { FakeCloudSocket, FakeSessionApi, SteppingClock } from 'smoke-session/src/testing';
+import { ChartColors } from 'temperaturechart/src/tempChart';
 import { PaletteTokens } from 'theme/src';
 import { BottomBar } from '../components/bottomBar/bottombar';
 import { History } from '../components/history/history';
@@ -29,13 +30,19 @@ import { SmokeProfileCard } from '../components/history/smokeCards/smokeProfileC
 import { WeightUnits } from '../components/common/interfaces/enums';
 import { DesignSurface, appTheme, carbonDark, carbonLight } from './index';
 
-// The temperature chart is deliberately outside this recolour (it keeps its own
-// panel and stroke colours), and its d3 rendering has nothing to say about the
-// card it sits in.
+// The chart draws itself through d3, which jsdom cannot exercise; what this app
+// is answerable for is the palette it hands the chart, so the stand-in records
+// it.
 jest.mock('temperaturechart/src/tempChart', () => ({
   __esModule: true,
-  default: () => <div data-testid="temp-chart" />,
+  default: (props: { colors?: unknown }) => (
+    <div data-testid="temp-chart" data-colors={JSON.stringify(props.colors)} />
+  ),
 }));
+
+/** The palette the screen under test handed the chart. */
+const chartColors = (): ChartColors =>
+  JSON.parse(screen.getByTestId('temp-chart').getAttribute('data-colors') ?? 'null');
 
 /** A screen, mounted and themed exactly as the application root mounts it. */
 const renderUnder = (scheme: 'light' | 'dark', ui: JSX.Element) => {
@@ -131,6 +138,69 @@ describe('the history detail’s probe names', () => {
     renderUnder('light', <SmokeProfileCard smokeProfile={smokeProfile()} temps={[]} />);
 
     expect(screen.getByTestId(testId)).toHaveStyle({ color: carbonLight.probes[probe] });
+  });
+});
+
+/**
+ * The names are read against a card, in the probe colours, so they are held to
+ * the threshold the palette promises them: large and bold. Set any smaller and
+ * two of the light probe colours stop being readable text on a white card.
+ */
+describe('the history detail’s probe names as text', () => {
+  it('sets them large and bold, which is what their colours are chosen for', () => {
+    renderUnder('light', <SmokeProfileCard smokeProfile={smokeProfile()} temps={[]} />);
+
+    ['review-smoke-chambername', 'review-smoke-probe1name', 'review-smoke-probe2name'].forEach(
+      testId => {
+        const name = screen.getByTestId(testId);
+
+        // WCAG counts text large from 14pt — 18.66px — when it is bold.
+        expect(parseFloat(getComputedStyle(name).fontSize)).toBeGreaterThanOrEqual(18.66);
+        expect(parseInt(getComputedStyle(name).fontWeight, 10)).toBeGreaterThanOrEqual(700);
+      }
+    );
+  });
+});
+
+/**
+ * The chart is a surface like any other: it used to paint itself a light-grey
+ * panel and draw the light probe colours whatever the scheme, which on a dark
+ * screen left a pale block with axis labels all but invisible against it. Every
+ * colour it draws with comes from the scheme in effect now.
+ */
+describe('the temperature chart', () => {
+  const screensWithAChart: [string, () => JSX.Element][] = [
+    ['the history detail', () => <SmokeProfileCard smokeProfile={smokeProfile()} temps={[]} />],
+    ['the smoke step', () => liveSmokeStep()],
+  ];
+
+  describe.each(screensWithAChart)('on %s', (_screen, ui) => {
+    it('is drawn on the nested surface of the scheme in effect', () => {
+      renderUnder('dark', ui());
+
+      expect(chartColors().surface).toBe(carbonDark.surfaceAlt);
+    });
+
+    it('is drawn on the light one when the light scheme is in effect', () => {
+      renderUnder('light', ui());
+
+      expect(chartColors().surface).toBe(carbonLight.surfaceAlt);
+    });
+
+    it('draws each reading’s line in that scheme’s colour for its probe', () => {
+      renderUnder('dark', ui());
+
+      expect(chartColors().probes).toEqual(carbonDark.probes);
+    });
+
+    /** The readings under the pointer sit in a callout of their own. */
+    it('writes the readings under the pointer on a surface they read against', () => {
+      renderUnder('dark', ui());
+
+      expect(chartColors().tooltipSurface).toBe(carbonDark.surface);
+      expect(chartColors().tooltipText).toBe(carbonDark.text);
+      expect(chartColors().tooltipBorder).toBe(carbonDark.textSecondary);
+    });
   });
 });
 
