@@ -7,6 +7,7 @@ import {
 } from '@nestjs/websockets';
 import { Server } from 'socket.io';
 import { StateService } from '../State/state.service';
+import { AppearancePreference } from '../appSettings/appearance';
 import { TempDto } from '../temps/tempDto';
 import { TempsService } from '../temps/temps.service';
 
@@ -16,6 +17,16 @@ import { TempsService } from '../temps/temps.service';
  * stored graph has always had.
  */
 const MESSAGES_PER_STORED_READING = 11;
+
+/**
+ * The event a changed appearance preference rides on.
+ *
+ * Restated by every client that listens for it rather than imported from here —
+ * this service ships as `dist/main.js` beside no copy of itself, exactly as the
+ * four events already on this gateway are restated in the socket adapters that
+ * speak to it.
+ */
+export const APPEARANCE_EVENT = 'appearance';
 
 @WebSocketGateway({
   cors: {
@@ -87,6 +98,23 @@ export class EventsGateway {
   handleClear(@MessageBody() data: string) {
     Logger.log(`Clearing smoke ${data}`, 'Websocket');
     this.server.emit('clear', data);
+  }
+
+  /**
+   * Tell every connected client how the installation now looks.
+   *
+   * Server-initiated rather than a handled message: the preference changes
+   * because something wrote it over the API, and no client is entitled to
+   * announce an appearance the backend has not stored. Clients that were not
+   * connected when it happened miss the announcement and read the stored
+   * preference on their next load, as they always have.
+   */
+  broadcastAppearance(preference: AppearancePreference): void {
+    Logger.log(
+      `Appearance is now ${preference.mode} (${preference.resolvedMode})`,
+      'Websocket',
+    );
+    this.server.emit(APPEARANCE_EVENT, preference);
   }
 
   @SubscribeMessage('refresh')

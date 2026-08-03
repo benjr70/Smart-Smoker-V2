@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { SmokeProfileModule } from '../smokeProfile/smokeProfile.module';
 import { StateModule } from '../State/state.module';
+import { EventsModule } from '../websocket/events.module';
 import { AppSettingsController } from './app-settings.controller';
 import {
   ApplicationSettings,
@@ -16,6 +17,9 @@ import { AppSettingsService } from './app-settings.service';
     // dependency chain (smoke, ratings, common, state) knows about settings.
     StateModule,
     SmokeProfileModule,
+    // The websocket gateway the application already runs: a written appearance
+    // reaches the clients that are open on it.
+    EventsModule,
     MongooseModule.forFeature([
       {
         name: ApplicationSettings.name,

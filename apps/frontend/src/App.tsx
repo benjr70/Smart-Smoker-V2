@@ -9,6 +9,14 @@ import { Settings } from './components/settings/settings';
 import { Smoke } from './components/smoke/smoke';
 import { DesignSurface, appTheme } from './theme';
 import { SharedAppearanceProvider } from './theme/SharedAppearance';
+import { createSocketAppearanceSubscription } from './theme/socketAppearanceSubscription';
+
+/**
+ * How this browser hears that another client changed the appearance: the
+ * websocket the application already speaks. Built once, and it opens no
+ * connection until the provider subscribes.
+ */
+const appearanceAnnouncements = createSocketAppearanceSubscription();
 
 class App extends React.Component<{}, { currentScreen: Screens }> {
   constructor(props: any) {
@@ -62,8 +70,11 @@ class App extends React.Component<{}, { currentScreen: Screens }> {
             this browser already painted, and publishes a choice made here. It
             sits inside the colour-scheme provider because that is what it
             reconciles with, and outside the screens so that every one of them
-            is themed by the outcome. */}
-        <SharedAppearanceProvider>
+            is themed by the outcome. It also listens on the application's
+            websocket, so an appearance chosen anywhere in the installation
+            reaches this browser while it is open rather than at its next
+            load. */}
+        <SharedAppearanceProvider subscription={appearanceAnnouncements}>
           {/* Every screen is recoloured now, so the design's palette is applied
               once, here, rather than opted into a screen at a time. */}
           <DesignSurface>

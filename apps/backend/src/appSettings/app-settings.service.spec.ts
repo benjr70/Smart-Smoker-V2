@@ -2,9 +2,11 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { StateService } from '../State/state.service';
 import { SmokeProfileService } from '../smokeProfile/smokeProfile.service';
+import { EventsGateway } from '../websocket/events.gateway';
 import { DEFAULT_APPLICATION_SETTINGS } from './app-settings.defaults';
 import { ApplicationSettings } from './app-settings.schema';
 import { AppSettingsService } from './app-settings.service';
+import { AppearancePreference } from './appearance';
 
 /** The probe rows a deployment that has configured nothing reads back as. */
 const DEFAULT_PROBE_TARGET_BLOCK = DEFAULT_APPLICATION_SETTINGS.probeTarget;
@@ -95,30 +97,60 @@ const createSettingsCollection = <T>(seed: T | null = null) => {
   };
 };
 
+/**
+ * The gateway, seen only as the announcement it makes. What a connected client
+ * is told is the observable part; the socket underneath it is the gateway's own
+ * business and has its own tests.
+ */
+const createClients = () => {
+  const announced: AppearancePreference[] = [];
+  return {
+    broadcastAppearance: (preference: AppearancePreference) => {
+      announced.push(preference);
+    },
+    /** Every appearance announced to connected clients, in order. */
+    announced,
+  };
+};
+
+/**
+ * The service, over a given collection, with a cook to name the probe rows from
+ * and connected clients listening.
+ */
+const createService = async (
+  settings: unknown,
+  clients: ReturnType<typeof createClients> = createClients(),
+  cookNames: ReturnType<typeof createCook> = createCook(),
+): Promise<AppSettingsService> => {
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      AppSettingsService,
+      {
+        provide: getModelToken(ApplicationSettings.name),
+        useValue: settings,
+      },
+      { provide: StateService, useValue: cookNames.state },
+      { provide: SmokeProfileService, useValue: cookNames.profile },
+      { provide: EventsGateway, useValue: clients },
+    ],
+  }).compile();
+
+  return module.get<AppSettingsService>(AppSettingsService);
+};
+
 describe('AppSettingsService', () => {
   let service: AppSettingsService;
   let settings: ReturnType<
     typeof createSettingsCollection<ApplicationSettings>
   >;
+  let clients: ReturnType<typeof createClients>;
   let cook: ReturnType<typeof createCook>;
 
   beforeEach(async () => {
     settings = createSettingsCollection<ApplicationSettings>();
+    clients = createClients();
     cook = createCook();
-
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        AppSettingsService,
-        {
-          provide: getModelToken(ApplicationSettings.name),
-          useValue: settings,
-        },
-        { provide: StateService, useValue: cook.state },
-        { provide: SmokeProfileService, useValue: cook.profile },
-      ],
-    }).compile();
-
-    service = module.get<AppSettingsService>(AppSettingsService);
+    service = await createService(settings, clients, cook);
   });
 
   describe('reading the settings of a deployment that has never saved any', () => {
@@ -139,30 +171,20 @@ describe('AppSettingsService', () => {
      * has to name the fields it serves.
      */
     it('serves exactly the settings fields, never the persistence internals riding on them', async () => {
-      const module = await Test.createTestingModule({
-        providers: [
-          AppSettingsService,
-          {
-            provide: getModelToken(ApplicationSettings.name),
-            useValue: createSettingsCollection<ApplicationSettings>({
-              chamber: Object.assign(
-                Object.create({ enabled: true, low: 200, high: 300 }),
-                { $__: 'mongoose-internal', _doc: {} },
-              ),
-              appearance: Object.assign(
-                Object.create({ mode: 'dark', resolvedMode: 'dark' }),
-                { $__: 'mongoose-internal', _doc: {} },
-              ),
-            } as unknown as ApplicationSettings),
-          },
-          { provide: StateService, useValue: createCook().state },
-          { provide: SmokeProfileService, useValue: createCook().profile },
-        ],
-      }).compile();
+      const mongooseShaped = await createService(
+        createSettingsCollection<ApplicationSettings>({
+          chamber: Object.assign(
+            Object.create({ enabled: true, low: 200, high: 300 }),
+            { $__: 'mongoose-internal', _doc: {} },
+          ),
+          appearance: Object.assign(
+            Object.create({ mode: 'dark', resolvedMode: 'dark' }),
+            { $__: 'mongoose-internal', _doc: {} },
+          ),
+        } as unknown as ApplicationSettings),
+      );
 
-      expect(
-        await module.get<AppSettingsService>(AppSettingsService).getSettings(),
-      ).toEqual({
+      expect(await mongooseShaped.getSettings()).toEqual({
         chamber: { enabled: true, low: 200, high: 300 },
         probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
         appearance: { mode: 'dark', resolvedMode: 'dark' },
@@ -184,20 +206,12 @@ describe('AppSettingsService', () => {
     const serviceReading = async (
       seed: ApplicationSettings,
       cookNames: ReturnType<typeof createCook> = createCook(),
-    ) => {
-      const module = await Test.createTestingModule({
-        providers: [
-          AppSettingsService,
-          {
-            provide: getModelToken(ApplicationSettings.name),
-            useValue: createSettingsCollection<ApplicationSettings>(seed),
-          },
-          { provide: StateService, useValue: cookNames.state },
-          { provide: SmokeProfileService, useValue: cookNames.profile },
-        ],
-      }).compile();
-      return module.get<AppSettingsService>(AppSettingsService);
-    };
+    ) =>
+      createService(
+        createSettingsCollection<ApplicationSettings>(seed),
+        createClients(),
+        cookNames,
+      );
 
     // The settings page renders a row per probe and the alert engine walks the
     // same list, so neither can be left guessing which slots exist: a document
@@ -473,19 +487,7 @@ describe('AppSettingsService', () => {
       const legacy = createSettingsCollection<ApplicationSettings>({
         settings: [{ type: true, message: 'probe1 is done' }],
       } as unknown as ApplicationSettings);
-      const module = await Test.createTestingModule({
-        providers: [
-          AppSettingsService,
-          {
-            provide: getModelToken(ApplicationSettings.name),
-            useValue: legacy,
-          },
-          { provide: StateService, useValue: createCook().state },
-          { provide: SmokeProfileService, useValue: createCook().profile },
-        ],
-      }).compile();
-
-      const service = module.get<AppSettingsService>(AppSettingsService);
+      const service = await createService(legacy);
       await service.saveSettings({
         appearance: { mode: 'dark', resolvedMode: 'dark' },
       });
@@ -496,6 +498,52 @@ describe('AppSettingsService', () => {
         probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
         appearance: { mode: 'dark', resolvedMode: 'dark' },
       });
+    });
+  });
+
+  /**
+   * The preference is installation-wide, so a browser choosing dark is choosing
+   * it for the touchscreen in the garage as well. Waiting for that screen to be
+   * reloaded would leave the installation disagreeing with itself for as long as
+   * nobody walks over to it, so the write itself tells whoever is connected.
+   */
+  describe('a written appearance preference', () => {
+    it('is announced to the clients already open', async () => {
+      await service.saveSettings({
+        appearance: { mode: 'dark', resolvedMode: 'dark' },
+      });
+
+      expect(clients.announced).toEqual([
+        { mode: 'dark', resolvedMode: 'dark' },
+      ]);
+    });
+
+    /**
+     * The document serves two unrelated writers. An operator saving the chamber
+     * alert has said nothing about how the installation looks, and announcing an
+     * appearance there would have every connected client repaint for a setting
+     * that is nothing to do with them.
+     */
+    it('is not announced when the write was about something else', async () => {
+      await service.saveSettings({
+        chamber: { enabled: true, low: 200, high: 250 },
+      });
+
+      expect(clients.announced).toEqual([]);
+    });
+
+    /**
+     * A preference the backend refused was never stored, so announcing it would
+     * hand every connected client a scheme the next load contradicts.
+     */
+    it('is not announced when it was refused', async () => {
+      await expect(
+        service.saveSettings({
+          appearance: { mode: 'light', resolvedMode: 'dark' },
+        }),
+      ).rejects.toThrow();
+
+      expect(clients.announced).toEqual([]);
     });
   });
 
