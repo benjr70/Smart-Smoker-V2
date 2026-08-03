@@ -25,7 +25,7 @@ import { stubSystemColorScheme } from 'theme/src/testing/systemColorScheme';
 import { ApiClientProvider, SnackbarProvider, createApiClient } from '../api';
 import { createFakeBackend } from '../api/fakeBackend';
 import { Settings } from '../components/settings/settings';
-import { appTheme, carbonDark, carbonLight } from './index';
+import { DesignSurface, appTheme, carbonDark, carbonLight } from './index';
 
 const HTML_TEMPLATE = path.resolve(__dirname, '../../public/index.html');
 
@@ -102,11 +102,13 @@ const renderSettings = () => {
   const client = createApiClient(createFakeBackend());
   return render(
     <CssVarsProvider theme={appTheme} defaultMode="system">
-      <ApiClientProvider client={client}>
-        <SnackbarProvider>
-          <Settings />
-        </SnackbarProvider>
-      </ApiClientProvider>
+      <DesignSurface>
+        <ApiClientProvider client={client}>
+          <SnackbarProvider>
+            <Settings />
+          </SnackbarProvider>
+        </ApiClientProvider>
+      </DesignSurface>
     </CssVarsProvider>
   );
 };

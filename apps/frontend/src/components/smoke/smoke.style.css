@@ -17,8 +17,10 @@
   width: 125px;
 }
 
+/* The page frame behind a wizard step: the background token, which follows the
+   colour scheme in effect. */
 .stepScreen {
-  background-color: #e0dfdf;
+  background-color: var(--mui-design-background);
   margin-left: auto;
   margin-right: auto;
   justify-content: center;

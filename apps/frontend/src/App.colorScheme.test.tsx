@@ -4,11 +4,11 @@
  * Each screen is replaced with the same probe, which reports the theme it is
  * handed — the design tokens it carries and the text colour it paints with — so
  * the assertions are about what the app gives its children rather than about how
- * any screen paints itself. With nothing stored, a browser follows the device
- * (AC 7); and the screens this slice does not restyle stay on the light palette
- * whatever the device says.
+ * any screen paints itself. With nothing stored, a browser follows the device;
+ * and now that every screen has been recoloured, every one of them is handed the
+ * scheme in effect rather than being held on the light palette.
  */
-import { createTheme, useTheme } from '@mui/material/styles';
+import { useTheme } from '@mui/material/styles';
 import '@testing-library/jest-dom';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -47,7 +47,6 @@ const renderAppOnADeviceThatIs = (preference: 'light' | 'dark'): void => {
   render(<App />);
 };
 
-/** The Settings screen, the only one this slice restyles. */
 const openSettings = (): Promise<void> => userEvent.click(screen.getByText('Settings'));
 
 describe('the colour scheme a browser renders a restyled screen in with nothing stored', () => {
@@ -67,25 +66,22 @@ describe('the colour scheme a browser renders a restyled screen in with nothing 
 });
 
 /**
- * Smoke, History and the bottom navigation are not restyled in this slice: they
- * are still painted against the light-grey shell `App.css` gives them. Handing
- * them the dark scheme would paint near-white Material-UI text and outlines onto
- * that light grey, so the root keeps them on the light palette — in the literal
- * colours Material-UI paints with, not in references to the scheme in effect.
+ * Smoke and History used to be held on the light palette whatever the device
+ * asked for, because they were still painted against a light-grey shell. They
+ * are recoloured now, so the scheme reaches them like everything else: the very
+ * point of the slice is that no screen stays light when the device asks for
+ * dark.
  */
-describe('the screens this slice does not restyle, on a device asking for dark', () => {
-  it('are handed the palette Material-UI paints with out of the box', () => {
+describe('the screen the app opens on, on a device asking for dark', () => {
+  it('is handed the dark design tokens', () => {
     renderAppOnADeviceThatIs('dark');
 
-    expect(screen.getByTestId('probe')).toHaveAttribute(
-      'data-text',
-      createTheme().palette.text.primary
-    );
+    expect(screen.getByTestId('probe')).toHaveAttribute('data-background', carbonDark.background);
   });
 
-  it('are handed the light design tokens, so nothing on them reaches for a dark one', () => {
+  it('is handed the dark palette to paint its text with', () => {
     renderAppOnADeviceThatIs('dark');
 
-    expect(screen.getByTestId('probe')).toHaveAttribute('data-background', carbonLight.background);
+    expect(screen.getByTestId('probe')).toHaveAttribute('data-text', carbonDark.text);
   });
 });

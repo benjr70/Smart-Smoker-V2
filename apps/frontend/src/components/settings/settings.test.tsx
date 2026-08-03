@@ -5,7 +5,7 @@ import { render, screen } from '@testing-library/react';
 import React from 'react';
 import { ApiClientProvider, SnackbarProvider, createApiClient } from '../../api';
 import { createFakeBackend } from '../../api/fakeBackend';
-import { appTheme } from '../../theme';
+import { DesignSurface, appTheme } from '../../theme';
 import { Settings } from './settings';
 
 /**
@@ -18,11 +18,13 @@ const renderSettings = (theme: ReturnType<typeof extendTheme> = appTheme) => {
   const client = createApiClient(createFakeBackend());
   return render(
     <CssVarsProvider theme={theme}>
-      <ApiClientProvider client={client}>
-        <SnackbarProvider>
-          <Settings />
-        </SnackbarProvider>
-      </ApiClientProvider>
+      <DesignSurface>
+        <ApiClientProvider client={client}>
+          <SnackbarProvider>
+            <Settings />
+          </SnackbarProvider>
+        </ApiClientProvider>
+      </DesignSurface>
     </CssVarsProvider>
   );
 };

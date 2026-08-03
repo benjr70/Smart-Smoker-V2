@@ -13,7 +13,7 @@ import { RatingsCard } from './ratingsCard';
 
 // Mock Material-UI components
 jest.mock('@mui/material', () => ({
-  Card: ({ children, ...props }: any) => (
+  Card: ({ children, 'data-testid': _dataTestId, ...props }: any) => (
     <div data-testid="card" {...props}>
       {children}
     </div>
@@ -44,11 +44,6 @@ jest.mock('@mui/material', () => ({
       {...props}
     />
   ),
-  ThemeProvider: ({ children, theme, ...props }: any) => (
-    <div data-testid="theme-provider" data-theme={JSON.stringify(theme)} {...props}>
-      {children}
-    </div>
-  ),
   Typography: ({ children, variant, component, align, ...props }: any) => (
     <div
       data-testid="typography"
@@ -60,7 +55,6 @@ jest.mock('@mui/material', () => ({
       {children}
     </div>
   ),
-  createTheme: jest.fn(theme => theme),
 }));
 
 let backend: FakeBackend;
@@ -118,7 +112,6 @@ describe('RatingsCard Component', () => {
       renderCard(mockProps);
 
       expect(screen.getByTestId('grid')).toBeInTheDocument();
-      expect(screen.getByTestId('theme-provider')).toBeInTheDocument();
       expect(screen.getByTestId('card')).toBeInTheDocument();
       expect(screen.getByTestId('card-content')).toBeInTheDocument();
     });
@@ -410,18 +403,6 @@ describe('RatingsCard Component', () => {
       const overallTasteLabel = screen.getByTestId('review-rating-overallTaste-value');
       expect(overallTasteLabel).toHaveAttribute('data-component', 'legend');
       expect(overallTasteLabel).toHaveTextContent('Overall Taste: 8.5');
-    });
-  });
-
-  describe('Theme Integration', () => {
-    test('should apply theme provider with custom theme', () => {
-      renderCard(mockProps);
-
-      const themeProvider = screen.getByTestId('theme-provider');
-      const theme = JSON.parse(themeProvider.getAttribute('data-theme') || '{}');
-
-      expect(theme.components.MuiCard.styleOverrides.root.backgroundColor).toBe('white');
-      expect(theme.components.MuiCard.styleOverrides.root.borderRadius).toBe('15px');
     });
   });
 

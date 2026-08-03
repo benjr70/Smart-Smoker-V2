@@ -19,6 +19,11 @@ export function BottomBar(props: buttonBarProps) {
   return (
     <Grid className="bottomBar">
       <BottomNavigation
+        // The bar is its own surface in the design, distinct from the cards it
+        // sits below, so it is painted from the navigation token rather than
+        // from the paper colour Material-UI would otherwise give it.
+        sx={theme => ({ backgroundColor: theme.design.navigation })}
+        data-testid="bottom-navigation"
         showLabels
         value={value}
         onChange={(event, newValue) => {

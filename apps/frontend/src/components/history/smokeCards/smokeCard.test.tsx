@@ -43,11 +43,6 @@ jest.mock('@mui/material', () => ({
       Rating: {value}/10
     </div>
   ),
-  ThemeProvider: ({ children, theme, ...props }: any) => (
-    <div data-testid="theme-provider" data-theme={JSON.stringify(theme)} {...props}>
-      {children}
-    </div>
-  ),
   Typography: ({
     children,
     variant,
@@ -68,7 +63,6 @@ jest.mock('@mui/material', () => ({
       {children}
     </div>
   ),
-  createTheme: jest.fn(theme => theme),
 }));
 
 describe('SmokeCard Component', () => {
@@ -94,7 +88,6 @@ describe('SmokeCard Component', () => {
       render(<SmokeCard {...mockProps} />);
 
       expect(screen.getByTestId('grid')).toBeInTheDocument();
-      expect(screen.getByTestId('theme-provider')).toBeInTheDocument();
       expect(screen.getByTestId('card')).toBeInTheDocument();
     });
 
@@ -244,18 +237,6 @@ describe('SmokeCard Component', () => {
 
       expect(sx.display).toBe('flex');
       expect(sx.justifyContent).toBe('space-between');
-    });
-  });
-
-  describe('Theme Integration', () => {
-    test('should apply theme provider with custom theme', () => {
-      render(<SmokeCard {...mockProps} />);
-
-      const themeProvider = screen.getByTestId('theme-provider');
-      const theme = JSON.parse(themeProvider.getAttribute('data-theme') || '{}');
-
-      expect(theme.components.MuiCard.styleOverrides.root.backgroundColor).toBe('white');
-      expect(theme.components.MuiCard.styleOverrides.root.borderRadius).toBe('15px');
     });
   });
 

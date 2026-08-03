@@ -3,17 +3,17 @@ import React from 'react';
 import { withDesignPalette } from './appTheme';
 
 /**
- * Marks a subtree as restyled to the design mock.
+ * Paints a subtree in the design's palette and typeface.
  *
- * The application theme carries the design's tokens but paints nothing with
- * them, because the screens this slice does not restyle — Smoke, History, the
- * bottom navigation — must keep their current look. Wrapping a screen here is
- * how it opts in: the design's colours and typeface apply inside, and nothing
- * outside changes. As the remaining screens are restyled they wrap themselves
- * the same way, and when the last one has, the palette can move to the root.
+ * The application theme carries the design's tokens for every colour scheme but
+ * paints nothing with them, so that a consumer decides where they apply. The web
+ * app wraps its whole tree here, having been recoloured screen by screen; the
+ * touchscreen application still paints itself by hand and is left alone until
+ * the slice that recolours it.
  *
- * The theme is derived from the enclosing one rather than replacing it, so a
- * restyled screen still inherits whatever the application provides.
+ * The theme is derived from the enclosing one rather than replacing it, so the
+ * subtree keeps everything else the application provides — including which
+ * colour scheme is in effect, whose tokens are the ones it is painted with.
  */
 export const DesignSurface = ({ children }: { children: React.ReactNode }): JSX.Element => {
   const outer = useTheme();

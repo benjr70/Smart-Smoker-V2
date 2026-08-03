@@ -150,6 +150,12 @@ describe('adding a further palette', () => {
     accent: '#FF8A65',
     danger: '#FF6B6B',
     success: '#6FCF7F',
+    probes: {
+      chamber: '#7FD68D',
+      probe1: '#9CC0DC',
+      probe2: '#6FC2FF',
+      probe3: '#C2D8E8',
+    },
   };
 
   it('carries the second token set on the application theme', () => {

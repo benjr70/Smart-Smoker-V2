@@ -7,7 +7,7 @@ import { TempData } from 'temperaturechart/src/tempChart';
 
 // Mock Material-UI components
 jest.mock('@mui/material', () => ({
-  Card: ({ children, ...props }: any) => (
+  Card: ({ children, 'data-testid': _dataTestId, ...props }: any) => (
     <div data-testid="card" {...props}>
       {children}
     </div>
@@ -19,11 +19,6 @@ jest.mock('@mui/material', () => ({
   ),
   Grid: ({ children, ...props }: any) => (
     <div data-testid="grid" {...props}>
-      {children}
-    </div>
-  ),
-  ThemeProvider: ({ children, theme, ...props }: any) => (
-    <div data-testid="theme-provider" data-theme={JSON.stringify(theme)} {...props}>
       {children}
     </div>
   ),
@@ -39,7 +34,6 @@ jest.mock('@mui/material', () => ({
       {children}
     </div>
   ),
-  createTheme: jest.fn(theme => theme),
 }));
 
 // Mock TempChart
@@ -111,7 +105,6 @@ describe('SmokeProfileCard Component', () => {
     test('should render SmokeProfileCard component successfully', () => {
       render(<SmokeProfileCard {...mockProps} />);
       expect(screen.getByTestId('grid')).toBeInTheDocument();
-      expect(screen.getByTestId('theme-provider')).toBeInTheDocument();
       expect(screen.getByTestId('card')).toBeInTheDocument();
       expect(screen.getByTestId('card-content')).toBeInTheDocument();
     });
@@ -206,35 +199,11 @@ describe('SmokeProfileCard Component', () => {
       expect(screen.getByTestId('card-content')).toBeInTheDocument();
     });
 
-    test('should have correct typography for probe and chamber names', () => {
-      render(<SmokeProfileCard {...mockProps} />);
-      // The names carry e2e test ids, so query them directly rather than
-      // through the shared `typography` test id.
-      const named = [
-        ['review-smoke-chambername', '#1f4f2d'],
-        ['review-smoke-probe1name', '#2a475e'],
-        ['review-smoke-probe2name', '#118cd8'],
-        ['review-smoke-probe3name', '#5582a7'],
-      ];
-      named.forEach(([testId, color]) => {
-        expect(JSON.parse(screen.getByTestId(testId).getAttribute('data-sx') || '{}')).toEqual({
-          fontSize: 16,
-          fontWeight: 600,
-          color,
-          width: '75%',
-        });
-      });
-    });
-  });
-
-  describe('Theme Integration', () => {
-    test('should apply theme provider with custom theme', () => {
-      render(<SmokeProfileCard {...mockProps} />);
-      const themeProvider = screen.getByTestId('theme-provider');
-      const theme = JSON.parse(themeProvider.getAttribute('data-theme') || '{}');
-      expect(theme.components.MuiCard.styleOverrides.root.backgroundColor).toBe('white');
-      expect(theme.components.MuiCard.styleOverrides.root.borderRadius).toBe('15px');
-    });
+    // Each name is painted in its own probe's colour, and which colour that is
+    // depends on the colour scheme in effect — something this suite's stub
+    // components, which have no theme to read, cannot see. It is asserted
+    // against real Material-UI, under both schemes, in
+    // `src/theme/restyledScreens.test.tsx`.
   });
 
   describe('Edge Cases', () => {
