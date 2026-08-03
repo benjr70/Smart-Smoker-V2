@@ -61,11 +61,13 @@ const mockChainable = {
 
 const mockSelection = mockChainable;
 
-const mockScale = {
-  domain: jest.fn().mockReturnThis(),
-  range: jest.fn().mockReturnThis(),
-  invert: jest.fn(x => x * 2), // Mock invert function
-};
+// A d3 scale is a function that also carries configuration methods; the chart
+// calls it to place a point (`xScale.current(…)`), so the mock has to be
+// callable as well as chainable.
+const mockScale: any = jest.fn((value: any) => value);
+mockScale.domain = jest.fn(() => mockScale);
+mockScale.range = jest.fn(() => mockScale);
+mockScale.invert = jest.fn((x: number) => x * 2);
 
 const mockLine = {
   x: jest.fn().mockReturnThis(),

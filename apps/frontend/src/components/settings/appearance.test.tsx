@@ -15,7 +15,7 @@ import React from 'react';
 import { stubSystemColorScheme } from 'theme/src/testing/systemColorScheme';
 import { ApiClientProvider, SnackbarProvider, createApiClient } from '../../api';
 import { createFakeBackend } from '../../api/fakeBackend';
-import { appTheme, carbonDark, carbonLight } from '../../theme';
+import { DesignSurface, appTheme, carbonDark, carbonLight } from '../../theme';
 import { Settings } from './settings';
 
 let system: ReturnType<typeof stubSystemColorScheme>;
@@ -31,11 +31,13 @@ const renderSettings = () => {
   const client = createApiClient(createFakeBackend());
   return render(
     <CssVarsProvider theme={appTheme} defaultMode="system">
-      <ApiClientProvider client={client}>
-        <SnackbarProvider>
-          <Settings />
-        </SnackbarProvider>
-      </ApiClientProvider>
+      <DesignSurface>
+        <ApiClientProvider client={client}>
+          <SnackbarProvider>
+            <Settings />
+          </SnackbarProvider>
+        </ApiClientProvider>
+      </DesignSurface>
     </CssVarsProvider>
   );
 };

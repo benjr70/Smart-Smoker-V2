@@ -54,11 +54,10 @@ export const resolveDesignPalette = (tokens: PaletteTokens): DesignPalette => ({
  * rather than code.
  *
  * The theme deliberately leaves Material-UI's own palette and typography as they
- * are. It is provided at the application root, and Smoke, History and the bottom
- * navigation are explicitly out of scope for this restyle: handing them the
- * design's accent and typeface here would repaint and re-type all three. The
- * design's colours reach a screen only where that screen wraps itself in
- * `DesignSurface`, so the remaining screens can be adopted one at a time.
+ * are: it carries the tokens, and a consumer decides where they are painted by
+ * wrapping that part of its tree in a `DesignSurface`. An application still
+ * painting itself by hand — the touchscreen, until the slice that recolours it —
+ * can therefore take this theme without being repainted or re-typed by it.
  */
 export const createThemeFromTokens = (mode: 'light' | 'dark', tokens: PaletteTokens): Theme =>
   createTheme({ palette: { mode }, design: resolveDesignPalette(tokens) });
@@ -90,34 +89,15 @@ export const createColorSchemeTheme = (
  * The theme without the custom properties a colour-scheme theme carries.
  *
  * Material-UI's components read their colours from those properties in
- * preference to the palette, and the properties hold the application's
- * unrestyled palette. A restyled subtree is painted from the values the scheme
- * in effect resolved to, so it is handed a theme that has none.
+ * preference to the palette, and the properties hold Material-UI's own palette
+ * rather than the design's. A restyled subtree is painted from the values the
+ * scheme in effect resolved to, so it is handed a theme that has none.
  */
 const withoutCustomProperties = (theme: Theme): Theme => {
   const plain = { ...theme } as Theme & Partial<Pick<CssVarsTheme, 'vars' | 'colorSchemes'>>;
   delete plain.vars;
   delete plain.colorSchemes;
   return plain;
-};
-
-/**
- * The enclosing theme, pinned to its light colour scheme.
- *
- * Applied by `UnrestyledScreen` to the theme already in scope. The colour scheme
- * is chosen for the whole application, but only a restyled screen is painted
- * from the design's tokens: the rest are still painted by hand, against a
- * light-hardcoded shell, so the dark scheme reaching them would put near-white
- * text and outlines onto light grey. Handing such a screen the light scheme's
- * palette — as literal colours, since the custom properties follow whichever
- * scheme is in effect — keeps it looking exactly as it does today, and nothing
- * else about the theme changes.
- */
-export const withLightColorScheme = (outer: Theme): Theme => {
-  const light = (outer as Theme & Partial<CssVarsTheme>).colorSchemes?.light;
-  const plain = withoutCustomProperties(outer);
-
-  return light ? createTheme(plain, { palette: light.palette, design: light.design }) : plain;
 };
 
 /**

@@ -6,6 +6,7 @@ import { SmokeSessionProvider } from 'smoke-session/src/react';
 import { SessionConfig } from 'smoke-session/src';
 import { encodeEvents } from 'smoke-session/src';
 import { FakeCloudSocket, FakeSessionApi, SteppingClock } from 'smoke-session/src/testing';
+import { DesignSurface } from '../../../theme';
 
 // The package's `flushPromises` uses `setImmediate`, which is absent from the
 // frontend's jsdom test environment; a `setTimeout(0)` macrotask drains the
@@ -159,12 +160,21 @@ function harness(): { config: SessionConfig; socket: FakeCloudSocket; api: FakeS
   return { config, socket, api };
 }
 
-/** Render the view under a live Provider wired to the fake kit. */
+/**
+ * Render the view under a live Provider wired to the fake kit.
+ *
+ * The step's layout grid is imported straight from Material-UI rather than
+ * through the barrel this file mocks, so it is a real component and reads the
+ * theme: the readouts are painted from the probe colours the design carries.
+ * Wrapping the way the application root wraps its tree hands them over.
+ */
 function renderView(kit = harness()) {
   const utils = render(
-    <SmokeSessionProvider config={kit.config}>
-      <SmokeStepView nextButton={nextButton} />
-    </SmokeSessionProvider>
+    <DesignSurface>
+      <SmokeSessionProvider config={kit.config}>
+        <SmokeStepView nextButton={nextButton} />
+      </SmokeSessionProvider>
+    </DesignSurface>
   );
   return { ...utils, ...kit };
 }
@@ -399,7 +409,11 @@ describe('SmokeStep composition root', () => {
   test('opens the cloud socket at WS_URL and renders the view under the Provider', async () => {
     process.env.WS_URL = 'ws://cloud.example';
 
-    render(<SmokeStep nextButton={nextButton} />);
+    render(
+      <DesignSurface>
+        <SmokeStep nextButton={nextButton} />
+      </DesignSurface>
+    );
     await act(async () => {
       await flushPromises();
     });
@@ -410,7 +424,11 @@ describe('SmokeStep composition root', () => {
   });
 
   test('defaults the socket URL to empty string when WS_URL is unset', async () => {
-    render(<SmokeStep nextButton={nextButton} />);
+    render(
+      <DesignSurface>
+        <SmokeStep nextButton={nextButton} />
+      </DesignSurface>
+    );
     await act(async () => {
       await flushPromises();
     });
@@ -423,7 +441,11 @@ describe('SmokeStep composition root', () => {
     const close = jest.fn();
     createCloudSocketAdapter.mockReturnValue({ ...port, close });
 
-    const { unmount } = render(<SmokeStep nextButton={nextButton} />);
+    const { unmount } = render(
+      <DesignSurface>
+        <SmokeStep nextButton={nextButton} />
+      </DesignSurface>
+    );
     await act(async () => {
       await flushPromises();
     });

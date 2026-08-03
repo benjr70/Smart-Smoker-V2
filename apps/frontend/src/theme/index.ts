@@ -12,3 +12,7 @@ import '@fontsource/plus-jakarta-sans/latin-700.css';
 // workspace package so that the touchscreen application can consume exactly the
 // same palette. This app reaches them through here.
 export * from 'theme/src';
+
+// The shared chart is not part of any application's theme — it is handed the
+// colours it draws in. Which of this app's tokens those are is decided here.
+export * from './chartColors';

@@ -6,6 +6,23 @@
  * further constant here and a further entry in `paletteTokens` — no theme
  * restructuring, and nothing in this file knows what a component library is.
  */
+/**
+ * The four temperature readings, each in its own colour, so a name and the
+ * number beside it identify the probe they belong to at a glance.
+ *
+ * A palette carries its own set because the colours have to be read against that
+ * palette's surfaces: the light set is dark ink on a white card, and reusing it
+ * on a near-black one would leave the two darkest readings all but invisible.
+ * Hue is what carries the identity, so the dark set keeps each probe's hue and
+ * moves only its lightness.
+ */
+export interface ProbeTokens {
+  chamber: string;
+  probe1: string;
+  probe2: string;
+  probe3: string;
+}
+
 export interface PaletteTokens {
   /** Page background behind every surface. */
   background: string;
@@ -29,6 +46,8 @@ export interface PaletteTokens {
   danger: string;
   /** Positive / success. */
   success: string;
+  /** One colour per temperature probe. */
+  probes: ProbeTokens;
 }
 
 /** Alpha applied to the accent for accent-tinted backgrounds. */
@@ -47,6 +66,14 @@ export const carbonLight: PaletteTokens = {
   accent: '#DA4A2E',
   danger: '#B91C1C',
   success: '#3F7D46',
+  // The colours the temperature chart has always drawn its lines in, so a
+  // reading and the line it belongs to still match on a light card.
+  probes: {
+    chamber: '#1f4f2d',
+    probe1: '#2a475e',
+    probe2: '#118cd8',
+    probe3: '#5582a7',
+  },
 };
 
 /**
@@ -65,6 +92,15 @@ export const carbonDark: PaletteTokens = {
   accent: '#FF6247',
   danger: '#F0503C',
   success: '#4EA85C',
+  // Each probe's own hue, lifted until it reads against a near-black surface:
+  // the chamber's green and the third probe's steel keep their identity, and the
+  // second probe stays the most vivid of the three blues, as it is in the light.
+  probes: {
+    chamber: '#4FBF6A',
+    probe1: '#7FA9C9',
+    probe2: '#4FB5FF',
+    probe3: '#A8C4DB',
+  },
 };
 
 /** The palette modes the application can render in. */

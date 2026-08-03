@@ -6,7 +6,7 @@ import { PostSmoke } from '../../../api/types';
 
 // Mock Material-UI components
 jest.mock('@mui/material', () => ({
-  Card: ({ children, ...props }: any) => (
+  Card: ({ children, 'data-testid': _dataTestId, ...props }: any) => (
     <div data-testid="card" {...props}>
       {children}
     </div>
@@ -18,11 +18,6 @@ jest.mock('@mui/material', () => ({
   ),
   Grid: ({ children, paddingBottom, ...props }: any) => (
     <div data-testid="grid" data-padding-bottom={paddingBottom} {...props}>
-      {children}
-    </div>
-  ),
-  ThemeProvider: ({ children, theme, ...props }: any) => (
-    <div data-testid="theme-provider" data-theme={JSON.stringify(theme)} {...props}>
       {children}
     </div>
   ),
@@ -51,7 +46,6 @@ jest.mock('@mui/material', () => ({
       {children}
     </div>
   ),
-  createTheme: jest.fn(theme => theme),
 }));
 
 describe('PostSmokeCard Component', () => {
@@ -70,7 +64,6 @@ describe('PostSmokeCard Component', () => {
       render(<PostSmokeCard {...mockProps} />);
 
       expect(screen.getByTestId('grid')).toBeInTheDocument();
-      expect(screen.getByTestId('theme-provider')).toBeInTheDocument();
       expect(screen.getByTestId('card')).toBeInTheDocument();
       expect(screen.getByTestId('card-content')).toBeInTheDocument();
     });
@@ -274,18 +267,6 @@ describe('PostSmokeCard Component', () => {
       expect(notesTypography).toHaveAttribute('data-paragraph', 'true');
       expect(notesTypography).toHaveAttribute('data-color', 'text.secondary');
       expect(notesTypography).toHaveTextContent('Resting is crucial for juicy meat');
-    });
-  });
-
-  describe('Theme Integration', () => {
-    test('should apply theme provider with custom theme', () => {
-      render(<PostSmokeCard {...mockProps} />);
-
-      const themeProvider = screen.getByTestId('theme-provider');
-      const theme = JSON.parse(themeProvider.getAttribute('data-theme') || '{}');
-
-      expect(theme.components.MuiCard.styleOverrides.root.backgroundColor).toBe('white');
-      expect(theme.components.MuiCard.styleOverrides.root.borderRadius).toBe('15px');
     });
   });
 

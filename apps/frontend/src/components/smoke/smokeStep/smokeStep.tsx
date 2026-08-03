@@ -7,6 +7,7 @@ import { SmokeSessionProvider, useSmokeSession } from 'smoke-session/src/react';
 import { CloudSocketAdapter, createCloudSocketAdapter, SessionConfig } from 'smoke-session/src';
 import { getDefaultApiClient } from '../../../api';
 import { createSessionApiPort } from '../../../api/sessionApiAdapter';
+import { useChartColors } from '../../../theme';
 
 const woodType = ['Hickory', 'Post Oak', 'Pecan', 'Cherry', 'Apple'];
 
@@ -28,86 +29,103 @@ type SmokeStepProps = {
  */
 export function SmokeStepView(props: SmokeStepProps): JSX.Element {
   const session = useSmokeSession({ flushProfileOnUnmount: true });
+  const chartColors = useChartColors();
 
   return (
     <Grid item xs={12}>
       <Grid container direction="column" sx={{ marginTop: '10px' }}>
-        <Grid
-          container
-          direction="row"
-          justifyContent="space-around"
-          sx={{ margin: '5px' }}
-          color={'#1f4f2d'}
-        >
+        <Grid container direction="row" justifyContent="space-around" sx={{ margin: '5px' }}>
           <Input
             defaultValue="Chamber"
             value={session.chamberName}
             onChange={event => session.setName('chamber', event.target.value)}
-            sx={{ fontSize: 24, fontWeight: 700, color: '#1f4f2d', width: '75%' }}
+            sx={theme => ({
+              fontSize: 24,
+              fontWeight: 700,
+              color: theme.design.probes.chamber,
+              width: '75%',
+            })}
             disableUnderline={true}
             inputProps={{ 'data-testid': 'smoke-chamber-name-input' }}
           />
-          <Grid item className="text" data-testid="smoke-chamber-temp">
+          <Grid
+            item
+            className="text"
+            data-testid="smoke-chamber-temp"
+            sx={theme => ({ color: theme.design.probes.chamber })}
+          >
             {session.chamberTemp}
           </Grid>
         </Grid>
         <Divider variant="middle" />
-        <Grid
-          container
-          direction="row"
-          justifyContent="space-around"
-          sx={{ margin: '5px' }}
-          color={'#2a475e'}
-        >
+        <Grid container direction="row" justifyContent="space-around" sx={{ margin: '5px' }}>
           <Input
             defaultValue="Probe 1"
             value={session.probe1Name}
             onChange={event => session.setName('probe1', event.target.value)}
-            sx={{ fontSize: 24, fontWeight: 700, color: '#2a475e', width: '75%' }}
+            sx={theme => ({
+              fontSize: 24,
+              fontWeight: 700,
+              color: theme.design.probes.probe1,
+              width: '75%',
+            })}
             disableUnderline={true}
             inputProps={{ 'data-testid': 'smoke-probe1-name-input' }}
           />
-          <Grid item className="text" data-testid="smoke-probe1-temp">
+          <Grid
+            item
+            className="text"
+            data-testid="smoke-probe1-temp"
+            sx={theme => ({ color: theme.design.probes.probe1 })}
+          >
             {session.probeTemp1}
           </Grid>
         </Grid>
         <Divider variant="middle" />
-        <Grid
-          container
-          direction="row"
-          justifyContent="space-around"
-          sx={{ margin: '5px' }}
-          color={'#118cd8'}
-        >
+        <Grid container direction="row" justifyContent="space-around" sx={{ margin: '5px' }}>
           <Input
             defaultValue="Probe 2"
             value={session.probe2Name}
             onChange={event => session.setName('probe2', event.target.value)}
-            sx={{ fontSize: 24, fontWeight: 700, color: '#118cd8', width: '75%' }}
+            sx={theme => ({
+              fontSize: 24,
+              fontWeight: 700,
+              color: theme.design.probes.probe2,
+              width: '75%',
+            })}
             disableUnderline={true}
             inputProps={{ 'data-testid': 'smoke-probe2-name-input' }}
           />
-          <Grid item className="text" data-testid="smoke-probe2-temp">
+          <Grid
+            item
+            className="text"
+            data-testid="smoke-probe2-temp"
+            sx={theme => ({ color: theme.design.probes.probe2 })}
+          >
             {session.probeTemp2}
           </Grid>
         </Grid>
         <Divider variant="middle" />
-        <Grid
-          container
-          direction="row"
-          justifyContent="space-around"
-          sx={{ margin: '5px' }}
-          color={'#5582a7'}
-        >
+        <Grid container direction="row" justifyContent="space-around" sx={{ margin: '5px' }}>
           <Input
             defaultValue="Probe 3"
             value={session.probe3Name}
             onChange={event => session.setName('probe3', event.target.value)}
-            sx={{ fontSize: 24, fontWeight: 700, color: '#5582a7', width: '75%' }}
+            sx={theme => ({
+              fontSize: 24,
+              fontWeight: 700,
+              color: theme.design.probes.probe3,
+              width: '75%',
+            })}
             disableUnderline={true}
             inputProps={{ 'data-testid': 'smoke-probe3-name-input' }}
           />
-          <Grid item className="text" data-testid="smoke-probe3-temp">
+          <Grid
+            item
+            className="text"
+            data-testid="smoke-probe3-temp"
+            sx={theme => ({ color: theme.design.probes.probe3 })}
+          >
             {session.probeTemp3}
           </Grid>
         </Grid>
@@ -125,6 +143,7 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
           date={session.date}
           smoking={session.smoking}
           initData={session.initialTemps}
+          colors={chartColors}
         ></TempChart>
       </Grid>
       <Grid container className="buttonContainer" justifyContent="space-around">
