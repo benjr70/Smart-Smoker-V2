@@ -123,6 +123,20 @@ const uninstallBrowser = () => {
 afterEach(uninstallBrowser);
 
 describe('browserPushAdapter', () => {
+  test('getPermission reports what the browser already permits, without prompting', () => {
+    installBrowser();
+    (window as any).Notification.permission = 'denied';
+
+    expect(createBrowserPushPort().getPermission()).toBe('denied');
+    expect((window as any).Notification.requestPermission).not.toHaveBeenCalled();
+  });
+
+  test('getPermission reports unsupported on a browser without push', () => {
+    uninstallBrowser();
+
+    expect(createBrowserPushPort().getPermission()).toBe('unsupported');
+  });
+
   test('requestPermission reports what the browser prompt returned', async () => {
     installBrowser();
     (window as any).Notification.requestPermission.mockResolvedValue('denied');

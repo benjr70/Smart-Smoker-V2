@@ -1,5 +1,7 @@
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import {
+  Alert,
+  AlertTitle,
   Button,
   Card,
   CardContent,
@@ -20,7 +22,16 @@ import {
   defaultNotificationSettings,
   useCurrentResource,
 } from '../../api';
-import { useTestNotification } from '../../push';
+import {
+  BLOCKED_BANNER_BODY,
+  BLOCKED_BANNER_TITLE,
+  NOT_ENABLED_BANNER_ACTION,
+  NOT_ENABLED_BANNER_BODY,
+  NOT_ENABLED_BANNER_TITLE,
+  UNSUPPORTED_BANNER_BODY,
+  UNSUPPORTED_BANNER_TITLE,
+  usePushNotifications,
+} from '../../push';
 
 /**
  * How long the chamber must stay outside its range before the backend alerts.
@@ -111,7 +122,7 @@ export function NotificationsCard(): JSX.Element {
     loadErrorMessage: 'Could not load notification settings.',
     saveErrorMessage: 'Could not save notification settings.',
   });
-  const { sendTest, sending } = useTestNotification();
+  const { permission, enabling, enable, sendTest, sending } = usePushNotifications();
 
   const updateChamber = (change: Partial<ChamberAlertSettings>) =>
     setSettings(current => ({ ...current, chamber: { ...current.chamber, ...change } }));
@@ -140,10 +151,31 @@ export function NotificationsCard(): JSX.Element {
       smokeComplete: { ...current.smokeComplete, ...change },
     }));
 
+  /**
+   * Switching an alert on is the user gesture the permission prompt needs, so
+   * the setting is recorded and the browser is enlisted in the same handler.
+   * Every alert routes through here: whichever one the user reaches for first
+   * has to be the one that asks, or the single alert they chose would sit there
+   * armed against a browser that was never enlisted.
+   *
+   * The setting is saved either way: a user who unblocks notifications later
+   * should find the alert they configured still switched on.
+   */
+  const setAlertEnabled = (enabled: boolean, record: (change: { enabled: boolean }) => void) => {
+    record({ enabled });
+    if (enabled) {
+      void enable();
+    }
+  };
+
   const { chamber, probeTarget, smokeComplete } = settings;
   // The mock tags the first watched probe with the cook's ETA. Which probe that
   // is follows from the watch list, so it is derived here rather than stored.
   const firstWatchedSlot = probeTarget.probes.find(probe => probe.enabled)?.slot;
+  // Any alert switched on is something this browser is expected to deliver, so
+  // any of them is reason enough to offer the way in below. Reading only the
+  // chamber alert would strand a smoker whose alerts are all about the meat.
+  const anyAlertEnabled = chamber.enabled || probeTarget.enabled || smokeComplete.enabled;
 
   return (
     // No spacing wrapper: the settings page stacks its cards and owns the gap
@@ -154,6 +186,43 @@ export function NotificationsCard(): JSX.Element {
           <Typography variant="h6" component="h2" fontWeight={700}>
             Notifications
           </Typography>
+
+          {permission === 'unsupported' && (
+            <Alert severity="info" data-testid="settings-push-unsupported">
+              <AlertTitle>{UNSUPPORTED_BANNER_TITLE}</AlertTitle>
+              {UNSUPPORTED_BANNER_BODY}
+            </Alert>
+          )}
+
+          {/* An alert switched on elsewhere arrives already on here, so there is
+              no off→on toggle left to carry the prompt. This is that gesture.
+              Hidden while a chain is running, so switching an alert on does not
+              flash a "not set up" banner at the user mid-prompt. */}
+          {permission === 'default' && anyAlertEnabled && !enabling && (
+            <Alert severity="info" data-testid="settings-push-not-enabled">
+              <AlertTitle>{NOT_ENABLED_BANNER_TITLE}</AlertTitle>
+              <Stack alignItems="flex-start" spacing={1}>
+                <span>{NOT_ENABLED_BANNER_BODY}</span>
+                <Button
+                  variant="outlined"
+                  color="inherit"
+                  size="small"
+                  onClick={() => void enable()}
+                >
+                  {NOT_ENABLED_BANNER_ACTION}
+                </Button>
+              </Stack>
+            </Alert>
+          )}
+
+          {permission === 'denied' && (
+            // Severity, not a hand-picked colour: the palette comes from the
+            // shared theme so this reads correctly in either colour scheme.
+            <Alert severity="warning" data-testid="settings-push-blocked">
+              <AlertTitle>{BLOCKED_BANNER_TITLE}</AlertTitle>
+              {BLOCKED_BANNER_BODY}
+            </Alert>
+          )}
 
           <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
             <Stack>
@@ -166,7 +235,7 @@ export function NotificationsCard(): JSX.Element {
             </Stack>
             <Switch
               checked={chamber.enabled}
-              onChange={event => updateChamber({ enabled: event.target.checked })}
+              onChange={event => setAlertEnabled(event.target.checked, updateChamber)}
               // The accessible name is the handle every caller uses — component
               // tests and the end-to-end suite alike — so the control needs no
               // test-only attribute of its own.
@@ -220,7 +289,7 @@ export function NotificationsCard(): JSX.Element {
             </Stack>
             <Switch
               checked={probeTarget.enabled}
-              onChange={event => updateProbeTarget({ enabled: event.target.checked })}
+              onChange={event => setAlertEnabled(event.target.checked, updateProbeTarget)}
               inputProps={{ 'aria-label': 'Probe Target Reached' }}
             />
           </Stack>
@@ -262,7 +331,7 @@ export function NotificationsCard(): JSX.Element {
             </Stack>
             <Switch
               checked={smokeComplete.enabled}
-              onChange={event => updateSmokeComplete({ enabled: event.target.checked })}
+              onChange={event => setAlertEnabled(event.target.checked, updateSmokeComplete)}
               inputProps={{ 'aria-label': 'Smoke Complete' }}
             />
           </Stack>
@@ -275,15 +344,22 @@ export function NotificationsCard(): JSX.Element {
             {describeSmokeComplete(smokeComplete, probeTarget)}
           </Typography>
 
-          <Button
-            variant="outlined"
-            startIcon={<NotificationsActiveIcon />}
-            disabled={sending}
-            onClick={sendTest}
-            sx={{ alignSelf: 'flex-start' }}
-          >
-            Send Test Notification
-          </Button>
+          {/* Only worth offering once a notification could actually arrive: in
+              any other permission state this control can only ever report the
+              same failure the banner above already explains. Held back until
+              the enabling chain finishes too — offered mid-subscribe it would
+              start a second one against the same registration. */}
+          {permission === 'granted' && !enabling && (
+            <Button
+              variant="outlined"
+              startIcon={<NotificationsActiveIcon />}
+              disabled={sending}
+              onClick={sendTest}
+              sx={{ alignSelf: 'flex-start' }}
+            >
+              Send Test Notification
+            </Button>
+          )}
         </Stack>
       </CardContent>
     </Card>
