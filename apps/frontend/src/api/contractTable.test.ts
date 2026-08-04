@@ -83,6 +83,7 @@ const seededNotifications: NotificationSettings = {
     enabled: true,
     probes: [{ slot: 'probe1', enabled: true, target: 203, name: 'Brisket Flat' }],
   },
+  smokeComplete: { enabled: true },
 };
 
 // A browser push subscription in its wire form — the exact body the backend
@@ -190,6 +191,7 @@ const projectedNotificationsBody = {
       { slot: 'probe3', enabled: false, target: 203 },
     ],
   },
+  smokeComplete: { enabled: true },
 };
 
 const rows: ContractRow[] = [

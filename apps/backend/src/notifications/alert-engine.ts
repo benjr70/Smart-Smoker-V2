@@ -35,10 +35,23 @@ export interface ProbeTargetAlertSettings {
   probes: ProbeTargetEntrySettings[];
 }
 
+/**
+ * The user-owned Smoke Complete alert: one notification per cook, when every
+ * probe the cook is watching is done.
+ *
+ * It has nothing to configure beyond being on, because what counts as complete
+ * is already described by the probe watch list — saying it twice would let the
+ * two descriptions disagree.
+ */
+export interface SmokeCompleteAlertSettings {
+  enabled: boolean;
+}
+
 /** The user-owned notification settings the engine reads. */
 export interface AlertSettings {
   chamber: ChamberAlertSettings;
   probeTarget: ProbeTargetAlertSettings;
+  smokeComplete: SmokeCompleteAlertSettings;
 }
 
 /** The latest reading from the smoker. `null` means "nothing readable". */
@@ -72,6 +85,23 @@ export interface AlertRuntimeState {
    * again on the next cook.
    */
   probeTargetsReached: string[];
+  /**
+   * The slots the completion rule has seen reach their target this session.
+   *
+   * Separate from {@link probeTargetsReached}, which records what the Probe
+   * Target Reached alert has *announced* and therefore stays empty while that
+   * alert is switched off. The two alerts are configured independently, so the
+   * completion rule keeps its own memory of "has been reached" — otherwise, with
+   * the per-probe alert off, completion would be judged on one instant's
+   * readings and a probe re-seated or unplugged after finishing would hold the
+   * cook open forever.
+   */
+  smokeCompleteProbesDone: string[];
+  /**
+   * Whether this session has already been declared complete. Scoped to the
+   * session the same way, so the next cook can complete on its own account.
+   */
+  smokeCompleteFired: boolean;
 }
 
 /** A notification the engine decided to send. */
@@ -99,6 +129,8 @@ export const initialAlertRuntimeState = (): AlertRuntimeState => ({
   chamberOutOfRangeSince: null,
   chamberAlertSent: false,
   probeTargetsReached: [],
+  smokeCompleteProbesDone: [],
+  smokeCompleteFired: false,
 });
 
 /**
@@ -189,6 +221,33 @@ const evaluateChamber = (input: AlertEvaluationInput): AlertEvaluation => {
   };
 };
 
+/** The probes the cook is watching, whichever alerts are switched on. */
+const watchedProbes = (
+  input: AlertEvaluationInput,
+): ProbeTargetEntrySettings[] =>
+  input.settings.probeTarget.probes.filter((probe) => probe.enabled);
+
+/**
+ * The watched probes this reading shows at or above their target, with the
+ * reading that says so.
+ *
+ * Both probe rules ask this one question — "which meat is done?" — so it is
+ * answered in one place. A probe the smoker reported nothing for is not done:
+ * read as 0°F an absent reading would leave a cook waiting on an unplugged
+ * probe forever, and read as anything else it would announce meat that is not
+ * cooking.
+ */
+const probesAtTarget = (
+  input: AlertEvaluationInput,
+): Array<{ slot: string; temp: number }> =>
+  watchedProbes(input).flatMap((probe) => {
+    const temp = input.reading.probeTemps[probe.slot];
+    if (temp === null || temp === undefined || !Number.isFinite(temp)) {
+      return [];
+    }
+    return temp < probe.target ? [] : [{ slot: probe.slot, temp }];
+  });
+
 /**
  * The Probe Target Reached rule: every watched probe that has reached the
  * temperature its meat is done at, named as this cook named it.
@@ -197,41 +256,93 @@ const evaluateProbeTargets = (
   input: AlertEvaluationInput,
   state: AlertRuntimeState,
 ): AlertEvaluation => {
-  const { probeTarget } = input.settings;
-  if (!probeTarget.enabled) {
+  if (!input.settings.probeTarget.enabled) {
     return { notifications: [], state };
   }
 
-  const notifications: AlertNotification[] = [];
-  const reached: string[] = [];
-  probeTarget.probes.forEach((probe) => {
-    if (!probe.enabled || state.probeTargetsReached.includes(probe.slot)) {
-      return;
-    }
-    const temp = input.reading.probeTemps[probe.slot];
-    if (temp === null || temp === undefined || !Number.isFinite(temp)) {
-      return;
-    }
-    if (temp < probe.target) {
-      return;
-    }
-    const name = input.names.probes[probe.slot] ?? probe.slot;
-    reached.push(probe.slot);
-    notifications.push({
+  const newlyReached = probesAtTarget(input).filter(
+    ({ slot }) => !state.probeTargetsReached.includes(slot),
+  );
+  const notifications: AlertNotification[] = newlyReached.map(
+    ({ slot, temp }) => ({
       title: ALERT_TITLE,
-      body: `${name} reached ${formatTemp(temp)}.`,
-    });
-  });
+      body: `${input.names.probes[slot] ?? slot} reached ${formatTemp(temp)}.`,
+    }),
+  );
 
-  if (reached.length === 0) {
+  if (newlyReached.length === 0) {
     return { notifications, state };
   }
   return {
     notifications,
     state: {
       ...state,
-      probeTargetsReached: [...state.probeTargetsReached, ...reached],
+      probeTargetsReached: [
+        ...state.probeTargetsReached,
+        ...newlyReached.map(({ slot }) => slot),
+      ],
     },
+  };
+};
+
+/**
+ * The Smoke Complete rule: the moment the last piece of meat is done.
+ *
+ * Deliberately not wired to the finish action — the person pressing Finish
+ * already knows they pressed it. This is the thing they cannot see coming,
+ * which is why it is derived from the readings instead.
+ *
+ * It reads the same watch list the probe rule does, and a probe stays done once
+ * it has been seen at its target — a probe re-seated into a cooler part of the
+ * meat, or pulled and unplugged once it was finished, must not hold the cook
+ * open. That memory is kept here rather than read off the Probe Target Reached
+ * alert's announcements, because the two alerts are switched on and off
+ * separately: silencing the per-probe chatter must not stop this rule knowing
+ * which meat is done.
+ *
+ * Like every other rule, it is genuinely inert while switched off: it records
+ * nothing, so switching it on mid-cook judges the cook from that moment rather
+ * than releasing a backlog.
+ */
+const evaluateSmokeComplete = (
+  input: AlertEvaluationInput,
+  state: AlertRuntimeState,
+): AlertEvaluation => {
+  if (!input.settings.smokeComplete.enabled || state.smokeCompleteFired) {
+    return { notifications: [], state };
+  }
+
+  const watched = watchedProbes(input);
+  // Watching nothing is not the same as being finished: with no probe to be
+  // done, there is no moment to announce.
+  if (watched.length === 0) {
+    return { notifications: [], state };
+  }
+
+  const done = new Set([
+    ...state.smokeCompleteProbesDone,
+    // What the per-probe alert has already announced counts too, so switching
+    // this alert on part-way through a cook does not forget finished meat the
+    // cook has already been told about.
+    ...state.probeTargetsReached,
+    ...probesAtTarget(input).map(({ slot }) => slot),
+  ]);
+  const remembered: AlertRuntimeState = {
+    ...state,
+    smokeCompleteProbesDone: [...done],
+  };
+  if (!watched.every((probe) => done.has(probe.slot))) {
+    return { notifications: [], state: remembered };
+  }
+
+  return {
+    notifications: [
+      {
+        title: ALERT_TITLE,
+        body: 'Smoke complete — every probe you are watching has reached its target.',
+      },
+    ],
+    state: { ...remembered, smokeCompleteFired: true },
   };
 };
 
@@ -245,8 +356,13 @@ export const evaluateAlerts = (
 ): AlertEvaluation => {
   const chamber = evaluateChamber(input);
   const probes = evaluateProbeTargets(input, chamber.state);
+  const complete = evaluateSmokeComplete(input, probes.state);
   return {
-    notifications: [...chamber.notifications, ...probes.notifications],
-    state: probes.state,
+    notifications: [
+      ...chamber.notifications,
+      ...probes.notifications,
+      ...complete.notifications,
+    ],
+    state: complete.state,
   };
 };

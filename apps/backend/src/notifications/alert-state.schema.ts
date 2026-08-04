@@ -41,6 +41,24 @@ export class AlertState {
    */
   @Prop({ type: [String], default: [] })
   probeTargetsReached: string[];
+
+  /**
+   * The probe slots the completion rule has seen reach their target this
+   * session. Kept apart from `probeTargetsReached`, which records what was
+   * announced and so stays empty while the Probe Target Reached alert is off:
+   * completion has to know which meat is done whether or not the per-probe
+   * alert is the one saying so.
+   */
+  @Prop({ type: [String], default: [] })
+  smokeCompleteProbesDone: string[];
+
+  /**
+   * Whether this session has already been announced as complete. One per cook,
+   * for the same reason and with the same `smokeId` scoping: the meat that
+   * finished last weekend must not silence the next cook's completion.
+   */
+  @Prop({ default: false })
+  smokeCompleteFired: boolean;
 }
 
 export const AlertStateSchema = SchemaFactory.createForClass(AlertState);

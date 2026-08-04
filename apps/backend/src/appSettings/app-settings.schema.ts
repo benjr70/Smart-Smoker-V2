@@ -76,6 +76,24 @@ export const ProbeTargetAlertSettingsSchema = SchemaFactory.createForClass(
 );
 
 /**
+ * The Smoke Complete alert: on or off, and nothing else.
+ *
+ * What counts as complete is the probe watch list above — every probe being
+ * watched has reached its target — so this block deliberately carries no second
+ * description of it that could disagree.
+ */
+@Schema({ _id: false })
+export class SmokeCompleteAlertSettings {
+  @ApiProperty()
+  @Prop({ default: false })
+  enabled: boolean;
+}
+
+export const SmokeCompleteAlertSettingsSchema = SchemaFactory.createForClass(
+  SmokeCompleteAlertSettings,
+);
+
+/**
  * How the installation looks: the mode an operator chose, and what that choice
  * resolved to on the client that last wrote it.
  *
@@ -115,6 +133,10 @@ export class ApplicationSettings {
   @ApiProperty({ type: ProbeTargetAlertSettings })
   @Prop({ type: ProbeTargetAlertSettingsSchema, default: () => ({}) })
   probeTarget: ProbeTargetAlertSettings;
+
+  @ApiProperty({ type: SmokeCompleteAlertSettings })
+  @Prop({ type: SmokeCompleteAlertSettingsSchema, default: () => ({}) })
+  smokeComplete: SmokeCompleteAlertSettings;
 
   @ApiProperty({ type: AppearanceSettings })
   @Prop({ type: AppearanceSettingsSchema, default: () => ({}) })

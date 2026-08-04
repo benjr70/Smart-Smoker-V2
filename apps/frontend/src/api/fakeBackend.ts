@@ -154,6 +154,7 @@ const withSettingsDefaults = (
       };
     }),
   },
+  smokeComplete: { enabled: stored?.smokeComplete?.enabled ?? false },
   appearance: {
     mode: stored?.appearance?.mode ?? 'system',
     resolvedMode: stored?.appearance?.resolvedMode ?? 'light',

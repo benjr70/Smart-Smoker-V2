@@ -104,6 +104,19 @@ export interface ProbeTargetAlertSettings {
 }
 
 /**
+ * The Smoke Complete alert: told once, when every probe being watched has
+ * reached its target.
+ *
+ * Only a switch, because the cook it describes is the probe watch list above —
+ * a second description of "done" here could only disagree with that one. It is
+ * deliberately not tied to the finish action: the person pressing Finish
+ * already knows they pressed it.
+ */
+export interface SmokeCompleteAlertSettings {
+  enabled: boolean;
+}
+
+/**
  * The notification settings document. Canonical here so API call sites depend
  * only on the API types module.
  *
@@ -116,6 +129,7 @@ export interface ProbeTargetAlertSettings {
 export interface NotificationSettings {
   chamber: ChamberAlertSettings;
   probeTarget: ProbeTargetAlertSettings;
+  smokeComplete: SmokeCompleteAlertSettings;
 }
 
 /** The colour schemes the application can render in. */
@@ -149,6 +163,7 @@ export interface AppearancePreference {
 export interface ApplicationSettings {
   chamber: ChamberAlertSettings;
   probeTarget: ProbeTargetAlertSettings;
+  smokeComplete: SmokeCompleteAlertSettings;
   appearance: AppearancePreference;
 }
 

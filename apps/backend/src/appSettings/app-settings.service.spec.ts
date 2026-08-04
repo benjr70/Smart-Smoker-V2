@@ -11,6 +11,9 @@ import { AppearancePreference } from './appearance';
 /** The probe rows a deployment that has configured nothing reads back as. */
 const DEFAULT_PROBE_TARGET_BLOCK = DEFAULT_APPLICATION_SETTINGS.probeTarget;
 
+/** The Smoke Complete alert as a deployment that has configured nothing has it. */
+const SMOKE_COMPLETE_OFF = DEFAULT_APPLICATION_SETTINGS.smokeComplete;
+
 /**
  * The session and the cook the probe rows are named from. A stand-in: this
  * service only has to know whether there is a session and what its profile calls
@@ -158,6 +161,7 @@ describe('AppSettingsService', () => {
       expect(await service.getSettings()).toEqual({
         chamber: { enabled: false, low: 225, high: 275 },
         probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
+        smokeComplete: SMOKE_COMPLETE_OFF,
         appearance: { mode: 'system', resolvedMode: 'light' },
       });
     });
@@ -187,6 +191,7 @@ describe('AppSettingsService', () => {
       expect(await mongooseShaped.getSettings()).toEqual({
         chamber: { enabled: true, low: 200, high: 300 },
         probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
+        smokeComplete: SMOKE_COMPLETE_OFF,
         appearance: { mode: 'dark', resolvedMode: 'dark' },
       });
     });
@@ -376,6 +381,7 @@ describe('AppSettingsService', () => {
       expect(await service.getSettings()).toEqual({
         chamber: { enabled: true, low: 200, high: 250 },
         probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
+        smokeComplete: SMOKE_COMPLETE_OFF,
         appearance: { mode: 'dark', resolvedMode: 'dark' },
       });
       expect(settings.all()).toHaveLength(1);
@@ -392,6 +398,7 @@ describe('AppSettingsService', () => {
       expect(await service.getSettings()).toEqual({
         chamber: { enabled: false, low: 225, high: 275 },
         probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
+        smokeComplete: SMOKE_COMPLETE_OFF,
         appearance: { mode: 'system', resolvedMode: 'light' },
       });
     });
@@ -429,6 +436,7 @@ describe('AppSettingsService', () => {
       expect(await service.getSettings()).toEqual({
         chamber: { enabled: true, low: 200, high: 250 },
         probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
+        smokeComplete: SMOKE_COMPLETE_OFF,
         appearance: { mode: 'dark', resolvedMode: 'dark' },
       });
     });
@@ -445,6 +453,7 @@ describe('AppSettingsService', () => {
       expect(await service.getSettings()).toEqual({
         chamber: { enabled: true, low: 200, high: 250 },
         probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
+        smokeComplete: SMOKE_COMPLETE_OFF,
         appearance: { mode: 'light', resolvedMode: 'light' },
       });
     });
@@ -471,6 +480,7 @@ describe('AppSettingsService', () => {
       expect(await service.getSettings()).toEqual({
         chamber: { enabled: true, low: 200, high: 250 },
         probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
+        smokeComplete: SMOKE_COMPLETE_OFF,
         appearance: { mode: 'dark', resolvedMode: 'dark' },
       });
       expect(settings.all()).toHaveLength(1);
@@ -496,6 +506,7 @@ describe('AppSettingsService', () => {
       expect(await service.getSettings()).toEqual({
         chamber: { enabled: false, low: 225, high: 275 },
         probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
+        smokeComplete: SMOKE_COMPLETE_OFF,
         appearance: { mode: 'dark', resolvedMode: 'dark' },
       });
     });

@@ -16,6 +16,7 @@ import {
   NotificationSettings,
   ProbeTargetAlertSettings,
   ProbeTargetEntry,
+  SmokeCompleteAlertSettings,
   defaultNotificationSettings,
   useCurrentResource,
 } from '../../api';
@@ -61,6 +62,29 @@ export const describeProbeTargets = (probeTarget: ProbeTargetAlertSettings): str
   }
   const names = watched.map(probe => `${probe.name} at ${degrees(probe.target)}`);
   return `You will be told once when each of ${listOf(names)} reaches its target.`;
+};
+
+/**
+ * What the Smoke Complete alert will actually do, in a sentence. It is measured
+ * against the probe watch list rather than anything of its own, so the sentence
+ * names that list — and says so plainly when the list is empty, which is the one
+ * configuration that looks armed and can never fire.
+ */
+export const describeSmokeComplete = (
+  smokeComplete: SmokeCompleteAlertSettings,
+  probeTarget: ProbeTargetAlertSettings
+): string => {
+  if (!smokeComplete.enabled) {
+    return 'Off — you will not be told when the smoke is complete.';
+  }
+  const watched = probeTarget.probes.filter(probe => probe.enabled);
+  if (watched.length === 0) {
+    return 'No probes are being watched — check one, so there is a smoke to complete.';
+  }
+  const names = listOf(watched.map(probe => `${probe.name} at ${degrees(probe.target)}`));
+  return watched.length === 1
+    ? `You will be told once, when ${names} has reached its target.`
+    : `You will be told once, when all of ${names} have reached their targets.`;
 };
 
 /** `a`, `a and b`, `a, b and c` — as a person would say the list out loud. */
@@ -110,7 +134,13 @@ export function NotificationsCard(): JSX.Element {
       },
     }));
 
-  const { chamber, probeTarget } = settings;
+  const updateSmokeComplete = (change: Partial<SmokeCompleteAlertSettings>) =>
+    setSettings(current => ({
+      ...current,
+      smokeComplete: { ...current.smokeComplete, ...change },
+    }));
+
+  const { chamber, probeTarget, smokeComplete } = settings;
   // The mock tags the first watched probe with the cook's ETA. Which probe that
   // is follows from the watch list, so it is derived here rather than stored.
   const firstWatchedSlot = probeTarget.probes.find(probe => probe.enabled)?.slot;
@@ -195,7 +225,10 @@ export function NotificationsCard(): JSX.Element {
             />
           </Stack>
 
-          {probeTarget.enabled && (
+          {/* The watch list is what both probe alerts are measured against, so
+              it is shown for either of them: a Smoke Complete alert switched on
+              by itself would otherwise have no way to be told what to wait for. */}
+          {(probeTarget.enabled || smokeComplete.enabled) && (
             <Stack spacing={1} data-testid="settings-probe-rows">
               {probeTarget.probes.map(probe => (
                 <ProbeRow
@@ -214,6 +247,32 @@ export function NotificationsCard(): JSX.Element {
             data-testid="settings-probe-target-summary"
           >
             {describeProbeTargets(probeTarget)}
+          </Typography>
+
+          {/* No detail controls: what counts as complete is the watch list
+              above, so there is nothing else here to configure. */}
+          <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
+            <Stack>
+              <Typography variant="body1" fontWeight={600}>
+                Smoke Complete
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Tell me when every probe I am watching has hit its target.
+              </Typography>
+            </Stack>
+            <Switch
+              checked={smokeComplete.enabled}
+              onChange={event => updateSmokeComplete({ enabled: event.target.checked })}
+              inputProps={{ 'aria-label': 'Smoke Complete' }}
+            />
+          </Stack>
+
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            data-testid="settings-smoke-complete-summary"
+          >
+            {describeSmokeComplete(smokeComplete, probeTarget)}
           </Typography>
 
           <Button

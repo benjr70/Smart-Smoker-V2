@@ -17,6 +17,7 @@ export type {
   ProbeTargetEntry,
   PushSubscriptionPayload,
   Smoke,
+  SmokeCompleteAlertSettings,
   SmokeHistory,
   SmokeProfile,
   SmokeReview,

@@ -206,6 +206,8 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
       chamberOutOfRangeSince: stored.chamberOutOfRangeSince ?? null,
       chamberAlertSent: stored.chamberAlertSent ?? false,
       probeTargetsReached: stored.probeTargetsReached ?? [],
+      smokeCompleteProbesDone: stored.smokeCompleteProbesDone ?? [],
+      smokeCompleteFired: stored.smokeCompleteFired ?? false,
     };
   }
 

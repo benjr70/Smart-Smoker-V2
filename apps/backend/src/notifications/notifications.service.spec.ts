@@ -232,6 +232,10 @@ describe('NotificationsService', () => {
       },
     });
 
+    /** The body the Smoke Complete alert is announced with. */
+    const SMOKE_COMPLETE =
+      'Smoke complete — every probe you are watching has reached its target.';
+
     beforeEach(() => {
       settings.seed({ chamber: { enabled: true, low: 225, high: 275 } });
     });
@@ -271,6 +275,8 @@ describe('NotificationsService', () => {
         chamberOutOfRangeSince: null,
         chamberAlertSent: false,
         probeTargetsReached: ['probe1'],
+        smokeCompleteProbesDone: ['probe1'],
+        smokeCompleteFired: false,
       });
       smokeSession.GetState.mockResolvedValue({
         smokeId: 'this-weekend',
@@ -341,6 +347,73 @@ describe('NotificationsService', () => {
       );
     });
 
+    // The completion marker is session-scoped like every other one, so the meat
+    // that finished last weekend cannot silence this weekend's cook.
+    it('completes the next cook too, though the last one already completed', async () => {
+      settings.seed({
+        ...watchingProbe('probe1', 203),
+        smokeComplete: { enabled: true },
+      });
+      alertState.seed({
+        smokeId: 'last-weekend',
+        chamberArmed: true,
+        chamberOutOfRangeSince: null,
+        chamberAlertSent: false,
+        probeTargetsReached: ['probe1'],
+        smokeCompleteProbesDone: ['probe1'],
+        smokeCompleteFired: true,
+      });
+      smokeSession.GetState.mockResolvedValue({
+        smokeId: 'this-weekend',
+        smoking: true,
+      });
+      temps.getLatestCurrentTemp.mockResolvedValue({
+        ChamberTemp: '240',
+        MeatTemp: '205',
+      });
+
+      await service.checkAlerts();
+      // The rest of the cook adds nothing: it is one completion per session.
+      await service.checkAlerts();
+
+      expect(pushDispatcher.notify).toHaveBeenCalledWith(
+        'Smoker',
+        SMOKE_COMPLETE,
+      );
+      expect(
+        pushDispatcher.notify.mock.calls.filter(
+          ([, body]) => body === SMOKE_COMPLETE,
+        ),
+      ).toHaveLength(1);
+      expect(alertState.stored()).toMatchObject({
+        smokeId: 'this-weekend',
+        smokeCompleteFired: true,
+      });
+    });
+
+    // The completion is what the cook cannot see coming; the finish action is
+    // something they just did. Wiring one to the other would announce a smoke
+    // complete to the person who pressed Finish, which is why nothing here
+    // listens to it — a finished session is simply not evaluated.
+    it('announces nothing when the cook finishes the smoke themselves', async () => {
+      settings.seed({
+        ...watchingProbe('probe1', 203),
+        smokeComplete: { enabled: true },
+      });
+      smokeSession.GetState.mockResolvedValue({
+        smokeId: 'smoke-1',
+        smoking: false,
+      });
+      temps.getLatestCurrentTemp.mockResolvedValue({
+        ChamberTemp: '240',
+        MeatTemp: '205',
+      });
+
+      await service.checkAlerts();
+
+      expect(pushDispatcher.notify).not.toHaveBeenCalled();
+    });
+
     it('says nothing about an idle smoker, whatever its chamber reads', async () => {
       smokeSession.GetState.mockResolvedValue({
         smokeId: 'smoke-1',
@@ -403,6 +476,8 @@ describe('NotificationsService', () => {
         chamberOutOfRangeSince: new Date('2020-01-01T00:00:00Z'),
         chamberAlertSent: false,
         probeTargetsReached: ['probe1'],
+        smokeCompleteProbesDone: ['probe1'],
+        smokeCompleteFired: true,
       });
       smokeSession.GetState.mockResolvedValue({
         smokeId: 'fresh-smoke',
@@ -418,8 +493,11 @@ describe('NotificationsService', () => {
         chamberArmed: false,
         chamberOutOfRangeSince: null,
         // The fired-once markers go with it: the same probe has to be able to
-        // announce itself again on this cook.
+        // announce itself again on this cook, and this cook has to be able to
+        // complete on its own account.
         probeTargetsReached: [],
+        smokeCompleteProbesDone: [],
+        smokeCompleteFired: false,
       });
     });
 

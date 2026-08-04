@@ -27,6 +27,7 @@ export const DEFAULT_APPLICATION_SETTINGS: ApplicationSettings = {
       target: DEFAULT_PROBE_TARGET,
     })),
   },
+  smokeComplete: { enabled: false },
   appearance: { mode: 'system', resolvedMode: 'light' },
 };
 
@@ -66,6 +67,7 @@ export const withSettingsDefaults = (
 ): ApplicationSettings => {
   const chamber = stored?.chamber;
   const probeTarget = stored?.probeTarget;
+  const smokeComplete = stored?.smokeComplete;
   const appearance = stored?.appearance;
   const defaults = DEFAULT_APPLICATION_SETTINGS;
   return {
@@ -77,6 +79,9 @@ export const withSettingsDefaults = (
     probeTarget: {
       enabled: probeTarget?.enabled ?? defaults.probeTarget.enabled,
       probes: withProbeEntryPerSlot(probeTarget?.probes),
+    },
+    smokeComplete: {
+      enabled: smokeComplete?.enabled ?? defaults.smokeComplete.enabled,
     },
     appearance: {
       mode: appearance?.mode ?? defaults.appearance.mode,
