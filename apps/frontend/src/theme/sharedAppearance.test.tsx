@@ -145,6 +145,76 @@ describe('choosing "follow the device" on a device set to dark', () => {
   });
 });
 
+/**
+ * "Follow the device" is a standing instruction, and the device can change its
+ * mind while the page sits open — at dusk, or at a flick of the system switch.
+ * The touchscreen renders the half this browser recorded, so a browser that saw
+ * the change and said nothing would leave the smoker painted for this morning.
+ */
+describe('the operator’s machine changing its mind while the page is open', () => {
+  /**
+   * Started from a fixed scheme so that the installation's value is visibly in
+   * effect before the machine is touched — "Auto" is also what an unloaded page
+   * shows, and a change recorded before the load landed would prove nothing.
+   */
+  const chooseAutoOn = async (backend: FakeBackend): Promise<void> => {
+    renderApp(backend);
+    await screen.findByText('Appearance');
+    await waitFor(() => expect(option('Light')).toHaveAttribute('aria-pressed', 'true'));
+    await userEvent.click(option('Auto'));
+    await waitFor(() =>
+      expect(backend.store.appSettings).toMatchObject({
+        appearance: { mode: 'system', resolvedMode: 'light' },
+      })
+    );
+  };
+
+  const withFixedLightChosen = () =>
+    createFakeBackend({
+      appSettings: { settings: { appearance: { mode: 'light', resolvedMode: 'light' } } },
+    });
+
+  it('records the scheme the machine now asks for, under "follow the device"', async () => {
+    const backend = withFixedLightChosen();
+    await chooseAutoOn(backend);
+
+    system.setDark(true);
+
+    await waitFor(() =>
+      expect(backend.store.appSettings).toMatchObject({
+        appearance: { mode: 'system', resolvedMode: 'dark' },
+      })
+    );
+  });
+
+  it('paints this browser to match what it recorded', async () => {
+    const backend = withFixedLightChosen();
+    await chooseAutoOn(backend);
+
+    system.setDark(true);
+
+    await waitFor(() => expect(page()).toHaveStyle({ backgroundColor: carbonDark.background }));
+  });
+
+  /**
+   * An operator who asked for dark outright asked for it everywhere, whatever
+   * their laptop does at dusk — so nothing is published and nothing repaints.
+   */
+  it('leaves a fixed choice alone, on this browser and on every other client', async () => {
+    const backend = withFixedLightChosen();
+    renderApp(backend);
+    await screen.findByText('Appearance');
+    await waitFor(() => expect(option('Light')).toHaveAttribute('aria-pressed', 'true'));
+
+    system.setDark(true);
+
+    await waitFor(() => expect(page()).toHaveStyle({ backgroundColor: carbonLight.background }));
+    expect(backend.store.appSettings).toMatchObject({
+      appearance: { mode: 'light', resolvedMode: 'light' },
+    });
+  });
+});
+
 describe('an installation whose backend cannot be reached', () => {
   it('still themes the page from the cached scheme', async () => {
     const backend = createFakeBackend();

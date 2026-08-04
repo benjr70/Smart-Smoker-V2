@@ -11,12 +11,14 @@ export {
 export type { DesignPalette } from './appTheme';
 export {
   DEFAULT_APPEARANCE_PREFERENCE,
+  DEVICE_DEFAULT_COLOR_SCHEME,
   isCoherentPreference,
   resolveAppearance,
   resolveChoice,
 } from './appearance';
 export type {
   AppearanceChoiceInput,
+  AppearanceClient,
   AppearanceInput,
   AppearanceMode,
   AppearancePreference,

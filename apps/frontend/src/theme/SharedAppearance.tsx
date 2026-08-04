@@ -37,6 +37,30 @@ const DARK_QUERY = '(prefers-color-scheme: dark)';
 const devicePrefersDark = (): boolean =>
   typeof window.matchMedia === 'function' && window.matchMedia(DARK_QUERY).matches;
 
+/**
+ * Hear about the device changing its own preference, and hand back the way to
+ * stop.
+ *
+ * The device can change its mind while the page is open — at dusk, or at a flick
+ * of the system switch — and the touchscreen renders the resolved half this
+ * browser recorded. So this is the only place in the installation where that
+ * change can be noticed at all.
+ *
+ * A browser too old to add a listener the modern way (Safari before 14) simply
+ * never reports one: the page it is showing still follows the device, because
+ * the colour-scheme provider paints from the media query itself, and the
+ * recorded half is corrected by the next client that loads.
+ */
+const watchDevicePreference = (listener: () => void): (() => void) => {
+  const query = typeof window.matchMedia === 'function' ? window.matchMedia(DARK_QUERY) : null;
+  if (!query?.addEventListener) {
+    return () => undefined;
+  }
+  const handler = (): void => listener();
+  query.addEventListener('change', handler);
+  return () => query.removeEventListener('change', handler);
+};
+
 const SharedAppearanceContext = createContext<AppearanceChoice | null>(null);
 
 export interface SharedAppearanceProviderProps {
@@ -70,6 +94,7 @@ export const SharedAppearanceProvider = ({
           readMode: () => (latest.current.mode as AppearanceMode | undefined) ?? null,
           systemDark: devicePrefersDark,
           apply: chosen => latest.current.setMode(chosen),
+          watchSystemDark: watchDevicePreference,
         },
         client,
         subscription,

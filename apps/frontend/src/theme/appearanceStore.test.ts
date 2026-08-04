@@ -17,14 +17,29 @@ import { createAppearanceStore } from './appearanceStore';
  */
 const createCache = (mode: AppearanceMode | null = null, systemDark = false) => {
   let current = mode;
+  let dark = systemDark;
   const applied: AppearanceMode[] = [];
+  const watchers: Array<() => void> = [];
   return {
     readMode: () => current,
-    systemDark: () => systemDark,
+    systemDark: () => dark,
     apply: (chosen: AppearanceMode) => {
       current = chosen;
       applied.push(chosen);
     },
+    watchSystemDark: (listener: () => void) => {
+      watchers.push(listener);
+      return () => {
+        watchers.splice(watchers.indexOf(listener), 1);
+      };
+    },
+    /** The operator changed the machine's own colour preference. */
+    setSystemDark: (next: boolean) => {
+      dark = next;
+      watchers.forEach(listener => listener());
+    },
+    /** How many listeners the store currently has on the machine. */
+    watching: () => watchers.length,
     /** Every mode the store asked to be painted, in order. */
     applied,
     /** What this browser would paint right now. */
@@ -147,6 +162,118 @@ describe('what a load tells the backend', () => {
     await flush();
 
     expect(client.written).toEqual([{ mode: 'system', resolvedMode: 'dark' }]);
+  });
+});
+
+/**
+ * "Follow the device" is a standing instruction, not a value: the machine can
+ * change its mind while the page is open, at dusk or at a flick of a switch. Only
+ * a browser can see that happen, and the touchscreen renders the recorded answer
+ * — so a browser that noticed and said nothing would leave the smoker painted for
+ * this morning.
+ */
+describe('the machine changing its own colour preference', () => {
+  it('records what "follow the device" now resolves to', async () => {
+    const cache = createCache('system', false);
+    const client = createPendingClient();
+    const store = createAppearanceStore({ cache, client, subscription: noSubscription });
+    store.start();
+    client.answer({ mode: 'system', resolvedMode: 'light' });
+    await flush();
+
+    cache.setSystemDark(true);
+    await flush();
+
+    expect(client.written).toEqual([{ mode: 'system', resolvedMode: 'dark' }]);
+  });
+
+  /**
+   * An operator who asked for dark outright asked for it everywhere, whatever
+   * their laptop does at dusk. Writing here would repaint the smoker away from
+   * the choice they made.
+   */
+  it('tells the backend nothing when a fixed scheme was chosen', async () => {
+    const cache = createCache('dark', false);
+    const client = createPendingClient();
+    const store = createAppearanceStore({ cache, client, subscription: noSubscription });
+    store.start();
+    client.answer({ mode: 'dark', resolvedMode: 'dark' });
+    await flush();
+
+    cache.setSystemDark(true);
+    await flush();
+
+    expect(client.written).toEqual([]);
+    expect(cache.applied).toEqual([]);
+  });
+
+  /**
+   * The machine announces more than the one query asked about, and announces it
+   * again on the way back. Only a value that differs from what is stored is news.
+   */
+  it('tells the backend nothing when the machine ends up where it already was', async () => {
+    const cache = createCache('system', true);
+    const client = createPendingClient();
+    const store = createAppearanceStore({ cache, client, subscription: noSubscription });
+    store.start();
+    client.answer({ mode: 'system', resolvedMode: 'dark' });
+    await flush();
+
+    cache.setSystemDark(true);
+    await flush();
+
+    expect(client.written).toEqual([]);
+  });
+
+  /**
+   * Until the load lands, this browser knows what *it* is painting and nothing
+   * about what the installation chose. Recording its own cached mode here would
+   * publish a guess — and overwrite the fixed choice an operator made elsewhere
+   * with a "follow the device" nobody asked for.
+   */
+  it('says nothing while it still does not know what the installation holds', async () => {
+    const cache = createCache('system', false);
+    const client = createPendingClient();
+    const store = createAppearanceStore({ cache, client, subscription: noSubscription });
+    store.start();
+
+    cache.setSystemDark(true);
+    await flush();
+
+    expect(client.written).toEqual([]);
+  });
+
+  /**
+   * Nothing is lost by waiting: the load resolves the mode it fetched against
+   * the machine as it is when it lands, so the change is recorded then.
+   */
+  it('leaves the load that was on its way to record it instead', async () => {
+    const cache = createCache('system', false);
+    const client = createPendingClient();
+    const store = createAppearanceStore({ cache, client, subscription: noSubscription });
+    store.start();
+
+    cache.setSystemDark(true);
+    client.answer({ mode: 'system', resolvedMode: 'light' });
+    await flush();
+
+    expect(client.written).toEqual([{ mode: 'system', resolvedMode: 'dark' }]);
+  });
+
+  it('stops listening to a machine once the store is stopped', async () => {
+    const cache = createCache('system', false);
+    const client = createPendingClient();
+    const store = createAppearanceStore({ cache, client, subscription: noSubscription });
+    store.start();
+    client.answer({ mode: 'system', resolvedMode: 'light' });
+    await flush();
+
+    store.stop();
+    cache.setSystemDark(true);
+    await flush();
+
+    expect(client.written).toEqual([]);
+    expect(cache.watching()).toBe(0);
   });
 });
 

@@ -19,7 +19,7 @@ import {
   clone,
   createFakeBackendKernel,
 } from 'api-transport/src';
-import { State, TempData } from './types';
+import { AppearancePreference, State, TempData } from './types';
 
 /**
  * A profile as it may sit persisted on the backend: the optional `notes`/
@@ -59,6 +59,14 @@ export interface FakeBackendSeed {
     connection?: unknown;
     connectResult?: unknown;
   };
+  /**
+   * The stored application settings document. An absent `appearance` models an
+   * installation nobody has chosen one on — and a deployment older than the
+   * block — which the client reads as the documented default.
+   */
+  appSettings?: {
+    appearance?: AppearancePreference;
+  };
 }
 
 /** What the transport yields for an empty-body 200 (axios surfaces `''`). */
@@ -77,6 +85,7 @@ interface FakeStore {
     connection: unknown;
     connectResult: unknown;
   };
+  appSettings: { appearance?: AppearancePreference };
 }
 
 export type FakeBackend = FakeBackendKernel<FakeStore>;
@@ -95,6 +104,7 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
       connection: seed.wifi?.connection ?? [],
       connectResult: seed.wifi?.connectResult ?? { success: true },
     },
+    appSettings: { appearance: seed.appSettings?.appearance },
   };
   const route = ({ method, path, body }: FakeRequest): unknown => {
     // Cloud API routes.
@@ -125,6 +135,12 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
       const batch = clone(body) as TempData[];
       store.temps.batches.push(batch);
       return { success: true, count: batch.length };
+    }
+
+    // The settings document, of which the device reads only the appearance
+    // block — and only ever reads it.
+    if (path === 'appSettings' && method === 'get') {
+      return clone(store.appSettings);
     }
 
     // Device-service routes.

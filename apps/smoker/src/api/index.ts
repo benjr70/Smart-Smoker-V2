@@ -12,7 +12,10 @@
  * from one place.
  */
 export type {
+  AppearanceMode,
+  AppearancePreference,
   BatchTempDto,
+  ColorScheme,
   SmokeProfile,
   SmokingState,
   State,
@@ -25,10 +28,16 @@ export type { FakeBackend, FakeBackendSeed, StoredSmokeProfile } from './fakeBac
 export { createFakeBackend } from './fakeBackend';
 export type {
   ApiClient,
+  AppearanceResource,
   StateResource,
   SmokeProfileResource,
   TempsResource,
   DeviceResource,
 } from './client';
-export { createApiClient, createProductionApiClient, getDefaultApiClient } from './client';
+export {
+  DEFAULT_APPEARANCE_PREFERENCE,
+  createApiClient,
+  createProductionApiClient,
+  getDefaultApiClient,
+} from './client';
 export { createSessionApi } from './sessionApiAdapter';
