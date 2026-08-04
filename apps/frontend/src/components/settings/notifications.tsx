@@ -64,6 +64,29 @@ export const describeProbeTargets = (probeTarget: ProbeTargetAlertSettings): str
   return `You will be told once when each of ${listOf(names)} reaches its target.`;
 };
 
+/**
+ * What the Smoke Complete alert will actually do, in a sentence. It is measured
+ * against the probe watch list rather than anything of its own, so the sentence
+ * names that list — and says so plainly when the list is empty, which is the one
+ * configuration that looks armed and can never fire.
+ */
+export const describeSmokeComplete = (
+  smokeComplete: SmokeCompleteAlertSettings,
+  probeTarget: ProbeTargetAlertSettings
+): string => {
+  if (!smokeComplete.enabled) {
+    return 'Off — you will not be told when the smoke is complete.';
+  }
+  const watched = probeTarget.probes.filter(probe => probe.enabled);
+  if (watched.length === 0) {
+    return 'No probes are being watched — check one, so there is a smoke to complete.';
+  }
+  const names = listOf(watched.map(probe => `${probe.name} at ${degrees(probe.target)}`));
+  return watched.length === 1
+    ? `You will be told once, when ${names} has reached its target.`
+    : `You will be told once, when all of ${names} have reached their targets.`;
+};
+
 /** `a`, `a and b`, `a, b and c` — as a person would say the list out loud. */
 const listOf = (items: string[]): string =>
   items.length <= 1
@@ -202,7 +225,10 @@ export function NotificationsCard(): JSX.Element {
             />
           </Stack>
 
-          {probeTarget.enabled && (
+          {/* The watch list is what both probe alerts are measured against, so
+              it is shown for either of them: a Smoke Complete alert switched on
+              by itself would otherwise have no way to be told what to wait for. */}
+          {(probeTarget.enabled || smokeComplete.enabled) && (
             <Stack spacing={1} data-testid="settings-probe-rows">
               {probeTarget.probes.map(probe => (
                 <ProbeRow
@@ -240,6 +266,14 @@ export function NotificationsCard(): JSX.Element {
               inputProps={{ 'aria-label': 'Smoke Complete' }}
             />
           </Stack>
+
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            data-testid="settings-smoke-complete-summary"
+          >
+            {describeSmokeComplete(smokeComplete, probeTarget)}
+          </Typography>
 
           <Button
             variant="outlined"

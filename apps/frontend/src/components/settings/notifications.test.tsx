@@ -25,6 +25,7 @@ const savedProbeRows = (watched: Record<string, number> = {}) =>
 const chamberAlertOn: NotificationSettings = {
   chamber: { enabled: true, low: 225, high: 275 },
   probeTarget: { enabled: false, probes: probeRows() },
+  smokeComplete: { enabled: false },
 };
 
 const browserSubscription: PushSubscriptionPayload = {
@@ -389,6 +390,50 @@ describe('NotificationsCard', () => {
     expect(
       screen.getByText(/tell me when every probe i am watching has hit its target/i)
     ).toBeInTheDocument();
+  });
+
+  // Completion is measured against the probe watch list, and the two alerts are
+  // switched on independently. Hiding the rows behind the per-probe alert would
+  // make a Smoke Complete alert switched on by itself a toggle with no way to
+  // say what it is waiting for — and so one that can never fire.
+  test('reveals the probe rows for a Smoke Complete alert switched on by itself', async () => {
+    const backend = createFakeBackend({
+      appSettings: { settings: chamberAlertOn },
+      smokeProfile: { current: { probe1Name: 'Brisket Flat' } },
+    });
+
+    renderCard(backend);
+
+    // The stored chamber range only appears once the settings have arrived, so
+    // waiting for it keeps the toggle below from being clicked mid-load.
+    await screen.findByLabelText('Low');
+    fireEvent.click(screen.getByLabelText('Smoke Complete'));
+
+    expect(await screen.findByTestId('settings-probe-row-probe1')).toBeInTheDocument();
+    // Named after the active cook, as the rows are under the other alert.
+    expect(screen.getByLabelText('Watch Brisket Flat')).toBeInTheDocument();
+    // Without the per-probe chatter being switched on to get them.
+    expect(screen.getByLabelText('Probe Target Reached')).not.toBeChecked();
+  });
+
+  // The card's other alerts each state what the current configuration will do.
+  // This one has to say it too, because "on but watching nothing" is a
+  // configuration that looks armed and can never fire.
+  test('says what Smoke Complete will do, including when it is watching nothing', async () => {
+    const backend = createFakeBackend({
+      smokeProfile: { current: { probe1Name: 'Brisket Flat' } },
+    });
+
+    renderCard(backend);
+
+    const summary = await screen.findByTestId('settings-smoke-complete-summary');
+    await waitFor(() => expect(summary).toHaveTextContent(/will not be told/i));
+
+    fireEvent.click(screen.getByLabelText('Smoke Complete'));
+    await waitFor(() => expect(summary).toHaveTextContent(/no probes are being watched/i));
+
+    fireEvent.click(await screen.findByLabelText('Watch Brisket Flat'));
+    await waitFor(() => expect(summary).toHaveTextContent(/Brisket Flat at 203°F/));
   });
 
   // Settings are the one screen whose whole job is to still be there tomorrow,

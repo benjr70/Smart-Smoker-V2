@@ -86,6 +86,18 @@ export interface AlertRuntimeState {
    */
   probeTargetsReached: string[];
   /**
+   * The slots the completion rule has seen reach their target this session.
+   *
+   * Separate from {@link probeTargetsReached}, which records what the Probe
+   * Target Reached alert has *announced* and therefore stays empty while that
+   * alert is switched off. The two alerts are configured independently, so the
+   * completion rule keeps its own memory of "has been reached" — otherwise, with
+   * the per-probe alert off, completion would be judged on one instant's
+   * readings and a probe re-seated or unplugged after finishing would hold the
+   * cook open forever.
+   */
+  smokeCompleteProbesDone: string[];
+  /**
    * Whether this session has already been declared complete. Scoped to the
    * session the same way, so the next cook can complete on its own account.
    */
@@ -117,6 +129,7 @@ export const initialAlertRuntimeState = (): AlertRuntimeState => ({
   chamberOutOfRangeSince: null,
   chamberAlertSent: false,
   probeTargetsReached: [],
+  smokeCompleteProbesDone: [],
   smokeCompleteFired: false,
 });
 
@@ -279,11 +292,17 @@ const evaluateProbeTargets = (
  * already knows they pressed it. This is the thing they cannot see coming,
  * which is why it is derived from the readings instead.
  *
- * It reads the same watch list the probe rule does, and counts a probe as done
- * if it was announced earlier this session or is at its target on this reading.
- * Taking both means completion does not depend on the Probe Target Reached
- * alert being switched on: the two alerts are configured separately, so
- * silencing one must not silence the other.
+ * It reads the same watch list the probe rule does, and a probe stays done once
+ * it has been seen at its target — a probe re-seated into a cooler part of the
+ * meat, or pulled and unplugged once it was finished, must not hold the cook
+ * open. That memory is kept here rather than read off the Probe Target Reached
+ * alert's announcements, because the two alerts are switched on and off
+ * separately: silencing the per-probe chatter must not stop this rule knowing
+ * which meat is done.
+ *
+ * Like every other rule, it is genuinely inert while switched off: it records
+ * nothing, so switching it on mid-cook judges the cook from that moment rather
+ * than releasing a backlog.
  */
 const evaluateSmokeComplete = (
   input: AlertEvaluationInput,
@@ -301,11 +320,19 @@ const evaluateSmokeComplete = (
   }
 
   const done = new Set([
+    ...state.smokeCompleteProbesDone,
+    // What the per-probe alert has already announced counts too, so switching
+    // this alert on part-way through a cook does not forget finished meat the
+    // cook has already been told about.
     ...state.probeTargetsReached,
     ...probesAtTarget(input).map(({ slot }) => slot),
   ]);
+  const remembered: AlertRuntimeState = {
+    ...state,
+    smokeCompleteProbesDone: [...done],
+  };
   if (!watched.every((probe) => done.has(probe.slot))) {
-    return { notifications: [], state };
+    return { notifications: [], state: remembered };
   }
 
   return {
@@ -315,7 +342,7 @@ const evaluateSmokeComplete = (
         body: 'Smoke complete — every probe you are watching has reached its target.',
       },
     ],
-    state: { ...state, smokeCompleteFired: true },
+    state: { ...remembered, smokeCompleteFired: true },
   };
 };
 

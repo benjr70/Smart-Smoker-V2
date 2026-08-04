@@ -275,6 +275,7 @@ describe('NotificationsService', () => {
         chamberOutOfRangeSince: null,
         chamberAlertSent: false,
         probeTargetsReached: ['probe1'],
+        smokeCompleteProbesDone: ['probe1'],
         smokeCompleteFired: false,
       });
       smokeSession.GetState.mockResolvedValue({
@@ -359,6 +360,7 @@ describe('NotificationsService', () => {
         chamberOutOfRangeSince: null,
         chamberAlertSent: false,
         probeTargetsReached: ['probe1'],
+        smokeCompleteProbesDone: ['probe1'],
         smokeCompleteFired: true,
       });
       smokeSession.GetState.mockResolvedValue({
@@ -474,6 +476,7 @@ describe('NotificationsService', () => {
         chamberOutOfRangeSince: new Date('2020-01-01T00:00:00Z'),
         chamberAlertSent: false,
         probeTargetsReached: ['probe1'],
+        smokeCompleteProbesDone: ['probe1'],
         smokeCompleteFired: true,
       });
       smokeSession.GetState.mockResolvedValue({
@@ -493,6 +496,7 @@ describe('NotificationsService', () => {
         // announce itself again on this cook, and this cook has to be able to
         // complete on its own account.
         probeTargetsReached: [],
+        smokeCompleteProbesDone: [],
         smokeCompleteFired: false,
       });
     });

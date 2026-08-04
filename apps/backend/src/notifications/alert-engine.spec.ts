@@ -532,4 +532,45 @@ describe('alert engine — smoke complete alert', () => {
       'Smoke complete — every probe you are watching has reached its target.',
     ]);
   });
+
+  // The same cook with the per-probe chatter silenced. Nothing else is recording
+  // that the brisket was done, so the completion rule has to remember it itself:
+  // a probe re-seated (or pulled and unplugged) after it finished must not
+  // quietly hold the cook open for the rest of the smoke.
+  it('holds a probe done with the per-probe alert switched off, though it then reads cooler', () => {
+    const { bodies } = runCook(
+      [
+        [240, null, { probe1: 204, probe2: 180 }],
+        [300, null, { probe1: 198, probe2: 196 }],
+        // Pulled and unplugged once it was done: still done.
+        [330, null, { probe1: null, probe2: 197 }],
+      ],
+      {
+        probeTarget: watching({ probe1: 203, probe2: 195 }, { enabled: false }),
+        smokeComplete: smokeCompleteOn,
+      },
+    );
+
+    expect(bodies).toEqual([
+      'Smoke complete — every probe you are watching has reached its target.',
+    ]);
+  });
+
+  // Nothing was announced and nothing is complete, so switching the alert on
+  // mid-cook must not find a backlog of meat it decided was done while it was
+  // off — the same rule the per-probe alert follows.
+  it('leaves no bookkeeping behind while switched off, so switching it on still judges the cook fresh', () => {
+    const off = runCook([[240, null, { probe1: 204, probe2: 196 }]], {
+      probeTarget: watching({ probe1: 203, probe2: 195 }, { enabled: false }),
+      smokeComplete: { enabled: false },
+    });
+
+    const { bodies } = runCook([[300, null, { probe1: 198, probe2: 190 }]], {
+      probeTarget: watching({ probe1: 203, probe2: 195 }, { enabled: false }),
+      smokeComplete: smokeCompleteOn,
+      state: off.state,
+    });
+
+    expect(bodies).toEqual([]);
+  });
 });
