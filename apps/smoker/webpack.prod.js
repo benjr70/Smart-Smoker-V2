@@ -32,8 +32,8 @@ module.exports = {
       },
       {
         // Build TS/TSX sources from the workspace packages "temperaturechart",
-        // "smoke-session" and "api-transport", which ship TS/TSX sources (no
-        // prebuilt dist). Both layouts are listed on purpose: locally
+        // "smoke-session", "api-transport" and "theme", which ship TS/TSX
+        // sources (no prebuilt dist). Both layouts are listed on purpose: locally
         // node_modules/<pkg> is a symlink so webpack reports the packages/
         // real path, while CI ships the workspace as an upload-artifact, which
         // dereferences the symlink into a real node_modules/ directory that the
@@ -46,6 +46,8 @@ module.exports = {
           path.resolve(__dirname, '../../node_modules/smoke-session/src'),
           path.resolve(__dirname, '../../packages/api-transport/src'),
           path.resolve(__dirname, '../../node_modules/api-transport/src'),
+          path.resolve(__dirname, '../../packages/theme/src'),
+          path.resolve(__dirname, '../../node_modules/theme/src'),
         ],
         use: {
           loader: 'ts-loader',

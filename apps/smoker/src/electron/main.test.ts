@@ -8,7 +8,7 @@
  * imported across the boundary.
  */
 
-export {};
+import { carbonDark } from 'theme/src';
 
 jest.mock('electron', () => ({
   app: { on: jest.fn(), quit: jest.fn() },
@@ -127,12 +127,29 @@ describe('Electron main process window lifecycle', () => {
       width: 800,
       frame: false,
       fullscreen: true,
+      backgroundColor: carbonDark.background,
       webPreferences: {
         sandbox: false,
         preload: '/preload.js',
       },
     });
     expect(main.window.setKiosk).toHaveBeenCalledWith(true);
+  });
+
+  /**
+   * The window exists before there is a page in it, and the shell reloads into
+   * it on every failed load — which, on a smoker whose wifi has dropped, is the
+   * ordinary path. An unpainted window is white, so the panel in the garage
+   * flashes white each time unless the window opens in the interface's own dark.
+   */
+  it('opens the window already painted in the touchscreen dark', async () => {
+    const main = await loadMainProcess({});
+
+    main.handler('ready')();
+
+    expect(main.electron.BrowserWindow).toHaveBeenCalledWith(
+      expect.objectContaining({ backgroundColor: carbonDark.background })
+    );
   });
 
   it('quits when all windows close off macOS', async () => {

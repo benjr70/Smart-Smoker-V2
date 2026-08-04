@@ -22,6 +22,25 @@
       Learn how to configure a non-root public URL by running `npm run build`.
     -->
     <title>Smart Smoker</title>
+    <style>
+      /* The panel, painted before the application has run.
+         Everything the touchscreen paints arrives as custom properties emitted
+         by its bundle, so until that bundle has run there is nothing in the
+         document painting anything — and the white page the flash consists of is
+         painted anyway, on every boot and on every reload after the smoker's
+         wifi came back.
+
+         There is one scheme here, unlike the web application: this device is
+         fixed dark, so the page needs neither a stored choice to read nor a
+         media query to ask. The colour is the Carbon dark background, written
+         out because the page has no bundle to read it from. Guarded by
+         src/theme/preFirstPaint.test.tsx, which paints the served page in
+         isolation and compares what comes out against the shared token set. */
+      html {
+        background-color: #0c0c0c;
+        color-scheme: dark;
+      }
+    </style>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>

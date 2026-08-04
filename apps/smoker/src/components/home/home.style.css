@@ -1,6 +1,26 @@
+/*
+ * The touchscreen's colours come from the shared theme, which the application
+ * root puts on `:root` as custom properties. The same property names carry the
+ * same palette in the web application, so a rule here reads the same as a rule
+ * there. Layout is untouched: this file still owns only sizes and spacing.
+ */
+
 .background {
-  background-color: #e0dfdf;
+  background-color: var(--mui-design-background);
+  /* Every readout on both screens sits inside this container and takes its
+     colour from here, rather than each one naming a colour of its own. */
+  color: var(--mui-design-text);
   min-height: 100vh;
+}
+
+/*
+ * The chart's place on the screen. The chart paints its own panel a light grey
+ * and draws its axes, ticks and labels in the colour it inherits, so it is
+ * handed one that reads against that panel instead of the screen's near-white
+ * text. Recolouring the chart itself belongs with the chart.
+ */
+.chart {
+  color: var(--smoker-chart-text);
 }
 
 .text {

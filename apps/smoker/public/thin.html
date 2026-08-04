@@ -1,6 +1,18 @@
 <!doctype html>
 <html lang="en">
-  <head> </head>
+  <head>
+    <style>
+      /* The shell's own page, shown only when it was given no address to load.
+         Painted for the dark window it now opens in, in the same Carbon dark
+         colours the served page uses; guarded by
+         src/theme/preFirstPaint.test.tsx. */
+      html {
+        background-color: #0c0c0c;
+        color: #f0efed;
+        color-scheme: dark;
+      }
+    </style>
+  </head>
   <body>
     <p id="env-error">Error: ELECTRON_THIN_APP_URL environment variable has not been set.</p>
   </body>

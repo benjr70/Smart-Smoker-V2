@@ -4,6 +4,7 @@ import React, { useRef } from 'react';
 import { SessionConfig } from 'smoke-session/src';
 import { SmokeSessionProvider } from 'smoke-session/src/react';
 import { createSmokerSessionConfig } from './session/compositionRoot';
+import { DeviceThemeProvider } from './theme/DeviceThemeProvider';
 
 function App() {
   // Build the composition-root config exactly once for the app's lifetime so the
@@ -15,11 +16,13 @@ function App() {
   }
 
   return (
-    <div className="App">
-      <SmokeSessionProvider config={configRef.current}>
-        <Home />
-      </SmokeSessionProvider>
-    </div>
+    <DeviceThemeProvider>
+      <div className="App">
+        <SmokeSessionProvider config={configRef.current}>
+          <Home />
+        </SmokeSessionProvider>
+      </div>
+    </DeviceThemeProvider>
   );
 }
 

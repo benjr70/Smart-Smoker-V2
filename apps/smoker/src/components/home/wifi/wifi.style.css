@@ -1,4 +1,43 @@
+/*
+ * Colours come from the shared theme's custom properties, which the application
+ * root puts on `:root` (see src/theme/DeviceThemeProvider.tsx). Layout rules are
+ * untouched.
+ */
+
 .button {
   height: 50px;
   width: 125px;
+}
+
+/*
+ * The on-screen keyboard ships its own light theme — an off-white slab with
+ * white keys — which is the largest thing on this screen and the one part of it
+ * the component library cannot reach. Only its colours are overridden; every
+ * size, radius and gap is left to the library. This file is imported after the
+ * keyboard's own stylesheet, so these win at equal specificity.
+ *
+ * The keys keep the relationship the library gave them: they stand out of the
+ * slab they are laid on, which on a dark screen makes the slab the surface and
+ * the keys the lighter one nested in it.
+ */
+.hg-theme-default {
+  background-color: var(--mui-design-surface);
+}
+
+.hg-theme-default .hg-button {
+  background-color: var(--mui-design-surfaceAlt);
+  border-bottom-color: var(--mui-design-border);
+  color: var(--mui-design-text);
+}
+
+/*
+ * A key being held. The wifi password is typed into a field that shows dots, so
+ * this is the only confirmation the operator's thumb landed where they meant —
+ * hence the accent, which is unmistakable at arm's length rather than another
+ * near-black a shade off the two around it. Its glyph goes dark, as it does on
+ * every other accent-filled control in the product.
+ */
+.hg-theme-default .hg-button.hg-activeButton {
+  background-color: var(--mui-design-accent);
+  color: var(--mui-design-background);
 }

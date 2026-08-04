@@ -35,7 +35,13 @@ export function Home(): JSX.Element {
       {activeScreen === 0 ? (
         <>
           <Grid item xs={4} container justifyContent="space-evenly" alignItems="center">
-            <Grid container spacing={2} color={'#1f4f2d'}>
+            {/* The readouts take the screen's text colour (see
+                home.style.css). They used to be painted in the chart's four
+                series colours, which were picked against a light-grey shell and
+                are unreadable on the Carbon dark background; re-tying a readout
+                to its line belongs with the chart itself, which this slice
+                leaves alone. */}
+            <Grid container spacing={2}>
               <Grid item className="text">
                 {session.chamberName}
               </Grid>
@@ -43,7 +49,7 @@ export function Home(): JSX.Element {
                 {session.chamberTemp}
               </Grid>
             </Grid>
-            <Grid container spacing={4} color={'#118cd8'}>
+            <Grid container spacing={4}>
               <Grid item className="text">
                 {session.probe2Name}
               </Grid>
@@ -53,7 +59,7 @@ export function Home(): JSX.Element {
             </Grid>
           </Grid>
           <Grid item xs={4} container justifyContent="space-evenly" alignItems="center">
-            <Grid container spacing={2} color={'#2a475e'}>
+            <Grid container spacing={2}>
               <Grid item className="text">
                 {session.probe1Name}
               </Grid>
@@ -61,7 +67,7 @@ export function Home(): JSX.Element {
                 {session.probeTemp1}
               </Grid>
             </Grid>
-            <Grid container spacing={2} color={'#5582a7'}>
+            <Grid container spacing={2}>
               <Grid item className="text">
                 {session.probe3Name}
               </Grid>
@@ -96,7 +102,7 @@ export function Home(): JSX.Element {
               </Grid>
             </Grid>
           </Grid>
-          <Grid item xs={12} style={{ height: '83vh' }}>
+          <Grid item xs={12} className="chart" style={{ height: '83vh' }}>
             <TempChart
               ChamberTemp={parseFloat(session.chamberTemp)}
               MeatTemp={parseFloat(session.probeTemp1)}
