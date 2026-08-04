@@ -114,6 +114,26 @@ const readTemperatureInput = (raw: string, fallback: number): number => {
   return raw.trim() === '' || Number.isNaN(parsed) ? fallback : parsed;
 };
 
+/**
+ * The change a keystroke in a probe's target field makes.
+ *
+ * A temperature the user typed is theirs, and the row says so: the backend
+ * seeds a session's probes from the meat being cooked and only ever over a
+ * target nobody chose, and the number alone cannot tell the two apart — a
+ * hand-typed 203 looks exactly like the default.
+ *
+ * A field that is empty or half-typed is not a temperature yet. It keeps the
+ * number the row already had and leaves the provenance alone, so clearing the
+ * field to retype and then thinking better of it does not silently pin the
+ * probe out of seeding for every cook after it.
+ */
+const readTargetEdit = (raw: string, probe: ProbeTargetEntry): Partial<ProbeTargetEntry> => {
+  const parsed = Number(raw);
+  return raw.trim() === '' || Number.isNaN(parsed)
+    ? { target: probe.target }
+    : { target: parsed, targetSource: 'user' };
+};
+
 export function NotificationsCard(): JSX.Element {
   const [settings, setSettings] = useCurrentResource<NotificationSettings>({
     initialValue: defaultNotificationSettings(),
@@ -406,9 +426,7 @@ const ProbeRow = ({
       size="small"
       variant="outlined"
       value={probe.target}
-      onChange={event =>
-        onChange({ target: readTemperatureInput(event.target.value, probe.target) })
-      }
+      onChange={event => onChange(readTargetEdit(event.target.value, probe))}
       inputProps={{ 'data-testid': `settings-probe-target-${probe.slot}` }}
       sx={{ width: 120 }}
     />

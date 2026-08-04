@@ -60,6 +60,66 @@ describe('ApplicationSettingsDto validation', () => {
     );
   });
 
+  /**
+   * The settings page marks the row it typed a temperature into, so seeding
+   * knows to leave it alone. That mark is part of what a save carries.
+   */
+  it('accepts the mark distinguishing a hand-set target from a default one', async () => {
+    const body = {
+      probeTarget: {
+        enabled: true,
+        probes: [
+          { slot: 'probe1', enabled: true, target: 180, targetSource: 'user' },
+          {
+            slot: 'probe2',
+            enabled: true,
+            target: 203,
+            targetSource: 'default',
+          },
+        ],
+      },
+    };
+
+    const result = await pipe.transform(body, metadata);
+
+    expect(result.probeTarget).toEqual(body.probeTarget);
+  });
+
+  it('rejects a provenance that is not one the app records', async () => {
+    const body = {
+      probeTarget: {
+        enabled: true,
+        probes: [
+          { slot: 'probe1', enabled: true, target: 180, targetSource: 'guess' },
+        ],
+      },
+    };
+
+    await expect(pipe.transform(body, metadata)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
+  it('accepts the default target temps the settings page saves', async () => {
+    const body = { targetPresets: { beef: 210, pork: 200, poultry: 165 } };
+
+    const result = await pipe.transform(body, metadata);
+
+    expect(result.targetPresets).toEqual({
+      beef: 210,
+      pork: 200,
+      poultry: 165,
+    });
+  });
+
+  it('rejects a preset temperature that is not a number', async () => {
+    const body = { targetPresets: { beef: 'hot', pork: 200, poultry: 165 } };
+
+    await expect(pipe.transform(body, metadata)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
   it('rejects a probe target that is not a number', async () => {
     const body = {
       chamber: { enabled: true, low: 225, high: 275 },

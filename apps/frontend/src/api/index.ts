@@ -22,6 +22,8 @@ export type {
   SmokeProfile,
   SmokeReview,
   State,
+  TargetPresets,
+  TargetSource,
   TempData,
   rating,
 } from './types';

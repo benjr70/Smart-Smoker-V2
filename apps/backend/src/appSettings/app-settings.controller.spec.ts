@@ -22,9 +22,12 @@ describe('AppSettingsController', () => {
     chamber: { enabled: true, low: 200, high: 250 },
     probeTarget: {
       enabled: true,
-      probes: [{ slot: 'probe1', enabled: true, target: 203 }],
+      probes: [
+        { slot: 'probe1', enabled: true, target: 203, targetSource: 'user' },
+      ],
     },
     smokeComplete: { enabled: true },
+    targetPresets: { beef: 203, pork: 195, poultry: 165 },
     appearance: { mode: 'dark', resolvedMode: 'dark' },
   };
 
@@ -34,7 +37,13 @@ describe('AppSettingsController', () => {
     probeTarget: {
       enabled: true,
       probes: [
-        { slot: 'probe1', enabled: true, target: 203, name: 'Brisket Flat' },
+        {
+          slot: 'probe1',
+          enabled: true,
+          target: 203,
+          targetSource: 'user',
+          name: 'Brisket Flat',
+        },
       ],
     },
   };

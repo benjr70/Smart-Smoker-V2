@@ -4,6 +4,8 @@ import { StateService } from '../State/state.service';
 import { DEFAULT_APPLICATION_SETTINGS } from '../appSettings/app-settings.defaults';
 import { ApplicationSettings } from '../appSettings/app-settings.schema';
 import { AppSettingsService } from '../appSettings/app-settings.service';
+import { withSeededTargets } from '../appSettings/meat-presets';
+import { PreSmokeService } from '../presmoke/presmoke.service';
 import { PushDispatcherService } from '../pushDispatcher/push-dispatcher.service';
 import { SmokeProfileService } from '../smokeProfile/smokeProfile.service';
 import { TempsService } from '../temps/temps.service';
@@ -93,9 +95,28 @@ const createAppSettings = () => {
       document = { ...document, ...incoming };
       return Promise.resolve(document);
     }),
+    // Seeding applies the same rule the real service applies — the rule itself
+    // is a pure function both of them call — so what a cook is told here
+    // depends on the targets a session start would really have written.
+    seedProbeTargets: jest.fn((meatType: string | null | undefined) => {
+      const seeded = withSeededTargets(
+        document.probeTarget.probes,
+        document.targetPresets,
+        meatType,
+      );
+      if (seeded) {
+        document = {
+          ...document,
+          probeTarget: { ...document.probeTarget, probes: seeded },
+        };
+      }
+      return Promise.resolve(document);
+    }),
     seed: (value: Partial<ApplicationSettings>) => {
       document = { ...DEFAULT_APPLICATION_SETTINGS, ...value };
     },
+    /** The settings as they stand, for a test asking what seeding wrote. */
+    stored: () => document,
   };
 };
 
@@ -107,6 +128,7 @@ describe('NotificationsService', () => {
   let pushDispatcher: { notify: jest.Mock; getPublicKey: jest.Mock };
   let smokeSession: { GetState: jest.Mock };
   let smokeProfile: { getCurrentSmokeProfile: jest.Mock };
+  let preSmoke: { GetByCurrent: jest.Mock };
   let temps: { getLatestCurrentTemp: jest.Mock };
 
   const mockSubscription: NotificationSubscription = {
@@ -140,6 +162,9 @@ describe('NotificationsService', () => {
         probe3Name: '',
       }),
     };
+    preSmoke = {
+      GetByCurrent: jest.fn().mockResolvedValue({ meatType: 'Packer brisket' }),
+    };
     temps = { getLatestCurrentTemp: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -155,6 +180,7 @@ describe('NotificationsService', () => {
         { provide: StateService, useValue: smokeSession },
         { provide: TempsService, useValue: temps },
         { provide: SmokeProfileService, useValue: smokeProfile },
+        { provide: PreSmokeService, useValue: preSmoke },
       ],
     }).compile();
 
@@ -223,12 +249,17 @@ describe('NotificationsService', () => {
   describe('checkAlerts', () => {
     const chamberAt = (temp: string) => ({ ChamberTemp: temp });
 
-    /** A cook watching one probe, at the target the user set for it. */
+    /**
+     * A cook watching one probe, at the target the user set for it — marked as
+     * theirs, so the session start leaves it exactly where they put it.
+     */
     const watchingProbe = (slot: string, target: number) => ({
       chamber: { enabled: true, low: 225, high: 275 },
       probeTarget: {
         enabled: true,
-        probes: [{ slot, enabled: true, target }],
+        probes: [
+          { slot, enabled: true, target, targetSource: 'user' as const },
+        ],
       },
     });
 
@@ -412,6 +443,122 @@ describe('NotificationsService', () => {
       await service.checkAlerts();
 
       expect(pushDispatcher.notify).not.toHaveBeenCalled();
+    });
+
+    /**
+     * The cook typed what they are smoking into pre-smoke. Nobody should have
+     * to go and copy the matching done temperature onto the probes by hand, so
+     * the session start does it for them.
+     */
+    describe('the targets a session starts with', () => {
+      /** A cook watching one probe, on the target nobody has changed. */
+      const watchingUntouched = (slot: string) => ({
+        chamber: { enabled: true, low: 225, high: 275 },
+        probeTarget: {
+          enabled: true,
+          probes: [
+            {
+              slot,
+              enabled: true,
+              target: 203,
+              targetSource: 'default' as const,
+            },
+          ],
+        },
+      });
+
+      it('gives a watched probe the default target for the meat in pre-smoke', async () => {
+        settings.seed(watchingUntouched('probe1'));
+        preSmoke.GetByCurrent.mockResolvedValue({
+          meatType: 'Whole chicken',
+        });
+        temps.getLatestCurrentTemp.mockResolvedValue({
+          ChamberTemp: '240',
+          MeatTemp: '170',
+        });
+
+        await service.checkAlerts();
+
+        // 170°F is short of the 203°F it was carrying and past the 165°F
+        // poultry is done at, so the alert is the seeding being visible.
+        expect(pushDispatcher.notify).toHaveBeenCalledWith(
+          'Smoker',
+          'Probe 1 reached 170°F.',
+        );
+      });
+
+      /**
+       * Seeding is something a session does once, at its start. Editing the
+       * defaults afterwards is a decision about the next cook — the one already
+       * on the smoker keeps the targets it started with, rather than being
+       * retargeted under the cook thirty seconds later.
+       */
+      it('does not seed again on the next reading of the same session', async () => {
+        settings.seed(watchingUntouched('probe1'));
+        preSmoke.GetByCurrent.mockResolvedValue({ meatType: 'Whole chicken' });
+        temps.getLatestCurrentTemp.mockResolvedValue({
+          ChamberTemp: '240',
+          MeatTemp: '120',
+        });
+        await service.checkAlerts();
+
+        await settings.saveSettings({
+          targetPresets: { beef: 203, pork: 195, poultry: 175 },
+        });
+        await service.checkAlerts();
+
+        expect(settings.stored().probeTarget.probes).toEqual([
+          {
+            slot: 'probe1',
+            enabled: true,
+            target: 165,
+            targetSource: 'preset',
+          },
+        ]);
+      });
+
+      it('seeds nothing when pre-smoke names a meat it does not recognise', async () => {
+        settings.seed(watchingUntouched('probe1'));
+        preSmoke.GetByCurrent.mockResolvedValue({ meatType: 'Salmon fillet' });
+        temps.getLatestCurrentTemp.mockResolvedValue({
+          ChamberTemp: '240',
+          MeatTemp: '170',
+        });
+
+        await service.checkAlerts();
+
+        expect(settings.stored().probeTarget.probes).toEqual([
+          {
+            slot: 'probe1',
+            enabled: true,
+            target: 203,
+            targetSource: 'default',
+          },
+        ]);
+        expect(pushDispatcher.notify).not.toHaveBeenCalled();
+      });
+
+      // A cook that reached the smoke step without filling pre-smoke in has no
+      // meat type at all, which is the same silence as an unrecognised one.
+      it('seeds nothing when there is no pre-smoke document', async () => {
+        settings.seed(watchingUntouched('probe1'));
+        preSmoke.GetByCurrent.mockResolvedValue(null);
+        temps.getLatestCurrentTemp.mockResolvedValue({
+          ChamberTemp: '240',
+          MeatTemp: '170',
+        });
+
+        await service.checkAlerts();
+
+        expect(settings.stored().probeTarget.probes).toEqual([
+          {
+            slot: 'probe1',
+            enabled: true,
+            target: 203,
+            targetSource: 'default',
+          },
+        ]);
+      });
     });
 
     it('says nothing about an idle smoker, whatever its chamber reads', async () => {

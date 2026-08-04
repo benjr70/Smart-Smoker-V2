@@ -15,17 +15,26 @@ const probeRows = (
     slot,
     enabled: watched[slot] !== undefined,
     target: watched[slot] ?? 203,
+    // Watched or not, these are targets nobody has typed in: the temperature is
+    // whatever the app put there, which is what lets a session start seed it.
+    targetSource: 'default' as const,
     name: `Probe ${index + 1}`,
   }));
 
 /** The same rows as they go back over the wire: the names are not saved. */
 const savedProbeRows = (watched: Record<string, number> = {}) =>
-  probeRows(watched).map(({ slot, enabled, target }) => ({ slot, enabled, target }));
+  probeRows(watched).map(({ slot, enabled, target, targetSource }) => ({
+    slot,
+    enabled,
+    target,
+    targetSource,
+  }));
 
 const chamberAlertOn: NotificationSettings = {
   chamber: { enabled: true, low: 225, high: 275 },
   probeTarget: { enabled: false, probes: probeRows() },
   smokeComplete: { enabled: false },
+  targetPresets: { beef: 203, pork: 195, poultry: 165 },
 };
 
 const browserSubscription: PushSubscriptionPayload = {
@@ -719,7 +728,49 @@ describe('NotificationsCard', () => {
     await waitFor(() =>
       expect(backend.store.appSettings?.probeTarget).toEqual({
         enabled: true,
-        probes: savedProbeRows({ probe1: 198 }),
+        probes: [
+          // The temperature was typed in, so it is the user's: a session start
+          // seeds the other rows and leaves this one exactly here.
+          { slot: 'probe1', enabled: true, target: 198, targetSource: 'user' },
+          ...savedProbeRows().slice(1),
+        ],
+      })
+    );
+  });
+
+  /**
+   * Clearing the field is how anyone retypes a number, and abandoning that
+   * half-edit is not a decision about the temperature. The row keeps the target
+   * it had and stays the app's to seed — pinning it out of seeding here would
+   * leave a chicken cook on the 203°F beef default with nothing on screen to
+   * say why.
+   */
+  test('a target field cleared mid-edit claims nothing for the user', async () => {
+    const backend = createFakeBackend({
+      appSettings: {
+        settings: {
+          chamber: { enabled: false, low: 225, high: 275 },
+          probeTarget: { enabled: true, probes: probeRows() },
+        },
+      },
+      smokeProfile: { current: { probe1Name: 'Brisket Flat' } },
+    });
+
+    const { unmount } = renderCard(backend);
+
+    fireEvent.click(await screen.findByLabelText('Watch Brisket Flat'));
+    const target = screen.getByLabelText('Brisket Flat target');
+    fireEvent.change(target, { target: { value: '' } });
+    expect(target).toHaveValue(203);
+
+    unmount();
+
+    await waitFor(() =>
+      expect(backend.store.appSettings?.probeTarget?.probes[0]).toEqual({
+        slot: 'probe1',
+        enabled: true,
+        target: 203,
+        targetSource: 'default',
       })
     );
   });
@@ -746,6 +797,7 @@ describe('NotificationsCard', () => {
         slot: 'probe2',
         enabled: true,
         target: 195,
+        targetSource: 'user',
       })
     );
 

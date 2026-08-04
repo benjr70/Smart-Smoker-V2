@@ -38,6 +38,17 @@ describe('Settings page', () => {
     expect(screen.getByText('Version')).toBeInTheDocument();
   });
 
+  // The mock's order: the alerts, then the temperatures those alerts start
+  // from, then the build.
+  it('shows the default target temps card between the notifications and the version', async () => {
+    renderSettings();
+    await screen.findByText('Notifications');
+
+    const cards = screen.getAllByRole('heading', { level: 2 }).map(heading => heading.textContent);
+
+    expect(cards).toEqual(['Appearance', 'Notifications', 'Default target temps']);
+  });
+
   it('shows the build version the bundle was stamped with', () => {
     (globalThis as Record<string, unknown>).VERSION = '2.4.1';
     try {
@@ -71,7 +82,7 @@ describe('Settings page', () => {
     renderSettings(markedTheme);
     await screen.findByText('Notifications');
 
-    expect(screen.getAllByTestId('styled-by-application-theme')).toHaveLength(3);
+    expect(screen.getAllByTestId('styled-by-application-theme')).toHaveLength(4);
   });
 
   it('paints the page with the design background and typeface', async () => {

@@ -3,7 +3,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { StateService } from '../State/state.service';
 import { SmokeProfileService } from '../smokeProfile/smokeProfile.service';
 import { EventsGateway } from '../websocket/events.gateway';
-import { DEFAULT_APPLICATION_SETTINGS } from './app-settings.defaults';
+import {
+  DEFAULT_APPLICATION_SETTINGS,
+  DEFAULT_TARGET_PRESETS,
+} from './app-settings.defaults';
 import { ApplicationSettings } from './app-settings.schema';
 import { AppSettingsService } from './app-settings.service';
 import { AppearancePreference } from './appearance';
@@ -13,6 +16,12 @@ const DEFAULT_PROBE_TARGET_BLOCK = DEFAULT_APPLICATION_SETTINGS.probeTarget;
 
 /** The Smoke Complete alert as a deployment that has configured nothing has it. */
 const SMOKE_COMPLETE_OFF = DEFAULT_APPLICATION_SETTINGS.smokeComplete;
+
+/** A target the user typed in themselves, as a row records that. */
+const byHand = { targetSource: 'user' } as const;
+
+/** A target nobody has set: the shipped default, which seeding may replace. */
+const untouched = { targetSource: 'default' } as const;
 
 /**
  * The session and the cook the probe rows are named from. A stand-in: this
@@ -162,6 +171,7 @@ describe('AppSettingsService', () => {
         chamber: { enabled: false, low: 225, high: 275 },
         probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
         smokeComplete: SMOKE_COMPLETE_OFF,
+        targetPresets: DEFAULT_TARGET_PRESETS,
         appearance: { mode: 'system', resolvedMode: 'light' },
       });
     });
@@ -192,6 +202,7 @@ describe('AppSettingsService', () => {
         chamber: { enabled: true, low: 200, high: 300 },
         probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
         smokeComplete: SMOKE_COMPLETE_OFF,
+        targetPresets: DEFAULT_TARGET_PRESETS,
         appearance: { mode: 'dark', resolvedMode: 'dark' },
       });
     });
@@ -228,10 +239,64 @@ describe('AppSettingsService', () => {
       expect((await reading.getSettings()).probeTarget).toEqual({
         enabled: true,
         probes: [
-          { slot: 'probe1', enabled: false, target: 203 },
-          { slot: 'probe2', enabled: true, target: 195 },
-          { slot: 'probe3', enabled: false, target: 203 },
+          { slot: 'probe1', enabled: false, target: 203, ...untouched },
+          // 195°F on a document that predates provenance: see the upgrade
+          // tests below for why that reads as the user's own.
+          { slot: 'probe2', enabled: true, target: 195, ...byHand },
+          { slot: 'probe3', enabled: false, target: 203, ...untouched },
         ],
+      });
+    });
+
+    /**
+     * Per-probe targets shipped before this slice did, so every installation
+     * already carries targets somebody typed with nothing recording that they
+     * did. Seeding must not treat those as its own to overwrite — a probe set
+     * to 145°F for a pork loin that came back as 195°F on the next cook would
+     * be the upgrade quietly ruining dinner.
+     */
+    describe('reading targets stored before they had a provenance', () => {
+      const legacyDocument = (target: number) =>
+        ({
+          probeTarget: {
+            enabled: true,
+            probes: [{ slot: 'probe1', enabled: true, target }],
+          },
+        }) as unknown as ApplicationSettings;
+
+      it('treats a target that is not the shipped default as the user’s own', async () => {
+        const reading = await serviceReading(legacyDocument(145));
+
+        expect((await reading.getSettings()).probeTarget.probes[0]).toEqual({
+          slot: 'probe1',
+          enabled: true,
+          target: 145,
+          ...byHand,
+        });
+      });
+
+      // Nothing distinguishes a row left on the shipped 203°F from one nobody
+      // ever opened, so it is read as untouched and an upgraded installation
+      // still gets the presets this slice exists to apply.
+      it('treats a target still on the shipped default as untouched', async () => {
+        const reading = await serviceReading(legacyDocument(203));
+
+        expect((await reading.getSettings()).probeTarget.probes[0]).toEqual({
+          slot: 'probe1',
+          enabled: true,
+          target: 203,
+          ...untouched,
+        });
+      });
+
+      it('seeds nothing over a hand-typed target it inherited', async () => {
+        const reading = await serviceReading(legacyDocument(145));
+
+        await reading.seedProbeTargets('Pork shoulder');
+
+        expect((await reading.getSettings()).probeTarget.probes[0].target).toBe(
+          145,
+        );
       });
     });
 
@@ -245,9 +310,27 @@ describe('AppSettingsService', () => {
       const reading = await serviceReading(watchingProbe2, cookNames);
 
       expect((await reading.getResolvedSettings()).probeTarget.probes).toEqual([
-        { slot: 'probe1', enabled: false, target: 203, name: 'Brisket Flat' },
-        { slot: 'probe2', enabled: true, target: 195, name: 'Pork Butt' },
-        { slot: 'probe3', enabled: false, target: 203, name: 'Probe 3' },
+        {
+          slot: 'probe1',
+          enabled: false,
+          target: 203,
+          ...untouched,
+          name: 'Brisket Flat',
+        },
+        {
+          slot: 'probe2',
+          enabled: true,
+          target: 195,
+          ...byHand,
+          name: 'Pork Butt',
+        },
+        {
+          slot: 'probe3',
+          enabled: false,
+          target: 203,
+          ...untouched,
+          name: 'Probe 3',
+        },
       ]);
     });
 
@@ -317,9 +400,9 @@ describe('AppSettingsService', () => {
         probeTarget: {
           enabled: true,
           probes: [
-            { slot: 'probe1', enabled: true, target: 203 },
-            { slot: 'probe2', enabled: false, target: 195 },
-            { slot: 'probe3', enabled: false, target: 203 },
+            { slot: 'probe1', enabled: true, target: 203, ...byHand },
+            { slot: 'probe2', enabled: false, target: 195, ...byHand },
+            { slot: 'probe3', enabled: false, target: 203, ...byHand },
           ],
         },
       });
@@ -327,11 +410,39 @@ describe('AppSettingsService', () => {
       expect((await service.getSettings()).probeTarget).toEqual({
         enabled: true,
         probes: [
-          { slot: 'probe1', enabled: true, target: 203 },
-          { slot: 'probe2', enabled: false, target: 195 },
-          { slot: 'probe3', enabled: false, target: 203 },
+          { slot: 'probe1', enabled: true, target: 203, ...byHand },
+          { slot: 'probe2', enabled: false, target: 195, ...byHand },
+          { slot: 'probe3', enabled: false, target: 203, ...byHand },
         ],
       });
+    });
+
+    /**
+     * The stored row says where its target came from; nothing downstream is
+     * left to work it out again.
+     *
+     * Provenance is inferred only for rows written before it existed, and that
+     * inference cannot tell a deliberate 203°F from an untouched one. A save
+     * that stored a row without provenance would leave every later read
+     * guessing — so a client too old to send one still has its rows stored with
+     * one worked out here, once.
+     */
+    it('stores an explicit provenance for a row saved without one', async () => {
+      await service.saveSettings({
+        probeTarget: {
+          enabled: true,
+          probes: [
+            { slot: 'probe1', enabled: true, target: 145 },
+            { slot: 'probe2', enabled: true, target: 203 },
+          ],
+        } as ApplicationSettings['probeTarget'],
+      });
+
+      expect(settings.all()[0].probeTarget.probes).toEqual([
+        { slot: 'probe1', enabled: true, target: 145, ...byHand },
+        { slot: 'probe2', enabled: true, target: 203, ...untouched },
+        { slot: 'probe3', enabled: false, target: 203, ...untouched },
+      ]);
     });
 
     // The document's three writers are independent: saving probe targets must
@@ -345,7 +456,7 @@ describe('AppSettingsService', () => {
       await service.saveSettings({
         probeTarget: {
           enabled: true,
-          probes: [{ slot: 'probe1', enabled: true, target: 203 }],
+          probes: [{ slot: 'probe1', enabled: true, target: 203, ...byHand }],
         },
       });
 
@@ -353,6 +464,140 @@ describe('AppSettingsService', () => {
         chamber: { enabled: true, low: 200, high: 250 },
         appearance: { mode: 'dark', resolvedMode: 'dark' },
       });
+    });
+  });
+
+  /**
+   * A cook starts by typing what is going on the smoker, not by copying a
+   * temperature off a chart. The category that meat belongs to carries a
+   * default target, and every probe the user has not deliberately set is given
+   * it when the session begins.
+   */
+  describe('seeding probe targets for the meat being cooked', () => {
+    /** A cook watching all three probes, none of whose targets they set. */
+    const watchingEveryProbe = {
+      enabled: true,
+      probes: [
+        { slot: 'probe1', enabled: true, target: 203, targetSource: 'default' },
+        { slot: 'probe2', enabled: true, target: 203, targetSource: 'default' },
+        { slot: 'probe3', enabled: true, target: 203, targetSource: 'default' },
+      ],
+    } as ApplicationSettings['probeTarget'];
+
+    it('gives a watched probe the default target of the matched category', async () => {
+      await service.saveSettings({ probeTarget: watchingEveryProbe });
+
+      await service.seedProbeTargets('Whole chicken');
+
+      expect(
+        (await service.getSettings()).probeTarget.probes.map(
+          (probe) => probe.target,
+        ),
+      ).toEqual([165, 165, 165]);
+    });
+
+    // The person at the smoker outranks the preset: a temperature they typed is
+    // the one they will be told about, whatever category the meat falls into.
+    it('leaves a target the user typed in alone', async () => {
+      await service.saveSettings({
+        probeTarget: {
+          enabled: true,
+          probes: [
+            { slot: 'probe1', enabled: true, target: 180, ...byHand },
+            { slot: 'probe2', enabled: true, target: 203, ...untouched },
+            { slot: 'probe3', enabled: true, target: 203, ...untouched },
+          ],
+        },
+      });
+
+      await service.seedProbeTargets('Whole chicken');
+
+      expect(
+        (await service.getSettings()).probeTarget.probes.map(
+          (probe) => probe.target,
+        ),
+      ).toEqual([180, 165, 165]);
+    });
+
+    // The temperatures shipped are the ones the PRD's operator should not have
+    // to remember: a pork butt at 195°F, poultry at the 165°F it is safe at,
+    // beef at the 203°F a brisket is done at.
+    it.each([
+      ['Pork shoulder', 195],
+      ['Whole chicken', 165],
+      ['Packer brisket', 203],
+    ])(
+      'takes a cook of %s to %d°F out of the box',
+      async (meatType, target) => {
+        await service.saveSettings({ probeTarget: watchingEveryProbe });
+
+        await service.seedProbeTargets(meatType);
+
+        expect((await service.getSettings()).probeTarget.probes[0].target).toBe(
+          target,
+        );
+      },
+    );
+
+    // A probe nobody is watching is a row that was switched off deliberately.
+    // Writing a temperature onto it would be an alert waiting to happen the
+    // moment it is switched back on.
+    it('leaves a probe that is not being watched alone', async () => {
+      await service.saveSettings({
+        probeTarget: {
+          enabled: true,
+          probes: [
+            { slot: 'probe1', enabled: true, target: 203, ...untouched },
+            { slot: 'probe2', enabled: false, target: 203, ...untouched },
+            { slot: 'probe3', enabled: false, target: 203, ...untouched },
+          ],
+        },
+      });
+
+      await service.seedProbeTargets('Whole chicken');
+
+      expect((await service.getSettings()).probeTarget.probes).toEqual([
+        { slot: 'probe1', enabled: true, target: 165, targetSource: 'preset' },
+        { slot: 'probe2', enabled: false, target: 203, ...untouched },
+        { slot: 'probe3', enabled: false, target: 203, ...untouched },
+      ]);
+    });
+
+    it('changes nothing when the meat type is not one it recognises', async () => {
+      await service.saveSettings({ probeTarget: watchingEveryProbe });
+
+      await service.seedProbeTargets('Salmon fillet');
+
+      expect((await service.getSettings()).probeTarget.probes).toEqual(
+        watchingEveryProbe.probes,
+      );
+    });
+
+    // Nothing is cooking that anyone described, so there is no category to seed
+    // from — the same silence as an unrecognised meat.
+    it('changes nothing when no meat type was recorded at all', async () => {
+      await service.saveSettings({ probeTarget: watchingEveryProbe });
+
+      await service.seedProbeTargets(undefined);
+
+      expect((await service.getSettings()).probeTarget.probes).toEqual(
+        watchingEveryProbe.probes,
+      );
+    });
+
+    it('applies the presets the user edited rather than the shipped ones', async () => {
+      await service.saveSettings({
+        probeTarget: watchingEveryProbe,
+        targetPresets: { beef: 210, pork: 200, poultry: 165 },
+      });
+
+      await service.seedProbeTargets('Packer brisket');
+
+      expect(
+        (await service.getSettings()).probeTarget.probes.map(
+          (probe) => probe.target,
+        ),
+      ).toEqual([210, 210, 210]);
     });
   });
 
@@ -382,6 +627,7 @@ describe('AppSettingsService', () => {
         chamber: { enabled: true, low: 200, high: 250 },
         probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
         smokeComplete: SMOKE_COMPLETE_OFF,
+        targetPresets: DEFAULT_TARGET_PRESETS,
         appearance: { mode: 'dark', resolvedMode: 'dark' },
       });
       expect(settings.all()).toHaveLength(1);
@@ -399,6 +645,7 @@ describe('AppSettingsService', () => {
         chamber: { enabled: false, low: 225, high: 275 },
         probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
         smokeComplete: SMOKE_COMPLETE_OFF,
+        targetPresets: DEFAULT_TARGET_PRESETS,
         appearance: { mode: 'system', resolvedMode: 'light' },
       });
     });
@@ -437,6 +684,7 @@ describe('AppSettingsService', () => {
         chamber: { enabled: true, low: 200, high: 250 },
         probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
         smokeComplete: SMOKE_COMPLETE_OFF,
+        targetPresets: DEFAULT_TARGET_PRESETS,
         appearance: { mode: 'dark', resolvedMode: 'dark' },
       });
     });
@@ -454,6 +702,7 @@ describe('AppSettingsService', () => {
         chamber: { enabled: true, low: 200, high: 250 },
         probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
         smokeComplete: SMOKE_COMPLETE_OFF,
+        targetPresets: DEFAULT_TARGET_PRESETS,
         appearance: { mode: 'light', resolvedMode: 'light' },
       });
     });
@@ -481,6 +730,7 @@ describe('AppSettingsService', () => {
         chamber: { enabled: true, low: 200, high: 250 },
         probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
         smokeComplete: SMOKE_COMPLETE_OFF,
+        targetPresets: DEFAULT_TARGET_PRESETS,
         appearance: { mode: 'dark', resolvedMode: 'dark' },
       });
       expect(settings.all()).toHaveLength(1);
@@ -507,6 +757,7 @@ describe('AppSettingsService', () => {
         chamber: { enabled: false, low: 225, high: 275 },
         probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
         smokeComplete: SMOKE_COMPLETE_OFF,
+        targetPresets: DEFAULT_TARGET_PRESETS,
         appearance: { mode: 'dark', resolvedMode: 'dark' },
       });
     });
