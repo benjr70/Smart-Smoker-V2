@@ -12,21 +12,13 @@
  */
 import '@testing-library/jest-dom';
 import { render } from '@testing-library/react';
-import fs from 'fs';
-import path from 'path';
 import React from 'react';
 import { DeviceThemeProvider } from './DeviceThemeProvider';
-
-const DEVICE_STYLESHEETS = [
-  '../components/home/home.style.css',
-  '../components/home/wifi/wifi.style.css',
-];
+import { deviceStylesheets } from './testing/deviceColours';
 
 /** Every custom property the touchscreen's own stylesheets read a colour from. */
 const propertiesReferencedByTheDevice = (): string[] => {
-  const stylesheets = DEVICE_STYLESHEETS.map(sheet =>
-    fs.readFileSync(path.join(__dirname, sheet), 'utf8')
-  ).join('\n');
+  const stylesheets = deviceStylesheets().join('\n');
   return Array.from(new Set(Array.from(stylesheets.matchAll(/var\((--[\w-]+)\)/g), m => m[1])));
 };
 

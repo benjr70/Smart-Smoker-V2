@@ -13,6 +13,16 @@
   min-height: 100vh;
 }
 
+/*
+ * The chart's place on the screen. The chart paints its own panel a light grey
+ * and draws its axes, ticks and labels in the colour it inherits, so it is
+ * handed one that reads against that panel instead of the screen's near-white
+ * text. Recolouring the chart itself belongs with the chart.
+ */
+.chart {
+  color: var(--smoker-chart-text);
+}
+
 .text {
   font-family: 'Roboto', 'Helvetica', 'Arial', sans-serif;
   font-size: 1.5rem;

@@ -102,7 +102,7 @@ export function Home(): JSX.Element {
               </Grid>
             </Grid>
           </Grid>
-          <Grid item xs={12} style={{ height: '83vh' }}>
+          <Grid item xs={12} className="chart" style={{ height: '83vh' }}>
             <TempChart
               ChamberTemp={parseFloat(session.chamberTemp)}
               MeatTemp={parseFloat(session.probeTemp1)}

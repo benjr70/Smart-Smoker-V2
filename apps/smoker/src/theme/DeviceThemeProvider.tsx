@@ -1,6 +1,6 @@
 import { GlobalStyles, ThemeProvider, createTheme } from '@mui/material';
 import React from 'react';
-import { ColorScheme, appTheme, createAppTheme, withDesignPalette } from 'theme/src';
+import { ColorScheme, appTheme, carbonLight, createAppTheme, withDesignPalette } from 'theme/src';
 
 /**
  * The colour scheme the touchscreen renders in, decided here and nowhere else.
@@ -42,6 +42,18 @@ const deviceTheme = createTheme(withDesignPalette(createAppTheme(DEVICE_COLOR_SC
 const deviceCssVariables = appTheme.generateCssVars(DEVICE_COLOR_SCHEME).css;
 
 /**
+ * The colour for anything drawn on a panel the device still paints light.
+ *
+ * The chart is the one such panel: it paints itself a light grey of its own and
+ * draws its axes and labels in the colour it inherits, and restyling it belongs
+ * with the chart rather than with this recolour. Until then it is handed the
+ * light palette's text — the same answer the web application reaches for when a
+ * screen it has not restyled is still painted against a light shell (see
+ * `withLightColorScheme` in the shared theme).
+ */
+const lightPanelCssVariables = { '--smoker-chart-text': carbonLight.text };
+
+/**
  * Provides the shared theme to the touchscreen, fixed to its dark scheme.
  *
  * Deliberately not the component library's colour-scheme provider: that one
@@ -53,7 +65,7 @@ const deviceCssVariables = appTheme.generateCssVars(DEVICE_COLOR_SCHEME).css;
 export function DeviceThemeProvider({ children }: { children: React.ReactNode }): JSX.Element {
   return (
     <ThemeProvider theme={deviceTheme}>
-      <GlobalStyles styles={{ ':root': deviceCssVariables }} />
+      <GlobalStyles styles={{ ':root': { ...deviceCssVariables, ...lightPanelCssVariables } }} />
       {children}
     </ThemeProvider>
   );

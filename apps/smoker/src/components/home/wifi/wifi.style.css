@@ -15,17 +15,29 @@
  * the component library cannot reach. Only its colours are overridden; every
  * size, radius and gap is left to the library. This file is imported after the
  * keyboard's own stylesheet, so these win at equal specificity.
+ *
+ * The keys keep the relationship the library gave them: they stand out of the
+ * slab they are laid on, which on a dark screen makes the slab the surface and
+ * the keys the lighter one nested in it.
  */
 .hg-theme-default {
-  background-color: var(--mui-design-surfaceAlt);
+  background-color: var(--mui-design-surface);
 }
 
 .hg-theme-default .hg-button {
-  background: var(--mui-design-surface);
+  background-color: var(--mui-design-surfaceAlt);
   border-bottom-color: var(--mui-design-border);
   color: var(--mui-design-text);
 }
 
+/*
+ * A key being held. The wifi password is typed into a field that shows dots, so
+ * this is the only confirmation the operator's thumb landed where they meant —
+ * hence the accent, which is unmistakable at arm's length rather than another
+ * near-black a shade off the two around it. Its glyph goes dark, as it does on
+ * every other accent-filled control in the product.
+ */
 .hg-theme-default .hg-button.hg-activeButton {
-  background: var(--mui-design-surfaceAlt);
+  background-color: var(--mui-design-accent);
+  color: var(--mui-design-background);
 }

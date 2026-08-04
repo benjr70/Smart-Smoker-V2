@@ -9,6 +9,7 @@
  */
 import '@testing-library/jest-dom';
 import { act, fireEvent, render, screen } from '@testing-library/react';
+import fs from 'fs';
 import React from 'react';
 import { SessionConfig } from 'smoke-session/src';
 import { SmokeSessionProvider } from 'smoke-session/src/react';
@@ -23,6 +24,12 @@ import { carbonDark } from 'theme/src';
 import { Home } from '../components/home/home';
 import { getConnection } from '../services/deviceService';
 import { DeviceThemeProvider } from './DeviceThemeProvider';
+import {
+  contrastRatio,
+  serveDeviceStylesheets,
+  stopServingDeviceStylesheets,
+  textColourAt,
+} from './testing/deviceColours';
 
 jest.mock('../services/deviceService', () => ({
   connectToWiFi: jest.fn(),
@@ -105,6 +112,34 @@ describe('what the recolour adds to the home screen', () => {
     await renderTouchscreen();
 
     expect(screen.queryByText(/\d+:\d{2}/)).toBeNull();
+  });
+});
+
+/**
+ * The chart is the one thing on this screen the recolour deliberately leaves as
+ * it is: it paints its own panel a light grey, and it draws its axes, ticks and
+ * labels in whatever colour it is handed — d3 gives them `currentColor`. So the
+ * colour the screen around it hands down lands on that light panel, and the
+ * dark scheme's near-white text would take the scale off the chart entirely.
+ */
+describe('the colour the chart draws its axes in', () => {
+  /** The panel the chart paints behind itself, read from the chart itself. */
+  const chartPanel = (): string => {
+    const source = fs.readFileSync(require.resolve('temperaturechart/src/tempChart'), 'utf8');
+    const [, colour] = /\.style\('background', '(#[0-9a-fA-F]{6})'\)/.exec(source) ?? [];
+    if (!colour) throw new Error('The chart no longer paints itself a panel of its own');
+    return colour;
+  };
+
+  beforeEach(() => serveDeviceStylesheets());
+  afterEach(() => stopServingDeviceStylesheets());
+
+  it('is legible against the panel the chart paints itself', async () => {
+    await renderTouchscreen();
+
+    const drawnIn = textColourAt(screen.getByTestId('temp-chart'));
+
+    expect(contrastRatio(drawnIn, chartPanel())).toBeGreaterThanOrEqual(4.5);
   });
 });
 

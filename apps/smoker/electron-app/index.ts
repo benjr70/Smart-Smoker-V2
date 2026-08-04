@@ -22,6 +22,14 @@ const createWindow = (): void => {
     width: 800,
     frame: false,
     fullscreen: true,
+    // The window exists before there is a page in it, and it is reloaded into
+    // whenever a load fails, so it opens in the colour the page it loads is
+    // painted — otherwise the kiosk shows a white 800x480 panel for as long as
+    // the load takes, which on a smoker whose wifi has dropped is every retry
+    // below. Named here rather than taken from the shared theme: this is the
+    // Electron main process, built without the renderer's packages. Guarded
+    // against the shared token by src/electron/main.test.ts.
+    backgroundColor: '#0C0C0C',
     webPreferences: {
       sandbox: false,
       preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
