@@ -175,7 +175,7 @@ export function NotificationsCard(): JSX.Element {
   // Any alert switched on is something this browser is expected to deliver, so
   // any of them is reason enough to offer the way in below. Reading only the
   // chamber alert would strand a smoker whose alerts are all about the meat.
-  const anyAlertEnabled = chamber.enabled || probeTarget.enabled;
+  const anyAlertEnabled = chamber.enabled || probeTarget.enabled || smokeComplete.enabled;
 
   return (
     // No spacing wrapper: the settings page stacks its cards and owns the gap

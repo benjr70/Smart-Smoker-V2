@@ -297,6 +297,33 @@ describe('NotificationsCard', () => {
     expect(port.calls).toEqual(['requestPermission', 'subscribe']);
   });
 
+  // And the third alert, which is the one most likely to be a smoker's only
+  // one: someone who only wants telling when the cook is done switches on
+  // Smoke Complete and nothing else. Judging the way in by the other two alerts
+  // would leave exactly that smoker with a browser that is never asked.
+  test('offers the same way in when the alert already on is Smoke Complete', async () => {
+    const backend = createFakeBackend({
+      appSettings: {
+        settings: {
+          chamber: { enabled: false, low: 225, high: 275 },
+          probeTarget: { enabled: false, probes: probeRows({ probe1: 203 }) },
+          smokeComplete: { enabled: true },
+        },
+      },
+    });
+    const port = createFakePushPort({ permission: 'default', onRequest: 'granted' });
+
+    renderCard(backend, port);
+
+    const banner = await screen.findByTestId('settings-push-not-enabled');
+    fireEvent.click(within(banner).getByRole('button', { name: /turn on/i }));
+
+    await waitFor(() =>
+      expect(backend.store.notifications.subscriptions).toEqual([browserSubscription])
+    );
+    expect(port.calls).toEqual(['requestPermission', 'subscribe']);
+  });
+
   // Without this the toggles would sit there looking armed while nothing could
   // ever arrive, which is exactly the silence this whole overhaul is about.
   test('explains the dead end, and the way out of it, when the user denies the prompt', async () => {
