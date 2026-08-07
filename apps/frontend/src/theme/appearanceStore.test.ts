@@ -77,6 +77,53 @@ const createPendingClient = (stored: AppearancePreference = DEFAULT_APPEARANCE_P
   };
 };
 
+/**
+ * A backend whose writes stay on the wire until this test delivers them, and
+ * which can deliver them in an order nobody asked for.
+ *
+ * Requests do not land in the order they were sent — that is the whole hazard
+ * here — so what this records is the order the *backend* saw them in, which is
+ * what decides the value the installation is left holding.
+ */
+const createSlowClient = (stored: AppearancePreference = DEFAULT_APPEARANCE_PREFERENCE) => {
+  const wire: Array<{ preference: AppearancePreference; land: () => void }> = [];
+  const landed: AppearancePreference[] = [];
+  return {
+    get: async () => stored,
+    save: (preference: AppearancePreference) =>
+      new Promise<AppearancePreference>(resolve => {
+        wire.push({
+          preference,
+          land: () => {
+            landed.push(preference);
+            resolve(preference);
+          },
+        });
+      }),
+    /** How many writes are in the air at this moment. */
+    inFlight: () => wire.length,
+    /**
+     * Deliver everything, newest first — the worst order the network can pick,
+     * and the one a store that sends two writes at once cannot survive.
+     */
+    deliverNewestFirst: async () => {
+      while (wire.length > 0) {
+        wire.pop()?.land();
+        await flush();
+      }
+    },
+    /** Deliver in turn, oldest first. */
+    deliverAll: async () => {
+      while (wire.length > 0) {
+        wire.shift()?.land();
+        await flush();
+      }
+    },
+    /** Every preference the backend actually received, in the order it did. */
+    landed,
+  };
+};
+
 /** Let the store's promise chain settle without advancing any clock. */
 const flush = async (): Promise<void> => {
   for (let turn = 0; turn < 10; turn++) {
@@ -258,6 +305,69 @@ describe('the machine changing its own colour preference', () => {
     await flush();
 
     expect(client.written).toEqual([{ mode: 'system', resolvedMode: 'dark' }]);
+  });
+
+  /**
+   * The machine flipping to dark at dusk and the operator reaching for Light are
+   * two decisions arriving at once, and the operator's is the one that counts.
+   * Two writes in the air at the same time land in whatever order the network
+   * feels like: if the dusk one lands second, the installation holds a value
+   * nobody chose, announces it, and every client — the touchscreen included —
+   * repaints away from what the operator just clicked.
+   */
+  it('never has two writes in the air at once', async () => {
+    const cache = createCache('system', false);
+    const client = createSlowClient({ mode: 'system', resolvedMode: 'light' });
+    const store = createAppearanceStore({ cache, client, subscription: noSubscription });
+    await store.start();
+
+    cache.setSystemDark(true);
+    void store.choose('light');
+    await flush();
+
+    expect(client.inFlight()).toBe(1);
+  });
+
+  it('leaves the installation holding the operator’s choice, however the network delivers', async () => {
+    const cache = createCache('system', false);
+    const client = createSlowClient({ mode: 'system', resolvedMode: 'light' });
+    const store = createAppearanceStore({ cache, client, subscription: noSubscription });
+    await store.start();
+
+    cache.setSystemDark(true);
+    void store.choose('light');
+    await flush();
+    await client.deliverNewestFirst();
+
+    expect(client.landed[client.landed.length - 1]).toEqual({
+      mode: 'light',
+      resolvedMode: 'light',
+    });
+  });
+
+  /**
+   * An operator trying the options out is not asking for each of them to be
+   * published: a value already overtaken while it waited its turn would be
+   * written only to be corrected a moment later, and announced to every other
+   * client in between.
+   */
+  it('does not publish a value another choice overtook while it queued', async () => {
+    const cache = createCache('dark', false);
+    const client = createSlowClient({ mode: 'dark', resolvedMode: 'dark' });
+    const store = createAppearanceStore({ cache, client, subscription: noSubscription });
+    await store.start();
+
+    void store.choose('light');
+    await flush();
+    void store.choose('system');
+    void store.choose('dark');
+    await flush();
+    await client.deliverAll();
+
+    expect(client.landed).toEqual([
+      { mode: 'light', resolvedMode: 'light' },
+      { mode: 'dark', resolvedMode: 'dark' },
+    ]);
   });
 
   it('stops listening to a machine once the store is stopped', async () => {

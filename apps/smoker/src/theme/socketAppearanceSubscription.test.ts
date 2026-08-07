@@ -51,6 +51,9 @@ afterEach(() => {
 const announce = (payload: unknown): void =>
   (handlers.get('appearance') ?? []).forEach(handler => handler(payload));
 
+/** The socket reaching the cloud — for the first time, or after a drop. */
+const connects = (): void => (handlers.get('connect') ?? []).forEach(handler => handler(undefined));
+
 describe('an appearance a browser chose', () => {
   it('reaches the device over the socket it already speaks to the cloud', () => {
     process.env.REACT_APP_CLOUD_URL = 'ws://cloud:3001';
@@ -91,5 +94,47 @@ describe('an appearance a browser chose', () => {
     announce({ mode: 'dark' });
 
     expect(heard).toEqual([]);
+  });
+});
+
+/**
+ * An announcement only reaches the clients connected when it was made, and this
+ * appliance is switched on before the tailnet is and drops off it routinely. So
+ * the connection itself is news: it is the moment the device can find out what
+ * was decided while it was away, and the only one it gets before its next boot.
+ */
+describe('the socket reaching the cloud', () => {
+  it('is reported, so the device can ask what it missed', () => {
+    let connections = 0;
+
+    createSocketAppearanceSubscription().subscribe(
+      () => undefined,
+      () => (connections += 1)
+    );
+    connects();
+    connects();
+
+    expect(connections).toBe(2);
+  });
+
+  it('is not reported to a device that has stopped listening', () => {
+    let connections = 0;
+    const stop = createSocketAppearanceSubscription().subscribe(
+      () => undefined,
+      () => (connections += 1)
+    );
+
+    stop();
+    connects();
+
+    expect(connections).toBe(0);
+  });
+
+  /** A caller with no use for it says so by not passing one. */
+  it('costs nothing to a device that did not ask to be told', () => {
+    expect(() => {
+      createSocketAppearanceSubscription().subscribe(() => undefined);
+      connects();
+    }).not.toThrow();
   });
 });

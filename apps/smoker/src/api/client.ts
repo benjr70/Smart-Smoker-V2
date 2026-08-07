@@ -13,16 +13,19 @@ import { AppearancePreference, SmokeProfile, State, TempData, WifiManager } from
 
 /**
  * What an installation nobody has chosen an appearance on is taken to have
- * chosen: follow the device, resolved the way a client with no device
- * preference of its own resolves it.
+ * chosen: follow the device, recorded as the scheme this panel renders until it
+ * is told otherwise.
  *
  * The API layer's copy of the value the appearance resolver and the backend both
  * start from — kept here rather than imported so the wire types stay free of
- * domain imports.
+ * domain imports, and pinned to the shared one by this client's tests. The
+ * recorded half says dark for the reason it says dark everywhere: this device is
+ * the only thing that reads it, and the wrong answer in a garage is a sheet of
+ * white in an unlit room.
  */
 export const DEFAULT_APPEARANCE_PREFERENCE: AppearancePreference = {
   mode: 'system',
-  resolvedMode: 'light',
+  resolvedMode: 'dark',
 };
 
 export interface StateResource {

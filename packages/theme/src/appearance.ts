@@ -28,9 +28,9 @@ export interface AppearanceInput {
    * Whether the operating system asks for a dark interface.
    *
    * Optional because a device client has no answer to give: it never consults
-   * this, and omitting it says so. Left out by a browser it means the same as it
-   * means in {@link DEFAULT_APPEARANCE_PREFERENCE} — a client with no device
-   * preference of its own reads light.
+   * this, and omitting it says so. Left out by a browser it reads as false — a
+   * client with no device preference of its own renders light, which is what a
+   * machine that cannot be asked is taken to want.
    */
   systemDark?: boolean;
   /** Which kind of client is asking. A client that does not say is a browser. */
@@ -138,14 +138,22 @@ export const isCoherentPreference = ({ mode, resolvedMode }: AppearancePreferenc
  * What an installation nobody has chosen an appearance on is taken to have
  * chosen.
  *
- * "Follow the device", resolved the way a client with no device preference of
- * its own resolves it. Storage, the API and every client start from this one
- * value, so "nothing chosen yet" cannot mean something different in each of
- * them.
+ * "Follow the device", recorded as the touchscreen's own default. Storage, the
+ * API and every client start from this one value, so "nothing chosen yet" cannot
+ * mean something different in each of them.
+ *
+ * The recorded half says dark because the touchscreen is the only client that
+ * ever reads it — a browser resolves "follow the device" against the machine in
+ * front of it and never looks at what someone else recorded. And storage answers
+ * with this default rather than with nothing, so on an installation nobody has
+ * opened a browser on this *is* the value the panel in the garage resolves
+ * against: recording light here would boot it dark and then repaint it to a
+ * sheet of white in an unlit room. {@link DEVICE_DEFAULT_COLOR_SCHEME} is
+ * therefore where the value comes from, and the two cannot drift apart.
  */
 export const DEFAULT_APPEARANCE_PREFERENCE: AppearancePreference = {
   mode: 'system',
-  resolvedMode: 'light',
+  resolvedMode: DEVICE_DEFAULT_COLOR_SCHEME,
 };
 
 /**

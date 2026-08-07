@@ -115,6 +115,31 @@ describe('the touchscreen following the installation', () => {
 
     await waitFor(() => expect(painted()).toBe(carbonLight.background));
   });
+
+  /**
+   * A smoker installed this afternoon, with nobody having opened the settings
+   * page on a phone yet. The backend answers that read with a document all the
+   * same — the documented default — so "nothing chosen" reaches the panel as a
+   * preference like any other, and the only thing standing between the garage
+   * and a sheet of white is what that default records. Run against the real
+   * client and the fake backend, because the value under test is the one the
+   * assembled application actually reads.
+   */
+  it('stays dark on an installation nobody has chosen an appearance on', async () => {
+    const cloud = createFakeBackend({ appSettings: {} });
+    const client = createApiClient(cloud, createFakeBackend());
+    render(
+      <DeviceThemeProvider appearance={{ client: client.appearance }}>
+        <Probe />
+      </DeviceThemeProvider>
+    );
+
+    await waitFor(() =>
+      expect(cloud.requests).toEqual([{ method: 'get', path: 'appSettings', body: undefined }])
+    );
+
+    expect(painted()).toBe(carbonDark.background);
+  });
 });
 
 /**

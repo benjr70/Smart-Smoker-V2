@@ -124,6 +124,43 @@ export const createAppearanceStore = ({
   let settlements = 0;
 
   /**
+   * The write in flight, and how many have been asked for. Writes leave one at
+   * a time, in the order they were asked for.
+   *
+   * Two of them can otherwise be in the air at once — the machine flipping to
+   * dark at dusk publishes one, and the operator who then reaches for Light
+   * publishes another — and nothing about HTTP says the first one sent lands
+   * first. If the dusk write lands second the installation is left holding a
+   * value nobody chose, announces it, and every client including the touchscreen
+   * repaints away from the choice the operator just made. Sending the second
+   * only once the first has landed is the whole of the fix; the load path is
+   * protected differently, by `settlements`, because what it has to survive is a
+   * stale *answer* rather than an out-of-order write.
+   *
+   * Waiting its turn is also where a write can find it has nothing left to say:
+   * an operator trying the options out would otherwise have each of them
+   * published in sequence and announced to every other client, each corrected by
+   * the next a moment later.
+   */
+  let published: Promise<void> = Promise.resolve();
+  let asked = 0;
+
+  const publish = (preference: AppearancePreference): Promise<void> => {
+    const attempt = (asked += 1);
+    published = published.then(async () => {
+      if (attempt !== asked) {
+        return;
+      }
+      // The repaint has already happened by now, so a write that cannot be
+      // delivered costs the installation agreement about the appearance rather
+      // than costing the operator their choice. There is nothing to report and
+      // nothing to retry: the next load reconciles.
+      await client.save(preference).catch(() => undefined);
+    });
+    return published;
+  };
+
+  /**
    * Paint a resolution and, if it is news to the backend, publish it.
    *
    * Publishing is deliberately last and deliberately awaited separately from
@@ -139,11 +176,7 @@ export const createAppearanceStore = ({
       return;
     }
     stored = resolution.preference;
-    // The repaint above has already happened, so a write that cannot be
-    // delivered costs the installation agreement about the appearance rather
-    // than costing the operator their choice. There is nothing to report and
-    // nothing to retry: the next load reconciles.
-    await client.save(resolution.preference).catch(() => undefined);
+    await publish(resolution.preference);
   };
 
   /**

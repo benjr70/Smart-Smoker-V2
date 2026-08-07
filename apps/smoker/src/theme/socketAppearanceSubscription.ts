@@ -23,6 +23,18 @@ import { DeviceAppearanceSubscriptionPort } from './deviceAppearance';
 const APPEARANCE_EVENT = 'appearance';
 
 /**
+ * The event the socket library raises when it reaches the backend — on the first
+ * connection and on every one it makes after a drop, which it reconnects on its
+ * own.
+ *
+ * Passed on because an announcement reaches only the clients connected when it
+ * was made: this appliance is switched on before the tailnet is and drops off it
+ * routinely, so being connected again is the device's one chance to find out
+ * what was decided while it was away.
+ */
+const CONNECT_EVENT = 'connect';
+
+/**
  * Whether a frame off the wire is a preference this device can paint.
  *
  * Anything else is dropped rather than handed on: the appearance decides what
@@ -40,7 +52,7 @@ const isPreference = (payload: unknown): payload is AppearancePreference => {
 };
 
 export const createSocketAppearanceSubscription = (): DeviceAppearanceSubscriptionPort => ({
-  subscribe: listener => {
+  subscribe: (listener, onConnected) => {
     // Opened on subscription rather than on construction, so assembling the
     // application costs no connection and the adapter owns the socket's
     // lifetime.
@@ -50,10 +62,13 @@ export const createSocketAppearanceSubscription = (): DeviceAppearanceSubscripti
         listener(payload);
       }
     };
+    const connected = (): void => onConnected?.();
     socket.on(APPEARANCE_EVENT, handler);
+    socket.on(CONNECT_EVENT, connected);
 
     return () => {
       socket.off(APPEARANCE_EVENT, handler);
+      socket.off(CONNECT_EVENT, connected);
       socket.close();
     };
   },

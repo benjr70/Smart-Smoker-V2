@@ -245,12 +245,42 @@ describe('a client with nothing stored', () => {
 
 /**
  * What an installation nobody has chosen an appearance on is taken to have
- * chosen: follow the device, which a client with no device preference of its own
- * reads as light.
+ * chosen: follow the device, recorded as the scheme the one client that reads
+ * the recorded half needs.
  */
 describe('the documented default', () => {
-  it('is "follow the device", resolved as a client with no device would', () => {
-    expect(DEFAULT_APPEARANCE_PREFERENCE).toEqual({ mode: 'system', resolvedMode: 'light' });
+  it('is "follow the device", recorded as the panel in the garage needs it', () => {
+    expect(DEFAULT_APPEARANCE_PREFERENCE).toEqual({
+      mode: 'system',
+      resolvedMode: DEVICE_DEFAULT_COLOR_SCHEME,
+    });
+  });
+
+  /**
+   * The recorded half exists for the touchscreen and is read by nothing else, so
+   * on an installation where no browser has recorded one it has to say what the
+   * touchscreen needs — otherwise the default is the one value that reaches the
+   * garage, and it lights the room up. Storage answers with this default rather
+   * than with nothing, so this is the value the panel actually resolves against:
+   * the "nothing stored" rule below never gets a look in from a live backend.
+   */
+  it('leaves the touchscreen of an installation nobody has chosen for dark', () => {
+    expect(
+      resolveAppearance({ stored: DEFAULT_APPEARANCE_PREFERENCE, client: 'device' }).colorScheme
+    ).toBe(DEVICE_DEFAULT_COLOR_SCHEME);
+  });
+
+  /**
+   * And costs a browser nothing, because a browser never reads the recorded
+   * half: it resolves "follow the device" against the machine in front of it.
+   */
+  it('still leaves a browser following the machine it runs on', () => {
+    expect(
+      resolveAppearance({ stored: DEFAULT_APPEARANCE_PREFERENCE, systemDark: true }).colorScheme
+    ).toBe('dark');
+    expect(
+      resolveAppearance({ stored: DEFAULT_APPEARANCE_PREFERENCE, systemDark: false }).colorScheme
+    ).toBe('light');
   });
 
   it('says the same thing twice, like any preference that may be stored', () => {

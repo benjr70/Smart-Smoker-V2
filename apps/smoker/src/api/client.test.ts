@@ -203,7 +203,7 @@ describe('smoker api client', () => {
 
       await expect(client.appearance.get()).resolves.toEqual({
         mode: 'system',
-        resolvedMode: 'light',
+        resolvedMode: 'dark',
       });
     });
 

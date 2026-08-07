@@ -46,7 +46,16 @@ export const DEFAULT_APPLICATION_SETTINGS: ApplicationSettings = {
   },
   smokeComplete: { enabled: false },
   targetPresets: DEFAULT_TARGET_PRESETS,
-  appearance: { mode: 'system', resolvedMode: 'light' },
+  // "Follow the device", recorded as dark. The resolved half is written by
+  // browsers and read only by the touchscreen, which renders it verbatim rather
+  // than resolving anything itself — and this document is served whether or not
+  // a browser has ever written one, so on a fresh installation this value *is*
+  // what the panel in the garage renders. Light would boot it dark and then
+  // repaint it to a sheet of white in an unlit room; it costs a browser nothing,
+  // because a browser resolves "follow the device" against the machine in front
+  // of it and never reads this half. Pinned to the clients' own default by
+  // `appearance.spec.ts`.
+  appearance: { mode: 'system', resolvedMode: 'dark' },
 };
 
 /**
