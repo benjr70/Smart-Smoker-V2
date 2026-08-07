@@ -156,6 +156,15 @@ describe('adding a further palette', () => {
       probe2: '#6FC2FF',
       probe3: '#C2D8E8',
     },
+    chart: {
+      panel: '#111111',
+      grid: '#2A2A2A',
+      label: '#9B9B9B',
+      chamber: '#FF9E80',
+      probe1: '#7FD68D',
+      probe2: '#6FC2FF',
+      probe3: '#C39BF5',
+    },
   };
 
   it('carries the second token set on the application theme', () => {

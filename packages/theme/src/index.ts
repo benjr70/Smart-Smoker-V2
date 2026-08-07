@@ -24,7 +24,7 @@ export type {
   ColorScheme,
 } from './appearance';
 export { ACCENT_TINT_ALPHA, carbonDark, carbonLight, paletteTokens } from './tokens';
-export type { PaletteTokens, ThemeMode } from './tokens';
+export type { ChartTokens, PaletteTokens, ThemeMode } from './tokens';
 
 /**
  * The single theme the application provides to its component tree, carrying

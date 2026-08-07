@@ -24,6 +24,8 @@
     "@testing-library/react": "^13.4.0",
     "@testing-library/user-event": "^14.4.3",
     "@types/d3": "^7.4.0",
+    "@types/d3-scale": "^4.0.9",
+    "@types/d3-shape": "^3.1.7",
     "@types/jest": "28.1.8",
     "@types/node": "^24.3.0",
     "@types/react": "^18.0.28",
@@ -44,6 +46,8 @@
   },
   "dependencies": {
     "d3": "^7.8.5",
+    "d3-scale": "^4.0.2",
+    "d3-shape": "^3.2.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
@@ -85,6 +89,19 @@
         "lines": 75,
         "functions": 45
       }
+    },
+    "transform": {
+      "^.+\\.tsx?$": "ts-jest",
+      "^.+\\.jsx?$": [
+        "babel-jest",
+        {
+          "presets": [
+            "@babel/preset-env"
+          ],
+          "babelrc": false,
+          "configFile": false
+        }
+      ]
     }
   }
 }

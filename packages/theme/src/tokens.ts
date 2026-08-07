@@ -23,6 +23,34 @@ export interface ProbeTokens {
   probe3: string;
 }
 
+/**
+ * Everything the temperature chart paints with, for one palette.
+ *
+ * The chart draws itself out of raw colour rather than out of components, so it
+ * cannot inherit a surface the way a card does: it has to be handed the panel it
+ * sits on, the two weights of framing around the plot, and a colour per reading.
+ *
+ * These are chart lines, read against that panel — a different job from the
+ * `probes` colours, which are the readings text on a card, and a different set of
+ * values.
+ */
+export interface ChartTokens {
+  /** The panel the plot is drawn on. */
+  panel: string;
+  /** The dashed gridlines behind the data. */
+  grid: string;
+  /** The axis labels beside it. */
+  label: string;
+  /** The chamber's line. */
+  chamber: string;
+  /** The first meat probe's line. */
+  probe1: string;
+  /** The second meat probe's line. */
+  probe2: string;
+  /** The third meat probe's line. */
+  probe3: string;
+}
+
 export interface PaletteTokens {
   /** Page background behind every surface. */
   background: string;
@@ -48,6 +76,8 @@ export interface PaletteTokens {
   success: string;
   /** One colour per temperature probe. */
   probes: ProbeTokens;
+  /** The temperature chart's own colours. */
+  chart: ChartTokens;
 }
 
 /** Alpha applied to the accent for accent-tinted backgrounds. */
@@ -73,6 +103,20 @@ export const carbonLight: PaletteTokens = {
     probe1: '#2a475e',
     probe2: '#118cd8',
     probe3: '#5582a7',
+  },
+  // The chart is a white panel among white cards, framed in the same hairline
+  // and the same secondary ink as everything else on the page. Its four lines
+  // are the design's own: the brand accent for the chamber, then a green, a blue
+  // and a violet, spread far enough around the wheel to be told apart at a
+  // glance on a phone held at arm's length over a smoker.
+  chart: {
+    panel: '#FFFFFF',
+    grid: '#E2E2DF',
+    label: '#6B6B68',
+    chamber: '#DA4A2E',
+    probe1: '#3F7D46',
+    probe2: '#2A6FB8',
+    probe3: '#7C5AC8',
   },
 };
 
@@ -100,6 +144,18 @@ export const carbonDark: PaletteTokens = {
     probe1: '#7FA9C9',
     probe2: '#4FB5FF',
     probe3: '#A8C4DB',
+  },
+  // The same four hues, lifted until each line carries on a near-black panel:
+  // the plot sits on the card colour, and the frame keeps the light scheme's
+  // relationship, with the grid far quieter than the labels beside it.
+  chart: {
+    panel: '#161616',
+    grid: '#2C2C2C',
+    label: '#8E8E8A',
+    chamber: '#FF6247',
+    probe1: '#5BC46E',
+    probe2: '#4E9BE8',
+    probe3: '#A585F0',
   },
 };
 
