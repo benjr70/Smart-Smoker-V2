@@ -6,6 +6,7 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server } from 'socket.io';
+import { State } from '../State/state.schema';
 import { StateService } from '../State/state.service';
 import { AppearancePreference } from '../appSettings/appearance';
 import { TempDto } from '../temps/tempDto';
@@ -53,27 +54,72 @@ export class EventsGateway {
     return data;
   }
 
+  /**
+   * Relay one device reading to every client, and persist every eleventh one.
+   *
+   * `async` rather than floating `.then()`s on purpose: the relay is the
+   * hottest path in the application and it touches the database twice — once
+   * to read the state, once to store the reading — so an unattended rejection
+   * from either is a process-level crash. Awaiting hands the promise to Nest,
+   * and the try/catch around each call means neither a missing state document
+   * nor an unreachable database can stop temperatures flowing to the clients:
+   * the emit above has already happened either way, and losing one sampled
+   * reading is worth vastly less than the backend staying up.
+   */
   @SubscribeMessage('events')
-  handleEvent(@MessageBody() data: string) {
+  async handleEvent(@MessageBody() data: string): Promise<void> {
     this.server.emit('events', data);
     this.messagesSinceStore++;
-    if (this.messagesSinceStore >= MESSAGES_PER_STORED_READING) {
-      this.stateService.GetState().then((state) => {
-        if (state.smoking) {
-          const tempObj = JSON.parse(data);
-          const tempDto: TempDto = {
-            MeatTemp: tempObj.probeTemp1,
-            Meat2Temp: tempObj.probeTemp2,
-            Meat3Temp: tempObj.probeTemp3,
-            ChamberTemp: tempObj.chamberTemp,
-            date: tempObj.date,
-          };
-          this.handleTempLogging(tempDto);
-          this.tempsService.saveNewTemp(tempDto);
-        }
-      });
-      this.messagesSinceStore = 0;
+    if (this.messagesSinceStore < MESSAGES_PER_STORED_READING) {
+      return;
     }
+    // Reset before awaiting, not after: messages that arrive while the state
+    // read is in flight must count toward the next reading, not re-trigger
+    // this one.
+    this.messagesSinceStore = 0;
+
+    let state: State | undefined;
+    try {
+      state = await this.stateService.GetState();
+    } catch (err) {
+      this.logDatabaseFailure(
+        'could not read state, skipping stored reading',
+        err,
+      );
+      return;
+    }
+
+    // No state document at all means no cook is in progress: a fresh install
+    // has an empty `states` collection until something writes one.
+    if (!state?.smoking) {
+      return;
+    }
+
+    const tempObj = JSON.parse(data);
+    const tempDto: TempDto = {
+      MeatTemp: tempObj.probeTemp1,
+      Meat2Temp: tempObj.probeTemp2,
+      Meat3Temp: tempObj.probeTemp3,
+      ChamberTemp: tempObj.chamberTemp,
+      date: tempObj.date,
+    };
+    this.handleTempLogging(tempDto);
+    try {
+      await this.tempsService.saveNewTemp(tempDto);
+    } catch (err) {
+      this.logDatabaseFailure('could not store reading', err);
+    }
+  }
+
+  /**
+   * Report a database failure on the relay path without rethrowing. Shared by
+   * the state read and the temperature write so both report identically.
+   */
+  private logDatabaseFailure(what: string, err: unknown): void {
+    Logger.error(
+      `${what}: ${err instanceof Error ? err.message : String(err)}`,
+      'Websocket',
+    );
   }
 
   handleTempLogging(tempDto: TempDto) {
