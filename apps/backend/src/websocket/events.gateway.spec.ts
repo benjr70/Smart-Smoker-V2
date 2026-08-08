@@ -131,6 +131,92 @@ describe('EventsGateway', () => {
       expect(mockTempsService.saveNewTemp).toHaveBeenCalledTimes(2);
     });
 
+    // A fresh install — and every fresh hermetic stack — has an empty `states`
+    // collection, so the very first sampled batch used to dereference
+    // `undefined` inside an unawaited promise and take the whole process down
+    // with an unhandled rejection.
+    it('persists nothing and survives when no state document exists', async () => {
+      const testData = JSON.stringify({
+        probeTemp1: '150',
+        probeTemp2: '160',
+        probeTemp3: '170',
+        chamberTemp: '225',
+        date: new Date(),
+      });
+
+      mockStateService.GetState = jest.fn().mockResolvedValue(undefined);
+
+      for (let i = 0; i < 11; i++) {
+        gateway.handleEvent(testData);
+      }
+      await settle();
+
+      expect(mockServer.emit).toHaveBeenCalledWith('events', testData);
+      expect(mockTempsService.saveNewTemp).not.toHaveBeenCalled();
+    });
+
+    // The read used to be a floating promise with no rejection handler, so a
+    // database blip was an unhandled rejection and Node terminated the process.
+    // A relay handler must never be able to do that.
+    it('logs and swallows a failed state read', async () => {
+      const testData = JSON.stringify({
+        probeTemp1: '150',
+        probeTemp2: '160',
+        probeTemp3: '170',
+        chamberTemp: '225',
+        date: new Date(),
+      });
+      const errorSpy = jest.spyOn(Logger, 'error').mockImplementation();
+
+      mockStateService.GetState = jest
+        .fn()
+        .mockRejectedValue(new Error('mongo is down'));
+
+      for (let i = 0; i < 10; i++) {
+        await gateway.handleEvent(testData);
+      }
+      await expect(gateway.handleEvent(testData)).resolves.toBeUndefined();
+
+      expect(mockTempsService.saveNewTemp).not.toHaveBeenCalled();
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('mongo is down'),
+        'Websocket',
+      );
+
+      errorSpy.mockRestore();
+    });
+
+    // The persisting write is as much a database call as the read is, and it
+    // only ever runs mid-cook — exactly when a Mongo blip must not be allowed
+    // to take the backend down with it.
+    it('logs and swallows a failed temperature write', async () => {
+      const testData = JSON.stringify({
+        probeTemp1: '150',
+        probeTemp2: '160',
+        probeTemp3: '170',
+        chamberTemp: '225',
+        date: new Date(),
+      });
+      const errorSpy = jest.spyOn(Logger, 'error').mockImplementation();
+
+      mockTempsService.saveNewTemp = jest
+        .fn()
+        .mockRejectedValue(new Error('write concern failed'));
+
+      for (let i = 0; i < 10; i++) {
+        await gateway.handleEvent(testData);
+      }
+      await expect(gateway.handleEvent(testData)).resolves.toBeUndefined();
+
+      expect(mockTempsService.saveNewTemp).toHaveBeenCalledTimes(1);
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('write concern failed'),
+        'Websocket',
+      );
+
+      errorSpy.mockRestore();
+    });
+
     it('should emit events but not handle temperature when not smoking', async () => {
       const testData = JSON.stringify({
         probeTemp1: '150',
@@ -147,8 +233,10 @@ describe('EventsGateway', () => {
       for (let i = 0; i <= 11; i++) {
         gateway.handleEvent(testData);
       }
+      await settle();
 
       expect(mockServer.emit).toHaveBeenCalledWith('events', testData);
+      expect(mockStateService.GetState).toHaveBeenCalled();
       expect(mockTempsService.saveNewTemp).not.toHaveBeenCalled();
     });
   });

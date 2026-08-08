@@ -10,7 +10,7 @@ export class StateController {
   constructor(private readonly stateService: StateService) {}
 
   @Get()
-  getState(): Promise<State> {
+  getState(): Promise<State | undefined> {
     return this.stateService.GetState();
   }
 

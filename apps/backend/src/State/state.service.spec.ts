@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { StateService } from './state.service';
@@ -179,6 +180,53 @@ describe('StateService', () => {
 
       expect(service.updateCurrent).toHaveBeenCalledWith(expectedDto);
       expect(result).toEqual(expectedDto);
+    });
+  });
+
+  /**
+   * A fresh install — a new production database or any freshly booted hermetic
+   * stack — has an empty `states` collection, which every reader then has to
+   * treat as a special case. Seeding the singleton once at startup closes that
+   * window for good.
+   */
+  describe('onModuleInit', () => {
+    it('seeds the singleton state when the collection is empty', async () => {
+      mockStateModel.find = jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue([]),
+      });
+
+      await service.onModuleInit();
+
+      expect(mockStateModel).toHaveBeenCalledWith({
+        smokeId: '',
+        smoking: false,
+      });
+    });
+
+    // The backend restarting in the middle of a cook must not reset it: the
+    // default model mock already returns a smoking state.
+    it('leaves an existing state untouched', async () => {
+      await service.onModuleInit();
+
+      expect(mockStateModel).not.toHaveBeenCalled();
+      expect(mockStateModel.findOneAndUpdate).not.toHaveBeenCalled();
+    });
+
+    // A database that is not up yet must not stop the API from booting.
+    it('logs and does not throw when the read fails', async () => {
+      const errorSpy = jest.spyOn(Logger, 'error').mockImplementation();
+      mockStateModel.find = jest.fn().mockReturnValue({
+        exec: jest.fn().mockRejectedValue(new Error('no primary available')),
+      });
+
+      await expect(service.onModuleInit()).resolves.toBeUndefined();
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('no primary available'),
+        'State',
+      );
+
+      errorSpy.mockRestore();
     });
   });
 });
