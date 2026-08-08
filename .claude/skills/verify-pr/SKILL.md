@@ -5,9 +5,10 @@ description:
   checklist, boot a hermetic per-PR stack, spawn the manual-verifier agent to
   exercise each item in a real headful browser / Electron, tick the passing
   boxes, post one evidence comment, emit a `manual-verify:` summary line, and
-  tear everything down. Use when the user says "verify PR <n>", "run manual
-  verification", or invokes /verify-pr.
-disable-model-invocation: true
+  tear everything down. Use when anyone says "verify PR <n>", "run manual
+  verification", or invokes /verify-pr — a human, an agent calling the Skill
+  tool, or a subagent delegated the round by team-pickup §6a.2 or pr-reconcile
+  §3.
 argument-hint: '<PR number>'
 ---
 
@@ -32,6 +33,26 @@ human already signed off).
 
 One argument: the PR number. If it is missing or not an open PR, stop with a
 clear message — do not guess.
+
+### Callers — any caller is legitimate
+
+This harness is **runnable from anywhere**. All three of these are ordinary,
+equally valid entry points, and none of them needs a human in the loop:
+
+1. A human typing `/verify-pr <PR#>`.
+2. An agent calling the **`Skill` tool** for `verify-pr`.
+3. A `general-purpose` subagent spawned via the **`Agent` tool** that is told to
+   invoke this skill — the shape both automated callers use: **`team-pickup`
+   §6a.2** and **`pr-reconcile` §3**, each of which delegates its blocking
+   verification round here and consumes the terminal `manual-verify:` line this
+   skill emits.
+
+Do not refuse, defer, or downgrade a round because the caller is a model rather
+than a person: an unrun round is the pipeline's last quality gate going missing.
+Whoever calls, the contract is identical — same prerequisites, same evidence
+comment, same honest terminal line. If the round genuinely cannot run, say so
+with `manual-verify: infra-error …`; never hand the round back to a human as a
+silent skip.
 
 ## Prerequisites (fail fast, do not auto-install)
 

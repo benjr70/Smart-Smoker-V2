@@ -87,8 +87,8 @@ ours-shaped PR is still bot-incomplete this section fires and exits before
 bot-complete (CI green, one-time review done, a verification round posted). A
 bot-complete PR merely awaiting a human merge triggers nothing — work-ahead
 stays. Detection is a cheap `gh` read + the **PR Triage** deep module — zero
-Claude usage when nothing needs attention; the incomplete signals cost one
-extra `gh pr view --json comments` per otherwise-clean agent PR.
+Claude usage when nothing needs attention; the incomplete signals cost one extra
+`gh pr view --json comments` per otherwise-clean agent PR.
 
 `pr_triage_scan` owns the `gh pr list` call and rides out GitHub's async
 mergeability: a fresh master push leaves every open PR `UNKNOWN` for a few
@@ -508,6 +508,44 @@ never a legal value. If `/verify-pr` aborts on a prerequisite or returns
 acted on), record it verbatim, do **not** enter the fix loop (parse FAIL as 0),
 and report it in §7 like a pr-watch ERROR.
 
+**The round is NOT skippable.** `/verify-pr` is agent-invocable (issue #467
+removed the `disable-model-invocation` flag that used to refuse every automated
+round), so "the harness would not run for me" is a real failure, not a reason to
+move on. Exactly two outcomes let the fire continue:
+
+1. a real `manual-verify: <pass>/<total> PASS, <deferred> deferred, <fail> FAIL`
+   line, or
+2. an explicit recorded non-verdict, `manual-verify: infra-error …` — recorded
+   verbatim and reported like a pr-watch ERROR (above), never as PASS.
+
+Anything else — the spawned agent returned no `manual-verify:` line at all, the
+spawn failed, the harness refused, or you were tempted to skip the step because
+the PR "looks fine" — is a **missing round**. Never infer a verdict from
+absence: a missing round can never be reported as `result: PASS`, and never as a
+silent skip. Park it instead — on the **PR**, exactly like the §6a.3 exhaustion
+escalation below:
+
+```bash
+gh pr comment "$PR_NUM" --body "Manual verification round did not run: <reason>.
+Parking for a human — no verification evidence exists for this PR."
+gh pr ready "$PR_NUM" --undo
+gh pr edit  "$PR_NUM" --add-label team:checks-failed
+```
+
+The draft flip is the load-bearing half. PR Triage
+(`scripts/claude-agent/lib/pr-triage.sh`) keys on PR state and PR labels only —
+it never reads the backing issue, and the park comment deliberately does not
+match its `Manual verification — .*round` marker — so **drafting is what takes
+the PR out of the `incomplete` class**. A label with no draft leaves the PR
+open, non-draft and still incomplete, and the very next fire re-picks it in an
+unbounded loop.
+
+Then set `MANUAL_LINE` to `verify: MISSING — <reason>`, emit that verbatim as
+the §7 `verify:` line, and end the fire parked rather than passing. The §7 hard
+validity rule treats a missing `verify:` line as an invalid run for exactly this
+reason — the only legal ways past this step are a verdict, a recorded
+`infra-error`, or a park.
+
 **Split the deferrals — spec-demanding route like FAILs (AC 4).** `/verify-pr`'s
 `manual-verify:` line lumps every DEFER into one `deferred` count, but the
 `manual-verifier` classifies them two ways and they route differently:
@@ -622,6 +660,7 @@ pr:       <url>                    (success only)
 pr-watch: PASS | DRAFT | ERROR — <detail>   (success only)
 review:   <verbatim pr-review terminal line>   (pr-watch PASS only)
 verify:   <pass>/<total> PASS, <n> deferred, <n> FAIL — round <M>/3 [— EXHAUSTED]   (pr-watch PASS only)
+          | MISSING — <reason>            (§6a.2 park: round never ran)
 shots:    <verbatim screenshots: line from the last /verify-pr round>   (when present)
 ```
 
@@ -663,6 +702,19 @@ without a `verify:` line (the reconcile fire re-verifies after the fixes). If
 any required line is missing, the run is **invalid**: do not emit the report; go
 back and wait for the in-flight agent. `pr-watch: (in flight)` and
 `pr-review: (in flight)` are never legal values.
+
+Whenever §6a.2 was reached, the `verify:` line therefore has exactly three legal
+shapes: a real `manual-verify:` verdict, a recorded
+`manual-verify: infra-error …` non-verdict, or `verify: MISSING — <reason>` from
+the §6a.2 park — and only the first may accompany a passing fire. The
+`team:revise applied` exception above is the **only** way past §6a.1b without
+one: that fire ends before a round is ever owed, so it legally carries no
+`verify:` line, takes no park, and applies no `team:checks-failed` (the next
+fire's reconcile owns the round — double-labelling it here would muddy that
+fire's triage reason). Otherwise a reviewed PR must never reach a passing report
+on an absent round: when the round was owed and did not run, the fire ends
+parked (draft + `team:checks-failed` + the explanatory comment on the PR), not
+green.
 
 ## Failure modes
 
@@ -710,8 +762,8 @@ back and wait for the in-flight agent. `pr-watch: (in flight)` and
   applied a parked label (`team:rebase-failed` / `team:revise-failed`) that the
   PR Triage skips. An `incomplete` pick self-clears the same way: every
   reconcile tail run either posts the review marker / a verification round,
-  applies `team:revise` (re-picked as `revise` next fire), or parks the PR —
-  the PR exits the incomplete class every fire.
+  applies `team:revise` (re-picked as `revise` next fire), or parks the PR — the
+  PR exits the incomplete class every fire.
 
 ## Boundaries
 
