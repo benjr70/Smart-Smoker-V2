@@ -151,6 +151,21 @@ describe('BottomBar', () => {
     });
   });
 
+  describe('Space reserved for the fixed bar', () => {
+    test('reserves the bar height ahead of itself so the content above it is not left underneath', () => {
+      render(<BottomBar {...defaultProps} />);
+
+      const reservation = screen.getByTestId('bottom-bar-reservation');
+      const bar = screen.getByTestId('grid-container');
+
+      // The bar is out of flow, so the space it covers has to be given back in
+      // flow — the full height of the bar, immediately before it, where the
+      // screen's last element would otherwise run underneath.
+      expect(reservation).toHaveStyle({ height: '56px' });
+      expect(reservation.compareDocumentPosition(bar)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+  });
+
   describe('Navigation Interactions', () => {
     test('should call smokeOnClick when Smoke action is clicked', () => {
       render(<BottomBar {...defaultProps} />);

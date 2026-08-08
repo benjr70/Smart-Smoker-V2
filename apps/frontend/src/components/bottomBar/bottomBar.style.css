@@ -1,5 +1,9 @@
 /* The bar is its own surface at the edge of the app: the navigation token, which
-   follows the colour scheme in effect. */
+   follows the colour scheme in effect.
+
+   Pinning it to the viewport takes it out of flow, so the space it covers is
+   given back in flow by the component itself — see BOTTOM_BAR_HEIGHT and the
+   reservation in bottombar.tsx. Nothing here should be adjusted without that. */
 .bottomBar {
   background-color: var(--mui-design-navigation);
   font-size: large;

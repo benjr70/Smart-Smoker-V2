@@ -27,5 +27,11 @@
   width: 100%;
   padding: 5%;
   min-height: calc(93vh - 56px);
-  padding-bottom: 56px;
+  /* The bar used to be cleared here, by holding its 56px open below the step.
+     It reserves that height itself now (BOTTOM_BAR_HEIGHT in bottombar.tsx),
+     immediately below this screen, so keeping the padding would hold it twice
+     and give a step that fits the viewport a scrollbar. Zero rather than the
+     5% of the shorthand above: the reservation below is the gap now, and 5%
+     here would grow the screen instead of leaving it where it was. */
+  padding-bottom: 0;
 }
