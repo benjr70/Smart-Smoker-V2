@@ -24,6 +24,7 @@ import { createFakeBackend } from '../../api/fakeBackend';
 import { DesignSurface, appTheme } from '../../theme';
 import { History } from '../history/history';
 import { Settings } from '../settings/settings';
+import { Smoke } from '../smoke/smoke';
 import { BOTTOM_BAR_HEIGHT, BottomBar } from './bottombar';
 
 const SOURCE_ROOT = path.resolve(__dirname, '..', '..');
@@ -117,6 +118,64 @@ describe('the space left for the bottom bar', () => {
   });
 });
 
+/** Portrait heights of the phones this application is read on, in CSS pixels. */
+const PHONE_HEIGHTS = [800, 952, 1071];
+
+/** A rule that sizes itself against the viewport, and the selector it sizes. */
+type ViewportClaim = { selector: string; height: string };
+
+/** Every height in a stylesheet that is measured against the viewport. */
+const viewportClaims = (css: string): ViewportClaim[] =>
+  [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].flatMap(([, selector, body]) => {
+    const height = /(?:^|[;\s])(?:min-)?height:\s*([^;}]*vh[^;}]*)/.exec(body);
+
+    return height ? [{ selector: selector.trim(), height: height[1].trim() }] : [];
+  });
+
+/** What a viewport-relative height comes to, in pixels, on a viewport this tall. */
+const claimedPixels = (height: string, viewportHeight: number): number => {
+  const viewportUnits = /(\d+(?:\.\d+)?)vh/.exec(height);
+  const subtracted = /-\s*(\d+(?:\.\d+)?)px/.exec(height);
+
+  return (Number(viewportUnits?.[1] ?? 0) / 100) * viewportHeight - Number(subtracted?.[1] ?? 0);
+};
+
+/** The screens the bar navigates between, and the stylesheet each is laid out from. */
+const screens = [
+  {
+    name: 'Smoke',
+    stylesheet: path.join(SOURCE_ROOT, 'components', 'smoke', 'smoke.style.css'),
+    show: async (): Promise<HTMLElement> => {
+      renderSmokeWizard();
+      await screen.findByTestId('presmoke-name-input');
+
+      return screen.getByTestId('smoke-screen');
+    },
+  },
+  {
+    name: 'Review',
+    stylesheet: path.join(SOURCE_ROOT, 'components', 'history', 'history.style.css'),
+    show: (): Promise<HTMLElement> => {
+      renderReview();
+
+      return screen.findByTestId('history-screen');
+    },
+  },
+];
+
+const renderSmokeWizard = () =>
+  render(
+    <CssVarsProvider theme={appTheme}>
+      <DesignSurface>
+        <ApiClientProvider client={createApiClient(createFakeBackend())}>
+          <SnackbarProvider>
+            <Smoke />
+          </SnackbarProvider>
+        </ApiClientProvider>
+      </DesignSurface>
+    </CssVarsProvider>
+  );
+
 const renderReview = () =>
   render(
     <ApiClientProvider client={createApiClient(createFakeBackend())}>
@@ -150,3 +209,39 @@ const renderSettingsScreen = () =>
 
 /** A computed length in pixels, as a number; anything else counts as none. */
 const pixels = (length: string): number => Number.parseFloat(length) || 0;
+
+/**
+ * What a screen asks the viewport for, against what the bar leaves it.
+ *
+ * The reservation gives the bar's height back in flow, so a screen has
+ * `100vh - BOTTOM_BAR_HEIGHT` to lay itself out in — all of it, the whole
+ * screen, not each box within the screen separately. A viewport claim made by
+ * something *inside* a screen is measured as though that box were alone on the
+ * page, while whatever the screen stacks above it still has to come out of the
+ * same viewport: the Smoke wizard's step asked for `93vh - 56px` with an 80px
+ * stepper above it and the 56px reservation below, which is more than one
+ * viewport on every phone-sized screen and scrolls by the difference.
+ *
+ * So the claim belongs to the outermost box of a screen, where it covers
+ * everything the screen stacks, and it may be no larger than what the
+ * reservation leaves.
+ */
+describe('the viewport a screen claims', () => {
+  it.each(screens)(
+    '$name asks for no more of it than the bar leaves the whole screen',
+    async ({ stylesheet, show }) => {
+      const root = await show();
+      const claims = viewportClaims(declarationsOf(stylesheet));
+
+      expect(claims).not.toHaveLength(0);
+      expect(claims.filter(claim => !root.matches(claim.selector))).toEqual([]);
+      PHONE_HEIGHTS.forEach(viewport =>
+        claims.forEach(claim =>
+          expect(claimedPixels(claim.height, viewport) + BOTTOM_BAR_HEIGHT).toBeLessThanOrEqual(
+            viewport
+          )
+        )
+      );
+    }
+  );
+});

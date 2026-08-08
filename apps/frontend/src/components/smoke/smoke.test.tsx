@@ -70,7 +70,10 @@ describe('Smoke Component', () => {
 
       // Look for the actual MUI stepper instead of our mock
       expect(document.querySelector('.MuiStepper-root')).toBeInTheDocument();
-      expect(screen.getAllByTestId('grid')).toHaveLength(3);
+      // The screen's outermost Grid is addressed by name now (`smoke-screen`),
+      // so the two the mock still answers to are the stepper and the step.
+      expect(screen.getByTestId('smoke-screen')).toBeInTheDocument();
+      expect(screen.getAllByTestId('grid')).toHaveLength(2);
       expect(document.querySelectorAll('.MuiStep-root')).toHaveLength(3);
       expect(document.querySelectorAll('.MuiStepButton-root')).toHaveLength(3);
     });
@@ -274,11 +277,10 @@ describe('Smoke Component', () => {
     test('should have correct grid structure', () => {
       renderSmoke();
 
-      const grids = screen.getAllByTestId('grid');
-      expect(grids).toHaveLength(3);
+      expect(screen.getAllByTestId('grid')).toHaveLength(2);
 
-      // Check for specific class names - find the main grid by class name
-      expect(grids[0]).toHaveAttribute('data-classname', 'smoke');
+      // Check for specific class names - find the main grid by name
+      expect(screen.getByTestId('smoke-screen')).toHaveAttribute('data-classname', 'smoke');
     });
 
     test('should render stepper with correct props', () => {
