@@ -20,6 +20,7 @@ import {
   plotEdges,
   pointOf,
   readingOf,
+  reportedTargets,
   seriesPath,
   targetLabelAnchor,
   tempTicks,
@@ -105,11 +106,11 @@ function TemperatureChart({
    * the plot moves the crosshair without recomputing four paths on every event.
    */
   const drawing = useMemo(() => {
-    const drawn: ProbeTargets = {
+    const drawn = reportedTargets(data, {
       probe1: probe1Target,
       probe2: probe2Target,
       probe3: probe3Target,
-    };
+    });
     const scales = createScales(data, box, drawn);
     return {
       scales,
@@ -117,14 +118,10 @@ function TemperatureChart({
       latest: SERIES_KEYS.map(series => ({ series, point: latestPointOf(data, series, scales) })),
       temperatures: tempTicks(scales),
       moments: timeTicks(scales),
-      targetLines: TARGETABLE.filter(series => isReported(drawn[series] ?? NaN)).map(series => {
-        const y = scales.y(drawn[series] as number);
-        return {
-          series,
-          temperature: drawn[series] as number,
-          y,
-          label: targetLabelAnchor(box, y),
-        };
+      targetLines: TARGETABLE.filter(series => drawn[series] !== undefined).map(series => {
+        const temperature = drawn[series] as number;
+        const y = scales.y(temperature);
+        return { series, temperature, y, label: targetLabelAnchor(box, y) };
       }),
     };
   }, [data, box, probe1Target, probe2Target, probe3Target]);
@@ -132,21 +129,24 @@ function TemperatureChart({
   const plot = plotEdges(box);
   const anchors = axisLabelAnchors(box);
 
-  /** Where the reader is touching, which is the only thing the chart remembers. */
-  const [touchedIndex, setTouchedIndex] = useState<number | null>(null);
-  const touched =
-    touchedIndex !== null && touchedIndex < data.length ? data[touchedIndex] : undefined;
+  /**
+   * The moment the reader is touching, which is the only thing the chart
+   * remembers — and it remembers it as a moment of the cook rather than as a
+   * place in the array, because a live cook is thinned again as it grows and
+   * the same place in the array is then a different moment. The finger has not
+   * moved, so the reading under it must not move either.
+   */
+  const [touchedMoment, setTouchedMoment] = useState<number | null>(null);
+  const touchedIndex = touchedMoment === null ? -1 : nearestIndex(data, touchedMoment);
+  const touched = touchedIndex < 0 ? undefined : data[touchedIndex];
 
   const follow = (event: React.PointerEvent<SVGSVGElement>): void => {
-    const moment = momentAt(
-      event.clientX,
-      event.currentTarget.getBoundingClientRect(),
-      box,
-      drawing.scales
+    setTouchedMoment(
+      momentAt(event.clientX, event.currentTarget.getBoundingClientRect(), box, drawing.scales)
     );
-    const nearest = nearestIndex(data, moment);
-    setTouchedIndex(nearest < 0 ? null : nearest);
   };
+
+  const release = (): void => setTouchedMoment(null);
 
   /** Where along the plot the touched reading sits, which the card hangs off. */
   const touchedX = touched === undefined ? undefined : drawing.scales.x(timeOf(touched));
@@ -163,8 +163,8 @@ function TemperatureChart({
         style={{ touchAction: 'none' }}
         onPointerDown={follow}
         onPointerMove={follow}
-        onPointerLeave={() => setTouchedIndex(null)}
-        onPointerCancel={() => setTouchedIndex(null)}
+        onPointerLeave={release}
+        onPointerCancel={release}
       >
         <rect x={0} y={0} width={box.width} height={box.height} fill={colors.panel} />
         {drawing.temperatures.map(temperature => (

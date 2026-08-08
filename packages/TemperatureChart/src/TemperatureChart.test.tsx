@@ -182,6 +182,53 @@ describe('target lines', () => {
     expect(targetLines(container)).toHaveLength(0);
   });
 
+  /**
+   * A smoke starts with a target seeded for every probe, whether or not that
+   * probe has meat on it. Only the probes actually reporting get a line.
+   */
+  it('draws nothing for a probe that has a target but no meat on it', () => {
+    const oneProbe = cook.map(sample => ({ ...sample, Meat2Temp: 0, Meat3Temp: 0 }));
+
+    const { container } = render(
+      <TemperatureChart
+        data={oneProbe}
+        names={names}
+        colors={colors}
+        targets={{ probe1: 203, probe2: 165, probe3: 195 }}
+      />
+    );
+
+    expect(targetLines(container).map(line => line.getAttribute('stroke'))).toEqual([
+      colors.probe1,
+    ]);
+  });
+
+  /**
+   * The seeded target of an empty probe must not stretch the axis either, or the
+   * cook that is really happening is squashed into a sliver of the plot.
+   */
+  it('leaves the axis to the cook when an empty probe has a high target', () => {
+    const oneProbe = cook.map(sample => ({ ...sample, Meat2Temp: 0, Meat3Temp: 0 }));
+    const labelled = (container: HTMLElement): number[] =>
+      Array.from(container.querySelectorAll('text[data-temp-label]')).map(label =>
+        Number(label.getAttribute('data-temp-label'))
+      );
+
+    const { container: seeded } = render(
+      <TemperatureChart
+        data={oneProbe}
+        names={names}
+        colors={colors}
+        targets={{ probe2: 500, probe3: 500 }}
+      />
+    );
+    const { container: bare } = render(
+      <TemperatureChart data={oneProbe} names={names} colors={colors} />
+    );
+
+    expect(labelled(seeded)).toEqual(labelled(bare));
+  });
+
   /** A target still to be climbed to has to be on the chart, not off the top of it. */
   it('keeps a target above the cook inside the plot', () => {
     const { container } = render(
@@ -264,6 +311,25 @@ describe('touching the plot', () => {
     expect(container.querySelectorAll('circle[data-hover]')).toHaveLength(3);
   });
 
+  /**
+   * A live cook grows, and the caller thins it again as it does, so the same
+   * moment lands at a different place in the array from one render to the next.
+   * The finger has not moved, so neither should the reading it is resting on.
+   */
+  it('stays on the same moment when the cook is thinned again beneath it', () => {
+    const { container, rerender } = render(
+      <TemperatureChart data={cook} names={names} colors={colors} />
+    );
+
+    touchAt(container, middleOfThePlot);
+    expect(within(card(container)).getByText(formatClock(cook[1].date))).toBeInTheDocument();
+
+    const rethinned = [at(0), at(7), at(15), at(22), at(30)];
+    rerender(<TemperatureChart data={rethinned} names={names} colors={colors} />);
+
+    expect(within(card(container)).getByText(formatClock(cook[1].date))).toBeInTheDocument();
+  });
+
   it('puts the card away when the finger leaves', () => {
     const { container } = render(<TemperatureChart data={cook} names={names} colors={colors} />);
     const svg = container.querySelector('svg') as SVGSVGElement;
@@ -280,6 +346,24 @@ describe('touching the plot', () => {
     touchAt(container, middleOfThePlot);
 
     expect(container.querySelector('[data-hover-card]')).toBeNull();
+  });
+});
+
+/**
+ * A smoke that has been started but has no readings yet — the first seconds of a
+ * cook, or the backend not reporting — is still on the screen, and it must not
+ * date itself to the epoch while the reader waits.
+ */
+describe('a cook that has not started', () => {
+  it('labels its time axis with the present rather than 1970', () => {
+    const { container } = render(<TemperatureChart data={[]} names={names} colors={colors} />);
+
+    const labelled = Array.from(container.querySelectorAll('text[data-time-label]')).map(label =>
+      new Date(label.getAttribute('data-time-label') as string).getFullYear()
+    );
+
+    expect(labelled.length).toBeGreaterThan(0);
+    labelled.forEach(year => expect(year).toBe(new Date().getFullYear()));
   });
 });
 

@@ -11,6 +11,7 @@ import {
   ChartSample,
   DEFAULT_MAX_POINTS,
   LABEL_SIZE,
+  LONE_READING_SPAN,
   axisLabelAnchors,
   cardLayout,
   cardPlacement,
@@ -24,10 +25,12 @@ import {
   plotBoxOf,
   plotEdges,
   pointOf,
+  reportedTargets,
   seriesPath,
   targetLabelAnchor,
   tempTicks,
   tempYDomain,
+  timeDomainOf,
   timeOf,
   timeTicks,
 } from './chartGeometry';
@@ -143,6 +146,39 @@ describe('decimation', () => {
     expect(thinned[thinned.length - 1].ChamberTemp).toBeCloseTo(798.5);
   });
 
+  /**
+   * A bucket can straddle the moment a probe was plugged in, and the zeros it
+   * read before that are not cold meat — they are no reading at all. Averaging
+   * them in would invent a temperature the meat never had and drag the axis
+   * down to meet it.
+   */
+  it('averages only the readings a probe actually took', () => {
+    const pluggedInPartway = [0, 0, 0, 120, 130].map((reading, step) =>
+      at(step, { MeatTemp: reading })
+    );
+
+    expect(decimate(pluggedInPartway, 1)[0].MeatTemp).toBe(125);
+  });
+
+  /**
+   * A probe that was unplugged for a whole bucket has to come out of decimation
+   * still unplugged, so the gap in its line survives being thinned rather than
+   * being papered over with an average of nothing.
+   */
+  it('keeps a gap a probe left, rather than averaging its way across it', () => {
+    const unpluggedPartway = [130, 135, 0, 0].map((reading, step) =>
+      at(step, { MeatTemp: reading })
+    );
+
+    const thinned = decimate(unpluggedPartway, 2);
+
+    expect(thinned[0].MeatTemp).toBe(132.5);
+    expect(thinned[1].MeatTemp).toBe(0);
+    expect(seriesPath(thinned, 'probe1', createScales(thinned, plotBoxOf('mobile')))).not.toContain(
+      'NaN'
+    );
+  });
+
   it('leaves a cook short enough to draw exactly as it is', () => {
     const cook = climbing(50);
 
@@ -151,6 +187,50 @@ describe('decimation', () => {
 
   it('thins to a sane number of points when not told one', () => {
     expect(decimate(climbing(5000))).toHaveLength(DEFAULT_MAX_POINTS);
+  });
+});
+
+/**
+ * Which targets belong on the chart at all.
+ *
+ * Every smoke starts with a target seeded for all three probes, so a cook run
+ * with one probe would otherwise be ruled across by two dashed lines for meat
+ * that is not in the smoker — and, worse, have the axis stretched to reach them,
+ * squashing the one real trace into a sliver.
+ */
+describe('the targets worth drawing', () => {
+  it('keeps the target of a probe that is reporting', () => {
+    const cook = [at(0, { MeatTemp: 120 }), at(1, { MeatTemp: 130 })];
+
+    expect(reportedTargets(cook, { probe1: 203 })).toEqual({ probe1: 203 });
+  });
+
+  it('drops the target of a probe that never reported', () => {
+    const oneProbe = [
+      at(0, { MeatTemp: 120, Meat2Temp: 0, Meat3Temp: 0 }),
+      at(1, { MeatTemp: 130, Meat2Temp: 0, Meat3Temp: 0 }),
+    ];
+
+    expect(reportedTargets(oneProbe, { probe1: 203, probe2: 165, probe3: 195 })).toEqual({
+      probe1: 203,
+    });
+  });
+
+  /** A probe pulled out mid-cook was still cooked, so its target still means something. */
+  it('keeps the target of a probe that reported and then stopped', () => {
+    const pulled = [at(0, { Meat2Temp: 150 }), at(1, { Meat2Temp: 0 })];
+
+    expect(reportedTargets(pulled, { probe2: 165 })).toEqual({ probe2: 165 });
+  });
+
+  it('drops a target that was never really set', () => {
+    const cook = [at(0), at(1)];
+
+    expect(reportedTargets(cook, { probe1: 0, probe2: Number.NaN })).toEqual({});
+  });
+
+  it('has nothing to draw before the first reading arrives', () => {
+    expect(reportedTargets([], { probe1: 203 })).toEqual({});
   });
 });
 
@@ -217,6 +297,23 @@ describe('the plot', () => {
 
     expect(scales.y(high)).toBe(10);
     expect(scales.y(low)).toBe(180);
+  });
+
+  /**
+   * A smoke with no readings yet still has an axis, and it is an axis of the
+   * reader's own afternoon — an epoch-derived one would label the plot with 1970
+   * clock times while they wait for the first reading.
+   */
+  it('gives a cook that has not started a window on the present', () => {
+    const noon = new Date(2026, 0, 1, 12).getTime();
+
+    expect(timeDomainOf([], noon)).toEqual([new Date(noon - LONE_READING_SPAN), new Date(noon)]);
+  });
+
+  it('reads the present off the clock when it is not told one', () => {
+    const [, end] = timeDomainOf([]);
+
+    expect(Math.abs(end.getTime() - Date.now())).toBeLessThan(LONE_READING_SPAN);
   });
 
   it('gives a cook of a single reading an axis with width in it', () => {

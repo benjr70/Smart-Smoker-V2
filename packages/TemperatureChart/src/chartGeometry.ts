@@ -58,6 +58,34 @@ export const timeOf = (sample: ChartSample): number => new Date(sample.date).get
  */
 export const isReported = (reading: number): boolean => Number.isFinite(reading) && reading > 0;
 
+/** What a probe that took no reading reads as, which is what the hardware sends. */
+export const UNREPORTED = 0;
+
+/** Whether a probe took any reading at all over the course of a cook. */
+export const reportsIn = (data: ChartSample[], series: SeriesKey): boolean =>
+  data.some(sample => isReported(readingOf(sample, series)));
+
+/**
+ * The targets that belong on the chart: the ones set for meat that is actually
+ * in the smoker.
+ *
+ * Every smoke starts with a target seeded for all three probes, so drawing a
+ * target simply because one was configured would rule a cook run with a single
+ * probe across with dashed lines for meat that is not there — and stretch the
+ * temperature axis to reach them, squashing the one real trace into a sliver of
+ * the plot. A probe that reported and was then pulled keeps its target: that
+ * meat was cooked, and its target is still what it was cooked towards.
+ */
+export const reportedTargets = (data: ChartSample[], targets: ProbeTargets): ProbeTargets => {
+  const kept: ProbeTargets = {};
+  (Object.keys(targets) as (keyof ProbeTargets)[]).forEach(series => {
+    const target = targets[series];
+    if (target !== undefined && isReported(target) && reportsIn(data, series))
+      kept[series] = target;
+  });
+  return kept;
+};
+
 /** How far past the readings the axis reaches before it is rounded. */
 export const Y_PADDING = 15;
 /** The interval the axis is rounded outward to, so its labels stay round. */
@@ -100,17 +128,27 @@ export const tempYDomain = (data: ChartSample[], targets: ProbeTargets = {}): [n
  */
 export const DEFAULT_MAX_POINTS = 300;
 
-/** The mean of the samples in one bucket, as a sample in its own right. */
+/**
+ * The mean of the samples in one bucket, as a sample in its own right.
+ *
+ * Each line is averaged over the readings its own probe actually took, because
+ * the zeros a probe reads before it is plugged in are not cold meat — averaging
+ * them in would invent a temperature nothing ever reached and pull the axis down
+ * to meet it.
+ */
 const meanOf = (bucket: ChartSample[]): ChartSample => {
-  const mean = (value: (sample: ChartSample) => number): number =>
-    bucket.reduce((total, sample) => total + value(sample), 0) / bucket.length;
+  const mean = (series: SeriesKey): number => {
+    const reported = bucket.map(sample => readingOf(sample, series)).filter(isReported);
+    if (reported.length === 0) return UNREPORTED;
+    return reported.reduce((total, reading) => total + reading, 0) / reported.length;
+  };
 
   return {
-    ChamberTemp: mean(sample => sample.ChamberTemp),
-    MeatTemp: mean(sample => sample.MeatTemp),
-    Meat2Temp: mean(sample => sample.Meat2Temp),
-    Meat3Temp: mean(sample => sample.Meat3Temp),
-    date: new Date(mean(timeOf)),
+    ChamberTemp: mean('chamber'),
+    MeatTemp: mean('probe1'),
+    Meat2Temp: mean('probe2'),
+    Meat3Temp: mean('probe3'),
+    date: new Date(bucket.reduce((total, sample) => total + timeOf(sample), 0) / bucket.length),
   };
 };
 
@@ -183,11 +221,19 @@ export interface Point {
 }
 
 /** How wide a cook of a single reading is treated as being, so it has an axis. */
-const LONE_READING_SPAN = 60_000;
+export const LONE_READING_SPAN = 60_000;
 
-/** The span a cook covers, widened when it is too short to have one. */
-const timeDomainOf = (data: ChartSample[]): [Date, Date] => {
-  if (data.length === 0) return [new Date(0), new Date(LONE_READING_SPAN)];
+/**
+ * The span a cook covers, widened when it is too short to have one.
+ *
+ * A cook with no readings at all — the first seconds of a smoke, or a backend
+ * not yet reporting — is given a window around the present rather than around
+ * the epoch, because an axis labelled with 1970 clock times tells the reader
+ * their smoker has done something strange when in fact it has done nothing yet.
+ * The present is passed in rather than read, so the window can be pinned.
+ */
+export const timeDomainOf = (data: ChartSample[], now: number = Date.now()): [Date, Date] => {
+  if (data.length === 0) return [new Date(now - LONE_READING_SPAN), new Date(now)];
 
   const first = timeOf(data[0]);
   const last = timeOf(data[data.length - 1]);
