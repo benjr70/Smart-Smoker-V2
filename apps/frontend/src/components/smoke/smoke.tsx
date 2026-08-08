@@ -70,7 +70,14 @@ export function Smoke(): JSX.Element {
   }
 
   return (
-    <Grid container className="smoke">
+    // The wizard stacks the stepper above the step and shares one viewport
+    // between them (see `.smoke` in smoke.style.css). Both the direction and
+    // `nowrap` are set here rather than in the stylesheet: Material-UI emits
+    // `flex-direction` and `flex-wrap` for every Grid container, so a
+    // stylesheet setting them is left to whichever rule the browser saw last —
+    // and a wrapping column turns a step too tall for the screen into a second
+    // column beside the first.
+    <Grid container direction="column" wrap="nowrap" className="smoke" data-testid="smoke-screen">
       <Grid className="stepper">
         <Stepper nonLinear alternativeLabel activeStep={activeStep}>
           {steps.map((label, index) => (

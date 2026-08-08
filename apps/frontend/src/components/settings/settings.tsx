@@ -1,5 +1,6 @@
 import { Card, CardContent, ScopedCssBaseline, Stack, Typography } from '@mui/material';
 import React from 'react';
+import { BOTTOM_BAR_HEIGHT } from '../bottomBar/bottombar';
 import { AppearanceCard } from './appearance';
 import { NotificationsCard } from './notifications';
 import { TargetPresetsCard } from './targetPresets';
@@ -30,7 +31,12 @@ export const Settings = (): JSX.Element => (
     data-testid="settings-page"
     sx={{
       backgroundColor: 'background.default',
-      minHeight: 'calc(100vh - 56px)',
+      // The bar reserves its own height in flow, so this page claims what is
+      // left of the viewport — measured from the same constant, so the two
+      // cannot drift into a scrollbar or a gap. `paddingY` is the cards'
+      // breathing room, not an allowance for the bar; the last card clears the
+      // bar because of the reservation, not because of this.
+      minHeight: `calc(100vh - ${BOTTOM_BAR_HEIGHT}px)`,
       paddingX: 2,
       paddingY: 3,
     }}

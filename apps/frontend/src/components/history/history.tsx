@@ -27,7 +27,7 @@ export function History(): JSX.Element {
   };
 
   return (
-    <Grid paddingTop={1} className="history">
+    <Grid paddingTop={1} className="history" data-testid="history-screen">
       {smokeId ? (
         <Grid paddingLeft={2}>
           <IconButton color="primary" component="label" onClick={onBackClick}>
@@ -37,11 +37,17 @@ export function History(): JSX.Element {
       ) : (
         <></>
       )}
+      {/* The gap below the last card is the list's own rhythm now — it matches
+          the spacing between the cards. It used to be the bar's height over
+          again, to keep the last card clear of the bar; the bar reserves that
+          itself now (BOTTOM_BAR_HEIGHT in bottombar.tsx), directly below this
+          screen, so holding it here as well only doubles the dead space. */}
       <Grid
         container
         spacing={2}
         sx={{ display: 'flex', justifyContent: 'center' }}
-        paddingBottom={8}
+        paddingBottom={2}
+        data-testid="history-cards"
       >
         {!smokeId ? (
           history.map((smokeHistory, index) => {

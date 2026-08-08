@@ -112,6 +112,12 @@ GNOME/XWayland display through the Playwright MCP server, surviving reboots:
   test parses that file and fails on drift — change the panel, and the tour
   table has to follow. The Electron shell runs fullscreen on the box's much
   larger desktop, so the verifier resizes down to the panel before capturing.
+  Every tour shot is **viewport-clipped at that shape, never full-page**: fixed
+  and sticky chrome (the bottom navigation bar) is painted once at its viewport
+  anchor, so a full-page capture of a taller-than-viewport document strands the
+  bar mid-image over unrelated content and reads as a layout bug that isn't
+  there (PR #464). Content below the fold is reached by scrolling and captured
+  in the viewport.
 - **`inject-screenshots.sh`** — puts the `## Screenshots` section into the PR
   description from `caption<TAB>url` lines on stdin. It **replaces** the section
   it owns (marked `<!-- verify-pr-screenshots -->`) rather than appending, so

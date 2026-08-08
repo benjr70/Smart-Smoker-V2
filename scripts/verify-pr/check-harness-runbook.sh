@@ -74,6 +74,9 @@ rule_table() {
         "ui-screenshots	tour-viewport\.sh" \
         "ui-screenshots	427x952" \
         "ui-screenshots	800x480" \
+        "ui-screenshots	viewport-clipped, never.{0,4}full-page" \
+        "ui-screenshots	painted once, at its viewport anchor" \
+        "ui-screenshots	scroll to it and capture the viewport there" \
         "ui-screenshots	the tour documents the change, it does not verify it"
 }
 

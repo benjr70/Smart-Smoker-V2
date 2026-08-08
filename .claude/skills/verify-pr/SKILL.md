@@ -242,17 +242,23 @@ explicitly, in the prompt:
 > This PR changes UI on: \<UI_SURFACES>. In addition to your per-item evidence,
 > capture a screenshot tour of the changed surfaces in the real browser /
 > Electron shell: each screen the diff touches, in the state a reviewer would
-> want to see (populated, not an empty first-run screen), full-page, one file
-> per screen. **Set the viewport before you capture, per surface:** frontend →
-> 427x952 (a Pixel 10 Pro held portrait — it is a mobile app, never a
-> desktop-width window); smoker → 800x480 (the device's kiosk panel). Both come
-> from `scripts/verify-pr/tour-viewport.sh <surface>` — do not choose your own.
-> Name them `<surface>-NN-<slug>.png` (e.g. `frontend-01-settings-page.png`,
-> `smoker-02-smoke-screen.png`) in `ARTIFACT_DIR`, numbered in the order a
-> reviewer should read them, and list them at the end of your report as
-> `ui-shot: <filename> — <what it shows>` lines. Capture the tour even for
-> screens whose checklist items you deferred: the tour documents the change, it
-> does not verify it.
+> want to see (populated, not an empty first-run screen), one file per screen,
+> **viewport-clipped, never full-page**. Fixed and sticky chrome — the bottom
+> navigation bar — is painted once, at its viewport anchor, so a full-page
+> capture of a document taller than the viewport strands that bar in the middle
+> of the image on top of unrelated content, and a reviewer reads the artifact as
+> a layout bug that does not exist (PR #464). When the content a reviewer needs
+> to see is below the fold, **scroll to it and capture the viewport there** —
+> that is the shot, not a full-page one. **Set the viewport before you capture,
+> per surface:** frontend → 427x952 (a Pixel 10 Pro held portrait — it is a
+> mobile app, never a desktop-width window); smoker → 800x480 (the device's
+> kiosk panel). Both come from `scripts/verify-pr/tour-viewport.sh <surface>` —
+> do not choose your own. Name them `<surface>-NN-<slug>.png` (e.g.
+> `frontend-01-settings-page.png`, `smoker-02-smoke-screen.png`) in
+> `ARTIFACT_DIR`, numbered in the order a reviewer should read them, and list
+> them at the end of your report as `ui-shot: <filename> — <what it shows>`
+> lines. Capture the tour even for screens whose checklist items you deferred:
+> the tour documents the change, it does not verify it.
 
 The tour is **evidence for humans, not a verdict**: a screen you could not reach
 is simply absent from the tour and mentioned in your report; it never turns into

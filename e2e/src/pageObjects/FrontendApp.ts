@@ -258,6 +258,32 @@ const toRgb = (hex: string): string => {
 };
 
 /**
+ * The screens the bottom navigation bar moves between, addressed by the
+ * outermost box each of them lays itself out in.
+ */
+const SCREEN_ROOTS = {
+  smoke: '[data-testid="smoke-screen"]',
+  review: '[data-testid="history-screen"]',
+  settings: '[data-testid="settings-page"]',
+} as const;
+
+/** A screen, as the bottom navigation bar names it. */
+export type ScreenName = keyof typeof SCREEN_ROOTS;
+
+/**
+ * The height of the fixed bottom navigation bar, and so of the space the app
+ * holds open for it in flow (`BOTTOM_BAR_HEIGHT` in the frontend's
+ * `bottombar.tsx`).
+ */
+const BOTTOM_BAR_HEIGHT = 56;
+
+/**
+ * Rounding room, in CSS pixels: a viewport height that is not a multiple of the
+ * percentages a screen is laid out from lands these measurements on fractions.
+ */
+const SUB_PIXEL = 1;
+
+/**
  * Page object for the React web frontend.
  *
  * Encapsulates the pre-smoke wizard, the live smoke step + chart, the
@@ -1322,6 +1348,45 @@ export class FrontendApp {
   async leaveSettings(): Promise<void> {
     await this.page.getByTestId('nav-smoke').click();
     await expect(this.stepButton('Pre-Smoke')).toBeVisible();
+  }
+
+  /**
+   * Assert the bottom navigation bar covers nothing of the screen behind it:
+   * with the page scrolled as far down as it goes — where a fixed bar and the
+   * end of a screen meet — the screen ends at or above the top of the bar.
+   *
+   * `fitsTheViewport` holds the screen to the room the bar leaves it as well:
+   * the whole screen, everything it stacks, inside `100vh` less the bar. That
+   * is what a screen fails when a box *inside* it claims a slice of the
+   * viewport for itself — the claim reads as though that box were alone on the
+   * page, and whatever the screen stacks around it is added on top, scrolling a
+   * screen whose content fits perfectly well.
+   */
+  async expectClearsBottomBar(
+    screen: ScreenName,
+    { fitsTheViewport = false }: { fitsTheViewport?: boolean } = {}
+  ): Promise<void> {
+    await expect(this.page.locator(SCREEN_ROOTS[screen])).toBeVisible();
+    await this.page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+
+    const measured = await this.page.evaluate(selector => {
+      const box = (element: Element | null) => element?.getBoundingClientRect();
+
+      return {
+        screen: box(document.querySelector(selector)),
+        bar: box(document.querySelector('[data-testid="bottom-navigation"]')),
+        viewport: window.innerHeight,
+      };
+    }, SCREEN_ROOTS[screen]);
+
+    expect(measured.screen?.bottom ?? Infinity).toBeLessThanOrEqual(
+      (measured.bar?.top ?? 0) + SUB_PIXEL
+    );
+    if (fitsTheViewport) {
+      expect(measured.screen?.height ?? Infinity).toBeLessThanOrEqual(
+        measured.viewport - BOTTOM_BAR_HEIGHT + SUB_PIXEL
+      );
+    }
   }
 
   async reload(): Promise<void> {

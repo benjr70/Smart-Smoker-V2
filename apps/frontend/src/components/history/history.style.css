@@ -2,6 +2,17 @@
   justify-self: center;
 }
 
+/* The viewport left over by the bottom bar, which reserves its own height in
+   flow: 56px, BOTTOM_BAR_HEIGHT in bottombar.tsx. Claiming the whole viewport
+   here would push that reservation off the bottom of a short screen and give it
+   a scrollbar it has no content for.
+
+   Border-box so the claim means the whole screen: the screen carries padding of
+   its own (history.tsx), and against a content-box claim that padding is added
+   to the viewport rather than taken out of it — enough on its own to scroll an
+   empty Review. It affects the height only; this rule sets no width, and the
+   screen has no horizontal padding to re-measure. */
 .history {
+  box-sizing: border-box;
   min-height: calc(100vh - 56px);
 }
