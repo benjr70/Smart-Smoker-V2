@@ -7,6 +7,14 @@
 # device's own fixed panel. A tour captured at the wrong shape is worse than no
 # tour — it invites review comments about layout that only exists on the box.
 #
+# Shape is only half of it: the tour is captured **viewport-clipped at this
+# size, never full-page**. Fixed/sticky chrome (the app's bottom navigation bar)
+# is painted once, at its viewport anchor, so a full-page capture of a document
+# taller than the viewport shows that bar stranded mid-image over unrelated
+# content — which is exactly the "layout bug" a reviewer flagged on PR #464 when
+# a full-page Review shot was posted. Content below the fold gets scrolled to
+# and captured in the viewport; that is the shot.
+#
 # The smoker number is not a preference, it is the hardware: the kiosk
 # BrowserWindow in apps/smoker/electron-app/index.ts. The sibling test parses
 # that file and fails if the two ever disagree, so a device-panel change cannot

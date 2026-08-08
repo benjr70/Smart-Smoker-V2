@@ -198,9 +198,15 @@ same real browser / Electron shell you are already driving:
   refused, say so in your report and capture anyway; a wrong-shape shot noted as
   such beats no shot.
 
-- one **full-page** screenshot per screen the diff touches, in the state a
-  reviewer would want to see — populated with realistic data, not an empty
-  first-run screen;
+- one screenshot per screen the diff touches, **viewport-clipped, never
+  full-page**, in the state a reviewer would want to see — populated with
+  realistic data, not an empty first-run screen. Fixed and sticky chrome (the
+  bottom navigation bar) is painted once, at its viewport anchor, so a full-page
+  capture of a document taller than the viewport strands that bar in the middle
+  of the image on top of unrelated content — a reviewer reads that artifact as a
+  layout bug that does not exist (PR #464). Where the content a reviewer needs
+  is below the fold, **scroll to it and capture the viewport there**; that is
+  the shot, not a full-page one;
 - named `<surface>-NN-<slug>.png` in `ARTIFACT_DIR`
   (`frontend-01-settings-page.png`, `smoker-02-smoke-screen.png`), numbered in
   the order a reviewer should read them — the filename becomes the caption under
