@@ -12,10 +12,10 @@ description:
 # PR Reconcile — Autonomous PR Feedback + Conflict Fixer
 
 You are the **reconciler** spawned by `/team-pickup` when an already-open agent
-PR needs attention: master moved under it (merge conflict), a human reviewed
-it and handed it back with the `team:revise` label, and/or its bot tail never
-finished (`incomplete` — a prior fire died mid-§6a). One fire = one PR
-brought back to green — rebased, comments addressed with in-thread replies, CI
+PR needs attention: master moved under it (merge conflict), a human reviewed it
+and handed it back with the `team:revise` label, and/or its bot tail never
+finished (`incomplete` — a prior fire died mid-§6a). One fire = one PR brought
+back to green — rebased, comments addressed with in-thread replies, CI
 re-watched, manual verification re-run — or escalated with a parked label.
 
 Every run is **fresh and stateless**: context is reconstructed from the issue
@@ -39,10 +39,10 @@ This skill assumes:
 All four arguments required, supplied verbatim from team-pickup's triage verdict
 (`reason` is the triage pick reason; when the PR both conflicts and carries
 `team:revise`, the caller passes `both`). Reason `incomplete` means the PR
-carries no attention label and no conflict, but its bot tail never finished:
-the one-time review marker (`<!-- pr-review-done -->`) and/or any manual
-verification round comment is missing — a prior fire died mid-§6a. §1 and §2
-are then natural no-ops; §3 is the whole job.
+carries no attention label and no conflict, but its bot tail never finished: the
+one-time review marker (`<!-- pr-review-done -->`) and/or any manual
+verification round comment is missing — a prior fire died mid-§6a. §1 and §2 are
+then natural no-ops; §3 is the whole job.
 
 ## Process
 
@@ -229,21 +229,41 @@ success tail against this PR, with one modification:
 The same blocking rules apply verbatim: never emit output while pr-watch or the
 `/verify-pr` round is in flight; `pr-watch: (in flight)` is never a legal value.
 
+**The round is NOT skippable.** `/verify-pr` is agent-invocable (issue #467
+removed the `disable-model-invocation` flag that refused every automated round;
+PR #460 burned three consecutive reconcile fires on that refusal, each reporting
+a clean result with zero verification behind it). When the tail runs, the round
+runs: the only outcomes that let this fire report PASS are a real
+`manual-verify:` verdict line or an explicitly recorded
+`manual-verify: infra-error …` non-verdict. If the round produced neither — no
+`manual-verify:` line came back, the spawn failed, or the harness refused — that
+is a **missing round**, and it must never be reported as `result: PASS` or as an
+ordinary skip. Park it instead, exactly as team-pickup §6a.2 specifies:
+
+```bash
+gh pr comment "$PR_NUM" --body "Manual verification round did not run: <reason>.
+Parking for a human — no verification evidence exists for this PR."
+gh issue edit "$N" --add-label team:checks-failed
+```
+
+then emit `verify: MISSING — <reason>` as the block's `verify:` line and
+`result: ERROR — manual verification round did not run` as the verdict.
+
 If neither §1 nor §2 pushed a commit (e.g. `team:revise` with zero actionable
 threads) **and `--reason` is not `incomplete`**, skip the tail — nothing
 changed, existing evidence stands.
 
 When `--reason incomplete`, ALWAYS run the tail even with no push: the tail
-itself is the missing work (pr-watch to green, the marker-gated one-time
-review, a verification round). On a no-push `incomplete` run existing ticks
-are NOT stale — the `/verify-pr` round uses team-pickup §6a.2's standard
-semantics (unchecked items only), headed `### Manual verification — round
-<M>/3` with `M` = 1 + the count of existing round comments (respecting
-`MANUAL_ROUNDS_MAX=3`; at cap with FAILs it exhausts into draft as usual).
-Convergence: if the review marker is absent, §3's pr-review may apply
-`team:revise` and end the tail — the next fire re-picks the PR as `revise`;
-either way the PR exits the `incomplete` class every fire (marker/round
-posted, `team:revise` applied, or parked), so the pick can never loop.
+itself is the missing work (pr-watch to green, the marker-gated one-time review,
+a verification round). On a no-push `incomplete` run existing ticks are NOT
+stale — the `/verify-pr` round uses team-pickup §6a.2's standard semantics
+(unchecked items only), headed `### Manual verification — round <M>/3` with `M`
+= 1 + the count of existing round comments (respecting `MANUAL_ROUNDS_MAX=3`; at
+cap with FAILs it exhausts into draft as usual). Convergence: if the review
+marker is absent, §3's pr-review may apply `team:revise` and end the tail — the
+next fire re-picks the PR as `revise`; either way the PR exits the `incomplete`
+class every fire (marker/round posted, `team:revise` applied, or parked), so the
+pick can never loop.
 
 ## Output format
 
@@ -269,7 +289,10 @@ The final `result:` line doubles as the terminal verdict the caller parses:
 
 The hard validity rule from team-pickup §7 applies: when §3 ran, the block MUST
 carry the verbatim `pr-watch:` terminal line (and `verify:` on PASS) before the
-result is emitted.
+result is emitted. `result: PASS` requires a `verify:` line holding a real
+`manual-verify:` verdict — `verify: MISSING — <reason>` and an absent line are
+both disqualifying, and a `pr-reconcile: PASS` emitted without a round that
+actually ran is an invalid fire.
 
 ## Failure modes
 
@@ -287,6 +310,13 @@ result is emitted.
 - **Verification tail exhausts** — same escalation as team-pickup: draft +
   `team:checks-failed`; report DRAFT. The reconcile's own labels are NOT applied
   (the tail failing is a checks problem, not a revise/rebase problem).
+- **Verification round never ran** — the harness refused, the spawn failed, or
+  the agent returned no `manual-verify:` line. Do NOT treat it as a skip and do
+  NOT pass: `team:checks-failed`, an explanatory comment on the PR, and
+  `verify: MISSING — <reason>` with `result: ERROR`. Before parking,
+  sanity-check that `.claude/skills/verify-pr/SKILL.md` has not regained
+  `disable-model-invocation` — that flag is the known cause and
+  `bash scripts/verify-pr/check-verify-invocable.sh` names it in one line.
 - **Crash mid-fire** — the caller's
   `picked:   reconcile PR #<PR_NUM> (issue #<N>)` log line lets agent-run's
   crash cleanup restore the issue lock (`team:in-progress` cleared, `team:done`

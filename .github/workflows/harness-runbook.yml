@@ -7,6 +7,11 @@
 # Dropping one silently regresses the harness back to "no tool available"
 # deferrals, so a text check asserts every rule is present in both documents.
 # Pure text: needs only bash + coreutils, no Node install, no docker, no display.
+#
+# The same job also guards the harness's *invocability* (issue #467): the
+# verify-pr skill must stay callable by an agent (no `disable-model-invocation`,
+# no human-only caller wording), and team-pickup §6a.2 / pr-reconcile §3 must
+# keep routing a round that did not run to a park instead of a silent PASS.
 
 name: Harness Runbook Check
 
@@ -15,17 +20,25 @@ on:
     branches: [master]
     paths:
       - '.claude/skills/verify-pr/SKILL.md'
+      - '.claude/skills/team-pickup/SKILL.md'
+      - '.claude/skills/pr-reconcile/SKILL.md'
       - '.claude/agents/manual-verifier.md'
       - 'scripts/verify-pr/check-harness-runbook.sh'
       - 'scripts/verify-pr/check-harness-runbook.test.sh'
+      - 'scripts/verify-pr/check-verify-invocable.sh'
+      - 'scripts/verify-pr/check-verify-invocable.test.sh'
       - '.github/workflows/harness-runbook.yml'
   push:
     branches: [master]
     paths:
       - '.claude/skills/verify-pr/SKILL.md'
+      - '.claude/skills/team-pickup/SKILL.md'
+      - '.claude/skills/pr-reconcile/SKILL.md'
       - '.claude/agents/manual-verifier.md'
       - 'scripts/verify-pr/check-harness-runbook.sh'
       - 'scripts/verify-pr/check-harness-runbook.test.sh'
+      - 'scripts/verify-pr/check-verify-invocable.sh'
+      - 'scripts/verify-pr/check-verify-invocable.test.sh'
       - '.github/workflows/harness-runbook.yml'
 
 jobs:
@@ -37,3 +50,6 @@ jobs:
 
       - name: Run the harness runbook check suite
         run: bash scripts/verify-pr/check-harness-runbook.test.sh
+
+      - name: Run the verify-pr invocability check suite
+        run: bash scripts/verify-pr/check-verify-invocable.test.sh
