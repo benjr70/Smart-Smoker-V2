@@ -2,12 +2,14 @@ import React, { useEffect, useRef } from 'react';
 import Grid from '@mui/material/Grid';
 import './smokeStep.style.css';
 import { Autocomplete, Button, Divider, Input, TextField } from '@mui/material';
-import TempChart from 'temperaturechart/src/tempChart';
+import TemperatureChart from 'temperaturechart/src/TemperatureChart';
 import { SmokeSessionProvider, useSmokeSession } from 'smoke-session/src/react';
 import { CloudSocketAdapter, createCloudSocketAdapter, SessionConfig } from 'smoke-session/src';
 import { getDefaultApiClient } from '../../../api';
 import { createSessionApiPort } from '../../../api/sessionApiAdapter';
-import { useChartColors } from '../../../theme';
+import { useChartPalette } from '../../../theme';
+import { chartNamesOf } from '../../common/chartNames';
+import { useTemperatureSeries } from './useTemperatureSeries';
 
 const woodType = ['Hickory', 'Post Oak', 'Pecan', 'Cherry', 'Apple'];
 
@@ -29,7 +31,10 @@ type SmokeStepProps = {
  */
 export function SmokeStepView(props: SmokeStepProps): JSX.Element {
   const session = useSmokeSession({ flushProfileOnUnmount: true });
-  const chartColors = useChartColors();
+  // The cook so far, recorded and thinned by the hook; the chart is handed it
+  // and draws it, and holds nothing of the cook itself.
+  const series = useTemperatureSeries();
+  const chartColors = useChartPalette();
 
   return (
     <Grid item xs={12}>
@@ -131,20 +136,16 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
         </Grid>
       </Grid>
       <Grid item justifyContent="center" data-testid="smoke-chart">
-        <TempChart
-          ChamberTemp={parseFloat(session.chamberTemp)}
-          MeatTemp={parseFloat(session.probeTemp1)}
-          Meat2Temp={parseFloat(session.probeTemp2)}
-          Meat3Temp={parseFloat(session.probeTemp3)}
-          ChamberName={session.chamberName}
-          Probe1Name={session.probe1Name}
-          Probe2Name={session.probe2Name}
-          Probe3Name={session.probe3Name}
-          date={session.date}
-          smoking={session.smoking}
-          initData={session.initialTemps}
+        <TemperatureChart
+          data={series}
+          names={chartNamesOf({
+            chamberName: session.chamberName,
+            probe1Name: session.probe1Name,
+            probe2Name: session.probe2Name,
+            probe3Name: session.probe3Name,
+          })}
           colors={chartColors}
-        ></TempChart>
+        />
       </Grid>
       <Grid container className="buttonContainer" justifyContent="space-around">
         <Button
