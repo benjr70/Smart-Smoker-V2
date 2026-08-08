@@ -1,0 +1,47 @@
+# agent-dashboard.service — read-only tailnet status page for the agent pipeline.
+#
+# Serves http://<tailscale-ip>:8090/ (phone-friendly single page + /api/status
+# JSON). Read-only by construction: no POST routes exist. The port is
+# tailnet-only automatically — this box's ufw denies LAN inbound and allows
+# tailscale0 (docs/CI-CD/claude-agent-vm.md), so no firewall change is needed.
+#
+# To install (needs one sudo session — same HITL precedent as agent-daemon):
+#
+#   sudo cp infra/systemd/agent-dashboard.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now agent-dashboard.service
+#   journalctl -u agent-dashboard -f      # follow logs
+#
+# Sudo-free alternative: a user unit at ~/.config/systemd/user/ (drop User=,
+# change WantedBy to default.target, `systemctl --user enable --now`). Caveat:
+# Linger=no on this box, so a user unit dies at logout/reboot until
+# `sudo loginctl enable-linger claude-agent-1` — which needs sudo anyway;
+# prefer the system unit.
+#
+# Assumes the repo is checked out at /home/claude-agent-1/Smart-Smoker-V2.
+
+[Unit]
+Description=Smart-Smoker agent pipeline status dashboard (tailnet-only, read-only)
+Documentation=https://github.com/benjr70/Smart-Smoker-V2
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=claude-agent-1
+WorkingDirectory=/home/claude-agent-1/Smart-Smoker-V2
+# systemd's default PATH lacks gh-adjacent tooling and nvm node; mirror
+# agent-daemon.service so the wp_scan subprocess resolves gh/jq. Update the nvm
+# segment when the node version on the host changes.
+Environment=PATH=/home/claude-agent-1/.local/bin:/home/claude-agent-1/.nvm/versions/node/v24.7.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# Same optional secrets drop-in as the daemon (e.g. GH_TOKEN).
+EnvironmentFile=-/home/claude-agent-1/.config/agent-daemon/env
+ExecStart=/usr/bin/python3 /home/claude-agent-1/Smart-Smoker-V2/scripts/claude-agent/dashboard/server.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=agent-dashboard
+
+[Install]
+WantedBy=multi-user.target
