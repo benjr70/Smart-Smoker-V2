@@ -205,12 +205,19 @@ function render() {
     if (scan.reconcile) chips += `<span class="chip amber">reconcile PR #${scan.reconcile}</span>`;
     if (scan.paused) chips += `<span class="chip">paused #${scan.paused}</span>`;
     if (scan.pickSig) chips += `<span class="chip">queue: #${esc(scan.pickSig)}</span>`;
+    const sum = data.fireSummary || {};
+    const haveSum = sum.forFire === cur.id && sum.title;
     document.getElementById("fire").innerHTML =
       `<span class="badge green pulse">running</span>
-       <span class="kv"> ${esc(cur.id)} · <b>${ago(cur.startedAt)}</b> elapsed</span>
-       <div class="kv">${esc(cur.summary !== "in flight" ? cur.summary : "output arrives when the fire completes")}</div>
-       <div>${chips}</div>` +
-      ((data.pipeline || {}).error ? `<div class="err">pipeline: ${esc(data.pipeline.error)}</div>` : "");
+       <span class="kv"> ${esc(cur.id)} · <b>${ago(cur.startedAt)}</b> elapsed</span>` +
+      (haveSum
+        ? `<div style="font-weight:600;margin-top:6px">${esc(sum.title)}</div>
+           <div class="kv">${esc(sum.description || "")}</div>`
+        : `<div class="kv">${esc(cur.summary !== "in flight" ? cur.summary
+            : (sum.issue || "summarizing…"))}</div>`) +
+      `<div>${chips}</div>` +
+      ((data.pipeline || {}).error ? `<div class="err">pipeline: ${esc(data.pipeline.error)}</div>` : "") +
+      (sum.error ? `<div class="err">summary: ${esc(sum.error)}</div>` : "");
   } else {
     fc.style.display = "none";
   }

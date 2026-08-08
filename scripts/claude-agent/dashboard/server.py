@@ -37,7 +37,7 @@ import subprocess
 import threading
 import time
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("DASHBOARD_PORT", "8090"))
@@ -62,14 +62,22 @@ PATH_ENV = (
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
+# Live transcripts of the fire (and its teammate subagents) — the only place
+# an in-flight run's activity is visible, since claude --print buffers stdout.
+CLAUDE_PROJECT_DIR = os.path.expanduser(
+    "~/.claude/projects/-home-claude-agent-1-Smart-Smoker-V2"
+)
+HAIKU_MODEL = "claude-haiku-4-5-20251001"
+
+
 def now_iso():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def run(cmd, timeout):
+def run(cmd, timeout, cwd=None):
     env = dict(os.environ, PATH=PATH_ENV)
     out = subprocess.run(
-        cmd, capture_output=True, text=True, timeout=timeout, env=env
+        cmd, capture_output=True, text=True, timeout=timeout, env=env, cwd=cwd
     )
     if out.returncode != 0:
         raise RuntimeError(
@@ -380,6 +388,141 @@ def fetch_prs():
     return {"items": items}
 
 
+def _recent_transcript_events(since, max_events=40):
+    """Compact activity lines from every transcript active since the fire began.
+
+    Each teammate subagent writes its own JSONL in the project dir, so scanning
+    all recently-modified files captures which agents are working, not just the
+    top-level fire. Reads only the tail of each file; malformed lines skipped.
+    """
+    def born_after(path):
+        # A transcript belongs to the fire only if its FIRST entry postdates
+        # the fire's start — mtime alone also matches unrelated interactive
+        # sessions running in the same project (observed: the summary described
+        # the dashboard-building session instead of the fire).
+        try:
+            with open(path, errors="replace") as f:
+                first = json.loads(f.readline())
+            ts = first.get("timestamp") or ""
+            born = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            return born >= since - timedelta(seconds=60)
+        except Exception:
+            return False
+
+    paths = [
+        p
+        for p in glob.glob(os.path.join(CLAUDE_PROJECT_DIR, "*.jsonl"))
+        if os.path.getmtime(p) >= since.timestamp() and born_after(p)
+    ]
+    paths.sort(key=os.path.getmtime)
+    events = []
+    for p in paths[-6:]:
+        size = os.path.getsize(p)
+        with open(p, errors="replace") as f:
+            if size > 131072:
+                f.seek(size - 131072)
+            lines = f.read().splitlines()[1:] if size > 131072 else f.read().splitlines()
+        for raw in lines[-80:]:
+            try:
+                rec = json.loads(raw)
+            except ValueError:
+                continue
+            content = (rec.get("message") or {}).get("content")
+            if not isinstance(content, list):
+                continue
+            ts = rec.get("timestamp") or ""
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                if block.get("type") == "tool_use":
+                    inp = block.get("input") or {}
+                    hint = (
+                        inp.get("description")
+                        or inp.get("command")
+                        or inp.get("prompt")
+                        or inp.get("file_path")
+                        or inp.get("skill")
+                        or ""
+                    )
+                    events.append(
+                        (ts, f"tool {block.get('name')}: {str(hint)[:110]}")
+                    )
+                elif block.get("type") == "text" and rec.get("type") == "assistant":
+                    text = (block.get("text") or "").strip()
+                    if text:
+                        events.append((ts, f"says: {text[:110]}"))
+    events.sort(key=lambda e: e[0])
+    return [line for _, line in events[-max_events:]]
+
+
+def fetch_fire_summary():
+    """Haiku-written title + description of the in-flight fire.
+
+    Only source rich enough is the live transcript tail; the fire's own log is
+    header-only until it exits (claude --print buffers). One cheap haiku call
+    per cache window, and only while a fire is actually running.
+    """
+    fires = cached("fires", 10, fetch_fires)
+    cur = fires.get("current")
+    if not cur:
+        return {"forFire": None, "title": None, "description": None}
+
+    started = datetime.fromisoformat(cur["startedAt"])
+    events = _recent_transcript_events(started)
+    issue = None
+    try:
+        items = json.loads(
+            run(
+                ["gh", "issue", "list", "--label", "team:in-progress",
+                 "--state", "open", "--json", "number,title"],
+                timeout=15,
+            )
+        )
+        if items:
+            issue = f"issue #{items[0]['number']}: {items[0]['title']}"
+    except Exception:
+        pass
+    if not events and not issue:
+        return {"forFire": cur["id"], "title": None, "description": None}
+
+    context = "\n".join(
+        filter(
+            None,
+            [
+                f"Fire started {cur['startedAt']} (log {cur['id']}).",
+                f"Locked issue: {issue}" if issue else None,
+                "Recent activity (oldest first):",
+                *events,
+            ],
+        )
+    )
+    prompt = (
+        "You are labeling a status card for an autonomous coding-agent run "
+        "(a '/team-pickup' fire: it picks a GitHub issue or reconciles a PR, "
+        "spawns implementer/reviewer/verifier subagents, runs CI and manual "
+        "verification). Based on the activity below, reply with ONLY a JSON "
+        'object {"title": "...", "description": "..."} — title under 60 chars '
+        "naming the work item and phase; description 1-2 plain sentences on "
+        "what is happening right now and which agent/step is active. No "
+        "markdown, no code fences.\n\n" + context[:8000]
+    )
+    out = run(
+        ["claude", "--model", HAIKU_MODEL, "-p", prompt],
+        timeout=120,
+        cwd="/tmp",  # neutral cwd: don't load the repo's project context
+    )
+    m = re.search(r"\{.*\}", out, re.S)
+    if not m:
+        raise RuntimeError(f"haiku reply unparseable: {out.strip()[:120]}")
+    parsed = json.loads(m.group(0))
+    return {
+        "forFire": cur["id"],
+        "title": str(parsed.get("title") or "")[:80] or None,
+        "description": str(parsed.get("description") or "")[:400] or None,
+        "issue": issue,
+    }
+
+
 def build_status():
     return {
         "generatedAt": now_iso(),
@@ -388,6 +531,7 @@ def build_status():
         "fires": cached("fires", 10, fetch_fires),
         "pipeline": cached("pipeline", 60, fetch_pipeline),
         "openPrs": cached("prs", 60, fetch_prs),
+        "fireSummary": cached("fireSummary", 90, fetch_fire_summary),
     }
 
 
