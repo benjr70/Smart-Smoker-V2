@@ -83,4 +83,16 @@ describe('the backend rule against the one the product shares', () => {
       DEFAULT_APPEARANCE_PREFERENCE,
     );
   });
+
+  /**
+   * The resolved half is written by browsers and read by the touchscreen, which
+   * renders it verbatim — it resolves nothing itself. A fresh installation has
+   * no browser-written value, and this document is served all the same, so what
+   * stands here is what the panel in the garage renders: light would boot it
+   * dark and then repaint it to a sheet of white in an unlit room. Stated on
+   * this side too, because the backend is what actually serves it.
+   */
+  it('records the scheme an unlit garage needs, which is all that reads it', () => {
+    expect(DEFAULT_APPLICATION_SETTINGS.appearance.resolvedMode).toBe('dark');
+  });
 });

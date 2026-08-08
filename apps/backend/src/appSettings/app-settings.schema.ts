@@ -158,8 +158,14 @@ export class AppearanceSettings {
   @Prop({ default: 'system' })
   mode: AppearanceMode;
 
+  /**
+   * Defaulted dark, like {@link DEFAULT_APPLICATION_SETTINGS}: a document
+   * written before any browser resolved anything still reaches the touchscreen,
+   * which renders this half verbatim, and light there is a sheet of white in an
+   * unlit garage. No browser is affected, because none of them read it.
+   */
   @ApiProperty({ enum: ['light', 'dark'] })
-  @Prop({ default: 'light' })
+  @Prop({ default: 'dark' })
   resolvedMode: ColorScheme;
 }
 

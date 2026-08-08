@@ -184,16 +184,18 @@ export interface NotificationsResource {
 
 /**
  * What an installation nobody has chosen an appearance on is taken to have
- * chosen: follow the device, resolved the way a client with no device
- * preference of its own resolves it.
+ * chosen: follow the device, recorded as the touchscreen's own default.
  *
  * The API layer's copy of the value the appearance resolver and the backend both
  * start from — kept here rather than imported so the wire types stay free of
- * domain imports, and pinned to the shared one by the client's tests.
+ * domain imports, and pinned to the shared one by the client's tests. The
+ * recorded half costs this browser nothing either way: it resolves "follow the
+ * device" against the machine it is running on and never reads that half. The
+ * touchscreen does, which is why it says dark.
  */
 export const DEFAULT_APPEARANCE_PREFERENCE: AppearancePreference = {
   mode: 'system',
-  resolvedMode: 'light',
+  resolvedMode: 'dark',
 };
 
 export interface AppearanceResource {

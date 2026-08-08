@@ -10,6 +10,7 @@ import {
   AppearanceMode,
   ColorScheme,
   DEFAULT_APPEARANCE_PREFERENCE,
+  DEVICE_DEFAULT_COLOR_SCHEME,
   isCoherentPreference,
   resolveAppearance,
   resolveChoice,
@@ -180,13 +181,106 @@ describe('whether a preference says the same thing twice', () => {
 });
 
 /**
+ * The touchscreen bolted to the smoker. It has no operating-system preference
+ * worth consulting — its panel reports light however dark the garage is — so it
+ * resolves nothing: it renders the value some browser already resolved and
+ * recorded, and that is the whole of its rule.
+ */
+describe.each<[AppearanceMode, ColorScheme, boolean]>([
+  ['system', 'light', false],
+  ['system', 'light', true],
+  ['system', 'dark', false],
+  ['system', 'dark', true],
+  ['light', 'light', false],
+  ['light', 'light', true],
+  ['dark', 'dark', false],
+  ['dark', 'dark', true],
+])(
+  'a device client, sent "%s" resolved to "%s" with the panel dark: %s',
+  (mode, resolvedMode, systemDark) => {
+    it(`renders in ${resolvedMode}, whatever the panel says`, () => {
+      expect(
+        resolveAppearance({ stored: { mode, resolvedMode }, systemDark, client: 'device' })
+          .colorScheme
+      ).toBe(resolvedMode);
+    });
+
+    /**
+     * The device is a reader of the installation's appearance and nothing else.
+     * A device that wrote what it had resolved would overwrite the browser that
+     * knows what "follow the device" means with its own guess.
+     */
+    it('never asks for the value to be written back', () => {
+      expect(
+        resolveAppearance({ stored: { mode, resolvedMode }, systemDark, client: 'device' })
+          .shouldPersist
+      ).toBe(false);
+    });
+  }
+);
+
+/**
+ * Nothing stored means something different to each kind of client, which is why
+ * "nothing stored" cannot simply be one value. A browser can still ask the
+ * machine it runs on; the appliance in the garage has nobody to ask, and the
+ * safe answer for a panel in a dark room is the dark one.
+ */
+describe('a client with nothing stored', () => {
+  it('leaves a device on the scheme the garage is lit for', () => {
+    expect(resolveAppearance({ stored: null, client: 'device' })).toMatchObject({
+      colorScheme: DEVICE_DEFAULT_COLOR_SCHEME,
+      shouldPersist: false,
+    });
+  });
+
+  it('is dark, so a panel nobody has chosen for does not light up a dark garage', () => {
+    expect(DEVICE_DEFAULT_COLOR_SCHEME).toBe('dark');
+  });
+
+  it('still leaves a browser following the machine it runs on', () => {
+    expect(resolveAppearance({ stored: null, systemDark: true }).colorScheme).toBe('dark');
+    expect(resolveAppearance({ stored: null, systemDark: false }).colorScheme).toBe('light');
+  });
+});
+
+/**
  * What an installation nobody has chosen an appearance on is taken to have
- * chosen: follow the device, which a client with no device preference of its own
- * reads as light.
+ * chosen: follow the device, recorded as the scheme the one client that reads
+ * the recorded half needs.
  */
 describe('the documented default', () => {
-  it('is "follow the device", resolved as a client with no device would', () => {
-    expect(DEFAULT_APPEARANCE_PREFERENCE).toEqual({ mode: 'system', resolvedMode: 'light' });
+  it('is "follow the device", recorded as the panel in the garage needs it', () => {
+    expect(DEFAULT_APPEARANCE_PREFERENCE).toEqual({
+      mode: 'system',
+      resolvedMode: DEVICE_DEFAULT_COLOR_SCHEME,
+    });
+  });
+
+  /**
+   * The recorded half exists for the touchscreen and is read by nothing else, so
+   * on an installation where no browser has recorded one it has to say what the
+   * touchscreen needs — otherwise the default is the one value that reaches the
+   * garage, and it lights the room up. Storage answers with this default rather
+   * than with nothing, so this is the value the panel actually resolves against:
+   * the "nothing stored" rule below never gets a look in from a live backend.
+   */
+  it('leaves the touchscreen of an installation nobody has chosen for dark', () => {
+    expect(
+      resolveAppearance({ stored: DEFAULT_APPEARANCE_PREFERENCE, client: 'device' }).colorScheme
+    ).toBe(DEVICE_DEFAULT_COLOR_SCHEME);
+  });
+
+  /**
+   * And costs a browser nothing, because a browser never reads the recorded
+   * half: it resolves "follow the device" against the machine in front of it.
+   */
+  it('still leaves a browser following the machine it runs on', () => {
+    expect(
+      resolveAppearance({ stored: DEFAULT_APPEARANCE_PREFERENCE, systemDark: true }).colorScheme
+    ).toBe('dark');
+    expect(
+      resolveAppearance({ stored: DEFAULT_APPEARANCE_PREFERENCE, systemDark: false }).colorScheme
+    ).toBe('light');
   });
 
   it('says the same thing twice, like any preference that may be stored', () => {

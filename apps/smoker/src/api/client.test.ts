@@ -1,4 +1,5 @@
-import { createApiClient } from './client';
+import { DEFAULT_APPEARANCE_PREFERENCE as SHARED_DEFAULT_APPEARANCE_PREFERENCE } from 'theme/src';
+import { DEFAULT_APPEARANCE_PREFERENCE, createApiClient } from './client';
 import { createFakeBackend } from './fakeBackend';
 import { ApiError } from 'api-transport/src';
 
@@ -170,6 +171,56 @@ describe('smoker api client', () => {
         { method: 'get', path: 'api/wifiManager/connection', body: undefined },
       ]);
       expect(cloud.requests).toEqual([]);
+    });
+  });
+
+  /**
+   * The appearance the installation chose. Read-only on purpose: the device has
+   * no colour preference of its own to contribute, so it is given no way to say
+   * one — the resource has a read and nothing else.
+   */
+  describe('appearance resource (cloud base URL)', () => {
+    it('reads the installation preference from GET `appSettings`', async () => {
+      const { cloud, device, client } = buildClient({
+        appSettings: { appearance: { mode: 'system', resolvedMode: 'dark' } },
+      });
+
+      const result = await client.appearance.get();
+
+      expect(result).toEqual({ mode: 'system', resolvedMode: 'dark' });
+      expect(cloud.requests).toEqual([{ method: 'get', path: 'appSettings', body: undefined }]);
+      expect(device.requests).toEqual([]);
+    });
+
+    /**
+     * The route answers with a document whether or not an appearance has ever
+     * been chosen, and a deployment older than the block answers without one.
+     * Both mean "nothing chosen here", which is the documented default rather
+     * than an absence the touchscreen would have to have an opinion about.
+     */
+    it('reads an installation nobody has chosen an appearance on as the default', async () => {
+      const { client } = buildClient({ appSettings: {} });
+
+      await expect(client.appearance.get()).resolves.toEqual({
+        mode: 'system',
+        resolvedMode: 'dark',
+      });
+    });
+
+    /**
+     * The API layer keeps its own copy of that default so the wire types stay
+     * free of domain imports. Two copies can drift, and a drift here would have
+     * the touchscreen and the browsers disagreeing about what an installation
+     * nobody has chosen for looks like — so they are pinned together.
+     */
+    it('defaults to exactly what the shared appearance rule defaults to', () => {
+      expect(DEFAULT_APPEARANCE_PREFERENCE).toEqual(SHARED_DEFAULT_APPEARANCE_PREFERENCE);
+    });
+
+    it('offers no way to write one', () => {
+      const { client } = buildClient();
+
+      expect(Object.keys(client.appearance)).toEqual(['get']);
     });
   });
 

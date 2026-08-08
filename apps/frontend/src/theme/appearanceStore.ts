@@ -27,6 +27,16 @@ export interface AppearanceCachePort {
   systemDark(): boolean;
   /** Render in this mode from now on, and remember it locally. */
   apply(mode: AppearanceMode): void;
+  /**
+   * Call this back whenever the operating system changes its own preference,
+   * and hand back the way to stop listening.
+   *
+   * "Follow the device" is a standing instruction rather than a value, and the
+   * device can change its mind while the page is open. Only a browser can see
+   * that happen, so a browser that noticed and said nothing would leave the
+   * touchscreen — which renders the recorded answer — painted for this morning.
+   */
+  watchSystemDark(listener: () => void): () => void;
 }
 
 /**
@@ -114,6 +124,43 @@ export const createAppearanceStore = ({
   let settlements = 0;
 
   /**
+   * The write in flight, and how many have been asked for. Writes leave one at
+   * a time, in the order they were asked for.
+   *
+   * Two of them can otherwise be in the air at once — the machine flipping to
+   * dark at dusk publishes one, and the operator who then reaches for Light
+   * publishes another — and nothing about HTTP says the first one sent lands
+   * first. If the dusk write lands second the installation is left holding a
+   * value nobody chose, announces it, and every client including the touchscreen
+   * repaints away from the choice the operator just made. Sending the second
+   * only once the first has landed is the whole of the fix; the load path is
+   * protected differently, by `settlements`, because what it has to survive is a
+   * stale *answer* rather than an out-of-order write.
+   *
+   * Waiting its turn is also where a write can find it has nothing left to say:
+   * an operator trying the options out would otherwise have each of them
+   * published in sequence and announced to every other client, each corrected by
+   * the next a moment later.
+   */
+  let published: Promise<void> = Promise.resolve();
+  let asked = 0;
+
+  const publish = (preference: AppearancePreference): Promise<void> => {
+    const attempt = (asked += 1);
+    published = published.then(async () => {
+      if (attempt !== asked) {
+        return;
+      }
+      // The repaint has already happened by now, so a write that cannot be
+      // delivered costs the installation agreement about the appearance rather
+      // than costing the operator their choice. There is nothing to report and
+      // nothing to retry: the next load reconciles.
+      await client.save(preference).catch(() => undefined);
+    });
+    return published;
+  };
+
+  /**
    * Paint a resolution and, if it is news to the backend, publish it.
    *
    * Publishing is deliberately last and deliberately awaited separately from
@@ -129,11 +176,7 @@ export const createAppearanceStore = ({
       return;
     }
     stored = resolution.preference;
-    // The repaint above has already happened, so a write that cannot be
-    // delivered costs the installation agreement about the appearance rather
-    // than costing the operator their choice. There is nothing to report and
-    // nothing to retry: the next load reconciles.
-    await client.save(resolution.preference).catch(() => undefined);
+    await publish(resolution.preference);
   };
 
   /**
@@ -147,10 +190,35 @@ export const createAppearanceStore = ({
     applyIfDifferent(preference.mode);
   };
 
+  /**
+   * The machine changed its own preference. Nothing was chosen — the mode still
+   * says whatever it said — so this reconciles that same mode again, which is a
+   * no-op for a fixed scheme and a new resolved value under "follow the device".
+   *
+   * Silent until the installation's value has arrived. Before that this browser
+   * knows only what it is painting, and recording that would publish a guess:
+   * a browser opened on its cached "follow the device" would overwrite the fixed
+   * scheme an operator chose elsewhere. Nothing is lost by waiting — the load
+   * resolves the mode it fetches against the machine as it is when it lands, so
+   * the change is recorded then.
+   *
+   * Deliberately not counted as a settlement, for the same reason: an answer
+   * still on its way carries the mode the installation actually holds, which
+   * this has no way of knowing and no business discarding.
+   */
+  const reactToSystem = (): void => {
+    if (stored === null) {
+      return;
+    }
+    void reconcile(stored.mode);
+  };
+
   let unsubscribe: (() => void) | undefined;
+  let unwatch: (() => void) | undefined;
 
   const start = async (): Promise<void> => {
     unsubscribe = unsubscribe ?? subscription.subscribe(adopt);
+    unwatch = unwatch ?? cache.watchSystemDark(reactToSystem);
     const began = settlements;
     // A backend this client cannot reach is not an error the operator can do
     // anything about, and not a reason to change what is on screen: the cached
@@ -177,6 +245,8 @@ export const createAppearanceStore = ({
     stop: () => {
       unsubscribe?.();
       unsubscribe = undefined;
+      unwatch?.();
+      unwatch = undefined;
     },
   };
 };

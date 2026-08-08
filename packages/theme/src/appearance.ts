@@ -10,12 +10,31 @@ export interface AppearancePreference {
   resolvedMode: ColorScheme;
 }
 
+/**
+ * The kinds of client the rule answers for.
+ *
+ * A browser can ask the machine it runs on which colour scheme it wants; the
+ * touchscreen cannot — its panel reports light however dark the garage is — so
+ * the two read the same stored preference differently. Which one is asking is
+ * therefore part of the question, not something the rule could work out.
+ */
+export type AppearanceClient = 'browser' | 'device';
+
 /** Everything the resolver is given. Nothing here is read from the world. */
 export interface AppearanceInput {
   /** The preference as stored, or `null` when nothing has been stored yet. */
   stored: AppearancePreference | null;
-  /** Whether the operating system asks for a dark interface. */
-  systemDark: boolean;
+  /**
+   * Whether the operating system asks for a dark interface.
+   *
+   * Optional because a device client has no answer to give: it never consults
+   * this, and omitting it says so. Left out by a browser it reads as false — a
+   * client with no device preference of its own renders light, which is what a
+   * machine that cannot be asked is taken to want.
+   */
+  systemDark?: boolean;
+  /** Which kind of client is asking. A client that does not say is a browser. */
+  client?: AppearanceClient;
 }
 
 /** Everything the resolver decides. */
@@ -39,6 +58,36 @@ export interface AppearanceChoiceInput extends AppearanceInput {
 }
 
 /**
+ * What the touchscreen renders until it has been told anything else.
+ *
+ * It is an appliance in a garage with an 800x480 panel: the wrong answer there
+ * is a sheet of white in a dark room, so an installation nobody has chosen an
+ * appearance on, and a device that has not yet heard from the backend, both
+ * leave it dark. The served page and the shell's window are painted from this
+ * same choice, so there is no flash before the application runs either.
+ */
+export const DEVICE_DEFAULT_COLOR_SCHEME: ColorScheme = 'dark';
+
+/**
+ * What the touchscreen renders, which is never anything it worked out itself.
+ *
+ * The device has no operating-system preference to consult and no operator
+ * sitting at it, so it renders the value a browser resolved on its behalf and
+ * recorded — the chosen mode is none of its business, including when that mode
+ * is "follow the device". It has nothing to tell the installation either, so it
+ * never asks for a write.
+ */
+const resolveForDevice = (stored: AppearancePreference | null): AppearanceResolution => {
+  const colorScheme: ColorScheme = stored?.resolvedMode ?? DEVICE_DEFAULT_COLOR_SCHEME;
+
+  return {
+    colorScheme,
+    preference: { mode: stored?.mode ?? 'system', resolvedMode: colorScheme },
+    shouldPersist: false,
+  };
+};
+
+/**
  * Turn a mode into a rendered scheme, and say whether storage now disagrees.
  *
  * The one rule the whole product shares, in the form the act of choosing needs:
@@ -51,8 +100,13 @@ export interface AppearanceChoiceInput extends AppearanceInput {
 export const resolveChoice = ({
   chosen,
   stored,
-  systemDark,
+  systemDark = false,
+  client = 'browser',
 }: AppearanceChoiceInput): AppearanceResolution => {
+  if (client === 'device') {
+    return resolveForDevice(stored);
+  }
+
   const colorScheme: ColorScheme = chosen === 'system' ? (systemDark ? 'dark' : 'light') : chosen;
 
   const preference: AppearancePreference = { mode: chosen, resolvedMode: colorScheme };
@@ -84,14 +138,22 @@ export const isCoherentPreference = ({ mode, resolvedMode }: AppearancePreferenc
  * What an installation nobody has chosen an appearance on is taken to have
  * chosen.
  *
- * "Follow the device", resolved the way a client with no device preference of
- * its own resolves it. Storage, the API and every client start from this one
- * value, so "nothing chosen yet" cannot mean something different in each of
- * them.
+ * "Follow the device", recorded as the touchscreen's own default. Storage, the
+ * API and every client start from this one value, so "nothing chosen yet" cannot
+ * mean something different in each of them.
+ *
+ * The recorded half says dark because the touchscreen is the only client that
+ * ever reads it — a browser resolves "follow the device" against the machine in
+ * front of it and never looks at what someone else recorded. And storage answers
+ * with this default rather than with nothing, so on an installation nobody has
+ * opened a browser on this *is* the value the panel in the garage resolves
+ * against: recording light here would boot it dark and then repaint it to a
+ * sheet of white in an unlit room. {@link DEVICE_DEFAULT_COLOR_SCHEME} is
+ * therefore where the value comes from, and the two cannot drift apart.
  */
 export const DEFAULT_APPEARANCE_PREFERENCE: AppearancePreference = {
   mode: 'system',
-  resolvedMode: 'light',
+  resolvedMode: DEVICE_DEFAULT_COLOR_SCHEME,
 };
 
 /**
@@ -102,7 +164,12 @@ export const DEFAULT_APPEARANCE_PREFERENCE: AppearancePreference = {
  * than off a button.
  *
  * A browser client is the only kind of client that can answer "what does the
- * system want"; the touchscreen's rules arrive in a later slice.
+ * system want", and the only one that ever writes an answer down. A device
+ * client reads the answer it left (see {@link AppearanceClient}).
  */
-export const resolveAppearance = ({ stored, systemDark }: AppearanceInput): AppearanceResolution =>
-  resolveChoice({ chosen: stored?.mode ?? 'system', stored, systemDark });
+export const resolveAppearance = ({
+  stored,
+  systemDark,
+  client,
+}: AppearanceInput): AppearanceResolution =>
+  resolveChoice({ chosen: stored?.mode ?? 'system', stored, systemDark, client });

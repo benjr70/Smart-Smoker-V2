@@ -9,7 +9,24 @@
  */
 import { TransportPort, createHttpTransport } from 'api-transport/src';
 import { resolveDeviceUrl } from './deviceUrl';
-import { SmokeProfile, State, TempData, WifiManager } from './types';
+import { AppearancePreference, SmokeProfile, State, TempData, WifiManager } from './types';
+
+/**
+ * What an installation nobody has chosen an appearance on is taken to have
+ * chosen: follow the device, recorded as the scheme this panel renders until it
+ * is told otherwise.
+ *
+ * The API layer's copy of the value the appearance resolver and the backend both
+ * start from — kept here rather than imported so the wire types stay free of
+ * domain imports, and pinned to the shared one by this client's tests. The
+ * recorded half says dark for the reason it says dark everywhere: this device is
+ * the only thing that reads it, and the wrong answer in a garage is a sheet of
+ * white in an unlit room.
+ */
+export const DEFAULT_APPEARANCE_PREFERENCE: AppearancePreference = {
+  mode: 'system',
+  resolvedMode: 'dark',
+};
 
 export interface StateResource {
   /** GET `state` — the current smoke's persisted state. */
@@ -43,11 +60,32 @@ export interface DeviceResource {
   getConnection(): Promise<unknown>;
 }
 
+/**
+ * The installation-wide appearance, as the touchscreen is allowed to know it.
+ *
+ * A read and nothing else: the device has no colour preference of its own to
+ * contribute — its panel reports light however dark the garage is — so it is
+ * given no way to say one. There is no write here to disable, because there is
+ * none at all.
+ */
+export interface AppearanceResource {
+  /**
+   * GET `appSettings` — the installation's stored appearance preference.
+   *
+   * Always a preference: an installation nobody has chosen an appearance on
+   * reads as {@link DEFAULT_APPEARANCE_PREFERENCE}, so the caller has something
+   * to render rather than an absence to interpret. A read that could not be made
+   * rejects, which is a different thing entirely.
+   */
+  get(): Promise<AppearancePreference>;
+}
+
 export interface ApiClient {
   state: StateResource;
   smokeProfile: SmokeProfileResource;
   temps: TempsResource;
   device: DeviceResource;
+  appearance: AppearanceResource;
 }
 
 /**
@@ -95,6 +133,19 @@ export const createApiClient = (
     connectToWiFi: (creds: WifiManager) =>
       deviceTransport.post<unknown>('api/wifiManager/connect', creds),
     getConnection: () => deviceTransport.get<unknown>('api/wifiManager/connection'),
+  },
+  appearance: {
+    get: async () => {
+      // The route answers with a complete document whether or not anything has
+      // ever been chosen, so the only body without an appearance block comes
+      // from a deployment older than the block itself. Both mean "nothing
+      // chosen here", which is the documented default rather than an absence
+      // the touchscreen would have to have an opinion about.
+      const response = await cloudTransport.get<{
+        appearance?: AppearancePreference;
+      } | null>('appSettings');
+      return response?.appearance ?? DEFAULT_APPEARANCE_PREFERENCE;
+    },
   },
 });
 

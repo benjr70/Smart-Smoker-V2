@@ -170,7 +170,11 @@ const withSettingsDefaults = (
   },
   appearance: {
     mode: stored?.appearance?.mode ?? 'system',
-    resolvedMode: stored?.appearance?.resolvedMode ?? 'light',
+    // Dark, as the real document defaults: the resolved half is read only by the
+    // touchscreen, so until a browser records one it says what an unlit garage
+    // needs. A fake that answered light here would let this app's tests pass
+    // against a value the backend does not serve.
+    resolvedMode: stored?.appearance?.resolvedMode ?? 'dark',
   },
 });
 

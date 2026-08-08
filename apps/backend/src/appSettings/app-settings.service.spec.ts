@@ -172,7 +172,7 @@ describe('AppSettingsService', () => {
         probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
         smokeComplete: SMOKE_COMPLETE_OFF,
         targetPresets: DEFAULT_TARGET_PRESETS,
-        appearance: { mode: 'system', resolvedMode: 'light' },
+        appearance: { mode: 'system', resolvedMode: 'dark' },
       });
     });
   });
@@ -646,7 +646,7 @@ describe('AppSettingsService', () => {
         probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
         smokeComplete: SMOKE_COMPLETE_OFF,
         targetPresets: DEFAULT_TARGET_PRESETS,
-        appearance: { mode: 'system', resolvedMode: 'light' },
+        appearance: { mode: 'system', resolvedMode: 'dark' },
       });
     });
 

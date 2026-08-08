@@ -32,3 +32,24 @@ export interface WifiManager {
   ssid: string;
   password: string;
 }
+
+/** The colour schemes the application can render in. */
+export type ColorScheme = 'light' | 'dark';
+
+/** What an operator can ask for: a fixed scheme, or "follow the device". */
+export type AppearanceMode = ColorScheme | 'system';
+
+/**
+ * The installation-wide appearance preference as it comes over the wire: the
+ * mode that was chosen, and what that choice resolved to on the browser that
+ * recorded it.
+ *
+ * Restated here rather than imported so the wire types stay free of domain
+ * imports; it is structurally the preference the shared appearance resolver
+ * reads — which is what lets the touchscreen hand one straight to that rule —
+ * and the client's tests pin its default to the shared one.
+ */
+export interface AppearancePreference {
+  mode: AppearanceMode;
+  resolvedMode: ColorScheme;
+}
