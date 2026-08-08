@@ -50,14 +50,14 @@ systemd (agent-daemon.service, Restart=always)
 | --- | --- | --- |
 | `AGENT_RUN_NO_WORK=1` | queue empty or lock skip | chunked sleep with the **Work Probe** (below) — wakes early if work appears |
 | `AGENT_RUN_RESET_AT=<iso>` | usage exhausted mid-run (issue paused) | sleep to that reset |
-| non-zero exit, no marker | genuine failure | sleep out the window (no hot-loop) |
+| non-zero exit, no marker | genuine failure | probe-sleep (wakeable), deaf after `AGENT_DAEMON_FAIL_CAP` (default 3) consecutive failures — bounded retry, no hot-loop |
 
 ### The Work Probe (early wake on new work)
 
 A no-work sleep used to be deaf until the window reset — observed live
 2026-07-10: a human merge 52 seconds after a no-work fire conflicted an open
 PR, which then waited ~4 hours for the reset. Now the daemon sleeps in
-`WORK_PROBE_INTERVAL` chunks (default 900s) and runs `lib/work-probe.sh`
+`WORK_PROBE_INTERVAL` chunks (default 300s) and runs `lib/work-probe.sh`
 between chunks — a pure `gh` sweep, **zero Claude cost**. Wake rules:
 
 - **lock held** (`team:in-progress` anywhere) → never wake; a fire would just
@@ -147,16 +147,28 @@ A PR **needs attention** when it is *ours* (open, not draft, head
   review comments), or `/pr-review` posted 🤖 findings and applied the label
   itself (agent→agent hand-back, same machinery), or
 - its mergeable state is **`CONFLICTING`** — master moved under it (auto,
-  no label needed).
+  no label needed), or
+- it is **bot-incomplete** — no conflict, no label, but the bot tail never
+  finished: the one-time review marker (`<!-- pr-review-done -->`) and/or any
+  `Manual verification — … round` comment is missing because a prior fire
+  died mid-tail. Detected by `pr_triage_enrich` (one `gh pr view --json
+  comments` per otherwise-clean agent PR; fails safe toward "complete").
 
-`team:revise` outranks plain conflicts; oldest first within rank. Parked PRs
-(`team:revise-failed` / `team:rebase-failed`) and drafts are skipped.
+`team:revise` outranks plain conflicts, which outrank `incomplete`; oldest
+first within rank. Parked PRs (`team:revise-failed` / `team:rebase-failed`)
+and drafts are skipped.
+
+This gives the pipeline its ordering invariant: **outstanding agent PRs are
+finished before any new `team` issue is picked** — while any PR still needs
+bot work (CI fix, one-time review, verification round, conflict, revise
+threads), every fire goes to that PR and §2 never runs. A bot-complete PR
+that merely awaits a human merge blocks nothing (work-ahead stays).
 
 A master push leaves every open PR's mergeable state `UNKNOWN` for a few
 seconds while GitHub recomputes it asynchronously. The triage scan
 (`pr_triage_scan`) re-lists while any agent-shaped PR is still `UNKNOWN` (up
 to ~2 min) rather than skipping a conflict the fire lands seconds after a
-merge; the work probe re-checks every 15 minutes as the backstop.
+merge; the work probe re-checks every 5 minutes as the backstop.
 
 The picked PR goes to **`/pr-reconcile`** (`.claude/skills/pr-reconcile/`),
 which is fresh and stateless — context is rebuilt from the issue, the diff,
@@ -245,7 +257,8 @@ on every PR.
   `EnvironmentFile`) survives the per-fire reset; it carries
   `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0` and any `GH_TOKEN`.
   `WORK_PROBE_INTERVAL=<secs>` tunes the mid-sleep probe cadence (default
-  900).
+  300); `AGENT_DAEMON_FAIL_CAP=<n>` the consecutive-failure cap before the
+  failure path sleeps deaf to the reset (default 3).
 - **Stuck lock** — a crashed fire normally cleans up after itself
   (`fail_inflight`); if not: `gh issue edit <N> --remove-label
   team:in-progress`.

@@ -7,7 +7,7 @@
 # no-pick:
 #
 #     { "pr": <number>, "branch": "feat/issue-<M>", "issue": <M>,
-#       "reason": "revise|conflict" }
+#       "reason": "revise|conflict|incomplete" }
 #     { "pr": null }
 #
 # "Ours" filter — a PR is only ever considered when ALL hold:
@@ -23,12 +23,21 @@
 #     it back to the agent) → reason "revise";
 #   - its mergeable state is CONFLICTING (master moved under it) → reason
 #     "conflict". MERGEABLE and UNKNOWN both skip: UNKNOWN means GitHub is still
-#     computing mergeability async — the next fire re-checks rather than guessing.
+#     computing mergeability async — the next fire re-checks rather than guessing;
+#   - it is otherwise clean but its bot tail never finished — the one-time
+#     review marker (<!-- pr-review-done -->) and/or any manual-verification
+#     round comment is missing (a prior fire died mid-§6a) → reason
+#     "incomplete". These signals live in PR comments, so pr_triage_enrich
+#     (below) merges them into the payload first; an un-enriched payload reads
+#     every PR as complete (only an explicit false flags incomplete — jq's //
+#     would swallow false, so the pick tests != false).
 #   PRs already escalated (team:revise-failed / team:rebase-failed) are skipped —
 #   they are parked for a human; re-picking them would loop on a known-stuck PR.
 #
 # Pick order: `team:revise` beats plain CONFLICTING (a human is actively waiting
-# on their own review); within the same reason rank, oldest createdAt wins.
+# on their own review), which beats "incomplete" (nothing blocks a merge yet —
+# the tail just needs finishing); within the same reason rank, oldest createdAt
+# wins.
 #
 # The function is pure: it reads only stdin + env. The caller owns the gh call:
 #
@@ -78,11 +87,69 @@ pr_triage_scan() {
             | length' 2>/dev/null || echo '0')"
 
         if [ "${unknown:-0}" = "0" ] || [ "${i}" -ge "${tries}" ]; then
-            printf '%s' "${prs}" | pr_triage_pick
+            printf '%s' "${prs}" | pr_triage_enrich | pr_triage_pick
             return $?
         fi
         "${sleep_bin}" "${interval}"
     done
+}
+
+# pr_triage_enrich: merge the "bot tail finished?" comment signals into the
+# PR-list payload so pr_triage_pick can triage reason "incomplete".
+#
+# Reads the `gh pr list --json ...` array on stdin and, for every PR that is
+# ours-shaped and otherwise attention-free (open, non-draft, feat/issue-<N>,
+# author match, no team:revise, not parked, not CONFLICTING), fetches its
+# conversation comments once (`gh pr view --json comments`) and merges:
+#   reviewDone — any comment contains the <!-- pr-review-done --> marker
+#                (posted by /pr-review via lib/review-poster.sh)
+#   verifyDone — any comment matches "Manual verification — .*round"
+#                (posted by /verify-pr, one per round; post-reconcile counts)
+# Everything else passes through untouched.
+#
+# Fails SAFE toward "complete": on any gh/jq error the fields stay absent and
+# pr_triage_pick's `// true` defaults read the PR as complete — a broken
+# sensor must never start a pick/wake loop. Known accepted gap: a fire that
+# crashed after posting round 1 leaves a FAIL-latest PR looking bot-complete
+# (status quo before this class existed).
+#
+# Env: GH_BIN, PR_TRIAGE_AUTHOR (same semantics as pr_triage_pick).
+# Exit: always 0; stdout is the (possibly enriched) payload.
+pr_triage_enrich() {
+    local gh="${GH_BIN:-gh}" payload nums num comments review_done verify_done merged
+
+    payload="$(cat)"
+
+    if ! printf '%s' "${payload}" | jq -e 'type == "array"' >/dev/null 2>&1; then
+        printf '%s' "${payload}"
+        return 0
+    fi
+
+    nums="$(printf '%s' "${payload}" | jq -r --arg author "${PR_TRIAGE_AUTHOR:-}" '
+        def labels_of: [.labels[]?.name // empty];
+        .[]
+        | select((.state // "OPEN") == "OPEN")
+        | select((.isDraft // false) | not)
+        | select(.headRefName | test("^feat/issue-[0-9]+$"))
+        | select(($author == "") or ((.author.login // "") == $author))
+        | (labels_of) as $lbls
+        | select(($lbls | index("team:revise") | not)
+             and ($lbls | index("team:revise-failed") | not)
+             and ($lbls | index("team:rebase-failed") | not))
+        | select((.mergeable // "UNKNOWN") != "CONFLICTING")
+        | .number' 2>/dev/null || echo '')"
+
+    for num in ${nums}; do
+        comments="$("${gh}" pr view "${num}" --json comments 2>/dev/null)" || continue
+        review_done="$(printf '%s' "${comments}" | jq             'any(.comments[]?; .body | contains("<!-- pr-review-done"))' 2>/dev/null)" || continue
+        verify_done="$(printf '%s' "${comments}" | jq             'any(.comments[]?; .body | test("Manual verification — .*round"))' 2>/dev/null)" || continue
+        [ -n "${review_done}" ] && [ -n "${verify_done}" ] || continue
+        merged="$(printf '%s' "${payload}" | jq -c             --argjson n "${num}" --argjson r "${review_done}" --argjson v "${verify_done}"             'map(if .number == $n then . + {reviewDone: $r, verifyDone: $v} else . end)'             2>/dev/null)" || continue
+        [ -n "${merged}" ] && payload="${merged}"
+    done
+
+    printf '%s\n' "${payload}"
+    return 0
 }
 
 # pr_triage_pick: read the PR-list JSON on stdin, print the verdict JSON.
@@ -109,9 +176,12 @@ pr_triage_pick() {
           | . + { reason:
                     (if ($lbls | index("team:revise")) then "revise"
                      elif (.mergeable // "UNKNOWN") == "CONFLICTING" then "conflict"
+                     elif (((.reviewDone != false) and (.verifyDone != false)) | not) then "incomplete"
                      else null end) }
           | select(.reason != null) ]
-        | sort_by([(if .reason == "revise" then 0 else 1 end), .createdAt])
+        | sort_by([(if .reason == "revise" then 0
+                    elif .reason == "conflict" then 1
+                    else 2 end), .createdAt])
         | first
         | if . == null then {pr: null}
           else { pr: .number,

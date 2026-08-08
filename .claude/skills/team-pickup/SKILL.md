@@ -74,12 +74,21 @@ fi
 ### 1.2. Reconcile a PR needing attention (before resume, before any new pick)
 
 An already-open agent PR that a human is waiting on outranks everything else:
-finishing it is the shortest path to a merge. Two signals make a PR "needing
+finishing it is the shortest path to a merge. Three signals make a PR "needing
 attention": its mergeable state is `CONFLICTING` (master moved under it — always
-auto-fixed, no label needed) or it carries the **`team:revise`** label (a human
+auto-fixed, no label needed); it carries the **`team:revise`** label (a human
 reviewed it and explicitly handed it back — or §6a.1b's `/pr-review` posted 🤖
-findings and applied the label itself). Detection is a cheap `gh` read + the
-**PR Triage** deep module — zero Claude usage when nothing needs attention.
+findings and applied the label itself); or it is **bot-incomplete** — no
+conflict, no label, but its bot tail never finished: the one-time review marker
+(`<!-- pr-review-done -->`) and/or any `Manual verification — … round` comment
+is missing because a prior fire died mid-§6a → reason `incomplete`. While any
+ours-shaped PR is still bot-incomplete this section fires and exits before
+§1.5/§2 — no new issue is picked until every outstanding agent PR is
+bot-complete (CI green, one-time review done, a verification round posted). A
+bot-complete PR merely awaiting a human merge triggers nothing — work-ahead
+stays. Detection is a cheap `gh` read + the **PR Triage** deep module — zero
+Claude usage when nothing needs attention; the incomplete signals cost one
+extra `gh pr view --json comments` per otherwise-clean agent PR.
 
 `pr_triage_scan` owns the `gh pr list` call and rides out GitHub's async
 mergeability: a fresh master push leaves every open PR `UNKNOWN` for a few
@@ -104,6 +113,7 @@ RECON_BRANCH=$(printf '%s' "$PICK_JSON" | jq -r '.branch')
 RECON_N=$(printf '%s' "$PICK_JSON" | jq -r '.issue')
 RECON_REASON=$(printf '%s' "$PICK_JSON" | jq -r '.reason')
 # When the PR both conflicts AND carries team:revise, pass --reason both.
+# Reason "incomplete" (bot tail never finished) passes through as-is.
 
 # Single-flight lock: reuse the issue lock so §1's skip, the daemon's pacing,
 # and agent-run's crash cleanup all keep working unchanged. Remember whether
@@ -698,7 +708,10 @@ back and wait for the in-flight agent. `pr-watch: (in flight)` and
   `/pr-reconcile` always exits having either removed the attention signal
   (rebased ⇒ no longer CONFLICTING; threads done ⇒ `team:revise` dropped) or
   applied a parked label (`team:rebase-failed` / `team:revise-failed`) that the
-  PR Triage skips.
+  PR Triage skips. An `incomplete` pick self-clears the same way: every
+  reconcile tail run either posts the review marker / a verification round,
+  applies `team:revise` (re-picked as `revise` next fire), or parks the PR —
+  the PR exits the incomplete class every fire.
 
 ## Boundaries
 
