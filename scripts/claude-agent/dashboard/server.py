@@ -371,13 +371,14 @@ def fetch_pipeline():
 def fetch_prs():
     out = run(
         ["gh", "pr", "list", "--state", "open", "--json",
-         "number,title,headRefName,labels,mergeable,isDraft"],
+         "number,title,headRefName,labels,mergeable,isDraft,url"],
         timeout=30,
     )
     items = [
         {
             "number": p["number"],
             "title": p["title"],
+            "url": p.get("url"),
             "branch": p["headRefName"],
             "labels": [l["name"] for l in p.get("labels", [])],
             "mergeable": p.get("mergeable"),

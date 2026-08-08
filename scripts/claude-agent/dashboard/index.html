@@ -72,6 +72,9 @@
   .pulse { animation: pulse 1.5s infinite; }
   @keyframes pulse { 50% { opacity: .35; } }
   .err { color: var(--red); font-size: 12px; margin-top: 4px; }
+  .help { color: var(--dim); font-size: 11px; margin: -4px 0 8px; }
+  a.pr { display: block; text-decoration: none; color: inherit; }
+  a.pr .title { color: var(--blue); }
 </style>
 </head>
 <body>
@@ -85,12 +88,15 @@
 <div class="tiles" id="tiles"></div>
 
 <div class="card">
-  <h2>Daemon</h2>
+  <h2>Scheduler</h2>
+  <div class="help">Background service that launches agent runs whenever enough
+  Claude budget is left, then sleeps and probes GitHub for new work.</div>
   <div id="daemon">loading…</div>
 </div>
 
 <div class="card" id="fireCard" style="display:none">
-  <h2>Current fire</h2>
+  <h2>Current run</h2>
+  <div class="help">The agent run the scheduler is executing right now.</div>
   <div id="fire"></div>
 </div>
 
@@ -100,7 +106,7 @@
 </div>
 
 <div class="card">
-  <h2>Last fires</h2>
+  <h2>Recent runs</h2>
   <div id="fires">loading…</div>
 </div>
 
@@ -164,10 +170,11 @@ function render() {
   if (g) {
     const col = g.shouldFire ? "var(--green)" : "var(--red)";
     tiles += `<div class="tile">
-      <div class="label">Daemon gate · budget left</div>
+      <div class="label">Auto-work budget left</div>
       <div class="num" style="color:${col}">${g.remainPct}%</div>
       <div class="bar"><span style="width:${g.remainPct}%;background:${col}"></span></div>
-      <div class="sub">${g.shouldFire ? "firing allowed" : "below " + g.threshold + "% — holds"}</div>
+      <div class="sub">${g.shouldFire ? "agents may work · pause below " + g.threshold + "%"
+                                       : "agents paused — under " + g.threshold + "%"}</div>
     </div>`;
   }
   document.getElementById("tiles").innerHTML =
@@ -229,7 +236,8 @@ function render() {
       `<span class="chip ${l === "team:revise" ? "amber" : l.startsWith("team:") ? "red" : ""}">${esc(l)}</span>`).join("");
     if (p.mergeable === "CONFLICTING") chips += `<span class="chip red">conflict</span>`;
     if (p.isDraft) chips += `<span class="chip">draft</span>`;
-    return `<div class="pr"><b>#${p.number}</b> ${esc(p.title)}<br>${chips}</div>`;
+    return `<a class="pr" href="${esc(p.url || "#")}" target="_blank" rel="noopener">
+      <b>#${p.number}</b> <span class="title">${esc(p.title)}</span><br>${chips}</a>`;
   }).join("") : `<div class="kv">none</div>`) +
     ((data.openPrs || {}).error ? `<div class="err">${esc(data.openPrs.error)}</div>` : "");
 
