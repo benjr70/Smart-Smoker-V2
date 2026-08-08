@@ -52,6 +52,14 @@ DEFAULT_RECONCILE_SKILL="${REPO_ROOT}/.claude/skills/pr-reconcile/SKILL.md"
 # A rule with several patterns must satisfy ALL of them. Each pattern is
 # deliberately a phrase from the skill text, not a lone keyword, so the check
 # fails when the *rule* goes away rather than when a word is reused.
+#
+# The `round-non-skippable` patterns are phrases UNIQUE to the missing-round park
+# block. A generic `team:checks-failed` / `gh pr comment` / `gh pr ready --undo`
+# would be satisfied by the older, unrelated escalation paths that already live
+# in both skills (pr-watch exhaustion, revise-failed), so deleting the park block
+# would leave the check green. The park comment's own wording, and the sentence
+# pinning the DRAFT flip (without which PR Triage re-picks the parked PR every
+# fire), appear nowhere else.
 rule_table() {
     printf '%s\n' \
         "agent-invocable	verify-frontmatter	forbid	disable-model-invocation" \
@@ -64,14 +72,16 @@ rule_table() {
         "any-caller	verify	require	pr-reconcile.{0,8}3" \
         "any-caller	verify	require	do not refuse, defer, or downgrade a round because the caller is a model" \
         "round-non-skippable	pickup	require	the round is .{0,4}not.{0,4} skippable" \
-        "round-non-skippable	pickup	require	missing round can never be reported as .{0,4}result: PASS" \
-        "round-non-skippable	pickup	require	team:checks-failed" \
-        "round-non-skippable	pickup	require	gh pr comment" \
+        "round-non-skippable	pickup	require	never be reported as .{0,4}result: PASS" \
+        "round-non-skippable	pickup	require	Manual verification round did not run" \
+        "round-non-skippable	pickup	require	no verification evidence exists" \
+        "round-non-skippable	pickup	require	drafting is what takes the PR out of the .{0,4}incomplete.{0,4} class" \
         "round-non-skippable	pickup	require	verify: MISSING" \
         "round-non-skippable	reconcile	require	the round is .{0,4}not.{0,4} skippable" \
-        "round-non-skippable	reconcile	require	must never be reported as .{0,4}result: PASS" \
-        "round-non-skippable	reconcile	require	team:checks-failed" \
-        "round-non-skippable	reconcile	require	gh pr comment" \
+        "round-non-skippable	reconcile	require	never be reported as .{0,4}result: PASS" \
+        "round-non-skippable	reconcile	require	Manual verification round did not run" \
+        "round-non-skippable	reconcile	require	no verification evidence exists" \
+        "round-non-skippable	reconcile	require	drafting is what takes the PR out of the .{0,4}incomplete.{0,4} class" \
         "round-non-skippable	reconcile	require	verify: MISSING"
 }
 
@@ -134,7 +144,11 @@ main() {
         esac
 
         checks=$((checks + 1))
-        if printf '%s' "${text}" | grep -Eqi -- "${pattern}"; then
+        # Here-string, not `printf | grep`: `grep -q` exits on its first match,
+        # which SIGPIPEs the writer, and under `set -o pipefail` that surfaces as
+        # status 141 — a satisfied rule reported as MISSING once a normalized
+        # skill body outgrows the 64KB pipe buffer.
+        if grep -Eqi -- "${pattern}" <<< "${text}"; then
             if [ "${mode}" = "forbid" ]; then
                 violations=$((violations + 1))
                 echo "FORBIDDEN rule=${rule} file=${label} pattern=${pattern}"

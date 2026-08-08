@@ -23,7 +23,10 @@ RECONCILE_SKILL="${REPO_ROOT}/.claude/skills/pr-reconcile/SKILL.md"
 
 TESTS_RUN=0
 TESTS_FAILED=0
-FAILED_NAMES=()
+# Newline-delimited, not an array: `${arr[@]}` on an empty array aborts under
+# `set -u` on bash 3.2 (macOS's system bash), which would fail the suite on a
+# healthy tree.
+FAILED_NAMES=""
 
 pass() {
     TESTS_RUN=$((TESTS_RUN + 1))
@@ -33,7 +36,8 @@ pass() {
 fail() {
     TESTS_RUN=$((TESTS_RUN + 1))
     TESTS_FAILED=$((TESTS_FAILED + 1))
-    FAILED_NAMES+=("$1")
+    FAILED_NAMES="${FAILED_NAMES}$1
+"
     echo "  FAIL: $1"
     if [ -n "${2:-}" ]; then
         echo "    $2"
@@ -88,7 +92,7 @@ test_reintroduced_flag_is_caught() {
         fail "checker exits 1 when the flag is back" "exit ${rc}; output: ${out}"
     fi
 
-    if printf '%s' "${out}" | grep -q 'disable-model-invocation'; then
+    if grep -q 'disable-model-invocation' <<< "${out}"; then
         pass "report names the offending flag"
     else
         fail "report names the offending flag" "output: ${out}"
@@ -115,7 +119,7 @@ test_human_only_wording_is_caught() {
         rc=$?
         rm -f "${mutated}"
 
-        if [ "${rc}" -eq 1 ] && printf '%s' "${out}" | grep -q 'rule=no-human-only'; then
+        if [ "${rc}" -eq 1 ] && grep -q 'rule=no-human-only' <<< "${out}"; then
             pass "rejected: ${phrase}"
         else
             fail "rejected: ${phrase}" "exit ${rc}; output: ${out}"
@@ -148,7 +152,7 @@ test_skill_licenses_automated_callers() {
         'Agent.{0,4}tool' \
         'team-pickup' \
         'pr-reconcile'; do
-        if printf '%s' "${text}" | grep -Eqi -- "${phrase}"; then
+        if grep -Eqi -- "${phrase}" <<< "${text}"; then
             pass "invocation section mentions: ${phrase}"
         else
             fail "invocation section mentions: ${phrase}" "not found in ${VERIFY_SKILL}"
@@ -170,6 +174,12 @@ test_skill_licenses_automated_callers() {
 #         absent round as an ordinary skip. This is the property whose absence
 #         let three consecutive PR #460 fires land green with no verification at
 #         all (AC 4, behavior 3).
+#
+#         The asserted phrases are the park block's OWN wording, not the generic
+#         `team:checks-failed` / `gh pr comment` that the older escalation paths
+#         in these files already satisfy — including the `gh pr ready --undo`
+#         draft flip, without which PR Triage (pr_triage_pick skips drafts and
+#         PR labels only) re-picks the parked PR as `incomplete` every fire.
 #-------------------------------------------------------------------------------
 test_round_is_non_skippable_in_both_callers() {
     echo "TEST: team-pickup and pr-reconcile cannot PASS without a round"
@@ -180,10 +190,13 @@ test_round_is_non_skippable_in_both_callers() {
         text="$(normalized "${skill}")"
         for phrase in \
             'verify: MISSING' \
-            'never .{0,40}PASS' \
-            'team:checks-failed' \
-            'comment on the PR'; do
-            if printf '%s' "${text}" | grep -Eqi -- "${phrase}"; then
+            'never be reported as .{0,4}result: PASS' \
+            'Manual verification round did not run' \
+            'no verification evidence exists for this PR' \
+            'gh pr ready "\$PR_NUM" --undo' \
+            'gh pr edit +"\$PR_NUM" --add-label team:checks-failed' \
+            'drafting is what takes the PR out of the .{0,4}incomplete.{0,4} class'; do
+            if grep -Eqi -- "${phrase}" <<< "${text}"; then
                 pass "${name} carries: ${phrase}"
             else
                 fail "${name} carries: ${phrase}" "not found in ${skill}"
@@ -201,12 +214,19 @@ test_round_is_non_skippable_in_both_callers() {
 # Write a copy of ${1} with every occurrence of the regex ${2} deleted. The copy
 # is whitespace-normalized first so a phrase wrapped across markdown lines is
 # still removed (the checker normalizes the same way). Echoes the temp path.
+#
+# Case-insensitivity is done by folding BOTH the text and the pattern to lower
+# case rather than with sed's `I` flag, which is a GNU extension BSD sed rejects
+# (the mutation would silently no-op on macOS and the suite would report a
+# healthy tree as broken). Folding the copy is safe: the checker matches
+# case-insensitively, so every other rule still holds over the lower-cased text.
 mutate_without() {
-    local src="$1" pattern="$2" out d
+    local src="$1" pattern="$2" out d lc_pattern
     out="$(mktemp)"
     d=$'\001'
-    tr '\n' ' ' < "${src}" | tr -s '[:space:]' ' ' \
-        | sed -E "s${d}${pattern}${d}${d}gI" > "${out}"
+    lc_pattern="$(printf '%s' "${pattern}" | tr '[:upper:]' '[:lower:]')"
+    tr '\n' ' ' < "${src}" | tr -s '[:space:]' ' ' | tr '[:upper:]' '[:lower:]' \
+        | sed -E "s${d}${lc_pattern}${d}${d}g" > "${out}"
     echo "${out}"
 }
 
@@ -222,7 +242,9 @@ test_dropping_any_required_phrase_is_caught() {
 
     local rule target mode pattern mutated out rc
     local v p r
-    local undetected=()
+    # Newline-delimited string, not an array: see FAILED_NAMES — an empty array
+    # expansion aborts under `set -u` on bash 3.2.
+    local undetected=""
 
     while IFS=$'\t' read -r rule target mode pattern; do
         [ -n "${rule}" ] || continue
@@ -240,15 +262,15 @@ test_dropping_any_required_phrase_is_caught() {
         rc=$?
         rm -f "${mutated}"
 
-        if [ "${rc}" -ne 1 ] || ! printf '%s' "${out}" | grep -q "rule=${rule}"; then
-            undetected+=("${rule}/${target}: ${pattern} (exit ${rc})")
+        if [ "${rc}" -ne 1 ] || ! grep -q "rule=${rule}" <<< "${out}"; then
+            undetected="${undetected}${rule}/${target}: ${pattern} (exit ${rc}); "
         fi
     done < <(bash "${CHECKER}" --list)
 
-    if [ "${#undetected[@]}" -eq 0 ]; then
+    if [ -z "${undetected}" ]; then
         pass "every required phrase is load-bearing"
     else
-        fail "every required phrase is load-bearing" "undetected: ${undetected[*]}"
+        fail "every required phrase is load-bearing" "undetected: ${undetected}"
     fi
 }
 
@@ -269,7 +291,7 @@ test_missing_file_is_usage_error() {
         fail "missing skill file exits 2" "exit ${rc}; output: ${out}"
     fi
 
-    if printf '%s' "${out}" | grep -q "/nonexistent/SKILL.md"; then
+    if grep -q "/nonexistent/SKILL.md" <<< "${out}"; then
         pass "error names the missing path"
     else
         fail "error names the missing path" "output: ${out}"
@@ -296,8 +318,8 @@ main() {
 
     if [ "${TESTS_FAILED}" -gt 0 ]; then
         echo "Failed tests:"
-        for name in "${FAILED_NAMES[@]}"; do
-            echo "  - ${name}"
+        printf '%s' "${FAILED_NAMES}" | while IFS= read -r name; do
+            [ -n "${name}" ] && echo "  - ${name}"
         done
         exit 1
     fi

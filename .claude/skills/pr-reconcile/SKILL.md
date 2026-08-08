@@ -233,20 +233,33 @@ The same blocking rules apply verbatim: never emit output while pr-watch or the
 removed the `disable-model-invocation` flag that refused every automated round;
 PR #460 burned three consecutive reconcile fires on that refusal, each reporting
 a clean result with zero verification behind it). When the tail runs, the round
-runs: the only outcomes that let this fire report PASS are a real
-`manual-verify:` verdict line or an explicitly recorded
-`manual-verify: infra-error …` non-verdict. If the round produced neither — no
-`manual-verify:` line came back, the spawn failed, or the harness refused — that
-is a **missing round**, and it must never be reported as `result: PASS` or as an
-ordinary skip. Park it instead, exactly as team-pickup §6a.2 specifies:
+runs: the **only** outcome that lets this fire report `result: PASS` is a real
+`manual-verify:` verdict line. An explicitly recorded
+`manual-verify: infra-error …` non-verdict (the stack never booted — zero items
+acted on) is recorded verbatim as the `verify:` line and reported like a
+pr-watch ERROR, exactly as team-pickup §6a.2 requires — never as PASS. If the
+round produced neither — no `manual-verify:` line came back, the spawn failed,
+or the harness refused — that is a **missing round**, and it must never be
+reported as `result: PASS` or as an ordinary skip. Park it on the **PR**,
+exactly as team-pickup §6a.2 specifies:
 
 ```bash
 gh pr comment "$PR_NUM" --body "Manual verification round did not run: <reason>.
 Parking for a human — no verification evidence exists for this PR."
-gh issue edit "$N" --add-label team:checks-failed
+gh pr ready "$PR_NUM" --undo
+gh pr edit  "$PR_NUM" --add-label team:checks-failed
 ```
 
-then emit `verify: MISSING — <reason>` as the block's `verify:` line and
+The draft flip is the load-bearing half. PR Triage
+(`scripts/claude-agent/lib/pr-triage.sh`) keys on PR state and PR labels only —
+it never reads the backing issue, and the park comment deliberately does not
+match its `Manual verification — .*round` marker — so **drafting is what takes
+the PR out of the `incomplete` class**. A label with no draft leaves the PR
+open, non-draft and still incomplete, and the very next fire re-picks it in an
+unbounded loop. (Park on the PR only: `$ISSUE_N` names the backing issue here,
+but triage cannot see issue labels at all.)
+
+Then emit `verify: MISSING — <reason>` as the block's `verify:` line and
 `result: ERROR — manual verification round did not run` as the verdict.
 
 If neither §1 nor §2 pushed a commit (e.g. `team:revise` with zero actionable
@@ -276,6 +289,7 @@ rebase:    CLEAN — pushed | SKIPPED | FAILED — <detail>
 comments:  <k> thread(s) addressed in <R> round(s) | SKIPPED | FAILED — <n> unresolved
 pr-watch:  <verbatim terminal line>            (when §3 ran)
 verify:    <verbatim manual-verify line> — post-reconcile   (when §3 ran and pr-watch PASS)
+           | MISSING — <reason>                             (§3 park: round never ran)
 result:    PASS | REBASE-FAILED | REVISE-FAILED | DRAFT | ERROR — <detail>
 ```
 
@@ -289,10 +303,15 @@ The final `result:` line doubles as the terminal verdict the caller parses:
 
 The hard validity rule from team-pickup §7 applies: when §3 ran, the block MUST
 carry the verbatim `pr-watch:` terminal line (and `verify:` on PASS) before the
-result is emitted. `result: PASS` requires a `verify:` line holding a real
-`manual-verify:` verdict — `verify: MISSING — <reason>` and an absent line are
-both disqualifying, and a `pr-reconcile: PASS` emitted without a round that
-actually ran is an invalid fire.
+result is emitted. **When §3 ran**, `result: PASS` requires a `verify:` line
+holding a real `manual-verify:` verdict — `verify: MISSING — <reason>`, a
+recorded `manual-verify: infra-error …`, and an absent line are all
+disqualifying, and a `pr-reconcile: PASS` emitted without a round that actually
+ran is an invalid fire. The rule is scoped to the tail actually running: on the
+§3 skip path (neither §1 nor §2 pushed and `--reason` is not `incomplete`) no
+round was owed, so the block legally carries no `pr-watch:`/`verify:` lines at
+all and `result: PASS` stands on the PR's existing evidence — that fire must not
+park a healthy PR.
 
 ## Failure modes
 
@@ -312,10 +331,11 @@ actually ran is an invalid fire.
   (the tail failing is a checks problem, not a revise/rebase problem).
 - **Verification round never ran** — the harness refused, the spawn failed, or
   the agent returned no `manual-verify:` line. Do NOT treat it as a skip and do
-  NOT pass: `team:checks-failed`, an explanatory comment on the PR, and
-  `verify: MISSING — <reason>` with `result: ERROR`. Before parking,
-  sanity-check that `.claude/skills/verify-pr/SKILL.md` has not regained
-  `disable-model-invocation` — that flag is the known cause and
+  NOT pass: draft (`gh pr ready --undo`) + `team:checks-failed` on the **PR**,
+  an explanatory comment on the PR, and `verify: MISSING — <reason>` with
+  `result: ERROR`. The draft is what stops PR Triage re-picking it. Before
+  parking, sanity-check that `.claude/skills/verify-pr/SKILL.md` has not
+  regained `disable-model-invocation` — that flag is the known cause and
   `bash scripts/verify-pr/check-verify-invocable.sh` names it in one line.
 - **Crash mid-fire** — the caller's
   `picked:   reconcile PR #<PR_NUM> (issue #<N>)` log line lets agent-run's
