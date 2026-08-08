@@ -447,7 +447,9 @@ $(cat "${dir}/calls.log")"
 # Test 7 (REGRESSION): a fire that FAILS (exit non-zero, no exhaustion/no-work
 # marker) must NOT be treated as a clean run and re-fired immediately. The live
 # bug (2026-07-08) was a session-limit failure with no marker looping ~1271×.
-# Across two iters the daemon must fire once, sleep, and not hot-loop.
+# Across two iters the daemon must fire once per iter, sleep, and not hot-loop.
+# (The failure path now probe-sleeps below the fail cap — the probe is stubbed
+# quiet so the sleep runs its chunks.)
 #-------------------------------------------------------------------------------
 test_failed_run_sleeps_no_rapid_loop() {
     echo "TEST: failed fire sleeps instead of hot-looping"
@@ -467,6 +469,7 @@ EOF
         CCUSAGE_CMD="cat '${dir}/ccusage.json'" \
         AGENT_RUN_CMD="${dir}/agent-run-stub" \
         SLEEP_CMD="${dir}/sleep-stub" \
+        WORK_PROBE_CMD="echo '{\"locked\":false,\"reconcile\":null,\"paused\":null,\"pickSig\":\"\"}'" \
         bash "${DAEMON}" >/dev/null 2>&1
 
     local fired slept
@@ -486,6 +489,131 @@ $(cat "${dir}/calls.log")"
     fi
 
     pass "failed fire sleeps instead of hot-looping"
+}
+
+#-------------------------------------------------------------------------------
+# Test 7b: below the fail cap, a failed fire probe-sleeps (wakeable) instead of
+# going deaf — the 2026-08-08 OAuth-expiry incident cost 5h of deaf sleep per
+# transient failure while a team:revise would have sat unseen.
+#-------------------------------------------------------------------------------
+test_failed_fire_probe_sleeps() {
+    echo "TEST: failed fire probe-sleeps below the cap"
+
+    local dir; dir="$(make_env)"
+    trap "rm -rf '${dir}'" RETURN
+    fixture $((NOW_EPOCH - 60)) > "${dir}/ccusage.json"
+    cat > "${dir}/agent-run-stub" <<EOF
+#!/usr/bin/env bash
+echo "fired \$*" >> "${dir}/calls.log"
+exit 1
+EOF
+    chmod +x "${dir}/agent-run-stub"
+
+    BUDGET_GATE_NOW="${NOW_EPOCH}" AGENT_DAEMON_MAX_ITERS=1 \
+        CCUSAGE_CMD="cat '${dir}/ccusage.json'" \
+        AGENT_RUN_CMD="${dir}/agent-run-stub" \
+        SLEEP_CMD="${dir}/sleep-stub" \
+        WORK_PROBE_CMD="echo '{\"locked\":false,\"reconcile\":null,\"paused\":null,\"pickSig\":\"\"}'" \
+        bash "${DAEMON}" > "${dir}/daemon.out" 2>&1
+
+    if ! grep -q 'probe-sleeping (fail 1/3)' "${dir}/daemon.out"; then
+        fail "first failure must probe-sleep as fail 1/3" "out:
+$(tail -5 "${dir}/daemon.out")"
+        return
+    fi
+    if grep -q 'sleeping until window reset' "${dir}/daemon.out"; then
+        fail "first failure must NOT sleep deaf" "out:
+$(grep 'sleeping until' "${dir}/daemon.out")"
+        return
+    fi
+
+    pass "failed fire probe-sleeps below the cap"
+}
+
+#-------------------------------------------------------------------------------
+# Test 7c: the fail cap — the Nth (default 3rd) consecutive failure goes deaf
+# until the window reset, bounding a genuinely broken pick at CAP fires per
+# window.
+#-------------------------------------------------------------------------------
+test_fail_cap_falls_back_to_deaf_sleep() {
+    echo "TEST: fail cap falls back to deaf sleep"
+
+    local dir; dir="$(make_env)"
+    trap "rm -rf '${dir}'" RETURN
+    fixture $((NOW_EPOCH - 60)) > "${dir}/ccusage.json"
+    cat > "${dir}/agent-run-stub" <<EOF
+#!/usr/bin/env bash
+echo "fired \$*" >> "${dir}/calls.log"
+exit 1
+EOF
+    chmod +x "${dir}/agent-run-stub"
+
+    BUDGET_GATE_NOW="${NOW_EPOCH}" AGENT_DAEMON_MAX_ITERS=3 \
+        CCUSAGE_CMD="cat '${dir}/ccusage.json'" \
+        AGENT_RUN_CMD="${dir}/agent-run-stub" \
+        SLEEP_CMD="${dir}/sleep-stub" \
+        WORK_PROBE_CMD="echo '{\"locked\":false,\"reconcile\":null,\"paused\":null,\"pickSig\":\"\"}'" \
+        bash "${DAEMON}" > "${dir}/daemon.out" 2>&1
+
+    if ! grep -q 'fail cap reached (3/3)' "${dir}/daemon.out"; then
+        fail "third consecutive failure must hit the cap" "out:
+$(tail -5 "${dir}/daemon.out")"
+        return
+    fi
+    if ! grep -q 'fail cap reached (3/3), sleeping until window reset' "${dir}/daemon.out"; then
+        fail "capped failure must sleep deaf until reset" "out:
+$(tail -5 "${dir}/daemon.out")"
+        return
+    fi
+    if [ "$(grep -c '^fired' "${dir}/calls.log")" != "3" ]; then
+        fail "cap must bound the window at 3 fires" "calls:
+$(cat "${dir}/calls.log")"
+        return
+    fi
+
+    pass "fail cap falls back to deaf sleep"
+}
+
+#-------------------------------------------------------------------------------
+# Test 7d: a clean run resets the consecutive-failure counter — fail, succeed,
+# fail must log fail 1/3 twice (never 2/3).
+#-------------------------------------------------------------------------------
+test_success_resets_fail_counter() {
+    echo "TEST: success resets the fail counter"
+
+    local dir; dir="$(make_env)"
+    trap "rm -rf '${dir}'" RETURN
+    fixture $((NOW_EPOCH - 60)) > "${dir}/ccusage.json"
+    : > "${dir}/run.count"
+    cat > "${dir}/agent-run-stub" <<EOF
+#!/usr/bin/env bash
+echo "fired \$*" >> "${dir}/calls.log"
+n="\$(wc -c < "${dir}/run.count")"
+printf 'x' >> "${dir}/run.count"
+if [ "\${n}" -eq 1 ]; then exit 0; fi
+exit 1
+EOF
+    chmod +x "${dir}/agent-run-stub"
+
+    BUDGET_GATE_NOW="${NOW_EPOCH}" AGENT_DAEMON_MAX_ITERS=3 \
+        CCUSAGE_CMD="cat '${dir}/ccusage.json'" \
+        AGENT_RUN_CMD="${dir}/agent-run-stub" \
+        SLEEP_CMD="${dir}/sleep-stub" \
+        WORK_PROBE_CMD="echo '{\"locked\":false,\"reconcile\":null,\"paused\":null,\"pickSig\":\"\"}'" \
+        bash "${DAEMON}" > "${dir}/daemon.out" 2>&1
+
+    if [ "$(grep -c 'probe-sleeping (fail 1/3)' "${dir}/daemon.out")" != "2" ]; then
+        fail "both isolated failures must count as fail 1/3" "out:
+$(grep 'fail' "${dir}/daemon.out")"
+        return
+    fi
+    if grep -q '(fail 2/3)' "${dir}/daemon.out"; then
+        fail "a clean run between failures must reset the counter" "out:
+$(grep 'fail' "${dir}/daemon.out")"
+        return
+    fi
+
+    pass "success resets the fail counter"
 }
 
 #-------------------------------------------------------------------------------
@@ -615,6 +743,9 @@ test_no_work_probe_suppresses_stale_candidates
 test_no_work_probe_wakes_on_pr_shrink
 test_exhausted_run_sleeps_to_reset
 test_failed_run_sleeps_no_rapid_loop
+test_failed_fire_probe_sleeps
+test_fail_cap_falls_back_to_deaf_sleep
+test_success_resets_fail_counter
 test_idle_window_fires_from_cold
 test_oauth_sensor_overrides_ccusage
 test_oauth_unreachable_falls_back_to_ccusage

@@ -30,7 +30,10 @@
 #     loop against a genuinely held lock.
 #   - reconcile candidate → wake unconditionally. Deterministic: team-pickup
 #     §1.2 runs the very same pr_triage_pick over the same inputs, so it WILL
-#     act on it.
+#     act on it. Candidates cover all three attention classes (team:revise,
+#     CONFLICTING, bot-incomplete tail); the incomplete signals cost one extra
+#     `gh pr view --json comments` per otherwise-clean agent PR per scan and
+#     fail SAFE toward "complete" (see pr-triage.sh pr_triage_enrich).
 #   - team:paused issue → wake unconditionally. §1.5 always acts (resume, or
 #     cap → team:failed — either way the signal clears itself).
 #   - open-PR set shrink → wake unconditionally when a PR present in the
@@ -89,7 +92,9 @@ wp_scan() {
         pr_sig_arg='null' # set unreadable → signature is null, not ""
     fi
 
-    pick_json="$(printf '%s' "${prs}" | PR_TRIAGE_AUTHOR="${author}" pr_triage_pick)" || true
+    pick_json="$(printf '%s' "${prs}" \
+        | PR_TRIAGE_AUTHOR="${author}" pr_triage_enrich \
+        | PR_TRIAGE_AUTHOR="${author}" pr_triage_pick)" || true
     reconcile="$(printf '%s' "${pick_json}" | jq -r '.pr // "null"' 2>/dev/null || echo 'null')"
 
     paused="$("${gh}" issue list --label team:paused --state open \

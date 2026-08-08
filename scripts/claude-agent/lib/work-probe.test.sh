@@ -47,6 +47,7 @@ case "\${args}" in
     *"--label team:paused"*)     cat "${dir}/paused.out" ;;
     *"issue list --label team "*) cat "${dir}/picks.out" ;;
     *"pr list"*)                 cat "${dir}/prs.out" ;;
+    *"pr view"*)                 cat "${dir}/prview.out" ;;
     *)                           exit 1 ;;
 esac
 EOF
@@ -56,6 +57,12 @@ EOF
     echo "null"      > "${dir}/paused.out"
     echo ""          > "${dir}/picks.out"
     echo "[]"        > "${dir}/prs.out"
+    # Default: bot-complete comments (both markers) so pre-incomplete tests
+    # keep their "nothing happening" baseline.
+    cat > "${dir}/prview.out" <<'PVEOF'
+{"comments":[{"body":"<!-- pr-review-done reviewed=abc fixes=abc -->"},
+             {"body":"### Manual verification — round 1/3"}]}
+PVEOF
     printf '%s' "${dir}"
 }
 
@@ -454,6 +461,69 @@ test_decide_locked_suppresses_shrink() {
     pass "wp_decide never shrink-wakes while locked"
 }
 
+
+#-------------------------------------------------------------------------------
+# Test 19: a clean agent PR whose bot tail never finished (no review marker, no
+# verification round) scans as a reconcile candidate — the daemon wakes to
+# finish outstanding PR work instead of sleeping past it.
+#-------------------------------------------------------------------------------
+test_scan_incomplete_pr_sets_reconcile() {
+    echo "TEST: wp_scan flags a bot-incomplete PR for reconcile"
+
+    local dir; dir="$(make_env)"
+    trap "rm -rf '${dir}'" RETURN
+    cat > "${dir}/prs.out" <<'EOF'
+[{"number":305,"headRefName":"feat/issue-281","isDraft":false,
+  "mergeable":"MERGEABLE","labels":[],"createdAt":"2026-07-09T00:00:00Z",
+  "author":{"login":"agent-bot"}}]
+EOF
+    printf '%s\n' '{"comments":[]}' > "${dir}/prview.out"
+
+    local scan reconcile reason
+    scan="$(GH_BIN="${dir}/gh-stub" wp_scan)"
+    reconcile="$(printf '%s' "${scan}" | jq -r '.reconcile')"
+
+    if [ "${reconcile}" != "305" ]; then
+        fail "bot-incomplete PR must be the reconcile candidate" "scan=${scan}"
+        return
+    fi
+    if ! reason="$(printf '%s' "${scan}" | wp_decide "")" \
+        || [ "${reason}" != "reconcile PR #305" ]; then
+        fail "wp_decide must wake naming the incomplete PR" "reason=${reason:-}"
+        return
+    fi
+
+    pass "wp_scan flags a bot-incomplete PR for reconcile"
+}
+
+#-------------------------------------------------------------------------------
+# Test 20: the same clean PR with both markers present (bot-complete, awaiting
+# only a human merge) is NOT a reconcile candidate — the daemon keeps sleeping
+# and work-ahead stays possible.
+#-------------------------------------------------------------------------------
+test_scan_bot_complete_pr_no_reconcile() {
+    echo "TEST: wp_scan ignores a bot-complete PR"
+
+    local dir; dir="$(make_env)"
+    trap "rm -rf '${dir}'" RETURN
+    cat > "${dir}/prs.out" <<'EOF'
+[{"number":305,"headRefName":"feat/issue-281","isDraft":false,
+  "mergeable":"MERGEABLE","labels":[],"createdAt":"2026-07-09T00:00:00Z",
+  "author":{"login":"agent-bot"}}]
+EOF
+    # default prview.out carries both markers
+
+    local reconcile
+    reconcile="$(GH_BIN="${dir}/gh-stub" wp_scan | jq -r '.reconcile')"
+
+    if [ "${reconcile}" != "null" ]; then
+        fail "bot-complete PR must not be a reconcile candidate" "reconcile=${reconcile}"
+        return
+    fi
+
+    pass "wp_scan ignores a bot-complete PR"
+}
+
 #-------------------------------------------------------------------------------
 # Run suite
 #-------------------------------------------------------------------------------
@@ -479,6 +549,8 @@ test_decide_pr_unchanged_no_wake
 test_decide_pr_unreadable_no_wake
 test_decide_pr_empty_baseline_no_wake
 test_decide_locked_suppresses_shrink
+test_scan_incomplete_pr_sets_reconcile
+test_scan_bot_complete_pr_no_reconcile
 
 echo ""
 echo "=========================================="

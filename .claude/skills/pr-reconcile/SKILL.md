@@ -12,8 +12,9 @@ description:
 # PR Reconcile — Autonomous PR Feedback + Conflict Fixer
 
 You are the **reconciler** spawned by `/team-pickup` when an already-open agent
-PR needs attention: master moved under it (merge conflict) and/or a human
-reviewed it and handed it back with the `team:revise` label. One fire = one PR
+PR needs attention: master moved under it (merge conflict), a human reviewed
+it and handed it back with the `team:revise` label, and/or its bot tail never
+finished (`incomplete` — a prior fire died mid-§6a). One fire = one PR
 brought back to green — rebased, comments addressed with in-thread replies, CI
 re-watched, manual verification re-run — or escalated with a parked label.
 
@@ -32,12 +33,16 @@ This skill assumes:
 ## Invocation
 
 ```
-/pr-reconcile --pr <PR_NUM> --branch <BRANCH> --issue <ISSUE_N> --reason <revise|conflict|both>
+/pr-reconcile --pr <PR_NUM> --branch <BRANCH> --issue <ISSUE_N> --reason <revise|conflict|both|incomplete>
 ```
 
 All four arguments required, supplied verbatim from team-pickup's triage verdict
 (`reason` is the triage pick reason; when the PR both conflicts and carries
-`team:revise`, the caller passes `both`).
+`team:revise`, the caller passes `both`). Reason `incomplete` means the PR
+carries no attention label and no conflict, but its bot tail never finished:
+the one-time review marker (`<!-- pr-review-done -->`) and/or any manual
+verification round comment is missing — a prior fire died mid-§6a. §1 and §2
+are then natural no-ops; §3 is the whole job.
 
 ## Process
 
@@ -197,7 +202,7 @@ gh pr edit "$PR_NUM" --remove-label team:revise
 The label drop is what stops the daemon re-picking this PR next fire; the human
 re-applies `team:revise` (and re-opens threads) if a fix missed.
 
-### 3. Verification tail (always, when §1/§2 pushed anything)
+### 3. Verification tail (when §1/§2 pushed anything — or `--reason incomplete`)
 
 Any push (rebase or comment fix) re-ran CI and staled ALL previous evidence —
 per the locked design, **all verification re-runs**. Execute team-pickup's
@@ -225,7 +230,20 @@ The same blocking rules apply verbatim: never emit output while pr-watch or the
 `/verify-pr` round is in flight; `pr-watch: (in flight)` is never a legal value.
 
 If neither §1 nor §2 pushed a commit (e.g. `team:revise` with zero actionable
-threads), skip the tail — nothing changed, existing evidence stands.
+threads) **and `--reason` is not `incomplete`**, skip the tail — nothing
+changed, existing evidence stands.
+
+When `--reason incomplete`, ALWAYS run the tail even with no push: the tail
+itself is the missing work (pr-watch to green, the marker-gated one-time
+review, a verification round). On a no-push `incomplete` run existing ticks
+are NOT stale — the `/verify-pr` round uses team-pickup §6a.2's standard
+semantics (unchecked items only), headed `### Manual verification — round
+<M>/3` with `M` = 1 + the count of existing round comments (respecting
+`MANUAL_ROUNDS_MAX=3`; at cap with FAILs it exhausts into draft as usual).
+Convergence: if the review marker is absent, §3's pr-review may apply
+`team:revise` and end the tail — the next fire re-picks the PR as `revise`;
+either way the PR exits the `incomplete` class every fire (marker/round
+posted, `team:revise` applied, or parked), so the pick can never loop.
 
 ## Output format
 
@@ -233,7 +251,7 @@ One block per fire, written to stdout:
 
 ```
 === /pr-reconcile PR #<PR_NUM> <ISO-8601> ===
-reason:    revise | conflict | both
+reason:    revise | conflict | both | incomplete
 rebase:    CLEAN — pushed | SKIPPED | FAILED — <detail>
 comments:  <k> thread(s) addressed in <R> round(s) | SKIPPED | FAILED — <n> unresolved
 pr-watch:  <verbatim terminal line>            (when §3 ran)

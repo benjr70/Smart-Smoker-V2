@@ -36,7 +36,9 @@
 #   CLAUDE_JSONL_DIR      dir scanned for the degraded reset estimate
 #   WINDOW_SECS           assumed window length for degraded estimate (default 5h)
 #   AGENT_DAEMON_MAX_ITERS  stop after N loop passes (default: unbounded)
-#   WORK_PROBE_INTERVAL   secs between mid-sleep work probes (default 900)
+#   WORK_PROBE_INTERVAL   secs between mid-sleep work probes (default 300)
+#   AGENT_DAEMON_FAIL_CAP consecutive failed fires before the failure path
+#                         goes deaf until the window reset (default 3)
 #   WORK_PROBE_CMD        command eval'd for a probe scan (default: wp_scan)
 #   USAGE_FETCH_CMD       command eval'd for the OAuth usage JSON
 #                         (default: usage_sensor_fetch)
@@ -62,7 +64,8 @@ SLEEP_CMD="${SLEEP_CMD:-sleep}"
 CLAUDE_JSONL_DIR="${CLAUDE_JSONL_DIR:-${HOME}/.claude}"
 WINDOW_SECS="${WINDOW_SECS:-18000}"
 AGENT_DAEMON_MAX_ITERS="${AGENT_DAEMON_MAX_ITERS:-0}"   # 0 = unbounded
-WORK_PROBE_INTERVAL="${WORK_PROBE_INTERVAL:-900}"       # secs between probes
+WORK_PROBE_INTERVAL="${WORK_PROBE_INTERVAL:-300}"       # secs between probes
+AGENT_DAEMON_FAIL_CAP="${AGENT_DAEMON_FAIL_CAP:-3}"     # consecutive-failure cap
 WORK_PROBE_CMD="${WORK_PROBE_CMD:-wp_scan}"             # eval'd; emits scan JSON
 USAGE_FETCH_CMD="${USAGE_FETCH_CMD:-usage_sensor_fetch}" # eval'd; OAuth usage JSON
 
@@ -210,7 +213,7 @@ probe_sleep() {
 
 main() {
     log "starting (ccusage='${CCUSAGE_CMD}', max_iters=${AGENT_DAEMON_MAX_ITERS})"
-    local iters=0 fire_log run_reset fire_rc
+    local iters=0 fire_log run_reset fire_rc consec_fails=0
     while true; do
         read_budget
         log "sensor=${SENSOR} remainPct=${REMAIN_PCT} shouldFire=${SHOULD_FIRE} resetAt=${RESET_AT}"
@@ -234,6 +237,7 @@ main() {
                 # picks, but new work arrives on human time — sleep in chunks
                 # and let the Work Probe (pure gh, zero Claude cost) wake the
                 # loop early when something actionable appears.
+                consec_fails=0
                 log "queue empty — sleeping until window reset (with work probe)"
                 probe_sleep "${RESET_AT}"
             elif grep -q '^AGENT_RUN_RESET_AT=' "${fire_log}"; then
@@ -241,19 +245,33 @@ main() {
                 # the run's own scraped reset, falling back to the window's.
                 run_reset="$(grep -m1 '^AGENT_RUN_RESET_AT=' "${fire_log}" | cut -d= -f2-)"
                 [ -n "${run_reset}" ] || run_reset="${RESET_AT}"
+                consec_fails=0
                 log "run exhausted usage — sleeping until ${run_reset}"
                 sleep_and_poll "${run_reset}"
             elif [ "${fire_rc}" -ne 0 ]; then
                 # Genuine failure (exit non-zero, no exhaustion/no-work marker).
                 # Re-firing immediately would hot-loop on the same broken pick and
-                # burn the whole window (observed 2026-07-08: 1271 fires in 2h).
-                # A real failure will not fix itself — sleep out the window and
-                # let the next reset (or a human) clear it.
-                log "WARN — agent-run failed (exit ${fire_rc}) — sleeping until window reset"
-                sleep_and_poll "${RESET_AT}"
+                # burn the whole window (observed 2026-07-08: 1271 fires in 2h) —
+                # but an always-deaf sleep-to-reset makes a TRANSIENT failure cost
+                # hours (observed 2026-08-08: OAuth-expiry fires each slept 5h
+                # while a team:revise would have sat unseen). Bounded middle
+                # ground: probe-sleep so an actionable signal can retry the fire,
+                # capped at AGENT_DAEMON_FAIL_CAP consecutive failures — worst
+                # case CAP fires per window on a genuinely broken pick, then deaf
+                # until the reset (or a human) clears it.
+                consec_fails=$((consec_fails + 1))
+                if [ "${consec_fails}" -lt "${AGENT_DAEMON_FAIL_CAP}" ]; then
+                    log "WARN — agent-run failed (exit ${fire_rc}) — probe-sleeping (fail ${consec_fails}/${AGENT_DAEMON_FAIL_CAP})"
+                    probe_sleep "${RESET_AT}"
+                else
+                    log "WARN — agent-run failed (exit ${fire_rc}) — fail cap reached (${consec_fails}/${AGENT_DAEMON_FAIL_CAP}), sleeping until window reset"
+                    sleep_and_poll "${RESET_AT}"
+                    consec_fails=0
+                fi
             else
                 # Run finished with budget possibly to spare: loop straight back
                 # to the gate and keep working through the backlog this window.
+                consec_fails=0
                 log "run complete — re-checking budget"
             fi
             rm -f "${fire_log}"

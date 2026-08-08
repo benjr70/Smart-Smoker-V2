@@ -307,6 +307,238 @@ EOF
     pass "scan retry cap yields no-pick"
 }
 
+
+#-------------------------------------------------------------------------------
+# Test 10: an enriched-clean PR whose bot tail never finished (missing review
+# marker and/or verification round) is picked with reason "incomplete".
+#-------------------------------------------------------------------------------
+test_incomplete_pr_picked() {
+    echo "TEST: bot-incomplete PR is picked"
+
+    local out rc
+    out="$(jq -s '.' \
+        <(pr_json 400 "feat/issue-350" "MERGEABLE" "2026-08-01T10:00:00Z" "" \
+            | jq '. + {reviewDone: false, verifyDone: true}') \
+        | pr_triage_pick)"
+    rc=$?
+
+    if [ "${rc}" -ne 0 ] \
+        || [ "$(printf '%s' "${out}" | jq -r '.pr')" != "400" ] \
+        || [ "$(printf '%s' "${out}" | jq -r '.issue')" != "350" ] \
+        || [ "$(printf '%s' "${out}" | jq -r '.reason')" != "incomplete" ]; then
+        fail "missing review marker must pick reason=incomplete" "rc=${rc} out=${out}"
+        return
+    fi
+
+    out="$(jq -s '.' \
+        <(pr_json 400 "feat/issue-350" "MERGEABLE" "2026-08-01T10:00:00Z" "" \
+            | jq '. + {reviewDone: true, verifyDone: false}') \
+        | pr_triage_pick)"
+
+    if [ "$(printf '%s' "${out}" | jq -r '.reason')" != "incomplete" ]; then
+        fail "missing verification round must pick reason=incomplete" "out=${out}"
+        return
+    fi
+
+    pass "bot-incomplete PR is picked"
+}
+
+#-------------------------------------------------------------------------------
+# Test 11: a bot-complete PR (review marker + verification round both present)
+# awaiting only a human merge is NOT picked — work-ahead stays.
+#-------------------------------------------------------------------------------
+test_bot_complete_pr_no_pick() {
+    echo "TEST: bot-complete PR is not picked"
+
+    local out rc
+    out="$(jq -s '.' \
+        <(pr_json 400 "feat/issue-350" "MERGEABLE" "2026-08-01T10:00:00Z" "" \
+            | jq '. + {reviewDone: true, verifyDone: true}') \
+        | pr_triage_pick)"
+    rc=$?
+
+    if [ "${rc}" -eq 0 ] || [ "$(printf '%s' "${out}" | jq -r '.pr')" != "null" ]; then
+        fail "bot-complete PR must no-pick" "rc=${rc} out=${out}"
+        return
+    fi
+
+    pass "bot-complete PR is not picked"
+}
+
+#-------------------------------------------------------------------------------
+# Test 12: rank order — revise beats conflict beats incomplete even when the
+# incomplete PR is oldest; two incompletes resolve oldest-first.
+#-------------------------------------------------------------------------------
+test_revise_and_conflict_beat_incomplete() {
+    echo "TEST: revise > conflict > incomplete rank order"
+
+    local out
+    out="$(jq -s '.' \
+        <(pr_json 400 "feat/issue-350" "MERGEABLE" "2026-07-01T10:00:00Z" "" \
+            | jq '. + {reviewDone: false, verifyDone: false}') \
+        <(pr_json 401 "feat/issue-351" "CONFLICTING" "2026-07-05T10:00:00Z" "") \
+        <(pr_json 402 "feat/issue-352" "MERGEABLE" "2026-07-09T10:00:00Z" "team:revise") \
+        | pr_triage_pick)"
+
+    if [ "$(printf '%s' "${out}" | jq -r '.pr')" != "402" ]; then
+        fail "revise must beat conflict and incomplete" "out=${out}"
+        return
+    fi
+
+    out="$(jq -s '.' \
+        <(pr_json 400 "feat/issue-350" "MERGEABLE" "2026-07-01T10:00:00Z" "" \
+            | jq '. + {reviewDone: false, verifyDone: false}') \
+        <(pr_json 401 "feat/issue-351" "CONFLICTING" "2026-07-05T10:00:00Z" "") \
+        | pr_triage_pick)"
+
+    if [ "$(printf '%s' "${out}" | jq -r '.pr')" != "401" ]; then
+        fail "conflict must beat an older incomplete" "out=${out}"
+        return
+    fi
+
+    out="$(jq -s '.' \
+        <(pr_json 405 "feat/issue-355" "MERGEABLE" "2026-07-08T10:00:00Z" "" \
+            | jq '. + {reviewDone: false, verifyDone: false}') \
+        <(pr_json 404 "feat/issue-354" "MERGEABLE" "2026-07-02T10:00:00Z" "" \
+            | jq '. + {reviewDone: false, verifyDone: false}') \
+        | pr_triage_pick)"
+
+    if [ "$(printf '%s' "${out}" | jq -r '.pr')" != "404" ]; then
+        fail "oldest incomplete must win within rank" "out=${out}"
+        return
+    fi
+
+    pass "revise > conflict > incomplete rank order"
+}
+
+#-------------------------------------------------------------------------------
+# Test 13: pr_triage_enrich probes ONLY clean candidates (skips conflicting /
+# revise-labeled / draft / foreign-author PRs) and merges both signals into the
+# probed PR.
+#-------------------------------------------------------------------------------
+test_enrich_merges_signals_and_probes_only_clean_candidates() {
+    echo "TEST: enrich probes only clean candidates"
+
+    local dir; dir="$(mktemp -d)"
+    trap "rm -rf '${dir}'" RETURN
+
+    cat > "${dir}/gh-stub" <<EOF
+#!/usr/bin/env bash
+echo "\$*" >> "${dir}/calls"
+printf '%s\n' '{"comments":[{"body":"just chatter"}]}'
+EOF
+    chmod +x "${dir}/gh-stub"
+    : > "${dir}/calls"
+
+    local out
+    out="$(jq -s '.' \
+        <(pr_json 400 "feat/issue-350" "MERGEABLE" "2026-07-01T10:00:00Z" "") \
+        <(pr_json 401 "feat/issue-351" "CONFLICTING" "2026-07-01T10:00:00Z" "") \
+        <(pr_json 402 "feat/issue-352" "MERGEABLE" "2026-07-01T10:00:00Z" "team:revise") \
+        <(pr_json 403 "feat/issue-353" "MERGEABLE" "2026-07-01T10:00:00Z" "" "agent-bot" "true") \
+        <(pr_json 404 "feat/issue-354" "MERGEABLE" "2026-07-01T10:00:00Z" "" "some-human") \
+        | GH_BIN="${dir}/gh-stub" PR_TRIAGE_AUTHOR="agent-bot" pr_triage_enrich)"
+
+    if [ "$(wc -l < "${dir}/calls")" != "1" ] || ! grep -q "pr view 400" "${dir}/calls"; then
+        fail "exactly the one clean candidate must be probed" "calls: $(cat "${dir}/calls")"
+        return
+    fi
+    if [ "$(printf '%s' "${out}" | jq -r '.[] | select(.number == 400) | .reviewDone')" != "false" ] \
+        || [ "$(printf '%s' "${out}" | jq -r '.[] | select(.number == 400) | .verifyDone')" != "false" ]; then
+        fail "probed PR must carry both merged signals" "out=${out}"
+        return
+    fi
+    if [ "$(printf '%s' "${out}" | jq -r '.[] | select(.number == 401) | has("reviewDone")')" != "false" ]; then
+        fail "unprobed PRs must stay untouched" "out=${out}"
+        return
+    fi
+
+    pass "enrich probes only clean candidates"
+}
+
+#-------------------------------------------------------------------------------
+# Test 14: enrich fails SAFE — a gh error leaves the fields absent, so the pick
+# reads the PR as complete and no-picks (a broken sensor must never pick-loop).
+#-------------------------------------------------------------------------------
+test_enrich_gh_error_fails_safe() {
+    echo "TEST: enrich gh error fails safe as complete"
+
+    local dir; dir="$(mktemp -d)"
+    trap "rm -rf '${dir}'" RETURN
+    cat > "${dir}/gh-stub" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+    chmod +x "${dir}/gh-stub"
+
+    local out rc
+    out="$(jq -s '.' \
+        <(pr_json 400 "feat/issue-350" "MERGEABLE" "2026-07-01T10:00:00Z" "") \
+        | GH_BIN="${dir}/gh-stub" pr_triage_enrich | pr_triage_pick)"
+    rc=$?
+
+    if [ "${rc}" -eq 0 ] || [ "$(printf '%s' "${out}" | jq -r '.pr')" != "null" ]; then
+        fail "gh error must degrade to no-pick" "rc=${rc} out=${out}"
+        return
+    fi
+
+    pass "enrich gh error fails safe as complete"
+}
+
+#-------------------------------------------------------------------------------
+# Test 15: enrich passes malformed (non-array) input through untouched, exit 0.
+#-------------------------------------------------------------------------------
+test_enrich_malformed_passthrough() {
+    echo "TEST: enrich passes malformed input through"
+
+    local out rc
+    out="$(printf 'not json' | pr_triage_enrich)"
+    rc=$?
+
+    if [ "${rc}" -ne 0 ] || [ "${out}" != "not json" ]; then
+        fail "malformed input must pass through with exit 0" "rc=${rc} out=${out}"
+        return
+    fi
+
+    pass "enrich passes malformed input through"
+}
+
+#-------------------------------------------------------------------------------
+# Test 16: pr_triage_scan end-to-end — the listing is clean but the PR's bot
+# tail never finished → the scan verdict is reason "incomplete".
+#-------------------------------------------------------------------------------
+test_scan_picks_incomplete() {
+    echo "TEST: scan picks a bot-incomplete PR"
+
+    local dir; dir="$(mktemp -d)"
+    trap "rm -rf '${dir}'" RETURN
+
+    jq -s '.' <(pr_json 400 "feat/issue-350" "MERGEABLE" "2026-08-01T10:00:00Z" "") \
+        > "${dir}/list.json"
+    cat > "${dir}/gh-stub" <<EOF
+#!/usr/bin/env bash
+case "\$*" in
+    *"pr list"*) cat "${dir}/list.json" ;;
+    *"pr view"*) printf '%s\n' '{"comments":[]}' ;;
+    *)           exit 1 ;;
+esac
+EOF
+    chmod +x "${dir}/gh-stub"
+
+    local out rc
+    out="$(GH_BIN="${dir}/gh-stub" pr_triage_scan)"
+    rc=$?
+
+    if [ "${rc}" -ne 0 ] \
+        || [ "$(printf '%s' "${out}" | jq -r '.pr')" != "400" ] \
+        || [ "$(printf '%s' "${out}" | jq -r '.reason')" != "incomplete" ]; then
+        fail "scan must pick the incomplete PR" "rc=${rc} out=${out}"
+        return
+    fi
+
+    pass "scan picks a bot-incomplete PR"
+}
+
 #-------------------------------------------------------------------------------
 # Run suite
 #-------------------------------------------------------------------------------
@@ -323,6 +555,13 @@ test_no_attention_no_pick
 test_empty_and_malformed_no_pick
 test_scan_polls_unknown_to_resolution
 test_scan_retry_cap_no_pick
+test_incomplete_pr_picked
+test_bot_complete_pr_no_pick
+test_revise_and_conflict_beat_incomplete
+test_enrich_merges_signals_and_probes_only_clean_candidates
+test_enrich_gh_error_fails_safe
+test_enrich_malformed_passthrough
+test_scan_picks_incomplete
 
 echo ""
 echo "=========================================="
