@@ -8,6 +8,7 @@
  * plugged in.
  */
 import {
+  ChartAspect,
   ChartSample,
   DEFAULT_MAX_POINTS,
   LABEL_SIZE,
@@ -466,9 +467,17 @@ describe('the axes', () => {
     });
   });
 
-  /** The three contexts the chart is drawn in each get a box of their own. */
+  /**
+   * The three contexts the chart is drawn in each get a box of their own: the
+   * kiosk's is a strip wider for its height than a phone's portrait column,
+   * because that is the shape of the panel left under its readouts; History's
+   * review card is smaller than either.
+   */
   it('sizes itself for the screen it is drawn on', () => {
-    expect(plotBoxOf('touchscreen').height).toBeGreaterThan(plotBoxOf('mobile').height);
+    const shape = (aspect: ChartAspect): number =>
+      plotBoxOf(aspect).width / plotBoxOf(aspect).height;
+
+    expect(shape('touchscreen')).toBeGreaterThan(shape('mobile'));
     expect(plotBoxOf('compact').height).toBeLessThan(plotBoxOf('mobile').height);
   });
 

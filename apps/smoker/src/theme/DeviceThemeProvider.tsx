@@ -4,7 +4,6 @@ import {
   ColorScheme,
   DEVICE_DEFAULT_COLOR_SCHEME,
   appTheme,
-  carbonLight,
   createAppTheme,
   withDesignPalette,
 } from 'theme/src';
@@ -58,18 +57,6 @@ const cssVariables: Record<ColorScheme, Record<string, string | number>> = {
   light: appTheme.generateCssVars('light').css,
   dark: appTheme.generateCssVars('dark').css,
 };
-
-/**
- * The colour for anything drawn on a panel the device still paints light.
- *
- * The chart is the one such panel: it paints itself a light grey of its own and
- * draws its axes and labels in the colour it inherits, and restyling it belongs
- * with the chart rather than with this recolour. Until then it is handed the
- * light palette's text — the same answer the web application reaches for when a
- * screen it has not restyled is still painted against a light shell (see
- * `withLightColorScheme` in the shared theme).
- */
-const lightPanelCssVariables = { '--smoker-chart-text': carbonLight.text };
 
 /** Where the device hears the installation's appearance from. */
 export interface DeviceAppearanceSource {
@@ -142,9 +129,7 @@ export function DeviceThemeProvider({
 
   return (
     <ThemeProvider theme={themes[colorScheme]}>
-      <GlobalStyles
-        styles={{ ':root': { ...cssVariables[colorScheme], ...lightPanelCssVariables } }}
-      />
+      <GlobalStyles styles={{ ':root': cssVariables[colorScheme] }} />
       {children}
     </ThemeProvider>
   );

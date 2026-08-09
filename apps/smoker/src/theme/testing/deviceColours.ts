@@ -5,9 +5,9 @@
  * shared palette onto `:root` as custom properties, and the legacy stylesheets
  * name those properties. Neither half says anything on its own, and the test
  * environment joins neither of them — it stubs a CSS import out of the bundle,
- * it does not inherit `color` down a tree, and it does not resolve `var()`. So
- * these helpers put the halves back together, letting a test ask what colour
- * something on the touchscreen actually comes out.
+ * and it does not resolve `var()`. So these helpers put the halves back
+ * together, letting a test ask what colour something on the touchscreen
+ * actually comes out.
  */
 import fs from 'fs';
 import path from 'path';
@@ -92,22 +92,6 @@ const declaredValue = (element: Element, properties: string[]): string | undefin
     .flatMap(rule => properties.map(property => rule.style.getPropertyValue(property)))
     .filter(value => value !== '')
     .pop();
-
-/**
- * The colour the page paints text that names no colour of its own. The page the
- * touchscreen is served in declares itself a dark colour scheme, so that colour
- * is the platform's light-on-dark default rather than black.
- */
-const PAGE_TEXT_COLOUR = '#FFFFFF';
-
-/** The colour anything drawn at this element is drawn in, `color` inheriting. */
-export const textColourAt = (element: Element): string => {
-  for (let node: Element | null = element; node; node = node.parentElement) {
-    const declared = declaredValue(node, ['color']);
-    if (declared) return resolve(declared);
-  }
-  return PAGE_TEXT_COLOUR;
-};
 
 /** The colour an element paints itself; empty when it paints itself nothing. */
 export const backgroundColourAt = (element: Element): string =>

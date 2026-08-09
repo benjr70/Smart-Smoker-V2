@@ -1,8 +1,8 @@
 import React from 'react';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { Home } from './home';
-import { SessionConfig, decodeEvents } from 'smoke-session/src';
+import { SessionConfig, SmokeProfile, decodeEvents } from 'smoke-session/src';
 import { SmokeSessionProvider } from 'smoke-session/src/react';
 import {
   FakeCloudSocket,
@@ -11,25 +11,12 @@ import {
   FakeWifiStatus,
   SteppingClock,
 } from 'smoke-session/src/testing';
+import { plotBoxOf } from 'temperaturechart/src/chartGeometry';
 
 // The package's flushPromises leans on node's setImmediate, absent in the CRA
 // jsdom test env; a setTimeout(0) drain settles the store's fire-and-forget
 // startup loads and command promises just the same.
 const flushPromises = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 0));
-
-// The chart is a heavy D3 leaf; stub it to a readout of the temps it receives.
-jest.mock('temperaturechart/src/tempChart', () => {
-  return function MockTempChart(props: any) {
-    return (
-      <div data-testid="temp-chart">
-        <div data-testid="chart-chamber">{props.ChamberTemp}</div>
-        <div data-testid="chart-meat">{props.MeatTemp}</div>
-        <div data-testid="chart-meat2">{props.Meat2Temp}</div>
-        <div data-testid="chart-meat3">{props.Meat3Temp}</div>
-      </div>
-    );
-  };
-});
 
 // The wifi sub-screen owns its own device wiring; stub it to a back button.
 jest.mock('./wifi/wifi', () => ({
@@ -49,6 +36,7 @@ interface SmokerKit {
   api: FakeSessionApi;
   deviceFeed: FakeDeviceFeed;
   wifi: FakeWifiStatus;
+  clock: SteppingClock;
 }
 
 function smokerKit(): SmokerKit {
@@ -65,7 +53,7 @@ function smokerKit(): SmokerKit {
     deviceFeed,
     wifi: { port: wifi, throttleMs: 0 },
   };
-  return { config, socket, api, deviceFeed, wifi };
+  return { config, socket, api, deviceFeed, wifi, clock };
 }
 
 function renderHome(kit: SmokerKit) {
@@ -78,6 +66,183 @@ function renderHome(kit: SmokerKit) {
 
 const reading = (chamber: string, meat: string, meat2: string, meat3: string): string =>
   JSON.stringify({ Chamber: chamber, Meat: meat, Meat2: meat2, Meat3: meat3 });
+
+/**
+ * The chart on the touchscreen.
+ *
+ * It is the real one, drawn into this document, because the whole point of the
+ * rewrite is that the drawing is a rendering an operator could read — so what a
+ * test asks of it is the same thing an operator would look for at the smoker.
+ */
+describe('the chart on the home screen', () => {
+  /** The touchscreen's shape, the one the kiosk's wide panel is cut for. */
+  const TOUCHSCREEN = plotBoxOf('touchscreen');
+
+  it('draws a line for the chamber and each of the three probes', async () => {
+    const kit = smokerKit();
+    const { container } = renderHome(kit);
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(
+      Array.from(container.querySelectorAll('path[data-series]')).map(line =>
+        line.getAttribute('data-series')
+      )
+    ).toEqual(['chamber', 'probe1', 'probe2', 'probe3']);
+  });
+
+  it('draws in the shape the touchscreen gives it', async () => {
+    const kit = smokerKit();
+    renderHome(kit);
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(screen.getByRole('img', { name: 'Temperature chart' })).toHaveAttribute(
+      'viewBox',
+      `0 0 ${TOUCHSCREEN.width} ${TOUCHSCREEN.height}`
+    );
+  });
+
+  /**
+   * The panel this screen is drawn on: 800 across, 480 down, and no scrollbar
+   * at a smoker to go looking for anything that falls off it.
+   *
+   * The chart is given the whole width of the row it sits in and takes its own
+   * height from the shape it draws in, so that shape is the whole of what
+   * decides whether the plot uses the panel or is letterboxed in the middle of
+   * it, and whether the legend naming the four lines is on the screen at all.
+   * Both of those are the same number, which is why they are asserted together:
+   * a shape tall enough to be worth capping is a shape that had to be shrunk
+   * away from the sides to fit.
+   */
+  describe('drawn across the panel it hangs on', () => {
+    const PANEL = { width: 800, height: 480 };
+    /** What the readouts and the two actions take off the top of the panel. */
+    const READOUTS_AND_ACTIONS = 140;
+    /** The legend the chart writes under the plot. */
+    const LEGEND = 32;
+    /** The room left down the panel for the plot itself. */
+    const ROOM = PANEL.height - READOUTS_AND_ACTIONS - LEGEND;
+
+    /** How tall the plot comes out, drawn at the width the row gives it. */
+    const drawnHeight = (plot: SVGSVGElement): number => {
+      const [, , width, height] = (plot.getAttribute('viewBox') ?? '')
+        .split(' ')
+        .map(Number) as number[];
+      return (PANEL.width * height) / width;
+    };
+
+    it('fills the width of the panel and still leaves its legend on the screen', async () => {
+      const kit = smokerKit();
+      renderHome(kit);
+      await act(async () => {
+        await flushPromises();
+      });
+      const plot = screen.getByRole('img', {
+        name: 'Temperature chart',
+      }) as unknown as SVGSVGElement;
+
+      // Drawn at the width it is given, rather than at a width of its own...
+      expect(plot).toHaveAttribute('width', '100%');
+      // ...it comes out short enough for the legend under it to be on screen...
+      expect(drawnHeight(plot)).toBeLessThanOrEqual(ROOM);
+      // ...and tall enough to be using the room it was left, rather than a
+      // strip of it with the panel showing either side.
+      expect(drawnHeight(plot)).toBeGreaterThan(ROOM * 0.8);
+    });
+  });
+
+  it('plots the cook as the device reads it, while the smoke is running', async () => {
+    const kit = smokerKit();
+    kit.api.seedSmoking(true);
+    const { container } = renderHome(kit);
+    await act(async () => {
+      await flushPromises();
+    });
+
+    const drawnBefore = container.querySelector('path[data-series="chamber"]');
+    expect(drawnBefore).toHaveAttribute('d', '');
+
+    for (const chamber of ['225', '230', '228']) {
+      kit.clock.step(60_000);
+      await act(async () => {
+        kit.deviceFeed.injectReading(reading(chamber, '185', '190', '0'));
+        await flushPromises();
+      });
+    }
+
+    expect(container.querySelector('path[data-series="chamber"]')).not.toHaveAttribute('d', '');
+  });
+
+  /**
+   * The operator is standing at the smoker with a finger on the glass, so a
+   * touch has to answer what the probes read at the moment being touched — and
+   * lifting off has to give the plot back.
+   */
+  describe('a finger on the plot', () => {
+    /** Where the plot's own middle falls, between the touchscreen's margins. */
+    const middleOfThePlot = (TOUCHSCREEN.width + TOUCHSCREEN.margin.left) / 2;
+
+    /** The chart's own plot, not the wifi button's icon further up the screen. */
+    const plotOf = (container: HTMLElement): SVGSVGElement =>
+      container.querySelector('svg[aria-label="Temperature chart"]') as SVGSVGElement;
+
+    const touchAt = (container: HTMLElement, x: number): void => {
+      fireEvent(plotOf(container), new MouseEvent('pointerdown', { bubbles: true, clientX: x }));
+    };
+
+    const cookThreeReadings = async (kit: SmokerKit): Promise<void> => {
+      for (const chamber of ['225', '230', '228']) {
+        kit.clock.step(60_000);
+        await act(async () => {
+          kit.deviceFeed.injectReading(reading(chamber, '185', '190', '0'));
+          await flushPromises();
+        });
+      }
+    };
+
+    it('says what each probe read at the moment being touched', async () => {
+      const kit = smokerKit();
+      kit.api.seedSmoking(true);
+      const { container } = renderHome(kit);
+      await act(async () => {
+        await flushPromises();
+      });
+      await cookThreeReadings(kit);
+
+      expect(container.querySelector('[data-hover-card]')).toBeNull();
+
+      touchAt(container, middleOfThePlot);
+
+      const card = container.querySelector('[data-hover-card]') as unknown as HTMLElement;
+      expect(card).not.toBeNull();
+      expect(within(card).getByText('Chamber')).toBeInTheDocument();
+      expect(within(card).getByText('probe 1')).toBeInTheDocument();
+      expect(within(card).getByText('185°')).toBeInTheDocument();
+      expect(container.querySelector('[data-crosshair]')).not.toBeNull();
+      expect(container.querySelectorAll('circle[data-hover]').length).toBeGreaterThan(0);
+    });
+
+    it('gives the plot back when the finger leaves', async () => {
+      const kit = smokerKit();
+      kit.api.seedSmoking(true);
+      const { container } = renderHome(kit);
+      await act(async () => {
+        await flushPromises();
+      });
+      await cookThreeReadings(kit);
+
+      touchAt(container, middleOfThePlot);
+      expect(container.querySelector('[data-hover-card]')).not.toBeNull();
+
+      fireEvent.pointerLeave(plotOf(container));
+
+      expect(container.querySelector('[data-hover-card]')).toBeNull();
+    });
+  });
+});
 
 describe('Home (smoker session host)', () => {
   it('renders a live device reading and relays it to the cloud as an events frame', async () => {
@@ -94,9 +259,9 @@ describe('Home (smoker session host)', () => {
     });
 
     // The live reading is on screen...
-    expect(screen.getByTestId('chart-chamber')).toHaveTextContent('225');
-    expect(screen.getByTestId('chart-meat')).toHaveTextContent('185');
-    expect(screen.getByTestId('chart-meat2')).toHaveTextContent('190');
+    expect(screen.getByTestId('smoker-chamber-temp')).toHaveTextContent('225');
+    expect(screen.getByText('185')).toBeInTheDocument();
+    expect(screen.getByText('190')).toBeInTheDocument();
 
     // ...and relayed to the cloud verbatim.
     expect(kit.socket.emittedEvents).toHaveLength(1);
@@ -220,10 +385,42 @@ describe('Home (smoker session host)', () => {
       await flushPromises();
     });
 
-    expect(screen.getByText('Big Pit')).toBeInTheDocument();
-    expect(screen.getByText('Brisket')).toBeInTheDocument();
-    expect(screen.getByText('Ribs')).toBeInTheDocument();
-    expect(screen.getByText('Wings')).toBeInTheDocument();
+    // Each name is on screen twice: as the readout's label, and labelling that
+    // probe's line in the chart's legend.
+    expect(screen.getAllByText('Big Pit')).toHaveLength(2);
+    expect(screen.getAllByText('Brisket')).toHaveLength(2);
+    expect(screen.getAllByText('Ribs')).toHaveLength(2);
+    expect(screen.getAllByText('Wings')).toHaveLength(2);
+  });
+
+  /**
+   * A stored profile carries all four names when a browser wrote it, and need
+   * not otherwise: every one of them is optional where the smoke is stored, and
+   * a name that was never written comes back missing rather than empty. The
+   * kiosk is the one screen with nowhere to go when a render throws — no
+   * reload, no back, and an operator with a cook running — so a missing name
+   * has to be a name to fall back on rather than a blank screen in the garage.
+   */
+  it('keeps drawing when a stored profile carries no name for a probe', async () => {
+    const kit = smokerKit();
+    kit.api.seedProfile({
+      chamberName: 'Big Pit',
+      probe1Name: 'Brisket',
+      probe3Name: 'Wings',
+      notes: '',
+      woodType: 'Hickory',
+    } as SmokeProfile);
+    renderHome(kit);
+
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(screen.getByRole('img', { name: 'Temperature chart' })).toBeInTheDocument();
+    // The unnamed line is still named in the legend, where there is no readout
+    // beside it carrying the same name.
+    expect(screen.getByText('probe 2')).toBeInTheDocument();
+    expect(screen.getAllByText('Brisket')).toHaveLength(2);
   });
 
   it('falls back to default probe names when no profile is saved', async () => {
@@ -235,10 +432,10 @@ describe('Home (smoker session host)', () => {
       await flushPromises();
     });
 
-    expect(screen.getByText('Chamber')).toBeInTheDocument();
-    expect(screen.getByText('probe 1')).toBeInTheDocument();
-    expect(screen.getByText('probe 2')).toBeInTheDocument();
-    expect(screen.getByText('probe 3')).toBeInTheDocument();
+    expect(screen.getAllByText('Chamber')).toHaveLength(2);
+    expect(screen.getAllByText('probe 1')).toHaveLength(2);
+    expect(screen.getAllByText('probe 2')).toHaveLength(2);
+    expect(screen.getAllByText('probe 3')).toHaveLength(2);
   });
 
   it('shows the stop-smoking action when the persisted state is already smoking', async () => {
@@ -271,8 +468,8 @@ describe('Home (smoker session host)', () => {
       await flushPromises();
     });
 
-    expect(screen.getByText('Renamed Chamber')).toBeInTheDocument();
-    expect(screen.getByText('Renamed Probe 1')).toBeInTheDocument();
+    expect(screen.getAllByText('Renamed Chamber')).toHaveLength(2);
+    expect(screen.getAllByText('Renamed Probe 1')).toHaveLength(2);
     expect(screen.getByText('Stop Smoking')).toBeInTheDocument();
   });
 });

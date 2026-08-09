@@ -14,14 +14,15 @@
 }
 
 /*
- * The chart's place on the screen. The chart paints its own panel a light grey
- * and draws its axes, ticks and labels in the colour it inherits, so it is
- * handed one that reads against that panel instead of the screen's near-white
- * text. Recolouring the chart itself belongs with the chart.
+ * The chart has no rule here, which is the rule.
+ *
+ * It is given the whole width of the row it sits in and takes its height from
+ * the shape it is drawn in — the touchscreen shape, which is cut for the strip
+ * of the 800×480 panel the readouts and the two actions leave. Capping its
+ * height here instead would letterbox it: the plot keeps its proportions, so a
+ * height it is held to is a width it is held to as well, and the panel would
+ * show either side of a chart drawn down the middle of it.
  */
-.chart {
-  color: var(--smoker-chart-text);
-}
 
 .text {
   font-family: 'Roboto', 'Helvetica', 'Arial', sans-serif;

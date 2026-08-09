@@ -16,17 +16,17 @@ const NOTHING_RECORDED: ChartSample[] = [];
  * the plot's own size.
  *
  * A smoke runs for twelve hours at a reading every few seconds, which is tens of
- * thousands of them; keeping every one would mean the screen holding more of
+ * thousands of them; keeping every one would mean this appliance holding more of
  * them, and copying and thinning more of them on each new arrival, the longer
- * the cook goes on — worst late in a long smoke, on the kiosk least able to
- * absorb it. So what is kept is compacted instead, and both the memory and the
- * work per reading settle at a few plots' worth. A few, rather than one, so the
- * recent hours stay at the resolution they were read at rather than being
+ * the cook goes on — worst late in a long smoke, on the 800MHz panel least able
+ * to absorb it. So what is kept is compacted instead, and both the memory and
+ * the work per reading settle at a few plots' worth. A few, rather than one, so
+ * the recent hours stay at the resolution they were read at rather than being
  * averaged again on the heels of every reading.
  */
 const RETAINED_READINGS = DEFAULT_MAX_POINTS * 4;
 
-/** A temperature off the wire, as a number the chart can plot. */
+/** A temperature off the device, as a number the chart can plot. */
 const readingOf = (temp: string): number => {
   const value = parseFloat(temp);
   return Number.isFinite(value) ? value : UNREPORTED;
@@ -36,21 +36,23 @@ const readingOf = (temp: string): number => {
 const momentOf = (date: Date): number => new Date(date).getTime();
 
 /**
- * The series the live chart draws: the cook so far, as it is being recorded.
+ * The series the touchscreen's chart draws: the cook so far, as the smoker is
+ * recording it.
  *
- * The hook reads the live session — the same stream the readouts above the
+ * The hook reads the live session — the same stream the readouts beside the
  * chart are painted from — and keeps every reading that arrives while the smoke
  * is running. A reading is kept whenever it carries a moment of its own: a cook
- * run with one probe in the meat is a cook, and the chart it draws is the point
- * of running it.
+ * run with one probe in the meat is a cook, and the chart at the smoker is
+ * where the operator watches it.
  *
- * The touchscreen keeps a hook of its own that records to these same rules
- * (`apps/smoker/src/components/home/useTemperatureSeries.ts`), which is the
- * PRD's decision: each application owns a thin series hook over its own
- * temperature stream, and neither package changes shape to hold one. The two
- * are the same code over the same session snapshot, so a change here belongs
- * there too — and a third consumer wanting the same recording is the moment to
- * lift it into the session package rather than write it a third time.
+ * The web application keeps a hook of its own that records to the same rules
+ * (`apps/frontend/src/components/smoke/smokeStep/useTemperatureSeries.ts`),
+ * which is the PRD's decision: each application owns a thin series hook over
+ * its own temperature stream, and neither package changes shape to hold one.
+ * The two are the same code over the same session snapshot, so a change here
+ * belongs there too — and a third consumer wanting the same recording is the
+ * moment to lift it into the session package rather than write it a third
+ * time.
  */
 export function useTemperatureSeries(): ChartSample[] {
   const { chamberTemp, probeTemp1, probeTemp2, probeTemp3, date, smoking, initialTemps } =
@@ -60,22 +62,21 @@ export function useTemperatureSeries(): ChartSample[] {
 
   /**
    * The moment last taken down, so that a render caused by something other than
-   * a reading — a name typed in, the smoking flag flipping — does not enter the
-   * reading already on screen a second time. It starts at whatever the session
-   * was last showing, which is a reading that arrived before this chart existed.
+   * a reading — a name announced from a phone, the smoking flag flipping — does
+   * not enter the reading already on screen a second time.
    */
   const lastMoment = useRef<number>(momentOf(date));
 
   /**
-   * A new baseline means a different cook — the smoke was cleared, or the
-   * history was re-fetched and now already contains what was recorded here — so
-   * what this hook has been keeping is dropped rather than drawn on top of it.
+   * A new baseline means the stored cook has been re-read — the operator has
+   * come back from the wifi screen, or the smoke was cleared from a phone — and
+   * it already holds what this hook took down while it was away. What is held
+   * here is dropped rather than drawn on top of it.
    *
    * This is settled here, while rendering, and not in an effect afterwards: an
-   * effect would let the render that first sees the refreshed history draw it
-   * with the superseded readings still on the end, and a cook that doubles back
-   * on itself for a frame is a line that visibly folds over and a hover that
-   * lands on the wrong reading while it does.
+   * effect would let the render that first sees the re-read cook draw it with
+   * the superseded readings still on the end, and a cook that doubles back on
+   * itself for a frame is a line that visibly folds over.
    */
   const sameCook = baseline === initialTemps;
   if (!sameCook) {
@@ -102,23 +103,23 @@ export function useTemperatureSeries(): ChartSample[] {
   }, [chamberTemp, probeTemp1, probeTemp2, probeTemp3, date, smoking]);
 
   /**
-   * The cook that was already recorded when the screen was opened, thinned the
-   * once. A screen opened late into a long smoke is handed every reading the
-   * backend has stored for it, and none of them will ever change again, so they
+   * The cook that was already stored when the screen came up, thinned the once.
+   * A panel switched on late into a long smoke is handed every reading the
+   * backend has kept for it, and none of them will ever change again, so they
    * are thinned when they arrive rather than on the heels of every new reading.
    */
   const alreadyCooked = useMemo(() => decimate(initialTemps), [initialTemps]);
 
   /**
-   * The cook the chart is handed: what was already recorded when the screen was
-   * opened, then everything that has arrived since, thinned to what a plot can
+   * The cook the chart is handed: what was already stored when the screen came
+   * up, then everything the device has read since, thinned to what the plot can
    * show. A cook runs for twelve hours at a reading every few seconds, and the
    * chart must not carry a path segment for every one of them — so the thinning
    * happens here, once per reading, rather than inside the drawing.
    *
    * It is rebuilt only when one of those two changes, so a render caused by
-   * anything else hands the chart back the identical array and costs it no
-   * redrawing.
+   * anything else — a name announced from a phone — hands the chart back the
+   * identical array and costs the kiosk no redrawing.
    */
   return useMemo(() => decimate([...alreadyCooked, ...cook]), [alreadyCooked, cook]);
 }
