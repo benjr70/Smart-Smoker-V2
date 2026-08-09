@@ -12,6 +12,8 @@ import {
   SteppingClock,
 } from 'smoke-session/src/testing';
 import { plotBoxOf } from 'temperaturechart/src/chartGeometry';
+import { carbonDark } from 'theme/src';
+import { ProbeTargetSetting } from '../../api';
 
 // The package's flushPromises leans on node's setImmediate, absent in the CRA
 // jsdom test env; a setTimeout(0) drain settles the store's fire-and-forget
@@ -56,10 +58,35 @@ function smokerKit(): SmokerKit {
   return { config, socket, api, deviceFeed, wifi, clock };
 }
 
-function renderHome(kit: SmokerKit) {
+/**
+ * A stand-in for the settings the panel reads its targets out of, answering a
+ * different set of rows on each read so a test can change what is configured
+ * between one read and the next — which is the only way the touchscreen ever
+ * sees a target change.
+ */
+function fakeProbeTargets(...rounds: ProbeTargetSetting[][]) {
+  const port = {
+    reads: 0,
+    get: async (): Promise<ProbeTargetSetting[]> => {
+      const rows = rounds[Math.min(port.reads, rounds.length - 1)] ?? [];
+      port.reads += 1;
+      return rows;
+    },
+  };
+  return port;
+}
+
+/** A watched probe, at the temperature its meat is done at. */
+const watching = (slot: string, target: number): ProbeTargetSetting => ({
+  slot,
+  enabled: true,
+  target,
+});
+
+function renderHome(kit: SmokerKit, probeTargets = fakeProbeTargets([])) {
   return render(
     <SmokeSessionProvider config={kit.config}>
-      <Home />
+      <Home probeTargets={probeTargets} />
     </SmokeSessionProvider>
   );
 }
@@ -241,6 +268,182 @@ describe('the chart on the home screen', () => {
 
       expect(container.querySelector('[data-hover-card]')).toBeNull();
     });
+  });
+});
+
+/**
+ * The dashed lines the operator reads the cook against: how far each meat is
+ * from done, without walking inside to open the settings page.
+ *
+ * The panel is a display for a decision made elsewhere, so what it draws is
+ * whatever the settings said when it last read them — at boot, and again the
+ * moment a cook is started. Nothing arrives mid-cook.
+ */
+describe('the targets on the touchscreen chart', () => {
+  const targetLines = (container: HTMLElement): SVGLineElement[] =>
+    Array.from(container.querySelectorAll<SVGLineElement>('line[data-target]'));
+
+  /** A cook with two probes in the meat and the third not plugged in. */
+  const cook = async (kit: SmokerKit): Promise<void> => {
+    for (const chamber of ['225', '230']) {
+      kit.clock.step(60_000);
+      await act(async () => {
+        kit.deviceFeed.injectReading(reading(chamber, '185', '190', '0'));
+        await flushPromises();
+      });
+    }
+  };
+
+  it('rules a dashed line per watched probe, in that probe’s colour', async () => {
+    const kit = smokerKit();
+    kit.api.seedSmoking(true);
+    const { container } = renderHome(
+      kit,
+      fakeProbeTargets([
+        watching('probe1', 203),
+        watching('probe2', 165),
+        // Configured but not watched: the operator is not cooking to it.
+        { slot: 'probe3', enabled: false, target: 195 },
+      ])
+    );
+    await act(async () => {
+      await flushPromises();
+    });
+    await cook(kit);
+
+    const drawn = targetLines(container);
+    expect(drawn.map(line => line.getAttribute('data-target'))).toEqual(['probe1', 'probe2']);
+    expect(drawn[0]).toHaveAttribute('stroke', carbonDark.chart.probe1);
+    expect(drawn[1]).toHaveAttribute('stroke', carbonDark.chart.probe2);
+    drawn.forEach(line => expect(line.getAttribute('stroke-dasharray')).toBeTruthy());
+    expect(screen.getByText('TARGET 203°')).toBeInTheDocument();
+    expect(screen.getByText('TARGET 165°')).toBeInTheDocument();
+  });
+
+  /**
+   * The panel ships mounted under `React.StrictMode` (`src/index.tsx`), so the
+   * development build mounts every screen twice — effect, cleanup, effect —
+   * before an operator sees anything. A switch-on read that is only made on the
+   * first of those two passes is a read whose answer is thrown away by the
+   * cleanup between them, and the panel comes up with no dashed lines on it at
+   * all until somebody starts a cook.
+   */
+  it('reads the targets at switch-on even when the screen is mounted twice', async () => {
+    const kit = smokerKit();
+    // A panel switched on to a cook that is already on the backend and not
+    // running: it draws the stored cook straight away, and nothing else happens
+    // afterwards to make it read the settings a second time.
+    kit.api.seedSmoking(false).seedTemps([
+      {
+        ChamberTemp: 210,
+        MeatTemp: 120,
+        Meat2Temp: 0,
+        Meat3Temp: 0,
+        date: new Date('2026-08-09T11:00:00.000Z'),
+      },
+      {
+        ChamberTemp: 220,
+        MeatTemp: 130,
+        Meat2Temp: 0,
+        Meat3Temp: 0,
+        date: new Date('2026-08-09T11:01:00.000Z'),
+      },
+    ]);
+    const settings = fakeProbeTargets([watching('probe1', 203)]);
+    const { container } = render(
+      <React.StrictMode>
+        <SmokeSessionProvider config={kit.config}>
+          <Home probeTargets={settings} />
+        </SmokeSessionProvider>
+      </React.StrictMode>
+    );
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(targetLines(container)).toHaveLength(1);
+    expect(screen.getByText('TARGET 203°')).toBeInTheDocument();
+  });
+
+  it('reads the settings again when a cook is started, and never during one', async () => {
+    const kit = smokerKit();
+    kit.api.seedSmoking(false);
+    // The target is raised on a phone while the panel sits at the smoker.
+    const settings = fakeProbeTargets([watching('probe1', 195)], [watching('probe1', 210)]);
+    const { container } = renderHome(kit, settings);
+    await act(async () => {
+      await flushPromises();
+    });
+
+    // Read once when the panel was switched on, with no cook to draw it against.
+    expect(settings.reads).toBe(1);
+
+    fireEvent.click(screen.getByTestId('smoker-start-button'));
+    await act(async () => {
+      await flushPromises();
+    });
+
+    // Starting the cook is when the panel looks again...
+    expect(settings.reads).toBe(2);
+    await cook(kit);
+    // ...and what it draws is what the settings said then, not at switch-on.
+    expect(screen.getByText('TARGET 210°')).toBeInTheDocument();
+    expect(screen.queryByText('TARGET 195°')).not.toBeInTheDocument();
+
+    // It does not look again while that cook runs, however long it runs.
+    await cook(kit);
+    expect(settings.reads).toBe(2);
+    expect(targetLines(container)).toHaveLength(1);
+
+    // Stopping is not a moment to read — nothing is being cooked to a target —
+    // and the cook after it is, so every cook gets the settings as they stand.
+    fireEvent.click(screen.getByTestId('smoker-start-button'));
+    await act(async () => {
+      await flushPromises();
+    });
+    expect(settings.reads).toBe(2);
+
+    fireEvent.click(screen.getByTestId('smoker-start-button'));
+    await act(async () => {
+      await flushPromises();
+    });
+    expect(settings.reads).toBe(3);
+  });
+
+  it('keeps drawing the cook when the settings cannot be read', async () => {
+    const kit = smokerKit();
+    kit.api.seedSmoking(true);
+    const unreachable = {
+      reads: 0,
+      get: async (): Promise<ProbeTargetSetting[]> => {
+        unreachable.reads += 1;
+        throw new Error('the panel cannot reach the cloud');
+      },
+    };
+    const { container } = renderHome(kit, unreachable);
+    await act(async () => {
+      await flushPromises();
+    });
+    await cook(kit);
+
+    // No dashed lines, and the cook itself still drawn: the operator is at the
+    // smoker, and a chart is worth more than an error.
+    expect(unreachable.reads).toBeGreaterThan(0);
+    expect(targetLines(container)).toHaveLength(0);
+    expect(container.querySelector('path[data-series="chamber"]')).not.toHaveAttribute('d', '');
+  });
+
+  it('draws no target for a probe nobody is watching', async () => {
+    const kit = smokerKit();
+    kit.api.seedSmoking(true);
+    const { container } = renderHome(kit, fakeProbeTargets([]));
+    await act(async () => {
+      await flushPromises();
+    });
+    await cook(kit);
+
+    expect(targetLines(container)).toHaveLength(0);
+    expect(screen.queryByText(/TARGET/)).not.toBeInTheDocument();
   });
 });
 

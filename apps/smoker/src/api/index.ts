@@ -16,6 +16,7 @@ export type {
   AppearancePreference,
   BatchTempDto,
   ColorScheme,
+  ProbeTargetSetting,
   SmokeProfile,
   SmokingState,
   State,
@@ -33,6 +34,7 @@ export type {
   SmokeProfileResource,
   TempsResource,
   DeviceResource,
+  ProbeTargetsResource,
 } from './client';
 export {
   DEFAULT_APPEARANCE_PREFERENCE,

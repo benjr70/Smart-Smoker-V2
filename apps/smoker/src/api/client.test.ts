@@ -224,6 +224,55 @@ describe('smoker api client', () => {
     });
   });
 
+  /**
+   * The targets the meat is being cooked to, which the chart rules its dashed
+   * lines at. Read-only for the same reason the appearance is: they are
+   * configured on a phone, and the panel only draws them.
+   */
+  describe('probe targets resource (cloud base URL)', () => {
+    it('reads the configured probe rows from GET `appSettings`', async () => {
+      const { cloud, device, client } = buildClient({
+        appSettings: {
+          probeTarget: {
+            enabled: true,
+            probes: [
+              { slot: 'probe1', enabled: true, target: 203, targetSource: 'user', name: 'Brisket' },
+              { slot: 'probe2', enabled: false, target: 195, targetSource: 'default' },
+            ],
+          },
+        },
+      });
+
+      // Which probe, whether it is watched, and what it is being cooked to —
+      // and nothing else: where the number came from is the settings page's
+      // business, not the panel's.
+      await expect(client.probeTargets.get()).resolves.toEqual([
+        { slot: 'probe1', enabled: true, target: 203 },
+        { slot: 'probe2', enabled: false, target: 195 },
+      ]);
+      expect(cloud.requests).toEqual([{ method: 'get', path: 'appSettings', body: undefined }]);
+      expect(device.requests).toEqual([]);
+    });
+
+    /**
+     * An installation nobody has configured targets on — and a deployment older
+     * than the block — answers without any rows. Both mean "nothing to draw",
+     * which is a list of no rows rather than an absence the screen would have to
+     * have an opinion about.
+     */
+    it('reads an installation with no configured targets as no rows at all', async () => {
+      const { client } = buildClient({ appSettings: {} });
+
+      await expect(client.probeTargets.get()).resolves.toEqual([]);
+    });
+
+    it('offers no way to write one', () => {
+      const { client } = buildClient();
+
+      expect(Object.keys(client.probeTargets)).toEqual(['get']);
+    });
+  });
+
   describe('failure mapping', () => {
     it('surfaces an HTTP failure as the typed ApiError with method/path/status', async () => {
       const { cloud, client } = buildClient();

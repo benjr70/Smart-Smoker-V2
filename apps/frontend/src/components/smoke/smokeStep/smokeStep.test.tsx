@@ -6,7 +6,14 @@ import { SmokeSessionProvider } from 'smoke-session/src/react';
 import { SessionConfig } from 'smoke-session/src';
 import { encodeEvents } from 'smoke-session/src';
 import { FakeCloudSocket, FakeSessionApi, SteppingClock } from 'smoke-session/src/testing';
-import { DesignSurface } from '../../../theme';
+import { plotBoxOf, plotEdges } from 'temperaturechart/src/chartGeometry';
+import { ApiClientProvider, createApiClient } from '../../../api';
+import {
+  createFakeBackend,
+  FakeBackend,
+  StoredApplicationSettings,
+} from '../../../api/fakeBackend';
+import { DesignSurface, carbonLight, resolveDesignPalette } from '../../../theme';
 
 // The package's `flushPromises` uses `setImmediate`, which is absent from the
 // frontend's jsdom test environment; a `setTimeout(0)` macrotask drains the
@@ -68,12 +75,20 @@ jest.mock('@mui/material', () => ({
 // props it was handed.
 
 // The composition root opens a real cloud socket and pairs the store with the
-// production API client. Automock both boundaries — the cloud-socket adapter
-// factory (which owns the only socket.io import) and the default API client — so
-// the host test asserts the wiring without touching a network. Implementations
-// are (re)installed in each test's beforeEach because CRA runs `resetMocks`.
+// production API client. Mock both boundaries — the cloud-socket adapter factory
+// (which owns the only socket.io import) and the default API client — so the
+// host test asserts the wiring without touching a network. Implementations are
+// (re)installed in each test's beforeEach because CRA runs `resetMocks`.
+//
+// Only the production-client factory is replaced, not the whole API module: the
+// step reads its notification settings through the injection seam, so the
+// provider and its hook have to be the real ones for a test to be able to hand
+// the view a fake-backend-backed client.
 jest.mock('smoke-session/src/adapters/cloud-socket');
-jest.mock('../../../api');
+jest.mock('../../../api', () => ({
+  ...jest.requireActual('../../../api'),
+  getDefaultApiClient: jest.fn(),
+}));
 
 const nextButton = <button data-testid="next-button">Next</button>;
 
@@ -151,20 +166,23 @@ function harness(): { config: SessionConfig; socket: FakeCloudSocket; api: FakeS
 }
 
 /**
- * Render the view under a live Provider wired to the fake kit.
+ * Render the view under a live Provider wired to the fake kit, and over a client
+ * backed by the in-memory backend the step reads its settings from.
  *
  * The step's layout grid is imported straight from Material-UI rather than
  * through the barrel this file mocks, so it is a real component and reads the
  * theme: the readouts are painted from the probe colours the design carries.
  * Wrapping the way the application root wraps its tree hands them over.
  */
-function renderView(kit = harness()) {
+function renderView(kit = harness(), backend: FakeBackend = createFakeBackend()) {
   const utils = render(
-    <DesignSurface>
-      <SmokeSessionProvider config={kit.config}>
-        <SmokeStepView nextButton={nextButton} />
-      </SmokeSessionProvider>
-    </DesignSurface>
+    <ApiClientProvider client={createApiClient(backend)}>
+      <DesignSurface>
+        <SmokeSessionProvider config={kit.config}>
+          <SmokeStepView nextButton={nextButton} />
+        </SmokeSessionProvider>
+      </DesignSurface>
+    </ApiClientProvider>
   );
   return { ...utils, ...kit };
 }
@@ -172,6 +190,29 @@ function renderView(kit = harness()) {
 /** The four lines the chart draws, in the order it draws them. */
 const seriesPaths = (container: HTMLElement): SVGPathElement[] =>
   Array.from(container.querySelectorAll<SVGPathElement>('path[data-series]'));
+
+/** The dashed target lines the chart rules across the plot. */
+const targetLines = (container: HTMLElement): SVGLineElement[] =>
+  Array.from(container.querySelectorAll<SVGLineElement>('line[data-target]'));
+
+/** The chart colours the smoke screen draws under in a test, which is light. */
+const chartColours = resolveDesignPalette(carbonLight).chart;
+
+/**
+ * A stored settings document with the given probes watched at the given
+ * temperatures — the shape the settings page saves, keyed by slot and unnamed.
+ */
+const settingsWatching = (watched: Record<string, number>): Partial<StoredApplicationSettings> => ({
+  probeTarget: {
+    enabled: true,
+    probes: ['probe1', 'probe2', 'probe3'].map(slot => ({
+      slot,
+      enabled: watched[slot] !== undefined,
+      target: watched[slot] ?? 203,
+      targetSource: watched[slot] === undefined ? ('default' as const) : ('user' as const),
+    })),
+  },
+});
 
 describe('the chart on the smoke screen', () => {
   test('draws a line per probe, named as the operator named it', async () => {
@@ -240,6 +281,120 @@ describe('the chart on the smoke screen', () => {
     ['Chamber', 'Probe 1', 'Probe 2', 'Probe 3'].forEach(name =>
       expect(within(card).getByText(name)).toBeInTheDocument()
     );
+  });
+});
+
+describe('the target lines on the smoke screen', () => {
+  test('rules a dashed line per watched probe, in that probe’s colour, at its target', async () => {
+    const backend = createFakeBackend({
+      appSettings: { settings: settingsWatching({ probe1: 203, probe2: 165 }) },
+    });
+    const kit = harness();
+    kit.api.seedSmoking(true);
+    const { container, socket } = renderView(kit, backend);
+
+    await act(async () => {
+      await flushPromises();
+    });
+    await act(async () => {
+      socket.injectEvents(eventsFrame('213', ['145', '92', '78']));
+    });
+    await act(async () => {
+      socket.injectEvents(eventsFrame('218', ['150', '95', '80'], 60));
+    });
+
+    await waitFor(() => expect(targetLines(container)).toHaveLength(2));
+    const drawn = targetLines(container);
+    expect(drawn.map(line => line.getAttribute('data-target'))).toEqual(['probe1', 'probe2']);
+    expect(drawn[0]).toHaveAttribute('stroke', chartColours.probe1);
+    expect(drawn[1]).toHaveAttribute('stroke', chartColours.probe2);
+    drawn.forEach(line => expect(line.getAttribute('stroke-dasharray')).toBeTruthy());
+    // Each line says what it is, so a reader can tell 203 from 165 at a glance.
+    expect(screen.getByText('TARGET 203°')).toBeInTheDocument();
+    expect(screen.getByText('TARGET 165°')).toBeInTheDocument();
+  });
+
+  test('draws nothing for probes nobody is watching, nor for the chamber range', async () => {
+    const backend = createFakeBackend({
+      appSettings: {
+        settings: {
+          // A fire being watched, and no meat: the range the chamber is held
+          // inside is not a target and belongs on no chart.
+          chamber: { enabled: true, low: 225, high: 275 },
+          ...settingsWatching({}),
+        },
+      },
+    });
+    const kit = harness();
+    kit.api.seedSmoking(true);
+    const { container, socket } = renderView(kit, backend);
+
+    await act(async () => {
+      await flushPromises();
+    });
+    await act(async () => {
+      socket.injectEvents(eventsFrame('213', ['145', '92', '78']));
+    });
+    await act(async () => {
+      socket.injectEvents(eventsFrame('218', ['150', '95', '80'], 60));
+    });
+
+    // The cook is on the chart; only the dashed lines are absent.
+    expect(seriesPaths(container)).toHaveLength(4);
+    expect(targetLines(container)).toHaveLength(0);
+    expect(screen.queryByText(/TARGET/)).not.toBeInTheDocument();
+  });
+
+  test('draws the cook without target lines when the settings cannot be read', async () => {
+    const backend = createFakeBackend({
+      appSettings: { settings: settingsWatching({ probe1: 203 }) },
+    });
+    backend.injectFault({ method: 'get', path: 'appSettings', status: 503 });
+    const kit = harness();
+    kit.api.seedSmoking(true);
+    const { container, socket } = renderView(kit, backend);
+
+    await act(async () => {
+      await flushPromises();
+    });
+    await act(async () => {
+      socket.injectEvents(eventsFrame('213', ['145', '92', '78']));
+    });
+    await act(async () => {
+      socket.injectEvents(eventsFrame('218', ['150', '95', '80'], 60));
+    });
+
+    // The cook is what the screen is for, and it is still on the screen.
+    expect(seriesPaths(container)).toHaveLength(4);
+    seriesPaths(container).forEach(path => expect(path.getAttribute('d')).toBeTruthy());
+    expect(targetLines(container)).toHaveLength(0);
+  });
+
+  test('keeps a target above the cook so far on the plot', async () => {
+    const backend = createFakeBackend({
+      appSettings: { settings: settingsWatching({ probe1: 203 }) },
+    });
+    const kit = harness();
+    kit.api.seedSmoking(true);
+    const { container, socket } = renderView(kit, backend);
+
+    await act(async () => {
+      await flushPromises();
+    });
+    // A cook that has only just been lit: every reading on the chart, chamber
+    // included, is far below the temperature the meat is being taken to.
+    await act(async () => {
+      socket.injectEvents(eventsFrame('92', ['41', '0', '0']));
+    });
+    await act(async () => {
+      socket.injectEvents(eventsFrame('104', ['46', '0', '0'], 60));
+    });
+
+    await waitFor(() => expect(targetLines(container)).toHaveLength(1));
+    const plot = plotEdges(plotBoxOf('mobile'));
+    const y = Number(targetLines(container)[0].getAttribute('y1'));
+    expect(y).toBeGreaterThanOrEqual(plot.top);
+    expect(y).toBeLessThanOrEqual(plot.bottom);
   });
 });
 
@@ -464,9 +619,11 @@ describe('SmokeStep composition root', () => {
     process.env.WS_URL = 'ws://cloud.example';
 
     render(
-      <DesignSurface>
-        <SmokeStep nextButton={nextButton} />
-      </DesignSurface>
+      <ApiClientProvider client={createApiClient(createFakeBackend())}>
+        <DesignSurface>
+          <SmokeStep nextButton={nextButton} />
+        </DesignSurface>
+      </ApiClientProvider>
     );
     await act(async () => {
       await flushPromises();
@@ -479,9 +636,11 @@ describe('SmokeStep composition root', () => {
 
   test('defaults the socket URL to empty string when WS_URL is unset', async () => {
     render(
-      <DesignSurface>
-        <SmokeStep nextButton={nextButton} />
-      </DesignSurface>
+      <ApiClientProvider client={createApiClient(createFakeBackend())}>
+        <DesignSurface>
+          <SmokeStep nextButton={nextButton} />
+        </DesignSurface>
+      </ApiClientProvider>
     );
     await act(async () => {
       await flushPromises();
@@ -496,9 +655,11 @@ describe('SmokeStep composition root', () => {
     createCloudSocketAdapter.mockReturnValue({ ...port, close });
 
     const { unmount } = render(
-      <DesignSurface>
-        <SmokeStep nextButton={nextButton} />
-      </DesignSurface>
+      <ApiClientProvider client={createApiClient(createFakeBackend())}>
+        <DesignSurface>
+          <SmokeStep nextButton={nextButton} />
+        </DesignSurface>
+      </ApiClientProvider>
     );
     await act(async () => {
       await flushPromises();
