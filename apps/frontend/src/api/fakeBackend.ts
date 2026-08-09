@@ -40,6 +40,17 @@ export type StoredSmokeProfile = Partial<SmokeProfile> & {
 };
 
 /**
+ * A reading as it actually sits persisted on the backend: the temps schema
+ * declares every temperature a string, so that is what the wire carries back
+ * however numeric the domain type is. Seeded by tests to exercise read-path
+ * normalization, because a fake that only ever answers with numbers agrees with
+ * the type instead of with the deployment.
+ */
+export type StoredTempData = {
+  [Reading in keyof Omit<TempData, 'date'>]: TempData[Reading] | string;
+} & { date: Date | string };
+
+/**
  * The application settings as they actually sit stored: probe rows keyed by
  * slot, with the resolved name optional — the backend resolves names from the
  * active cook on the way out, and rejects them on the way in.
@@ -52,8 +63,8 @@ export type StoredApplicationSettings = Omit<ApplicationSettings, 'probeTarget'>
 
 export interface FakeBackendSeed {
   temps?: {
-    current?: TempData[];
-    records?: Record<string, TempData[]>;
+    current?: StoredTempData[];
+    records?: Record<string, StoredTempData[]>;
   };
   smokeProfile?: {
     current?: StoredSmokeProfile;
@@ -217,8 +228,8 @@ const withResolvedProbeNames = (
 
 interface FakeStore {
   temps: {
-    current: TempData[];
-    records: Record<string, TempData[]>;
+    current: StoredTempData[];
+    records: Record<string, StoredTempData[]>;
   };
   smokeProfile: {
     current: StoredSmokeProfile;

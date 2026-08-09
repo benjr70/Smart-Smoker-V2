@@ -35,6 +35,23 @@ const TEMPS_PATH = '/api/temps';
 const APP_SETTINGS_PATH = '/api/appSettings';
 
 /**
+ * The cook a seeded completed smoke is given: a chamber coming up to
+ * temperature with one probe in the meat, which is what a smoke that somebody
+ * actually ran looks like. Short enough to post in a fixture, long enough that
+ * the review card has a line to draw rather than a dot.
+ */
+const SEEDED_COOK = [
+  { chamber: 180, meat: 80 },
+  { chamber: 215, meat: 110 },
+  { chamber: 232, meat: 145 },
+  { chamber: 228, meat: 168 },
+  { chamber: 240, meat: 203 },
+];
+
+/** How far apart the seeded readings are taken, so the cook spans real time. */
+const SEEDED_READING_GAP_MS = 15 * 60 * 1000;
+
+/**
  * The one failure a pre-smoke save is allowed to heal and retry: the 404 the
  * backend answers with while the *current* smoke references a pre-smoke
  * document that no longer exists (`PreSmoke <id> not found`). Any other 404 is
@@ -317,10 +334,11 @@ export class BackendFixture {
    * have a finished smoke to open without driving the whole live pipeline.
    *
    * Mirrors the real lifecycle order: pre-smoke (creates the smoke + current
-   * state) -> smoke profile -> post-smoke -> ratings -> finish (marks Complete,
-   * which is what history returns). It then clears the current smoke so the next
-   * seed starts fresh. The finished smoke is tracked as a `smoke` entity so
-   * `cleanup()` can cascade-delete it, leaving no `smoke-test-*` residue.
+   * state) -> smoke profile -> the cook itself -> post-smoke -> ratings ->
+   * finish (marks Complete, which is what history returns). It then clears the
+   * current smoke so the next seed starts fresh. The finished smoke is tracked
+   * as a `smoke` entity so `cleanup()` can cascade-delete it, leaving no
+   * `smoke-test-*` residue.
    */
   async seedCompletedSmoke(options: SeedCompletedSmokeOptions = {}): Promise<SeededSmoke> {
     const name = testEntityName(options.label ?? 'completed-smoke');
@@ -363,6 +381,8 @@ export class BackendFixture {
       woodType: resolved.woodType,
       notes: '',
     });
+    await this.seedCook();
+
     await this.http.post('/api/postSmoke/current', {
       restTime: resolved.restTime,
       steps: [''],
@@ -378,6 +398,32 @@ export class BackendFixture {
     await this.http.put(`${STATE_PATH}/clearSmoke`);
 
     return resolved;
+  }
+
+  /**
+   * Record a short cook on the current smoke: a chamber that climbs and one
+   * meat probe that follows it, the other two never plugged in.
+   *
+   * A finished smoke with no readings is a smoke whose review card has nothing
+   * to draw, which would make every assertion about that chart pass by drawing
+   * an empty frame — the exact way a chart handed unusable readings fails. So
+   * the seed cooks: the readings go one at a time down the same route the
+   * device service posts them (the first is what links a temps series onto the
+   * smoke; a batch posted before that has nothing to belong to), and they go as
+   * strings, because that is what the backend's temps DTO accepts and what it
+   * stores.
+   */
+  private async seedCook(): Promise<void> {
+    const start = Date.now() - SEEDED_COOK.length * SEEDED_READING_GAP_MS;
+    for (const [reading, cook] of SEEDED_COOK.entries()) {
+      await this.http.post(TEMPS_PATH, {
+        ChamberTemp: String(cook.chamber),
+        MeatTemp: String(cook.meat),
+        Meat2Temp: '0',
+        Meat3Temp: '0',
+        date: new Date(start + reading * SEEDED_READING_GAP_MS).toISOString(),
+      });
+    }
   }
 
   /**

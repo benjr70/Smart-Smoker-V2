@@ -1,8 +1,11 @@
 import { Card, CardContent, Grid, Typography } from '@mui/material';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { SmokeProfile } from '../../../api/types';
-import TempChart, { TempData } from 'temperaturechart/src/tempChart';
-import { useChartColors } from '../../../theme';
+import { TempData } from 'temperaturechart/src/tempChart';
+import TemperatureChart from 'temperaturechart/src/TemperatureChart';
+import { decimate } from 'temperaturechart/src/chartGeometry';
+import { useChartPalette } from '../../../theme';
+import { chartNamesOf } from '../../common/chartNames';
 
 interface SmokeProfileCardProps {
   smokeProfile: SmokeProfile;
@@ -10,7 +13,11 @@ interface SmokeProfileCardProps {
 }
 
 export function SmokeProfileCard(props: SmokeProfileCardProps): JSX.Element {
-  const chartColors = useChartColors();
+  const chartColors = useChartPalette();
+  // A finished cook is every reading it ever took — twelve hours of them for a
+  // brisket — and the card is the smallest chart in the app. It is thinned to
+  // what that chart can draw, once, rather than on every render of the review.
+  const cook = useMemo(() => decimate(props.temps), [props.temps]);
 
   return (
     <Grid paddingBottom={1}>
@@ -80,21 +87,14 @@ export function SmokeProfileCard(props: SmokeProfileCardProps): JSX.Element {
             {props.smokeProfile.probe3Name ?? 'Probe 3'}
           </Typography>
 
-          <TempChart
-            ChamberTemp={
-              props.temps.length > 0 ? props.temps[props.temps.length - 1].ChamberTemp : 0
-            }
-            MeatTemp={props.temps.length > 0 ? props.temps[props.temps.length - 1].MeatTemp : 0}
-            Meat2Temp={props.temps.length > 0 ? props.temps[props.temps.length - 1].Meat2Temp : 0}
-            Meat3Temp={props.temps.length > 0 ? props.temps[props.temps.length - 1].Meat3Temp : 0}
-            ChamberName={props.smokeProfile.chamberName ?? 'Chamber'}
-            Probe1Name={props.smokeProfile.probe1Name ?? 'Probe 1'}
-            Probe2Name={props.smokeProfile.probe2Name ?? 'Probe 2'}
-            Probe3Name={props.smokeProfile.probe3Name ?? 'Probe 3'}
-            date={props.temps.length > 0 ? props.temps[props.temps.length - 1].date : new Date()}
-            smoking={false}
-            initData={props.temps}
+          {/* The cook as it was recorded, in the shape the card has room for.
+              No target is drawn across it: a smoke being read back is over, and
+              a line saying where it was headed is only noise on it. */}
+          <TemperatureChart
+            data={cook}
+            names={chartNamesOf(props.smokeProfile)}
             colors={chartColors}
+            aspect="compact"
           />
           <Typography sx={{ fontSize: 18 }} data-testid="review-smoke-woodtype">
             {props.smokeProfile.woodType} Wood

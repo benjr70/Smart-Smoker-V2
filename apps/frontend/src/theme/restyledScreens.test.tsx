@@ -7,16 +7,15 @@
  * user actually sees. A screen that still carried a colour of its own would
  * report the same value under both schemes and fail the dark half.
  */
-import { Experimental_CssVarsProvider as CssVarsProvider } from '@mui/material';
+import { Experimental_CssVarsProvider as CssVarsProvider, useColorScheme } from '@mui/material';
 import '@testing-library/jest-dom';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { ApiClientProvider, SnackbarProvider, createApiClient } from '../api';
 import { createFakeBackend } from '../api/fakeBackend';
 import { PostSmoke, PreSmoke, SmokeHistory, SmokeProfile, rating } from '../api/types';
 import { SmokeSessionProvider } from 'smoke-session/src/react';
 import { FakeCloudSocket, FakeSessionApi, SteppingClock } from 'smoke-session/src/testing';
-import { ChartColors } from 'temperaturechart/src/tempChart';
 import { PaletteTokens } from 'theme/src';
 import { BottomBar } from '../components/bottomBar/bottombar';
 import { History } from '../components/history/history';
@@ -30,19 +29,15 @@ import { SmokeProfileCard } from '../components/history/smokeCards/smokeProfileC
 import { WeightUnits } from '../components/common/interfaces/enums';
 import { DesignSurface, appTheme, carbonDark, carbonLight } from './index';
 
-// The chart draws itself through d3, which jsdom cannot exercise; what this app
-// is answerable for is the palette it hands the chart, so the stand-in records
-// it.
-jest.mock('temperaturechart/src/tempChart', () => ({
-  __esModule: true,
-  default: (props: { colors?: unknown }) => (
-    <div data-testid="temp-chart" data-colors={JSON.stringify(props.colors)} />
-  ),
-}));
+/** The four lines the chart draws, in the order it draws them. */
+const seriesStrokes = (container: HTMLElement): (string | null)[] =>
+  Array.from(container.querySelectorAll('path[data-series]')).map(line =>
+    line.getAttribute('stroke')
+  );
 
-/** The palette the screen under test handed the chart. */
-const chartColors = (): ChartColors =>
-  JSON.parse(screen.getByTestId('temp-chart').getAttribute('data-colors') ?? 'null');
+/** The panel the plot is drawn on: the first thing the chart paints. */
+const chartPanel = (container: HTMLElement): string | null =>
+  container.querySelector('svg rect')?.getAttribute('fill') ?? null;
 
 /** A screen, mounted and themed exactly as the application root mounts it. */
 const renderUnder = (scheme: 'light' | 'dark', ui: JSX.Element) => {
@@ -166,7 +161,8 @@ describe('the history detail’s probe names as text', () => {
  * The chart is a surface like any other: it used to paint itself a light-grey
  * panel and draw the light probe colours whatever the scheme, which on a dark
  * screen left a pale block with axis labels all but invisible against it. Every
- * colour it draws with comes from the scheme in effect now.
+ * colour it draws with comes from the scheme in effect now — and it is drawn
+ * here rather than stubbed, so these are the colours a browser would paint.
  */
 describe('the temperature chart', () => {
   const screensWithAChart: [string, () => JSX.Element][] = [
@@ -175,32 +171,74 @@ describe('the temperature chart', () => {
   ];
 
   describe.each(screensWithAChart)('on %s', (_screen, ui) => {
-    it('is drawn on the nested surface of the scheme in effect', () => {
-      renderUnder('dark', ui());
+    it('is drawn on the panel of the scheme in effect', () => {
+      const { container } = renderUnder('dark', ui());
 
-      expect(chartColors().surface).toBe(carbonDark.surfaceAlt);
+      expect(chartPanel(container)).toBe(carbonDark.chart.panel);
     });
 
     it('is drawn on the light one when the light scheme is in effect', () => {
-      renderUnder('light', ui());
+      const { container } = renderUnder('light', ui());
 
-      expect(chartColors().surface).toBe(carbonLight.surfaceAlt);
+      expect(chartPanel(container)).toBe(carbonLight.chart.panel);
     });
 
     it('draws each reading’s line in that scheme’s colour for its probe', () => {
-      renderUnder('dark', ui());
+      const { container } = renderUnder('dark', ui());
 
-      expect(chartColors().probes).toEqual(carbonDark.probes);
+      expect(seriesStrokes(container)).toEqual([
+        carbonDark.chart.chamber,
+        carbonDark.chart.probe1,
+        carbonDark.chart.probe2,
+        carbonDark.chart.probe3,
+      ]);
     });
 
-    /** The readings under the pointer sit in a callout of their own. */
-    it('writes the readings under the pointer on a surface they read against', () => {
-      renderUnder('dark', ui());
+    it('rules its frame and writes its labels in that scheme’s colours', () => {
+      const { container } = renderUnder('dark', ui());
 
-      expect(chartColors().tooltipSurface).toBe(carbonDark.surface);
-      expect(chartColors().tooltipText).toBe(carbonDark.text);
-      expect(chartColors().tooltipBorder).toBe(carbonDark.textSecondary);
+      expect(container.querySelector('line[data-grid]')).toHaveAttribute(
+        'stroke',
+        carbonDark.chart.grid
+      );
+      expect(container.querySelector('text[data-temp-label]')).toHaveAttribute(
+        'fill',
+        carbonDark.chart.label
+      );
     });
+  });
+
+  /**
+   * The scheme can change while a cook is being watched — somebody chooses dark
+   * on another client, or the phone crosses into the evening. The chart is
+   * handed the new colours and repaints; it is not rebuilt, because rebuilding
+   * it would throw away the cook it has drawn and the reading under the finger.
+   */
+  it('follows a change of scheme without being rebuilt', () => {
+    const Repainter = (): JSX.Element => {
+      const { setMode } = useColorScheme();
+      return (
+        <button data-testid="go-dark" onClick={() => setMode('dark')}>
+          dark
+        </button>
+      );
+    };
+
+    const { container } = renderUnder(
+      'light',
+      <>
+        <Repainter />
+        <SmokeProfileCard smokeProfile={smokeProfile()} temps={[]} />
+      </>
+    );
+    const plot = container.querySelector('svg');
+    expect(seriesStrokes(container)[0]).toBe(carbonLight.chart.chamber);
+
+    fireEvent.click(screen.getByTestId('go-dark'));
+
+    expect(seriesStrokes(container)[0]).toBe(carbonDark.chart.chamber);
+    expect(chartPanel(container)).toBe(carbonDark.chart.panel);
+    expect(container.querySelector('svg')).toBe(plot);
   });
 });
 

@@ -32,6 +32,8 @@ test(
       await frontend.expectHistoryContains(seeded.name);
 
       await frontend.openReview(seeded.name);
+      // The review draws the stored cook on the same chart the live step uses.
+      await frontend.expectReviewChartRendered();
       await frontend.expectReviewShows({
         name: seeded.name,
         meatType: seeded.meatType,

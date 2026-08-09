@@ -140,6 +140,11 @@ test('full smoke: hand-entered fields survive a reload, the cook runs, and the r
     await frontend.openSmokeStep();
     await frontend.expectSmokeStepShows(smokeStep);
 
+    // 7b. The step draws the cook on one chart, a line per reading: chamber and
+    //     three probes. Read before anything is live, this is the chart being
+    //     on screen at all — what it plots comes later.
+    await frontend.expectChartRendered();
+
     // 8. The cook begins where a pitmaster begins it: the smoker touchscreen.
     //    The frontend stays parked on the Smoke step, so it is watching live.
     await smoker.goto();
@@ -224,6 +229,9 @@ test('full smoke: hand-entered fields survive a reload, the cook runs, and the r
     //     the wrap-up just entered. Anything the app quietly failed to carry
     //     from a form to storage to the review surfaces fails here.
     await frontend.openReview(smokeName);
+    // The cook that was watched live is drawn again on the review card, from
+    // what the backend stored rather than from anything the page remembers.
+    await frontend.expectReviewChartRendered();
     await frontend.expectReviewShows({
       name: smokeName,
       meatType: preSmoke.meatType,

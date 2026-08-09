@@ -101,6 +101,42 @@ const CHART_SAMPLE_INTERVAL_MS = 500;
 const CHART_STOPPED_OBSERVATION_MS = 6_000;
 
 /**
+ * How many readings a set of chart lines is drawing, totalled across them.
+ *
+ * A line's `d` opens at its first reading (`M`) and carries one command per
+ * reading after it — `L` for the straight probe lines, `C` for the chamber's
+ * cardinal curve — so the commands are the readings. A line drawing nothing
+ * carries an empty `d` and counts as the zero readings it is showing, which is
+ * what separates a chart that is drawing a cook from one that has merely put
+ * its four paths on the page.
+ */
+const pointsDrawnBy = async (lines: Locator): Promise<number> => {
+  const perLine = await lines.evaluateAll(paths =>
+    paths.map(path => {
+      const geometry = path.getAttribute('d') ?? '';
+      return geometry === '' ? 0 : 1 + (geometry.match(/[LC]/g)?.length ?? 0);
+    })
+  );
+  return perLine.reduce((sum, points) => sum + points, 0);
+};
+
+/**
+ * The moments a chart has written under its plot, left to right.
+ *
+ * A cook runs forwards, so these must ascend. They did not: read back from a
+ * collection that answers newest-first, the chart took the span of the plot from
+ * the ends of the array and ruled its clock backwards — with the cook itself
+ * drawn off the side of the plot, over the temperature labels, while still
+ * showing four paths carrying every point the cook recorded.
+ */
+const timeAxisOf = async (chart: Locator): Promise<number[]> =>
+  chart
+    .locator('text[data-time-label]')
+    .evaluateAll(labels =>
+      labels.map(label => new Date(label.getAttribute('data-time-label') ?? '').getTime())
+    );
+
+/**
  * The pre-smoke step's load: `GET /api/presmoke/` (the trailing slash is what
  * separates the *current* pre-smoke from `GET /api/presmoke/:id`, which the
  * review screens use).
@@ -841,7 +877,60 @@ export class FrontendApp {
   }
 
   private get chartLines(): Locator {
-    return this.chart.locator('svg path.line');
+    return this.chart.locator('svg path[data-series]');
+  }
+
+  /**
+   * Assert the live chart is on screen and drawing a line per reading.
+   *
+   * The chart is one SVG carrying one path per series — the chamber and its
+   * three probes — so this is the check that the smoke screen is showing a
+   * chart at all, ahead of any assertion about what that chart has plotted.
+   */
+  async expectChartRendered(): Promise<void> {
+    await expect(this.chart.getByRole('img', { name: 'Temperature chart' })).toBeVisible();
+    await expect(this.chartLines).toHaveCount(4);
+    // The live chart is handed the cook the backend has already stored as its
+    // baseline, so a reload mid-cook can hand it that cook in the store's own
+    // order. It is still a cook, and a cook runs forwards.
+    const axis = await timeAxisOf(this.chart);
+    expect(axis.length, 'the live chart drew no clock under its plot').toBeGreaterThan(1);
+    expect(axis, 'the live chart ruled its clock backwards').toEqual(
+      [...axis].sort((one, other) => one - other)
+    );
+  }
+
+  /**
+   * Assert the review card of an opened smoke draws that smoke's chart: the
+   * same SVG, with the same four lines, over what the backend stored — and that
+   * those lines have the stored cook in them.
+   *
+   * The geometry is the assertion. The chart keeps one path per series whether
+   * or not that probe ever reported, so counting paths alone passes on a card
+   * showing an empty frame — which is precisely what a chart handed readings it
+   * cannot plot draws. A smoke that was recorded has at least the chamber to
+   * show for it.
+   *
+   * The direction is asserted too. The stored series comes back in whatever
+   * order the collection holds it, and a card handed it backwards draws every
+   * one of those points against a clock running the wrong way — passing every
+   * assertion above while showing the operator a cook drawn off the plot.
+   */
+  async expectReviewChartRendered(): Promise<void> {
+    const card = this.page.getByTestId('review-smoke-card');
+    await expect(card.getByRole('img', { name: 'Temperature chart' })).toBeVisible();
+    const lines = card.locator('svg path[data-series]');
+    await expect(lines).toHaveCount(4);
+    await expect
+      .poll(async () => pointsDrawnBy(lines), {
+        message: 'the review card drew its chart, but with none of the stored cook in it',
+      })
+      .toBeGreaterThan(0);
+    const axis = await timeAxisOf(card);
+    expect(axis.length, 'the review card drew no clock under its chart').toBeGreaterThan(1);
+    expect(axis, 'the review card ruled its clock backwards').toEqual(
+      [...axis].sort((one, other) => one - other)
+    );
   }
 
   /**
@@ -851,18 +940,14 @@ export class FrontendApp {
    * Counted off each line's own geometry: a `d` path opens at its first reading
    * (`M`) and carries one command per reading after it — `L` for the straight
    * probe lines, `C` for the chamber's cardinal curve — so the commands are the
-   * readings. This is what makes the measure comparable *across a reload*,
+   * readings. A line the chart is thinning draws fewer commands than the cook
+   * has readings, which is exactly the point of thinning; the count still only
+   * grows while a cook is being recorded. This is what makes the measure comparable *across a reload*,
    * unlike the raw length of `d`, which changes with the axis scaling even when
    * the very same readings are drawn.
    */
   async chartPointCount(): Promise<number> {
-    const perLine = await this.chartLines.evaluateAll(paths =>
-      paths.map(path => {
-        const geometry = path.getAttribute('d') ?? '';
-        return geometry === '' ? 0 : 1 + (geometry.match(/[LC]/g)?.length ?? 0);
-      })
-    );
-    return perLine.reduce((sum, points) => sum + points, 0);
+    return pointsDrawnBy(this.chartLines);
   }
 
   /**

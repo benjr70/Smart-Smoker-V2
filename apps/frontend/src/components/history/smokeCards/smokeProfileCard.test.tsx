@@ -4,6 +4,7 @@ import '@testing-library/jest-dom';
 import { SmokeProfileCard } from './smokeProfileCard';
 import { SmokeProfile } from '../../../api/types';
 import { TempData } from 'temperaturechart/src/tempChart';
+import { plotBoxOf } from 'temperaturechart/src/chartGeometry';
 
 // Mock Material-UI components
 jest.mock('@mui/material', () => ({
@@ -36,38 +37,8 @@ jest.mock('@mui/material', () => ({
   ),
 }));
 
-// Mock TempChart
-jest.mock('temperaturechart/src/tempChart', () => ({
-  __esModule: true,
-  default: ({
-    ChamberTemp,
-    MeatTemp,
-    Meat2Temp,
-    Meat3Temp,
-    ChamberName,
-    Probe1Name,
-    Probe2Name,
-    Probe3Name,
-    date,
-    smoking,
-    initData,
-  }: any) => (
-    <div
-      data-testid="temp-chart"
-      data-chamber-temp={ChamberTemp}
-      data-meat-temp={MeatTemp}
-      data-meat2-temp={Meat2Temp}
-      data-meat3-temp={Meat3Temp}
-      data-chamber-name={ChamberName}
-      data-probe1-name={Probe1Name}
-      data-probe2-name={Probe2Name}
-      data-probe3-name={Probe3Name}
-      data-date={date}
-      data-smoking={smoking ? 'true' : 'false'}
-      data-init-data={JSON.stringify(initData)}
-    />
-  ),
-}));
+// The chart is not stubbed: it draws itself in plain React SVG, so what the
+// review card shows of a stored cook is assertable here.
 
 describe('SmokeProfileCard Component', () => {
   const mockSmokeProfile: SmokeProfile = {
@@ -116,10 +87,12 @@ describe('SmokeProfileCard Component', () => {
 
     test('should render probe names and chamber name', () => {
       render(<SmokeProfileCard {...mockProps} />);
-      expect(screen.getByText('Main Chamber')).toBeInTheDocument();
-      expect(screen.getByText('Point')).toBeInTheDocument();
-      expect(screen.getByText('Flat')).toBeInTheDocument();
-      expect(screen.getByText('Ambient')).toBeInTheDocument();
+
+      // Each name is written twice: once as the card's own readout, and once in
+      // the chart's legend, labelling that probe's line.
+      ['Main Chamber', 'Point', 'Flat', 'Ambient'].forEach(name =>
+        expect(screen.getAllByText(name)).toHaveLength(2)
+      );
     });
 
     test('should render each renamed readout under its own test id', () => {
@@ -145,19 +118,32 @@ describe('SmokeProfileCard Component', () => {
       expect(screen.getByText('Great smoke session')).toBeInTheDocument();
     });
 
-    test('should render TempChart with correct props', () => {
-      render(<SmokeProfileCard {...mockProps} />);
-      const tempChart = screen.getByTestId('temp-chart');
-      expect(tempChart).toHaveAttribute('data-chamber-temp', '250');
-      expect(tempChart).toHaveAttribute('data-meat-temp', '180');
-      expect(tempChart).toHaveAttribute('data-meat2-temp', '170');
-      expect(tempChart).toHaveAttribute('data-meat3-temp', '160');
-      expect(tempChart).toHaveAttribute('data-chamber-name', 'Main Chamber');
-      expect(tempChart).toHaveAttribute('data-probe1-name', 'Point');
-      expect(tempChart).toHaveAttribute('data-probe2-name', 'Flat');
-      expect(tempChart).toHaveAttribute('data-probe3-name', 'Ambient');
-      expect(tempChart).toHaveAttribute('data-date', new Date('2023-07-15T14:00:00Z').toString());
-      expect(tempChart).toHaveAttribute('data-smoking', 'false');
+    test('draws the stored cook as a line per probe', () => {
+      const { container } = render(<SmokeProfileCard {...mockProps} />);
+
+      const lines = Array.from(container.querySelectorAll('path[data-series]'));
+
+      expect(lines).toHaveLength(4);
+      // Two stored readings a couple of hours apart, so each line is drawn
+      // between two moments rather than being a single dot.
+      lines.forEach(line => expect(line.getAttribute('d')).toMatch(/[LC]/));
+    });
+
+    test('draws no target across a cook that is already over', () => {
+      const { container } = render(<SmokeProfileCard {...mockProps} />);
+
+      expect(container.querySelectorAll('[data-target]')).toHaveLength(0);
+      expect(container.querySelectorAll('[data-target-label]')).toHaveLength(0);
+    });
+
+    test('draws it in the shape the review card has room for', () => {
+      const { container } = render(<SmokeProfileCard {...mockProps} />);
+      const compact = plotBoxOf('compact');
+
+      expect(container.querySelector('svg')).toHaveAttribute(
+        'viewBox',
+        `0 0 ${compact.width} ${compact.height}`
+      );
     });
   });
 
@@ -174,10 +160,11 @@ describe('SmokeProfileCard Component', () => {
         temps: mockTemps,
       };
       render(<SmokeProfileCard {...propsWithMissingNames} />);
-      expect(screen.getByText('Chamber')).toBeInTheDocument();
-      expect(screen.getByText('Probe 1')).toBeInTheDocument();
-      expect(screen.getByText('Probe 2')).toBeInTheDocument();
-      expect(screen.getByText('Probe 3')).toBeInTheDocument();
+
+      // The default names stand in on the card and in the chart's legend alike.
+      ['Chamber', 'Probe 1', 'Probe 2', 'Probe 3'].forEach(name =>
+        expect(screen.getAllByText(name)).toHaveLength(2)
+      );
     });
 
     test('should handle empty temps array', () => {
@@ -185,9 +172,10 @@ describe('SmokeProfileCard Component', () => {
         smokeProfile: mockSmokeProfile,
         temps: [],
       };
-      render(<SmokeProfileCard {...propsWithEmptyTemps} />);
-      // Should not crash, but TempChart will get undefined values
-      expect(screen.getByTestId('temp-chart')).toBeInTheDocument();
+      const { container } = render(<SmokeProfileCard {...propsWithEmptyTemps} />);
+      // A smoke with nothing recorded still draws its frame and its legend.
+      expect(screen.getByRole('img', { name: 'Temperature chart' })).toBeInTheDocument();
+      expect(container.querySelectorAll('path[data-series]')).toHaveLength(4);
     });
   });
 

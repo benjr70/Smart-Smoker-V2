@@ -1,5 +1,6 @@
-import { ApiClient } from './client';
+import { ApiClient, createApiClient } from './client';
 import { SmokeProfile, State, TempData } from './types';
+import { createFakeBackend } from './fakeBackend';
 import { createSessionApiPort } from './sessionApiAdapter';
 
 /**
@@ -102,6 +103,36 @@ describe('createSessionApiPort', () => {
     const [temp] = await port.getCurrentTemps();
     expect(temp.date).toBeInstanceOf(Date);
     expect(temp.date.getTime()).toBe(new Date(iso).getTime());
+  });
+
+  test('the baseline a reloaded smoke screen starts from is readings, not strings', async () => {
+    // Over the real client this time, because that is where a stored cook is
+    // turned back into numbers: the temps collection holds every reading as a
+    // string, and this baseline is what the live chart draws until the next
+    // frame arrives. Left as strings it draws nothing, so an operator who
+    // reloaded mid-cook would watch an empty chart until the cook ended.
+    const port = createSessionApiPort(
+      createApiClient(
+        createFakeBackend({
+          temps: {
+            current: [
+              {
+                ChamberTemp: '225',
+                MeatTemp: '150',
+                Meat2Temp: '0',
+                Meat3Temp: '0',
+                date: new Date('2026-07-18T12:00:00.000Z'),
+              },
+            ],
+          },
+        })
+      )
+    );
+
+    const [temp] = await port.getCurrentTemps();
+
+    expect(temp).toMatchObject({ ChamberTemp: 225, MeatTemp: 150, Meat2Temp: 0, Meat3Temp: 0 });
+    expect(temp.date).toBeInstanceOf(Date);
   });
 
   test('postTempsBatch rejects: the monitor role never posts batches', async () => {

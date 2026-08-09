@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { SmokeStep, SmokeStepView } from './smokeStep';
 import { SmokeSessionProvider } from 'smoke-session/src/react';
@@ -63,20 +63,9 @@ jest.mock('@mui/material', () => ({
   ),
 }));
 
-// Mock the D3 TempChart: it renders SVG through d3 which jsdom cannot exercise;
-// the view's contract is that it forwards the snapshot fields as props.
-jest.mock('temperaturechart/src/tempChart', () => ({
-  __esModule: true,
-  default: ({ ChamberTemp, ChamberName, smoking, initData }: any) => (
-    <div
-      data-testid="temp-chart"
-      data-chamber-temp={ChamberTemp}
-      data-chamber-name={ChamberName}
-      data-smoking={smoking ? 'true' : 'false'}
-      data-init-data={JSON.stringify(initData)}
-    />
-  ),
-}));
+// The chart itself is not stubbed: it is plain React SVG now, so what it draws
+// from the session is assertable here rather than being taken on trust from the
+// props it was handed.
 
 // The composition root opens a real cloud socket and pairs the store with the
 // production API client. Automock both boundaries — the cloud-socket adapter
@@ -135,7 +124,8 @@ function fakeApiClient() {
  */
 function eventsFrame(
   chamberTemp: string,
-  probeTemps: [string, string, string] = ['0', '0', '0']
+  probeTemps: [string, string, string] = ['0', '0', '0'],
+  secondsIn = 0
 ): string {
   return encodeEvents({
     chamberName: 'Chamber',
@@ -147,7 +137,7 @@ function eventsFrame(
     probeTemp3: probeTemps[2],
     chamberTemp,
     smoking: false,
-    date: new Date('2026-07-18T12:00:00.000Z'),
+    date: new Date(new Date('2026-07-18T12:00:00.000Z').getTime() + secondsIn * 1000),
   });
 }
 
@@ -179,23 +169,81 @@ function renderView(kit = harness()) {
   return { ...utils, ...kit };
 }
 
-describe('SmokeStepView', () => {
-  test('renders a new chamber temperature from an inbound events frame', async () => {
-    const { socket } = renderView();
+/** The four lines the chart draws, in the order it draws them. */
+const seriesPaths = (container: HTMLElement): SVGPathElement[] =>
+  Array.from(container.querySelectorAll<SVGPathElement>('path[data-series]'));
+
+describe('the chart on the smoke screen', () => {
+  test('draws a line per probe, named as the operator named it', async () => {
+    const kit = harness();
+    kit.api.seedSmoking(true).seedProfile({
+      chamberName: 'Offset',
+      probe1Name: 'Brisket Flat',
+      probe2Name: 'Brisket Point',
+      probe3Name: 'Ribs',
+      notes: '',
+      woodType: '',
+    });
+    const { container, socket } = renderView(kit);
 
     await act(async () => {
       await flushPromises();
     });
 
     await act(async () => {
-      socket.injectEvents(eventsFrame('213'));
+      socket.injectEvents(eventsFrame('213', ['145', '92', '78']));
+    });
+    await act(async () => {
+      socket.injectEvents(eventsFrame('218', ['150', '95', '80'], 60));
     });
 
-    await waitFor(() => {
-      expect(screen.getByTestId('temp-chart')).toHaveAttribute('data-chamber-temp', '213');
-    });
+    expect(seriesPaths(container)).toHaveLength(4);
+    seriesPaths(container).forEach(path => expect(path.getAttribute('d')).toBeTruthy());
+    ['Offset', 'Brisket Flat', 'Brisket Point', 'Ribs'].forEach(name =>
+      expect(screen.getByText(name)).toBeInTheDocument()
+    );
   });
 
+  test('falls back to a default name for a probe nobody named', async () => {
+    const kit = harness();
+    kit.api.seedSmoking(true).seedProfile({
+      chamberName: '',
+      probe1Name: '',
+      probe2Name: '  ',
+      probe3Name: '',
+      notes: '',
+      woodType: '',
+    });
+    const { container, socket } = renderView(kit);
+
+    await act(async () => {
+      await flushPromises();
+    });
+    await act(async () => {
+      socket.injectEvents(eventsFrame('213', ['145', '92', '78']));
+    });
+    await act(async () => {
+      socket.injectEvents(eventsFrame('218', ['150', '95', '80'], 60));
+    });
+
+    ['Chamber', 'Probe 1', 'Probe 2', 'Probe 3'].forEach(name =>
+      expect(screen.getByText(name)).toBeInTheDocument()
+    );
+
+    // The same names label the readings under a finger on the plot.
+    fireEvent(
+      container.querySelector('svg') as SVGSVGElement,
+      new MouseEvent('pointermove', { bubbles: true, clientX: 193 })
+    );
+    const card = container.querySelector('[data-hover-card]') as unknown as HTMLElement;
+
+    ['Chamber', 'Probe 1', 'Probe 2', 'Probe 3'].forEach(name =>
+      expect(within(card).getByText(name)).toBeInTheDocument()
+    );
+  });
+});
+
+describe('SmokeStepView', () => {
   test('shows each inbound temperature on its own readout, chamber and three probes', async () => {
     const { socket } = renderView();
 
@@ -361,20 +409,30 @@ describe('SmokeStepView', () => {
   });
 
   test('a refresh signal reloads the chart baseline', async () => {
+    const noon = new Date('2026-07-18T12:00:00.000Z');
     const kit = harness();
-    kit.api.seedTemps([
-      { ChamberTemp: 1, MeatTemp: 1, Meat2Temp: 1, Meat3Temp: 1, date: new Date() },
-    ]);
-    const { socket, api } = renderView(kit);
+    kit.api.seedTemps([{ ChamberTemp: 1, MeatTemp: 1, Meat2Temp: 1, Meat3Temp: 1, date: noon }]);
+    const { container, socket, api } = renderView(kit);
 
     await act(async () => {
       await flushPromises();
     });
 
+    // One reading is a dot, not a line: nothing has been drawn between moments.
+    const chamberLine = (): string =>
+      container.querySelector('path[data-series="chamber"]')?.getAttribute('d') ?? '';
+    expect(chamberLine()).not.toMatch(/[LC]/);
+
     // A newer baseline is now available; a refresh must re-pull it.
     api.seedTemps([
-      { ChamberTemp: 2, MeatTemp: 2, Meat2Temp: 2, Meat3Temp: 2, date: new Date() },
-      { ChamberTemp: 3, MeatTemp: 3, Meat2Temp: 3, Meat3Temp: 3, date: new Date() },
+      { ChamberTemp: 2, MeatTemp: 2, Meat2Temp: 2, Meat3Temp: 2, date: noon },
+      {
+        ChamberTemp: 3,
+        MeatTemp: 3,
+        Meat2Temp: 3,
+        Meat3Temp: 3,
+        date: new Date(noon.getTime() + 60_000),
+      },
     ]);
 
     await act(async () => {
@@ -382,12 +440,8 @@ describe('SmokeStepView', () => {
       await flushPromises();
     });
 
-    await waitFor(() => {
-      const initData = JSON.parse(
-        screen.getByTestId('temp-chart').getAttribute('data-init-data') || '[]'
-      );
-      expect(initData).toHaveLength(2);
-    });
+    // The reloaded history is what the chart now draws: two moments, so a line.
+    await waitFor(() => expect(chamberLine()).toMatch(/[LC]/));
   });
 });
 
@@ -419,7 +473,7 @@ describe('SmokeStep composition root', () => {
     });
 
     expect(createCloudSocketAdapter).toHaveBeenCalledWith('ws://cloud.example');
-    expect(screen.getByTestId('temp-chart')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Temperature chart' })).toBeInTheDocument();
     expect(screen.getByTestId('next-button')).toBeInTheDocument();
   });
 

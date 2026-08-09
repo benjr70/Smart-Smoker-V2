@@ -153,24 +153,53 @@ const meanOf = (bucket: ChartSample[]): ChartSample => {
 };
 
 /**
+ * The cook in the order it was cooked.
+ *
+ * A series does not always arrive that way: a stored cook comes back from the
+ * API in whatever order the database found its rows in — newest-first, in
+ * practice — and a live screen appends what has arrived since to whatever it was
+ * given as a baseline. Everything downstream of here reads a cook as a sequence:
+ * thinning buckets it by position, the tooltip binary-searches it, and the dot
+ * marking where the cook has got to is looked for from the end. Ordering it once,
+ * here, is what lets all of them keep saying so plainly.
+ *
+ * A cook already in order is handed straight back, identical, so that ordering a
+ * live series on every reading costs the chart no redrawing.
+ */
+export const inTimeOrder = (data: ChartSample[]): ChartSample[] => {
+  for (let at = 1; at < data.length; at += 1) {
+    if (timeOf(data[at - 1]) > timeOf(data[at]))
+      return [...data].sort((one, other) => timeOf(one) - timeOf(other));
+  }
+  return data;
+};
+
+/**
  * A cook thinned to at most `maxPoints`, each point the mean of the readings it
  * stands in for.
  *
  * Averaging rather than sampling is what keeps the line honest: a cook that
  * wobbles as the lid opens keeps the shape of that wobble instead of it landing
  * on, or missing, whichever reading a sampling rule happened to pick. A cook
- * already short enough is handed straight back, unchanged and identical, so a
- * caller can decimate unconditionally without giving the chart a new array to
- * redraw from on every update.
+ * already short enough, and already in order, is handed straight back, unchanged
+ * and identical, so a caller can decimate unconditionally without giving the
+ * chart a new array to redraw from on every update.
+ *
+ * The readings are put in time order first, because a bucket is a run of the
+ * array: averaged out of order, a bucket would stand for moments that never sat
+ * together and would be dated to the middle of nowhere in particular.
  */
 export const decimate = (
   data: ChartSample[],
   maxPoints: number = DEFAULT_MAX_POINTS
 ): ChartSample[] => {
-  if (maxPoints < 1 || data.length <= maxPoints) return data;
+  const ordered = inTimeOrder(data);
+  if (maxPoints < 1 || ordered.length <= maxPoints) return ordered;
 
   const buckets: ChartSample[][] = Array.from({ length: maxPoints }, () => []);
-  data.forEach((sample, at) => buckets[Math.floor((at * maxPoints) / data.length)].push(sample));
+  ordered.forEach((sample, at) =>
+    buckets[Math.floor((at * maxPoints) / ordered.length)].push(sample)
+  );
 
   return buckets.filter(bucket => bucket.length > 0).map(meanOf);
 };
@@ -178,10 +207,11 @@ export const decimate = (
 /**
  * Which reading a moment is nearest to, or -1 when there are none.
  *
- * The readings are in time order, so this walks in from both ends rather than
- * scanning: a finger dragged across a long cook asks this question on every
- * pointer event. A moment outside the cook settles on the end it is past, and a
- * moment exactly between two readings settles on the earlier one. A moment that
+ * The readings are in time order — {@link inTimeOrder} is what makes sure of
+ * that — so this walks in from both ends rather than scanning: a finger dragged
+ * across a long cook asks this question on every pointer event. A moment
+ * outside the cook settles on the end it is past, and a moment exactly between
+ * two readings settles on the earlier one. A moment that
  * is no moment at all — a pointer event that arrived without a position — is
  * nearest to nothing.
  */
@@ -226,19 +256,32 @@ export const LONE_READING_SPAN = 60_000;
 /**
  * The span a cook covers, widened when it is too short to have one.
  *
+ * The span is taken from the moments in the cook rather than from the ends of
+ * the array, so a series that arrives newest-first — which is how a stored cook
+ * comes back from a database asked for it without an order — is still drawn
+ * forwards. Reading the ends instead once inverted the axis: the clock ran
+ * backwards under the plot, and the cook was drawn off the side of it.
+ *
  * A cook with no readings at all — the first seconds of a smoke, or a backend
  * not yet reporting — is given a window around the present rather than around
  * the epoch, because an axis labelled with 1970 clock times tells the reader
  * their smoker has done something strange when in fact it has done nothing yet.
- * The present is passed in rather than read, so the window can be pinned.
+ * A cook whose readings carry no readable moment at all is the same case. The
+ * present is passed in rather than read, so the window can be pinned.
  */
 export const timeDomainOf = (data: ChartSample[], now: number = Date.now()): [Date, Date] => {
-  if (data.length === 0) return [new Date(now - LONE_READING_SPAN), new Date(now)];
+  let earliest = Number.POSITIVE_INFINITY;
+  let latest = Number.NEGATIVE_INFINITY;
+  data.forEach(sample => {
+    const moment = timeOf(sample);
+    if (!Number.isFinite(moment)) return;
+    earliest = Math.min(earliest, moment);
+    latest = Math.max(latest, moment);
+  });
 
-  const first = timeOf(data[0]);
-  const last = timeOf(data[data.length - 1]);
-  if (first < last) return [new Date(first), new Date(last)];
-  return [new Date(first - LONE_READING_SPAN), new Date(last + LONE_READING_SPAN)];
+  if (earliest > latest) return [new Date(now - LONE_READING_SPAN), new Date(now)];
+  if (earliest < latest) return [new Date(earliest), new Date(latest)];
+  return [new Date(earliest - LONE_READING_SPAN), new Date(latest + LONE_READING_SPAN)];
 };
 
 /**

@@ -15,4 +15,4 @@ export * from 'theme/src';
 
 // The shared chart is not part of any application's theme — it is handed the
 // colours it draws in. Which of this app's tokens those are is decided here.
-export * from './chartColors';
+export * from './chartPalette';

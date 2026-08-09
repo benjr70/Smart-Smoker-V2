@@ -305,10 +305,16 @@ describe('BackendFixture.seedCompletedSmoke', () => {
 
     assert.equal(isTestEntityName(seeded.name), true, 'name must carry the smoke-test- prefix');
     assert.deepEqual(
-      http.posts.map(p => p.path),
+      // The cook is a run of readings down one route; collapsed to a single
+      // entry here so this stays an assertion about the lifecycle order rather
+      // than about how many readings a seeded cook happens to carry.
+      http.posts
+        .map(p => p.path)
+        .filter((path, at, paths) => path !== '/api/temps' || paths[at - 1] !== '/api/temps'),
       [
         '/api/presmoke',
         '/api/smokeProfile/current',
+        '/api/temps',
         '/api/postSmoke/current',
         '/api/ratings',
         '/api/smoke/finish',
@@ -319,6 +325,31 @@ describe('BackendFixture.seedCompletedSmoke', () => {
     assert.deepEqual(
       http.puts.map(p => p.path),
       ['/api/state/clearSmoke']
+    );
+  });
+
+  it('stores a cook on the seeded smoke, so its review has a chart to draw', async () => {
+    http.getResponses['/api/state'] = { smokeId: 'smoke-1' };
+
+    await fixture.seedCompletedSmoke();
+
+    const readings = http.posts.filter(p => p.path === '/api/temps');
+    assert.ok(readings.length > 1, 'a cook is a series, not a single reading');
+    // Readings go over the wire as strings, because that is what the backend's
+    // temps DTO accepts and what it stores; a seed that posted numbers would be
+    // rejected, and a review chart drawn from a fiction proves nothing.
+    readings.forEach(reading =>
+      assert.equal(
+        typeof reading.body.ChamberTemp,
+        'string',
+        'temperatures are strings on the wire'
+      )
+    );
+    // Each reading is posted before the smoke is finished — a finished smoke is
+    // no longer current, and the temps route only ever writes to the current one.
+    assert.ok(
+      http.calls.indexOf('POST /api/temps') < http.calls.indexOf('POST /api/smoke/finish'),
+      'the cook must be recorded while the smoke is still the current one'
     );
   });
 
