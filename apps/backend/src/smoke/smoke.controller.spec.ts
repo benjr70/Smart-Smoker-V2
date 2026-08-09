@@ -68,6 +68,14 @@ describe('SmokeController', () => {
       expect(mockSmokeService.FinishSmoke).toHaveBeenCalled();
       expect(result).toEqual({ ...mockSmoke, status: SmokeStatus.Complete });
     });
+
+    // Finishing with nothing in progress is a no-op, not an error: the
+    // endpoint relays the service's null as an empty body.
+    it('relays null when there is no smoke in progress', async () => {
+      mockSmokeService.FinishSmoke = jest.fn().mockResolvedValue(null);
+
+      await expect(controller.FinishSmoke()).resolves.toBeNull();
+    });
   });
 
   describe('getById', () => {

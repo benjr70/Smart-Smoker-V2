@@ -19,8 +19,9 @@ export class SmokeController {
     return this.smokeService.getAll();
   }
 
+  /** Empty body when there was no smoke in progress to finish. */
   @Post('/finish')
-  FinishSmoke(): Promise<Smoke> {
+  FinishSmoke(): Promise<Smoke | null> {
     return this.smokeService.FinishSmoke();
   }
 

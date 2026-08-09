@@ -21,8 +21,14 @@ export class NotificationSubscription {
   @Prop()
   endpoint: string;
 
+  /**
+   * Null whenever the browser issues a subscription that never expires, which
+   * is the common case. The storage type is explicit because the emitted
+   * decorator metadata for a `number | null` union is just `Object`, and
+   * Mongoose cannot infer a field type from that.
+   */
   @ApiProperty()
-  @Prop()
+  @Prop({ type: Number })
   expirationTime: number | null;
 
   @ApiProperty()

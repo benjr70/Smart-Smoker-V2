@@ -53,7 +53,7 @@ export class CurrentSmokeService {
 
   async readCurrent<T>(
     key: SmokeChildKey,
-    load: (childId: string) => Promise<T>,
+    load: (childId: string) => Promise<T | null>,
     fallback: T,
   ): Promise<T> {
     const smoke = await this.currentSmoke();
@@ -64,7 +64,11 @@ export class CurrentSmokeService {
     if (!childId) {
       return fallback;
     }
-    return load(childId);
+    // `load` is a by-id lookup, so it is nullable: the key can outlive the
+    // document it points at. A dangling link is the same "nothing active"
+    // answer as an unlinked key, and the fallback is what the caller asked
+    // for in that case.
+    return (await load(childId)) ?? fallback;
   }
 
   async upsertCurrent<T>(

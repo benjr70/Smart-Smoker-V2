@@ -13,7 +13,9 @@ jest.setTimeout(10000);
 // Increase memory limit if needed
 if (global.gc) {
   afterEach(() => {
-    global.gc();
+    // Re-checked at call time: `global.gc` is only present under --expose-gc,
+    // and the guard above cannot narrow it inside a deferred callback.
+    global.gc?.();
   });
 }
 

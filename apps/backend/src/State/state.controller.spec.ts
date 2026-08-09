@@ -89,6 +89,14 @@ describe('StateController', () => {
       expect(mockStateService.toggleSmoking).toHaveBeenCalled();
       expect(result).toEqual({ ...mockState, smoking: false });
     });
+
+    // With no smoke to toggle the service declines the write and the endpoint
+    // answers an empty body. Pinned here because the signature now says so.
+    it('relays null when there is no smoke to toggle', async () => {
+      mockStateService.toggleSmoking = jest.fn().mockResolvedValue(null);
+
+      await expect(controller.toggleSmoking()).resolves.toBeNull();
+    });
   });
 
   describe('clearSmoke', () => {

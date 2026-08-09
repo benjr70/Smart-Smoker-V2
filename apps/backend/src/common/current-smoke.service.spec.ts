@@ -7,8 +7,12 @@ import { SmokeStatus } from '../smoke/smoke.schema';
 
 describe('CurrentSmokeService', () => {
   let service: CurrentSmokeService;
-  let stateService: jest.Mocked<Partial<StateService>>;
-  let smokeService: jest.Mocked<Partial<SmokeService>>;
+  // Collaborators are stubbed as bare jest mocks: the real signatures return
+  // Mongoose documents, and `jest.Mocked<Partial<Service>>` would make every
+  // member optional — forcing a `?.` or `!` at each stubbing site instead of
+  // saying what these actually are.
+  let stateService: { GetState: jest.Mock; create: jest.Mock };
+  let smokeService: { getById: jest.Mock; update: jest.Mock };
 
   const activeSmoke = {
     _id: 'smoke-1',
@@ -97,6 +101,21 @@ describe('CurrentSmokeService', () => {
 
       expect(load).toHaveBeenCalledWith('post-1');
       expect(result).toBe(child);
+    });
+
+    /**
+     * The smoke still carries the foreign key but the child row is gone —
+     * a deleted document, or a half-written aggregate. That is the same
+     * "nothing to show" situation as an unlinked key, so it resolves to the
+     * fallback rather than handing the caller a null it was never told about.
+     */
+    it('returns the fallback when the linked child no longer exists', async () => {
+      const load = jest.fn().mockResolvedValue(null);
+
+      const result = await service.readCurrent('postSmokeId', load, fallback);
+
+      expect(load).toHaveBeenCalledWith('post-1');
+      expect(result).toBe(fallback);
     });
   });
 

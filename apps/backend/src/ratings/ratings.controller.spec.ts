@@ -71,6 +71,14 @@ describe('RatingsController', () => {
         'No current smoke found',
       );
     });
+
+    // Nothing cooking is an empty answer, not an error: the endpoint relays
+    // the null straight through as an empty body.
+    it('relays null when there is no rating to return', async () => {
+      mockRatingsService.getCurrentRating.mockResolvedValue(null);
+
+      await expect(controller.getCurrentRatings()).resolves.toBeNull();
+    });
   });
 
   describe('saveCurrentRatings', () => {

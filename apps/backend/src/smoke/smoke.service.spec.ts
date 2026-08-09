@@ -146,7 +146,9 @@ describe('SmokeService', () => {
 
       expect(service.getCurrentSmoke).toHaveBeenCalled();
       expect(service.update).toHaveBeenCalledWith('test-smoke-id', expectedDto);
-      expect(result.status).toEqual(SmokeStatus.Complete);
+      // `?.` rather than `!`: FinishSmoke really can answer null, and reading
+      // through a null here must fail the assertion.
+      expect(result?.status).toEqual(SmokeStatus.Complete);
     });
   });
 });

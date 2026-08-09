@@ -11,13 +11,15 @@ import { RatingsUpdateDto } from './ratingsUpdateDto';
 export class RatingsController {
   constructor(private readonly ratingsService: RatingsService) {}
 
+  /** Empty body when nothing is cooking, or when the smoke is unrated. */
   @Get('')
-  getCurrentRatings(): Promise<Ratings> {
+  getCurrentRatings(): Promise<Ratings | null> {
     return this.ratingsService.getCurrentRating();
   }
 
+  /** Empty body on the update path; the created rating on the create path. */
   @Post('')
-  saveCurrentRatings(@Body() dto: RatingsDto): Promise<Ratings> {
+  saveCurrentRatings(@Body() dto: RatingsDto): Promise<Ratings | undefined> {
     return this.ratingsService.saveCurrentRatings(dto);
   }
 
