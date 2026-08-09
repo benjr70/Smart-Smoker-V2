@@ -23,9 +23,14 @@ export class NotificationSubscription {
 
   /**
    * Null whenever the browser issues a subscription that never expires, which
-   * is the common case. The storage type is explicit because the emitted
-   * decorator metadata for a `number | null` union is just `Object`, and
-   * Mongoose cannot infer a field type from that.
+   * is the common case.
+   *
+   * The storage type has to be stated: `@Prop()` infers it from the metadata
+   * TypeScript emits for the annotation, and `strictNullChecks` makes the
+   * `number | null` union real, so that metadata degrades from `Number` to
+   * `Object` and Mongoose throws while building the schema. `Number` is what
+   * this field already compiled to with the flag off — the persisted type is
+   * unchanged, it is only now written down.
    */
   @ApiProperty()
   @Prop({ type: Number })

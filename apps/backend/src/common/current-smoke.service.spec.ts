@@ -176,6 +176,50 @@ describe('CurrentSmokeService', () => {
       );
     });
 
+    /**
+     * The smoke still carries the foreign key but the child row is gone, so
+     * the update lands on nothing. `readCurrent` already calls that "nothing
+     * active" and answers the fallback; the write path agrees by creating a
+     * fresh child and relinking it, instead of 404-ing forever on a form the
+     * client was just served with a 200.
+     */
+    it('recreates and relinks the child when the linked id is dangling', async () => {
+      const update = jest
+        .fn()
+        .mockRejectedValue(new NotFoundException('PostSmoke post-1 not found'));
+      const created = { note: 'recreated' };
+      const create = jest
+        .fn()
+        .mockResolvedValue({ result: created, childId: 'post-new' });
+
+      const result = await service.upsertCurrent('postSmokeId', {
+        update,
+        create,
+      });
+
+      expect(update).toHaveBeenCalledWith('post-1');
+      expect(result).toBe(created);
+      expect(smokeService.update).toHaveBeenCalledWith(
+        'smoke-1',
+        expect.objectContaining({
+          postSmokeId: 'post-new',
+          preSmokeId: 'pre-1',
+          tempsId: 'temps-1',
+        }),
+      );
+    });
+
+    it('propagates a non-404 failure from the update path', async () => {
+      const update = jest.fn().mockRejectedValue(new Error('Database error'));
+      const create = jest.fn();
+
+      await expect(
+        service.upsertCurrent('postSmokeId', { update, create }),
+      ).rejects.toThrow('Database error');
+      expect(create).not.toHaveBeenCalled();
+      expect(smokeService.update).not.toHaveBeenCalled();
+    });
+
     it('invokes onResolveSmoke when provided on the create path', async () => {
       smokeService.getById.mockResolvedValue({
         ...activeSmoke,
