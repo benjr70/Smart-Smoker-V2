@@ -53,16 +53,31 @@ const kitFor = (smoking = true): Kit => {
 };
 
 /**
+ * The moments a cook was drawn at, for every frame that doubled back on itself.
+ *
+ * A cook only ever runs forwards, so a frame holding a reading at or before the
+ * one in front of it is a frame no operator should ever be shown: the line
+ * visibly folds back, and a hover lands on the wrong reading while it does.
+ */
+const doubledBack = (frames: ChartSample[][]): number[][] =>
+  frames
+    .map(frame => frame.map(sample => new Date(sample.date).getTime()))
+    .filter(moments => moments.some((moment, at) => at > 0 && moment <= moments[at - 1]));
+
+/**
  * The hook, live, under a session wired to the fakes.
  *
  * It is read through a component that does nothing but call it, which is how a
  * screen holds it; `result.current` is what that screen would have drawn on its
- * last render.
+ * last render, and `frames` is every cook it was handed along the way — a chart
+ * is drawn from each of them, so each of them has to be a cook.
  */
 const renderSeries = async (kit: Kit) => {
   const result: { current: ChartSample[] } = { current: [] };
+  const frames: ChartSample[][] = [];
   const Probe = (): JSX.Element => {
     result.current = useTemperatureSeries();
+    frames.push(result.current);
     return <div data-testid="probe" />;
   };
 
@@ -74,7 +89,7 @@ const renderSeries = async (kit: Kit) => {
   await act(async () => {
     await flushPromises();
   });
-  return { ...rendered, result };
+  return { ...rendered, result, frames };
 };
 
 describe('a cook run with only some of its probes plugged in', () => {
@@ -157,6 +172,29 @@ describe('a cook that runs long enough to outgrow the plot', () => {
     expect(result.current).toHaveLength(DEFAULT_MAX_POINTS);
   }, 30000);
 
+  /**
+   * A cook that runs long enough is compacted as it goes, so that a twelve-hour
+   * smoke neither holds every reading it ever took nor re-thins all of them on
+   * each new one. What is drawn afterwards is still the whole cook: it starts
+   * when the smoke did, ends at the reading that just arrived, and the
+   * temperatures in between are the ones the probes read.
+   */
+  it('still draws the whole run once what it holds has been compacted', async () => {
+    const kit = kitFor();
+    const { result } = await renderSeries(kit);
+    const minutes = 1500;
+
+    await cookFor(kit, minutes);
+
+    expect(result.current).toHaveLength(DEFAULT_MAX_POINTS);
+    const first = new Date(result.current[0].date).getTime();
+    const last = new Date(result.current[result.current.length - 1].date).getTime();
+    expect(first - Date.UTC(2026, 7, 8, 12, 0)).toBeLessThan(10 * 60_000);
+    expect(Date.UTC(2026, 7, 8, 12, minutes - 1) - last).toBeLessThan(10 * 60_000);
+    expect(result.current.every(sample => sample.ChamberTemp === 225)).toBe(true);
+    expect(result.current.every(sample => sample.MeatTemp === 140)).toBe(true);
+  }, 30000);
+
   /** Thinning is an average, so the readings themselves stay where they were. */
   it('keeps the cook spanning the whole time it ran for', async () => {
     const kit = kitFor();
@@ -189,6 +227,29 @@ describe('the smoke being cleared out from under the screen', () => {
     });
 
     expect(result.current).toHaveLength(0);
+  });
+});
+
+describe('a history re-fetch that already holds what this screen recorded', () => {
+  it('never draws the re-fetched cook on top of the readings it replaces', async () => {
+    const kit = kitFor();
+    const { result, frames } = await renderSeries(kit);
+    const at = new Date('2026-08-08T12:00:00.000Z');
+
+    await act(async () => {
+      kit.socket.injectEvents(reading({ chamber: '225', probe1: '140' }, at));
+    });
+    expect(result.current).toHaveLength(1);
+
+    // The backend now serves the very reading this screen took down itself.
+    kit.api.seedTemps([{ ChamberTemp: 225, MeatTemp: 140, Meat2Temp: 0, Meat3Temp: 0, date: at }]);
+    await act(async () => {
+      kit.socket.injectRefresh();
+      await flushPromises();
+    });
+
+    expect(doubledBack(frames)).toEqual([]);
+    expect(result.current).toHaveLength(1);
   });
 });
 
