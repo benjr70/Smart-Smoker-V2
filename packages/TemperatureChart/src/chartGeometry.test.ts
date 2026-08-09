@@ -185,6 +185,31 @@ describe('decimation', () => {
     expect(decimate(cook, 300)).toBe(cook);
   });
 
+  /**
+   * Thinning buckets the readings by where they sit in the array, so a series
+   * that arrived newest-first — or a stored cook with live readings appended
+   * after it — would otherwise be averaged across moments hours apart, inventing
+   * temperatures the smoker never held. The cook is put back in the order it was
+   * cooked before any of it is averaged.
+   */
+  it('puts a cook that arrived newest-first back in order', () => {
+    const backwards = [...climbing(10)].reverse();
+
+    expect(decimate(backwards, 300).map(timeOf)).toEqual(climbing(10).map(timeOf));
+  });
+
+  it('averages a jumbled cook over the moments it really covers', () => {
+    const jumbled = [climbing(4)[2], climbing(4)[0], climbing(4)[3], climbing(4)[1]];
+
+    const thinned = decimate(jumbled, 2);
+
+    expect(thinned.map(timeOf)).toEqual([
+      (timeOf(climbing(4)[0]) + timeOf(climbing(4)[1])) / 2,
+      (timeOf(climbing(4)[2]) + timeOf(climbing(4)[3])) / 2,
+    ]);
+    expect(thinned[0].ChamberTemp).toBe(200.5);
+  });
+
   it('thins to a sane number of points when not told one', () => {
     expect(decimate(climbing(5000))).toHaveLength(DEFAULT_MAX_POINTS);
   });
@@ -321,6 +346,38 @@ describe('the plot', () => {
 
     expect(scales.x(timeOf(cook[0]))).toBeGreaterThan(40);
     expect(scales.x(timeOf(cook[0]))).toBeLessThan(350);
+  });
+
+  /**
+   * A stored cook comes back from the API in whatever order the database found
+   * the rows in, and that order is newest-first. Reading the span off the ends
+   * of the array rather than off the readings themselves turned that into an
+   * inverted axis: the clock ran backwards under the plot and the cook was
+   * drawn off the side of it, over the temperature labels. The span is a fact
+   * about the moments in the cook, not about where they sit in the array.
+   */
+  it('spans a cook that arrived newest-first the same way round', () => {
+    const backwards = [...cook].reverse();
+
+    expect(timeDomainOf(backwards)).toEqual(timeDomainOf(cook));
+  });
+
+  it('draws a cook that arrived newest-first inside the plot, left to right', () => {
+    const backwards = [...cook].reverse();
+    const scales = createScales(backwards, box);
+
+    expect(scales.x(timeOf(cook[0]))).toBe(40);
+    expect(scales.x(timeOf(cook[1]))).toBe(350);
+  });
+
+  /** The clock under the plot runs forwards, whichever way the rows arrived. */
+  it('labels the time axis chronologically for a cook that arrived newest-first', () => {
+    const moments = timeTicks(createScales([...cook].reverse(), box));
+
+    expect(moments.map(moment => moment.getTime())).toEqual(
+      [...moments].sort((a, b) => a.getTime() - b.getTime()).map(moment => moment.getTime())
+    );
+    expect(moments.length).toBeGreaterThan(1);
   });
 
   it('reaches a target the readings have not climbed to yet', () => {

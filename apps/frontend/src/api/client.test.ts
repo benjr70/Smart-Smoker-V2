@@ -154,6 +154,66 @@ describe('temps client — readings the backend stored as strings', () => {
   });
 });
 
+/**
+ * A cook is a sequence, and everything that reads one — the chart above all —
+ * reads it as one. The backend answers in the order its index holds the rows,
+ * which is newest-first, so this boundary is also where a series stops being
+ * rows and starts being a cook that runs forwards.
+ */
+describe('temps client — a series that arrives newest-first', () => {
+  const reading = (chamber: string, meat: string, taken: string) => ({
+    ChamberTemp: chamber,
+    MeatTemp: meat,
+    Meat2Temp: '0',
+    Meat3Temp: '0',
+    date: new Date(taken),
+  });
+
+  const newestFirst = [
+    reading('235', '203', '2025-01-01T15:00:00Z'),
+    reading('240', '155', '2025-01-01T13:30:00Z'),
+    reading('225', '145', '2025-01-01T12:00:00Z'),
+  ];
+
+  const moments = (temps: { date: Date | string }[]): string[] =>
+    temps.map(temp => new Date(temp.date).toISOString());
+
+  test('the current series reads back in the order it was recorded', async () => {
+    const client = createApiClient(createFakeBackend({ temps: { current: newestFirst } }));
+
+    expect(moments(await client.temps.getCurrent())).toEqual([
+      '2025-01-01T12:00:00.000Z',
+      '2025-01-01T13:30:00.000Z',
+      '2025-01-01T15:00:00.000Z',
+    ]);
+  });
+
+  test('a stored series read by id reads back in the order it was recorded', async () => {
+    const client = createApiClient(
+      createFakeBackend({ temps: { records: { abc123: newestFirst } } })
+    );
+
+    expect(moments(await client.temps.getById('abc123'))).toEqual([
+      '2025-01-01T12:00:00.000Z',
+      '2025-01-01T13:30:00.000Z',
+      '2025-01-01T15:00:00.000Z',
+    ]);
+  });
+
+  test('the cook the review carries runs forwards', async () => {
+    const backend = seedFullSmoke();
+    backend.store.temps.records['temps-1'] = newestFirst;
+
+    const review = await createApiClient(backend).smoke.getReview('smoke-1');
+
+    expect(moments(review.temps)).toEqual([
+      '2025-01-01T12:00:00.000Z',
+      '2025-01-01T13:30:00.000Z',
+      '2025-01-01T15:00:00.000Z',
+    ]);
+  });
+});
+
 const sampleProfile: SmokeProfile = {
   chamberName: 'Main Chamber',
   probe1Name: 'Meat Probe',

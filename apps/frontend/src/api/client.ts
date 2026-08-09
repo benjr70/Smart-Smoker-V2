@@ -309,7 +309,7 @@ const asReading = (value: number | string | null | undefined): number => {
 
 /**
  * Centralized read-path normalization for a stored series: every reading as the
- * number its type claims it is.
+ * number its type claims it is, in the order the cook was cooked.
  *
  * This is the one place a stored cook enters the app — the live smoke screen's
  * baseline, and the History review card's whole chart, are both read through
@@ -317,15 +317,23 @@ const asReading = (value: number | string | null | undefined): number => {
  * mean each screen minding a wire format it should never have to know, and
  * doing it in the chart would mean the geometry quietly accepting samples that
  * are not what its own type says they are.
+ *
+ * The order is part of that shape. A series is a cook, and the screens that read
+ * one read it as a sequence — a chart spans the plot with it, a hook appends
+ * live readings to the end of it — but the wire carries rows, in whatever order
+ * the collection was asked for them. Ordering here means no screen has to know
+ * which order that was.
  */
 const normalizeTemps = (raw: TempData[]): TempData[] =>
-  raw.map(temp => ({
-    ...temp,
-    ChamberTemp: asReading(temp.ChamberTemp),
-    MeatTemp: asReading(temp.MeatTemp),
-    Meat2Temp: asReading(temp.Meat2Temp),
-    Meat3Temp: asReading(temp.Meat3Temp),
-  }));
+  raw
+    .map(temp => ({
+      ...temp,
+      ChamberTemp: asReading(temp.ChamberTemp),
+      MeatTemp: asReading(temp.MeatTemp),
+      Meat2Temp: asReading(temp.Meat2Temp),
+      Meat3Temp: asReading(temp.Meat3Temp),
+    }))
+    .sort((one, other) => new Date(one.date).getTime() - new Date(other.date).getTime());
 
 /**
  * Outbound projection to the exact backend DTO whitelist (chamber name, three

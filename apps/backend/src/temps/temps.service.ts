@@ -37,10 +37,21 @@ export class TempsService extends BaseService<TempDocument> {
     return this.model.insertMany(rows);
   }
 
+  /**
+   * The current smoke's readings, oldest first.
+   *
+   * A series is a cook, and a cook has a direction: the chart that draws it
+   * takes the span of the plot from the readings themselves. Left unordered,
+   * Mongo answers in whatever order it finds the rows in — in practice
+   * newest-first, since that is the order of the index this collection is read
+   * through — and a backwards cook draws a backwards time axis with the lines
+   * outside the plot. The order belongs here, at the one place the series is
+   * read, rather than in each reader that would otherwise have to know.
+   */
   async getAllTempsCurrent(): Promise<Temp[]> {
     return this.currentSmoke.readCurrent<Temp[]>(
       'tempsId',
-      (tempsId) => this.model.find({ tempsId }).exec(),
+      (tempsId) => this.model.find({ tempsId }).sort({ date: 1 }).exec(),
       [],
     );
   }
@@ -66,8 +77,9 @@ export class TempsService extends BaseService<TempDocument> {
     );
   }
 
+  /** A stored smoke's readings, oldest first, for the same reason as above. */
   async getAllTempsById(id: string): Promise<Temp[]> {
-    return this.model.find({ tempsId: id }).exec();
+    return this.model.find({ tempsId: id }).sort({ date: 1 }).exec();
   }
 
   async GetTempID(): Promise<string | undefined> {

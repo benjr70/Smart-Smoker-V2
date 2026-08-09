@@ -12,6 +12,7 @@ import {
   createScales,
   formatClock,
   formatTemperature,
+  inTimeOrder,
   isReported,
   latestPointOf,
   momentAt,
@@ -47,7 +48,11 @@ export interface ChartPalette {
 }
 
 export interface TemperatureChartProps {
-  /** The cook to draw, in time order, already thinned by the caller. */
+  /**
+   * The cook to draw, already thinned by the caller. It is put in time order
+   * here, so a series read back from a store that answers newest-first is drawn
+   * the same way round as one that arrived as it was cooked.
+   */
   data: ChartSample[];
   names: ChartSeriesNames;
   colors: ChartPalette;
@@ -102,20 +107,32 @@ function TemperatureChart({
   const { probe1: probe1Target, probe2: probe2Target, probe3: probe3Target } = targets;
 
   /**
+   * The cook, in the order it was cooked.
+   *
+   * A caller can hand over a series in any order — a stored cook comes back from
+   * the API newest-first — and everything below reads one as a sequence: the dot
+   * marking where the cook has got to is looked for from the end, and the
+   * tooltip searches by halving. Ordering it here, once, is the whole of what
+   * the chart has to know about the order it was given. A cook already in order
+   * is the same array it was handed, so this costs a live series no redrawing.
+   */
+  const cook = useMemo(() => inTimeOrder(data), [data]);
+
+  /**
    * The whole drawing is derived once per cook, so that a finger dragged across
    * the plot moves the crosshair without recomputing four paths on every event.
    */
   const drawing = useMemo(() => {
-    const drawn = reportedTargets(data, {
+    const drawn = reportedTargets(cook, {
       probe1: probe1Target,
       probe2: probe2Target,
       probe3: probe3Target,
     });
-    const scales = createScales(data, box, drawn);
+    const scales = createScales(cook, box, drawn);
     return {
       scales,
-      paths: SERIES_KEYS.map(series => ({ series, d: seriesPath(data, series, scales) })),
-      latest: SERIES_KEYS.map(series => ({ series, point: latestPointOf(data, series, scales) })),
+      paths: SERIES_KEYS.map(series => ({ series, d: seriesPath(cook, series, scales) })),
+      latest: SERIES_KEYS.map(series => ({ series, point: latestPointOf(cook, series, scales) })),
       temperatures: tempTicks(scales),
       moments: timeTicks(scales),
       targetLines: TARGETABLE.filter(series => drawn[series] !== undefined).map(series => {
@@ -124,7 +141,7 @@ function TemperatureChart({
         return { series, temperature, y, label: targetLabelAnchor(box, y) };
       }),
     };
-  }, [data, box, probe1Target, probe2Target, probe3Target]);
+  }, [cook, box, probe1Target, probe2Target, probe3Target]);
 
   const plot = plotEdges(box);
   const anchors = axisLabelAnchors(box);
@@ -137,8 +154,8 @@ function TemperatureChart({
    * moved, so the reading under it must not move either.
    */
   const [touchedMoment, setTouchedMoment] = useState<number | null>(null);
-  const touchedIndex = touchedMoment === null ? -1 : nearestIndex(data, touchedMoment);
-  const touched = touchedIndex < 0 ? undefined : data[touchedIndex];
+  const touchedIndex = touchedMoment === null ? -1 : nearestIndex(cook, touchedMoment);
+  const touched = touchedIndex < 0 ? undefined : cook[touchedIndex];
 
   const follow = (event: React.PointerEvent<SVGSVGElement>): void => {
     setTouchedMoment(

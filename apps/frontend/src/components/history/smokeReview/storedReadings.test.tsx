@@ -59,7 +59,7 @@ const storedCook = [
 ];
 
 /** The review screen, mounted and themed as the application root mounts it. */
-const renderReview = () => {
+const renderReview = (cook = storedCook) => {
   const backend = createFakeBackend({
     smoke: { records: { 'smoke-1': smoke } },
     smokeProfile: {
@@ -74,7 +74,7 @@ const renderReview = () => {
         },
       },
     },
-    temps: { records: { 'temps-1': storedCook } },
+    temps: { records: { 'temps-1': cook } },
   });
 
   return render(
@@ -117,5 +117,54 @@ describe('the review of a smoke whose readings were stored as strings', () => {
 
     expect(labels).toContain('150°');
     expect(labels).toContain('200°');
+  });
+});
+
+/**
+ * The order the readings come back in.
+ *
+ * `GET /api/temps/:id` answers with the rows in the order the collection holds
+ * them, and that order is newest-first. Read back that way, the review card
+ * ruled its clock backwards — 15:00, 13:30, 12:00 left to right — and drew the
+ * cook off the side of the plot, over the temperature labels, while still
+ * rendering four paths and the right number of points. So the assertion here is
+ * about direction and span, not about how much was drawn.
+ */
+describe('the review of a smoke whose readings come back newest-first', () => {
+  const newestFirst = [...storedCook].reverse();
+
+  const timeAxisOf = (container: HTMLElement): number[] =>
+    Array.from(container.querySelectorAll('text[data-time-label]')).map(label =>
+      new Date(label.getAttribute('data-time-label') as string).getTime()
+    );
+
+  it('rules its clock forwards, across the hours the cook covers', async () => {
+    const { container } = renderReview(newestFirst);
+    await waitFor(() => expect(screen.getByText('Hickory Wood')).toBeInTheDocument());
+
+    const axis = timeAxisOf(container);
+
+    expect(axis.length).toBeGreaterThan(1);
+    expect(axis).toEqual([...axis].sort((one, other) => one - other));
+    expect(axis[0]).toBeGreaterThanOrEqual(new Date('2026-08-08T12:00:00.000Z').getTime());
+    expect(axis[axis.length - 1]).toBeLessThanOrEqual(
+      new Date('2026-08-08T15:00:00.000Z').getTime()
+    );
+  });
+
+  it('draws the cook across the plot, from its left edge to its right', async () => {
+    const { container } = renderReview(newestFirst);
+    await waitFor(() => expect(screen.getByText('Hickory Wood')).toBeInTheDocument());
+
+    const xs = Array.from(container.querySelectorAll('path[data-series]'))
+      .flatMap(line => (line.getAttribute('d') ?? '').match(/-?\d+(\.\d+)?(?=,)/g) ?? [])
+      .map(Number);
+
+    // The compact box the History card draws in: 340 wide, with 34 left of the
+    // plot for the temperature labels and 10 right of it. Drawn against an
+    // inverted axis the cook ran from x = -404 to x = 768, off both sides.
+    expect(xs.length).toBeGreaterThan(0);
+    expect(Math.min(...xs)).toBeCloseTo(34, 5);
+    expect(Math.max(...xs)).toBeCloseTo(330, 5);
   });
 });

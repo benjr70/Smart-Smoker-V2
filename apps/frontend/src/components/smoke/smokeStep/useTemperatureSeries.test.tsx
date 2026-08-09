@@ -145,6 +145,54 @@ describe('a screen opened part-way through a cook', () => {
     expect(result.current).toHaveLength(3);
     expect(result.current[2]).toMatchObject({ ChamberTemp: 225, MeatTemp: 140 });
   });
+
+  /**
+   * The baseline is whatever the backend answered with, and a collection asked
+   * for a series without an order answers newest-first. Handed on as it arrived,
+   * the reload mid-cook drew the chart's clock backwards and put the cook off
+   * the side of the plot — so the hook hands on a cook, not a page of rows.
+   */
+  it('hands on a baseline that arrived newest-first as a cook that runs forwards', async () => {
+    const kit = kitFor();
+    kit.api.seedTemps([
+      {
+        ChamberTemp: 230,
+        MeatTemp: 135,
+        Meat2Temp: 0,
+        Meat3Temp: 0,
+        date: new Date('2026-08-08T11:30:00.000Z'),
+      },
+      {
+        ChamberTemp: 220,
+        MeatTemp: 130,
+        Meat2Temp: 0,
+        Meat3Temp: 0,
+        date: new Date('2026-08-08T11:15:00.000Z'),
+      },
+      {
+        ChamberTemp: 210,
+        MeatTemp: 120,
+        Meat2Temp: 0,
+        Meat3Temp: 0,
+        date: new Date('2026-08-08T11:00:00.000Z'),
+      },
+    ]);
+    const { result, frames } = await renderSeries(kit);
+
+    await act(async () => {
+      kit.socket.injectEvents(
+        reading({ chamber: '225', probe1: '140' }, new Date('2026-08-08T12:00:00.000Z'))
+      );
+    });
+
+    expect(result.current.map(sample => new Date(sample.date).toISOString())).toEqual([
+      '2026-08-08T11:00:00.000Z',
+      '2026-08-08T11:15:00.000Z',
+      '2026-08-08T11:30:00.000Z',
+      '2026-08-08T12:00:00.000Z',
+    ]);
+    expect(doubledBack(frames)).toEqual([]);
+  });
 });
 
 describe('a cook that runs long enough to outgrow the plot', () => {

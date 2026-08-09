@@ -8,6 +8,33 @@ import { CurrentSmokeService } from '../common/current-smoke.service';
 
 const query = <T>(value: T) => ({ exec: jest.fn().mockResolvedValue(value) });
 
+/**
+ * A query stub that really orders and truncates, so the order a caller gets is
+ * a fact about the query the service builds and not about the order the stub
+ * happened to be seeded in — which is exactly the distinction that let readings
+ * reach the chart newest-first.
+ */
+const orderedQuery = (seed: Temp[]) => {
+  let rows = [...seed];
+  const chain: any = {
+    sort: (order: Record<string, number>) => {
+      const [[field, direction]] = Object.entries(order);
+      rows = [...rows].sort(
+        (a, b) =>
+          (new Date(a[field]).getTime() - new Date(b[field]).getTime()) *
+          direction,
+      );
+      return chain;
+    },
+    limit: (count: number) => {
+      rows = rows.slice(0, count);
+      return chain;
+    },
+    exec: () => Promise.resolve(rows),
+  };
+  return chain;
+};
+
 describe('TempsService', () => {
   let service: TempsService;
   let model: any;
@@ -39,7 +66,7 @@ describe('TempsService', () => {
       ...doc,
       save: jest.fn().mockResolvedValue({ ...doc, _id: 'new-temp-id' }),
     }));
-    model.find = jest.fn().mockReturnValue(query(mockTempRows));
+    model.find = jest.fn().mockImplementation(() => orderedQuery(mockTempRows));
     model.insertMany = jest.fn().mockResolvedValue(mockTempRows);
     model.deleteMany = jest.fn().mockResolvedValue({ deletedCount: 5 });
 
@@ -149,6 +176,33 @@ describe('TempsService', () => {
       expect(result).toEqual(mockTempRows);
     });
 
+    /**
+     * The series is a cook, and a cook has a direction. Unordered, Mongo answers
+     * in whatever order the storage engine finds the rows in — in practice
+     * newest-first, because that is the order of the index the series is read
+     * through — and a chart handed a backwards cook draws its time axis
+     * backwards and its lines outside the plot.
+     */
+    it('answers with the readings in the order they were taken', async () => {
+      const outOfOrder: Temp[] = [
+        { ...mockTempRows[0], date: new Date('2026-08-02T13:15:21Z') },
+        { ...mockTempRows[0], date: new Date('2026-08-02T13:14:00Z') },
+        { ...mockTempRows[0], date: new Date('2026-08-02T13:12:40Z') },
+      ];
+      model.find = jest.fn().mockImplementation(() => orderedQuery(outOfOrder));
+      currentSmoke.readCurrent.mockImplementation((key, load) =>
+        load('temps-group-1'),
+      );
+
+      const result = await service.getAllTempsCurrent();
+
+      expect(result.map((temp) => temp.date)).toEqual([
+        new Date('2026-08-02T13:12:40Z'),
+        new Date('2026-08-02T13:14:00Z'),
+        new Date('2026-08-02T13:15:21Z'),
+      ]);
+    });
+
     it('returns an empty array when nothing is active (fallback)', async () => {
       currentSmoke.readCurrent.mockImplementation(
         (key, load, fallback) => fallback,
@@ -185,26 +239,7 @@ describe('TempsService', () => {
     beforeEach(() => {
       // A query object that really orders and truncates, so "the newest row" is
       // a fact about the service's query and not about the stub's seeding order.
-      model.find = jest.fn().mockImplementation(() => {
-        let rows = [...series];
-        const chain: any = {
-          sort: (order: Record<string, number>) => {
-            const [[field, direction]] = Object.entries(order);
-            rows = [...rows].sort(
-              (a, b) =>
-                (new Date(a[field]).getTime() - new Date(b[field]).getTime()) *
-                direction,
-            );
-            return chain;
-          },
-          limit: (count: number) => {
-            rows = rows.slice(0, count);
-            return chain;
-          },
-          exec: () => Promise.resolve(rows),
-        };
-        return chain;
-      });
+      model.find = jest.fn().mockImplementation(() => orderedQuery(series));
     });
 
     it('returns the most recent reading of the current smoke', async () => {
@@ -290,6 +325,28 @@ describe('TempsService', () => {
 
       expect(model.find).toHaveBeenCalledWith({ tempsId: 'some-group' });
       expect(result).toEqual(mockTempRows);
+    });
+
+    /**
+     * A stored cook is read back for the History review card, which plots it —
+     * so the rows have to come back in the order they were taken rather than in
+     * the order the index happens to hold them.
+     */
+    it('answers with the readings in the order they were taken', async () => {
+      const outOfOrder: Temp[] = [
+        { ...mockTempRows[0], date: new Date('2026-08-02T13:15:21Z') },
+        { ...mockTempRows[0], date: new Date('2026-08-02T13:14:00Z') },
+        { ...mockTempRows[0], date: new Date('2026-08-02T13:12:40Z') },
+      ];
+      model.find = jest.fn().mockImplementation(() => orderedQuery(outOfOrder));
+
+      const result = await service.getAllTempsById('some-group');
+
+      expect(result.map((temp) => temp.date)).toEqual([
+        new Date('2026-08-02T13:12:40Z'),
+        new Date('2026-08-02T13:14:00Z'),
+        new Date('2026-08-02T13:15:21Z'),
+      ]);
     });
   });
 

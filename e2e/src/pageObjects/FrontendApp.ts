@@ -121,6 +121,22 @@ const pointsDrawnBy = async (lines: Locator): Promise<number> => {
 };
 
 /**
+ * The moments a chart has written under its plot, left to right.
+ *
+ * A cook runs forwards, so these must ascend. They did not: read back from a
+ * collection that answers newest-first, the chart took the span of the plot from
+ * the ends of the array and ruled its clock backwards — with the cook itself
+ * drawn off the side of the plot, over the temperature labels, while still
+ * showing four paths carrying every point the cook recorded.
+ */
+const timeAxisOf = async (chart: Locator): Promise<number[]> =>
+  chart
+    .locator('text[data-time-label]')
+    .evaluateAll(labels =>
+      labels.map(label => new Date(label.getAttribute('data-time-label') ?? '').getTime())
+    );
+
+/**
  * The pre-smoke step's load: `GET /api/presmoke/` (the trailing slash is what
  * separates the *current* pre-smoke from `GET /api/presmoke/:id`, which the
  * review screens use).
@@ -874,6 +890,14 @@ export class FrontendApp {
   async expectChartRendered(): Promise<void> {
     await expect(this.chart.getByRole('img', { name: 'Temperature chart' })).toBeVisible();
     await expect(this.chartLines).toHaveCount(4);
+    // The live chart is handed the cook the backend has already stored as its
+    // baseline, so a reload mid-cook can hand it that cook in the store's own
+    // order. It is still a cook, and a cook runs forwards.
+    const axis = await timeAxisOf(this.chart);
+    expect(axis.length, 'the live chart drew no clock under its plot').toBeGreaterThan(1);
+    expect(axis, 'the live chart ruled its clock backwards').toEqual(
+      [...axis].sort((one, other) => one - other)
+    );
   }
 
   /**
@@ -886,6 +910,11 @@ export class FrontendApp {
    * showing an empty frame — which is precisely what a chart handed readings it
    * cannot plot draws. A smoke that was recorded has at least the chamber to
    * show for it.
+   *
+   * The direction is asserted too. The stored series comes back in whatever
+   * order the collection holds it, and a card handed it backwards draws every
+   * one of those points against a clock running the wrong way — passing every
+   * assertion above while showing the operator a cook drawn off the plot.
    */
   async expectReviewChartRendered(): Promise<void> {
     const card = this.page.getByTestId('review-smoke-card');
@@ -897,6 +926,11 @@ export class FrontendApp {
         message: 'the review card drew its chart, but with none of the stored cook in it',
       })
       .toBeGreaterThan(0);
+    const axis = await timeAxisOf(card);
+    expect(axis.length, 'the review card drew no clock under its chart').toBeGreaterThan(1);
+    expect(axis, 'the review card ruled its clock backwards').toEqual(
+      [...axis].sort((one, other) => one - other)
+    );
   }
 
   /**

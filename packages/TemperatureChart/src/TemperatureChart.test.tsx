@@ -367,6 +367,87 @@ describe('a cook that has not started', () => {
   });
 });
 
+/**
+ * A stored cook comes back from the API in whatever order the database found
+ * its rows in, and that order is newest-first. The chart is handed the cook and
+ * draws it: it must draw the same cook whichever way round the rows arrived,
+ * rather than an axis that runs backwards with the lines drawn off the side of
+ * the plot.
+ */
+describe('a cook that arrived newest-first', () => {
+  const backwards = [...cook].reverse();
+
+  it('labels the time axis forwards, across the span of the cook', () => {
+    const { container } = render(
+      <TemperatureChart data={backwards} names={names} colors={colors} />
+    );
+
+    const labelled = Array.from(container.querySelectorAll('text[data-time-label]')).map(label =>
+      new Date(label.getAttribute('data-time-label') as string).getTime()
+    );
+
+    expect(labelled.length).toBeGreaterThan(1);
+    expect(labelled).toEqual([...labelled].sort((a, b) => a - b));
+    expect(labelled[0]).toBeGreaterThanOrEqual(new Date(cook[0].date).getTime());
+    expect(labelled[labelled.length - 1]).toBeLessThanOrEqual(new Date(cook[2].date).getTime());
+  });
+
+  it('draws the cook inside the plot, in the same places as it would forwards', () => {
+    const { container: forwards } = render(
+      <TemperatureChart data={cook} names={names} colors={colors} />
+    );
+    const { container: reversed } = render(
+      <TemperatureChart data={backwards} names={names} colors={colors} />
+    );
+
+    const xs = (container: HTMLElement): number[] =>
+      Array.from(container.querySelectorAll('circle[data-latest]')).map(dot =>
+        Number(dot.getAttribute('cx'))
+      );
+
+    expect(xs(reversed)).toEqual(xs(forwards));
+    xs(reversed).forEach(x => {
+      expect(x).toBeGreaterThanOrEqual(0);
+      expect(x).toBeLessThanOrEqual(360);
+    });
+  });
+
+  /** The dot marks where the cook has got to, not where the array happens to end. */
+  it('marks the newest reading with the latest dot', () => {
+    const pulled = [...cook]
+      .reverse()
+      .map((sample, index) => ({ ...sample, MeatTemp: 100 + index }));
+
+    const { container } = render(<TemperatureChart data={pulled} names={names} colors={colors} />);
+
+    const probe1 = container.querySelector('circle[data-latest="probe1"]') as SVGCircleElement;
+    const chamber = container.querySelector('circle[data-latest="chamber"]') as SVGCircleElement;
+
+    // The right-hand edge of the mobile plot, which is where the newest reading
+    // sits — not the last row of an array that came back newest-first.
+    const rightEdge = 348;
+    expect(Number(probe1.getAttribute('cx'))).toBe(rightEdge);
+    expect(Number(chamber.getAttribute('cx'))).toBe(rightEdge);
+  });
+
+  it('reads back the reading nearest the finger', () => {
+    const { container } = render(
+      <TemperatureChart data={backwards} names={names} colors={colors} />
+    );
+
+    fireEvent(
+      container.querySelector('svg') as SVGSVGElement,
+      new MouseEvent('pointermove', { bubbles: true, clientX: 193 })
+    );
+
+    expect(
+      within(container.querySelector('[data-hover-card]') as unknown as HTMLElement).getByText(
+        formatClock(cook[1].date)
+      )
+    ).toBeInTheDocument();
+  });
+});
+
 describe('the shape the chart is drawn in', () => {
   it("draws in the phone's shape unless it is told otherwise", () => {
     const { container } = render(<TemperatureChart data={cook} names={names} colors={colors} />);
