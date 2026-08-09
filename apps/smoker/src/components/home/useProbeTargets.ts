@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ProbeTargets } from 'temperaturechart/src/chartGeometry';
 import { ProbeTargetsResource, getDefaultApiClient } from '../../api';
 import { NO_TARGETS, chartTargetsOf } from './chartTargets';
@@ -26,9 +26,10 @@ export type ProbeTargetsReadPort = ProbeTargetsResource;
  * reads twice for the switch-on; the appliance does not ship that way.
  *
  * A read that fails leaves the chart with the targets it already had rather
- * than an error. The panel is the one screen with nowhere to go — no reload, no
- * back button, and a cook running — and a chart missing its dashed lines is a
- * chart that still shows the cook.
+ * than an error, including targets the read it overlapped with had already
+ * fetched. The panel is the one screen with nowhere to go — no reload, no back
+ * button, and a cook running — and a chart missing its dashed lines is a chart
+ * that still shows the cook.
  */
 export const useProbeTargets = (smoking: boolean, source?: ProbeTargetsReadPort): ProbeTargets => {
   const [targets, setTargets] = useState<ProbeTargets>(NO_TARGETS);
@@ -47,9 +48,10 @@ export const useProbeTargets = (smoking: boolean, source?: ProbeTargetsReadPort)
    * the moment one begins. Working that out while rendering — rather than in the
    * effect that reads — is what keeps it honest under the development build,
    * which mounts every screen twice: an effect that both decides a cook has
-   * started and reads for it decides it on the first of the two passes and reads
-   * on neither, since the answer to that read is dropped by the cleanup between
-   * them.
+   * started and reads for it makes that decision on the first of the two passes
+   * and has nothing left to decide on the second, which is the mount the
+   * operator ends up looking at. Derived here, it is a number the read is keyed
+   * on rather than a decision the read has to make for itself.
    */
   const [lastSmoking, setLastSmoking] = useState(smoking);
   const [cookNumber, setCookNumber] = useState(0);
@@ -60,19 +62,50 @@ export const useProbeTargets = (smoking: boolean, source?: ProbeTargetsReadPort)
     if (smoking) setCookNumber(cook => cook + 1);
   }
 
+  /**
+   * Whether the screen is still on the panel. A read is a request to a box that
+   * may be a house away, and the answer to one is worth nothing once the screen
+   * that asked has gone.
+   */
+  const onScreen = useRef(true);
   useEffect(() => {
-    let reading = true;
+    onScreen.current = true;
+    return () => {
+      onScreen.current = false;
+    };
+  }, []);
+
+  /**
+   * Which read is which: the number the next one is given, and the newest one
+   * whose answer is on the chart.
+   *
+   * A read is not cancelled by the one after it, because a panel switched on
+   * into a running cook asks twice within the same second and either answer is
+   * the settings — dropping the first would leave the chart bare for the whole
+   * cook if the second fails, which is the one thing this hook promises not to
+   * do. Newer still beats older: a cook is started against the settings as they
+   * stand, so a slow switch-on read wandering in behind the cook's own read is
+   * an answer about a target the operator has already moved on from, and is let
+   * go rather than drawn.
+   */
+  const nextRead = useRef(0);
+  const drawnRead = useRef(-1);
+
+  useEffect(() => {
+    const readNumber = nextRead.current;
+    nextRead.current += 1;
     void port
       .get()
       .then(probes => {
         // The screen may have moved on — to the wifi screen, or off the panel
         // altogether — while the settings were being read.
-        if (reading) setTargets(chartTargetsOf(probes));
+        if (!onScreen.current) return;
+        // A read overtaken by a newer one that is already drawn is history.
+        if (readNumber < drawnRead.current) return;
+        drawnRead.current = readNumber;
+        setTargets(chartTargetsOf(probes));
       })
       .catch(() => undefined);
-    return () => {
-      reading = false;
-    };
   }, [cookNumber, port]);
 
   return targets;

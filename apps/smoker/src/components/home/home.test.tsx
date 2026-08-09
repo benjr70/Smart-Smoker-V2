@@ -76,6 +76,42 @@ function fakeProbeTargets(...rounds: ProbeTargetSetting[][]) {
   return port;
 }
 
+/**
+ * A stand-in for the same settings, answered by hand one read at a time, so a
+ * test can hold a read in flight across the moment a cook starts — the one
+ * moment the panel has two reads of its own on the go at once.
+ */
+function heldProbeTargets() {
+  const held: Array<{
+    resolve: (rows: ProbeTargetSetting[]) => void;
+    reject: (error: Error) => void;
+  }> = [];
+  return {
+    /** How many reads the panel has asked for so far, answered or not. */
+    get reads(): number {
+      return held.length;
+    },
+    get: (): Promise<ProbeTargetSetting[]> =>
+      new Promise<ProbeTargetSetting[]>((resolve, reject) => {
+        held.push({ resolve, reject });
+      }),
+    /** Let the n-th read (counting from nought) come back with these rows. */
+    answer: async (read: number, rows: ProbeTargetSetting[]): Promise<void> => {
+      await act(async () => {
+        held[read].resolve(rows);
+        await flushPromises();
+      });
+    },
+    /** Let the n-th read come back as an unreachable cloud. */
+    fail: async (read: number): Promise<void> => {
+      await act(async () => {
+        held[read].reject(new Error('the panel cannot reach the cloud'));
+        await flushPromises();
+      });
+    },
+  };
+}
+
 /** A watched probe, at the temperature its meat is done at. */
 const watching = (slot: string, target: number): ProbeTargetSetting => ({
   slot,
@@ -431,6 +467,70 @@ describe('the targets on the touchscreen chart', () => {
     expect(unreachable.reads).toBeGreaterThan(0);
     expect(targetLines(container)).toHaveLength(0);
     expect(container.querySelector('path[data-series="chamber"]')).not.toHaveAttribute('d', '');
+  });
+
+  /**
+   * A panel switched on into a cook has two reads on the go within the same
+   * second: the switch-on read, and the one the cook starting asks for. Whatever
+   * of the two comes back is what the operator gets — the settings do not stop
+   * being the settings because the second request was the one that timed out.
+   */
+  it('keeps the targets the switch-on read fetched when the cook’s own read fails', async () => {
+    const kit = smokerKit();
+    kit.api.seedSmoking(false);
+    const settings = heldProbeTargets();
+    const { container } = renderHome(kit, settings);
+    await act(async () => {
+      await flushPromises();
+    });
+    // Switched on, and the switch-on read still out at the cloud.
+    expect(settings.reads).toBe(1);
+
+    fireEvent.click(screen.getByTestId('smoker-start-button'));
+    await act(async () => {
+      await flushPromises();
+    });
+    expect(settings.reads).toBe(2);
+
+    // The switch-on read lands, late — after the cook was started — and the
+    // cook's own read never lands at all.
+    await settings.answer(0, [watching('probe1', 203)]);
+    await settings.fail(1);
+    await cook(kit);
+
+    expect(targetLines(container)).toHaveLength(1);
+    expect(screen.getByText('TARGET 203°')).toBeInTheDocument();
+  });
+
+  /**
+   * The same two reads, both answered, and the older of them slower. What the
+   * cook was started against is the newer answer, and a switch-on read wandering
+   * in behind it does not get to move the lines back to what they were before
+   * the operator pressed start.
+   */
+  it('does not let a late switch-on read undo what the cook was started with', async () => {
+    const kit = smokerKit();
+    kit.api.seedSmoking(false);
+    const settings = heldProbeTargets();
+    const { container } = renderHome(kit, settings);
+    await act(async () => {
+      await flushPromises();
+    });
+
+    fireEvent.click(screen.getByTestId('smoker-start-button'));
+    await act(async () => {
+      await flushPromises();
+    });
+
+    // The cook's read comes back first, with the target as it stands...
+    await settings.answer(1, [watching('probe1', 210)]);
+    // ...and the switch-on read, with the target as it was, comes back after.
+    await settings.answer(0, [watching('probe1', 195)]);
+    await cook(kit);
+
+    expect(targetLines(container)).toHaveLength(1);
+    expect(screen.getByText('TARGET 210°')).toBeInTheDocument();
+    expect(screen.queryByText('TARGET 195°')).not.toBeInTheDocument();
   });
 
   it('draws no target for a probe nobody is watching', async () => {
