@@ -1,3 +1,4 @@
+import { UNREPORTED, reportsIn, tempYDomain } from 'temperaturechart/src/chartGeometry';
 import { createSmokerSessionApi } from './sessionApiAdapter';
 import {
   getCurrentSmokeProfile,
@@ -78,6 +79,74 @@ describe('createSmokerSessionApi', () => {
     const api = createSmokerSessionApi();
 
     await expect(api.getCurrentTemps()).resolves.toEqual(temps);
+  });
+
+  it('reads a stored cook back as numbers, whatever the wire made of the readings', async () => {
+    // The temps collection stores every reading as a string, so this is the
+    // shape a stored cook actually comes back in — probes 2 and 3 at "0"
+    // because they were never plugged in, which is what the hardware sends.
+    mockGetCurrentTemps.mockResolvedValue([
+      {
+        ChamberTemp: '225',
+        MeatTemp: '150.5',
+        Meat2Temp: '0',
+        Meat3Temp: '0',
+        date: '2026-08-09T12:00:00.000Z',
+      },
+    ]);
+
+    const api = createSmokerSessionApi();
+
+    await expect(api.getCurrentTemps()).resolves.toEqual([
+      {
+        ChamberTemp: 225,
+        MeatTemp: 150.5,
+        Meat2Temp: 0,
+        Meat3Temp: 0,
+        date: '2026-08-09T12:00:00.000Z',
+      },
+    ]);
+  });
+
+  it('hands the chart a partial cook it can plot: the probes that reported, and no others', async () => {
+    mockGetCurrentTemps.mockResolvedValue([
+      { ChamberTemp: '200', MeatTemp: '100', Meat2Temp: '0', Meat3Temp: '0', date: new Date(1) },
+      { ChamberTemp: '235', MeatTemp: '165', Meat2Temp: '0', Meat3Temp: '0', date: new Date(2) },
+    ]);
+
+    const api = createSmokerSessionApi();
+    const cook = await api.getCurrentTemps();
+
+    expect(reportsIn(cook, 'chamber')).toBe(true);
+    expect(reportsIn(cook, 'probe1')).toBe(true);
+    expect(reportsIn(cook, 'probe2')).toBe(false);
+    expect(reportsIn(cook, 'probe3')).toBe(false);
+    // Not the 0-100 fallback the axis collapses to when nothing plots.
+    expect(tempYDomain(cook)).toEqual([75, 250]);
+  });
+
+  it('reads a reading that is no number at all as unreported rather than plotting it', async () => {
+    mockGetCurrentTemps.mockResolvedValue([
+      {
+        ChamberTemp: 'n/a',
+        MeatTemp: '',
+        Meat2Temp: null,
+        Meat3Temp: undefined,
+        date: new Date(1),
+      },
+    ]);
+
+    const api = createSmokerSessionApi();
+
+    await expect(api.getCurrentTemps()).resolves.toEqual([
+      {
+        ChamberTemp: UNREPORTED,
+        MeatTemp: UNREPORTED,
+        Meat2Temp: UNREPORTED,
+        Meat3Temp: UNREPORTED,
+        date: new Date(1),
+      },
+    ]);
   });
 
   it('persists a buffered batch through the temps service', async () => {
