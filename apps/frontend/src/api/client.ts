@@ -7,6 +7,7 @@
  * it never resolves `undefined`.
  */
 import { TransportPort, createHttpTransport } from 'api-transport/src';
+import { UNREPORTED } from 'temperaturechart/src/chartGeometry';
 import { PushNotConfiguredError } from './errors';
 import { SmokeEventPort, noopEventPort } from './events';
 import { createSocketEventPort } from './socketEventAdapter';
@@ -288,6 +289,45 @@ const normalizeProfile = (raw: SmokeProfile): SmokeProfile => ({
 });
 
 /**
+ * One temperature, as a number, whatever the wire made of it.
+ *
+ * The temps collection stores every reading as a string, so `GET temps` answers
+ * with `"225"` where {@link TempData} promises 225 — a lie the type cannot see
+ * and nothing downstream corrects. The chart's geometry asks whether a reading
+ * is a finite number before it plots it, and `"225"` is not one, so a stored
+ * cook read back raw draws as four empty lines over an axis of nothing.
+ *
+ * A value that is no number at all is read as the zero the hardware sends for a
+ * probe that is not plugged in, which the chart draws as a gap. Passing it on
+ * would be worse than dropping it: an unparseable reading plotted anyway is a
+ * temperature the smoker never reached.
+ */
+const asReading = (value: number | string | null | undefined): number => {
+  const reading = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(reading) ? reading : UNREPORTED;
+};
+
+/**
+ * Centralized read-path normalization for a stored series: every reading as the
+ * number its type claims it is.
+ *
+ * This is the one place a stored cook enters the app — the live smoke screen's
+ * baseline, and the History review card's whole chart, are both read through
+ * here — so it is the one place the coercion belongs. Doing it further in would
+ * mean each screen minding a wire format it should never have to know, and
+ * doing it in the chart would mean the geometry quietly accepting samples that
+ * are not what its own type says they are.
+ */
+const normalizeTemps = (raw: TempData[]): TempData[] =>
+  raw.map(temp => ({
+    ...temp,
+    ChamberTemp: asReading(temp.ChamberTemp),
+    MeatTemp: asReading(temp.MeatTemp),
+    Meat2Temp: asReading(temp.Meat2Temp),
+    Meat3Temp: asReading(temp.Meat3Temp),
+  }));
+
+/**
  * Outbound projection to the exact backend DTO whitelist (chamber name, three
  * probe names, notes, wood type). Stray persisted fields such as `_id`/`__v`
  * that ride along on a fetched-then-saved profile are stripped, preserving the
@@ -464,8 +504,8 @@ export const createApiClient = (
   events: SmokeEventPort = noopEventPort
 ): ApiClient => ({
   temps: {
-    getCurrent: () => transport.get<TempData[]>('temps'),
-    getById: (id: string) => transport.get<TempData[]>(`temps/${id}`),
+    getCurrent: async () => normalizeTemps(await transport.get<TempData[]>('temps')),
+    getById: async (id: string) => normalizeTemps(await transport.get<TempData[]>(`temps/${id}`)),
     deleteById: async (id: string) => {
       await transport.delete<void>(`temps/${id}`);
     },
@@ -624,7 +664,10 @@ export const createApiClient = (
           .get<SmokeProfile>(`smokeProfile/${smoke.smokeProfileId}`)
           .then(normalizeProfile)
           .catch(() => defaultSmokeProfile),
-        transport.get<TempData[]>(`temps/${smoke.tempsId}`).catch(() => defaultTemps),
+        transport
+          .get<TempData[]>(`temps/${smoke.tempsId}`)
+          .then(normalizeTemps)
+          .catch(() => defaultTemps),
         transport.get<PostSmoke>(`postSmoke/${smoke.postSmokeId}`).catch(() => defaultPostSmoke),
         transport.get<rating>(`ratings/${smoke.ratingId}`).catch(() => defaultRating),
       ]);

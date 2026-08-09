@@ -79,6 +79,81 @@ describe('temps client — legacy endpoint contract', () => {
   });
 });
 
+/**
+ * The temps collection stores every temperature as a string, so this is the
+ * boundary where a stored cook stops being wire and starts being the numbers
+ * the type promises. Nothing downstream coerces: the chart asks whether a
+ * reading is a finite number, and `"225"` is not one, so a series that arrived
+ * uncoerced is drawn as no line at all.
+ */
+describe('temps client — readings the backend stored as strings', () => {
+  const storedTemps = [
+    {
+      ChamberTemp: '225',
+      MeatTemp: '145',
+      Meat2Temp: '0',
+      Meat3Temp: '0',
+      date: new Date('2025-01-01T12:00:00Z'),
+    },
+  ];
+
+  test('the current series reads back as numbers', async () => {
+    const client = createApiClient(createFakeBackend({ temps: { current: storedTemps } }));
+
+    const [reading] = await client.temps.getCurrent();
+
+    expect(reading).toMatchObject({
+      ChamberTemp: 225,
+      MeatTemp: 145,
+      Meat2Temp: 0,
+      Meat3Temp: 0,
+    });
+  });
+
+  test('a stored series read by id reads back as numbers', async () => {
+    const client = createApiClient(
+      createFakeBackend({ temps: { records: { abc123: storedTemps } } })
+    );
+
+    const [reading] = await client.temps.getById('abc123');
+
+    expect(reading).toMatchObject({ ChamberTemp: 225, MeatTemp: 145 });
+  });
+
+  test('the date the reading was taken at rides through untouched', async () => {
+    const client = createApiClient(createFakeBackend({ temps: { current: storedTemps } }));
+
+    const [reading] = await client.temps.getCurrent();
+
+    expect(new Date(reading.date).toISOString()).toBe('2025-01-01T12:00:00.000Z');
+  });
+
+  test('a reading that is no number at all reads back as unreported', async () => {
+    const client = createApiClient(
+      createFakeBackend({
+        temps: {
+          current: [
+            {
+              ChamberTemp: 'n/a',
+              MeatTemp: '',
+              Meat2Temp: '145',
+              Meat3Temp: '0',
+              date: new Date('2025-01-01T12:00:00Z'),
+            },
+          ],
+        },
+      })
+    );
+
+    const [reading] = await client.temps.getCurrent();
+
+    // Zero is what the hardware sends for a probe that is not plugged in, and
+    // what the chart draws as a gap. Handing the string on instead would put a
+    // temperature on the plot that nothing ever measured.
+    expect(reading).toMatchObject({ ChamberTemp: 0, MeatTemp: 0, Meat2Temp: 145, Meat3Temp: 0 });
+  });
+});
+
 const sampleProfile: SmokeProfile = {
   chamberName: 'Main Chamber',
   probe1Name: 'Meat Probe',
@@ -1041,5 +1116,25 @@ describe('smoke client — review aggregate', () => {
 
     expect(error).toBeInstanceOf(ApiError);
     expect(error.status).toBe(404);
+  });
+
+  test('the cook it carries reads back as numbers, however it was stored', async () => {
+    const backend = seedFullSmoke();
+    backend.store.temps.records['temps-1'] = [
+      {
+        ChamberTemp: '225',
+        MeatTemp: '145',
+        Meat2Temp: '0',
+        Meat3Temp: '0',
+        date: new Date('2025-01-01T12:00:00Z'),
+      },
+    ];
+    const client = createApiClient(backend);
+
+    const review = await client.smoke.getReview('smoke-1');
+
+    // This is the series the review card charts, so string readings reaching it
+    // are a blank chart on a smoke that was recorded perfectly well.
+    expect(review.temps[0]).toMatchObject({ ChamberTemp: 225, MeatTemp: 145 });
   });
 });

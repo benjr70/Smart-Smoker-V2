@@ -101,6 +101,26 @@ const CHART_SAMPLE_INTERVAL_MS = 500;
 const CHART_STOPPED_OBSERVATION_MS = 6_000;
 
 /**
+ * How many readings a set of chart lines is drawing, totalled across them.
+ *
+ * A line's `d` opens at its first reading (`M`) and carries one command per
+ * reading after it — `L` for the straight probe lines, `C` for the chamber's
+ * cardinal curve — so the commands are the readings. A line drawing nothing
+ * carries an empty `d` and counts as the zero readings it is showing, which is
+ * what separates a chart that is drawing a cook from one that has merely put
+ * its four paths on the page.
+ */
+const pointsDrawnBy = async (lines: Locator): Promise<number> => {
+  const perLine = await lines.evaluateAll(paths =>
+    paths.map(path => {
+      const geometry = path.getAttribute('d') ?? '';
+      return geometry === '' ? 0 : 1 + (geometry.match(/[LC]/g)?.length ?? 0);
+    })
+  );
+  return perLine.reduce((sum, points) => sum + points, 0);
+};
+
+/**
  * The pre-smoke step's load: `GET /api/presmoke/` (the trailing slash is what
  * separates the *current* pre-smoke from `GET /api/presmoke/:id`, which the
  * review screens use).
@@ -858,12 +878,25 @@ export class FrontendApp {
 
   /**
    * Assert the review card of an opened smoke draws that smoke's chart: the
-   * same SVG, with the same four lines, over what the backend stored.
+   * same SVG, with the same four lines, over what the backend stored — and that
+   * those lines have the stored cook in them.
+   *
+   * The geometry is the assertion. The chart keeps one path per series whether
+   * or not that probe ever reported, so counting paths alone passes on a card
+   * showing an empty frame — which is precisely what a chart handed readings it
+   * cannot plot draws. A smoke that was recorded has at least the chamber to
+   * show for it.
    */
   async expectReviewChartRendered(): Promise<void> {
     const card = this.page.getByTestId('review-smoke-card');
     await expect(card.getByRole('img', { name: 'Temperature chart' })).toBeVisible();
-    await expect(card.locator('svg path[data-series]')).toHaveCount(4);
+    const lines = card.locator('svg path[data-series]');
+    await expect(lines).toHaveCount(4);
+    await expect
+      .poll(async () => pointsDrawnBy(lines), {
+        message: 'the review card drew its chart, but with none of the stored cook in it',
+      })
+      .toBeGreaterThan(0);
   }
 
   /**
@@ -880,13 +913,7 @@ export class FrontendApp {
    * the very same readings are drawn.
    */
   async chartPointCount(): Promise<number> {
-    const perLine = await this.chartLines.evaluateAll(paths =>
-      paths.map(path => {
-        const geometry = path.getAttribute('d') ?? '';
-        return geometry === '' ? 0 : 1 + (geometry.match(/[LC]/g)?.length ?? 0);
-      })
-    );
-    return perLine.reduce((sum, points) => sum + points, 0);
+    return pointsDrawnBy(this.chartLines);
   }
 
   /**
