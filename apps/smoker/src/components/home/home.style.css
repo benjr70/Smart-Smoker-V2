@@ -14,37 +14,15 @@
 }
 
 /*
- * The chart's place on the screen: the room the readouts and the two actions
- * leave on the 800×480 panel.
+ * The chart has no rule here, which is the rule.
  *
- * The chart draws to a viewBox and takes whatever width it is given, so on a
- * panel this wide it would come out taller than the panel is and push its own
- * legend off the bottom — with no scrollbar at a smoker to go and find it. So
- * the slot says how tall the chart may be and the plot keeps its proportions
- * inside that, which is the whole of what this file has ever done: sizes.
- *
- * The two rules below reach into the chart's own wrapper — the plot and the
- * legend beneath it — to stack them down the slot and let the plot have
- * whatever height the legend leaves. Sizing is the caller's, not the chart's:
- * the same chart is drawn on a phone, where the page scrolls and none of this
- * applies.
+ * It is given the whole width of the row it sits in and takes its height from
+ * the shape it is drawn in — the touchscreen shape, which is cut for the strip
+ * of the 800×480 panel the readouts and the two actions leave. Capping its
+ * height here instead would letterbox it: the plot keeps its proportions, so a
+ * height it is held to is a width it is held to as well, and the panel would
+ * show either side of a chart drawn down the middle of it.
  */
-.chart {
-  height: 70vh;
-}
-
-.chart > div {
-  align-items: center;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.chart svg {
-  flex: 1;
-  min-height: 0;
-  width: auto;
-}
 
 .text {
   font-family: 'Roboto', 'Helvetica', 'Arial', sans-serif;

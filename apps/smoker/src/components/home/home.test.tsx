@@ -2,7 +2,7 @@ import React from 'react';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { Home } from './home';
-import { SessionConfig, decodeEvents } from 'smoke-session/src';
+import { SessionConfig, SmokeProfile, decodeEvents } from 'smoke-session/src';
 import { SmokeSessionProvider } from 'smoke-session/src/react';
 import {
   FakeCloudSocket,
@@ -75,7 +75,7 @@ const reading = (chamber: string, meat: string, meat2: string, meat3: string): s
  * test asks of it is the same thing an operator would look for at the smoker.
  */
 describe('the chart on the home screen', () => {
-  /** The touchscreen's shape, the one the kiosk's tall panel is cut for. */
+  /** The touchscreen's shape, the one the kiosk's wide panel is cut for. */
   const TOUCHSCREEN = plotBoxOf('touchscreen');
 
   it('draws a line for the chamber and each of the three probes', async () => {
@@ -103,6 +103,55 @@ describe('the chart on the home screen', () => {
       'viewBox',
       `0 0 ${TOUCHSCREEN.width} ${TOUCHSCREEN.height}`
     );
+  });
+
+  /**
+   * The panel this screen is drawn on: 800 across, 480 down, and no scrollbar
+   * at a smoker to go looking for anything that falls off it.
+   *
+   * The chart is given the whole width of the row it sits in and takes its own
+   * height from the shape it draws in, so that shape is the whole of what
+   * decides whether the plot uses the panel or is letterboxed in the middle of
+   * it, and whether the legend naming the four lines is on the screen at all.
+   * Both of those are the same number, which is why they are asserted together:
+   * a shape tall enough to be worth capping is a shape that had to be shrunk
+   * away from the sides to fit.
+   */
+  describe('drawn across the panel it hangs on', () => {
+    const PANEL = { width: 800, height: 480 };
+    /** What the readouts and the two actions take off the top of the panel. */
+    const READOUTS_AND_ACTIONS = 140;
+    /** The legend the chart writes under the plot. */
+    const LEGEND = 32;
+    /** The room left down the panel for the plot itself. */
+    const ROOM = PANEL.height - READOUTS_AND_ACTIONS - LEGEND;
+
+    /** How tall the plot comes out, drawn at the width the row gives it. */
+    const drawnHeight = (plot: SVGSVGElement): number => {
+      const [, , width, height] = (plot.getAttribute('viewBox') ?? '')
+        .split(' ')
+        .map(Number) as number[];
+      return (PANEL.width * height) / width;
+    };
+
+    it('fills the width of the panel and still leaves its legend on the screen', async () => {
+      const kit = smokerKit();
+      renderHome(kit);
+      await act(async () => {
+        await flushPromises();
+      });
+      const plot = screen.getByRole('img', {
+        name: 'Temperature chart',
+      }) as unknown as SVGSVGElement;
+
+      // Drawn at the width it is given, rather than at a width of its own...
+      expect(plot).toHaveAttribute('width', '100%');
+      // ...it comes out short enough for the legend under it to be on screen...
+      expect(drawnHeight(plot)).toBeLessThanOrEqual(ROOM);
+      // ...and tall enough to be using the room it was left, rather than a
+      // strip of it with the panel showing either side.
+      expect(drawnHeight(plot)).toBeGreaterThan(ROOM * 0.8);
+    });
   });
 
   it('plots the cook as the device reads it, while the smoke is running', async () => {
@@ -342,6 +391,36 @@ describe('Home (smoker session host)', () => {
     expect(screen.getAllByText('Brisket')).toHaveLength(2);
     expect(screen.getAllByText('Ribs')).toHaveLength(2);
     expect(screen.getAllByText('Wings')).toHaveLength(2);
+  });
+
+  /**
+   * A stored profile carries all four names when a browser wrote it, and need
+   * not otherwise: every one of them is optional where the smoke is stored, and
+   * a name that was never written comes back missing rather than empty. The
+   * kiosk is the one screen with nowhere to go when a render throws — no
+   * reload, no back, and an operator with a cook running — so a missing name
+   * has to be a name to fall back on rather than a blank screen in the garage.
+   */
+  it('keeps drawing when a stored profile carries no name for a probe', async () => {
+    const kit = smokerKit();
+    kit.api.seedProfile({
+      chamberName: 'Big Pit',
+      probe1Name: 'Brisket',
+      probe3Name: 'Wings',
+      notes: '',
+      woodType: 'Hickory',
+    } as SmokeProfile);
+    renderHome(kit);
+
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(screen.getByRole('img', { name: 'Temperature chart' })).toBeInTheDocument();
+    // The unnamed line is still named in the legend, where there is no readout
+    // beside it carrying the same name.
+    expect(screen.getByText('probe 2')).toBeInTheDocument();
+    expect(screen.getAllByText('Brisket')).toHaveLength(2);
   });
 
   it('falls back to default probe names when no profile is saved', async () => {

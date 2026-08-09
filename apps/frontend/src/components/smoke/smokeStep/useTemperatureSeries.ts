@@ -43,6 +43,14 @@ const momentOf = (date: Date): number => new Date(date).getTime();
  * is running. A reading is kept whenever it carries a moment of its own: a cook
  * run with one probe in the meat is a cook, and the chart it draws is the point
  * of running it.
+ *
+ * The touchscreen keeps a hook of its own that records to these same rules
+ * (`apps/smoker/src/components/home/useTemperatureSeries.ts`), which is the
+ * PRD's decision: each application owns a thin series hook over its own
+ * temperature stream, and neither package changes shape to hold one. The two
+ * are the same code over the same session snapshot, so a change here belongs
+ * there too — and a third consumer wanting the same recording is the moment to
+ * lift it into the session package rather than write it a third time.
  */
 export function useTemperatureSeries(): ChartSample[] {
   const { chamberTemp, probeTemp1, probeTemp2, probeTemp3, date, smoking, initialTemps } =

@@ -11,27 +11,40 @@ import { useChartPalette } from '../../theme/chartPalette';
 import { useTemperatureSeries } from './useTemperatureSeries';
 import { Wifi } from './wifi/wifi';
 
-/** Anything carrying the four probe names, as the session holds them. */
+/**
+ * Anything carrying the four probe names.
+ *
+ * Every one of them is optional, because a name reaches this screen from a
+ * stored smoke profile whose fields are all optional where it is stored, and
+ * the session hands a profile's names on as it read them. A name nobody ever
+ * wrote arrives missing rather than empty, and the kiosk is the one screen with
+ * nowhere to go if reading one throws: no reload, no back button, and a cook
+ * running.
+ */
 interface NamedProbes {
-  chamberName: string;
-  probe1Name: string;
-  probe2Name: string;
-  probe3Name: string;
+  chamberName?: string;
+  probe1Name?: string;
+  probe2Name?: string;
+  probe3Name?: string;
 }
 
 /**
  * The names the chart labels its lines with, in the legend and under a finger.
  *
- * A saved profile can carry a name that was cleared rather than never set, and
- * a blank legend entry is not a legend, so the same names the readouts fall
- * back to are used here — which is what keeps a line's label agreeing with the
- * readout beside it.
+ * A profile can carry a name that was cleared rather than never set, and a
+ * blank legend entry is not a legend, so a name that says nothing falls back to
+ * one that does. The web application decides the same thing for its own charts
+ * the same way (`chartNames.ts` there); the two are kept identical in what they
+ * do with a name, and differ only in what they fall back to — this screen falls
+ * back to the session's own default names, which are what the readouts beside
+ * the chart show when no profile has been saved, so a line's label agrees with
+ * the readout next to it rather than quietly renaming the same probe.
  */
 const chartNamesOf = (named: NamedProbes): ChartSeriesNames => ({
-  chamber: named.chamberName.trim() || DEFAULT_PROBE_NAMES.chamberName,
-  probe1: named.probe1Name.trim() || DEFAULT_PROBE_NAMES.probe1Name,
-  probe2: named.probe2Name.trim() || DEFAULT_PROBE_NAMES.probe2Name,
-  probe3: named.probe3Name.trim() || DEFAULT_PROBE_NAMES.probe3Name,
+  chamber: named.chamberName?.trim() || DEFAULT_PROBE_NAMES.chamberName,
+  probe1: named.probe1Name?.trim() || DEFAULT_PROBE_NAMES.probe1Name,
+  probe2: named.probe2Name?.trim() || DEFAULT_PROBE_NAMES.probe2Name,
+  probe3: named.probe3Name?.trim() || DEFAULT_PROBE_NAMES.probe3Name,
 });
 
 /**
@@ -132,9 +145,12 @@ export function Home(): JSX.Element {
               </Grid>
             </Grid>
           </Grid>
-          {/* No test hook of its own: the chart carries an accessible name, and
-              "Temperature chart" is the handle a test and a reader both use. */}
-          <Grid item xs={12} className="chart">
+          {/* The chart is given the whole width of this row and takes its own
+              height from the touchscreen shape, which is cut for the strip of
+              the panel this row is (see home.style.css). No test hook of its
+              own: the chart carries an accessible name, and "Temperature chart"
+              is the handle a test and a reader both use. */}
+          <Grid item xs={12}>
             <TemperatureChart
               data={series}
               names={chartNamesOf(session)}
