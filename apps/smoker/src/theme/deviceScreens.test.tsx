@@ -4,12 +4,11 @@
  *
  * These assertions are about computed colour on the controls an operator
  * touches, because that is the thing the recolour is for. Both screens are the
- * real ones; only the leaves that reach hardware or draw with D3 are stood in
+ * real ones; only the leaves that reach hardware are stood in
  * for.
  */
 import '@testing-library/jest-dom';
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import fs from 'fs';
 import React from 'react';
 import { SessionConfig } from 'smoke-session/src';
 import { SmokeSessionProvider } from 'smoke-session/src/react';
@@ -20,28 +19,15 @@ import {
   FakeWifiStatus,
   SteppingClock,
 } from 'smoke-session/src/testing';
-import { carbonDark } from 'theme/src';
+import { AppearancePreference, carbonDark, carbonLight } from 'theme/src';
 import { Home } from '../components/home/home';
 import { getConnection } from '../services/deviceService';
-import { DeviceThemeProvider } from './DeviceThemeProvider';
-import {
-  contrastRatio,
-  serveDeviceStylesheets,
-  stopServingDeviceStylesheets,
-  textColourAt,
-} from './testing/deviceColours';
+import { DeviceAppearanceSource, DeviceThemeProvider } from './DeviceThemeProvider';
 
 jest.mock('../services/deviceService', () => ({
   connectToWiFi: jest.fn(),
   getConnection: jest.fn(),
 }));
-
-// The chart is a heavy D3 leaf, and this slice does not restyle it.
-jest.mock('temperaturechart/src/tempChart', () => {
-  return function MockTempChart() {
-    return <div data-testid="temp-chart" />;
-  };
-});
 
 // The on-screen keyboard is a third-party leaf with its own DOM.
 jest.mock('react-simple-keyboard', () => {
@@ -61,9 +47,36 @@ const sessionConfig = (): SessionConfig => ({
   wifi: { port: new FakeWifiStatus(), throttleMs: 0 },
 });
 
-const renderTouchscreen = async (): Promise<void> => {
+/**
+ * A backend whose appearance read this test resolves by hand, so a screen can
+ * be looked at before the installation has answered and again after it has.
+ */
+const createPendingBackend = () => {
+  let settle: (value: AppearancePreference) => void = () => undefined;
+  return {
+    get: () => new Promise<AppearancePreference>(resolve => (settle = resolve)),
+    answer: (preference: AppearancePreference) => settle(preference),
+  };
+};
+
+/** The channel a phone announces a change of appearance down. */
+const createChannel = () => {
+  const listeners: Array<(preference: AppearancePreference) => void> = [];
+  return {
+    subscribe: (listener: (preference: AppearancePreference) => void) => {
+      listeners.push(listener);
+      return () => {
+        listeners.splice(listeners.indexOf(listener), 1);
+      };
+    },
+    announce: (preference: AppearancePreference) =>
+      listeners.forEach(listener => listener(preference)),
+  };
+};
+
+const renderTouchscreen = async (appearance?: DeviceAppearanceSource): Promise<void> => {
   render(
-    <DeviceThemeProvider>
+    <DeviceThemeProvider appearance={appearance}>
       <SmokeSessionProvider config={sessionConfig()}>
         <Home />
       </SmokeSessionProvider>
@@ -108,38 +121,136 @@ describe('what the recolour adds to the home screen', () => {
     expect(screen.getAllByRole('button')).toHaveLength(2);
   });
 
-  it('adds no elapsed clock', async () => {
+  /**
+   * The chart writes clock times along its time axis, which are the moments the
+   * cook was read at rather than the rebuilt screen's elapsed clock; the screen
+   * around it still keeps no clock of its own.
+   */
+  it('adds no elapsed clock outside the chart', async () => {
     await renderTouchscreen();
 
-    expect(screen.queryByText(/\d+:\d{2}/)).toBeNull();
+    const clocks = screen
+      .queryAllByText(/\d+:\d{2}/)
+      .filter(text => text.closest('svg[aria-label="Temperature chart"]') === null);
+
+    expect(clocks).toEqual([]);
   });
 });
 
 /**
- * The chart is the one thing on this screen the recolour deliberately leaves as
- * it is: it paints its own panel a light grey, and it draws its axes, ticks and
- * labels in whatever colour it is handed — d3 gives them `currentColor`. So the
- * colour the screen around it hands down lands on that light panel, and the
- * dark scheme's near-white text would take the scale off the chart entirely.
+ * The chart is a surface like any other now. It used to paint itself a light
+ * grey panel and draw the light probe colours whatever the screen around it was
+ * doing, which on this near-black panel left a pale slab in a dark garage.
+ * Every colour it draws with comes from the scheme this device has been told to
+ * render — and it is drawn here rather than stubbed, so these are the colours
+ * the touchscreen actually comes out.
  */
-describe('the colour the chart draws its axes in', () => {
-  /** The panel the chart paints behind itself, read from the chart itself. */
-  const chartPanel = (): string => {
-    const source = fs.readFileSync(require.resolve('temperaturechart/src/tempChart'), 'utf8');
-    const [, colour] = /\.style\('background', '(#[0-9a-fA-F]{6})'\)/.exec(source) ?? [];
-    if (!colour) throw new Error('The chart no longer paints itself a panel of its own');
-    return colour;
-  };
+describe('the chart under the shared theme', () => {
+  /** The panel the plot is drawn on: the first thing the chart paints. */
+  const chartPanel = (): string | null =>
+    document.querySelector('svg[aria-label="Temperature chart"] rect')?.getAttribute('fill') ??
+    null;
 
-  beforeEach(() => serveDeviceStylesheets());
-  afterEach(() => stopServingDeviceStylesheets());
+  /** The four lines the chart draws, in the order it draws them. */
+  const seriesStrokes = (): (string | null)[] =>
+    Array.from(document.querySelectorAll('path[data-series]')).map(line =>
+      line.getAttribute('stroke')
+    );
 
-  it('is legible against the panel the chart paints itself', async () => {
+  it('is drawn on the panel of the scheme the device renders', async () => {
     await renderTouchscreen();
 
-    const drawnIn = textColourAt(screen.getByTestId('temp-chart'));
+    expect(chartPanel()).toBe(carbonDark.chart.panel);
+  });
 
-    expect(contrastRatio(drawnIn, chartPanel())).toBeGreaterThanOrEqual(4.5);
+  it('draws each reading’s line in that scheme’s colour for its probe', async () => {
+    await renderTouchscreen();
+
+    expect(seriesStrokes()).toEqual([
+      carbonDark.chart.chamber,
+      carbonDark.chart.probe1,
+      carbonDark.chart.probe2,
+      carbonDark.chart.probe3,
+    ]);
+  });
+
+  it('rules its frame and writes its labels in that scheme’s colours', async () => {
+    await renderTouchscreen();
+
+    expect(document.querySelector('line[data-grid]')).toHaveAttribute(
+      'stroke',
+      carbonDark.chart.grid
+    );
+    expect(document.querySelector('text[data-temp-label]')).toHaveAttribute(
+      'fill',
+      carbonDark.chart.label
+    );
+  });
+
+  /**
+   * The scheme the device is *told* to render, rather than the one it would
+   * reach for on its own.
+   *
+   * Dark is both this appliance's answer before the installation has said
+   * anything and the answer it falls back to when it is handed no palette at
+   * all, so a chart asserted only in the dark would be a chart that could just
+   * as well be painted from four constants. A panel told to render light has to
+   * come out light — that is the half of the rule that says this device renders
+   * a resolved scheme rather than choosing one.
+   */
+  it('is drawn in the light scheme when that is what the installation resolved', async () => {
+    const backend = createPendingBackend();
+    await renderTouchscreen({ client: backend });
+
+    expect(chartPanel()).toBe(carbonDark.chart.panel);
+
+    await act(async () => {
+      backend.answer({ mode: 'light', resolvedMode: 'light' });
+      await flushPromises();
+    });
+
+    expect(chartPanel()).toBe(carbonLight.chart.panel);
+    expect(seriesStrokes()).toEqual([
+      carbonLight.chart.chamber,
+      carbonLight.chart.probe1,
+      carbonLight.chart.probe2,
+      carbonLight.chart.probe3,
+    ]);
+    expect(document.querySelector('line[data-grid]')).toHaveAttribute(
+      'stroke',
+      carbonLight.chart.grid
+    );
+    expect(document.querySelector('text[data-temp-label]')).toHaveAttribute(
+      'fill',
+      carbonLight.chart.label
+    );
+  });
+
+  /**
+   * Nobody is in the garage to reload the panel, so a scheme chosen on a phone
+   * in the kitchen has to land on the chart as it stands — repainted, not
+   * rebuilt, because rebuilding it would throw away the cook it has drawn and
+   * the reading under the operator's finger.
+   */
+  it('repaints on a scheme announced mid-cook, without being rebuilt', async () => {
+    const backend = createPendingBackend();
+    const channel = createChannel();
+    await renderTouchscreen({ client: backend, subscription: channel });
+    await act(async () => {
+      backend.answer({ mode: 'dark', resolvedMode: 'dark' });
+      await flushPromises();
+    });
+    const plot = document.querySelector('svg[aria-label="Temperature chart"]');
+    expect(chartPanel()).toBe(carbonDark.chart.panel);
+
+    await act(async () => {
+      channel.announce({ mode: 'light', resolvedMode: 'light' });
+      await flushPromises();
+    });
+
+    expect(chartPanel()).toBe(carbonLight.chart.panel);
+    expect(seriesStrokes()[0]).toBe(carbonLight.chart.chamber);
+    expect(document.querySelector('svg[aria-label="Temperature chart"]')).toBe(plot);
   });
 });
 

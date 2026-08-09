@@ -14,13 +14,36 @@
 }
 
 /*
- * The chart's place on the screen. The chart paints its own panel a light grey
- * and draws its axes, ticks and labels in the colour it inherits, so it is
- * handed one that reads against that panel instead of the screen's near-white
- * text. Recolouring the chart itself belongs with the chart.
+ * The chart's place on the screen: the room the readouts and the two actions
+ * leave on the 800×480 panel.
+ *
+ * The chart draws to a viewBox and takes whatever width it is given, so on a
+ * panel this wide it would come out taller than the panel is and push its own
+ * legend off the bottom — with no scrollbar at a smoker to go and find it. So
+ * the slot says how tall the chart may be and the plot keeps its proportions
+ * inside that, which is the whole of what this file has ever done: sizes.
+ *
+ * The two rules below reach into the chart's own wrapper — the plot and the
+ * legend beneath it — to stack them down the slot and let the plot have
+ * whatever height the legend leaves. Sizing is the caller's, not the chart's:
+ * the same chart is drawn on a phone, where the page scrolls and none of this
+ * applies.
  */
 .chart {
-  color: var(--smoker-chart-text);
+  height: 70vh;
+}
+
+.chart > div {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.chart svg {
+  flex: 1;
+  min-height: 0;
+  width: auto;
 }
 
 .text {
