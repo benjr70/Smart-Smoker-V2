@@ -4,10 +4,12 @@ import { getModelToken } from '@nestjs/mongoose';
 import { StateService } from './state.service';
 import { State } from './state.schema';
 import { StateDto } from './stateDto';
+import { TimelineService } from '../timeline/timeline.service';
 
 describe('StateService', () => {
   let service: StateService;
   let mockStateModel: any;
+  let mockTimelineService: { stampStart: jest.Mock };
 
   const mockState: State = {
     smokeId: 'test-smoke-id',
@@ -35,12 +37,20 @@ describe('StateService', () => {
       .fn()
       .mockResolvedValue(mockStateDocument);
 
+    mockTimelineService = {
+      stampStart: jest.fn().mockResolvedValue(undefined),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         StateService,
         {
           provide: getModelToken('state'),
           useValue: mockStateModel,
+        },
+        {
+          provide: TimelineService,
+          useValue: mockTimelineService,
         },
       ],
     }).compile();
@@ -162,6 +172,63 @@ describe('StateService', () => {
       // No active smoke → no write, returns null.
       expect(service.updateCurrent).not.toHaveBeenCalled();
       expect(result).toBeNull();
+    });
+
+    it('stamps the start of the cook when smoking is switched on', async () => {
+      const currentState = {
+        ...mockStateDocument,
+        smoking: false,
+        smokeId: 'test-smoke-id',
+      };
+      jest.spyOn(service, 'GetState').mockResolvedValue(currentState as State);
+      jest
+        .spyOn(service, 'updateCurrent')
+        .mockResolvedValue({ ...currentState, smoking: true } as State);
+
+      await service.toggleSmoking();
+
+      expect(mockTimelineService.stampStart).toHaveBeenCalledWith(
+        'test-smoke-id',
+      );
+    });
+
+    /**
+     * The stamp is written once and never moved, so a start recorded for a cook
+     * that never actually began could not be corrected by retrying the toggle.
+     * It must therefore follow the write that starts the cook, not precede it.
+     */
+    it('stamps no start when the state itself could not be saved', async () => {
+      const currentState = {
+        ...mockStateDocument,
+        smoking: false,
+        smokeId: 'test-smoke-id',
+      };
+      jest.spyOn(service, 'GetState').mockResolvedValue(currentState as State);
+      jest
+        .spyOn(service, 'updateCurrent')
+        .mockRejectedValue(new Error('mongo is having a moment'));
+
+      await expect(service.toggleSmoking()).rejects.toThrow(
+        'mongo is having a moment',
+      );
+
+      expect(mockTimelineService.stampStart).not.toHaveBeenCalled();
+    });
+
+    it('does not stamp a start when smoking is switched off', async () => {
+      const currentState = {
+        ...mockStateDocument,
+        smoking: true,
+        smokeId: 'test-smoke-id',
+      };
+      jest.spyOn(service, 'GetState').mockResolvedValue(currentState as State);
+      jest
+        .spyOn(service, 'updateCurrent')
+        .mockResolvedValue({ ...currentState, smoking: false } as State);
+
+      await service.toggleSmoking();
+
+      expect(mockTimelineService.stampStart).not.toHaveBeenCalled();
     });
   });
 

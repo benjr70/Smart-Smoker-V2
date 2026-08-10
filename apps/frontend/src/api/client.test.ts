@@ -1198,3 +1198,87 @@ describe('smoke client — review aggregate', () => {
     expect(review.temps[0]).toMatchObject({ ChamberTemp: 225, MeatTemp: 145 });
   });
 });
+
+describe('timeline client — the cook clock', () => {
+  test('reads a stored timeline with its stamps as dates, not wire strings', async () => {
+    const backend = createFakeBackend({
+      timeline: {
+        records: {
+          'smoke-1': {
+            startedAt: '2025-01-01T12:00:00.000Z',
+            finishedAt: '2025-01-01T18:30:00.000Z',
+            durationMs: 23400000,
+            peakChamber: 268,
+            peakMeat: 203,
+            targetTemp: 203,
+          },
+        },
+      },
+    });
+    const client = createApiClient(backend);
+
+    const timeline = await client.timeline.getById('smoke-1');
+
+    // The elapsed clock subtracts from this, so a string here is `NaN` on screen.
+    expect(timeline.startedAt).toEqual(new Date('2025-01-01T12:00:00.000Z'));
+    expect(timeline.finishedAt).toEqual(new Date('2025-01-01T18:30:00.000Z'));
+    expect(timeline.durationMs).toBe(23400000);
+    expect(timeline.peakChamber).toBe(268);
+  });
+
+  test('a cook whose timing nothing recorded reads as absent, not as zero', async () => {
+    const backend = createFakeBackend({
+      timeline: {
+        records: {
+          'smoke-1': {
+            startedAt: null,
+            finishedAt: null,
+            durationMs: null,
+            peakChamber: null,
+            peakMeat: null,
+            targetTemp: null,
+          },
+        },
+      },
+    });
+
+    const timeline = await createApiClient(backend).timeline.getById('smoke-1');
+
+    expect(timeline).toEqual({
+      startedAt: null,
+      finishedAt: null,
+      durationMs: null,
+      peakChamber: null,
+      peakMeat: null,
+      targetTemp: null,
+    });
+  });
+
+  test('the current cook has no timeline until a session is set up', async () => {
+    const backend = createFakeBackend({ state: { smokeId: '', smoking: false } });
+
+    expect(await createApiClient(backend).timeline.getCurrent()).toBeNull();
+  });
+
+  test('the current cook resolves its timeline through the session state', async () => {
+    const backend = createFakeBackend({
+      state: { smokeId: 'smoke-1', smoking: true },
+      timeline: {
+        records: {
+          'smoke-1': {
+            startedAt: '2025-01-01T12:00:00.000Z',
+            finishedAt: null,
+            durationMs: null,
+            peakChamber: 240,
+            peakMeat: 150,
+            targetTemp: null,
+          },
+        },
+      },
+    });
+
+    const timeline = await createApiClient(backend).timeline.getCurrent();
+
+    expect(timeline?.startedAt).toEqual(new Date('2025-01-01T12:00:00.000Z'));
+  });
+});

@@ -5,6 +5,7 @@ import { RatingsService } from '../ratings/ratings.service';
 import { SmokeService } from '../smoke/smoke.service';
 import { SmokeProfileService } from '../smokeProfile/smokeProfile.service';
 import { SmokeStatus } from '../smoke/smoke.schema';
+import { TimelineService } from '../timeline/timeline.service';
 
 describe('HistoryService', () => {
   let service: HistoryService;
@@ -12,6 +13,7 @@ describe('HistoryService', () => {
   let mockPreSmokeService: Partial<PreSmokeService>;
   let mockSmokeProfileService: Partial<SmokeProfileService>;
   let mockRatingsService: Partial<RatingsService>;
+  let mockTimelineService: { getDurationMs: jest.Mock };
 
   const mockSmoke = {
     _id: 'smoke-id',
@@ -53,6 +55,10 @@ describe('HistoryService', () => {
       getById: jest.fn().mockResolvedValue(mockRatings),
     };
 
+    mockTimelineService = {
+      getDurationMs: jest.fn().mockResolvedValue(6 * 60 * 60 * 1000),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         HistoryService,
@@ -71,6 +77,10 @@ describe('HistoryService', () => {
         {
           provide: RatingsService,
           useValue: mockRatingsService,
+        },
+        {
+          provide: TimelineService,
+          useValue: mockTimelineService,
         },
       ],
     }).compile();
@@ -107,8 +117,16 @@ describe('HistoryService', () => {
           woodType: 'hickory',
           smokeId: 'smoke-id',
           overAllRating: '9',
+          durationMs: 6 * 60 * 60 * 1000,
         },
       ]);
+    });
+
+    it('carries how long each cook ran', async () => {
+      const result = await service.getHistory();
+
+      expect(mockTimelineService.getDurationMs).toHaveBeenCalledWith(mockSmoke);
+      expect(result[0].durationMs).toBe(6 * 60 * 60 * 1000);
     });
 
     it('should filter out incomplete smokes', async () => {

@@ -138,6 +138,18 @@ const fullySeededBackend = (): FakeBackend =>
       finish: seededSmoke,
     },
     history: [],
+    timeline: {
+      records: {
+        'smoke-1': {
+          startedAt: '2025-01-01T12:00:00.000Z',
+          finishedAt: '2025-01-01T18:00:00.000Z',
+          durationMs: 21600000,
+          peakChamber: 268,
+          peakMeat: 203,
+          targetTemp: 203,
+        },
+      },
+    },
   });
 
 interface ContractRow {
@@ -389,6 +401,17 @@ const rows: ContractRow[] = [
     run: c => c.smoke.deleteById('smoke-1'),
     expected: { method: 'delete', path: 'smoke/smoke-1', body: undefined },
   },
+  // timeline
+  {
+    name: 'timeline.getById → GET timeline/:id',
+    run: c => c.timeline.getById('smoke-1'),
+    expected: { method: 'get', path: 'timeline/smoke-1', body: undefined },
+  },
+  {
+    name: 'timeline.getCurrent → GET timeline/:id of the session smoke',
+    run: c => c.timeline.getCurrent(),
+    expected: { method: 'get', path: 'timeline/smoke-1', body: undefined },
+  },
   // history
   {
     name: 'history.list → GET history',
@@ -434,7 +457,7 @@ describe('endpoint-contract table — aggregate operations emit the full ordered
     });
   });
 
-  test('smoke.getReview reads the parent then all five children at their exact legacy paths', async () => {
+  test('smoke.getReview reads the parent, its five children and the cook timeline at their exact paths', async () => {
     const backend = fullySeededBackend();
     const client = createApiClient(backend);
 
@@ -447,6 +470,7 @@ describe('endpoint-contract table — aggregate operations emit the full ordered
       { method: 'get', path: 'temps/temps-1', body: undefined },
       { method: 'get', path: 'postSmoke/post-1', body: undefined },
       { method: 'get', path: 'ratings/rate-1', body: undefined },
+      { method: 'get', path: 'timeline/smoke-1', body: undefined },
     ];
     expectedReads.forEach(req => expect(backend.requests).toContainEqual(req));
     // The parent is always read first.

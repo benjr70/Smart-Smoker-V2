@@ -48,6 +48,10 @@ jest.mock('@mui/material', () => ({
     </button>
   ),
   Divider: ({ variant: _variant, ...props }: any) => <hr data-testid="divider" {...props} />,
+  Box: ({ children, sx: _sx, ...props }: any) => <div {...props}>{children}</div>,
+  Typography: ({ children, sx: _sx, variant: _variant, ...props }: any) => (
+    <span {...props}>{children}</span>
+  ),
   Input: ({ value, onChange, defaultValue: _dv, disableUnderline: _du, sx: _sx }: any) => (
     <input data-testid="input" value={value || ''} onChange={onChange} />
   ),
@@ -673,5 +677,53 @@ describe('SmokeStep composition root', () => {
     });
 
     expect(close).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('SmokeStepView — the cook status bar', () => {
+  /** A session whose cook has been running for two hours, as the backend has it. */
+  const backendWithRunningCook = () =>
+    createFakeBackend({
+      state: { smokeId: 'smoke-1', smoking: true },
+      timeline: {
+        records: {
+          'smoke-1': {
+            startedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+            finishedAt: null,
+            durationMs: null,
+            peakChamber: null,
+            peakMeat: null,
+            targetTemp: null,
+          },
+        },
+      },
+    });
+
+  test('the step carries a status bar clocked from the start the backend recorded', async () => {
+    renderView(harness(), backendWithRunningCook());
+
+    await waitFor(() =>
+      expect(screen.getByTestId('smoke-elapsed-clock')).not.toHaveTextContent('00:00:00')
+    );
+    // Two hours in, however many seconds have passed since the seed was built.
+    expect(screen.getByTestId('smoke-elapsed-clock').textContent).toMatch(/^0[12]:\d\d:\d\d$/);
+  });
+
+  test('the bar states the session smoking flag, not a guess of its own', async () => {
+    const kit = harness();
+    renderView(kit, backendWithRunningCook());
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(screen.getByTestId('smoke-status-label')).toHaveTextContent('Paused');
+
+    // Pressing Start Smoking flips the persisted flag through the session.
+    fireEvent.click(screen.getByTestId('smoke-start-button'));
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(screen.getByTestId('smoke-status-label')).toHaveTextContent('Smoking');
   });
 });

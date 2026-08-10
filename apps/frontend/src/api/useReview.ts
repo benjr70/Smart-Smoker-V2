@@ -13,10 +13,16 @@
 import { useEffect, useState } from 'react';
 import { useApiClient } from './ApiClientProvider';
 import { useApiSnackbar } from './SnackbarProvider';
-import { PostSmoke, PreSmoke, SmokeProfile, TempData, rating } from './types';
+import { PostSmoke, PreSmoke, SmokeProfile, SmokeTimeline, TempData, rating } from './types';
 
 export interface UseReviewResult {
   preSmoke: PreSmoke;
+  /**
+   * The cook's timing, derived server-side. `null` until the aggregate loads —
+   * and afterwards too when the backend could not be asked — so the screen
+   * renders its timing fields as an em-dash rather than as invented numbers.
+   */
+  timeline: SmokeTimeline | null;
   smokeProfile: SmokeProfile;
   temps: TempData[];
   postSmoke: PostSmoke;
@@ -46,6 +52,7 @@ export function useReview(smokeId: string): UseReviewResult {
   const notify = useApiSnackbar();
   const [review, setReview] = useState<UseReviewResult>({
     preSmoke: defaultPreSmoke,
+    timeline: null,
     smokeProfile: defaultSmokeProfile,
     temps: [],
     postSmoke: defaultPostSmoke,
@@ -60,6 +67,7 @@ export function useReview(smokeId: string): UseReviewResult {
         if (active) {
           setReview({
             preSmoke: result.preSmoke,
+            timeline: result.timeline,
             smokeProfile: result.smokeProfile,
             temps: result.temps,
             postSmoke: result.postSmoke,

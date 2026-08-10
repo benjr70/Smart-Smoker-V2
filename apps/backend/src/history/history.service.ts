@@ -5,6 +5,7 @@ import { SmokeService } from '../smoke/smoke.service';
 import { SmokeProfileService } from '../smokeProfile/smokeProfile.service';
 import { SmokeHistory } from './histroyDto';
 import { SmokeStatus } from '../smoke/smoke.schema';
+import { TimelineService } from '../timeline/timeline.service';
 
 @Injectable()
 export class HistoryService {
@@ -13,6 +14,7 @@ export class HistoryService {
     private preSmokeService: PreSmokeService,
     private smokeProfileService: SmokeProfileService,
     private ratingsService: RatingsService,
+    private timelineService: TimelineService,
   ) {}
 
   async getHistory(): Promise<SmokeHistory[]> {
@@ -28,6 +30,9 @@ export class HistoryService {
               smoke.smokeProfileId,
             );
             const ratings = await this.ratingsService.getById(smoke.ratingId);
+            // How long the cook ran is derived, never stored: see the timeline
+            // module. The list form of the read never loads a series.
+            const durationMs = await this.timelineService.getDurationMs(smoke);
             const smokeHistory: SmokeHistory = {
               name: preSmoke ? preSmoke.name : '',
               meatType: preSmoke ? preSmoke.meatType : '',
@@ -43,6 +48,7 @@ export class HistoryService {
                 ratings && ratings.overallTaste
                   ? ratings.overallTaste.toString()
                   : '',
+              durationMs,
             };
             return smokeHistory;
           }),

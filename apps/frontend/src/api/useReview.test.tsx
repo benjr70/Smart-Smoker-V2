@@ -79,4 +79,28 @@ describe('useReview', () => {
 
     await waitFor(() => expect(screen.getByText('Could not load smoke review.')).toBeVisible());
   });
+
+  test('carries the cook timing the backend derived, so the review can show it', async () => {
+    const backend = createFakeBackend({
+      smoke: { records: { 'smoke-1': smokeAggregate('smoke-1') } },
+      timeline: {
+        records: {
+          'smoke-1': {
+            startedAt: '2026-08-01T10:00:00.000Z',
+            finishedAt: '2026-08-01T16:30:00.000Z',
+            durationMs: 23400000,
+            peakChamber: 268,
+            peakMeat: 203,
+            targetTemp: 203,
+          },
+        },
+      },
+    });
+
+    const { result } = renderReviewHook(backend, 'smoke-1');
+
+    await waitFor(() => expect(result.current.timeline?.durationMs).toBe(23400000));
+    expect(result.current.timeline?.startedAt).toEqual(new Date('2026-08-01T10:00:00.000Z'));
+    expect(result.current.timeline?.peakChamber).toBe(268);
+  });
 });

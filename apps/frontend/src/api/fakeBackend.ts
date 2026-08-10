@@ -24,6 +24,7 @@ import {
   Smoke,
   SmokeHistory,
   SmokeProfile,
+  SmokeTimeline,
   State,
   TempData,
   rating,
@@ -59,6 +60,17 @@ export type StoredApplicationSettings = Omit<ApplicationSettings, 'probeTarget'>
   probeTarget: Omit<ProbeTargetAlertSettings, 'probes'> & {
     probes: (Omit<ProbeTargetEntry, 'name'> & { name?: string })[];
   };
+};
+
+/**
+ * A timeline as it actually comes off the wire: the two stamps are ISO strings,
+ * because JSON has no date. Seeded by tests so the client's read-path
+ * conversion is exercised against what a deployment really answers with, not
+ * against `Date`s a fake invented.
+ */
+export type StoredSmokeTimeline = Omit<SmokeTimeline, 'startedAt' | 'finishedAt'> & {
+  startedAt: string | null;
+  finishedAt: string | null;
 };
 
 export interface FakeBackendSeed {
@@ -120,6 +132,9 @@ export interface FakeBackendSeed {
     finish?: Smoke;
   };
   history?: SmokeHistory[];
+  timeline?: {
+    records?: Record<string, StoredSmokeTimeline>;
+  };
 }
 
 /**
@@ -263,6 +278,7 @@ interface FakeStore {
     finish: Smoke | Record<string, never>;
   };
   history: SmokeHistory[];
+  timeline: Record<string, StoredSmokeTimeline>;
 }
 
 export type FakeBackend = FakeBackendKernel<FakeStore>;
@@ -306,6 +322,7 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
       finish: seed.smoke?.finish ?? {},
     },
     history: seed.history ?? [],
+    timeline: seed.timeline?.records ?? {},
   };
   const route = ({ method, path, body }: FakeRequest): unknown => {
     const segments = path.split('/');
@@ -523,6 +540,14 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
         store.history = store.history.filter(row => row.smokeId !== id);
         return {};
       }
+    }
+
+    if (resource === 'timeline' && method === 'get' && id !== undefined) {
+      const record = store.timeline[id];
+      if (!record) {
+        throw new ApiError({ status: 404, path, method });
+      }
+      return clone(record);
     }
 
     if (resource === 'history' && method === 'get' && id === undefined) {

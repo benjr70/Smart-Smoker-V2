@@ -36,6 +36,7 @@ const historyRow = (smokeId: string, name: string): SmokeHistory => ({
   date: '2023-07-15',
   smokeId,
   overAllRating: '5',
+  durationMs: 6 * 60 * 60 * 1000,
 });
 
 const smokeAggregate = (id: string): Smoke => ({
