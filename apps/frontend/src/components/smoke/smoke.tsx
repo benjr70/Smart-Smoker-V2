@@ -5,7 +5,7 @@ import { SmokeStep } from './smokeStep/smokeStep';
 import { PostSmokeStep } from './postSmokeStep/PostSmokeStep';
 import { Button, Grid } from '@mui/material';
 import { useApiClient } from '../../api';
-import { SegmentedControl } from '../common/components/SegmentedControl';
+import { SegmentedControl, segmentTabId } from '../common/components/SegmentedControl';
 import { SmokeHeader } from './SmokeHeader';
 
 /**
@@ -20,6 +20,14 @@ const steps = [
 ] as const;
 
 type StepValue = (typeof steps)[number]['value'];
+
+/**
+ * The id of the region the step control switches: the step being edited. The
+ * control points its segments at it and the region names itself after the
+ * segment in effect, so the two are one relationship rather than a row of tabs
+ * leading nowhere.
+ */
+const STEP_PANEL_ID = 'smoke-step-panel';
 
 export function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -53,6 +61,11 @@ export function Smoke(): JSX.Element {
       setActiveStep(nextStep);
     }
   };
+
+  // The finish flow parks the wizard on a step index past the last one while it
+  // resets; the control still has to name a segment, and the step being left is
+  // the honest one to name.
+  const shownStep = steps[Math.min(activeStep, steps.length - 1)].value;
 
   let step;
   const nextButton = (
@@ -91,16 +104,20 @@ export function Smoke(): JSX.Element {
       <SmokeHeader>
         <SegmentedControl
           options={steps}
-          // The finish flow parks the wizard on a step index past the last one
-          // while it resets; the control still has to name a segment, and the
-          // step being left is the honest one to name.
-          value={steps[Math.min(activeStep, steps.length - 1)].value}
+          value={shownStep}
           onChange={(value: StepValue) => handleStep(steps.findIndex(step => step.value === value))}
           label="Smoke step"
+          panelId={STEP_PANEL_ID}
           testIdPrefix="smoke-step"
         />
       </SmokeHeader>
-      <Grid container className="stepScreen">
+      <Grid
+        container
+        className="stepScreen"
+        role="tabpanel"
+        id={STEP_PANEL_ID}
+        aria-labelledby={segmentTabId(STEP_PANEL_ID, shownStep)}
+      >
         {step}
       </Grid>
     </Grid>

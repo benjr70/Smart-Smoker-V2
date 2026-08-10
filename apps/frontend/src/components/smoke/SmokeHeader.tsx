@@ -18,6 +18,15 @@ export interface SmokeHeaderProps {
  * It is sticky rather than fixed, so it takes its own space in the column
  * instead of covering the step's first field — the same reason the bottom bar
  * reserves its height at the other end of the screen.
+ *
+ * That space is a budget, not a preference: the wizard has one viewport less
+ * the bar to lay the header and the step out in, and the tallest step very
+ * nearly fills it on a phone (see `.smoke` in smoke.style.css, and the
+ * bar-clearance journey that measures it). So every vertical length here is
+ * kept as tight as the design allows, and every one of them is stated —
+ * including the line heights of the text, which would otherwise be whatever
+ * font the browser fell back to and put the budget at the mercy of metrics
+ * this application does not control.
  */
 export function SmokeHeader({ children }: SmokeHeaderProps): JSX.Element {
   return (
@@ -32,7 +41,7 @@ export function SmokeHeader({ children }: SmokeHeaderProps): JSX.Element {
         // that a step scrolling underneath it does not read through.
         backgroundColor: theme.design.surface,
         borderBottom: `1px solid ${theme.design.border}`,
-        padding: '16px 16px 12px',
+        padding: '10px 16px',
       })}
     >
       <Box
@@ -41,7 +50,7 @@ export function SmokeHeader({ children }: SmokeHeaderProps): JSX.Element {
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: 1,
-          marginBottom: '12px',
+          marginBottom: '8px',
         }}
       >
         <Box>
@@ -51,7 +60,7 @@ export function SmokeHeader({ children }: SmokeHeaderProps): JSX.Element {
               fontSize: '0.6875rem',
               fontWeight: 700,
               letterSpacing: '0.14em',
-              lineHeight: 1.4,
+              lineHeight: 1.3,
               color: theme.design.textSecondary,
             })}
           >
@@ -77,9 +86,12 @@ export function SmokeHeader({ children }: SmokeHeaderProps): JSX.Element {
           aria-hidden="true"
           sx={theme => ({
             flexShrink: 0,
-            width: 44,
-            height: 44,
-            borderRadius: '12px',
+            // Small enough that the badge is not what decides the height of the
+            // row: the two lines of text beside it are taller than this, so the
+            // header costs the wizard nothing for carrying it.
+            width: 38,
+            height: 38,
+            borderRadius: '11px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -87,7 +99,7 @@ export function SmokeHeader({ children }: SmokeHeaderProps): JSX.Element {
             color: theme.design.accent,
           })}
         >
-          <FlameIcon size={22} />
+          <FlameIcon size={20} />
         </Box>
       </Box>
       {children}

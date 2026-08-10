@@ -14,7 +14,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { DesignSurface, appTheme, carbonLight } from '../../../theme';
-import { SegmentedControl } from './SegmentedControl';
+import { SegmentedControl, segmentTabId } from './SegmentedControl';
 
 const options = [
   { value: 'one', label: 'One' },
@@ -33,8 +33,16 @@ const showControl = (value: Choice, onChange = jest.fn()) => {
           value={value}
           onChange={onChange}
           label="Choice"
+          panelId="choice-panel"
           testIdPrefix="choice"
         />
+        <div
+          role="tabpanel"
+          id="choice-panel"
+          aria-labelledby={segmentTabId('choice-panel', value)}
+        >
+          What the chosen segment shows
+        </div>
       </DesignSurface>
     </CssVarsProvider>
   );
@@ -52,6 +60,22 @@ describe('the segmented control', () => {
     expect(segment('Two')).toHaveAttribute('aria-selected', 'true');
     expect(segment('One')).toHaveAttribute('aria-selected', 'false');
     expect(screen.getByRole('tablist')).toHaveAccessibleName('Choice');
+  });
+
+  /**
+   * A tab is only a tab because of what it switches: assistive technology
+   * offered a tab with no panel behind it announces a relationship that leads
+   * nowhere. Each segment therefore points at the region it shows, and carries
+   * an id of its own so that region can name the segment back.
+   */
+  it('points every segment at the region it switches, and can be named back by it', () => {
+    showControl('two');
+
+    screen.getAllByRole('tab').forEach(tab => {
+      expect(tab).toHaveAttribute('aria-controls', 'choice-panel');
+    });
+    expect(segment('Two')).toHaveAttribute('id', segmentTabId('choice-panel', 'two'));
+    expect(screen.getByRole('tabpanel')).toHaveAccessibleName('Two');
   });
 
   it('reports the value of a segment that is chosen, and changes nothing itself', async () => {
@@ -132,6 +156,7 @@ describe('the segmented control', () => {
             value="one"
             onChange={jest.fn()}
             label="Unnamed choice"
+            panelId="unnamed-panel"
           />
         </DesignSurface>
       </CssVarsProvider>

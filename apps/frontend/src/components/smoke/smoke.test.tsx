@@ -21,6 +21,8 @@ import '@testing-library/jest-dom';
 import { Experimental_CssVarsProvider as CssVarsProvider } from '@mui/material';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import fs from 'fs';
+import path from 'path';
 import React from 'react';
 import { ApiClientProvider, SnackbarProvider, createApiClient } from '../../api';
 import { createFakeBackend, FakeBackend } from '../../api/fakeBackend';
@@ -105,6 +107,51 @@ describe('the wizard header', () => {
     // The step control travels with the header: the step being edited has to
     // stay switchable however far down a step the user has scrolled.
     expect(within(header).getByRole('tablist')).toBeInTheDocument();
+  });
+
+  /**
+   * Saying `position: sticky` is only half of sticking. A sticky box is pinned
+   * inside its nearest scrolling ancestor, and any ancestor that declares a
+   * scrolling `overflow` becomes that ancestor — including one that never
+   * scrolls itself, because it is as tall as its content while the document is
+   * what the reader scrolls. The shell every screen is wrapped in used to
+   * declare `overflow: auto`, and the header measured its stickiness against a
+   * box that never moved: scrolled 800px down, the header was 800px above the
+   * top of the screen.
+   *
+   * jsdom computes no layout, so the assertion above cannot see this and the
+   * stylesheet is read from disk instead — the same reason
+   * `barClearance.test.tsx` reads them that way (the test runner replaces
+   * stylesheet imports with a proxy).
+   */
+  it('is not pinned to a shell that never scrolls', () => {
+    const shellStyles = fs
+      .readFileSync(path.resolve(__dirname, '..', '..', 'App.css'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+    const shell = /\.App-header\s*\{([^}]*)\}/.exec(shellStyles);
+
+    expect(shell).not.toBeNull();
+    expect(shell?.[1]).not.toMatch(/overflow(-y)?:\s*(auto|scroll|hidden|overlay)/);
+  });
+
+  /**
+   * The segments say they are tabs, so the step below them has to be the panel
+   * they switch: otherwise a screen reader announces three tabs and there is
+   * nothing they lead to.
+   */
+  it('makes the step below it the panel its segments switch, named by the step in effect', async () => {
+    const user = userEvent.setup();
+    renderWizard();
+    await screen.findByTestId('presmoke-name-input');
+
+    const panel = screen.getByRole('tabpanel');
+    expect(panel).toContainElement(screen.getByTestId('presmoke-name-input'));
+    expect(segment('Pre-Smoke')).toHaveAttribute('aria-controls', panel.id);
+    expect(panel).toHaveAccessibleName('Pre-Smoke');
+
+    await user.click(segment('Post-Smoke'));
+
+    await waitFor(() => expect(screen.getByRole('tabpanel')).toHaveAccessibleName('Post-Smoke'));
   });
 
   it('offers the steps as a segmented control rather than as the stepper it replaced', async () => {

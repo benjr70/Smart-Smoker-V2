@@ -7,6 +7,16 @@ export interface SegmentedControlOption<Value extends string> {
   label: string;
 }
 
+/**
+ * The id of the segment that selects `value`, derived from the id of the region
+ * the control switches.
+ *
+ * It is exported so the region can name itself after the segment in effect
+ * (`aria-labelledby`) without either side spelling the other's id out: the two
+ * halves of the tab/panel relationship are then built from one string.
+ */
+export const segmentTabId = (panelId: string, value: string): string => `${panelId}-tab-${value}`;
+
 export interface SegmentedControlProps<Value extends string> {
   /** The segments, left to right. */
   options: readonly SegmentedControlOption<Value>[];
@@ -16,6 +26,16 @@ export interface SegmentedControlProps<Value extends string> {
   onChange: (value: Value) => void;
   /** Names the control for assistive technology. */
   label: string;
+  /**
+   * The `id` of the region the segments switch between — the panel this control
+   * controls, which the caller marks `role="tabpanel"` and names after the
+   * segment in effect (see `segmentTabId`).
+   *
+   * Required, not optional: a tab list whose tabs control nothing announces a
+   * relationship to assistive technology that leads to no panel, so there is no
+   * correct way to use this control without one.
+   */
+  panelId: string;
   /**
    * Prefix for each segment's `data-testid`, completed with the segment's own
    * value (`<prefix>-<value>`). Optional: a control nobody addresses by name
@@ -37,7 +57,10 @@ export interface SegmentedControlProps<Value extends string> {
  *
  * It is a tab list, because that is what the thing is: a row of choices where
  * exactly one is in effect and choosing another swaps what is shown beneath.
- * That brings the tab list's keyboard contract with it — the arrows move
+ * That is a contract, not a label: the caller has to mark what is shown beneath
+ * as the panel (`panelId`), because a tab announced to assistive technology
+ * with no panel behind it is a promise of somewhere to go that goes nowhere.
+ * The role also brings the tab list's keyboard contract with it — the arrows move
  * between segments, Home and End jump to the ends, and only the selected
  * segment is in the tab order, so a keyboard reaches the row once rather than
  * once per segment.
@@ -50,6 +73,7 @@ export function SegmentedControl<Value extends string>({
   value,
   onChange,
   label,
+  panelId,
   testIdPrefix,
 }: SegmentedControlProps<Value>): JSX.Element {
   const selectedIndex = options.findIndex(option => option.value === value);
@@ -102,7 +126,7 @@ export function SegmentedControl<Value extends string>({
       sx={theme => ({
         display: 'flex',
         gap: 0.5,
-        padding: '4px',
+        padding: '3px',
         borderRadius: '10px',
         // The track is the recessed surface the segments sit in, so it is the
         // alternate surface rather than the card one: a segment raised onto the
@@ -119,6 +143,10 @@ export function SegmentedControl<Value extends string>({
             type="button"
             key={option.value}
             role="tab"
+            id={segmentTabId(panelId, option.value)}
+            // The half of the tab relationship that points forward: what this
+            // segment shows. The panel points back, by naming this id.
+            aria-controls={panelId}
             aria-selected={selected}
             tabIndex={selected ? 0 : -1}
             data-testid={testIdPrefix ? `${testIdPrefix}-${option.value}` : undefined}
@@ -128,10 +156,16 @@ export function SegmentedControl<Value extends string>({
               minWidth: 0,
               border: 'none',
               cursor: 'pointer',
-              padding: '8px 4px',
+              padding: '6px 4px',
               borderRadius: '8px',
               font: 'inherit',
               fontSize: '0.875rem',
+              // Stated rather than inherited: `font: inherit` above takes the
+              // surrounding line height with it, so a segment left to itself is
+              // as tall as whatever text it happens to sit in. Callers that
+              // hold a height budget — the smoke wizard's header — cannot
+              // afford a control whose height is decided elsewhere.
+              lineHeight: 1.25,
               fontWeight: selected ? 700 : 500,
               // The selected segment is lifted out of the track: the card
               // surface, the accent, and a shadow to carry the lift. The rest
