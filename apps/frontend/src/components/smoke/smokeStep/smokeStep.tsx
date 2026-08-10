@@ -9,6 +9,7 @@ import { getDefaultApiClient } from '../../../api';
 import { createSessionApiPort } from '../../../api/sessionApiAdapter';
 import { useChartPalette } from '../../../theme';
 import { chartNamesOf } from '../../common/chartNames';
+import { useProbeTargets } from './useProbeTargets';
 import { useTemperatureSeries } from './useTemperatureSeries';
 
 const woodType = ['Hickory', 'Post Oak', 'Pecan', 'Cherry', 'Apple'];
@@ -35,6 +36,9 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
   // and draws it, and holds nothing of the cook itself.
   const series = useTemperatureSeries();
   const chartColors = useChartPalette();
+  // What each meat is being cooked to, from the notification settings; the chart
+  // rules a dashed line at each one it is given.
+  const chartTargets = useProbeTargets();
 
   return (
     <Grid item xs={12}>
@@ -145,6 +149,7 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
             probe3Name: session.probe3Name,
           })}
           colors={chartColors}
+          targets={chartTargets}
         />
       </Grid>
       <Grid container className="buttonContainer" justifyContent="space-around">

@@ -53,3 +53,19 @@ export interface AppearancePreference {
   mode: AppearanceMode;
   resolvedMode: ColorScheme;
 }
+
+/**
+ * One probe's row of the Probe Target Reached settings, as much of it as the
+ * touchscreen has any use for: which probe it is, whether it is being watched,
+ * and the temperature its meat is done at.
+ *
+ * Stored by slot and never by name, because a slot outlives a cook. The row also
+ * carries where the temperature came from and the name the backend resolved for
+ * it; neither reaches here — the panel draws a line at a target, and does not
+ * care who typed it.
+ */
+export interface ProbeTargetSetting {
+  slot: string;
+  enabled: boolean;
+  target: number;
+}

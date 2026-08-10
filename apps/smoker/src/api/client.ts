@@ -9,7 +9,14 @@
  */
 import { TransportPort, createHttpTransport } from 'api-transport/src';
 import { resolveDeviceUrl } from './deviceUrl';
-import { AppearancePreference, SmokeProfile, State, TempData, WifiManager } from './types';
+import {
+  AppearancePreference,
+  ProbeTargetSetting,
+  SmokeProfile,
+  State,
+  TempData,
+  WifiManager,
+} from './types';
 
 /**
  * What an installation nobody has chosen an appearance on is taken to have
@@ -80,12 +87,32 @@ export interface AppearanceResource {
   get(): Promise<AppearancePreference>;
 }
 
+/**
+ * What the meat is being cooked to, as the installation configured it.
+ *
+ * A read and nothing else, like the appearance beside it: targets are set on a
+ * phone, in settings, and the panel's only interest in them is drawing a line
+ * at each one. There is no write here to disable, because there is none at all.
+ */
+export interface ProbeTargetsResource {
+  /**
+   * GET `appSettings` — the configured probe rows.
+   *
+   * Always a list: an installation nobody has configured targets on — and a
+   * deployment older than the block — reads as no rows, so the caller has
+   * something to map rather than an absence to interpret. A read that could not
+   * be made rejects, which is a different thing entirely.
+   */
+  get(): Promise<ProbeTargetSetting[]>;
+}
+
 export interface ApiClient {
   state: StateResource;
   smokeProfile: SmokeProfileResource;
   temps: TempsResource;
   device: DeviceResource;
   appearance: AppearanceResource;
+  probeTargets: ProbeTargetsResource;
 }
 
 /**
@@ -145,6 +172,24 @@ export const createApiClient = (
         appearance?: AppearancePreference;
       } | null>('appSettings');
       return response?.appearance ?? DEFAULT_APPEARANCE_PREFERENCE;
+    },
+  },
+  probeTargets: {
+    get: async () => {
+      // The same document the appearance comes out of, read for a different
+      // block of it. Two reads rather than one shared read: they happen at
+      // different moments — the appearance at boot, the targets again whenever a
+      // cook starts — and a panel that is switched on for twelve hours can
+      // afford a request per cook far more easily than it can afford the two
+      // being coupled.
+      const response = await cloudTransport.get<{
+        probeTarget?: { probes?: ProbeTargetSetting[] };
+      } | null>('appSettings');
+      return (response?.probeTarget?.probes ?? []).map(({ slot, enabled, target }) => ({
+        slot,
+        enabled,
+        target,
+      }));
     },
   },
 });

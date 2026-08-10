@@ -8,6 +8,7 @@ import { useSmokeSession } from 'smoke-session/src/react';
 import { DEFAULT_PROBE_NAMES } from 'smoke-session/src/session/domain';
 import './home.style.css';
 import { useChartPalette } from '../../theme/chartPalette';
+import { ProbeTargetsReadPort, useProbeTargets } from './useProbeTargets';
 import { useTemperatureSeries } from './useTemperatureSeries';
 import { Wifi } from './wifi/wifi';
 
@@ -55,12 +56,25 @@ const chartNamesOf = (named: NamedProbes): ChartSeriesNames => ({
  * mapping now live in the session store behind the Provider — none of it in this
  * component.
  */
-export function Home(): JSX.Element {
+export interface HomeProps {
+  /**
+   * Where the configured targets are read from. Defaults to the settings this
+   * appliance runs against; a screen assembled with its own reads whatever that
+   * one says instead.
+   */
+  probeTargets?: ProbeTargetsReadPort;
+}
+
+export function Home({ probeTargets }: HomeProps = {}): JSX.Element {
   const session = useSmokeSession();
   // The cook so far, recorded and thinned by the hook; the chart is handed it
   // and draws it, and holds nothing of the cook itself.
   const series = useTemperatureSeries();
   const chartColors = useChartPalette();
+  // What each meat is being cooked to, as the settings said when this panel was
+  // switched on and when this cook was started; the chart rules a dashed line at
+  // each one it is given.
+  const chartTargets = useProbeTargets(session.smoking, probeTargets);
   // The only genuinely local state: which sub-screen is showing. Returning to
   // the home screen refreshes the chart baseline (the wifi screen may have run
   // for a while).
@@ -155,6 +169,7 @@ export function Home(): JSX.Element {
               data={series}
               names={chartNamesOf(session)}
               colors={chartColors}
+              targets={chartTargets}
               aspect="touchscreen"
             />
           </Grid>

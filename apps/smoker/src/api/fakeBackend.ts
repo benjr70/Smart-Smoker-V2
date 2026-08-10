@@ -19,7 +19,7 @@ import {
   clone,
   createFakeBackendKernel,
 } from 'api-transport/src';
-import { AppearancePreference, State, TempData } from './types';
+import { AppearancePreference, ProbeTargetSetting, State, TempData } from './types';
 
 /**
  * A profile as it may sit persisted on the backend: the optional `notes`/
@@ -36,6 +36,17 @@ export type StoredSmokeProfile = {
   woodType?: string;
   _id?: string;
   __v?: number;
+};
+
+/**
+ * The Probe Target Reached block as the backend actually serves it: each row
+ * also carries where its temperature came from, and the name resolved from the
+ * cook that is set up now. The touchscreen reads neither, so seeding them is
+ * what proves it is not quietly passing them on.
+ */
+export type StoredProbeTargets = {
+  enabled: boolean;
+  probes: (ProbeTargetSetting & { targetSource?: string; name?: string })[];
 };
 
 export interface FakeBackendSeed {
@@ -66,6 +77,12 @@ export interface FakeBackendSeed {
    */
   appSettings?: {
     appearance?: AppearancePreference;
+    /**
+     * The Probe Target Reached rows, as they are stored: by slot, with the
+     * temperature each probe's meat is done at. Absent models an installation
+     * nobody has configured any targets on.
+     */
+    probeTarget?: StoredProbeTargets;
   };
 }
 
@@ -85,7 +102,10 @@ interface FakeStore {
     connection: unknown;
     connectResult: unknown;
   };
-  appSettings: { appearance?: AppearancePreference };
+  appSettings: {
+    appearance?: AppearancePreference;
+    probeTarget?: StoredProbeTargets;
+  };
 }
 
 export type FakeBackend = FakeBackendKernel<FakeStore>;
@@ -104,7 +124,10 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
       connection: seed.wifi?.connection ?? [],
       connectResult: seed.wifi?.connectResult ?? { success: true },
     },
-    appSettings: { appearance: seed.appSettings?.appearance },
+    appSettings: {
+      appearance: seed.appSettings?.appearance,
+      probeTarget: seed.appSettings?.probeTarget,
+    },
   };
   const route = ({ method, path, body }: FakeRequest): unknown => {
     // Cloud API routes.
@@ -137,8 +160,8 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
       return { success: true, count: batch.length };
     }
 
-    // The settings document, of which the device reads only the appearance
-    // block — and only ever reads it.
+    // The settings document, of which the device reads the appearance and the
+    // configured targets — and only ever reads them.
     if (path === 'appSettings' && method === 'get') {
       return clone(store.appSettings);
     }
