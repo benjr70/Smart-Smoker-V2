@@ -3,13 +3,14 @@
   "version": "1.0.0",
   "description": "Temperature chart package for smart smoker",
   "main": "dist/TemperatureChart.js",
+  "types": "dist/TemperatureChart.d.ts",
   "scripts": {
     "bootstrap": "npm install --legacy-peer-deps",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "start": "tsc",
-    "build": "babel src --out-dir dist",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint \"src/**/*.{ts,tsx}\" --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,md}\""
   },

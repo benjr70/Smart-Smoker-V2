@@ -10,7 +10,7 @@ You are reviewing code changes for their impact on test coverage thresholds.
 | device-service   | 75%   | 75%       | 75%      | 75%        |
 | frontend         | 75%   | 75%       | 70%      | 75%        |
 | smoker           | 80%   | 80%       | 75%      | 80%        |
-| TemperatureChart | 75%   | 45%       | 75%      | 75%        |
+| TemperatureChart | 75%   | 75%       | 75%      | 75%        |
 
 ## What to Check
 
