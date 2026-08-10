@@ -395,7 +395,7 @@ jobs:
             echo "- **Device Service**: 75% (lines, functions, branches, statements)" >> comment.md
             echo "- **Frontend**: 75% lines/functions/statements, 70% branches" >> comment.md
             echo "- **Smoker**: 80% lines/functions/statements, 75% branches" >> comment.md
-            echo "- **TemperatureChart**: 75% lines/branches/statements, 45% functions" >> comment.md
+            echo "- **TemperatureChart**: 75% (lines, functions, branches, statements)" >> comment.md
             echo "- **smoke-session**: 80% (lines, functions, branches, statements)" >> comment.md
             echo "- **api-transport**: 80% (lines, functions, branches, statements)" >> comment.md
             echo "- **theme**: 80% (lines, functions, branches, statements)" >> comment.md

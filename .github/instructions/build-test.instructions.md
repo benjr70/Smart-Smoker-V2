@@ -118,7 +118,7 @@ npm test                   # Tests require Jest configuration to support D3.js E
 - **Device Service**: 75% (lines, functions, branches, statements)
 - **Frontend**: 75% lines/functions/statements, 70% branches
 - **Smoker**: 80% lines/functions/statements, 75% branches
-- **TemperatureChart**: 75% lines/branches/statements, 45% functions
+- **TemperatureChart**: 75% (lines, functions, branches, statements)
 
 ## Documentation Commands
 

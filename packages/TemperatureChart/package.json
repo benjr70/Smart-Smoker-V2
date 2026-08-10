@@ -2,14 +2,15 @@
   "name": "temperaturechart",
   "version": "1.0.0",
   "description": "Temperature chart package for smart smoker",
-  "main": "dist/tempChart.js",
+  "main": "dist/TemperatureChart.js",
+  "types": "dist/TemperatureChart.d.ts",
   "scripts": {
     "bootstrap": "npm install --legacy-peer-deps",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "start": "tsc",
-    "build": "babel src --out-dir dist",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint \"src/**/*.{ts,tsx}\" --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,md}\""
   },
@@ -23,7 +24,6 @@
     "@testing-library/jest-dom": "^5.16.5",
     "@testing-library/react": "^13.4.0",
     "@testing-library/user-event": "^14.4.3",
-    "@types/d3": "^7.4.0",
     "@types/d3-scale": "^4.0.9",
     "@types/d3-shape": "^3.1.7",
     "@types/jest": "28.1.8",
@@ -45,7 +45,6 @@
     "typescript": "^4.9.5"
   },
   "dependencies": {
-    "d3": "^7.8.5",
     "d3-scale": "^4.0.2",
     "d3-shape": "^3.2.0",
     "react": "^18.2.0",
@@ -58,11 +57,10 @@
       "<rootDir>/src/setupTests.ts"
     ],
     "moduleNameMapper": {
-      "\\.(css|less|scss)$": "identity-obj-proxy",
-      "^d3$": "<rootDir>/src/__mocks__/d3.ts"
+      "\\.(css|less|scss)$": "identity-obj-proxy"
     },
     "transformIgnorePatterns": [
-      "node_modules/(?!(d3|d3-.*|internmap|delaunator|robust-predicates)/)"
+      "node_modules/(?!(d3-.*|internmap)/)"
     ],
     "testMatch": [
       "<rootDir>/src/**/__tests__/**/*.{ts,tsx}",
@@ -71,8 +69,7 @@
     "collectCoverageFrom": [
       "src/**/*.{ts,tsx}",
       "!src/**/*.d.ts",
-      "!src/setupTests.ts",
-      "!src/__mocks__/**"
+      "!src/setupTests.ts"
     ],
     "coverageDirectory": "coverage",
     "coverageReporters": [
@@ -87,7 +84,7 @@
         "statements": 75,
         "branches": 75,
         "lines": 75,
-        "functions": 45
+        "functions": 75
       }
     },
     "transform": {
