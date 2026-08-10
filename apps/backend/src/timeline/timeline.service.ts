@@ -11,6 +11,7 @@ import { TempDocument } from '../temps/temps.schema';
 import {
   deriveTimeline,
   durationBetween,
+  momentOf,
   TimelineReading,
   TimelineSmoke,
 } from './timeline.derive';
@@ -110,7 +111,17 @@ export class TimelineService {
     return durationBetween(startedAt ?? null, finishedAt ?? null);
   }
 
-  /** The moment of a cook's first (`1`) or last (`-1`) reading, if it kept any. */
+  /**
+   * The moment of a cook's first (`1`) or last (`-1`) *dated* reading, if it
+   * kept any.
+   *
+   * Undated rows are excluded in the query rather than skipped afterwards: a
+   * reading may be stored without a date, and ascending order puts every one of
+   * them ahead of the whole cook, so the row that came back would carry no
+   * moment and the cook would read as having no duration at all — while the
+   * derivation behind `GET /timeline/:id`, which ignores undated rows, went on
+   * reporting one for the same cook.
+   */
   private async edgeReading(
     smoke: StoredSmoke,
     direction: 1 | -1,
@@ -119,10 +130,10 @@ export class TimelineService {
       return null;
     }
     const edge = await this.tempModel
-      .findOne({ tempsId: smoke.tempsId })
+      .findOne({ tempsId: smoke.tempsId, date: { $ne: null } })
       .sort({ date: direction })
       .exec();
-    return edge?.date ?? null;
+    return edge ? momentOf(edge) : null;
   }
 
   /** Every reading of a cook, oldest first; none at all when it stored none. */

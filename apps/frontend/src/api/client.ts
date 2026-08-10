@@ -338,6 +338,17 @@ const asReading = (value: number | string | null | undefined): number => {
  * the collection was asked for them. Ordering here means no screen has to know
  * which order that was.
  */
+const normalizeTemps = (raw: TempData[]): TempData[] =>
+  raw
+    .map(temp => ({
+      ...temp,
+      ChamberTemp: asReading(temp.ChamberTemp),
+      MeatTemp: asReading(temp.MeatTemp),
+      Meat2Temp: asReading(temp.Meat2Temp),
+      Meat3Temp: asReading(temp.Meat3Temp),
+    }))
+    .sort((one, other) => new Date(one.date).getTime() - new Date(other.date).getTime());
+
 /**
  * A timeline as JSON carries it: the two stamps are strings, since JSON has no
  * date type and Nest serializes a `Date` as ISO.
@@ -372,17 +383,6 @@ const normalizeTimeline = (raw: WireTimeline): SmokeTimeline => ({
   peakMeat: raw?.peakMeat ?? null,
   targetTemp: raw?.targetTemp ?? null,
 });
-
-const normalizeTemps = (raw: TempData[]): TempData[] =>
-  raw
-    .map(temp => ({
-      ...temp,
-      ChamberTemp: asReading(temp.ChamberTemp),
-      MeatTemp: asReading(temp.MeatTemp),
-      Meat2Temp: asReading(temp.Meat2Temp),
-      Meat3Temp: asReading(temp.Meat3Temp),
-    }))
-    .sort((one, other) => new Date(one.date).getTime() - new Date(other.date).getTime());
 
 /**
  * Outbound projection to the exact backend DTO whitelist (chamber name, three

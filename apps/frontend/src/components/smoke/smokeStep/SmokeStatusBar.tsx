@@ -21,10 +21,13 @@ export interface SmokeStatusBarProps {
  *
  * The clock is not kept here: it is derived from the recorded start against the
  * current time by the shared elapsed hook, so it is right the moment this
- * mounts rather than counting from whenever the screen was opened.
+ * mounts rather than counting from whenever the screen was opened. It reads the
+ * age of the cook, not the time the smoker spent lit, so pausing does not stop
+ * it — a cook paused for an hour is an hour older. It reads zero only once
+ * there is no cook, which is when `startedAt` comes back `null`.
  */
 export function SmokeStatusBar({ smoking, startedAt }: SmokeStatusBarProps): JSX.Element {
-  const elapsed = useElapsed(startedAt, smoking);
+  const elapsed = useElapsed(startedAt);
 
   return (
     <Box

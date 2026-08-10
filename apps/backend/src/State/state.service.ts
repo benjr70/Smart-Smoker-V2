@@ -90,6 +90,13 @@ export class StateService
    * presses Start Smoking. Stopping and restarting during a cook is ordinary,
    * so only the switch-on stamps, and the stamp itself is written once (see
    * {@link TimelineService.stampStart}).
+   *
+   * The stamp follows the state write rather than leading it, because the two
+   * failures are not equal. A stamp written before a state write that then
+   * fails is permanent — the write-once condition will never match again, so
+   * every duration and elapsed clock for that cook is wrong and no retry can
+   * fix it. A state write that succeeds before a stamp that fails leaves a
+   * running cook without a start, which the next toggle stamps correctly.
    */
   async toggleSmoking(): Promise<State | null> {
     const state = await this.GetState();
@@ -97,10 +104,11 @@ export class StateService
       return null;
     }
     state.smoking = !state.smoking;
+    const updated = await this.updateCurrent(state);
     if (state.smoking) {
       await this.timeline.stampStart(state.smokeId);
     }
-    return this.updateCurrent(state);
+    return updated;
   }
 
   async clearSmoke() {

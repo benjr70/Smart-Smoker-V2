@@ -109,6 +109,39 @@ describe('TimelineService', () => {
       expect(await service.getDurationMs(smoke)).toBeNull();
     });
 
+    /**
+     * A reading may be stored without a date — `TempDto.date` is optional — and
+     * the cheap end-reads must skip it exactly as the full derivation does.
+     * Otherwise the History card and the review screen would answer differently
+     * about the same cook, and there is no version of that anybody can read.
+     */
+    it('skips a reading stored without a date, as the derived timeline does', async () => {
+      temps.unshift({
+        tempsId: 'temps-id',
+        ChamberTemp: '200',
+        MeatTemp: '70',
+      });
+      const smoke = { tempsId: 'temps-id', status: SmokeStatus.Complete };
+
+      const duration = await service.getDurationMs(smoke);
+
+      // 10:05 to 15:55 — the ends of the series that carry a moment.
+      expect(duration).toBe(5 * 60 * 60 * 1000 + 50 * 60 * 1000);
+      expect(duration).toBe((await service.getTimeline('smoke-id')).durationMs);
+    });
+
+    it('answers nothing for a cook whose readings all lack a date', async () => {
+      temps = [{ tempsId: 'temps-id', ChamberTemp: '200', MeatTemp: '70' }];
+      service = await build();
+
+      expect(
+        await service.getDurationMs({
+          tempsId: 'temps-id',
+          status: SmokeStatus.Complete,
+        }),
+      ).toBeNull();
+    });
+
     it('answers nothing for a cook with neither stamps nor readings', async () => {
       expect(
         await service.getDurationMs({ status: SmokeStatus.Complete }),

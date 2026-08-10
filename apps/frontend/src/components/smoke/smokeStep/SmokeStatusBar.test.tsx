@@ -37,8 +37,8 @@ describe('SmokeStatusBar', () => {
     expect(screen.getByTestId('smoke-elapsed-clock')).toHaveTextContent('02:15:31');
   });
 
-  test('a cook nobody has started reads "Paused" at a clock that does not move', () => {
-    renderBar({ smoking: false, startedAt: START });
+  test('a cook nobody has started reads "Paused" at a clock reading nothing', () => {
+    renderBar({ smoking: false, startedAt: null });
 
     expect(screen.getByTestId('smoke-status-label')).toHaveTextContent('Paused');
 
@@ -46,7 +46,21 @@ describe('SmokeStatusBar', () => {
       jest.advanceTimersByTime(5000);
     });
 
+    expect(screen.getByTestId('smoke-elapsed-clock')).toHaveTextContent('00:00:00');
+  });
+
+  // A cook the user paused is still that old: the clock counts the cook's age,
+  // not the time the smoker spent lit, so it never freezes and then leaps.
+  test('a paused cook keeps ageing rather than freezing until it is resumed', () => {
+    renderBar({ smoking: false, startedAt: START });
+
     expect(screen.getByTestId('smoke-elapsed-clock')).toHaveTextContent('02:15:30');
+
+    act(() => {
+      jest.advanceTimersByTime(30_000);
+    });
+
+    expect(screen.getByTestId('smoke-elapsed-clock')).toHaveTextContent('02:16:00');
   });
 
   test('the state dot says which state it is showing, for anyone not seeing the colour', () => {

@@ -34,15 +34,25 @@ export function formatElapsed(elapsedMs: number): string {
  * shows six hours rather than starting again from zero. The interval only
  * decides how often the same subtraction is redone.
  *
- * It is stopped while the cook is not running — there is nothing to redraw once
- * a second when the number cannot change — and the value stays where it was so
- * a paused cook keeps reading the time it had reached.
+ * **Elapsed here is wall time since the stamp, always — pausing the smoker does
+ * not pause it.** There are two possible meanings of "elapsed" and only one of
+ * them can be true at a time: time since the cook started, or time the smoker
+ * spent actually running. This hook is the first, because the stamp is the only
+ * thing it reads and a clock that must survive a page reload can only be
+ * recomputed from a stamp. Excluding paused time would need paused spans
+ * recorded on the cook, which nothing stores.
+ *
+ * Freezing the display while paused and then recomputing on resume would be
+ * neither meaning: the number would sit still through a half-hour pause and
+ * then jump half an hour in one frame. So the clock goes on counting whether or
+ * not the smoker is lit, and stops only when there is no cook to count — the
+ * caller passes `null` once the cook is over, and the clock reads zero.
  *
  * Shared rather than local to a screen because the web status bar and the
  * touchscreen header show the same clock, and two implementations of it would
  * be two chances to disagree about what "elapsed" means.
  */
-export function useElapsed(startedAt: Date | null | undefined, running: boolean): string {
+export function useElapsed(startedAt: Date | null | undefined): string {
   const startedMs = startedAt ? startedAt.getTime() : null;
   const [elapsed, setElapsed] = useState<string>(() =>
     startedMs === null ? ZERO : formatElapsed(Date.now() - startedMs)
@@ -55,12 +65,9 @@ export function useElapsed(startedAt: Date | null | undefined, running: boolean)
     }
     const show = () => setElapsed(formatElapsed(Date.now() - startedMs));
     show();
-    if (!running) {
-      return undefined;
-    }
     const timer = setInterval(show, SECOND);
     return () => clearInterval(timer);
-  }, [startedMs, running]);
+  }, [startedMs]);
 
   return elapsed;
 }

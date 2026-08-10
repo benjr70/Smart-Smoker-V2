@@ -57,8 +57,14 @@ const peakOf = (
     }, peak);
   }, null);
 
-/** A valid moment from a reading, or `null` when the row carries no usable date. */
-const momentOf = (row: TimelineReading): Date | null => {
+/**
+ * A valid moment from a reading, or `null` when the row carries no usable date.
+ *
+ * Exported so the cheap end-of-series reads answer "is this row dated?" with
+ * the same rule the full derivation uses: a list card and a detail screen
+ * disagreeing about the same cook is worse than either answer alone.
+ */
+export const momentOf = (row: TimelineReading): Date | null => {
   const date = row.date ? new Date(row.date) : null;
   return date && !Number.isNaN(date.getTime()) ? date : null;
 };

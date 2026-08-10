@@ -12,8 +12,15 @@
  */
 export type FakeDoc = Record<string, any>;
 
-/** `null` in a filter means "missing or null", as it does in MongoDB. */
+/**
+ * `null` in a filter means "missing or null", as it does in MongoDB, and
+ * `{ $ne: x }` is its negation — so `{ $ne: null }` keeps only the rows that
+ * actually carry the field, which is how MongoDB reads it too.
+ */
 const fieldMatches = (value: unknown, expected: unknown): boolean => {
+  if (expected && typeof expected === 'object' && '$ne' in expected) {
+    return !fieldMatches(value, (expected as { $ne: unknown }).$ne);
+  }
   if (expected === null) {
     return value === null || value === undefined;
   }
