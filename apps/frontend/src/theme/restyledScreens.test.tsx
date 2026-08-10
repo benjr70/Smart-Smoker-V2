@@ -277,6 +277,34 @@ describe('the smoke step', () => {
       backgroundColor: carbonDark.accent,
     });
   });
+
+  // The dot is the other half of the pairing the readings are identified by, so
+  // it follows the scheme wherever the reading beside it does.
+  it.each(readouts)('marks %s with a dot in the dark scheme’s probe colour', (testId, probe) => {
+    renderUnder('dark', liveSmokeStep());
+
+    expect(screen.getByTestId(testId.replace('-temp', '-dot'))).toHaveStyle({
+      backgroundColor: carbonDark.probes[probe],
+    });
+  });
+
+  it.each([['smoke-temps-card'], ['smoke-chart-card'], ['smoke-details-card']])(
+    'lays %s on the dark scheme’s card surface',
+    testId => {
+      renderUnder('dark', liveSmokeStep());
+
+      expect(screen.getByTestId(testId)).toHaveStyle({ backgroundColor: carbonDark.surface });
+    }
+  );
+
+  it.each([['smoke-temps-card'], ['smoke-chart-card'], ['smoke-details-card']])(
+    'lays %s on the light scheme’s card surface',
+    testId => {
+      renderUnder('light', liveSmokeStep());
+
+      expect(screen.getByTestId(testId)).toHaveStyle({ backgroundColor: carbonLight.surface });
+    }
+  );
 });
 
 /** The live step over the session module's fakes: no socket, no HTTP. */

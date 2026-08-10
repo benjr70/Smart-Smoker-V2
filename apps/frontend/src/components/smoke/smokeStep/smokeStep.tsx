@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import Grid from '@mui/material/Grid';
 import './smokeStep.style.css';
-import { Autocomplete, Button, Divider, Input, TextField } from '@mui/material';
+import { Autocomplete, Button, Card, Divider, TextField, Typography } from '@mui/material';
 import TemperatureChart from 'temperaturechart/src/TemperatureChart';
 import { SmokeSessionProvider, useSmokeSession } from 'smoke-session/src/react';
 import { CloudSocketAdapter, createCloudSocketAdapter, SessionConfig } from 'smoke-session/src';
@@ -10,10 +10,20 @@ import { createSessionApiPort } from '../../../api/sessionApiAdapter';
 import { useChartPalette } from '../../../theme';
 import { chartNamesOf } from '../../common/chartNames';
 import { SmokeStatusBar } from './SmokeStatusBar';
+import { TemperatureChannel, TemperatureRow } from './TemperatureRow';
 import { useProbeTargets } from './useProbeTargets';
 import { useTemperatureSeries } from './useTemperatureSeries';
 
-const woodType = ['Hickory', 'Post Oak', 'Pecan', 'Cherry', 'Apple'];
+/**
+ * The woods the picker offers, in the design's order. Mesquite joins the five
+ * the app has always listed — it is one of the four or five woods anyone
+ * actually smokes on, and its absence was an omission rather than a decision.
+ *
+ * The list is a set of suggestions, not the permitted values: the picker is
+ * free-text, so a cook on grapevine or whisky-barrel oak is recorded the same
+ * way as one on hickory.
+ */
+const WOOD_TYPES = ['Hickory', 'Post Oak', 'Pecan', 'Cherry', 'Apple', 'Mesquite'];
 
 type SmokeStepProps = {
   nextButton: JSX.Element;
@@ -30,6 +40,13 @@ type SmokeStepProps = {
  * `flushProfileOnUnmount` reproduces the legacy save-on-leave: leaving the step
  * unmounts this view and persists the profile draft (names + notes + wood type)
  * exactly as the old unmount effect did.
+ *
+ * What the step *looks* like is the design's: a column of cards — the readings,
+ * the chart under its own heading, and the wood and notes the cook is described
+ * with — with the status bar above them and the control that lights the cook
+ * between the chart and the description. There is deliberately no Estimated
+ * Completion card: target temperatures stay settings-managed, and the design's
+ * estimate is the one part of this screen the product is not building.
  */
 export function SmokeStepView(props: SmokeStepProps): JSX.Element {
   const session = useSmokeSession({ flushProfileOnUnmount: true });
@@ -44,162 +61,160 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
   // is switched, which is the moment the stamp is written.
   const startedAt = useCookStart(session.smoking);
 
+  /**
+   * The four readings in the order the design lists them, each paired with the
+   * session field it comes from. Written out once so the card below is a list
+   * rather than four copies of the same markup differing only in which probe
+   * they name — which is what the previous four hand-written blocks were.
+   */
+  const readings: {
+    channel: TemperatureChannel;
+    name: string;
+    placeholder: string;
+    value: string;
+  }[] = [
+    {
+      channel: 'chamber',
+      name: session.chamberName,
+      placeholder: 'Chamber',
+      value: session.chamberTemp,
+    },
+    {
+      channel: 'probe1',
+      name: session.probe1Name,
+      placeholder: 'Probe 1',
+      value: session.probeTemp1,
+    },
+    {
+      channel: 'probe2',
+      name: session.probe2Name,
+      placeholder: 'Probe 2',
+      value: session.probeTemp2,
+    },
+    {
+      channel: 'probe3',
+      name: session.probe3Name,
+      placeholder: 'Probe 3',
+      value: session.probeTemp3,
+    },
+  ];
+
   return (
-    <Grid item xs={12}>
-      <Grid container direction="column" sx={{ marginTop: '10px' }}>
-        <SmokeStatusBar smoking={session.smoking} startedAt={startedAt} />
-        <Grid container direction="row" justifyContent="space-around" sx={{ margin: '5px' }}>
-          <Input
-            defaultValue="Chamber"
-            value={session.chamberName}
-            onChange={event => session.setName('chamber', event.target.value)}
-            sx={theme => ({
-              fontSize: 24,
-              fontWeight: 700,
-              color: theme.design.probes.chamber,
-              width: '75%',
-            })}
-            disableUnderline={true}
-            inputProps={{ 'data-testid': 'smoke-chamber-name-input' }}
-          />
-          <Grid
-            item
-            className="text"
-            data-testid="smoke-chamber-temp"
-            sx={theme => ({ color: theme.design.probes.chamber })}
-          >
-            {session.chamberTemp}
-          </Grid>
-        </Grid>
-        <Divider variant="middle" />
-        <Grid container direction="row" justifyContent="space-around" sx={{ margin: '5px' }}>
-          <Input
-            defaultValue="Probe 1"
-            value={session.probe1Name}
-            onChange={event => session.setName('probe1', event.target.value)}
-            sx={theme => ({
-              fontSize: 24,
-              fontWeight: 700,
-              color: theme.design.probes.probe1,
-              width: '75%',
-            })}
-            disableUnderline={true}
-            inputProps={{ 'data-testid': 'smoke-probe1-name-input' }}
-          />
-          <Grid
-            item
-            className="text"
-            data-testid="smoke-probe1-temp"
-            sx={theme => ({ color: theme.design.probes.probe1 })}
-          >
-            {session.probeTemp1}
-          </Grid>
-        </Grid>
-        <Divider variant="middle" />
-        <Grid container direction="row" justifyContent="space-around" sx={{ margin: '5px' }}>
-          <Input
-            defaultValue="Probe 2"
-            value={session.probe2Name}
-            onChange={event => session.setName('probe2', event.target.value)}
-            sx={theme => ({
-              fontSize: 24,
-              fontWeight: 700,
-              color: theme.design.probes.probe2,
-              width: '75%',
-            })}
-            disableUnderline={true}
-            inputProps={{ 'data-testid': 'smoke-probe2-name-input' }}
-          />
-          <Grid
-            item
-            className="text"
-            data-testid="smoke-probe2-temp"
-            sx={theme => ({ color: theme.design.probes.probe2 })}
-          >
-            {session.probeTemp2}
-          </Grid>
-        </Grid>
-        <Divider variant="middle" />
-        <Grid container direction="row" justifyContent="space-around" sx={{ margin: '5px' }}>
-          <Input
-            defaultValue="Probe 3"
-            value={session.probe3Name}
-            onChange={event => session.setName('probe3', event.target.value)}
-            sx={theme => ({
-              fontSize: 24,
-              fontWeight: 700,
-              color: theme.design.probes.probe3,
-              width: '75%',
-            })}
-            disableUnderline={true}
-            inputProps={{ 'data-testid': 'smoke-probe3-name-input' }}
-          />
-          <Grid
-            item
-            className="text"
-            data-testid="smoke-probe3-temp"
-            sx={theme => ({ color: theme.design.probes.probe3 })}
-          >
-            {session.probeTemp3}
-          </Grid>
-        </Grid>
-      </Grid>
-      <Grid item justifyContent="center" data-testid="smoke-chart">
-        <TemperatureChart
-          data={series}
-          names={chartNamesOf({
-            chamberName: session.chamberName,
-            probe1Name: session.probe1Name,
-            probe2Name: session.probe2Name,
-            probe3Name: session.probe3Name,
+    // The step is one column of cards down the screen — status, readings,
+    // chart, the control that lights the cook, and the notes it is described
+    // with. Every gap between them is the column's, so the cards themselves
+    // carry no margins and none of them has to know what it is next to.
+    <Grid item xs={12} sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      <SmokeStatusBar smoking={session.smoking} startedAt={startedAt} />
+      <Card data-testid="smoke-temps-card">
+        {readings.map((reading, index) => (
+          <React.Fragment key={reading.channel}>
+            {/* Between the readings only: the card's own border already ends
+                the list at both ends, and a rule on top of it would read as a
+                double line. */}
+            {index > 0 ? <Divider /> : null}
+            <TemperatureRow
+              channel={reading.channel}
+              name={reading.name}
+              placeholder={reading.placeholder}
+              value={reading.value}
+              onNameChange={name => session.setName(reading.channel, name)}
+            />
+          </React.Fragment>
+        ))}
+      </Card>
+      <Card data-testid="smoke-chart-card" sx={{ padding: '12px 14px 8px' }}>
+        {/* The plot is a picture of numbers; nothing in it says which numbers,
+            or over what. The design gives it a heading, set as an overline
+            rather than a title so it labels the card without competing with the
+            readings above it. */}
+        <Typography
+          component="h2"
+          sx={theme => ({
+            fontSize: '0.6875rem',
+            fontWeight: 700,
+            letterSpacing: '0.12em',
+            lineHeight: 1.3,
+            color: theme.design.textSecondary,
+            marginBottom: '6px',
           })}
-          colors={chartColors}
-          targets={chartTargets}
-        />
-      </Grid>
-      <Grid container className="buttonContainer" justifyContent="space-around">
+        >
+          TEMPERATURE HISTORY
+        </Typography>
+        {/* The legend is the chart's own, drawn under the plot: the key and the
+            lines it names stay in one card, and this step does not build a
+            second one out of the same names. */}
+        <Grid item justifyContent="center" data-testid="smoke-chart">
+          <TemperatureChart
+            data={series}
+            names={chartNamesOf({
+              chamberName: session.chamberName,
+              probe1Name: session.probe1Name,
+              probe2Name: session.probe2Name,
+              probe3Name: session.probe3Name,
+            })}
+            colors={chartColors}
+            targets={chartTargets}
+          />
+        </Grid>
+      </Card>
+      <Grid container justifyContent="space-around">
+        {/* Two states, two appearances. Lighting a cook is what the screen is
+            for, so it is offered filled in the accent; putting one out is
+            destructive and unrepeatable, so it retreats to an outline in the
+            danger colour — present, unmissable, and not the thing a thumb
+            reaches for by default. */}
         <Button
           className="button"
-          variant="contained"
+          variant={session.smoking ? 'outlined' : 'contained'}
+          color={session.smoking ? 'error' : 'primary'}
           size="small"
           data-testid="smoke-start-button"
+          // Material-UI draws an outlined button's border at half the strength
+          // of its text. The design's stop control is outlined in the danger
+          // colour itself, so the border is stated rather than left to that
+          // default.
+          sx={theme => (session.smoking ? { borderColor: theme.design.danger } : {})}
           onClick={() => void session.toggleSmoking()}
         >
           {session.smoking ? 'Stop Smoking' : 'Start Smoking'}
         </Button>
       </Grid>
-      <Grid container direction="column">
+      <Card data-testid="smoke-details-card" sx={{ padding: '14px' }}>
+        {/* The picker keeps its type-anything behaviour and gains the look of
+            the design's select: the list is always offered behind a chevron,
+            rather than Material-UI's free-text default of hiding it. A cook on
+            a wood nobody listed is still recordable — which is the whole reason
+            this is not a real select. */}
         <Autocomplete
-          sx={{ marginBottom: '10px' }}
           freeSolo
-          options={woodType.map(option => option)}
+          forcePopupIcon
+          options={WOOD_TYPES}
           inputValue={session.woodType}
           onInputChange={(event, newInputValue) => session.setWoodType(newInputValue)}
           renderInput={params => (
-            <Grid container direction="row" justifyContent="space-around">
-              <TextField
-                sx={{ marginTop: '10px', marginBottom: '10px', width: '95%' }}
-                {...params}
-                label="Wood Type"
-                inputProps={{ ...params.inputProps, 'data-testid': 'smoke-wood-type-input' }}
-              />
-            </Grid>
+            <TextField
+              {...params}
+              fullWidth
+              label="Wood Type"
+              inputProps={{ ...params.inputProps, 'data-testid': 'smoke-wood-type-input' }}
+            />
           )}
         />
-        <Grid container direction="row" justifyContent="space-around">
-          <TextField
-            sx={{ marginTop: '10px', marginBottom: '10px', width: '95%' }}
-            id="outlined-multiline-static"
-            label="Notes"
-            multiline
-            inputProps={{ 'data-testid': 'smoke-notes-input' }}
-            value={session.notes}
-            onChange={event => session.setNotes(event.target.value)}
-            rows={4}
-          />
-        </Grid>
-      </Grid>
-      <Grid container className="buttonContainer" flexDirection="row-reverse">
+        <TextField
+          sx={{ marginTop: '14px' }}
+          fullWidth
+          id="outlined-multiline-static"
+          label="Notes"
+          placeholder="How is the cook going?"
+          multiline
+          inputProps={{ 'data-testid': 'smoke-notes-input' }}
+          value={session.notes}
+          onChange={event => session.setNotes(event.target.value)}
+          rows={4}
+        />
+      </Card>
+      <Grid container flexDirection="row-reverse" sx={{ paddingBottom: '8px' }}>
         {props.nextButton}
       </Grid>
     </Grid>

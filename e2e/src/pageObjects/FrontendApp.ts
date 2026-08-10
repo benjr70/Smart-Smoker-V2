@@ -1,4 +1,9 @@
 import { expect, Locator, Page, Request } from '@playwright/test';
+// Extensionless, like every other import Playwright resolves at runtime: the
+// one `.ts`-suffixed import in this suite's runtime code is an `import type`,
+// which is erased before a resolver ever sees it. The unit test beside this
+// module is run by `node --test` instead, which wants the extension.
+import { isTemperature, temperatureOf } from './readouts';
 
 /** The weight units the pre-smoke wizard offers; LB is the form's default. */
 export type WeightUnit = 'LB' | 'OZ';
@@ -72,20 +77,12 @@ const TEMP_READOUTS = ['chamber', 'probe1', 'probe2', 'probe3'] as const;
 
 type TempReadout = (typeof TEMP_READOUTS)[number];
 
-/** What every readout displays right now, verbatim. */
-type ReadoutTemps = Record<TempReadout, string>;
-
 /**
- * Whether a readout's text is a temperature at all.
- *
- * Every readout starts at the session's `0` default and shows a plain number
- * once frames arrive, so "a number greater than zero" separates a live display
- * from both the never-updated one and one rendering something that is not a
- * temperature (an empty string, `NaN`, `undefined`).
+ * What every readout displays right now, verbatim — unit and all, because it is
+ * what a failure message quotes. Reading a number out of one is
+ * {@link temperatureOf}'s job, not the caller's.
  */
-function isTemperature(displayed: string): boolean {
-  return Number(displayed) > 0;
-}
+type ReadoutTemps = Record<TempReadout, string>;
 
 /**
  * How often the chart is sampled while watching it. The emulator relays a frame
@@ -719,9 +716,11 @@ export class FrontendApp {
    * cook does: label each probe by what it is actually measuring, record the
    * wood, and start a running log.
    *
-   * The chamber and probe names are unlabelled inline inputs styled as headings,
-   * and the wood type is a free-solo autocomplete that accepts any wood a
-   * pitmaster names, list or no list.
+   * The chamber and probe names are inline inputs sitting in the readout rows,
+   * carrying no visible label and named for assistive technology instead, and
+   * the wood type is a free-solo autocomplete that accepts any wood a pitmaster
+   * names, list or no list — the chevron beside it offers the common ones
+   * without ever being the only way to answer.
    */
   async fillSmokeStep(fields: SmokeStepFields): Promise<void> {
     await this.fillField(this.smokeChamberName, fields.chamberName);
@@ -808,7 +807,12 @@ export class FrontendApp {
   private async unrefreshedReadouts(previous: ReadoutTemps): Promise<string[]> {
     const temps = await this.readoutTemps();
     return TEMP_READOUTS.filter(
-      readout => !isTemperature(temps[readout]) || temps[readout] === previous[readout]
+      readout =>
+        !isTemperature(temps[readout]) ||
+        // The readings are compared, not the strings that display them: what
+        // makes a frame new is a different temperature, and a readout that
+        // restyled its unit between two samples has still not moved.
+        temperatureOf(temps[readout]) === temperatureOf(previous[readout])
     ).map(readout => `${readout}=${JSON.stringify(temps[readout])}`);
   }
 

@@ -1,16 +1,9 @@
-.text {
-  font-family: 'Roboto', 'Helvetica', 'Arial', sans-serif;
-  font-size: 1.5rem;
-  font-weight: 700;
-}
-
-.tempContainer {
-  justify-content: space-around;
-}
-
-.buttonContainer {
-  padding: 2%;
-}
+/* `.text`, `.tempContainer` and `.buttonContainer` used to live here: the
+   readings' type in Roboto rather than the design typeface, a row rule nothing
+   ever used, and a percentage pad around the two buttons. The readings are
+   drawn by the temperature row now and the spacing between the step's cards is
+   the column's, so all three are gone rather than left behind to be found and
+   reused. */
 
 .button {
   height: 50px;
