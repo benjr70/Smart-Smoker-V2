@@ -4,11 +4,13 @@ import { SmokeService } from './smoke.service';
 import { Smoke, SmokeDocument, SmokeStatus } from './smoke.schema';
 import { SmokeDto } from './smokeDto';
 import { StateService } from '../State/state.service';
+import { TimelineService } from '../timeline/timeline.service';
 
 describe('SmokeService', () => {
   let service: SmokeService;
   let mockSmokeModel: any;
   let mockStateService: Partial<StateService>;
+  let mockTimelineService: { stampFinish: jest.Mock };
 
   const mockSmoke: Smoke = {
     preSmokeId: 'pre-smoke-id',
@@ -52,6 +54,10 @@ describe('SmokeService', () => {
       GetState: jest.fn().mockResolvedValue(mockState),
     };
 
+    mockTimelineService = {
+      stampFinish: jest.fn().mockResolvedValue(undefined),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SmokeService,
@@ -62,6 +68,10 @@ describe('SmokeService', () => {
         {
           provide: StateService,
           useValue: mockStateService,
+        },
+        {
+          provide: TimelineService,
+          useValue: mockTimelineService,
         },
       ],
     }).compile();
@@ -147,6 +157,29 @@ describe('SmokeService', () => {
       expect(service.getCurrentSmoke).toHaveBeenCalled();
       expect(service.update).toHaveBeenCalledWith('test-smoke-id', expectedDto);
       expect(result.status).toEqual(SmokeStatus.Complete);
+    });
+
+    it('stamps the finish of the cook it completes', async () => {
+      jest
+        .spyOn(service, 'getCurrentSmoke')
+        .mockResolvedValue(mockSmokeDocument as Smoke);
+      jest.spyOn(service, 'update').mockResolvedValue({
+        ...mockSmokeDocument,
+        status: SmokeStatus.Complete,
+      } as unknown as SmokeDocument);
+
+      await service.FinishSmoke();
+
+      expect(mockTimelineService.stampFinish).toHaveBeenCalledWith(
+        'test-smoke-id',
+      );
+    });
+
+    it('stamps nothing when there is no cook to finish', async () => {
+      jest.spyOn(service, 'getCurrentSmoke').mockResolvedValue(null);
+
+      expect(await service.FinishSmoke()).toBeNull();
+      expect(mockTimelineService.stampFinish).not.toHaveBeenCalled();
     });
   });
 });

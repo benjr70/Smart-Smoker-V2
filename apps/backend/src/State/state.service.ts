@@ -4,6 +4,7 @@ import { Model } from 'mongoose';
 import { BaseService } from '../common/base.service';
 import { State, StateDocument } from './state.schema';
 import { StateDto } from './stateDto';
+import { TimelineService } from '../timeline/timeline.service';
 
 /** What a state means before anything has been cooked: idle, no smoke. */
 const IDLE_STATE: StateDto = { smokeId: '', smoking: false };
@@ -13,7 +14,10 @@ export class StateService
   extends BaseService<StateDocument>
   implements OnModuleInit
 {
-  constructor(@InjectModel('state') model: Model<StateDocument>) {
+  constructor(
+    @InjectModel('state') model: Model<StateDocument>,
+    private readonly timeline: TimelineService,
+  ) {
     super(model, 'state');
   }
 
@@ -77,12 +81,25 @@ export class StateService
       });
   }
 
+  /**
+   * Flip the smoking flag, and — the first time it goes on — record that the
+   * cook has started.
+   *
+   * The start belongs here rather than at session creation because a session is
+   * set up while the meat is still being trimmed; the cook begins when somebody
+   * presses Start Smoking. Stopping and restarting during a cook is ordinary,
+   * so only the switch-on stamps, and the stamp itself is written once (see
+   * {@link TimelineService.stampStart}).
+   */
   async toggleSmoking(): Promise<State | null> {
     const state = await this.GetState();
     if (!state || !state.smokeId || state.smokeId.length <= 0) {
       return null;
     }
     state.smoking = !state.smoking;
+    if (state.smoking) {
+      await this.timeline.stampStart(state.smokeId);
+    }
     return this.updateCurrent(state);
   }
 

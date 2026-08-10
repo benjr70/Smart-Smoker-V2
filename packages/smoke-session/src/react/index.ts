@@ -6,3 +6,4 @@ export type {
   SmokeSessionValue,
   UseSmokeSessionOptions,
 } from './useSmokeSession';
+export { useElapsed, formatElapsed } from './useElapsed';

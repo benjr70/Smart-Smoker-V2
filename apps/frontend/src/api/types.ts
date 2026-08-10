@@ -222,6 +222,26 @@ export interface Smoke {
 }
 
 /**
+ * A cook's timing and extremes, as the backend derives them: when it started
+ * and finished, how long it ran, how hot it ever got, and what it was being
+ * taken to.
+ *
+ * Every field is nullable because a cook recorded before the stamps existed —
+ * or one that kept no readings at all — genuinely has no such number, and the
+ * screens render that absence as an em-dash. The two stamps are `Date`s here
+ * rather than the ISO strings the wire carries: the client's read path converts
+ * them, so nothing downstream subtracts one string from another.
+ */
+export interface SmokeTimeline {
+  startedAt: Date | null;
+  finishedAt: Date | null;
+  durationMs: number | null;
+  peakChamber: number | null;
+  peakMeat: number | null;
+  targetTemp: number | null;
+}
+
+/**
  * The composed review read-model: a smoke parent plus its five resolved child
  * resources, the shape the history review screen renders. The deep client's
  * review-aggregate call fetches the parent, then the children in parallel, and
@@ -231,6 +251,12 @@ export interface Smoke {
  */
 export interface SmokeReview {
   smoke: Smoke;
+  /**
+   * The cook's timing, derived server-side. `null` when the backend could not
+   * be asked for it — the review still renders, with its timing fields blank,
+   * rather than the whole screen failing over one absent piece.
+   */
+  timeline: SmokeTimeline | null;
   preSmoke: PreSmoke;
   smokeProfile: SmokeProfile;
   temps: TempData[];
@@ -251,6 +277,11 @@ export interface SmokeHistory {
   date: string;
   smokeId: string;
   overAllRating: string;
+  /**
+   * How long the cook ran, in milliseconds, or `null` when nothing recorded
+   * enough to say. The card renders the absence as an em-dash.
+   */
+  durationMs: number | null;
 }
 
 /**

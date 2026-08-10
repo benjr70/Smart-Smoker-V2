@@ -5,10 +5,11 @@ import { Autocomplete, Button, Divider, Input, TextField } from '@mui/material';
 import TemperatureChart from 'temperaturechart/src/TemperatureChart';
 import { SmokeSessionProvider, useSmokeSession } from 'smoke-session/src/react';
 import { CloudSocketAdapter, createCloudSocketAdapter, SessionConfig } from 'smoke-session/src';
-import { getDefaultApiClient } from '../../../api';
+import { getDefaultApiClient, useCookStart } from '../../../api';
 import { createSessionApiPort } from '../../../api/sessionApiAdapter';
 import { useChartPalette } from '../../../theme';
 import { chartNamesOf } from '../../common/chartNames';
+import { SmokeStatusBar } from './SmokeStatusBar';
 import { useProbeTargets } from './useProbeTargets';
 import { useTemperatureSeries } from './useTemperatureSeries';
 
@@ -39,10 +40,14 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
   // What each meat is being cooked to, from the notification settings; the chart
   // rules a dashed line at each one it is given.
   const chartTargets = useProbeTargets();
+  // When the cook started, as the backend stamped it — re-read whenever smoking
+  // is switched, which is the moment the stamp is written.
+  const startedAt = useCookStart(session.smoking);
 
   return (
     <Grid item xs={12}>
       <Grid container direction="column" sx={{ marginTop: '10px' }}>
+        <SmokeStatusBar smoking={session.smoking} startedAt={startedAt} />
         <Grid container direction="row" justifyContent="space-around" sx={{ margin: '5px' }}>
           <Input
             defaultValue="Chamber"

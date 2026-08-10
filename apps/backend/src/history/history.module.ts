@@ -5,9 +5,16 @@ import { SmokeModule } from 'src/smoke/smoke.module';
 import { HistoryService } from './history.service';
 import { HistoryController } from './history.controller';
 import { SmokeProfileModule } from 'src/smokeProfile/smokeProfile.module';
+import { TimelineModule } from 'src/timeline/timeline.module';
 
 @Module({
-  imports: [SmokeModule, PreSmokeModule, SmokeProfileModule, RatingsModel],
+  imports: [
+    SmokeModule,
+    PreSmokeModule,
+    SmokeProfileModule,
+    RatingsModel,
+    TimelineModule,
+  ],
   controllers: [HistoryController],
   providers: [HistoryService],
 })

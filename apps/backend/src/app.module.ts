@@ -17,6 +17,7 @@ import { SmokeModule } from './smoke/smoke.module';
 import { SmokeProfileModule } from './smokeProfile/smokeProfile.module';
 import { StateModule } from './State/state.module';
 import { TempModule } from './temps/temps.module';
+import { TimelineModule } from './timeline/timeline.module';
 import { EventsModule } from './websocket/events.module';
 import { ConfigModule } from '@nestjs/config';
 import { RatingsModel } from './ratings/ratings.module';
@@ -50,6 +51,7 @@ console.log(process.env.NODE_ENV);
     PostSmokeModule,
     RatingsModel,
     HistoryModule,
+    TimelineModule,
     NotificationsModule,
     HealthModule,
     ConfigModule.forRoot({

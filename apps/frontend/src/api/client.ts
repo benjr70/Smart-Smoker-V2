@@ -25,6 +25,7 @@ import {
   SmokeHistory,
   SmokeProfile,
   SmokeReview,
+  SmokeTimeline,
   State,
   TargetPresets,
   TempData,
@@ -258,6 +259,18 @@ export interface SmokeResource {
   getReview(id: string): Promise<SmokeReview>;
 }
 
+export interface TimelineResource {
+  /** GET `timeline/:id` — a stored cook's timing, stamps read back as dates. */
+  getById(id: string): Promise<SmokeTimeline>;
+  /**
+   * The timing of the cook set up right now, or `null` when there is no
+   * session. Composed from the session state, because the cook a client is
+   * looking at is whichever one the state points to — there is no separate
+   * "current" route to keep in step with it.
+   */
+  getCurrent(): Promise<SmokeTimeline | null>;
+}
+
 export interface HistoryResource {
   /** GET `history` — the denormalized history rows. */
   list(): Promise<SmokeHistory[]>;
@@ -273,6 +286,7 @@ export interface ApiClient {
   appearance: AppearanceResource;
   state: StateResource;
   smoke: SmokeResource;
+  timeline: TimelineResource;
   history: HistoryResource;
 }
 
@@ -324,6 +338,41 @@ const asReading = (value: number | string | null | undefined): number => {
  * the collection was asked for them. Ordering here means no screen has to know
  * which order that was.
  */
+/**
+ * A timeline as JSON carries it: the two stamps are strings, since JSON has no
+ * date type and Nest serializes a `Date` as ISO.
+ */
+type WireTimeline = Omit<SmokeTimeline, 'startedAt' | 'finishedAt'> & {
+  startedAt: string | Date | null;
+  finishedAt: string | Date | null;
+};
+
+/** A stamp off the wire as the moment it names, or `null` when there is none. */
+const asMoment = (value: string | Date | null | undefined): Date | null => {
+  if (!value) {
+    return null;
+  }
+  const moment = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(moment.getTime()) ? null : moment;
+};
+
+/**
+ * Read-path normalization for a cook's timing: the stamps become `Date`s.
+ *
+ * The one place it can be done. The elapsed clock subtracts the start from the
+ * current time, and `Date.now() - '2026-08-01T10:00:00.000Z'` is `NaN` — which
+ * renders as a clock reading `NaN:NaN:NaN` rather than as an error anybody
+ * would notice in review.
+ */
+const normalizeTimeline = (raw: WireTimeline): SmokeTimeline => ({
+  startedAt: asMoment(raw?.startedAt),
+  finishedAt: asMoment(raw?.finishedAt),
+  durationMs: raw?.durationMs ?? null,
+  peakChamber: raw?.peakChamber ?? null,
+  peakMeat: raw?.peakMeat ?? null,
+  targetTemp: raw?.targetTemp ?? null,
+});
+
 const normalizeTemps = (raw: TempData[]): TempData[] =>
   raw
     .map(temp => ({
@@ -666,7 +715,7 @@ export const createApiClient = (
       const smoke = await transport.get<Smoke>(`smoke/${id}`);
       // Fetch the five children in parallel; each absent piece (404) falls back
       // to its typed default rather than failing the whole aggregate.
-      const [preSmoke, smokeProfile, temps, postSmoke, rating] = await Promise.all([
+      const [preSmoke, smokeProfile, temps, postSmoke, rating, timeline] = await Promise.all([
         transport.get<PreSmoke>(`presmoke/${smoke.preSmokeId}`).catch(() => defaultPreSmoke),
         transport
           .get<SmokeProfile>(`smokeProfile/${smoke.smokeProfileId}`)
@@ -678,8 +727,26 @@ export const createApiClient = (
           .catch(() => defaultTemps),
         transport.get<PostSmoke>(`postSmoke/${smoke.postSmokeId}`).catch(() => defaultPostSmoke),
         transport.get<rating>(`ratings/${smoke.ratingId}`).catch(() => defaultRating),
+        // The cook's timing rides along with the five children: it is derived
+        // from the same series the chart draws, and the detail screen shows
+        // both. An unreachable timeline blanks those fields rather than
+        // failing the screen, exactly as an absent child does.
+        transport
+          .get<WireTimeline>(`timeline/${id}`)
+          .then(normalizeTimeline)
+          .catch(() => null),
       ]);
-      return { smoke, preSmoke, smokeProfile, temps, postSmoke, rating };
+      return { smoke, timeline, preSmoke, smokeProfile, temps, postSmoke, rating };
+    },
+  },
+  timeline: {
+    getById: (id: string) => transport.get<WireTimeline>(`timeline/${id}`).then(normalizeTimeline),
+    getCurrent: async (): Promise<SmokeTimeline | null> => {
+      const state = await transport.get<State>('state');
+      if (!state?.smokeId) {
+        return null;
+      }
+      return transport.get<WireTimeline>(`timeline/${state.smokeId}`).then(normalizeTimeline);
     },
   },
   history: {
