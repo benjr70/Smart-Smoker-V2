@@ -16,13 +16,13 @@ jest.mock('./components/settings/settings', () => ({
 }));
 
 jest.mock('../src/components/bottomBar/bottombar', () => ({
-  BottomBar: ({ smokeOnClick, reviewOnClick, settingsOnClick }: any) => (
+  BottomBar: ({ smokeOnClick, historyOnClick, settingsOnClick }: any) => (
     <div data-testid="bottom-bar">
       <button data-testid="smoke-button" onClick={smokeOnClick}>
         Smoke
       </button>
-      <button data-testid="review-button" onClick={reviewOnClick}>
-        Review
+      <button data-testid="history-button" onClick={historyOnClick}>
+        History
       </button>
       <button data-testid="settings-button" onClick={settingsOnClick}>
         Settings
@@ -52,17 +52,17 @@ describe('App Component', () => {
   test('smokeOnClick sets current screen to HOME', () => {
     render(<App />);
 
-    fireEvent.click(screen.getByTestId('review-button'));
+    fireEvent.click(screen.getByTestId('history-button'));
     expect(screen.getByTestId('history-component')).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('smoke-button'));
     expect(screen.getByTestId('smoke-component')).toBeInTheDocument();
   });
 
-  test('reviewOnClick sets current screen to HISTORY', () => {
+  test('historyOnClick sets current screen to HISTORY', () => {
     render(<App />);
 
-    fireEvent.click(screen.getByTestId('review-button'));
+    fireEvent.click(screen.getByTestId('history-button'));
     expect(screen.getByTestId('history-component')).toBeInTheDocument();
   });
 
@@ -78,7 +78,7 @@ describe('App Component', () => {
 
     expect(screen.getByTestId('smoke-component')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId('review-button'));
+    fireEvent.click(screen.getByTestId('history-button'));
     expect(screen.getByTestId('history-component')).toBeInTheDocument();
     expect(screen.queryByTestId('smoke-component')).not.toBeInTheDocument();
 

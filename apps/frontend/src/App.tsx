@@ -22,7 +22,7 @@ class App extends React.Component<{}, { currentScreen: Screens }> {
   constructor(props: any) {
     super(props);
     this.smokeOnClick = this.smokeOnClick.bind(this);
-    this.reviewOnClick = this.reviewOnClick.bind(this);
+    this.historyOnClick = this.historyOnClick.bind(this);
     this.settingsOnClick = this.settingsOnClick.bind(this);
     this.state = { currentScreen: Screens.HOME };
   }
@@ -30,7 +30,7 @@ class App extends React.Component<{}, { currentScreen: Screens }> {
   smokeOnClick() {
     this.setState({ currentScreen: Screens.HOME });
   }
-  reviewOnClick() {
+  historyOnClick() {
     this.setState({ currentScreen: Screens.HISTORY });
   }
   settingsOnClick() {
@@ -83,7 +83,7 @@ class App extends React.Component<{}, { currentScreen: Screens }> {
                 <Grid>{screen}</Grid>
                 <BottomBar
                   smokeOnClick={this.smokeOnClick}
-                  reviewOnClick={this.reviewOnClick}
+                  historyOnClick={this.historyOnClick}
                   settingsOnClick={this.settingsOnClick}
                 ></BottomBar>
               </Grid>

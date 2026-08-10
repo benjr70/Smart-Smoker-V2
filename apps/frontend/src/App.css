@@ -6,7 +6,14 @@
   width: 100vw; */
   /* display: flex; */
   flex-direction: column;
-  overflow: auto;
+  /* This block used to declare `overflow: auto`, left over from the fixed-size
+     shell above it (`height: 100vh`) that was commented out long ago. With no
+     height of its own it is always as tall as its content, so it never had
+     anything to scroll — but it still counted as a scroll container, and a
+     `position: sticky` box anywhere inside a screen is pinned to the nearest of
+     those rather than to the viewport. The smoke wizard's header was therefore
+     pinned to a box that never moves while the document scrolls, and it slid
+     off the top of the screen with the rest of the page. */
   font-size: calc(10px + 2vmin);
   color: var(--mui-design-text);
 }

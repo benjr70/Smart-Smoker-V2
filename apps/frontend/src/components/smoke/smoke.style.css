@@ -1,12 +1,12 @@
 /* The wizard is laid out in the viewport the bottom bar's reservation leaves
    it — 56px, BOTTOM_BAR_HEIGHT in bottombar.tsx — claimed here, once, for the
-   whole screen. The stepper takes the height it needs out of that and the step
+   whole screen. The header takes the height it needs out of that and the step
    below it takes what is left (see `.stepScreen`), so the two of them plus the
    reservation come to exactly one viewport and the wizard scrolls only when a
    step's own content is taller than the room it has.
 
    The claim used to be made by the step alone, `93vh - 56px`, as though it were
-   the only thing on the screen: the stepper's ~80px then sat on top of a screen
+   the only thing on the screen: the header's height then sat on top of a screen
    that was already most of a viewport tall, and every phone-sized screen
    scrolled by the difference. The column direction and `nowrap` this relies on
    are set on the Grid itself (smoke.tsx) — Material-UI emits both of those
@@ -14,13 +14,6 @@
    which stylesheet the browser saw last. */
 .smoke {
   min-height: calc(100vh - 56px);
-}
-
-.stepper {
-  padding-top: 5%;
-  width: 95%;
-  margin-left: auto;
-  margin-right: auto;
 }
 
 .nextButton {
@@ -38,18 +31,23 @@
   margin-right: auto;
   justify-content: center;
   width: 100%;
-  padding: 5%;
-  /* The rest of the wizard's viewport, whatever the stepper above did not need,
+  /* Above: the gap between the header's edge and the first field, and nothing
+     more. It used to be 5% of the screen's width — 21px on a phone — from the
+     days when the stepper above it ended flush with its own text; the header
+     ends in its own padding and a rule, so that gap was being paid twice out of
+     a viewport the wizard has none of to spare.
+
+     Below: nothing. The bar used to be cleared from here, by holding its 56px
+     open under the step. The reservation below the screen is that gap now, so
+     the step ends where its content ends: the tallest step (the live one, chart
+     and all) is within a pixel or two of the room the wizard has on a phone,
+     and a second gap here — even 5% — is what puts it over and scrolls a screen
+     that otherwise fits. */
+  padding: 12px 5% 0;
+  /* The rest of the wizard's viewport, whatever the header above did not need,
      rather than a slice of the viewport measured on its own. A step whose
      content outgrows that still pushes this box taller and scrolls the page —
      the bar's reservation moves down with it, so the last of the content stays
      clear of the bar. */
   flex: 1 1 auto;
-  /* The bar used to be cleared from here, by holding its 56px open below the
-     step. The reservation below the screen is that gap now, so the step ends
-     where its content ends: the tallest step (the live one, chart and all) is
-     within a pixel or two of the room the wizard has on a phone, and a second
-     gap here — even the 5% of the shorthand above — is what puts it over and
-     scrolls a screen that otherwise fits. */
-  padding-bottom: 0;
 }
