@@ -13,11 +13,16 @@ export interface SmokeStatusBarProps {
  * The smoke step's status bar: whether the cook is running, and how long it has
  * been.
  *
+ * The row is not a card. It sits directly on the page background, above the
+ * cards below it, so the cook's state reads as a caption over the screen rather
+ * than as one more panel competing with them.
+ *
  * The dot pulses only while the cook runs, so the one moving thing on the
  * screen means the one thing worth noticing from across a garage. It carries
  * the state as an attribute as well as a colour, because colour alone is not a
- * statement anyone can read — the label beside it is the state in words, and
- * the attribute is what a test (and any tooling) reads it by.
+ * statement anyone can read — the label beside it is the state in words, the
+ * colour only reinforces them, and the attribute is what a test (and any
+ * tooling) reads it by.
  *
  * The clock is not kept here: it is derived from the recorded start against the
  * current time by the shared elapsed hook, so it is right the moment this
@@ -38,12 +43,6 @@ export function SmokeStatusBar({ smoking, startedAt }: SmokeStatusBarProps): JSX
         gap: 1,
         px: 2,
         py: 1,
-        borderRadius: 1,
-        // Named through the palette rather than a token, so the bar repaints
-        // with the scheme the rest of the screen is in.
-        backgroundColor: 'background.paper',
-        border: '1px solid',
-        borderColor: 'divider',
       }}
     >
       <Box
@@ -66,18 +65,37 @@ export function SmokeStatusBar({ smoking, startedAt }: SmokeStatusBarProps): JSX
       />
       <Typography
         data-testid="smoke-status-label"
-        sx={{ fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }}
+        sx={theme => ({
+          fontWeight: 600,
+          // A running cook reads in the design's positive green, picking up the
+          // green of the dot beside it; a stopped one drops back to supporting
+          // ink, so nothing idle is dressed up as something happening.
+          color: smoking ? theme.design.success : theme.design.textSecondary,
+        })}
         variant="body2"
       >
         {smoking ? 'Smoking' : 'Paused'}
       </Typography>
-      <Typography
-        data-testid="smoke-elapsed-clock"
-        sx={{ marginLeft: 'auto', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}
-        variant="body2"
-      >
-        {elapsed}
-      </Typography>
+      {/* The clock is labelled, because a bare 02:16:21 in the corner of a
+          cooking screen could be a time of day as easily as an age. The caption
+          is deliberately outside the clock element: that element holds the
+          formatted time and nothing else, for anything reading it. */}
+      <Box sx={{ marginLeft: 'auto', display: 'flex', alignItems: 'baseline', gap: 0.75 }}>
+        <Typography sx={theme => ({ color: theme.design.textSecondary })} variant="body2">
+          Elapsed
+        </Typography>
+        <Typography
+          data-testid="smoke-elapsed-clock"
+          sx={theme => ({
+            fontVariantNumeric: 'tabular-nums',
+            fontWeight: 700,
+            color: theme.design.text,
+          })}
+          variant="body2"
+        >
+          {elapsed}
+        </Typography>
+      </Box>
     </Box>
   );
 }
