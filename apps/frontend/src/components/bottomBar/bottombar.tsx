@@ -2,10 +2,8 @@ import React from 'react';
 import './bottomBar.style.css';
 import BottomNavigation from '@mui/material/BottomNavigation';
 import BottomNavigationAction from '@mui/material/BottomNavigationAction';
-import SettingsIcon from '@mui/icons-material/Settings';
-import ReviewsIcon from '@mui/icons-material/Reviews';
-import OutdoorGrillIcon from '@mui/icons-material/OutdoorGrill';
 import { Box, Grid } from '@mui/material';
+import { FlameIcon, HistoryIcon, SettingsIcon } from '../common/components/DesignIcons';
 
 /**
  * The height of the bar, in pixels — Material-UI's `BottomNavigation` height,
@@ -17,12 +15,26 @@ export const BOTTOM_BAR_HEIGHT = 56;
 
 interface buttonBarProps {
   smokeOnClick: any;
-  reviewOnClick: any;
+  historyOnClick: any;
   settingsOnClick: any;
 }
 
+/**
+ * The three destinations, in the order the design puts them. The design draws a
+ * fourth — Stats — which is deliberately not built (see the parent PRD's
+ * carve-outs), so it is not offered here either: a tab leading nowhere is worse
+ * than an absent one.
+ */
+const destinations = [
+  { label: 'Smoke', icon: <FlameIcon />, testId: 'nav-smoke' },
+  { label: 'History', icon: <HistoryIcon />, testId: 'nav-history' },
+  { label: 'Settings', icon: <SettingsIcon />, testId: 'nav-settings' },
+] as const;
+
 export function BottomBar(props: buttonBarProps) {
   const [value, setValue] = React.useState(0);
+
+  const handlers = [props.smokeOnClick, props.historyOnClick, props.settingsOnClick];
 
   return (
     <>
@@ -44,37 +56,34 @@ export function BottomBar(props: buttonBarProps) {
           showLabels
           value={value}
           onChange={(event, newValue) => {
-            switch (newValue) {
-              case 0:
-                if (props.smokeOnClick && typeof props.smokeOnClick === 'function') {
-                  props.smokeOnClick();
-                }
-                break;
-              case 1:
-                if (props.reviewOnClick && typeof props.reviewOnClick === 'function') {
-                  props.reviewOnClick();
-                }
-                break;
-              case 2:
-                if (props.settingsOnClick && typeof props.settingsOnClick === 'function') {
-                  props.settingsOnClick();
-                }
-                break;
+            const handler = handlers[newValue];
+            if (typeof handler === 'function') {
+              handler();
             }
             setValue(newValue);
           }}
         >
-          <BottomNavigationAction
-            label="Smoke"
-            icon={<OutdoorGrillIcon />}
-            data-testid="nav-smoke"
-          />
-          <BottomNavigationAction label="Review" icon={<ReviewsIcon />} data-testid="nav-review" />
-          <BottomNavigationAction
-            label="Settings"
-            icon={<SettingsIcon />}
-            data-testid="nav-settings"
-          />
+          {destinations.map(destination => (
+            <BottomNavigationAction
+              key={destination.label}
+              label={destination.label}
+              icon={destination.icon}
+              data-testid={destination.testId}
+              // The design sets its navigation labels in small upper-case with
+              // the letters opened up. The transform is applied to the painted
+              // text rather than to the string, so what a screen reader
+              // announces — and what a test looks a destination up by — stays
+              // the word itself.
+              sx={{
+                '& .MuiBottomNavigationAction-label': {
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.06em',
+                  fontSize: '0.625rem',
+                  fontWeight: 700,
+                },
+              }}
+            />
+          ))}
         </BottomNavigation>
       </Grid>
     </>

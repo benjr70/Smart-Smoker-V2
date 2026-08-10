@@ -1,6 +1,3 @@
-import Stepper from '@mui/material/Stepper';
-import Step from '@mui/material/Step';
-import StepButton from '@mui/material/StepButton';
 import React from 'react';
 import './smoke.style.css';
 import { PreSmokeStep } from './preSmokeStep/preSmokeStep';
@@ -8,8 +5,21 @@ import { SmokeStep } from './smokeStep/smokeStep';
 import { PostSmokeStep } from './postSmokeStep/PostSmokeStep';
 import { Button, Grid } from '@mui/material';
 import { useApiClient } from '../../api';
+import { SegmentedControl } from '../common/components/SegmentedControl';
+import { SmokeHeader } from './SmokeHeader';
 
-const steps = ['Pre-Smoke', 'Smoke', 'Post-Smoke'];
+/**
+ * The three steps of the wizard, in the order the control offers them. The
+ * value doubles as the segment's label and as the suffix of its test id, which
+ * is what keeps `smoke-step-Pre-Smoke` addressing the same thing it always did.
+ */
+const steps = [
+  { value: 'Pre-Smoke', label: 'Pre-Smoke' },
+  { value: 'Smoke', label: 'Smoke' },
+  { value: 'Post-Smoke', label: 'Post-Smoke' },
+] as const;
+
+type StepValue = (typeof steps)[number]['value'];
 
 export function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -70,7 +80,7 @@ export function Smoke(): JSX.Element {
   }
 
   return (
-    // The wizard stacks the stepper above the step and shares one viewport
+    // The wizard stacks the header above the step and shares one viewport
     // between them (see `.smoke` in smoke.style.css). Both the direction and
     // `nowrap` are set here rather than in the stylesheet: Material-UI emits
     // `flex-direction` and `flex-wrap` for every Grid container, so a
@@ -78,21 +88,18 @@ export function Smoke(): JSX.Element {
     // and a wrapping column turns a step too tall for the screen into a second
     // column beside the first.
     <Grid container direction="column" wrap="nowrap" className="smoke" data-testid="smoke-screen">
-      <Grid className="stepper">
-        <Stepper nonLinear alternativeLabel activeStep={activeStep}>
-          {steps.map((label, index) => (
-            <Step key={label}>
-              <StepButton
-                color="inherit"
-                data-testid={`smoke-step-${label}`}
-                onClick={() => handleStep(index)}
-              >
-                {label}
-              </StepButton>
-            </Step>
-          ))}
-        </Stepper>
-      </Grid>
+      <SmokeHeader>
+        <SegmentedControl
+          options={steps}
+          // The finish flow parks the wizard on a step index past the last one
+          // while it resets; the control still has to name a segment, and the
+          // step being left is the honest one to name.
+          value={steps[Math.min(activeStep, steps.length - 1)].value}
+          onChange={(value: StepValue) => handleStep(steps.findIndex(step => step.value === value))}
+          label="Smoke step"
+          testIdPrefix="smoke-step"
+        />
+      </SmokeHeader>
       <Grid container className="stepScreen">
         {step}
       </Grid>

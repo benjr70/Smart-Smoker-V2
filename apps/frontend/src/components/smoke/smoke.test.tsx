@@ -1,339 +1,245 @@
-import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+/**
+ * The smoke wizard: the design's sticky header and its three-segment step
+ * control, around the three steps that were always there, and the advance-and-
+ * finish flow through them.
+ *
+ * The steps themselves are the real ones, mounted over the fake backend, so
+ * "leaving a step saves what was typed into it" is verified the way the user
+ * experiences it — type, leave, come back, read it again — rather than by
+ * watching for a save call. The one step stubbed out is the live smoke step:
+ * it is a composition root that opens a websocket to the deployment, which is
+ * the boundary this suite has no business reaching across. What it renders is
+ * of no interest here; that it can be navigated to and away from is.
+ *
+ * This replaces two suites (`smoke.test.tsx` and a near-identical
+ * `smoke-simple.test.tsx`) that asserted the same navigation and finish flow
+ * twice over, each through a hand-written stand-in for every Material-UI
+ * component the wizard used — including the stepper this shell removed, whose
+ * class names one of them asserted on directly.
+ */
 import '@testing-library/jest-dom';
+import { Experimental_CssVarsProvider as CssVarsProvider } from '@mui/material';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import React from 'react';
+import { ApiClientProvider, SnackbarProvider, createApiClient } from '../../api';
+import { createFakeBackend, FakeBackend } from '../../api/fakeBackend';
+import { DesignSurface, appTheme } from '../../theme';
+import { WeightUnits } from '../common/interfaces/enums';
 import { Smoke, delay } from './smoke';
-import { ApiClientProvider, createApiClient, createFakeBackend, FakeBackend } from '../../api';
+
+jest.mock('./smokeStep/smokeStep', () => ({
+  SmokeStep: ({ nextButton }: { nextButton: JSX.Element }) => (
+    <div data-testid="smoke-step">{nextButton}</div>
+  ),
+}));
 
 let backend: FakeBackend;
 
-const renderSmoke = () =>
-  render(
-    <ApiClientProvider client={createApiClient(backend)}>
-      <Smoke />
-    </ApiClientProvider>
+const renderWizard = () => {
+  // A session already under way: both steps have a stored document, which is
+  // what the save-on-leave needs — a step whose load failed deliberately writes
+  // nothing back (see `useCurrentResource`), so a wizard over an empty backend
+  // would be testing that safety rule rather than this shell.
+  backend = createFakeBackend({
+    state: { smokeId: 'test-id', smoking: true },
+    smoke: { finish: { _id: 'test-id' } as never },
+    preSmoke: {
+      current: {
+        name: '',
+        meatType: '',
+        weight: { unit: WeightUnits.LB },
+        steps: [''],
+        notes: '',
+      },
+    },
+    postSmoke: { current: { restTime: '', steps: [''], notes: '' } },
+  });
+
+  return render(
+    <CssVarsProvider theme={appTheme}>
+      <DesignSurface>
+        <ApiClientProvider client={createApiClient(backend)}>
+          <SnackbarProvider>
+            <Smoke />
+          </SnackbarProvider>
+        </ApiClientProvider>
+      </DesignSurface>
+    </CssVarsProvider>
+  );
+};
+
+/** A step segment of the header's step control, by the step it selects. */
+const segment = (label: 'Pre-Smoke' | 'Smoke' | 'Post-Smoke') =>
+  screen.getByTestId(`smoke-step-${label}`);
+
+/** The step's own primary action, whatever the step it is rendered in. */
+const nextButton = () => screen.getByTestId('smoke-next-button');
+
+/** Settle once the step that was just left has persisted its draft. */
+const savedTo = (path: string): Promise<void> =>
+  waitFor(() =>
+    expect(
+      backend.requests.some(request => request.method === 'post' && request.path === path)
+    ).toBe(true)
   );
 
-// Mock Material-UI components
-jest.mock('@mui/material', () => ({
-  Stepper: ({ children, ...props }: any) => (
-    <div data-testid="stepper" data-active-step={props.activeStep} {...props}>
-      {children}
-    </div>
-  ),
-  Step: ({ children, ...props }: any) => (
-    <div data-testid="step" {...props}>
-      {children}
-    </div>
-  ),
-  StepButton: ({ children, onClick, ...props }: any) => (
-    <button data-testid="step-button" onClick={onClick} {...props}>
-      {children}
-    </button>
-  ),
-  Button: ({ children, onClick, ...props }: any) => (
-    <button data-testid="button" onClick={onClick} {...props}>
-      {children}
-    </button>
-  ),
-  Grid: ({ children, className, ...props }: any) => (
-    <div data-testid="grid" data-classname={className} {...props}>
-      {children}
-    </div>
-  ),
-}));
+describe('the wizard header', () => {
+  it('names the product and the session, and carries the flame badge', async () => {
+    renderWizard();
+    await screen.findByTestId('presmoke-name-input');
 
-// Mock step components
-jest.mock('./preSmokeStep/preSmokeStep', () => ({
-  PreSmokeStep: ({ nextButton }: any) => <div data-testid="pre-smoke-step">{nextButton}</div>,
-}));
-
-jest.mock('./smokeStep/smokeStep', () => ({
-  SmokeStep: ({ nextButton }: any) => <div data-testid="smoke-step">{nextButton}</div>,
-}));
-
-jest.mock('./postSmokeStep/PostSmokeStep', () => ({
-  PostSmokeStep: ({ nextButton }: any) => <div data-testid="post-smoke-step">{nextButton}</div>,
-}));
-
-describe('Smoke Component', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    backend = createFakeBackend({
-      state: { smokeId: 'test-id', smoking: true },
-      smoke: { finish: { _id: 'test-id' } as never },
-    });
+    const header = screen.getByTestId('smoke-header');
+    expect(header).toHaveTextContent('SMART SMOKER');
+    expect(header).toHaveTextContent('New Session');
+    expect(within(header).getByTestId('smoke-header-badge')).toBeInTheDocument();
   });
 
-  describe('Component Rendering', () => {
-    test('should render Smoke component successfully', () => {
-      renderSmoke();
+  it('stays at the top of the screen while a step is scrolled', async () => {
+    renderWizard();
+    await screen.findByTestId('presmoke-name-input');
 
-      // Look for the actual MUI stepper instead of our mock
-      expect(document.querySelector('.MuiStepper-root')).toBeInTheDocument();
-      // The screen's outermost Grid is addressed by name now (`smoke-screen`),
-      // so the two the mock still answers to are the stepper and the step.
-      expect(screen.getByTestId('smoke-screen')).toBeInTheDocument();
-      expect(screen.getAllByTestId('grid')).toHaveLength(2);
-      expect(document.querySelectorAll('.MuiStep-root')).toHaveLength(3);
-      expect(document.querySelectorAll('.MuiStepButton-root')).toHaveLength(3);
-    });
-
-    test('should render all step labels', () => {
-      renderSmoke();
-
-      expect(screen.getByText('Pre-Smoke')).toBeInTheDocument();
-      expect(screen.getByText('Smoke')).toBeInTheDocument();
-      expect(screen.getByText('Post-Smoke')).toBeInTheDocument();
-    });
-
-    test('should start with step 0 (Pre-Smoke) active', () => {
-      renderSmoke();
-
-      // Check that the stepper shows active step 0
-      const stepper = document.querySelector('.MuiStepper-root');
-      expect(stepper).toBeInTheDocument();
-      expect(screen.getByTestId('pre-smoke-step')).toBeInTheDocument();
-      expect(screen.queryByTestId('smoke-step')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('post-smoke-step')).not.toBeInTheDocument();
-    });
-
-    test('should render next button with correct text for first step', () => {
-      renderSmoke();
-
-      const nextButton = screen.getByText('Next');
-      expect(nextButton).toBeInTheDocument();
-      expect(nextButton).toHaveClass('nextButton');
-    });
+    const header = screen.getByTestId('smoke-header');
+    expect(getComputedStyle(header).position).toBe('sticky');
+    expect(getComputedStyle(header).top).toBe('0px');
+    // The step control travels with the header: the step being edited has to
+    // stay switchable however far down a step the user has scrolled.
+    expect(within(header).getByRole('tablist')).toBeInTheDocument();
   });
 
-  describe('Step Navigation', () => {
-    test('should navigate to next step when next button is clicked', async () => {
-      renderSmoke();
+  it('offers the steps as a segmented control rather than as the stepper it replaced', async () => {
+    renderWizard();
+    await screen.findByTestId('presmoke-name-input');
 
-      // Start at step 0
-      expect(screen.getByTestId('pre-smoke-step')).toBeInTheDocument();
-
-      // Click next button
-      const nextButton = screen.getByText('Next');
-      fireEvent.click(nextButton);
-
-      // Should be at step 1
-      await waitFor(() => {
-        expect(screen.getByTestId('smoke-step')).toBeInTheDocument();
-        expect(screen.queryByTestId('pre-smoke-step')).not.toBeInTheDocument();
-      });
-    });
-
-    test('should navigate to step 2 from step 1', async () => {
-      renderSmoke();
-
-      // Navigate to step 1
-      const nextButton = screen.getByText('Next');
-      fireEvent.click(nextButton);
-
-      await waitFor(() => {
-        expect(screen.getByTestId('smoke-step')).toBeInTheDocument();
-      });
-
-      // Navigate to step 2 using the next button from step 1
-      const nextButton2 = screen.getByText('Next');
-      fireEvent.click(nextButton2);
-
-      await waitFor(() => {
-        expect(screen.getByTestId('post-smoke-step')).toBeInTheDocument();
-        expect(screen.queryByTestId('smoke-step')).not.toBeInTheDocument();
-      });
-    });
-
-    test('should show "Finish" button on last step', async () => {
-      renderSmoke();
-
-      // Navigate to step 2 using two separate next button clicks
-      let nextButton = screen.getByText('Next');
-      fireEvent.click(nextButton); // Go to step 1
-
-      await waitFor(() => {
-        expect(screen.getByTestId('smoke-step')).toBeInTheDocument();
-      });
-
-      // Get the next button from the new step
-      nextButton = screen.getByText('Next');
-      fireEvent.click(nextButton); // Go to step 2
-
-      await waitFor(() => {
-        expect(screen.getByTestId('post-smoke-step')).toBeInTheDocument();
-        expect(screen.getByText('Finish')).toBeInTheDocument();
-        expect(screen.queryByText('Next')).not.toBeInTheDocument();
-      });
-    });
-
-    test('should navigate directly to step using step buttons', async () => {
-      renderSmoke();
-
-      const stepButtons = document.querySelectorAll('.MuiStepButton-root');
-      expect(stepButtons).toHaveLength(3);
-
-      // Click step 2 button (index 2)
-      fireEvent.click(stepButtons[2] as Element);
-
-      await waitFor(() => {
-        expect(screen.getByTestId('post-smoke-step')).toBeInTheDocument();
-      });
-    });
-
-    test('should navigate to step 1 using step button', async () => {
-      renderSmoke();
-
-      const stepButtons = document.querySelectorAll('.MuiStepButton-root');
-
-      // Click step 1 button (index 1)
-      fireEvent.click(stepButtons[1] as Element);
-
-      await waitFor(() => {
-        expect(screen.getByTestId('smoke-step')).toBeInTheDocument();
-      });
+    // The stepper offered each step as a button of its own; the steps are now
+    // segments of a tab list, and nothing on the screen offers them twice.
+    expect(screen.getAllByRole('tab').map(step => step.textContent)).toEqual([
+      'Pre-Smoke',
+      'Smoke',
+      'Post-Smoke',
+    ]);
+    ['Pre-Smoke', 'Smoke', 'Post-Smoke'].forEach(step => {
+      expect(screen.queryByRole('button', { name: step })).not.toBeInTheDocument();
     });
   });
+});
 
-  describe('Finish Smoke Functionality', () => {
-    test('should call finish then clearSmoke on the client when finish button is clicked', async () => {
-      renderSmoke();
+describe('the wizard step control', () => {
+  it('shows the step whose segment was tapped', async () => {
+    const user = userEvent.setup();
+    renderWizard();
+    await screen.findByTestId('presmoke-name-input');
 
-      // Navigate to step 2 by clicking next buttons twice
-      let nextButton = screen.getByText('Next');
-      fireEvent.click(nextButton); // Go to step 1
+    await user.click(segment('Post-Smoke'));
+    expect(await screen.findByTestId('postsmoke-rest-time-input')).toBeInTheDocument();
+    expect(screen.queryByTestId('presmoke-name-input')).not.toBeInTheDocument();
 
-      await waitFor(() => {
-        expect(screen.getByTestId('smoke-step')).toBeInTheDocument();
-      });
+    await user.click(segment('Smoke'));
+    expect(await screen.findByTestId('smoke-step')).toBeInTheDocument();
 
-      nextButton = screen.getByText('Next'); // Get the next button from step 1
-      fireEvent.click(nextButton); // Go to step 2
-
-      await waitFor(() => {
-        expect(screen.getByTestId('post-smoke-step')).toBeInTheDocument();
-      });
-
-      // Now we should see the Finish button
-      await waitFor(() => {
-        expect(screen.getByText('Finish')).toBeInTheDocument();
-      });
-
-      // Click finish button
-      const finishButton = screen.getByText('Finish');
-      fireEvent.click(finishButton);
-
-      await waitFor(() => {
-        expect(backend.requests).toContainEqual({
-          method: 'post',
-          path: 'smoke/finish',
-          body: undefined,
-        });
-        expect(backend.requests).toContainEqual({
-          method: 'put',
-          path: 'state/clearSmoke',
-          body: undefined,
-        });
-      });
-    });
-
-    test('should reset to step 0 after finishing smoke', async () => {
-      renderSmoke();
-
-      // Navigate to step 2
-      let nextButton = screen.getByText('Next');
-      fireEvent.click(nextButton);
-
-      await waitFor(() => {
-        expect(screen.getByTestId('smoke-step')).toBeInTheDocument();
-      });
-
-      nextButton = screen.getByText('Next');
-      fireEvent.click(nextButton);
-
-      await waitFor(() => {
-        expect(screen.getByTestId('post-smoke-step')).toBeInTheDocument();
-      });
-
-      await waitFor(() => {
-        expect(screen.getByText('Finish')).toBeInTheDocument();
-      });
-
-      // Click finish button
-      const finishButton = screen.getByText('Finish');
-      fireEvent.click(finishButton);
-
-      // Wait for reset to step 0
-      await waitFor(
-        () => {
-          expect(screen.getByTestId('pre-smoke-step')).toBeInTheDocument();
-        },
-        { timeout: 3000 }
-      );
-    });
+    await user.click(segment('Pre-Smoke'));
+    expect(await screen.findByTestId('presmoke-name-input')).toBeInTheDocument();
   });
 
-  describe('Component Structure', () => {
-    test('should have correct grid structure', () => {
-      renderSmoke();
+  it('marks the step being shown as the selected segment, and only that one', async () => {
+    const user = userEvent.setup();
+    renderWizard();
+    await screen.findByTestId('presmoke-name-input');
 
-      expect(screen.getAllByTestId('grid')).toHaveLength(2);
+    expect(segment('Pre-Smoke')).toHaveAttribute('aria-selected', 'true');
+    expect(segment('Smoke')).toHaveAttribute('aria-selected', 'false');
+    expect(segment('Post-Smoke')).toHaveAttribute('aria-selected', 'false');
 
-      // Check for specific class names - find the main grid by name
-      expect(screen.getByTestId('smoke-screen')).toHaveAttribute('data-classname', 'smoke');
-    });
+    await user.click(segment('Post-Smoke'));
 
-    test('should render stepper with correct props', () => {
-      renderSmoke();
-
-      // Find stepper by its MUI class name
-      const stepper = document.querySelector('.MuiStepper-root');
-      expect(stepper).toBeInTheDocument();
-      expect(stepper).toHaveClass('MuiStepper-horizontal');
-      expect(stepper).toHaveClass('MuiStepper-nonLinear');
-      expect(stepper).toHaveClass('MuiStepper-alternativeLabel');
-    });
+    await waitFor(() => expect(segment('Post-Smoke')).toHaveAttribute('aria-selected', 'true'));
+    expect(segment('Pre-Smoke')).toHaveAttribute('aria-selected', 'false');
   });
 
-  describe('Edge Cases', () => {
-    test('should not navigate beyond step 2', async () => {
-      renderSmoke();
+  it('keeps what was typed into a step when it is left and returned to', async () => {
+    const user = userEvent.setup();
+    renderWizard();
 
-      // Start at step 0 (pre-smoke)
-      expect(screen.getByTestId('pre-smoke-step')).toBeInTheDocument();
+    await user.type(await screen.findByTestId('presmoke-name-input'), 'Brisket');
+    await user.click(segment('Post-Smoke'));
+    // Leaving the step is what saves it, and the save is a round trip: wait for
+    // it to land before coming back, exactly as the wizard's own save-on-leave
+    // has always required. Racing the read against it would test the fake's
+    // scheduling rather than the shell.
+    await savedTo('presmoke');
 
-      // Navigate to step 1 (smoke)
-      const nextButton = screen.getByText('Next');
-      fireEvent.click(nextButton);
+    await user.type(await screen.findByTestId('postsmoke-rest-time-input'), '0130');
+    await user.click(segment('Pre-Smoke'));
+    await savedTo('postSmoke/current');
 
-      await waitFor(() => {
-        expect(screen.getByTestId('smoke-step')).toBeInTheDocument();
-      });
+    expect(await screen.findByTestId('presmoke-name-input')).toHaveValue('Brisket');
 
-      // Navigate to step 2 (post-smoke)
-      const nextButton2 = screen.getByText('Next');
-      fireEvent.click(nextButton2);
+    await user.click(segment('Post-Smoke'));
+    expect(await screen.findByTestId('postsmoke-rest-time-input')).toHaveValue('01:30');
+  });
+});
 
-      await waitFor(() => {
-        expect(screen.getByTestId('post-smoke-step')).toBeInTheDocument();
-      });
+describe('advancing through the wizard', () => {
+  it('walks the steps in order, offering to finish only on the last of them', async () => {
+    const user = userEvent.setup();
+    renderWizard();
+    await screen.findByTestId('presmoke-name-input');
 
-      // Should show Finish button now
-      expect(screen.getByText('Finish')).toBeInTheDocument();
-    });
+    expect(nextButton()).toHaveTextContent('Next');
+    await user.click(nextButton());
+
+    expect(await screen.findByTestId('smoke-step')).toBeInTheDocument();
+    expect(nextButton()).toHaveTextContent('Next');
+    await user.click(nextButton());
+
+    expect(await screen.findByTestId('postsmoke-rest-time-input')).toBeInTheDocument();
+    expect(nextButton()).toHaveTextContent('Finish');
   });
 
-  describe('Delay Function', () => {
-    test('should resolve after specified time', async () => {
-      const startTime = Date.now();
-      await delay(10);
-      const endTime = Date.now();
+  it('finishes the smoke and clears the session, then starts the wizard over', async () => {
+    const user = userEvent.setup();
+    renderWizard();
+    await screen.findByTestId('presmoke-name-input');
 
-      expect(endTime - startTime).toBeGreaterThanOrEqual(10);
-    });
+    await user.click(segment('Post-Smoke'));
+    await screen.findByTestId('postsmoke-rest-time-input');
+    await user.click(nextButton());
 
-    test('should be exported and callable', () => {
-      expect(typeof delay).toBe('function');
-    });
+    await waitFor(() =>
+      expect(backend.requests).toContainEqual({
+        method: 'post',
+        path: 'smoke/finish',
+        body: undefined,
+      })
+    );
+    await waitFor(() =>
+      expect(backend.requests).toContainEqual({
+        method: 'put',
+        path: 'state/clearSmoke',
+        body: undefined,
+      })
+    );
+    expect(await screen.findByTestId('presmoke-name-input')).toBeInTheDocument();
+  });
+});
+
+describe('the delay the finish flow waits on', () => {
+  it('resolves once the scheduled timer fires, and not before', async () => {
+    jest.useFakeTimers();
+    try {
+      const resolved = jest.fn();
+      const pending = delay(10).then(resolved);
+
+      await Promise.resolve();
+      expect(resolved).not.toHaveBeenCalled();
+
+      // Fake timers keep this deterministic: measured against the wall clock
+      // under coverage it occasionally landed just under the threshold.
+      jest.advanceTimersByTime(10);
+      await pending;
+      expect(resolved).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

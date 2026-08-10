@@ -1175,7 +1175,7 @@ export class FrontendApp {
   }
 
   async openHistory(): Promise<void> {
-    await this.page.getByTestId('nav-review').click();
+    await this.page.getByTestId('nav-history').click();
   }
 
   historyCard(name: string): Locator {
@@ -1192,13 +1192,13 @@ export class FrontendApp {
   /**
    * The History list only fetches when it mounts, so a just-archived smoke can
    * be missing if the list rendered before the archive was queryable. Re-enter
-   * the Review tab to refetch until the card appears.
+   * the History tab to refetch until the card appears.
    */
   async expectHistoryContains(name: string): Promise<void> {
     await expect(async () => {
       if (!(await this.historyCard(name).isVisible())) {
         await this.page.getByTestId('nav-smoke').click();
-        await this.page.getByTestId('nav-review').click();
+        await this.page.getByTestId('nav-history').click();
       }
       await expect(this.historyCard(name)).toBeVisible({ timeout: 3_000 });
     }).toPass({ timeout: 20_000 });
@@ -1208,7 +1208,7 @@ export class FrontendApp {
   async expectHistoryMissing(name: string): Promise<void> {
     await expect(async () => {
       await this.page.getByTestId('nav-smoke').click();
-      await this.page.getByTestId('nav-review').click();
+      await this.page.getByTestId('nav-history').click();
       await expect(this.historyCard(name)).toHaveCount(0, { timeout: 3_000 });
     }).toPass({ timeout: 20_000 });
   }

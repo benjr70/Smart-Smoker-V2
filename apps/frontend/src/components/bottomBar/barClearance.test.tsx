@@ -189,7 +189,11 @@ const renderBar = () =>
   render(
     <CssVarsProvider theme={appTheme}>
       <DesignSurface>
-        <BottomBar smokeOnClick={jest.fn()} reviewOnClick={jest.fn()} settingsOnClick={jest.fn()} />
+        <BottomBar
+          smokeOnClick={jest.fn()}
+          historyOnClick={jest.fn()}
+          settingsOnClick={jest.fn()}
+        />
       </DesignSurface>
     </CssVarsProvider>
   );

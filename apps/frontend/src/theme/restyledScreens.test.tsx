@@ -338,10 +338,23 @@ describe('the smoke wizard', () => {
     });
   });
 
-  it('labels the step the user is on in the text colour of the scheme in effect', async () => {
+  /**
+   * The step control replaced the stepper, and with it what marks the step the
+   * user is on: the segment is lifted onto the card surface and reads in the
+   * accent, while the steps either side of it stay in the track in supporting
+   * ink. Both halves are asserted, because a control that painted every segment
+   * the accent would mark nothing.
+   */
+  it('lifts the step the user is on onto the surface and accent of the scheme in effect', async () => {
     renderUnder('dark', <Smoke />);
 
-    expect(await screen.findByText('Pre-Smoke')).toHaveStyle({ color: carbonDark.text });
+    expect(await screen.findByRole('tab', { name: 'Pre-Smoke' })).toHaveStyle({
+      backgroundColor: carbonDark.surface,
+      color: carbonDark.accent,
+    });
+    expect(screen.getByRole('tab', { name: 'Post-Smoke' })).toHaveStyle({
+      color: carbonDark.textSecondary,
+    });
   });
 });
 
@@ -383,7 +396,7 @@ describe('the bottom navigation', () => {
 
     expect(screen.getAllByRole('button').map(action => action.textContent)).toEqual([
       'Smoke',
-      'Review',
+      'History',
       'Settings',
     ]);
   });
@@ -410,7 +423,7 @@ describe('the recoloured history list', () => {
 
 const navigationHandlers = () => ({
   smokeOnClick: jest.fn(),
-  reviewOnClick: jest.fn(),
+  historyOnClick: jest.fn(),
   settingsOnClick: jest.fn(),
 });
 
