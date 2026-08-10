@@ -6,6 +6,7 @@ import { PostSmokeStep } from './postSmokeStep/PostSmokeStep';
 import { Button, Grid } from '@mui/material';
 import { useApiClient } from '../../api';
 import { SegmentedControl, segmentTabId } from '../common/components/SegmentedControl';
+import { SmokeComplete } from './SmokeComplete';
 import { SmokeHeader } from './SmokeHeader';
 
 /**
@@ -33,9 +34,22 @@ export function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-export function Smoke(): JSX.Element {
+export interface SmokeProps {
+  /**
+   * Where "View History" on the completion screen goes. The wizard does not
+   * know how this application navigates — that is the shell's business — so it
+   * asks rather than routes.
+   */
+  onViewHistory?: () => void;
+}
+
+export function Smoke({ onViewHistory }: SmokeProps = {}): JSX.Element {
   const client = useApiClient();
   const [activeStep, setActiveStep] = React.useState(0);
+  // Whether the cook this wizard was editing has been archived. It is the end
+  // of the wizard rather than a fourth step: what it was editing no longer
+  // exists once the session is cleared.
+  const [complete, setComplete] = React.useState(false);
 
   const handleStep = (step: any) => {
     setActiveStep(step);
@@ -44,16 +58,18 @@ export function Smoke(): JSX.Element {
   const nextStep = async () => {
     let nextStep = activeStep;
     if (activeStep === 2) {
-      nextStep = 0;
+      // Parking on an index past the last step unmounts the step being left,
+      // which is what persists what was typed into it; the beat after gives
+      // that save the chance to land before the smoke is archived.
       setActiveStep(5);
       await delay(2);
       // Finalize the current smoke, then reset the session (the websocket
       // `clear` broadcast fires inside the client's clearSmoke). Each call
-      // swallows-and-logs so a backend failure still resets the stepper — the
+      // swallows-and-logs so a backend failure still ends the wizard — the
       // behavior the two legacy shims preserved before this cutover.
       await client.smoke.finish().catch(error => console.log(error));
       await client.state.clearSmoke().catch(error => console.log(error));
-      setActiveStep(nextStep);
+      setComplete(true);
       return;
     }
     nextStep++;
@@ -62,17 +78,30 @@ export function Smoke(): JSX.Element {
     }
   };
 
+  if (complete) {
+    // The wizard is over: no header, no step control, nothing to step between.
+    // A fresh one is mounted by coming back to the Smoke tab.
+    return (
+      <Grid container direction="column" wrap="nowrap" className="smoke" data-testid="smoke-screen">
+        <SmokeComplete onViewHistory={() => onViewHistory?.()} />
+      </Grid>
+    );
+  }
+
   // The finish flow parks the wizard on a step index past the last one while it
   // resets; the control still has to name a segment, and the step being left is
   // the honest one to name.
   const shownStep = steps[Math.min(activeStep, steps.length - 1)].value;
 
   let step;
+  // One action at the foot of each step, across the width of it. It used to be a
+  // 125px pill pushed into the right-hand corner — the far corner of a phone
+  // held in one hand, for the control every step ends on.
   const nextButton = (
     <Button
       className="nextButton"
       variant="contained"
-      size="small"
+      fullWidth
       data-testid="smoke-next-button"
       onClick={() => nextStep()}
     >

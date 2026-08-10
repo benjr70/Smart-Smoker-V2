@@ -6,7 +6,7 @@ import { expect, Locator, Page, Request } from '@playwright/test';
 import { isTemperature, temperatureOf } from './readouts';
 
 /** The weight units the pre-smoke wizard offers; LB is the form's default. */
-export type WeightUnit = 'LB' | 'OZ';
+export type WeightUnit = 'LB' | 'OZ' | 'KG';
 
 /** Every value the pre-smoke wizard holds, as a journey enters (and re-reads) them. */
 export type PreSmokeFields = {
@@ -509,33 +509,35 @@ export class FrontendApp {
       );
   }
 
+  /** The one control under a dynamic steps list that grows it. */
+  private dynamicListAddButton(prefix: string): Locator {
+    return this.page.getByTestId(`${prefix}-add-button`);
+  }
+
   /**
    * Drive a dynamic steps list to hold exactly `values`.
    *
-   * Such a list starts as a single empty row, grows when the last row's "+" is
-   * clicked and shrinks when any earlier row's "-" is. The row count is driven
-   * to the target in *both* directions, so the fill converges from whatever the
-   * list currently holds — including a stored list longer than `values`, which
-   * a step's load can restore mid-fill (see `throughAsyncLoad`, which replays
-   * this whole sequence when that happens).
+   * Such a list grows when the "+ Add Step" control under it is clicked and
+   * shrinks when a row's "×" is. The row count is driven to the target in
+   * *both* directions, so the fill converges from whatever the list currently
+   * holds — including a stored list longer than `values`, which a step's load
+   * can restore mid-fill (see `throughAsyncLoad`, which replays this whole
+   * sequence when that happens).
    */
   private async fillDynamicList(prefix: string, values: string[]): Promise<void> {
     if (values.length < 1) {
-      throw new Error('a dynamic steps list always renders at least one row; got none to fill');
+      throw new Error('filling a dynamic steps list needs at least one value; got none');
     }
     const rows = this.dynamicListRows(prefix);
     await this.throughAsyncLoad(async () => {
       let count = await rows.count();
-      // Surplus rows go first: with a target of at least one row, a list that
-      // is too long has two or more rows, so its first row is never the last
-      // one — the only row that carries "+" instead of "-".
       while (count > values.length) {
         await rows.first().getByTestId(`${prefix}-remove-button`).click();
         await expect(rows).toHaveCount(count - 1, { timeout: 2_000 });
         count--;
       }
       while (count < values.length) {
-        await rows.last().getByTestId(`${prefix}-add-button`).click();
+        await this.dynamicListAddButton(prefix).click();
         await expect(rows).toHaveCount(count + 1, { timeout: 2_000 });
         count++;
       }
@@ -560,12 +562,11 @@ export class FrontendApp {
   }
 
   /**
-   * Remove one row of a dynamic steps list via its "-" button.
+   * Remove one row of a dynamic steps list via its "×" button.
    *
-   * Only rows *before* the last carry a "-": the last row carries the "+" that
-   * grows the list instead. Removing the final row is therefore not something
-   * the UI offers, and asking for it is a spec bug — reported as one here
-   * rather than surfacing later as an unexplained click timeout.
+   * Every row carries one, the last included — which it did not before this
+   * list was brought to the design: the final row used to carry the control
+   * that *added* a step, so the last step of a plan could not be dropped at all.
    *
    * Expressed as "converge on the rows that should survive" rather than "click
    * once", because the retry may replay it: a second unconditional click would
@@ -578,18 +579,11 @@ export class FrontendApp {
         `cannot remove row ${index} of the "${prefix}" list: it holds ${before.length} row(s)`
       );
     }
-    if (index === before.length - 1) {
-      throw new Error(
-        `cannot remove the last row (${index}) of the "${prefix}" list: it carries the add ` +
-          `button, not a remove button`
-      );
-    }
     const survivors = before.filter((_, position) => position !== index);
     await this.throughAsyncLoad(async () => {
       // Only click while the list is still too long: once it holds as many rows
       // as should survive, the removal has happened and a replay must not
-      // remove another. Any row addressable here is one a longer-than-target
-      // list keeps before its last, so it always carries a "-".
+      // remove another.
       if ((await this.dynamicListRows(prefix).count()) > survivors.length) {
         await this.dynamicListRows(prefix)
           .nth(index)
@@ -1147,14 +1141,13 @@ export class FrontendApp {
   }
 
   /**
-   * Finish the smoke from the Post-Smoke step: archive it and let the wizard
-   * reset for the next cook.
+   * Finish the smoke from the Post-Smoke step: archive it and land on the
+   * completion screen.
    *
    * The archive is awaited and asserted accepted, so a rejected finish fails
    * here — at the archive — instead of surfacing later as a smoke mysteriously
-   * absent from history. The wizard returning to the pre-smoke step's *content*
-   * is what says the whole sequence (archive, then clear) ran: the step buttons
-   * are on screen throughout, but only step 0 renders the pre-smoke form.
+   * absent from history. The completion screen is what says the whole sequence
+   * (archive, then clear) ran: it replaces the wizard only once both have.
    */
   async finishSmoke(): Promise<void> {
     const archived = this.page.waitForResponse(
@@ -1168,7 +1161,13 @@ export class FrontendApp {
         .text()
         .catch(() => '')}`
     ).toBeTruthy();
-    await expect(this.preSmokeName).toBeVisible();
+    await expect(this.page.getByTestId('smoke-complete')).toBeVisible();
+  }
+
+  /** Take the completion screen's own way to the history of finished cooks. */
+  async viewHistoryFromCompletion(): Promise<void> {
+    await this.page.getByTestId('smoke-complete-view-history').click();
+    await expect(this.page.getByTestId('history-screen')).toBeVisible();
   }
 
   /** Advance to the Post-Smoke step, enter a rest time, and finish the smoke. */

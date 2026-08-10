@@ -38,7 +38,7 @@ jest.mock('./smokeStep/smokeStep', () => ({
 
 let backend: FakeBackend;
 
-const renderWizard = () => {
+const renderWizard = (onViewHistory?: () => void) => {
   // A session already under way: both steps have a stored document, which is
   // what the save-on-leave needs — a step whose load failed deliberately writes
   // nothing back (see `useCurrentResource`), so a wizard over an empty backend
@@ -63,7 +63,7 @@ const renderWizard = () => {
       <DesignSurface>
         <ApiClientProvider client={createApiClient(backend)}>
           <SnackbarProvider>
-            <Smoke />
+            <Smoke onViewHistory={onViewHistory} />
           </SnackbarProvider>
         </ApiClientProvider>
       </DesignSurface>
@@ -243,7 +243,17 @@ describe('advancing through the wizard', () => {
     expect(nextButton()).toHaveTextContent('Finish');
   });
 
-  it('finishes the smoke and clears the session, then starts the wizard over', async () => {
+  it('offers the step’s primary action across the width of the form', async () => {
+    // It used to be a 125px pill pushed against the right-hand edge, which on a
+    // phone is the one corner a thumb has to stretch for. The design gives the
+    // step one full-width action at the foot of it.
+    renderWizard();
+    await screen.findByTestId('presmoke-name-input');
+
+    expect(nextButton()).toHaveStyle({ width: '100%' });
+  });
+
+  it('finishes the smoke and clears the session, and says so', async () => {
     const user = userEvent.setup();
     renderWizard();
     await screen.findByTestId('presmoke-name-input');
@@ -266,7 +276,31 @@ describe('advancing through the wizard', () => {
         body: undefined,
       })
     );
-    expect(await screen.findByTestId('presmoke-name-input')).toBeInTheDocument();
+
+    // Ending a cook used to drop the user back on an empty pre-smoke form, with
+    // nothing to say whether the session had been saved or thrown away. The
+    // design ends it on a moment of its own.
+    const complete = await screen.findByTestId('smoke-complete');
+    expect(complete).toHaveTextContent('Smoke Complete!');
+    expect(complete).toHaveTextContent('Your session has been saved to history.');
+    // The wizard is over, so the form it was is no longer underneath it.
+    expect(screen.queryByTestId('postsmoke-rest-time-input')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('presmoke-name-input')).not.toBeInTheDocument();
+  });
+
+  it('sends the user to the history from the completion screen', async () => {
+    const user = userEvent.setup();
+    const viewHistory = jest.fn();
+    renderWizard(viewHistory);
+    await screen.findByTestId('presmoke-name-input');
+
+    await user.click(segment('Post-Smoke'));
+    await screen.findByTestId('postsmoke-rest-time-input');
+    await user.click(nextButton());
+
+    await user.click(await screen.findByRole('button', { name: 'View History' }));
+
+    expect(viewHistory).toHaveBeenCalledTimes(1);
   });
 });
 

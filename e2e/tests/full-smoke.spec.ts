@@ -213,13 +213,14 @@ test('full smoke: hand-entered fields survive a reload, the cook runs, and the r
     await frontend.openPostSmokeStep();
     await frontend.expectPostSmokeShows({ ...postSmoke, steps: survivingWrapUp });
 
-    // 19. The cook is done: finish it, which archives the smoke and resets the
-    //     wizard for the next one.
+    // 19. The cook is done: finish it, which archives the smoke, clears the
+    //     session and ends on the completion screen.
     await frontend.finishSmoke();
 
     // 20. An archived smoke belongs in history, under the name the pitmaster
-    //     gave it back at the very first step.
-    await frontend.openHistory();
+    //     gave it back at the very first step — reached the way the completion
+    //     screen offers, which is the one action it has.
+    await frontend.viewHistoryFromCompletion();
     await frontend.expectHistoryContains(smokeName);
 
     // 21. The truth check the whole journey has been building to: open the

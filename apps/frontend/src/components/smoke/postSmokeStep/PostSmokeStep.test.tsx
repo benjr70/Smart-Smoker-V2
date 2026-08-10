@@ -1,9 +1,11 @@
 import '@testing-library/jest-dom';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { Experimental_CssVarsProvider as CssVarsProvider } from '@mui/material';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { ApiClientProvider, SnackbarProvider, createApiClient } from '../../../api';
 import { createFakeBackend, FakeBackend } from '../../../api/fakeBackend';
 import { PostSmoke } from '../../../api/types';
+import { DesignSurface, appTheme } from '../../../theme';
 import { PostSmokeStep } from './PostSmokeStep';
 
 const seededPostSmoke: PostSmoke = {
@@ -12,15 +14,24 @@ const seededPostSmoke: PostSmoke = {
   notes: 'Post-smoke notes',
 };
 
+/**
+ * The step, mounted the way the application root mounts it: inside the colour
+ * scheme provider and the design's palette, which is where its labels and cards
+ * take their colours from.
+ */
 const renderStep = (backend: FakeBackend) => {
   const client = createApiClient(backend);
   const nextButton = <button data-testid="next-button">Next</button>;
   return render(
-    <ApiClientProvider client={client}>
-      <SnackbarProvider>
-        <PostSmokeStep nextButton={nextButton} />
-      </SnackbarProvider>
-    </ApiClientProvider>
+    <CssVarsProvider theme={appTheme}>
+      <DesignSurface>
+        <ApiClientProvider client={client}>
+          <SnackbarProvider>
+            <PostSmokeStep nextButton={nextButton} />
+          </SnackbarProvider>
+        </ApiClientProvider>
+      </DesignSurface>
+    </CssVarsProvider>
   );
 };
 
@@ -84,6 +95,57 @@ describe('PostSmokeStep', () => {
     unmount();
 
     await waitFor(() => expect(backend.store.postSmoke.current?.steps).toContain('Rest in cooler'));
+  });
+
+  test('adds, edits and drops wrap-up steps, persisting the survivors in order', async () => {
+    // What is done to the meat after it comes off is a plan like the prep one,
+    // and is revised the same way: a step added, a step dropped, the rest kept
+    // in the order they will be done in.
+    const backend = createFakeBackend({
+      postSmoke: { current: { ...seededPostSmoke, steps: ['Rest wrapped'] } },
+    });
+
+    const { unmount } = renderStep(backend);
+
+    await screen.findByDisplayValue('Rest wrapped');
+    const rows = () => screen.getAllByTestId('postsmoke-step-row');
+    const stepInput = (index: number) => within(rows()[index]).getByTestId('postsmoke-step-input');
+
+    fireEvent.click(screen.getByTestId('postsmoke-step-add-button'));
+    fireEvent.change(stepInput(1), { target: { value: 'Hold in the cooler' } });
+    fireEvent.click(screen.getByTestId('postsmoke-step-add-button'));
+    fireEvent.change(stepInput(2), { target: { value: 'Slice against the grain' } });
+
+    fireEvent.click(within(rows()[1]).getByTestId('postsmoke-step-remove-button'));
+    expect(rows()).toHaveLength(2);
+
+    unmount();
+
+    await waitFor(() =>
+      expect(backend.store.postSmoke.current?.steps).toEqual([
+        'Rest wrapped',
+        'Slice against the grain',
+      ])
+    );
+  });
+
+  test('labels its fields in the design’s uppercase, and says how a rest time is written', async () => {
+    // The rest-time field is masked to `HH:MM` and rewrites what is typed into
+    // it. Without a word about the format that rewriting looks like the field
+    // eating the input: "90" for an hour and a half becomes "90:" and then
+    // refuses the rest. The hint is what the design puts under the field.
+    const backend = createFakeBackend({ postSmoke: { current: seededPostSmoke } });
+
+    renderStep(backend);
+    await screen.findByDisplayValue('01:30');
+
+    const restTime = screen.getByTestId('postsmoke-rest-time-input');
+    expect(screen.getByLabelText('Rest Time')).toBe(restTime);
+    expect(screen.getByText('Rest Time')).toHaveStyle({ textTransform: 'uppercase' });
+    expect(restTime).toHaveAccessibleDescription('Hours and minutes, as HH:MM');
+
+    expect(screen.getByLabelText('Notes')).toBe(screen.getByTestId('postsmoke-notes-input'));
+    expect(screen.getByText('Notes')).toHaveStyle({ textTransform: 'uppercase' });
   });
 
   test('raises the snackbar when loading the post-smoke fails', async () => {

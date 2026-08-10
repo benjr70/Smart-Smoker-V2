@@ -16,11 +16,12 @@
   min-height: calc(100vh - 56px);
 }
 
+/* The step's one action, at the foot of it. Its width is the form's now (see
+   `fullWidth` in smoke.tsx); what is left here is the height, which is a
+   touch target rather than a piece of typography and so is stated rather than
+   left to the text inside it. */
 .nextButton {
-  margin-right: 5%;
-  justify-content: flex-end;
-  height: 50px;
-  width: 125px;
+  height: 48px;
 }
 
 /* The page frame behind a wizard step: the background token, which follows the
