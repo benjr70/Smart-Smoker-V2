@@ -20,63 +20,18 @@ import { DesignSurface, carbonLight, resolveDesignPalette } from '../../../theme
 // store's fire-and-forget startup/command promises just the same.
 const flushPromises = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 0));
 
-// Mock Material-UI so the thin view can be driven and queried by simple test
-// ids; all real behavior flows through the fake socket/api (the true boundary).
-jest.mock('@mui/material', () => ({
-  Grid: ({ children, container, item, xs, direction, className, sx, ...props }: any) => (
-    <div data-testid="grid" className={className} {...props}>
-      {children}
-    </div>
-  ),
-  Autocomplete: ({ freeSolo, options, inputValue, onInputChange, renderInput, ...props }: any) => (
-    <div
-      data-testid="autocomplete"
-      data-free-solo={freeSolo}
-      data-options={JSON.stringify(options)}
-    >
-      <input
-        data-testid="autocomplete-input"
-        value={inputValue || ''}
-        onChange={(e: any) => onInputChange && onInputChange(e, e.target.value)}
-        placeholder="Wood Type"
-      />
-    </div>
-  ),
-  Button: ({ children, onClick, ...props }: any) => (
-    <button data-testid="button" onClick={onClick} {...props}>
-      {children}
-    </button>
-  ),
-  Divider: ({ variant: _variant, ...props }: any) => <hr data-testid="divider" {...props} />,
-  Box: ({ children, sx: _sx, ...props }: any) => <div {...props}>{children}</div>,
-  Typography: ({ children, sx: _sx, variant: _variant, ...props }: any) => (
-    <span {...props}>{children}</span>
-  ),
-  Input: ({ value, onChange, defaultValue: _dv, disableUnderline: _du, sx: _sx }: any) => (
-    <input data-testid="input" value={value || ''} onChange={onChange} />
-  ),
-  // `inputProps` (MUI's escape hatch onto the inner input element, which is
-  // where the fields' e2e test ids live) is swallowed rather than forwarded:
-  // this stub is a flat `<input>`, so it has no inner element to model, and
-  // spreading the object onto the DOM would only earn a React warning. Whether
-  // those ids reach the element a browser types into is proven against real MUI
-  // by the full-smoke e2e journey.
-  TextField: ({ label, value, onChange, multiline, rows, inputProps: _ip, ...props }: any) => (
-    <input
-      data-testid="text-field"
-      data-label={label}
-      value={value || ''}
-      onChange={onChange}
-      data-multiline={multiline}
-      data-rows={rows}
-      {...props}
-    />
-  ),
-}));
-
-// The chart itself is not stubbed: it is plain React SVG now, so what it draws
-// from the session is assertable here rather than being taken on trust from the
-// props it was handed.
+// Nothing of the user interface is stubbed. Material-UI is the library the step
+// is written in, not a boundary it talks across, and a suite that replaced it
+// with hand-written stand-ins could only assert on the stand-ins — which is how
+// the readouts' colours, the start control's two appearances and the wood
+// picker's suggestion list all became unassertable here. The chart is real for
+// the same reason: it is plain React SVG, so what it draws from the session is
+// read off the document rather than taken on trust from the props it was given.
+//
+// The fields are addressed by the test ids the step puts on the elements a
+// browser actually types into (`smoke-chamber-name-input` and friends) — the
+// same ids the e2e journeys use, so this suite and those agree on what the
+// controls are.
 
 // The composition root opens a real cloud socket and pairs the store with the
 // production API client. Mock both boundaries — the cloud-socket adapter factory
@@ -173,10 +128,10 @@ function harness(): { config: SessionConfig; socket: FakeCloudSocket; api: FakeS
  * Render the view under a live Provider wired to the fake kit, and over a client
  * backed by the in-memory backend the step reads its settings from.
  *
- * The step's layout grid is imported straight from Material-UI rather than
- * through the barrel this file mocks, so it is a real component and reads the
- * theme: the readouts are painted from the probe colours the design carries.
- * Wrapping the way the application root wraps its tree hands them over.
+ * {@link DesignSurface} is what carries the design's tokens into the subtree, so
+ * the step is painted here the way it is painted in the application: the probe
+ * colours, the surfaces and the accent are the real ones, and a test can ask
+ * what colour a reading is in.
  */
 function renderView(kit = harness(), backend: FakeBackend = createFakeBackend()) {
   const utils = render(
@@ -199,8 +154,14 @@ const seriesPaths = (container: HTMLElement): SVGPathElement[] =>
 const targetLines = (container: HTMLElement): SVGLineElement[] =>
   Array.from(container.querySelectorAll<SVGLineElement>('line[data-target]'));
 
-/** The chart colours the smoke screen draws under in a test, which is light. */
-const chartColours = resolveDesignPalette(carbonLight).chart;
+/** The palette the smoke screen is painted in under test, which is the light one. */
+const designColours = resolveDesignPalette(carbonLight);
+
+/** The chart colours the smoke screen draws under in a test. */
+const chartColours = designColours.chart;
+
+/** The colour each reading is identified by, in the same scheme. */
+const probeColours = designColours.probes;
 
 /**
  * A stored settings document with the given probes watched at the given
@@ -402,6 +363,270 @@ describe('the target lines on the smoke screen', () => {
   });
 });
 
+describe('the shape of the step', () => {
+  test('is the design’s three cards and nothing else — no estimated completion', async () => {
+    const { container } = renderView();
+
+    await act(async () => {
+      await flushPromises();
+    });
+
+    // Every card on the step, in the order it is read down the screen. Stated
+    // as the whole list rather than as three separate presence checks, because
+    // what this is guarding is as much what is absent as what is there: the
+    // design's Estimated Completion card is deliberately not built (target
+    // temperatures stay settings-managed), and a list is what notices a fourth
+    // card appearing.
+    const cards = Array.from(container.querySelectorAll('[data-testid$="-card"]')).map(card =>
+      card.getAttribute('data-testid')
+    );
+
+    expect(cards).toEqual(['smoke-temps-card', 'smoke-chart-card', 'smoke-details-card']);
+    expect(screen.queryByText(/estimated completion/i)).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * The four readings, as the design lays them out: one card, a row per channel,
+ * and in each row a dot, the name it was given, and what it is reading.
+ */
+describe('the temperature rows', () => {
+  /** Each channel, and the probe colour it is identified by. */
+  const channels: [string, keyof typeof probeColours][] = [
+    ['chamber', 'chamber'],
+    ['probe1', 'probe1'],
+    ['probe2', 'probe2'],
+    ['probe3', 'probe3'],
+  ];
+
+  test.each(channels)(
+    'marks the %s row with a dot in its own colour, beside a name in the same colour',
+    async channel => {
+      const { socket } = renderView();
+
+      await act(async () => {
+        await flushPromises();
+      });
+      await act(async () => {
+        socket.injectEvents(eventsFrame('213', ['145', '92', '78']));
+      });
+
+      const row = await screen.findByTestId(`smoke-${channel}-row`);
+      // The dot and the name carry the same colour, because between them they
+      // are the one thing that says which probe this row is: a dot in one
+      // colour beside a name in another would identify two probes.
+      expect(within(row).getByTestId(`smoke-${channel}-dot`)).toHaveStyle({
+        backgroundColor: probeColours[channel],
+      });
+      expect(within(row).getByTestId(`smoke-${channel}-name-input`)).toHaveStyle({
+        color: probeColours[channel],
+      });
+    }
+  );
+
+  test('reads every channel in Fahrenheit, each value in its own row', async () => {
+    const { socket } = renderView();
+
+    await act(async () => {
+      await flushPromises();
+    });
+    await act(async () => {
+      socket.injectEvents(eventsFrame('213', ['145', '92', '78']));
+    });
+
+    const readings = await Promise.all(
+      channels.map(async ([channel]) => {
+        const row = await screen.findByTestId(`smoke-${channel}-row`);
+        return within(row).getByTestId(`smoke-${channel}-temp`).textContent;
+      })
+    );
+
+    // The unit rides with the number rather than heading the column, so a row
+    // read on its own still says what it is: 213°F, not a bare 213.
+    //
+    // This text is a contract, not a detail: the full-smoke journey waits on
+    // these readouts to prove the whole pipeline is delivering frames, and it
+    // reads the temperature out of exactly this element. Its half of the
+    // contract is pinned by `e2e/src/pageObjects/readouts.test.mts`, and the
+    // two move together.
+    expect(readings).toEqual(['213°F', '145°F', '92°F', '78°F']);
+  });
+
+  /**
+   * The probe colours are held to the large-text contrast threshold and no
+   * lower — the palette's own contrast suite says so in as many words, because
+   * two of the light ones are chart colours first and do not clear the ordinary
+   * threshold on a white card. Anything painted in one of them has to be set
+   * large and bold, so both the name and the reading are.
+   */
+  test.each(channels)('sets the %s row large and bold, as its colour requires', async channel => {
+    const { socket } = renderView();
+
+    await act(async () => {
+      await flushPromises();
+    });
+    await act(async () => {
+      socket.injectEvents(eventsFrame('213', ['145', '92', '78']));
+    });
+
+    const row = await screen.findByTestId(`smoke-${channel}-row`);
+    [
+      within(row).getByTestId(`smoke-${channel}-name-input`),
+      within(row).getByTestId(`smoke-${channel}-temp`),
+    ].forEach(painted => {
+      // WCAG counts text large from 14pt — 18.66px — when it is bold.
+      expect(parseFloat(getComputedStyle(painted).fontSize)).toBeGreaterThanOrEqual(18.66);
+      expect(parseInt(getComputedStyle(painted).fontWeight, 10)).toBeGreaterThanOrEqual(700);
+    });
+  });
+
+  test('renaming a probe in its row is what gets saved when the step is left', async () => {
+    const { api, unmount } = renderView();
+
+    await act(async () => {
+      await flushPromises();
+    });
+
+    fireEvent.change(screen.getByTestId('smoke-probe1-name-input'), {
+      target: { value: 'Brisket Flat' },
+    });
+
+    await act(async () => {
+      unmount();
+      await flushPromises();
+    });
+
+    // The rename reaches the profile the step has always saved on the way out —
+    // the row is a new way to type the name, not a new place to keep it.
+    expect(api.calls.find(call => call.method === 'saveProfile')?.args[0]).toMatchObject({
+      probe1Name: 'Brisket Flat',
+      chamberName: 'Chamber',
+    });
+  });
+
+  test('gathers the rows into one card, ruled off from each other', async () => {
+    renderView();
+
+    const card = await screen.findByTestId('smoke-temps-card');
+    channels.forEach(([channel]) =>
+      expect(within(card).getByTestId(`smoke-${channel}-row`)).toBeInTheDocument()
+    );
+    // Three rules for four rows: the dividers separate the readings from each
+    // other, they do not fence the card's own edges.
+    expect(within(card).getAllByRole('separator')).toHaveLength(3);
+  });
+});
+
+/**
+ * The one control on the step that changes the world: it lights the cook, and
+ * it puts it out. The design gives its two states two appearances, because the
+ * cost of pressing it by mistake is not the same in both.
+ */
+describe('the start and stop control', () => {
+  test('offers the cook in the accent while nothing is running', async () => {
+    renderView();
+
+    await act(async () => {
+      await flushPromises();
+    });
+
+    const control = screen.getByTestId('smoke-start-button');
+    expect(control).toHaveTextContent('Start Smoking');
+    expect(control).toHaveStyle({ backgroundColor: designColours.accent });
+  });
+
+  test('turns into a danger outline once the cook is running', async () => {
+    const { socket } = renderView();
+
+    await act(async () => {
+      await flushPromises();
+    });
+
+    fireEvent.click(screen.getByTestId('smoke-start-button'));
+    await act(async () => {
+      await flushPromises();
+    });
+
+    const control = screen.getByTestId('smoke-start-button');
+    expect(control).toHaveTextContent('Stop Smoking');
+    // Outlined, not filled: stopping a cook is not the thing the screen is
+    // inviting, so it is drawn as the quieter of the two — and in the danger
+    // colour, because it is the destructive one.
+    expect(control).toHaveStyle({
+      color: designColours.danger,
+      borderColor: designColours.danger,
+    });
+    expect(control).not.toHaveStyle({ backgroundColor: designColours.accent });
+    // The state the button is drawn from is the session's, not a local guess:
+    // the same flip is what the status bar reads.
+    expect(socket.emittedSmokeUpdates.at(-1)?.smoking).toBe(true);
+    expect(screen.getByTestId('smoke-status-label')).toHaveTextContent('Smoking');
+  });
+});
+
+/**
+ * The wood is a picker in the design and a free-text field in the product, and
+ * it has to stay both: the list is what almost every cook picks from, and the
+ * field is what stops an unusual one being impossible to record.
+ */
+describe('the wood picker', () => {
+  test('opens like a select, on the design’s list of woods', async () => {
+    renderView();
+
+    await act(async () => {
+      await flushPromises();
+    });
+
+    // The affordance that makes it read as a select rather than as a text box:
+    // something to press that shows the list.
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }));
+
+    const offered = screen.getAllByRole('option').map(option => option.textContent);
+    expect(offered).toEqual(['Hickory', 'Post Oak', 'Pecan', 'Cherry', 'Apple', 'Mesquite']);
+  });
+
+  test('takes a wood nobody listed, and saves it with the rest of the draft', async () => {
+    const { api, unmount } = renderView();
+
+    await act(async () => {
+      await flushPromises();
+    });
+
+    fireEvent.change(screen.getByTestId('smoke-wood-type-input'), {
+      target: { value: 'Grapevine' },
+    });
+
+    await act(async () => {
+      unmount();
+      await flushPromises();
+    });
+
+    expect(api.calls.find(call => call.method === 'saveProfile')?.args[0]).toMatchObject({
+      woodType: 'Grapevine',
+    });
+  });
+});
+
+describe('the chart card', () => {
+  test('heads the plot with what it is, and keeps its legend under it in the same card', async () => {
+    const { container } = renderView();
+
+    const card = await screen.findByTestId('smoke-chart-card');
+    expect(within(card).getByText('TEMPERATURE HISTORY')).toBeInTheDocument();
+
+    const plot = within(card).getByRole('img', { name: 'Temperature chart' });
+    const swatches = card.querySelectorAll('[data-legend-swatch]');
+    expect(swatches).toHaveLength(4);
+    // The legend belongs to the plot above it, so it is inside the same card
+    // and after it — a key printed above a graph names lines nobody has seen
+    // yet.
+    expect(plot.compareDocumentPosition(swatches[0])).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    // And there is exactly one plot on the screen: the card holds the chart,
+    // it does not sit beside a second copy of it.
+    expect(container.querySelectorAll('svg[role="img"]')).toHaveLength(1);
+  });
+});
+
 describe('SmokeStepView', () => {
   test('shows each inbound temperature on its own readout, chamber and three probes', async () => {
     const { socket } = renderView();
@@ -430,7 +655,7 @@ describe('SmokeStepView', () => {
       await flushPromises();
     });
 
-    const chamberInput = screen.getAllByTestId('input')[0];
+    const chamberInput = screen.getByTestId('smoke-chamber-name-input');
     fireEvent.change(chamberInput, { target: { value: 'Offset' } });
 
     expect(chamberInput).toHaveValue('Offset');
@@ -452,14 +677,14 @@ describe('SmokeStepView', () => {
       await flushPromises();
     });
 
-    const inputs = () => screen.getAllByTestId('input');
-    fireEvent.change(inputs()[1], { target: { value: 'Point' } });
-    fireEvent.change(inputs()[2], { target: { value: 'Flat' } });
-    fireEvent.change(inputs()[3], { target: { value: 'Ambient' } });
+    const nameOf = (probe: string) => screen.getByTestId(`smoke-${probe}-name-input`);
+    fireEvent.change(nameOf('probe1'), { target: { value: 'Point' } });
+    fireEvent.change(nameOf('probe2'), { target: { value: 'Flat' } });
+    fireEvent.change(nameOf('probe3'), { target: { value: 'Ambient' } });
 
-    expect(inputs()[1]).toHaveValue('Point');
-    expect(inputs()[2]).toHaveValue('Flat');
-    expect(inputs()[3]).toHaveValue('Ambient');
+    expect(nameOf('probe1')).toHaveValue('Point');
+    expect(nameOf('probe2')).toHaveValue('Flat');
+    expect(nameOf('probe3')).toHaveValue('Ambient');
     // The last broadcast carries every accumulated rename in the five-field frame.
     expect(socket.emittedSmokeUpdates.at(-1)).toEqual({
       smoking: false,
@@ -478,7 +703,7 @@ describe('SmokeStepView', () => {
     });
 
     // The user is mid-edit on the chamber name locally.
-    const chamberInput = screen.getAllByTestId('input')[0];
+    const chamberInput = screen.getByTestId('smoke-chamber-name-input');
     fireEvent.change(chamberInput, { target: { value: 'My Local Name' } });
 
     // A remote smokeUpdate arrives carrying a different name and smoking=true.
@@ -496,7 +721,7 @@ describe('SmokeStepView', () => {
     await waitFor(() => {
       expect(screen.getByText('Stop Smoking')).toBeInTheDocument();
     });
-    expect(screen.getAllByTestId('input')[0]).toHaveValue('My Local Name');
+    expect(screen.getByTestId('smoke-chamber-name-input')).toHaveValue('My Local Name');
   });
 
   test('leaving the step saves the current profile draft exactly once', async () => {
@@ -507,8 +732,8 @@ describe('SmokeStepView', () => {
     });
 
     // Edit the free-text draft fields (wood type + notes).
-    fireEvent.change(screen.getByTestId('autocomplete-input'), { target: { value: 'Cherry' } });
-    fireEvent.change(screen.getByTestId('text-field'), { target: { value: 'wrap at 165' } });
+    fireEvent.change(screen.getByTestId('smoke-wood-type-input'), { target: { value: 'Cherry' } });
+    fireEvent.change(screen.getByTestId('smoke-notes-input'), { target: { value: 'wrap at 165' } });
 
     await act(async () => {
       unmount();
