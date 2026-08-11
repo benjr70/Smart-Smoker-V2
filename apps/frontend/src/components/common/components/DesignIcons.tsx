@@ -62,6 +62,29 @@ export function HistoryIcon({ size }: DesignIconProps = {}): JSX.Element {
   );
 }
 
+/** The lens: the search field it sits in. */
+export function SearchIcon({ size }: DesignIconProps = {}): JSX.Element {
+  return (
+    <OutlineIcon size={size}>
+      <circle cx="11" cy="11" r="7" />
+      <path d="M16.5 16.5L21 21" />
+    </OutlineIcon>
+  );
+}
+
+/** The bin: destroying what the control it sits on is about. */
+export function TrashIcon({ size }: DesignIconProps = {}): JSX.Element {
+  return (
+    <OutlineIcon size={size}>
+      <path d="M4 7h16" />
+      <path d="M9.5 7V5.5A1.5 1.5 0 0 1 11 4h2a1.5 1.5 0 0 1 1.5 1.5V7" />
+      <path d="M6.5 7l.8 12.1A1.5 1.5 0 0 0 8.8 20.5h6.4a1.5 1.5 0 0 0 1.5-1.4L17.5 7" />
+      <path d="M10.5 11v5.5" />
+      <path d="M13.5 11v5.5" />
+    </OutlineIcon>
+  );
+}
+
 /** The gear: the Settings destination. */
 export function SettingsIcon({ size }: DesignIconProps = {}): JSX.Element {
   return (

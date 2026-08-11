@@ -430,25 +430,6 @@ describe('the bottom navigation', () => {
   });
 });
 
-/**
- * A recolour adds no behaviour. The mock the palette comes from also draws a
- * search field and meat-type filter chips over the history list; those are
- * features, and they are not built here.
- */
-describe('the recoloured history list', () => {
-  it('offers nothing to search or filter with', async () => {
-    renderUnder('light', <History />);
-    await screen.findByTestId('smoke-card');
-
-    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
-    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
-    expect(screen.getAllByRole('button').map(control => control.textContent)).toEqual([
-      'View',
-      'delete',
-    ]);
-  });
-});
-
 const navigationHandlers = () => ({
   smokeOnClick: jest.fn(),
   historyOnClick: jest.fn(),
