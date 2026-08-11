@@ -282,6 +282,14 @@ export interface SmokeHistory {
    * enough to say. The card renders the absence as an em-dash.
    */
   durationMs: number | null;
+  /**
+   * Everything written about the cook — its pre-smoke, smoke, post-smoke and
+   * review notes — with the stages nobody wrote anything for left out.
+   *
+   * The list never shows them; the search reads them, because the word a user
+   * remembers ("spritzed") was typed on a screen they do not remember.
+   */
+  notes: string[];
 }
 
 /**

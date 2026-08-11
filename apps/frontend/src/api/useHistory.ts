@@ -15,9 +15,21 @@ import { useApiClient } from './ApiClientProvider';
 import { useApiSnackbar } from './SnackbarProvider';
 import { SmokeHistory } from './types';
 
+/**
+ * How the last read of the history went.
+ *
+ * Reported separately from the list because an empty list is not an answer on
+ * its own: a history nobody has cooked into, one that has not been read yet,
+ * and one whose read failed are all `[]`, and the screen says something
+ * different — and something wrong, if it guesses — for each.
+ */
+export type HistoryStatus = 'loading' | 'loaded' | 'failed';
+
 export interface UseHistoryResult {
   /** The history rows, newest-first. Empty while loading or after a failed read. */
   history: SmokeHistory[];
+  /** Whether the list has been read yet, and whether reading it worked. */
+  status: HistoryStatus;
   /** Re-reads the history list from the backend. */
   refresh: () => Promise<void>;
   /** Cascade-deletes a smoke and refreshes the list. */
@@ -28,6 +40,7 @@ export function useHistory(): UseHistoryResult {
   const client = useApiClient();
   const notify = useApiSnackbar();
   const [history, setHistory] = useState<SmokeHistory[]>([]);
+  const [status, setStatus] = useState<HistoryStatus>('loading');
 
   const refresh = useCallback(async () => {
     try {
@@ -35,10 +48,15 @@ export function useHistory(): UseHistoryResult {
       // Reverse to newest-first; guarded so a failed read never reaches here
       // with a non-array and crashes on `.reverse()`.
       setHistory([...list].reverse());
+      setStatus('loaded');
     } catch {
       setHistory([]);
+      setStatus('failed');
       notify('Could not load smoke history.');
     }
+    // A re-read does not go back to `loading`: the list on screen stays the
+    // answer to "what have I cooked" until a new one arrives, and blanking it
+    // mid-refresh would flash an empty history at a user who has one.
   }, [client, notify]);
 
   const remove = useCallback(
@@ -57,5 +75,5 @@ export function useHistory(): UseHistoryResult {
     refresh();
   }, [refresh]);
 
-  return { history, refresh, remove };
+  return { history, status, refresh, remove };
 }

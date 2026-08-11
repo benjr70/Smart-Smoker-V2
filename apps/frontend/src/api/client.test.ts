@@ -320,6 +320,8 @@ describe('history client — list read', () => {
       date: '2025-01-01',
       smokeId: 'smoke-id-1',
       overAllRating: '8',
+      durationMs: 6 * 60 * 60 * 1000,
+      notes: [],
     },
   ];
 

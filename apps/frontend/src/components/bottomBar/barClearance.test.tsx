@@ -179,11 +179,15 @@ const renderSmokeWizard = () =>
 
 const renderReview = () =>
   render(
-    <ApiClientProvider client={createApiClient(createFakeBackend())}>
-      <SnackbarProvider>
-        <History />
-      </SnackbarProvider>
-    </ApiClientProvider>
+    <CssVarsProvider theme={appTheme}>
+      <DesignSurface>
+        <ApiClientProvider client={createApiClient(createFakeBackend())}>
+          <SnackbarProvider>
+            <History />
+          </SnackbarProvider>
+        </ApiClientProvider>
+      </DesignSurface>
+    </CssVarsProvider>
   );
 
 const renderBar = () =>

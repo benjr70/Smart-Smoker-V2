@@ -17,6 +17,7 @@ describe('HistoryController', () => {
     smokeId: 'smoke-id',
     overAllRating: '9',
     durationMs: 6 * 60 * 60 * 1000,
+    notes: ['trimmed the fat cap the night before'],
   };
 
   beforeEach(async () => {

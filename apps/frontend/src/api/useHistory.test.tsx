@@ -18,6 +18,7 @@ const historyRow = (smokeId: string, name: string): SmokeHistory => ({
   smokeId,
   overAllRating: '5',
   durationMs: 6 * 60 * 60 * 1000,
+  notes: [],
 });
 
 const smokeAggregate = (id: string): Smoke => ({
@@ -54,6 +55,29 @@ describe('useHistory', () => {
     // recent smoke renders at the top of the list.
     expect(result.current.history[0].name).toBe('Newest');
     expect(result.current.history[1].name).toBe('Oldest');
+  });
+
+  test('says it is still reading until the list arrives', async () => {
+    const backend = createFakeBackend({ history: [historyRow('smoke-1', 'Brisket')] });
+
+    const { result } = renderHistoryHook(backend);
+
+    // An empty list means nothing until this says the read is over: "no cooks
+    // yet" and "not asked yet" look identical from the list alone.
+    expect(result.current.status).toBe('loading');
+
+    await waitFor(() => expect(result.current.status).toBe('loaded'));
+    expect(result.current.history).toHaveLength(1);
+  });
+
+  test('says the read failed rather than leaving an empty list to speak for it', async () => {
+    const backend = createFakeBackend({ history: [historyRow('smoke-1', 'Brisket')] });
+    backend.injectFault({ method: 'get', path: 'history', status: 500 });
+
+    const { result } = renderHistoryHook(backend);
+
+    await waitFor(() => expect(result.current.status).toBe('failed'));
+    expect(result.current.history).toEqual([]);
   });
 
   test('yields an empty list and raises the snackbar when the history read fails', async () => {

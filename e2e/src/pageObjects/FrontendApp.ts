@@ -1245,9 +1245,18 @@ export class FrontendApp {
     await ratingsPersisted;
   }
 
-  /** Delete a completed smoke from its history card. */
+  /**
+   * Delete a completed smoke from its history card.
+   *
+   * The trash icon only asks: the delete itself is behind the confirmation
+   * sheet, so the journey answers it the way a user would.
+   */
   async deleteFromHistory(name: string): Promise<void> {
     await this.historyCardFor(name).getByTestId('smoke-card-delete-button').click();
+    const sheet = this.page.getByTestId('delete-smoke-sheet');
+    await expect(sheet).toContainText(name);
+    await sheet.getByTestId('delete-smoke-sheet-confirm').click();
+    await expect(sheet).toBeHidden();
   }
 
   /**

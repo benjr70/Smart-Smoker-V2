@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { PostSmokeModule } from 'src/postSmoke/postSmoke.module';
 import { PreSmokeModule } from 'src/presmoke/presmoke.module';
 import { RatingsModel } from 'src/ratings/ratings.module';
 import { SmokeModule } from 'src/smoke/smoke.module';
@@ -12,6 +13,7 @@ import { TimelineModule } from 'src/timeline/timeline.module';
     SmokeModule,
     PreSmokeModule,
     SmokeProfileModule,
+    PostSmokeModule,
     RatingsModel,
     TimelineModule,
   ],

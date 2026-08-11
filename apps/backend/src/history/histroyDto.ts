@@ -25,4 +25,16 @@ export class SmokeHistory {
    */
   @ApiProperty({ type: Number, nullable: true })
   durationMs: number | null;
+  /**
+   * Everything written about the cook — the pre-smoke, smoke, post-smoke and
+   * review notes — in that order, with the stages nobody wrote anything for
+   * left out.
+   *
+   * Carried on the list row because the history search reads notes: a user
+   * looking for "the one I spritzed with apple juice" remembers the words, not
+   * which screen they typed them on. Flattened to a bare list because the
+   * search treats every note alike, and the list never shows them.
+   */
+  @ApiProperty({ type: [String] })
+  notes: string[];
 }
