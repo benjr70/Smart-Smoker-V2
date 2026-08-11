@@ -65,6 +65,7 @@ const historyRow = (): SmokeHistory => ({
   smokeId: 'smoke-1',
   overAllRating: '5',
   durationMs: 6 * 60 * 60 * 1000,
+  notes: [],
 });
 
 describe('the history list', () => {

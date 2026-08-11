@@ -14,12 +14,11 @@ export interface HistoryQuerySession {
   /**
    * Everything written about the cook — the pre-smoke, smoke, post-smoke and
    * review notes — in no particular order, because the search treats them
-   * alike.
+   * alike. The history row carries them flattened; see `SmokeHistory`.
    *
-   * Optional, and tolerant of gaps, because the history list is read from a
-   * payload that carries no notes today: a session without them is searched by
-   * its other fields rather than being excluded, and the field starts matching
-   * the day the list carries notes without this module changing.
+   * Optional, and tolerant of gaps, so a row from a backend older than the
+   * field is searched by its other fields rather than throwing the whole
+   * screen away.
    */
   notes?: readonly (string | null | undefined)[];
 }
@@ -44,6 +43,17 @@ export interface HistorySelection<Session extends HistoryQuerySession> {
    * can no longer widen.
    */
   meatTypes: string[];
+  /**
+   * The chosen meats that are still in the list — what the chips should show as
+   * pressed, and what actually narrowed `shown`.
+   *
+   * A choice can outlive the cooks it was made about: filter by pork, delete
+   * the last pork cook, and the chip goes but the choice does not. Left alone
+   * that choice hides every remaining cook behind a filter with no chip to
+   * unpick it, so it is dropped here — the list widens back rather than
+   * emptying for a reason nothing on the screen can explain.
+   */
+  meats: string[];
   /**
    * Whether the list is narrowed at all — the header counts "N of M" while it
    * is, and "M sessions" while it is not.
@@ -95,22 +105,26 @@ export function selectHistory<Session extends HistoryQuerySession>(
 ): HistorySelection<Session> {
   const query = filters.query.trim().toLowerCase();
 
-  const shown = sessions.filter(
-    session =>
-      // No chip chosen is "every meat", not "no meat": the chips narrow the
-      // list, and a list narrowed by nothing is the whole list.
-      (filters.meats.length === 0 || filters.meats.includes(session.meatType)) &&
-      matches(session, query)
-  );
-
   const meatTypes = sessions
     .map(session => session.meatType)
     .filter((meat, index, meats) => meat !== '' && meats.indexOf(meat) === index);
 
+  // Only the meats there is still a chip for can narrow the list; see `meats`
+  // on the selection for why a stale one is dropped rather than honoured.
+  const meats = filters.meats.filter(meat => meatTypes.includes(meat));
+
+  const shown = sessions.filter(
+    session =>
+      // No chip chosen is "every meat", not "no meat": the chips narrow the
+      // list, and a list narrowed by nothing is the whole list.
+      (meats.length === 0 || meats.includes(session.meatType)) && matches(session, query)
+  );
+
   return {
     shown,
     meatTypes,
-    filtering: query !== '' || filters.meats.length > 0,
+    meats,
+    filtering: query !== '' || meats.length > 0,
     emptyState: emptyStateFor(sessions.length, shown.length),
   };
 }

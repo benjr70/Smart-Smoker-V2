@@ -25,6 +25,7 @@ const smoke = (fields: Partial<SmokeHistory> = {}): SmokeHistory => ({
   smokeId: 'smoke-1',
   overAllRating: '7.5',
   durationMs: 6 * 60 * 60 * 1000 + 20 * 60 * 1000,
+  notes: [],
   ...fields,
 });
 

@@ -63,6 +63,33 @@ describe('the history query', () => {
     expect(meatTypes).toEqual(['Brisket', 'Pork']);
   });
 
+  it('drops a chosen meat the list no longer holds, rather than hiding every cook behind it', () => {
+    // The cook that was the only Pork one has just been deleted, so its chip
+    // is gone from the header — but the choice made while it was there is
+    // still in hand. A filter with no chip to unpick it is a list a user
+    // cannot get back.
+    const brisket = session({ name: 'Sunday Brisket', meatType: 'Brisket' });
+    const chicken = session({ name: 'Beer can chicken', meatType: 'Chicken' });
+
+    const selection = selectHistory([brisket, chicken], { query: '', meats: ['Pork'] });
+
+    expect(selection.shown).toEqual([brisket, chicken]);
+    expect(selection.meats).toEqual([]);
+    expect(selection.filtering).toBe(false);
+    expect(selection.emptyState).toBeNull();
+  });
+
+  it('keeps the chosen meats the list still holds when one of them goes', () => {
+    const brisket = session({ name: 'Sunday Brisket', meatType: 'Brisket' });
+    const chicken = session({ name: 'Beer can chicken', meatType: 'Chicken' });
+
+    const selection = selectHistory([brisket, chicken], { query: '', meats: ['Pork', 'Brisket'] });
+
+    expect(selection.shown).toEqual([brisket]);
+    expect(selection.meats).toEqual(['Brisket']);
+    expect(selection.filtering).toBe(true);
+  });
+
   it('tells an empty history apart from a filter that matched nothing', () => {
     const sessions = [session({ name: 'Sunday Brisket' })];
     const noFilters = { query: '', meats: [] };

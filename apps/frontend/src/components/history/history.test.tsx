@@ -29,6 +29,7 @@ const historyRow = (
   smokeId,
   overAllRating: '5',
   durationMs: 6 * 60 * 60 * 1000,
+  notes: [],
   ...fields,
 });
 
@@ -108,6 +109,31 @@ describe('History', () => {
     expect(screen.getByTestId('history-count')).toHaveTextContent('2 sessions');
   });
 
+  test('finds a cook by a word that was only ever written in its notes', async () => {
+    const backend = createFakeBackend({
+      history: [
+        historyRow('smoke-1', 'Sunday Brisket', {
+          // What the backend's history row carries: everything written across
+          // the cook's four note fields, flattened.
+          notes: ['spritzed with apple juice every hour'],
+        }),
+        historyRow('smoke-2', 'Pulled pork', { meatType: 'Pork' }),
+      ],
+    });
+
+    renderHistory(backend);
+    await screen.findByText('Sunday Brisket');
+
+    await userEvent.type(
+      screen.getByRole('searchbox', { name: 'Search smoke history' }),
+      'spritzed'
+    );
+
+    expect(screen.getByText('Sunday Brisket')).toBeInTheDocument();
+    expect(screen.queryByText('Pulled pork')).not.toBeInTheDocument();
+    expect(screen.getByTestId('history-count')).toHaveTextContent('1 of 2');
+  });
+
   test('offers a chip per meat in the list, narrows to the chosen ones, and widens again', async () => {
     const backend = createFakeBackend({
       history: [
@@ -149,6 +175,32 @@ describe('History', () => {
     expect(screen.getByTestId('history-count')).toHaveTextContent('3 sessions');
   });
 
+  test('widens the list again when the last cook of the meat it was filtered by is deleted', async () => {
+    const backend = createFakeBackend({
+      history: [
+        historyRow('smoke-1', 'Sunday Brisket'),
+        historyRow('smoke-2', 'Pulled pork', { meatType: 'Pork' }),
+        historyRow('smoke-3', 'Beer can chicken', { meatType: 'Chicken' }),
+      ],
+      smoke: { records: { 'smoke-2': smokeAggregate('smoke-2') } },
+    });
+
+    renderHistory(backend);
+    await screen.findByText('Sunday Brisket');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Pork' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Delete Pulled pork' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Delete smoke' }));
+
+    // The Pork chip goes with the last pork cook. A choice with no chip left to
+    // unpick it would strand the user on an empty list, so it stops counting.
+    expect(await screen.findByText('Sunday Brisket')).toBeInTheDocument();
+    expect(screen.getByText('Beer can chicken')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Pork' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('history-count')).toHaveTextContent('2 sessions');
+    expect(screen.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
   test('tells a user who has never smoked to go and finish a cook', async () => {
     renderHistory(createFakeBackend({ history: [] }));
 
@@ -186,6 +238,51 @@ describe('History', () => {
 
     expect(await screen.findByText('Could not load smoke history.')).toBeVisible();
     expect(screen.queryByTestId('smoke-card')).not.toBeInTheDocument();
+  });
+
+  test('does not tell a user whose history would not load that they have never smoked', async () => {
+    const backend = createFakeBackend({ history: [historyRow('smoke-1', 'Brisket')] });
+    backend.injectFault({ method: 'get', path: 'history', status: 500 });
+
+    renderHistory(backend);
+
+    // The list is empty because the read failed, not because the user has
+    // never cooked anything — saying otherwise contradicts their own history.
+    expect(await screen.findByText('Could not load your history')).toBeInTheDocument();
+    expect(screen.queryByText('No smokes logged yet')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument();
+  });
+
+  test('asks the backend again when the failed load is retried', async () => {
+    const backend = createFakeBackend({ history: [historyRow('smoke-1', 'Brisket')] });
+    backend.injectFault({ method: 'get', path: 'history', status: 500 });
+
+    renderHistory(backend);
+    await screen.findByText('Could not load your history');
+
+    const readsBefore = backend.requests.filter(
+      request => request.method === 'get' && request.path === 'history'
+    ).length;
+
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+
+    // A failure a user cannot answer is a dead end; the way out is another
+    // read, which the list is one of the few screens that can ask for itself.
+    await waitFor(() =>
+      expect(
+        backend.requests.filter(request => request.method === 'get' && request.path === 'history')
+          .length
+      ).toBe(readsBefore + 1)
+    );
+  });
+
+  test('says nothing about an empty history until the first read has landed', () => {
+    renderHistory(createFakeBackend({ history: [] }));
+
+    // Before the answer arrives there is nothing truthful to say, so the
+    // screen says nothing rather than guessing at one of its empty states.
+    expect(screen.queryByText('No smokes logged yet')).not.toBeInTheDocument();
+    expect(screen.queryByText('Could not load your history')).not.toBeInTheDocument();
   });
 
   test('viewing a smoke opens its review, and back returns to the list', async () => {

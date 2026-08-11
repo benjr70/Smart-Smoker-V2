@@ -12,5 +12,8 @@ import { PostSmokeService } from './postSmoke.service';
   ],
   controllers: [PostSmokeController],
   providers: [PostSmokeService],
+  // Exported for the history list, which reads a finished cook's post-smoke
+  // notes so they can be searched alongside the rest of what was written.
+  exports: [PostSmokeService],
 })
 export class PostSmokeModule {}

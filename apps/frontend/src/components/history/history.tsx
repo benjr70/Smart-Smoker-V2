@@ -3,7 +3,7 @@ import { Box, Grid, IconButton } from '@mui/material';
 import React, { useMemo, useState } from 'react';
 import { useHistory } from '../../api';
 import { ConfirmSheet } from '../common/components/ConfirmSheet';
-import { HistoryEmpty } from './HistoryEmpty';
+import { HistoryEmpty, HistoryEmptyKind } from './HistoryEmpty';
 import { HistoryHeader } from './HistoryHeader';
 import './history.style.css';
 import { selectHistory } from './historyQuery';
@@ -14,7 +14,7 @@ export function History(): JSX.Element {
   // The list, its newest-first reversal, refresh, and the cascade delete all
   // live in the hook now; a failed fetch yields an empty list plus the failure
   // snackbar instead of crashing on the old unguarded `result.reverse()`.
-  const { history, refresh, remove } = useHistory();
+  const { history, status, refresh, remove } = useHistory();
   const [smokeId, setSmokeId] = useState<string | undefined>(undefined);
   const [query, setQuery] = useState('');
   const [meats, setMeats] = useState<string[]>([]);
@@ -22,20 +22,39 @@ export function History(): JSX.Element {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | undefined>(undefined);
 
   // What is searched and how it narrows the list is the query module's; the
-  // screen holds only what the user typed and chose.
-  const { shown, filtering, meatTypes, emptyState } = useMemo(
-    () => selectHistory(history, { query, meats }),
-    [history, query, meats]
-  );
+  // screen holds only what the user typed and chose. `chosenMeats` comes back
+  // reconciled against the list — a meat whose last cook has been deleted has
+  // no chip left to unpick it, so it stops narrowing — and it, not the raw
+  // state, is what the chips are drawn from.
+  const {
+    shown,
+    filtering,
+    meatTypes,
+    meats: chosenMeats,
+    emptyState,
+  } = useMemo(() => selectHistory(history, { query, meats }), [history, query, meats]);
+
+  // An empty list means nothing until the read is over. A failed read says so
+  // and offers another go; a read still in flight says nothing at all, because
+  // "no smokes logged yet" is a claim about the user's history and nobody has
+  // been told what it holds yet. Only once it has landed does the query
+  // module's answer — no cooks at all, or none matching — get to speak.
+  const listEmptyState: HistoryEmptyKind | null =
+    status === 'failed' ? 'load-failed' : status === 'loading' ? null : emptyState;
 
   const onClearFilters = () => {
     setQuery('');
     setMeats([]);
   };
 
+  // Toggling works from the reconciled choice rather than the raw one, so a
+  // meat the list has since lost is dropped for good the next time the chips
+  // are touched instead of lying in wait.
   const onToggleMeat = (meat: string) => {
-    setMeats(chosen =>
-      chosen.includes(meat) ? chosen.filter(other => other !== meat) : [...chosen, meat]
+    setMeats(
+      chosenMeats.includes(meat)
+        ? chosenMeats.filter(other => other !== meat)
+        : [...chosenMeats, meat]
     );
   };
 
@@ -76,7 +95,7 @@ export function History(): JSX.Element {
           query={query}
           onQueryChange={setQuery}
           meatTypes={meatTypes}
-          meats={meats}
+          meats={chosenMeats}
           onToggleMeat={onToggleMeat}
           onClearMeats={() => setMeats([])}
         />
@@ -92,8 +111,8 @@ export function History(): JSX.Element {
       >
         {smokeId ? (
           <SmokeReview smokeId={smokeId} />
-        ) : emptyState ? (
-          <HistoryEmpty state={emptyState} onClearFilters={onClearFilters} />
+        ) : listEmptyState ? (
+          <HistoryEmpty state={listEmptyState} onClearFilters={onClearFilters} onRetry={refresh} />
         ) : (
           shown.map(smokeHistory => (
             <SmokeCard
