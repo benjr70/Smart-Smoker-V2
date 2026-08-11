@@ -85,6 +85,11 @@ class App extends React.Component<{}, { currentScreen: Screens }> {
               <Grid className="App-header">
                 <Grid>{screen}</Grid>
                 <BottomBar
+                  // The screen in effect lives here, so the bar is told it
+                  // rather than keeping a second copy that only a tap on the
+                  // bar could update — the completion screen navigates without
+                  // one.
+                  currentScreen={this.state.currentScreen}
                   smokeOnClick={this.smokeOnClick}
                   historyOnClick={this.historyOnClick}
                   settingsOnClick={this.settingsOnClick}

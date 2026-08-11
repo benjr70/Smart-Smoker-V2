@@ -4,6 +4,7 @@ import BottomNavigation from '@mui/material/BottomNavigation';
 import BottomNavigationAction from '@mui/material/BottomNavigationAction';
 import { Box, Grid } from '@mui/material';
 import { FlameIcon, HistoryIcon, SettingsIcon } from '../common/components/DesignIcons';
+import { Screens } from '../common/interfaces/enums';
 
 /**
  * The height of the bar, in pixels — Material-UI's `BottomNavigation` height,
@@ -14,25 +15,37 @@ import { FlameIcon, HistoryIcon, SettingsIcon } from '../common/components/Desig
 export const BOTTOM_BAR_HEIGHT = 56;
 
 interface buttonBarProps {
+  /**
+   * The screen actually in effect. The bar lights whichever destination leads
+   * here rather than remembering the last one tapped: taps are not the only way
+   * to arrive anywhere — finishing a smoke sends the user to the history from
+   * the completion screen — and a bar that remembers instead of reading goes on
+   * lighting SMOKE while the history is on screen.
+   */
+  currentScreen: Screens;
   smokeOnClick: any;
   historyOnClick: any;
   settingsOnClick: any;
 }
 
 /**
- * The three destinations, in the order the design puts them. The design draws a
- * fourth — Stats — which is deliberately not built (see the parent PRD's
- * carve-outs), so it is not offered here either: a tab leading nowhere is worse
- * than an absent one.
+ * The three destinations, in the order the design puts them, each with the
+ * screen it leads to — which is also how the bar recognises the screen in
+ * effect as one of its own. The design draws a fourth — Stats — which is
+ * deliberately not built (see the parent PRD's carve-outs), so it is not
+ * offered here either: a tab leading nowhere is worse than an absent one.
  */
 const destinations = [
-  { label: 'Smoke', icon: <FlameIcon />, testId: 'nav-smoke' },
-  { label: 'History', icon: <HistoryIcon />, testId: 'nav-history' },
-  { label: 'Settings', icon: <SettingsIcon />, testId: 'nav-settings' },
+  { label: 'Smoke', icon: <FlameIcon />, testId: 'nav-smoke', screen: Screens.HOME },
+  { label: 'History', icon: <HistoryIcon />, testId: 'nav-history', screen: Screens.HISTORY },
+  { label: 'Settings', icon: <SettingsIcon />, testId: 'nav-settings', screen: Screens.SETTINGS },
 ] as const;
 
 export function BottomBar(props: buttonBarProps) {
-  const [value, setValue] = React.useState(0);
+  // Which destination is lit is read off the screen in effect on every render.
+  // A screen no destination leads to — none does today — lights none of them,
+  // which is what the index of a screen that is not here comes to.
+  const value = destinations.findIndex(destination => destination.screen === props.currentScreen);
 
   const handlers = [props.smokeOnClick, props.historyOnClick, props.settingsOnClick];
 
@@ -56,11 +69,12 @@ export function BottomBar(props: buttonBarProps) {
           showLabels
           value={value}
           onChange={(event, newValue) => {
+            // Asking to go somewhere is all a tap does; what the bar lights
+            // follows from having arrived, on the next render.
             const handler = handlers[newValue];
             if (typeof handler === 'function') {
               handler();
             }
-            setValue(newValue);
           }}
         >
           {destinations.map(destination => (

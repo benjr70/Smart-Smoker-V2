@@ -26,7 +26,7 @@ import { PostSmokeCard } from '../components/history/smokeCards/postSmokeCard';
 import { PreSmokeCard } from '../components/history/smokeCards/preSmokeCard';
 import { RatingsCard } from '../components/history/smokeCards/ratingsCard';
 import { SmokeProfileCard } from '../components/history/smokeCards/smokeProfileCard';
-import { WeightUnits } from '../components/common/interfaces/enums';
+import { Screens, WeightUnits } from '../components/common/interfaces/enums';
 import { DesignSurface, appTheme, carbonDark, carbonLight } from './index';
 
 /** The four lines the chart draws, in the order it draws them. */
@@ -451,6 +451,7 @@ describe('the recoloured history list', () => {
 });
 
 const navigationHandlers = () => ({
+  currentScreen: Screens.HOME,
   smokeOnClick: jest.fn(),
   historyOnClick: jest.fn(),
   settingsOnClick: jest.fn(),

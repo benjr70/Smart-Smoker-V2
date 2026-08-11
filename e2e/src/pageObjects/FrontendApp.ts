@@ -1167,10 +1167,19 @@ export class FrontendApp {
     await expect(this.page.getByTestId('smoke-complete')).toBeVisible();
   }
 
-  /** Take the completion screen's own way to the history of finished cooks. */
+  /**
+   * Take the completion screen's own way to the history of finished cooks.
+   *
+   * Arriving means the history is on screen *and* the bottom bar says so: being
+   * taken somewhere without tapping the bar is exactly the case that used to
+   * leave HISTORY on screen with SMOKE lit in accent, so the tab is asserted
+   * here rather than assumed to follow the screen.
+   */
   async viewHistoryFromCompletion(): Promise<void> {
     await this.page.getByTestId('smoke-complete-view-history').click();
     await expect(this.page.getByTestId('history-screen')).toBeVisible();
+    await expect(this.page.getByTestId('nav-history')).toHaveClass(/Mui-selected/);
+    await expect(this.page.getByTestId('nav-smoke')).not.toHaveClass(/Mui-selected/);
   }
 
   /** Advance to the Post-Smoke step, enter a rest time, and finish the smoke. */

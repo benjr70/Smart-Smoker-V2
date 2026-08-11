@@ -23,6 +23,7 @@ import { ApiClientProvider, SnackbarProvider, createApiClient } from '../../api'
 import { createFakeBackend } from '../../api/fakeBackend';
 import { DesignSurface, appTheme } from '../../theme';
 import { History } from '../history/history';
+import { Screens } from '../common/interfaces/enums';
 import { Settings } from '../settings/settings';
 import { Smoke } from '../smoke/smoke';
 import { BOTTOM_BAR_HEIGHT, BottomBar } from './bottombar';
@@ -190,6 +191,7 @@ const renderBar = () =>
     <CssVarsProvider theme={appTheme}>
       <DesignSurface>
         <BottomBar
+          currentScreen={Screens.HOME}
           smokeOnClick={jest.fn()}
           historyOnClick={jest.fn()}
           settingsOnClick={jest.fn()}
