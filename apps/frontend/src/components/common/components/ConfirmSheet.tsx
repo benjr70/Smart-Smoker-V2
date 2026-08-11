@@ -1,4 +1,4 @@
-import { Box, Button, Drawer, Typography } from '@mui/material';
+import { BackdropProps, Box, Button, Drawer, Typography } from '@mui/material';
 import React from 'react';
 
 export interface ConfirmSheetProps {
@@ -53,8 +53,11 @@ export function ConfirmSheet({
       open={open}
       onClose={onCancel}
       // The backdrop is a way out of the sheet, so it is addressable like the
-      // two buttons are.
-      ModalProps={{ BackdropProps: { 'data-testid': `${testId}-backdrop` } }}
+      // two buttons are. Backdrop forwards unknown props to its root element,
+      // but its type does not admit data attributes, hence the cast.
+      ModalProps={{
+        BackdropProps: { 'data-testid': `${testId}-backdrop` } as Partial<BackdropProps>,
+      }}
       PaperProps={{
         // The drawer's own wrapper is presentational; the panel is the dialog,
         // so the role and the name go on the panel — otherwise assistive
