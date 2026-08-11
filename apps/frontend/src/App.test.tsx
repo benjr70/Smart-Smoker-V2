@@ -3,8 +3,17 @@ import React from 'react';
 import App from './App';
 
 // Mock the components
+// The wizard asks to be taken to the history rather than navigating itself, so
+// the stand-in offers that request as something this suite can make.
 jest.mock('./components/smoke/smoke', () => ({
-  Smoke: () => <div data-testid="smoke-component">Smoke Component</div>,
+  Smoke: ({ onViewHistory }: { onViewHistory?: () => void }) => (
+    <div data-testid="smoke-component">
+      Smoke Component
+      <button data-testid="smoke-asks-for-history" onClick={onViewHistory}>
+        View History
+      </button>
+    </div>
+  ),
 }));
 
 jest.mock('./components/history/history', () => ({
@@ -85,6 +94,18 @@ describe('App Component', () => {
     fireEvent.click(screen.getByTestId('settings-button'));
     expect(screen.getByTestId('settings-component')).toBeInTheDocument();
     expect(screen.queryByTestId('history-component')).not.toBeInTheDocument();
+  });
+
+  test('a finished smoke’s "View History" lands on the History screen', () => {
+    // The completion screen's one action. The wizard cannot navigate — the
+    // screen in effect is this component's state — so what it does is ask, and
+    // what has to be true is that asking gets the user there.
+    render(<App />);
+
+    fireEvent.click(screen.getByTestId('smoke-asks-for-history'));
+
+    expect(screen.getByTestId('history-component')).toBeInTheDocument();
+    expect(screen.queryByTestId('smoke-component')).not.toBeInTheDocument();
   });
 
   test('mounting the app subscribes to nothing and asks for no permission', async () => {

@@ -14,6 +14,7 @@ import '@testing-library/jest-dom';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
+import { Screens } from '../common/interfaces/enums';
 import { DesignSurface, appTheme, carbonLight } from '../../theme';
 import { BOTTOM_BAR_HEIGHT, BottomBar } from './bottombar';
 
@@ -23,16 +24,24 @@ const handlers = () => ({
   settingsOnClick: jest.fn(),
 });
 
-const showBar = (props = handlers()) => {
-  render(
-    <CssVarsProvider theme={appTheme} defaultMode="light">
-      <DesignSurface>
-        <BottomBar {...props} />
-      </DesignSurface>
-    </CssVarsProvider>
-  );
+const themed = (bar: JSX.Element) => (
+  <CssVarsProvider theme={appTheme} defaultMode="light">
+    <DesignSurface>{bar}</DesignSurface>
+  </CssVarsProvider>
+);
 
-  return props;
+/**
+ * The bar as the application mounts it: told which screen is in effect, since
+ * that is what it lights, and told again when the user gets somewhere else.
+ */
+const showBar = (props = handlers(), on: Screens = Screens.HOME) => {
+  const { rerender } = render(themed(<BottomBar currentScreen={on} {...props} />));
+
+  return {
+    ...props,
+    arriveAt: (screen: Screens) =>
+      rerender(themed(<BottomBar currentScreen={screen} {...props} />)),
+  };
 };
 
 const destination = (name: string) => screen.getByRole('button', { name });
@@ -86,18 +95,48 @@ describe('the bottom bar', () => {
     expect(props.smokeOnClick).toHaveBeenCalledTimes(1);
   });
 
-  it('tints the destination in effect with the accent, and only that one', async () => {
-    const user = userEvent.setup();
-    showBar();
-
+  it('tints the destination the screen in effect belongs to with the accent, and only that one', () => {
     // Smoke is where the application opens.
+    const bar = showBar();
+
     expect(destination('Smoke')).toHaveStyle({ color: carbonLight.accent });
     expect(destination('History')).not.toHaveStyle({ color: carbonLight.accent });
 
-    await user.click(destination('History'));
+    bar.arriveAt(Screens.HISTORY);
 
     expect(destination('History')).toHaveStyle({ color: carbonLight.accent });
     expect(destination('Smoke')).not.toHaveStyle({ color: carbonLight.accent });
+  });
+
+  /**
+   * The bar does not have to be tapped for the user to get somewhere: the
+   * completion screen at the end of a smoke takes them to the history itself.
+   * The history was then read with SMOKE lit, because the bar had moved its own
+   * selection on the taps it saw and had nothing to move it on the ones it did
+   * not.
+   */
+  it('lights where the user was taken, even though no destination was tapped', () => {
+    const bar = showBar();
+
+    bar.arriveAt(Screens.HISTORY);
+
+    expect(destination('History')).toHaveStyle({ color: carbonLight.accent });
+    expect(destination('Smoke')).not.toHaveStyle({ color: carbonLight.accent });
+  });
+
+  /**
+   * A tap asks to go somewhere; it does not decide that the user got there. If
+   * the application does not change screens, the bar keeps showing where the
+   * user actually is rather than where they asked to be.
+   */
+  it('does not light a tapped destination the application did not take the user to', async () => {
+    const user = userEvent.setup();
+    showBar();
+
+    await user.click(destination('Settings'));
+
+    expect(destination('Smoke')).toHaveStyle({ color: carbonLight.accent });
+    expect(destination('Settings')).not.toHaveStyle({ color: carbonLight.accent });
   });
 
   it('is painted its own surface, distinct from the cards above it', () => {
@@ -124,6 +163,7 @@ describe('the bottom bar', () => {
       <CssVarsProvider theme={appTheme} defaultMode="light">
         <DesignSurface>
           <BottomBar
+            currentScreen={Screens.HOME}
             smokeOnClick={undefined as never}
             historyOnClick={jest.fn()}
             settingsOnClick={jest.fn()}

@@ -4,8 +4,9 @@ import { PreSmokeStep } from './preSmokeStep/preSmokeStep';
 import { SmokeStep } from './smokeStep/smokeStep';
 import { PostSmokeStep } from './postSmokeStep/PostSmokeStep';
 import { Button, Grid } from '@mui/material';
-import { useApiClient } from '../../api';
+import { useApiClient, useApiSnackbar } from '../../api';
 import { SegmentedControl, segmentTabId } from '../common/components/SegmentedControl';
+import { SmokeComplete } from './SmokeComplete';
 import { SmokeHeader } from './SmokeHeader';
 
 /**
@@ -33,27 +34,82 @@ export function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-export function Smoke(): JSX.Element {
+export interface SmokeProps {
+  /**
+   * Where "View History" on the completion screen goes. The wizard does not
+   * know how this application navigates — that is the shell's business — so it
+   * asks rather than routes.
+   */
+  onViewHistory?: () => void;
+}
+
+export function Smoke({ onViewHistory }: SmokeProps = {}): JSX.Element {
   const client = useApiClient();
+  const notify = useApiSnackbar();
   const [activeStep, setActiveStep] = React.useState(0);
+  // Whether the cook this wizard was editing has been archived. It is the end
+  // of the wizard's *body* rather than a fourth step: what it was editing no
+  // longer exists once the session is cleared, so the steps have nothing to
+  // show — but the header and its step control stay, because tapping a step is
+  // how the next cook is started.
+  const [complete, setComplete] = React.useState(false);
 
   const handleStep = (step: any) => {
+    // Coming back to a step from the completion screen starts the next cook:
+    // the wizard is mounted for as long as the Smoke tab is the screen in
+    // effect, so nothing else would ever take the completion screen down.
+    setComplete(false);
     setActiveStep(step);
   };
 
   const nextStep = async () => {
     let nextStep = activeStep;
     if (activeStep === 2) {
-      nextStep = 0;
+      // Parking on an index past the last step unmounts the step being left,
+      // which is what persists what was typed into it; the beat after gives
+      // that save the chance to land before the smoke is archived.
       setActiveStep(5);
       await delay(2);
       // Finalize the current smoke, then reset the session (the websocket
-      // `clear` broadcast fires inside the client's clearSmoke). Each call
-      // swallows-and-logs so a backend failure still resets the stepper — the
-      // behavior the two legacy shims preserved before this cutover.
-      await client.smoke.finish().catch(error => console.log(error));
-      await client.state.clearSmoke().catch(error => console.log(error));
-      setActiveStep(nextStep);
+      // `clear` broadcast fires inside the client's clearSmoke). Both calls
+      // swallow-and-log, as the two legacy shims did before this cutover, so a
+      // backend that is down cannot take the wizard with it — but what they
+      // return decides what the user is then told. Saying "saved to history"
+      // over a failed archive is worse than the crash: it is a cook the
+      // pitmaster stops looking for.
+      const archived = await client.smoke
+        .finish()
+        .then(() => true)
+        .catch(error => {
+          console.log(error);
+          return false;
+        });
+      const cleared = archived
+        ? await client.state
+            .clearSmoke()
+            .then(() => true)
+            .catch(error => {
+              console.log(error);
+              return false;
+            })
+        : // The session is not cleared over a failed archive: clearing is what
+          // makes the cook unreachable, and a cook that was never archived is
+          // then gone for good.
+          false;
+
+      if (archived && cleared) {
+        setComplete(true);
+        return;
+      }
+      // Back to the step the user pressed Finish on, which is where pressing it
+      // again is offered. Nothing claims the session was saved, because it was
+      // not — or was saved but not closed, which is its own thing to say.
+      setActiveStep(2);
+      notify(
+        archived
+          ? 'The smoke was saved to history, but the session could not be closed. Try finishing again.'
+          : 'Could not finish the smoke — it has not been saved to history. Try again.'
+      );
       return;
     }
     nextStep++;
@@ -68,6 +124,8 @@ export function Smoke(): JSX.Element {
   const shownStep = steps[Math.min(activeStep, steps.length - 1)].value;
 
   let step;
+  // One action at the foot of each step, against the right-hand edge: the row
+  // it sits in is reversed by each step (see their containers).
   const nextButton = (
     <Button
       className="nextButton"
@@ -80,16 +138,23 @@ export function Smoke(): JSX.Element {
     </Button>
   );
 
-  switch (activeStep) {
-    case 0:
-      step = <PreSmokeStep nextButton={nextButton} />;
-      break;
-    case 1:
-      step = <SmokeStep nextButton={nextButton} />;
-      break;
-    case 2:
-      step = <PostSmokeStep nextButton={nextButton} />;
-      break;
+  if (complete) {
+    // The end of the cook, in the place the steps were: the header and the step
+    // control stay on screen, so the way on from here is the way the design
+    // offers — the history, or a step, which begins the next cook.
+    step = <SmokeComplete onViewHistory={() => onViewHistory?.()} />;
+  } else {
+    switch (activeStep) {
+      case 0:
+        step = <PreSmokeStep nextButton={nextButton} />;
+        break;
+      case 1:
+        step = <SmokeStep nextButton={nextButton} />;
+        break;
+      case 2:
+        step = <PostSmokeStep nextButton={nextButton} />;
+        break;
+    }
   }
 
   return (

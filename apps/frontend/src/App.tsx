@@ -48,7 +48,10 @@ class App extends React.Component<{}, { currentScreen: Screens }> {
     let screen;
     switch (this.state.currentScreen) {
       case Screens.HOME:
-        screen = <Smoke />;
+        // Finishing a smoke ends on the design's completion screen, whose one
+        // action is to go and look at what was just archived. The wizard has no
+        // idea how this application navigates, so it asks and this decides.
+        screen = <Smoke onViewHistory={this.historyOnClick} />;
         break;
       case Screens.HISTORY:
         screen = <History />;
@@ -82,6 +85,11 @@ class App extends React.Component<{}, { currentScreen: Screens }> {
               <Grid className="App-header">
                 <Grid>{screen}</Grid>
                 <BottomBar
+                  // The screen in effect lives here, so the bar is told it
+                  // rather than keeping a second copy that only a tap on the
+                  // bar could update — the completion screen navigates without
+                  // one.
+                  currentScreen={this.state.currentScreen}
                   smokeOnClick={this.smokeOnClick}
                   historyOnClick={this.historyOnClick}
                   settingsOnClick={this.settingsOnClick}

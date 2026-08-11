@@ -16,6 +16,9 @@
   min-height: calc(100vh - 56px);
 }
 
+/* The step's one action, at the foot of it and against the right-hand edge —
+   the row it sits in is reversed (see the steps' own containers), so this is
+   only its size and the gap it keeps from that edge. */
 .nextButton {
   margin-right: 5%;
   justify-content: flex-end;

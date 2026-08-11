@@ -38,7 +38,7 @@ jest.mock('./smokeStep/smokeStep', () => ({
 
 let backend: FakeBackend;
 
-const renderWizard = () => {
+const renderWizard = (onViewHistory?: () => void) => {
   // A session already under way: both steps have a stored document, which is
   // what the save-on-leave needs — a step whose load failed deliberately writes
   // nothing back (see `useCurrentResource`), so a wizard over an empty backend
@@ -63,7 +63,7 @@ const renderWizard = () => {
       <DesignSurface>
         <ApiClientProvider client={createApiClient(backend)}>
           <SnackbarProvider>
-            <Smoke />
+            <Smoke onViewHistory={onViewHistory} />
           </SnackbarProvider>
         </ApiClientProvider>
       </DesignSurface>
@@ -243,7 +243,25 @@ describe('advancing through the wizard', () => {
     expect(nextButton()).toHaveTextContent('Finish');
   });
 
-  it('finishes the smoke and clears the session, then starts the wizard over', async () => {
+  it('ends every step with its primary action against the right-hand edge', async () => {
+    // The design ends each step with one auto-width button pinned right, which
+    // is what the reversed row under the form does.
+    const user = userEvent.setup();
+    renderWizard();
+    await screen.findByTestId('presmoke-name-input');
+
+    const foot = () => nextButton().parentElement as HTMLElement;
+    expect(getComputedStyle(foot()).flexDirection).toBe('row-reverse');
+    // Not stretched across the form: the button is as wide as it needs to be.
+    expect(nextButton()).not.toHaveStyle({ width: '100%' });
+
+    await user.click(segment('Post-Smoke'));
+    await screen.findByTestId('postsmoke-rest-time-input');
+
+    expect(getComputedStyle(foot()).flexDirection).toBe('row-reverse');
+  });
+
+  it('finishes the smoke and clears the session, and says so', async () => {
     const user = userEvent.setup();
     renderWizard();
     await screen.findByTestId('presmoke-name-input');
@@ -266,7 +284,105 @@ describe('advancing through the wizard', () => {
         body: undefined,
       })
     );
+
+    // Ending a cook used to drop the user back on an empty pre-smoke form, with
+    // nothing to say whether the session had been saved or thrown away. The
+    // design ends it on a moment of its own.
+    const complete = await screen.findByTestId('smoke-complete');
+    expect(complete).toHaveTextContent('Smoke Complete!');
+    expect(complete).toHaveTextContent('Your session has been saved to history.');
+    // The step it took the place of is gone: there is no session left to edit.
+    expect(screen.queryByTestId('postsmoke-rest-time-input')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('presmoke-name-input')).not.toBeInTheDocument();
+  });
+
+  it('keeps the header and step control over the completion screen, and starts the next cook from them', async () => {
+    // The completion screen takes the place of the step, not of the wizard. It
+    // has to: the Smoke tab is already the screen in effect, so tapping it again
+    // mounts nothing new — a completion screen that replaced the whole wizard
+    // would be a dead end, escapable only by a detour through another screen.
+    const user = userEvent.setup();
+    renderWizard();
+    await screen.findByTestId('presmoke-name-input');
+
+    await user.click(segment('Post-Smoke'));
+    await screen.findByTestId('postsmoke-rest-time-input');
+    await user.click(nextButton());
+    await screen.findByTestId('smoke-complete');
+
+    expect(screen.getByTestId('smoke-header')).toBeInTheDocument();
+    expect(within(screen.getByTestId('smoke-header')).getByRole('tablist')).toBeInTheDocument();
+
+    await user.click(segment('Pre-Smoke'));
+
     expect(await screen.findByTestId('presmoke-name-input')).toBeInTheDocument();
+    expect(screen.queryByTestId('smoke-complete')).not.toBeInTheDocument();
+  });
+
+  it('sends the user to the history from the completion screen', async () => {
+    const user = userEvent.setup();
+    const viewHistory = jest.fn();
+    renderWizard(viewHistory);
+    await screen.findByTestId('presmoke-name-input');
+
+    await user.click(segment('Post-Smoke'));
+    await screen.findByTestId('postsmoke-rest-time-input');
+    await user.click(nextButton());
+
+    await user.click(await screen.findByRole('button', { name: 'View History' }));
+
+    expect(viewHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it('says the archive failed rather than that the session was saved, and offers the finish again', async () => {
+    // A false confirmation is the worst outcome here: the cook is not in the
+    // history, the session is still open on the backend, and the one screen
+    // that could say so instead says the opposite.
+    const user = userEvent.setup();
+    renderWizard();
+    await screen.findByTestId('presmoke-name-input');
+    backend.injectFault({ method: 'post', path: 'smoke/finish', status: 500 });
+
+    await user.click(segment('Post-Smoke'));
+    await screen.findByTestId('postsmoke-rest-time-input');
+    await user.click(nextButton());
+
+    expect(
+      await screen.findByText('Could not finish the smoke — it has not been saved to history.', {
+        exact: false,
+      })
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId('smoke-complete')).not.toBeInTheDocument();
+    // The session is left alone: clearing it is what makes a cook unreachable,
+    // and this one was never archived.
+    expect(backend.requests.some(request => request.path === 'state/clearSmoke')).toBe(false);
+    // And the user is back where the finish is offered, free to try again.
+    expect(await screen.findByTestId('postsmoke-rest-time-input')).toBeInTheDocument();
+    expect(nextButton()).toHaveTextContent('Finish');
+  });
+
+  it('says so when the smoke was archived but the session could not be closed', async () => {
+    // Half a finish is its own thing to say: the cook *is* in the history, so
+    // "nothing was saved" would be as wrong as "all done".
+    const user = userEvent.setup();
+    renderWizard();
+    await screen.findByTestId('presmoke-name-input');
+    backend.injectFault({ method: 'put', path: 'state/clearSmoke', status: 500 });
+
+    await user.click(segment('Post-Smoke'));
+    await screen.findByTestId('postsmoke-rest-time-input');
+    await user.click(nextButton());
+
+    expect(
+      await screen.findByText(
+        'The smoke was saved to history, but the session could not be closed.',
+        {
+          exact: false,
+        }
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId('smoke-complete')).not.toBeInTheDocument();
+    expect(await screen.findByTestId('postsmoke-rest-time-input')).toBeInTheDocument();
   });
 });
 
