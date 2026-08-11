@@ -133,19 +133,52 @@ describe('PostSmokeStep', () => {
     // The rest-time field is masked to `HH:MM` and rewrites what is typed into
     // it. Without a word about the format that rewriting looks like the field
     // eating the input: "90" for an hour and a half becomes "90:" and then
-    // refuses the rest. The hint is what the design puts under the field.
+    // refuses the rest. The design says the format in the label — before
+    // anything has been typed — and keeps the hint under the field for what the
+    // answer is *for*.
     const backend = createFakeBackend({ postSmoke: { current: seededPostSmoke } });
 
     renderStep(backend);
     await screen.findByDisplayValue('01:30');
 
     const restTime = screen.getByTestId('postsmoke-rest-time-input');
-    expect(screen.getByLabelText('Rest Time')).toBe(restTime);
-    expect(screen.getByText('Rest Time')).toHaveStyle({ textTransform: 'uppercase' });
-    expect(restTime).toHaveAccessibleDescription('Hours and minutes, as HH:MM');
+    expect(screen.getByLabelText('Rest Time (HH:MM)')).toBe(restTime);
+    expect(screen.getByText('Rest Time (HH:MM)')).toHaveStyle({ textTransform: 'uppercase' });
+    expect(restTime).toHaveAccessibleDescription('How long will you let it rest?');
 
     expect(screen.getByLabelText('Notes')).toBe(screen.getByTestId('postsmoke-notes-input'));
     expect(screen.getByText('Notes')).toHaveStyle({ textTransform: 'uppercase' });
+  });
+
+  test('says what the notes are for, in a hint that survives the first keystroke', async () => {
+    // The design puts this under the field. It used to be a placeholder, which
+    // is gone the moment anything is typed — so the one moment a pitmaster might
+    // wonder whether this is the right box for "the flat came out dry" is the
+    // moment the answer disappears.
+    const backend = createFakeBackend({ postSmoke: { current: seededPostSmoke } });
+
+    renderStep(backend);
+    await screen.findByDisplayValue('01:30');
+
+    const notes = screen.getByTestId('postsmoke-notes-input');
+    expect(notes).toHaveAccessibleDescription('Final thoughts on the cook');
+
+    fireEvent.change(notes, { target: { value: 'Bark was perfect' } });
+
+    expect(notes).toHaveAccessibleDescription('Final thoughts on the cook');
+  });
+
+  test('lays its fields out as one flat column, without the smoke step’s card chrome', async () => {
+    // The design cards the live smoke — readings, chart and details are separate
+    // things to look at — and leaves the two forms flat: one column of fields
+    // read top to bottom. Three raised surfaces down a form make it look like
+    // three forms.
+    const backend = createFakeBackend({ postSmoke: { current: seededPostSmoke } });
+
+    const { container } = renderStep(backend);
+    await screen.findByDisplayValue('01:30');
+
+    expect(container.querySelectorAll('.MuiPaper-root')).toHaveLength(0);
   });
 
   test('raises the snackbar when loading the post-smoke fails', async () => {

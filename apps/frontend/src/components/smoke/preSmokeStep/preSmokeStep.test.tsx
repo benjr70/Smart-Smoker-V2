@@ -152,13 +152,16 @@ describe('PreSmokeStep', () => {
     await screen.findByDisplayValue('Test Smoke');
     fireEvent.click(screen.getByRole('button', { name: 'Open' }));
 
+    // The design's list of cuts, in the design's order — not a list of our own
+    // that happens to be about the same length.
     expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual([
       'Brisket',
-      'Pork Butt',
       'Ribs',
-      'Chicken',
+      'Pork Shoulder',
       'Turkey',
-      'Salmon',
+      'Chicken',
+      'Chuck Roast',
+      'Other',
     ]);
   });
 
@@ -300,6 +303,19 @@ describe('PreSmokeStep', () => {
     // than by being pointed at.
     expect(screen.getByLabelText('Unit')).toBe(screen.getByTestId('presmoke-weight-unit-select'));
     expect(screen.getByText('Unit')).toHaveStyle({ textTransform: 'uppercase' });
+  });
+
+  test('lays its fields out as one flat column, without the smoke step’s card chrome', async () => {
+    // The design cards the live smoke — readings, chart and details are separate
+    // things to look at — and leaves this form flat: one column of fields read
+    // top to bottom. Three raised surfaces down a form make it look like three
+    // forms, and a pitmaster filling one in has one thing to do, not three.
+    const backend = createFakeBackend({ preSmoke: { current: seededPreSmoke } });
+
+    const { container } = renderStep(backend);
+    await screen.findByDisplayValue('Test Smoke');
+
+    expect(container.querySelectorAll('.MuiPaper-root')).toHaveLength(0);
   });
 
   test('raises the snackbar when loading the pre-smoke fails', async () => {

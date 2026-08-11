@@ -468,9 +468,10 @@ export class FrontendApp {
   /**
    * Drop one prep step by position, as a pitmaster revising the plan does.
    *
-   * The last step of the list has no remove button (it carries the one that
-   * adds a step), so it cannot be dropped this way; asking for it fails with
-   * that explanation.
+   * Any step can be dropped, the last one included: every row carries its own
+   * "×" and the control that adds a step sits under the list rather than in the
+   * final row. Asking for a position the list does not hold fails with that
+   * explanation.
    */
   async removePreSmokeStep(index: number): Promise<void> {
     await this.removeDynamicListRow(PRE_SMOKE_STEPS, index);
@@ -492,9 +493,9 @@ export class FrontendApp {
   // --- Dynamic steps lists -------------------------------------------------
   //
   // The add/remove row list the pre-smoke and post-smoke steps share. Rows are
-  // addressed by a caller-chosen test-id prefix: `<prefix>-row` per row, and
-  // within it `<prefix>-input`, `<prefix>-add-button` (last row only) and
-  // `<prefix>-remove-button` (every other row).
+  // addressed by a caller-chosen test-id prefix: `<prefix>-row` per row, with
+  // `<prefix>-input` and `<prefix>-remove-button` within every one of them, and
+  // one `<prefix>-add-button` under the list as a whole.
 
   private dynamicListRows(prefix: string): Locator {
     return this.page.getByTestId(`${prefix}-row`);
@@ -1147,7 +1148,9 @@ export class FrontendApp {
    * The archive is awaited and asserted accepted, so a rejected finish fails
    * here — at the archive — instead of surfacing later as a smoke mysteriously
    * absent from history. The completion screen is what says the whole sequence
-   * (archive, then clear) ran: it replaces the wizard only once both have.
+   * (archive, then clear) ran: it takes the place of the post-smoke step only
+   * once both have — a failure of either leaves the step, and its Finish, where
+   * they were.
    */
   async finishSmoke(): Promise<void> {
     const archived = this.page.waitForResponse(

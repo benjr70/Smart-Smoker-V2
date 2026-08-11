@@ -326,8 +326,9 @@ describe('the post-smoke step', () => {
     renderUnder('dark', <PostSmokeStep nextButton={<button>Finish</button>} />);
 
     // The field's label and the notch its outline leaves for it carry the same
-    // words; the label is the one that is painted.
-    expect((await screen.findAllByText('Rest Time'))[0]).toHaveStyle({
+    // words; the label is the one that is painted. Matched loosely because the
+    // label states the format the field is masked to ("Rest Time (HH:MM)").
+    expect((await screen.findAllByText(/^Rest Time/))[0]).toHaveStyle({
       color: carbonDark.textSecondary,
     });
   });
@@ -335,7 +336,7 @@ describe('the post-smoke step', () => {
   it('labels them in the light scheme’s secondary text colour too', async () => {
     renderUnder('light', <PostSmokeStep nextButton={<button>Finish</button>} />);
 
-    expect((await screen.findAllByText('Rest Time'))[0]).toHaveStyle({
+    expect((await screen.findAllByText(/^Rest Time/))[0]).toHaveStyle({
       color: carbonLight.textSecondary,
     });
   });

@@ -15,10 +15,16 @@ export interface SmokeCompleteProps {
  * the navigation bar to find. This says the session is saved and offers the
  * place it was saved to.
  *
- * It replaces the wizard rather than sitting inside it: the session it was
- * editing has been archived and cleared, so there is no longer a pre-smoke, a
- * smoke or a post-smoke to step between. The next cook begins by coming back to
- * the Smoke tab, which mounts a fresh wizard.
+ * It takes the place of the step being edited and no more than that: the header
+ * and the step control stay above it, exactly as the design has them, so the
+ * next cook is begun by tapping a step. Replacing the whole wizard instead
+ * would strand the user — the Smoke tab is already the screen in effect, so
+ * tapping it again mounts nothing new and there would be no way out but the
+ * long way round through another screen.
+ *
+ * It is only ever shown once the archive *and* the clear have landed, so what it
+ * says about the session having been saved is something that happened rather
+ * than something that was attempted.
  */
 export function SmokeComplete({ onViewHistory }: SmokeCompleteProps): JSX.Element {
   return (

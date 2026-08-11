@@ -4,7 +4,7 @@ import { PreSmokeStep } from './preSmokeStep/preSmokeStep';
 import { SmokeStep } from './smokeStep/smokeStep';
 import { PostSmokeStep } from './postSmokeStep/PostSmokeStep';
 import { Button, Grid } from '@mui/material';
-import { useApiClient } from '../../api';
+import { useApiClient, useApiSnackbar } from '../../api';
 import { SegmentedControl, segmentTabId } from '../common/components/SegmentedControl';
 import { SmokeComplete } from './SmokeComplete';
 import { SmokeHeader } from './SmokeHeader';
@@ -45,13 +45,20 @@ export interface SmokeProps {
 
 export function Smoke({ onViewHistory }: SmokeProps = {}): JSX.Element {
   const client = useApiClient();
+  const notify = useApiSnackbar();
   const [activeStep, setActiveStep] = React.useState(0);
   // Whether the cook this wizard was editing has been archived. It is the end
-  // of the wizard rather than a fourth step: what it was editing no longer
-  // exists once the session is cleared.
+  // of the wizard's *body* rather than a fourth step: what it was editing no
+  // longer exists once the session is cleared, so the steps have nothing to
+  // show — but the header and its step control stay, because tapping a step is
+  // how the next cook is started.
   const [complete, setComplete] = React.useState(false);
 
   const handleStep = (step: any) => {
+    // Coming back to a step from the completion screen starts the next cook:
+    // the wizard is mounted for as long as the Smoke tab is the screen in
+    // effect, so nothing else would ever take the completion screen down.
+    setComplete(false);
     setActiveStep(step);
   };
 
@@ -64,12 +71,45 @@ export function Smoke({ onViewHistory }: SmokeProps = {}): JSX.Element {
       setActiveStep(5);
       await delay(2);
       // Finalize the current smoke, then reset the session (the websocket
-      // `clear` broadcast fires inside the client's clearSmoke). Each call
-      // swallows-and-logs so a backend failure still ends the wizard — the
-      // behavior the two legacy shims preserved before this cutover.
-      await client.smoke.finish().catch(error => console.log(error));
-      await client.state.clearSmoke().catch(error => console.log(error));
-      setComplete(true);
+      // `clear` broadcast fires inside the client's clearSmoke). Both calls
+      // swallow-and-log, as the two legacy shims did before this cutover, so a
+      // backend that is down cannot take the wizard with it — but what they
+      // return decides what the user is then told. Saying "saved to history"
+      // over a failed archive is worse than the crash: it is a cook the
+      // pitmaster stops looking for.
+      const archived = await client.smoke
+        .finish()
+        .then(() => true)
+        .catch(error => {
+          console.log(error);
+          return false;
+        });
+      const cleared = archived
+        ? await client.state
+            .clearSmoke()
+            .then(() => true)
+            .catch(error => {
+              console.log(error);
+              return false;
+            })
+        : // The session is not cleared over a failed archive: clearing is what
+          // makes the cook unreachable, and a cook that was never archived is
+          // then gone for good.
+          false;
+
+      if (archived && cleared) {
+        setComplete(true);
+        return;
+      }
+      // Back to the step the user pressed Finish on, which is where pressing it
+      // again is offered. Nothing claims the session was saved, because it was
+      // not — or was saved but not closed, which is its own thing to say.
+      setActiveStep(2);
+      notify(
+        archived
+          ? 'The smoke was saved to history, but the session could not be closed. Try finishing again.'
+          : 'Could not finish the smoke — it has not been saved to history. Try again.'
+      );
       return;
     }
     nextStep++;
@@ -78,30 +118,19 @@ export function Smoke({ onViewHistory }: SmokeProps = {}): JSX.Element {
     }
   };
 
-  if (complete) {
-    // The wizard is over: no header, no step control, nothing to step between.
-    // A fresh one is mounted by coming back to the Smoke tab.
-    return (
-      <Grid container direction="column" wrap="nowrap" className="smoke" data-testid="smoke-screen">
-        <SmokeComplete onViewHistory={() => onViewHistory?.()} />
-      </Grid>
-    );
-  }
-
   // The finish flow parks the wizard on a step index past the last one while it
   // resets; the control still has to name a segment, and the step being left is
   // the honest one to name.
   const shownStep = steps[Math.min(activeStep, steps.length - 1)].value;
 
   let step;
-  // One action at the foot of each step, across the width of it. It used to be a
-  // 125px pill pushed into the right-hand corner — the far corner of a phone
-  // held in one hand, for the control every step ends on.
+  // One action at the foot of each step, against the right-hand edge: the row
+  // it sits in is reversed by each step (see their containers).
   const nextButton = (
     <Button
       className="nextButton"
       variant="contained"
-      fullWidth
+      size="small"
       data-testid="smoke-next-button"
       onClick={() => nextStep()}
     >
@@ -109,16 +138,23 @@ export function Smoke({ onViewHistory }: SmokeProps = {}): JSX.Element {
     </Button>
   );
 
-  switch (activeStep) {
-    case 0:
-      step = <PreSmokeStep nextButton={nextButton} />;
-      break;
-    case 1:
-      step = <SmokeStep nextButton={nextButton} />;
-      break;
-    case 2:
-      step = <PostSmokeStep nextButton={nextButton} />;
-      break;
+  if (complete) {
+    // The end of the cook, in the place the steps were: the header and the step
+    // control stay on screen, so the way on from here is the way the design
+    // offers — the history, or a step, which begins the next cook.
+    step = <SmokeComplete onViewHistory={() => onViewHistory?.()} />;
+  } else {
+    switch (activeStep) {
+      case 0:
+        step = <PreSmokeStep nextButton={nextButton} />;
+        break;
+      case 1:
+        step = <SmokeStep nextButton={nextButton} />;
+        break;
+      case 2:
+        step = <PostSmokeStep nextButton={nextButton} />;
+        break;
+    }
   }
 
   return (

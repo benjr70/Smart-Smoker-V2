@@ -1,4 +1,4 @@
-import { Card, Grid, TextField } from '@mui/material';
+import { Box, Grid, TextField } from '@mui/material';
 import React from 'react';
 import { useCurrentResource } from '../../../api';
 import { DynamicList } from '../../common/components/DynamicList';
@@ -24,38 +24,39 @@ export const PostSmokeStep: React.FC<PostSmokeStepProps> = ({ nextButton }) => {
   });
 
   return (
-    // The same column of cards the other two steps are laid out in: how the
-    // meat rested, what was done to it afterwards, and how it went.
+    // The same flat column of fields the pre-smoke step is laid out in, and for
+    // the same reason: how the meat rested, what was done to it afterwards, and
+    // how it went, read top to bottom in one pass with no card chrome between
+    // them.
     <Grid
       item
       xs={12}
-      sx={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%' }}
+      sx={{ display: 'flex', flexDirection: 'column', gap: '14px', width: '100%' }}
     >
-      <Card data-testid="postsmoke-details-card" sx={{ padding: '14px' }}>
-        <FormField label="Rest Time" htmlFor="postsmoke-rest-time">
-          <TextField
-            id="postsmoke-rest-time"
-            fullWidth
-            size="small"
-            value={postSmokeState.restTime}
-            // The mask rewrites what is typed, which without a word about the
-            // format reads as the field rejecting the number: this is what the
-            // design puts under it.
-            helperText="Hours and minutes, as HH:MM"
-            onChange={(event: any) =>
-              setPostSmokeState({ ...postSmokeState, restTime: event.target.value })
-            }
-            inputProps={{ 'data-testid': 'postsmoke-rest-time-input' }}
-            InputProps={{
-              inputComponent: TextMaskCustom as any,
-            }}
-          />
-        </FormField>
-      </Card>
-      <Card
-        data-testid="postsmoke-steps-card"
-        sx={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}
-      >
+      {/* The format lives in the label, as the design writes it: the mask
+          rewrites what is typed, and a field that says how it is written before
+          it is typed into is not correcting anybody afterwards. */}
+      <FormField label="Rest Time (HH:MM)" htmlFor="postsmoke-rest-time">
+        <TextField
+          id="postsmoke-rest-time"
+          fullWidth
+          size="small"
+          value={postSmokeState.restTime}
+          // What the design puts under the field: what the answer is for, rather
+          // than a second telling of the format the label already gives.
+          helperText="How long will you let it rest?"
+          onChange={(event: any) =>
+            setPostSmokeState({ ...postSmokeState, restTime: event.target.value })
+          }
+          inputProps={{ 'data-testid': 'postsmoke-rest-time-input' }}
+          InputProps={{
+            inputComponent: TextMaskCustom as any,
+          }}
+        />
+      </FormField>
+      {/* The wrap-up plan and its heading are one field of the form, spaced the
+          way a label sits above its control. */}
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
         <SectionHeading>Post-Smoke Steps</SectionHeading>
         <DynamicList
           newline={() =>
@@ -76,24 +77,29 @@ export const PostSmokeStep: React.FC<PostSmokeStepProps> = ({ nextButton }) => {
             })
           }
         />
-      </Card>
-      <Card data-testid="postsmoke-notes-card" sx={{ padding: '14px' }}>
-        <FormField label="Notes" htmlFor="postsmoke-notes">
-          <TextField
-            id="postsmoke-notes"
-            fullWidth
-            placeholder="How did it turn out?"
-            multiline
-            inputProps={{ 'data-testid': 'postsmoke-notes-input' }}
-            value={postSmokeState.notes}
-            onChange={(event: any) =>
-              setPostSmokeState({ ...postSmokeState, notes: event.target.value })
-            }
-            rows={4}
-          />
-        </FormField>
-      </Card>
-      <Grid container sx={{ paddingBottom: '8px' }}>
+      </Box>
+      <FormField label="Notes" htmlFor="postsmoke-notes">
+        <TextField
+          id="postsmoke-notes"
+          fullWidth
+          multiline
+          // A hint rather than a placeholder: a placeholder is gone the moment
+          // anything is typed, and what this says — that the field is for how
+          // the cook went, not for more of the wrap-up plan above it — is worth
+          // as much to somebody halfway through writing it as to somebody
+          // staring at an empty box.
+          helperText="Final thoughts on the cook"
+          inputProps={{ 'data-testid': 'postsmoke-notes-input' }}
+          value={postSmokeState.notes}
+          onChange={(event: any) =>
+            setPostSmokeState({ ...postSmokeState, notes: event.target.value })
+          }
+          rows={4}
+        />
+      </FormField>
+      {/* The step's one action, at the foot of it and against the right-hand
+          edge, which is where the design ends every step. */}
+      <Grid container flexDirection="row-reverse" sx={{ paddingBottom: '8px' }}>
         {nextButton}
       </Grid>
     </Grid>
