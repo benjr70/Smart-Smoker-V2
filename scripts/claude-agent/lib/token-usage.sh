@@ -58,7 +58,8 @@ tu_scan() {
     | while IFS= read -r -d '' f; do
         jq -c --arg file "${f}" '
             select(.message.usage? != null)
-            | (.gitBranch // "" | capture("^feat/issue-(?<n>[0-9]+)$")?.n // "overhead") as $key
+            | ((.gitBranch // "" | capture("^feat/issue-(?<n>[0-9]+)$") | .n)?
+               // "overhead") as $key
             | { key: $key, file: $file,
                 out: (.message.usage.output_tokens // 0),
                 cr:  (.message.usage.cache_read_input_tokens // 0),
