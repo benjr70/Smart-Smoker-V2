@@ -61,24 +61,12 @@ The box must already be provisioned (slice 2) and the stack-runner deps present
 prerequisite — never `apt-get`/`npm install` your way out (installing is the
 verifier agent's forbidden zone too):
 
-```bash
-gh auth status >/dev/null || { echo "verify-pr: gh not authenticated"; exit 1; }
-test -f scripts/verify-pr/parse-checklist.sh
-test -f scripts/verify-pr/tick-checklist.sh
-test -f scripts/verify-pr/detect-ui-change.sh
-test -f scripts/verify-pr/inject-screenshots.sh
-test -d scripts/stack-runner/node_modules || echo "verify-pr: run 'cd scripts/stack-runner && npm install' first"
-```
-
-The **screenshot tour** (step 7.2) has one extra, _soft_ prerequisite: the
-`scripts/pr-images` uploader and its logged-in GitHub profile. It is soft on
-purpose — a missing or expired upload session degrades the tour, it never fails
-a verification round:
-
-```bash
-test -d scripts/pr-images/node_modules \
-  || echo "verify-pr: screenshots unavailable — run 'cd scripts/pr-images && npm install --legacy-peer-deps'"
-```
+All of these checks (gh auth, the four verify-pr scripts, stack-runner deps, and
+the _soft_ screenshot-tour prerequisite — `scripts/pr-images` deps, which WARN
+but never fail a round) are executed by `scripts/verify-pr/preflight-boot.sh`,
+the single call that also boots the stack in §4. Do **not** run them as separate
+turns here — a hard prerequisite failure surfaces as the boot call exiting 3
+with the specific missing piece on stderr, before anything is booted.
 
 The `playwright-chrome` and `playwright-electron` MCP servers are **committed**
 to `.mcp.json`, so every checkout has them — they no longer depend on a
@@ -193,44 +181,42 @@ gh pr checkout "$PR"
 The stack-runner builds images **from this checkout**, so the stack under test
 is the PR's code, not master.
 
-### 4. Boot the hermetic stack (one retry, then abort)
+### 4. Preflight + boot the hermetic stack (one call, one retry built in)
 
-The stack-runner boots the whole app under a namespaced project and prints the
-`KEY=value` contract on stdout (URLs + hermetic Mongo string). Progress goes to
-stderr, so capture stdout cleanly:
-
-```bash
-cd scripts/stack-runner
-STACK_OUT="$(npx tsx cli.ts up --pr "$PR")"   # blocks until healthy or fails
-cd - >/dev/null
-```
-
-**Boot failure is an infrastructure error, not a verdict.** If `up` exits
-non-zero (build/health failure), tear down and retry **exactly once**. If the
-retry also fails, **abort the round**:
-
-- do **not** spawn the agent, do **not** fabricate any item verdicts;
-- post a distinct **infrastructure-error** comment (stack failed to boot, with
-  the stderr tail), clearly separate from a verification result;
-- emit `manual-verify: infra-error — stack boot failed (0 items verified)` and
-  stop after teardown (§8).
-
-On success, source the contract so the agent inherits it:
+`preflight-boot.sh` chains the §0 prerequisite checks, the stack-runner boot
+with the one-retry rule, and (when asked) the §5 Electron launch — one Bash call
+instead of the old 8–10 separate turns. Its stdout is ONLY the sourceable
+contract; all progress and failure tails go to stderr:
 
 ```bash
-eval "$(printf '%s\n' "$STACK_OUT" | grep -E '^(E2E_|STACK_PROJECT_NAME=)')"
+# Pass --electron ONLY when a parsed item targets the smoker desktop app
+# (§5's "do not launch needlessly" rule).
+eval "$(scripts/verify-pr/preflight-boot.sh --pr "$PR")"   # add --electron if needed
 ```
 
-### 5. Launch the smoker Electron app (only if a smoker/Electron item exists)
+Branch on its exit code:
 
-If any parsed item targets the smoker desktop app, start it against this stack
-so the `playwright-electron` MCP server can attach over CDP:
+- **0** — stack healthy (and Electron up, if requested); the `E2E_*` /
+  `STACK_PROJECT_NAME` contract is now in your env. Proceed to §6.
+- **3** — hard prerequisite failure (gh auth, missing scripts, missing
+  stack-runner deps); nothing was booted. Abort with the specific prerequisite
+  from stderr — never `apt-get`/`npm install` your way out.
+- **4** — boot failed **twice** (the one-retry rule already ran, teardown
+  already happened). **Infrastructure error, not a verdict**: do **not** spawn
+  the agent, do **not** fabricate item verdicts; post the distinct
+  infrastructure-error comment (with the stderr tail), emit
+  `manual-verify: infra-error — stack boot failed (0 items verified)`, stop.
+- **5** — stack healthy but the Electron launch failed; the stack is left UP and
+  the contract was still emitted. Retry
+  `scripts/verify-pr/electron-launcher.sh start` once yourself; if it fails
+  again, treat the Electron-dependent items per the Electron runbook and
+  continue browser-only where the checklist allows.
 
-```bash
-scripts/verify-pr/electron-launcher.sh start   # blocks until CDP is ready
-```
+### 5. The smoker Electron app (folded into §4's call)
 
-If no item needs Electron, skip this — do not launch it needlessly.
+Electron starts via §4's `--electron` flag — pass it only when a parsed item
+targets the smoker desktop app. There is no separate launch step on the happy
+path; `electron-launcher.sh start` remains the manual retry tool for exit 5.
 
 This step is the Electron tools' real precondition: the MCP server is already
 registered, but it only connects on the first tool call. Do not call an

@@ -84,7 +84,7 @@ REVIEWED_SHA=$(git rev-parse HEAD)
 ### 2. Round 1 — dual-axis review (parallel subagents)
 
 Spawn **both** wrappers in a single message so they run concurrently. Each:
-`subagent_type: general-purpose`, `model: opus`, `run_in_background: false`
+`subagent_type: general-purpose`, `model: fable`, `run_in_background: false`
 (blocking — wait for both before §3).
 
 Both must return findings in the same contract — a fenced block, one JSON object

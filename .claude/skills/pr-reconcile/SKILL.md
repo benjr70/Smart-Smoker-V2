@@ -90,7 +90,7 @@ VERDICT=$(rebase_onto "$BRANCH")          # {"status":"CLEAN"|"CONFLICT","files"
   ```
 
 - **CONFLICT** → spawn one **implementer** (blocking,
-  `subagent_type: implementer`, `model: opus`) to resolve **in place**. Prompt
+  `subagent_type: implementer`, `model: fable`) to resolve **in place**. Prompt
   embeds: the issue title + body, the conflicted file list from the verdict, and
   these instructions verbatim:
 
@@ -148,7 +148,7 @@ explicit change requests, otherwise just drop the label (§2-exit) and continue.
 Round loop (`R` starts at 1, cap `REVISE_ROUNDS_MAX=3`):
 
 1. **Spawn one implementer per round** (blocking, `subagent_type: implementer`,
-   `model: opus`) covering ALL currently-unresolved threads. Prompt embeds: the
+   `model: fable`) covering ALL currently-unresolved threads. Prompt embeds: the
    issue title + body, the current PR diff (`git diff origin/master...HEAD`,
    capped at 2000 lines as in pr-watch §3), and every thread verbatim —
    `threadId`, `path:line`, and comment body — plus these instructions verbatim:

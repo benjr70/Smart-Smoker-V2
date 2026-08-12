@@ -10,7 +10,8 @@ description:
 tools:
   Read, Grep, Glob, Bash, mcp__playwright-chrome, mcp__playwright-electron,
   mcp__mongodb
-model: opus
+model: fable
+effort: medium
 ---
 
 # Manual Verifier

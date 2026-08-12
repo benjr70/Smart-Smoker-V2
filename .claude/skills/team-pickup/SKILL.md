@@ -28,20 +28,34 @@ issue. Idempotent and silent when nothing is eligible.
 
 ## Process
 
-### 0. Pre-flight (lightweight)
+### 0. One-call triage (replaces the old §0–§2 probe turns)
 
-`/team-dispatch` owns full pre-flight (tooling, env flag, label creation).
-Verify only what the picker itself needs before §1:
+The whole §0–§2 read-only decision tree — env flag, gh auth/scope, concurrency
+lock, PR triage, paused probe, project pick with blocker check — runs as **one
+script call**. Do NOT re-derive any of it with individual `gh` probes; every
+extra Bash call is a full cache-read API turn, and this consolidation exists to
+eliminate exactly those turns.
 
 ```bash
-gh auth status >/dev/null || { echo "team-pickup: gh not authenticated — §2 will use GitHub MCP fallback"; USE_MCP_FOR_PROJECT=1; }
-if ! gh auth status 2>&1 | grep -q "'project'"; then
-  echo "team-pickup: gh token missing 'project' scope — §2 will use GitHub MCP fallback"
-  USE_MCP_FOR_PROJECT=1
-fi
-grep -q '"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"\s*:\s*"1"' .claude/settings.json \
-  || { echo "team-pickup: CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 missing in .claude/settings.json"; exit 1; }
+TRIAGE=$(scripts/claude-agent/lib/pickup-triage.sh); TRIAGE_RC=$?
+VERDICT=$(printf '%s' "$TRIAGE" | jq -r '.verdict')
+echo "team-pickup: triage verdict=$VERDICT"
 ```
+
+The script is **read-only** — it never touches labels, comments, branches, or
+PRs. All mutations stay in the sections below. Branch on `$VERDICT`:
+
+| verdict      | meaning                               | go to                                                                                             |
+| ------------ | ------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `abort`      | agent-teams env flag missing          | print the missing-flag line, `exit 1`                                                             |
+| `no-gh`      | gh unauthenticated                    | §0.5 MCP fallback (run §1.2/§1.5/§2 semantics via MCP tools)                                      |
+| `in-flight`  | `team:in-progress` lock held          | `echo "team-pickup: skip — $(jq -r '.inflight' <<<"$TRIAGE") issue(s) in flight"; exit 0`         |
+| `reconcile`  | a PR needs attention                  | §1.2 (fields in `.reconcile`)                                                                     |
+| `resume`     | paused issue below the resume cap     | §1.5 resume path (fields in `.paused`)                                                            |
+| `resume-cap` | paused issue AT the cap               | §1.5 fail path (fields in `.paused`)                                                              |
+| `pick`       | eligible issue found, blockers closed | §3/§4 with `N=$(jq -r '.pick.issue' <<<"$TRIAGE")`, title in `.pick.title`                        |
+| `pick-mcp`   | gh token lacks `project` scope        | run §2's pick via the GitHub MCP GraphQL tool (same query/filters as the script — see its header) |
+| `idle`       | nothing to do                         | `echo "team-pickup: no eligible issue"; exit 0`                                                   |
 
 > **Routine env note.** When fired by a remote/cron routine, the routine's `gh`
 > token may not have the `project` scope. Refreshing the local token does not
@@ -60,16 +74,9 @@ label management, PR creation. Pick whichever works in the current env; do
 
 ### 1. Concurrency lock check (repo-wide)
 
-`team:in-progress` is the distributed lock. If any open issue holds it, a prior
-fire is still working — exit silent.
-
-```bash
-INFLIGHT=$(gh issue list --label team:in-progress --state open --json number --jq 'length')
-if [ "$INFLIGHT" -gt 0 ]; then
-  echo "team-pickup: skip — $INFLIGHT issue(s) in flight"
-  exit 0
-fi
-```
+`team:in-progress` is the distributed lock. The check already ran inside §0's
+triage call (verdict `in-flight`, gh errors fail SAFE toward locked) — there is
+no separate probe to run here.
 
 ### 1.2. Reconcile a PR needing attention (before resume, before any new pick)
 
@@ -97,28 +104,22 @@ fire (observed live 2026-07-10: #305 missed at 18:45, one minute after a merge).
 The scan re-lists while any agent-shaped PR is `UNKNOWN` (up to ~2 min), then
 triages.
 
-```bash
-AGENT_LOGIN=$(gh api user -q .login 2>/dev/null || echo "")
-. scripts/claude-agent/lib/pr-triage.sh
-PICK_JSON=$(PR_TRIAGE_AUTHOR="$AGENT_LOGIN" pr_triage_scan) || PICK_JSON=""
-```
-
-If nothing is picked (`PICK_JSON` empty / `{"pr":null}`), fall through to §1.5.
-Otherwise (`--dry-run`: print
+The scan already ran inside §0's triage call. This section fires only on verdict
+`reconcile` (`--dry-run`: print
 `team-pickup: would-reconcile PR #<P> (issue #<N>)` and exit 0):
 
 ```bash
-RECON_PR=$(printf '%s' "$PICK_JSON" | jq -r '.pr')
-RECON_BRANCH=$(printf '%s' "$PICK_JSON" | jq -r '.branch')
-RECON_N=$(printf '%s' "$PICK_JSON" | jq -r '.issue')
-RECON_REASON=$(printf '%s' "$PICK_JSON" | jq -r '.reason')
+RECON_PR=$(printf '%s' "$TRIAGE" | jq -r '.reconcile.pr')
+RECON_BRANCH=$(printf '%s' "$TRIAGE" | jq -r '.reconcile.branch')
+RECON_N=$(printf '%s' "$TRIAGE" | jq -r '.reconcile.issue')
+RECON_REASON=$(printf '%s' "$TRIAGE" | jq -r '.reconcile.reason')
+HAD_DONE=$(printf '%s' "$TRIAGE" | jq -r '.reconcile.hadDone')
 # When the PR both conflicts AND carries team:revise, pass --reason both.
 # Reason "incomplete" (bot tail never finished) passes through as-is.
 
 # Single-flight lock: reuse the issue lock so §1's skip, the daemon's pacing,
-# and agent-run's crash cleanup all keep working unchanged. Remember whether
-# team:done was present so it can be restored on exit.
-HAD_DONE=$(gh issue view "$RECON_N" --json labels --jq '[.labels[].name] | index("team:done") != null')
+# and agent-run's crash cleanup all keep working unchanged. HAD_DONE (whether
+# team:done was present) came from the triage read; restore it on exit.
 gh issue edit "$RECON_N" --remove-label team:done --add-label team:in-progress 2>/dev/null || true
 ```
 
@@ -129,7 +130,7 @@ picked:   reconcile PR #<RECON_PR> (issue #<RECON_N>)
 ```
 
 Then spawn the **`/pr-reconcile`** skill via the `Agent` tool —
-`subagent_type: general-purpose`, `model: opus`, `run_in_background: false`
+`subagent_type: general-purpose`, `model: fable`, `run_in_background: false`
 (blocking, same rule as §6a.1: never proceed or emit output while it is in
 flight) — with the prompt:
 
@@ -154,40 +155,29 @@ mid-run (a `wip:` commit, branch kept) when Claude usage ran out. In-flight work
 is always finished before new work is started, so a paused issue is resumed
 **before** the §2 pick — and its partial branch is preserved, never reset.
 
-The resume-vs-fail decision (including the resume-count cap) is the
-**Pause/Resume state logic** deep module. Source it and hand it the paused
-issue's number and its pause count; do not re-derive the cap logic inline.
+The probe and the resume-vs-fail decision (including the resume-count cap)
+already ran inside §0's triage call, which delegates the cap logic to the
+**Pause/Resume state logic** deep module. Do not re-derive either inline.
+
+On verdict **`resume`**:
 
 ```bash
-# The paused issue (at most one — single-flight, same as the in-progress lock).
-PAUSED_N=$(gh issue list --label team:paused --state open --json number --jq '.[0].number // empty')
+# RESUME_MODE tells §4 to preserve the branch and §5 to dispatch in resume
+# mode. §2's fresh pick is skipped entirely.
+RESUME_MODE=1
+N=$(printf '%s' "$TRIAGE" | jq -r '.paused.issue')
+```
 
-if [ -n "$PAUSED_N" ]; then
-  # Pause count = number of pause records agent-run left on the issue timeline
-  # (each pause appends a "Run paused at … usage exhausted" comment).
-  PAUSE_COUNT=$(gh issue view "$PAUSED_N" --json comments \
-    --jq '[.comments[] | select(.body | test("Run paused at .*usage exhausted"))] | length')
+On verdict **`resume-cap`** (paused too many times — a too-big issue; hand to a
+human):
 
-  . scripts/claude-agent/lib/pause-resume.sh
-  ACTION_JSON=$(pause_resume_action "$PAUSED_N" "${PAUSE_COUNT:-0}")
-  ACTION=$(printf '%s' "$ACTION_JSON" | jq -r '.action')
-
-  case "$ACTION" in
-    resume)
-      # Resume this issue: RESUME_MODE tells §4 to preserve the branch and §5 to
-      # dispatch in resume mode. Skip §2's fresh pick entirely.
-      RESUME_MODE=1
-      N="$PAUSED_N"
-      ;;
-    fail)
-      # Paused too many times (cap reached) — a too-big issue; hand to a human.
-      gh issue edit "$PAUSED_N" --remove-label team:paused --add-label team:failed
-      gh issue comment "$PAUSED_N" --body "team-pickup: paused $(printf '%s' "$ACTION_JSON" | jq -r '.pauseCount') times (resume cap reached) — marking team:failed for human triage at $(date -Iseconds)."
-      echo "team-pickup: #$PAUSED_N hit the resume cap — team:failed, stopping"
-      exit 0
-      ;;
-  esac
-fi
+```bash
+PAUSED_N=$(printf '%s' "$TRIAGE" | jq -r '.paused.issue')
+PAUSE_COUNT=$(printf '%s' "$TRIAGE" | jq -r '.paused.pauseCount')
+gh issue edit "$PAUSED_N" --remove-label team:paused --add-label team:failed
+gh issue comment "$PAUSED_N" --body "team-pickup: paused $PAUSE_COUNT times (resume cap reached) — marking team:failed for human triage at $(date -Iseconds)."
+echo "team-pickup: #$PAUSED_N hit the resume cap — team:failed, stopping"
+exit 0
 ```
 
 If `RESUME_MODE` is set, skip §2 and §3 and go straight to §4 (§3's dry-run
@@ -206,66 +196,23 @@ Issues that carry the `team` label but are **not in the project** are skipped
 silently — project membership is the explicit triage signal. Add them to the
 project (and set Priority) before the picker will consider them.
 
-> If `USE_MCP_FOR_PROJECT=1` from §0 (or `gh` rejects the GraphQL call below),
-> invoke the equivalent GitHub MCP GraphQL tool with the same query string and
-> parse the same JSON shape downstream.
+The GraphQL query, the Priority/age sort, and the `Blocked by\s+#(\d+)` blocker
+check (same regex `team-dispatch` §1 uses) all already ran inside §0's triage
+call. On verdict **`pick`**, the winner is in the verdict:
 
 ```bash
-gh api graphql -f query='
-query {
-  repository(owner: "benjr70", name: "Smart-Smoker-V2") {
-    issues(first: 100, labels: ["team"], states: OPEN) {
-      nodes {
-        number
-        title
-        body
-        createdAt
-        labels(first: 30) { nodes { name } }
-        projectItems(first: 10) {
-          nodes {
-            project { number }
-            fieldValueByName(name: "Priority") {
-              ... on ProjectV2ItemFieldSingleSelectValue { name }
-            }
-          }
-        }
-      }
-    }
-  }
-}' \
-| jq -r '
-    def prio_rank:
-      if   . == "P0" then 0
-      elif . == "P1" then 1
-      elif . == "P2" then 2
-      else 2 end;
-    [.data.repository.issues.nodes[]
-      | . as $i
-      | ($i.labels.nodes | map(.name)) as $lbls
-      | select(($lbls | index("team:in-progress") | not)
-            and ($lbls | index("team:done") | not)
-            and ($lbls | index("team:failed") | not))
-      | ($i.projectItems.nodes | map(select(.project.number == 1)) | first) as $pi
-      | select($pi != null)
-      | ($pi.fieldValueByName.name // "P2") as $prio
-      | . + {priority: $prio, prio_rank: ($prio | prio_rank)}]
-    | sort_by([.prio_rank, .createdAt])
-    | .[] | @base64'
+N=$(printf '%s' "$TRIAGE" | jq -r '.pick.issue')
+TITLE=$(printf '%s' "$TRIAGE" | jq -r '.pick.title')
 ```
 
-For each candidate row (highest Priority first, oldest first within ties), parse
-`Blocked by\s+#(\d+)` from the body — same regex `team-dispatch` §1 uses. For
-every blocker number, run `gh issue view <blocker> --json state --jq .state`; if
-any is `OPEN`, skip this candidate. The first candidate with no open blockers is
-the pick.
+Verdict `idle` means no candidate survived — print
+`team-pickup: no eligible issue` and `exit 0`. Do not notify.
 
-If no candidate survives:
-
-```
-team-pickup: no eligible issue
-```
-
-…and `exit 0`. Do not notify.
+> On verdict `pick-mcp` (or `no-gh`), gh can't run the project query — invoke
+> the GitHub MCP GraphQL tool with the same query and apply the same
+> filters/sort/blocker rules by hand. The exact query string and jq shape live
+> in `scripts/claude-agent/lib/pickup-triage.sh` — read them from there rather
+> than reconstructing from memory.
 
 ### 3. Dry-run short-circuit
 
@@ -284,8 +231,7 @@ team-pickup: would-resume #<N> <title>      # RESUME_MODE from §1.5
 stale branch from a prior failed fire exists.
 
 ```bash
-N=<picked>
-TITLE=$(gh issue view "$N" --json title --jq .title)
+# N and TITLE already set from §2's verdict — no extra gh read here.
 git fetch origin master
 git checkout -B "feat/issue-$N" origin/master
 gh issue edit "$N" --add-label team:in-progress
@@ -391,7 +337,7 @@ pr-watch are the two halves of that constraint.
 Invoke pr-watch via the `Agent` tool with:
 
 - `subagent_type: general-purpose`
-- `model: opus`
+- `model: fable`
 - `run_in_background: false` ← blocking
 - `prompt`:
   `"Invoke the /pr-watch skill for PR #<PR_NUM> on branch feat/issue-<N>, repo benjr70/Smart-Smoker-V2. Issue #<N>. Poll CI every 60s up to 45 minutes per round. On red, loop the implementer up to 10 rounds total. On exhaustion convert the PR to draft and add the team:checks-failed label."`
@@ -431,7 +377,7 @@ fi
 ```
 
 When the marker is absent, spawn `/pr-review` via the `Agent` tool —
-`subagent_type: general-purpose`, `model: opus`, `run_in_background: false`
+`subagent_type: general-purpose`, `model: fable`, `run_in_background: false`
 (blocking, same rule as §6a.1: never proceed or emit output while it is in
 flight) — with the prompt:
 
@@ -480,7 +426,7 @@ the provisioned toolchain, namespaced compose builds/pulls allowed, execute in a
 real browser.
 
 Spawn `/verify-pr` via the `Agent` tool — `subagent_type: general-purpose`,
-`model: opus`, `run_in_background: false` (blocking, same rule as §6a.1: never
+`model: fable`, `run_in_background: false` (blocking, same rule as §6a.1: never
 proceed or emit output while it is in flight) — with a prompt that names the PR,
 repo, issue, and the current round so the harness heads its single evidence
 comment with the round marker:
@@ -600,7 +546,7 @@ while true:
 ```
 
 **Implementer spawn** — via the `Agent` tool: `subagent_type: implementer`,
-`model: opus`, `run_in_background: false` (blocking). The prompt embeds the
+`model: fable`, `run_in_background: false` (blocking). The prompt embeds the
 issue title + body, the PR diff (`git diff origin/master...HEAD`, capped at 2000
 lines as in pr-watch §3), the `/verify-pr` round's ❌ FAIL evidence lines and
 any outstanding deployed-env spec-demands verbatim (from `ROUND_COMMENT`), plus
@@ -648,6 +594,22 @@ gh issue comment "$N" --body "team-pickup FAILED at $(date -Iseconds): ${FAIL_RE
 Do NOT open a PR. Do NOT push the branch. Exit non-zero so the routine log
 captures the failure.
 
+### 6c. Token accounting (every fire that worked an issue — one call)
+
+Before emitting the output block — on the success path, the failure path, AND a
+reconcile fire — post the issue's cumulative token spend as a single
+create-or-update comment (marker `<!-- token-usage -->`, PATCHed in place on
+re-runs, so resumes and reconciles keep one comment current instead of stacking
+new ones):
+
+```bash
+scripts/claude-agent/lib/token-usage.sh post --issue "$N" || true
+```
+
+It sums every `feat/issue-$N` transcript line (main session + subagents) on this
+box. Advisory: `|| true` — accounting never fails a fire. Skip only when the
+fire picked nothing (`skip` / `no eligible issue`).
+
 ## Output format
 
 One block per fire, written to stdout:
@@ -662,6 +624,7 @@ review:   <verbatim pr-review terminal line>   (pr-watch PASS only)
 verify:   <pass>/<total> PASS, <n> deferred, <n> FAIL — round <M>/3 [— EXHAUSTED]   (pr-watch PASS only)
           | MISSING — <reason>            (§6a.2 park: round never ran)
 shots:    <verbatim screenshots: line from the last /verify-pr round>   (when present)
+tokens:   <verbatim token-usage: line from §6c>   (when an issue was worked)
 ```
 
 A **reconcile fire** (§1.2 picked a PR instead of an issue) emits this block
@@ -782,7 +745,7 @@ green.
 - The §6a.2 **`/verify-pr` round** mutates nothing beyond the PR body (boxes it
   proved) and one evidence comment per round, and tears its hermetic stack down
   on every exit path; it does spend Claude usage (the `manual-verifier` is an
-  opus agent). The §6a.3 **fix loop** also burns usage (one implementer spawn
+  fable agent). The §6a.3 **fix loop** also burns usage (one implementer spawn
   per manual round, cap 3) and pushes `fix(manual):` commits to the PR branch
   only — never to master, never force-pushed. The §6a.1b **`/pr-review` review**
   burns usage once per PR ever (two review subagents) and never pushes — its

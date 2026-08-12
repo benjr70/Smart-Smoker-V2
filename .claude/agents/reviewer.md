@@ -6,7 +6,8 @@ description:
   edit/write tools; cannot fix what it flags. Implementer-reviewer separation is
   enforced by the tool allowlist. Use as a team-lead spawn, one per team.
 tools: Read, Grep, Glob, Bash
-model: opus
+model: fable
+effort: medium
 ---
 
 # Reviewer
