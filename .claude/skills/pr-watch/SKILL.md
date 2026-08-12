@@ -64,31 +64,34 @@ Each round:
 4. If `ROUND == MAX_ROUNDS` and still red → **draft-on-exhaust** (§6) and return
    `pr-watch: DRAFT — exhausted 10 rounds, marked draft, team:checks-failed`.
 
-### 2. Poll CI (60s interval, 45min cap per round)
+### 2. Wait for CI to settle (zero turns while it runs)
+
+Run the consolidated waiter **in the background** — one Bash call with
+`run_in_background: true`. It polls on its own clock (60s interval, 45-min cap),
+and the harness re-invokes you exactly once when it exits. Do **not** poll
+`gh pr checks` yourself between rounds, and do not run the waiter in the
+foreground (the Bash tool's 10-min ceiling would force re-invocations — the
+exact turn burn this script eliminates).
 
 ```bash
-DEADLINE=$(( $(date +%s) + 45*60 ))
-while : ; do
-  STATUS=$(gh pr checks "$PR_NUM" --repo "$REPO" --json bucket,name,state,link)
-  PENDING=$(echo "$STATUS" | jq '[.[] | select(.bucket == "pending")] | length')
-  FAIL=$(echo "$STATUS" | jq '[.[] | select(.bucket == "fail")] | length')
-  if [ "$PENDING" -eq 0 ] && [ "$FAIL" -eq 0 ]; then
-    echo "pr-watch: round $ROUND — all green"
-    break  # → success branch in §1
-  fi
-  if [ "$FAIL" -gt 0 ] && [ "$PENDING" -eq 0 ]; then
-    echo "pr-watch: round $ROUND — $FAIL failed check(s), proceeding to fix"
-    break  # → fix branch in §1
-  fi
-  if [ "$(date +%s)" -ge "$DEADLINE" ]; then
-    echo "pr-watch: ERROR — polling timeout (45min) at round $ROUND"
-    exit 1
-  fi
-  sleep 60
-done
+# run_in_background: true
+scripts/claude-agent/lib/ci-wait.sh --pr "$PR_NUM" --repo "$REPO"
 ```
 
-Treat any `bucket == "skipping"` as benign — ignore. Only `fail` counts as red.
+When it completes, read its output. **Line 1 is the JSON verdict**; on a red
+settle the §3 failure-log bundle follows it in the same output:
+
+- exit 0 / `"result":"green"` → success branch in §1
+  (`pr-watch: round $ROUND — all green`)
+- exit 1 / `"result":"fail"` → fix branch in §1
+  (`pr-watch: round $ROUND — <failed count> failed check(s), proceeding to fix`)
+- exit 2 / `"result":"timeout"` →
+  `pr-watch: ERROR — polling timeout (45min) at round $ROUND`, exit 1
+- exit 3 / `"result":"error"` → checks unreadable 3 polls straight — re-check
+  `gh auth status` and the PR state before deciding anything
+
+`bucket == "skipping"` is benign and already ignored by the script. Only `fail`
+counts as red.
 
 ### 3. Gather failure context
 
@@ -97,22 +100,13 @@ For the fix-loop, the implementer needs:
 1. **Issue body** — `gh issue view $ISSUE_N --repo $REPO --json title,body`
 2. **PR diff** — `gh pr diff $PR_NUM --repo $REPO` (capped at 2000 lines; if
    longer, truncate with a `... [truncated]` marker)
-3. **Failed job logs** — for each `fail` entry from §2's `gh pr checks`, fetch
-   the run log and keep the last **200 lines per job** (failures cluster at the
-   tail of the log).
+3. **Failed job logs** — already in hand: ci-wait.sh printed the last 200 lines
+   of each failed job as `=== <job name> ===` sections right after its JSON
+   verdict line. Do **not** re-fetch logs with `gh run view` — reuse that bundle
+   verbatim.
 
-```bash
-FAILED_JOBS=$(echo "$STATUS" | jq -r '.[] | select(.bucket == "fail") | "\(.name)\t\(.link)"')
-LOG_BUNDLE=""
-echo "$FAILED_JOBS" | while IFS=$'\t' read -r NAME LINK; do
-  RUN_ID=$(echo "$LINK" | grep -oE 'runs/[0-9]+' | cut -d/ -f2)
-  JOB_LOG=$(gh run view "$RUN_ID" --repo "$REPO" --log-failed 2>/dev/null | tail -200)
-  LOG_BUNDLE+=$'\n\n=== '"$NAME"$' ===\n'"$JOB_LOG"
-done
-```
-
-Bundle all three into a single context blob the implementer prompt embeds
-verbatim.
+Fetch 1 and 2 in a single Bash call, then bundle all three into a single context
+blob the implementer prompt embeds verbatim.
 
 ### 4. Spawn implementer (Opus)
 
