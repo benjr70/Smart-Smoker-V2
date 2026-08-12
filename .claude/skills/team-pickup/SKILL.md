@@ -594,6 +594,22 @@ gh issue comment "$N" --body "team-pickup FAILED at $(date -Iseconds): ${FAIL_RE
 Do NOT open a PR. Do NOT push the branch. Exit non-zero so the routine log
 captures the failure.
 
+### 6c. Token accounting (every fire that worked an issue — one call)
+
+Before emitting the output block — on the success path, the failure path, AND a
+reconcile fire — post the issue's cumulative token spend as a single
+create-or-update comment (marker `<!-- token-usage -->`, PATCHed in place on
+re-runs, so resumes and reconciles keep one comment current instead of stacking
+new ones):
+
+```bash
+scripts/claude-agent/lib/token-usage.sh post --issue "$N" || true
+```
+
+It sums every `feat/issue-$N` transcript line (main session + subagents) on this
+box. Advisory: `|| true` — accounting never fails a fire. Skip only when the
+fire picked nothing (`skip` / `no eligible issue`).
+
 ## Output format
 
 One block per fire, written to stdout:
@@ -608,6 +624,7 @@ review:   <verbatim pr-review terminal line>   (pr-watch PASS only)
 verify:   <pass>/<total> PASS, <n> deferred, <n> FAIL — round <M>/3 [— EXHAUSTED]   (pr-watch PASS only)
           | MISSING — <reason>            (§6a.2 park: round never ran)
 shots:    <verbatim screenshots: line from the last /verify-pr round>   (when present)
+tokens:   <verbatim token-usage: line from §6c>   (when an issue was worked)
 ```
 
 A **reconcile fire** (§1.2 picked a PR instead of an issue) emits this block
