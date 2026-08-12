@@ -51,9 +51,12 @@ make_transcripts() {
         echo '{"type":"mode","gitBranch":null}'
         echo 'not json at all'
     } > "${dir}/aaa.jsonl"
-    {   # subagent of same session: issue 42 + a different issue
+    {   # subagent of same session: issue 42 + a different issue. Noise line
+        # here too, so a non-JSON line sits in the LAST file regardless of
+        # find order — guards the pipefail regression deterministically.
         usage_line "feat/issue-42" 300 3000 30
         usage_line "feat/issue-7"  40  400  4
+        echo 'not json either'
     } > "${dir}/aaa/subagents/agent-1.jsonl"
     echo "${dir}"
 }

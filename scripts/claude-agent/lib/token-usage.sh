@@ -64,7 +64,9 @@ tu_scan() {
                 out: (.message.usage.output_tokens // 0),
                 cr:  (.message.usage.cache_read_input_tokens // 0),
                 cw:  (.message.usage.cache_creation_input_tokens // 0),
-                inp: (.message.usage.input_tokens // 0) }' "${f}" 2>/dev/null
+                inp: (.message.usage.input_tokens // 0) }' "${f}" 2>/dev/null \
+            || true   # noise lines (non-JSON) fail this jq; with pipefail the
+                      # LAST file's status would sink the whole scan — tolerate
     done \
     | jq -s --arg only "${only_issue}" '
         group_by(.key)
