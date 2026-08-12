@@ -177,10 +177,10 @@ If the user passed `--dry-run`:
 === /team-dispatch <prd>: dry run ===
 
 Roster:
-  - implementer (opus, Edit/Write/Bash/Read/Grep/Glob)
-  - reviewer    (opus, Read/Grep/Glob/Bash — no Edit/Write)
-  - verifier    (opus, Read/Bash)
-  - researcher  (opus, Read/Grep/Glob/WebFetch — spawned on-demand)
+  - implementer (fable, Edit/Write/Bash/Read/Grep/Glob)
+  - reviewer    (fable, Read/Grep/Glob/Bash — no Edit/Write)
+  - verifier    (fable, Read/Bash)
+  - researcher  (fable, Read/Grep/Glob/WebFetch — spawned on-demand)
 
 Tasks (<N> total, in dependency order):
   #<issue>  <title>                       (unblocked)

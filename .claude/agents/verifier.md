@@ -2,7 +2,8 @@
 name: verifier
 description: Smoke-runner — invokes scripts/smoke/run.ts against local services, captures the result, appends the `smoke: PASS|FAIL|SKIPPED — <detail>` trailer to the implementer's staged commit message, and lands the commit. Use as a team-lead spawn, one per team.
 tools: Read, Bash
-model: opus
+model: fable
+effort: medium
 ---
 
 # Verifier

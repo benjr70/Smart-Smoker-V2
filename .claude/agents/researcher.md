@@ -5,7 +5,8 @@ description:
   before the implementer starts. Spawned on-demand by the lead for issues with a
   non-trivial "Interface Changes" section. No Bash, no Edit, no Write.
 tools: Read, Grep, Glob, WebFetch
-model: opus
+model: fable
+effort: medium
 ---
 
 # Researcher

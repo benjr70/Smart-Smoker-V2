@@ -130,7 +130,7 @@ picked:   reconcile PR #<RECON_PR> (issue #<RECON_N>)
 ```
 
 Then spawn the **`/pr-reconcile`** skill via the `Agent` tool —
-`subagent_type: general-purpose`, `model: opus`, `run_in_background: false`
+`subagent_type: general-purpose`, `model: fable`, `run_in_background: false`
 (blocking, same rule as §6a.1: never proceed or emit output while it is in
 flight) — with the prompt:
 
@@ -337,7 +337,7 @@ pr-watch are the two halves of that constraint.
 Invoke pr-watch via the `Agent` tool with:
 
 - `subagent_type: general-purpose`
-- `model: opus`
+- `model: fable`
 - `run_in_background: false` ← blocking
 - `prompt`:
   `"Invoke the /pr-watch skill for PR #<PR_NUM> on branch feat/issue-<N>, repo benjr70/Smart-Smoker-V2. Issue #<N>. Poll CI every 60s up to 45 minutes per round. On red, loop the implementer up to 10 rounds total. On exhaustion convert the PR to draft and add the team:checks-failed label."`
@@ -377,7 +377,7 @@ fi
 ```
 
 When the marker is absent, spawn `/pr-review` via the `Agent` tool —
-`subagent_type: general-purpose`, `model: opus`, `run_in_background: false`
+`subagent_type: general-purpose`, `model: fable`, `run_in_background: false`
 (blocking, same rule as §6a.1: never proceed or emit output while it is in
 flight) — with the prompt:
 
@@ -426,7 +426,7 @@ the provisioned toolchain, namespaced compose builds/pulls allowed, execute in a
 real browser.
 
 Spawn `/verify-pr` via the `Agent` tool — `subagent_type: general-purpose`,
-`model: opus`, `run_in_background: false` (blocking, same rule as §6a.1: never
+`model: fable`, `run_in_background: false` (blocking, same rule as §6a.1: never
 proceed or emit output while it is in flight) — with a prompt that names the PR,
 repo, issue, and the current round so the harness heads its single evidence
 comment with the round marker:
@@ -546,7 +546,7 @@ while true:
 ```
 
 **Implementer spawn** — via the `Agent` tool: `subagent_type: implementer`,
-`model: opus`, `run_in_background: false` (blocking). The prompt embeds the
+`model: fable`, `run_in_background: false` (blocking). The prompt embeds the
 issue title + body, the PR diff (`git diff origin/master...HEAD`, capped at 2000
 lines as in pr-watch §3), the `/verify-pr` round's ❌ FAIL evidence lines and
 any outstanding deployed-env spec-demands verbatim (from `ROUND_COMMENT`), plus
@@ -745,7 +745,7 @@ green.
 - The §6a.2 **`/verify-pr` round** mutates nothing beyond the PR body (boxes it
   proved) and one evidence comment per round, and tears its hermetic stack down
   on every exit path; it does spend Claude usage (the `manual-verifier` is an
-  opus agent). The §6a.3 **fix loop** also burns usage (one implementer spawn
+  fable agent). The §6a.3 **fix loop** also burns usage (one implementer spawn
   per manual round, cap 3) and pushes `fix(manual):` commits to the PR branch
   only — never to master, never force-pushed. The §6a.1b **`/pr-review` review**
   burns usage once per PR ever (two review subagents) and never pushes — its
