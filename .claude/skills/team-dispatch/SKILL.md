@@ -179,7 +179,7 @@ If the user passed `--dry-run`:
 Roster:
   - implementer (fable, Edit/Write/Bash/Read/Grep/Glob)
   - reviewer    (fable, Read/Grep/Glob/Bash — no Edit/Write)
-  - verifier    (fable, Read/Bash)
+  - verifier    (opus, Read/Bash)
   - researcher  (fable, Read/Grep/Glob/WebFetch — spawned on-demand)
 
 Tasks (<N> total, in dependency order):

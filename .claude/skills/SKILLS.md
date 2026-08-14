@@ -201,9 +201,11 @@ docs at [`docs/Teams/`](../../docs/Teams/index.md).
 Teammate roles spawned by the `/team-dispatch` lead. Each lives as a markdown
 file in `.claude/agents/` with frontmatter (`name`, `description`, `tools`,
 `model`) and a body appended to the teammate's system prompt. Claude Code
-resolves definitions by `name` when the lead spawns a teammate. **All four run
-on Fable at medium effort** — implementer/reviewer separation is enforced by the
-tool allowlist + prompt scoping, not by model choice.
+resolves definitions by `name` when the lead spawns a teammate.
+**Implementer/reviewer/researcher run on Fable at medium effort; verifier runs
+on Opus** (mechanical smoke-run, no judgment needed) — implementer/reviewer
+separation is enforced by the tool allowlist + prompt scoping, not by model
+choice.
 
 | Role        | File                            | Tools                                    | Spawned                                                | Purpose                                                                         |
 | ----------- | ------------------------------- | ---------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------- |
