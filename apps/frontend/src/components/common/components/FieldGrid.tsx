@@ -7,6 +7,11 @@ export interface GridField {
   label: string;
   /** The value on record; nothing, or only whitespace, reads as an em-dash. */
   value: string | null | undefined;
+  /**
+   * A test id for the value itself, for the fields journeys assert on — the
+   * cell's label is presentation, but its value is the record.
+   */
+  testId?: string;
 }
 
 export interface FieldGridProps {
@@ -56,6 +61,7 @@ export function FieldGrid({ fields }: FieldGridProps): JSX.Element {
           </Box>
           <Box
             component="span"
+            data-testid={field.testId}
             sx={theme => ({
               display: 'block',
               marginTop: '2px',

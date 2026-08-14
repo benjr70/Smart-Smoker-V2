@@ -18,7 +18,15 @@ export interface PostSmokeSectionProps {
 export function PostSmokeSection({ postSmoke }: PostSmokeSectionProps): JSX.Element {
   return (
     <DetailSection number="3" title="Post-Smoke" testId="review-postsmoke-section">
-      <FieldGrid fields={[{ label: 'Rest Time', value: formatRestTime(postSmoke.restTime) }]} />
+      <FieldGrid
+        fields={[
+          {
+            label: 'Rest Time',
+            value: formatRestTime(postSmoke.restTime),
+            testId: 'review-postsmoke-resttime',
+          },
+        ]}
+      />
       <StepList label="Post Steps" steps={postSmoke.steps} />
       <NoteBlock label="Notes" note={postSmoke.notes} />
     </DetailSection>

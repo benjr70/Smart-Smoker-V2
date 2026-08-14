@@ -27,10 +27,10 @@ export function PreSmokeSection({ preSmoke, woodType }: PreSmokeSectionProps): J
     <DetailSection number="1" title="Pre-Smoke" testId="review-presmoke-section">
       <FieldGrid
         fields={[
-          { label: 'Session Name', value: preSmoke.name },
-          { label: 'Meat Type', value: preSmoke.meatType },
-          { label: 'Weight', value: weighed },
-          { label: 'Wood', value: woodType },
+          { label: 'Session Name', value: preSmoke.name, testId: 'review-presmoke-name' },
+          { label: 'Meat Type', value: preSmoke.meatType, testId: 'review-presmoke-meattype' },
+          { label: 'Weight', value: weighed, testId: 'review-presmoke-weight' },
+          { label: 'Wood', value: woodType, testId: 'review-presmoke-wood' },
         ]}
       />
       <StepList label="Prep Steps" steps={preSmoke.steps} />

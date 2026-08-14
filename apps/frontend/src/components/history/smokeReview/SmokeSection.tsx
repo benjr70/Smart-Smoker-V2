@@ -87,6 +87,7 @@ export function SmokeSection({ smokeProfile, temps, timeline }: SmokeSectionProp
             />
             <Box
               component="span"
+              data-testid={`review-smoke-${row.slot === 'chamber' ? 'chambername' : `${row.slot}name`}`}
               sx={theme => ({
                 fontSize: '0.875rem',
                 fontWeight: row.used ? 600 : 400,
