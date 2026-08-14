@@ -18,6 +18,11 @@ import { PostSmoke, PreSmoke, SmokeProfile, SmokeTimeline, TempData, rating } fr
 export interface UseReviewResult {
   preSmoke: PreSmoke;
   /**
+   * The smoke's own date — the day the record was made. `null` until the
+   * aggregate loads, so the header shows an em-dash rather than today.
+   */
+  date: Date | null;
+  /**
    * The cook's timing, derived server-side. `null` until the aggregate loads —
    * and afterwards too when the backend could not be asked — so the screen
    * renders its timing fields as an em-dash rather than as invented numbers.
@@ -30,6 +35,17 @@ export interface UseReviewResult {
 }
 
 const defaultPreSmoke: PreSmoke = { weight: {}, steps: [] };
+
+/**
+ * The smoke's date as the wire actually carries it: JSON has no dates, so it
+ * arrives as an ISO string despite the type saying `Date`. Anything that does
+ * not read as a moment is admitted as no date at all.
+ */
+const asDay = (value: Date | string | undefined): Date | null => {
+  if (!value) return null;
+  const moment = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(moment.getTime()) ? null : moment;
+};
 const defaultSmokeProfile: SmokeProfile = {
   chamberName: '',
   probe1Name: '',
@@ -52,6 +68,7 @@ export function useReview(smokeId: string): UseReviewResult {
   const notify = useApiSnackbar();
   const [review, setReview] = useState<UseReviewResult>({
     preSmoke: defaultPreSmoke,
+    date: null,
     timeline: null,
     smokeProfile: defaultSmokeProfile,
     temps: [],
@@ -67,6 +84,7 @@ export function useReview(smokeId: string): UseReviewResult {
         if (active) {
           setReview({
             preSmoke: result.preSmoke,
+            date: asDay(result.smoke.date),
             timeline: result.timeline,
             smokeProfile: result.smokeProfile,
             temps: result.temps,

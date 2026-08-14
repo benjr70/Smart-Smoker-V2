@@ -103,4 +103,22 @@ describe('useReview', () => {
     expect(result.current.timeline?.startedAt).toEqual(new Date('2026-08-01T10:00:00.000Z'));
     expect(result.current.timeline?.peakChamber).toBe(268);
   });
+
+  test('carries the smoke’s own date, read back as a date, so the header can say the day', async () => {
+    const backend = createFakeBackend({
+      smoke: { records: { 'smoke-1': smokeAggregate('smoke-1') } },
+    });
+
+    const { result } = renderReviewHook(backend, 'smoke-1');
+
+    await waitFor(() => expect(result.current.date).toEqual(new Date('2023-07-15')));
+  });
+
+  test('has no date until the aggregate loads, so nothing invents a day', () => {
+    const backend = createFakeBackend({});
+
+    const { result } = renderReviewHook(backend, 'never-loads');
+
+    expect(result.current.date).toBeNull();
+  });
 });
