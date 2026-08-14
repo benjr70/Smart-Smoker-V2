@@ -10,7 +10,7 @@ description:
 tools:
   Read, Grep, Glob, Bash, mcp__playwright-chrome, mcp__playwright-electron,
   mcp__mongodb
-model: fable
+model: opus
 effort: medium
 ---
 
