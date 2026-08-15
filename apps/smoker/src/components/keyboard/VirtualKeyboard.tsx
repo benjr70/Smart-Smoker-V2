@@ -23,6 +23,15 @@ import {
 
 export type { KeyboardLayer } from './layouts';
 
+/**
+ * True for the underlying library's functional button tokens — '{shift}',
+ * '{bksp}', and any future '{enter}'/'{lock}'/'{//}' a layout edit might add.
+ * The literal one-character '{' and '}' keys on the symbols layer are real
+ * typeable characters, not tokens.
+ */
+export const isFunctionalKeyToken = (key: string): boolean =>
+  key.length > 1 && key.startsWith('{') && key.endsWith('}');
+
 export interface VirtualKeyboardProps {
   /** A printable character was typed — letters, digits, symbols, and space. */
   onCharacter: (character: string) => void;
@@ -59,7 +68,11 @@ export function VirtualKeyboard(props: VirtualKeyboardProps): JSX.Element {
         onCharacter(' ');
         break;
       default:
-        onCharacter(key);
+        // An unrecognized functional token must never land as literal text in
+        // the password field; only printable keys pass through.
+        if (!isFunctionalKeyToken(key)) {
+          onCharacter(key);
+        }
     }
   };
 

@@ -9,7 +9,7 @@
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
-import { VirtualKeyboard } from './VirtualKeyboard';
+import { isFunctionalKeyToken, VirtualKeyboard } from './VirtualKeyboard';
 
 const renderKeyboard = () => {
   const onCharacter = jest.fn();
@@ -121,5 +121,33 @@ describe('backspace and space', () => {
     tap('space');
 
     expect(onCharacter).toHaveBeenCalledWith(' ');
+  });
+});
+
+describe('functional key tokens', () => {
+  // The wrapper must never leak an unrecognized functional token (a future
+  // '{enter}', '{lock}', or the '{//}' spacer) into the password field as
+  // literal text — but the literal '{' and '}' keys on the symbols layer are
+  // real characters an operator can type.
+  it('classifies {token}-shaped keys as functional, never typeable', () => {
+    expect(isFunctionalKeyToken('{enter}')).toBe(true);
+    expect(isFunctionalKeyToken('{lock}')).toBe(true);
+    expect(isFunctionalKeyToken('{//}')).toBe(true);
+  });
+
+  it('classifies printable characters as typeable, including literal braces', () => {
+    expect(isFunctionalKeyToken('q')).toBe(false);
+    expect(isFunctionalKeyToken('{')).toBe(false);
+    expect(isFunctionalKeyToken('}')).toBe(false);
+  });
+
+  it('still types the literal { and } keys on the symbols layer', () => {
+    const { onCharacter } = renderKeyboard();
+
+    tap('?123');
+    tap('{');
+    tap('}');
+
+    expect(onCharacter.mock.calls.map(call => call[0])).toEqual(['{', '}']);
   });
 });
