@@ -1,13 +1,14 @@
 import WifiIcon from '@mui/icons-material/Wifi';
 import WifiOffIcon from '@mui/icons-material/WifiOff';
-import { Button } from '@mui/material';
-import Grid from '@mui/material/Grid';
+import { Box, Button, Card, Divider, Typography } from '@mui/material';
 import React, { useState } from 'react';
 import TemperatureChart, { ChartSeriesNames } from 'temperaturechart/src/TemperatureChart';
-import { useSmokeSession } from 'smoke-session/src/react';
+import { ChartSample } from 'temperaturechart/src/chartGeometry';
+import { useElapsed, useSmokeSession } from 'smoke-session/src/react';
 import { DEFAULT_PROBE_NAMES } from 'smoke-session/src/session/domain';
 import './home.style.css';
 import { useChartPalette } from '../../theme/chartPalette';
+import { useDesign } from '../../theme/useDesign';
 import { ProbeTargetsReadPort, useProbeTargets } from './useProbeTargets';
 import { useTemperatureSeries } from './useTemperatureSeries';
 import { Wifi } from './wifi/wifi';
@@ -48,13 +49,130 @@ const chartNamesOf = (named: NamedProbes): ChartSeriesNames => ({
   probe3: named.probe3Name?.trim() || DEFAULT_PROBE_NAMES.probe3Name,
 });
 
+/** Milliseconds in the units the window label is written in. */
+const MINUTE = 60 * 1000;
+const HOUR = 60 * MINUTE;
+
+/**
+ * What window of the cook the chart is showing, said as the design's label:
+ * `LAST 3H 12M` over a drawn span, `LIVE` before there is one — the card
+ * claims no span it does not show.
+ */
+const windowLabelOf = (series: ChartSample[]): string => {
+  if (series.length < 2) {
+    return 'LIVE';
+  }
+  const first = new Date(series[0].date).getTime();
+  const last = new Date(series[series.length - 1].date).getTime();
+  const span = last - first;
+  if (!Number.isFinite(span) || span < MINUTE) {
+    return 'LIVE';
+  }
+  const hours = Math.floor(span / HOUR);
+  const minutes = Math.floor((span % HOUR) / MINUTE);
+  if (hours === 0) {
+    return `LAST ${minutes}M`;
+  }
+  return minutes === 0 ? `LAST ${hours}H` : `LAST ${hours}H ${minutes}M`;
+};
+
+/** The small upper-case caption the design labels its cards and clocks with. */
+const overline = {
+  fontSize: '0.6875rem',
+  fontWeight: 700,
+  letterSpacing: '0.12em',
+  lineHeight: 1.3,
+} as const;
+
+/**
+ * One probe of the list card: the dot and the name in the probe's own colour —
+ * the same token the chart draws that probe's line in, which is the whole map
+ * between the list and the graph beside it — and what it reads right now.
+ */
+interface ProbeRowProps {
+  probe: 'probe1' | 'probe2' | 'probe3';
+  name: string;
+  value: string;
+}
+
+function ProbeRow({ probe, name, value }: ProbeRowProps): JSX.Element {
+  const design = useDesign();
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 14px' }}>
+      {/* Decoration in the strict sense — the name beside it says everything
+          it says — so it is not announced. */}
+      <Box
+        data-testid={`smoker-${probe}-dot`}
+        aria-hidden="true"
+        sx={{
+          width: 10,
+          height: 10,
+          borderRadius: '50%',
+          flexShrink: 0,
+          backgroundColor: design.probes[probe],
+        }}
+      />
+      <Typography
+        component="div"
+        sx={{
+          flex: 1,
+          minWidth: 0,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          fontSize: 18,
+          fontWeight: 700,
+          color: design.probes[probe],
+        }}
+      >
+        {name}
+      </Typography>
+      <Typography
+        component="div"
+        data-testid={`smoker-${probe}-temp`}
+        sx={{
+          flexShrink: 0,
+          fontSize: 26,
+          fontWeight: 700,
+          lineHeight: 1.1,
+          // Numbers that do not shuffle sideways as they change: a reading
+          // climbing from 99 to 100 should not move the rows around it.
+          fontVariantNumeric: 'tabular-nums',
+          color: design.probes[probe],
+        }}
+      >
+        {value}
+        {/* The unit is part of the reading, not a column heading, set small
+            and in supporting ink — the one part of the number that never
+            changes. Kept as its own element so the value beside it stays the
+            bare reading for anything reading the row. */}
+        <Box
+          component="span"
+          sx={{
+            fontSize: 13,
+            fontWeight: 600,
+            marginLeft: '1px',
+            color: design.textSecondary,
+          }}
+        >
+          °F
+        </Box>
+      </Typography>
+    </Box>
+  );
+}
+
 /**
  * The smoker touchscreen home screen. A thin view over the shared session store
- * (smoker role): every temp, name, smoking flag, and connectivity signal comes
- * off the hook snapshot, and the two actions (toggle smoking, navigate) dispatch
- * store commands. All socket/serial wiring, offline batching, and payload
- * mapping now live in the session store behind the Provider — none of it in this
- * component.
+ * (smoker role): every temp, name, smoking flag, connectivity signal, and the
+ * cook's recorded start come off the hook snapshot, and the two actions (toggle
+ * smoking, navigate) dispatch store commands. All socket/serial wiring, offline
+ * batching, and payload mapping live in the session store behind the Provider —
+ * none of it in this component.
+ *
+ * The screen is the mock's 800×480 layout: a top bar (brand, state pill,
+ * elapsed clock, wifi and start/stop), a left column with the chamber hero card
+ * and the colour-coded probe list, and the titled chart card taking the rest.
  */
 export interface HomeProps {
   /**
@@ -67,6 +185,7 @@ export interface HomeProps {
 
 export function Home({ probeTargets }: HomeProps = {}): JSX.Element {
   const session = useSmokeSession();
+  const design = useDesign();
   // The cook so far, recorded and thinned by the hook; the chart is handed it
   // and draws it, and holds nothing of the cook itself.
   const series = useTemperatureSeries();
@@ -75,6 +194,10 @@ export function Home({ probeTargets }: HomeProps = {}): JSX.Element {
   // switched on and when this cook was started; the chart rules a dashed line at
   // each one it is given.
   const chartTargets = useProbeTargets(session.smoking, probeTargets);
+  // The cook's age, derived from the recorded stamp against the current time,
+  // so the clock is right the instant the panel comes up — including a panel
+  // restarted six hours into a cook.
+  const elapsed = useElapsed(session.startedAt);
   // The only genuinely local state: which sub-screen is showing. Returning to
   // the home screen refreshes the chart baseline (the wifi screen may have run
   // for a while).
@@ -87,96 +210,194 @@ export function Home({ probeTargets }: HomeProps = {}): JSX.Element {
     }
   };
 
-  return (
-    <Grid container className="background">
-      {activeScreen === 0 ? (
-        <>
-          <Grid item xs={4} container justifyContent="space-evenly" alignItems="center">
-            {/* The readouts take the screen's text colour (see
-                home.style.css). Painting each one in its own line's colour
-                belongs with the mock's rebuilt touchscreen — the reading
-                column, the status pill, the elapsed clock — which the theming
-                PRD defers; the chart names its own lines in the legend under
-                it, which is what tells a line from a line today. */}
-            <Grid container spacing={2}>
-              <Grid item className="text">
-                {session.chamberName}
-              </Grid>
-              <Grid item className="text" data-testid="smoker-chamber-temp">
-                {session.chamberTemp}
-              </Grid>
-            </Grid>
-            <Grid container spacing={4}>
-              <Grid item className="text">
-                {session.probe2Name}
-              </Grid>
-              <Grid item className="text">
-                {session.probeTemp2}
-              </Grid>
-            </Grid>
-          </Grid>
-          <Grid item xs={4} container justifyContent="space-evenly" alignItems="center">
-            <Grid container spacing={2}>
-              <Grid item className="text">
-                {session.probe1Name}
-              </Grid>
-              <Grid item className="text">
-                {session.probeTemp1}
-              </Grid>
-            </Grid>
-            <Grid container spacing={2}>
-              <Grid item className="text">
-                {session.probe3Name}
-              </Grid>
-              <Grid item className="text">
-                {session.probeTemp3}
-              </Grid>
-            </Grid>
-          </Grid>
-          <Grid item xs={4}>
-            <Grid container className="buttonContainer" flexDirection="row-reverse">
-              <Grid item padding={1}>
-                <Button
-                  className="wifiButton"
-                  variant="contained"
-                  size="small"
-                  aria-label={session.wifiConnected ? 'wifi connected' : 'wifi disconnected'}
-                  onClick={() => goToScreen(1)}
-                >
-                  {session.wifiConnected ? <WifiIcon /> : <WifiOffIcon />}
-                </Button>
-              </Grid>
-              <Grid item padding={1}>
-                <Button
-                  className="button"
-                  variant="contained"
-                  size="small"
-                  data-testid="smoker-start-button"
-                  onClick={() => void session.toggleSmoking()}
-                >
-                  {session.smoking ? 'Stop Smoking' : 'Start Smoking'}
-                </Button>
-              </Grid>
-            </Grid>
-          </Grid>
-          {/* The chart is given the whole width of this row and takes its own
-              height from the touchscreen shape, which is cut for the strip of
-              the panel this row is (see home.style.css). No test hook of its
-              own: the chart carries an accessible name, and "Temperature chart"
-              is the handle a test and a reader both use. */}
-          <Grid item xs={12}>
-            <TemperatureChart
-              data={series}
-              names={chartNamesOf(session)}
-              colors={chartColors}
-              targets={chartTargets}
-              aspect="touchscreen"
-            />
-          </Grid>
-        </>
-      ) : (
+  if (activeScreen !== 0) {
+    return (
+      <Box className="background">
         <Wifi onBack={goToScreen}></Wifi>
-      )}
-    </Grid>
+      </Box>
+    );
+  }
+
+  return (
+    <Box
+      className="background"
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '10px',
+        height: '100vh',
+        boxSizing: 'border-box',
+        padding: '10px 12px 12px',
+      }}
+    >
+      {/* ————— Top bar ————— */}
+      <Box component="header" sx={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <Typography
+          component="h1"
+          sx={{
+            ...overline,
+            fontSize: '0.9375rem',
+            color: design.text,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          SMART SMOKER
+        </Typography>
+        {/* The state as a pill, in words rather than colour alone; the colour
+            (and the glow while smoking) only reinforce them, and the attribute
+            is what a test reads it by. */}
+        <Box
+          data-testid="smoker-status-pill"
+          data-smoking={String(session.smoking)}
+          sx={{
+            ...overline,
+            padding: '4px 12px',
+            borderRadius: '999px',
+            whiteSpace: 'nowrap',
+            color: session.smoking ? design.success : design.textSecondary,
+            border: `1px solid ${session.smoking ? design.success : design.border}`,
+            boxShadow: session.smoking ? `0 0 10px 0 ${design.success}` : 'none',
+          }}
+        >
+          {session.smoking ? 'SMOKING' : 'IDLE'}
+        </Box>
+        {/* The clock counts only a running cook; an idle panel says why there
+            is nothing to count rather than showing a zero that could be a cook
+            about to be one hour old. */}
+        {session.smoking ? (
+          <Box sx={{ display: 'flex', alignItems: 'baseline', gap: '6px', whiteSpace: 'nowrap' }}>
+            <Typography component="span" sx={{ ...overline, color: design.textSecondary }}>
+              ELAPSED
+            </Typography>
+            <Typography
+              component="span"
+              data-testid="smoker-elapsed-clock"
+              sx={{
+                fontVariantNumeric: 'tabular-nums',
+                fontWeight: 700,
+                fontSize: 18,
+                color: design.text,
+              }}
+            >
+              {elapsed}
+            </Typography>
+          </Box>
+        ) : (
+          <Typography component="span" sx={{ fontSize: 14, color: design.textSecondary }}>
+            No active smoke
+          </Typography>
+        )}
+        <Box sx={{ flex: 1 }} />
+        <Button
+          className="wifiButton"
+          variant="outlined"
+          size="small"
+          aria-label={session.wifiConnected ? 'wifi connected' : 'wifi disconnected'}
+          onClick={() => goToScreen(1)}
+          sx={{
+            minWidth: 0,
+            borderColor: design.border,
+            // The glyph carries the answer: green for a device on the network,
+            // red for one off it — the two colours the design says those
+            // things in everywhere else.
+            color: session.wifiConnected ? design.success : design.danger,
+          }}
+        >
+          {session.wifiConnected ? <WifiIcon /> : <WifiOffIcon />}
+        </Button>
+        {/* Two states, two appearances. Lighting a cook is what the screen is
+            for, so it is offered filled in the accent; putting one out is
+            destructive and unrepeatable, so it retreats to an outline in the
+            danger colour — present, unmissable, and not the thing a thumb
+            presses by habit. */}
+        <Button
+          className="button"
+          variant={session.smoking ? 'outlined' : 'contained'}
+          color={session.smoking ? 'error' : 'primary'}
+          size="small"
+          data-testid="smoker-start-button"
+          sx={session.smoking ? { borderColor: design.danger, color: design.danger } : {}}
+          onClick={() => void session.toggleSmoking()}
+        >
+          {session.smoking ? 'Stop Smoking' : 'Start Smoking'}
+        </Button>
+      </Box>
+
+      {/* ————— Cards ————— */}
+      <Box sx={{ display: 'flex', gap: '10px', flex: 1, minHeight: 0 }}>
+        {/* Left column: the chamber said once and large, then the meats. */}
+        <Box
+          sx={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '38%', minWidth: 0 }}
+        >
+          <Card data-testid="smoker-chamber-card" sx={{ padding: '12px 14px' }}>
+            <Typography
+              component="div"
+              sx={{ fontSize: 18, fontWeight: 700, color: design.probes.chamber }}
+            >
+              {session.chamberName}
+            </Typography>
+            <Typography
+              component="div"
+              data-testid="smoker-chamber-temp"
+              sx={{
+                fontSize: 56,
+                fontWeight: 700,
+                lineHeight: 1.05,
+                fontVariantNumeric: 'tabular-nums',
+                color: design.text,
+              }}
+            >
+              {session.chamberTemp}
+              <Box
+                component="span"
+                sx={{
+                  fontSize: 20,
+                  fontWeight: 600,
+                  marginLeft: '2px',
+                  color: design.textSecondary,
+                }}
+              >
+                °F
+              </Box>
+            </Typography>
+          </Card>
+          <Card data-testid="smoker-probe-card" sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+            <ProbeRow probe="probe1" name={session.probe1Name} value={session.probeTemp1} />
+            <Divider />
+            <ProbeRow probe="probe2" name={session.probe2Name} value={session.probeTemp2} />
+            <Divider />
+            <ProbeRow probe="probe3" name={session.probe3Name} value={session.probeTemp3} />
+          </Card>
+        </Box>
+
+        {/* The chart in its card, saying what the picture is of and over how
+            long. The legend is the chart's own, drawn under the plot: the key
+            and the lines it names stay in one card. */}
+        <Card
+          data-testid="smoker-chart-card"
+          sx={{ flex: 1, minWidth: 0, padding: '10px 14px 6px' }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'baseline', marginBottom: '4px' }}>
+            <Typography component="h2" sx={{ ...overline, color: design.textSecondary, flex: 1 }}>
+              TEMPERATURE HISTORY
+            </Typography>
+            <Typography
+              component="span"
+              data-testid="smoker-chart-window"
+              sx={{ ...overline, color: design.textSecondary }}
+            >
+              {windowLabelOf(series)}
+            </Typography>
+          </Box>
+          <TemperatureChart
+            data={series}
+            names={chartNamesOf(session)}
+            colors={chartColors}
+            targets={chartTargets}
+            aspect="touchscreen"
+          />
+        </Card>
+      </Box>
+    </Box>
   );
 }

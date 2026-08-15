@@ -68,7 +68,20 @@ export class SmokerApp {
   /** Resolve once the device-service emulator temps reach the readout. */
   async waitForLiveTemps(): Promise<void> {
     await expect
-      .poll(async () => Number(await this.chamberTemp.innerText()), { timeout: 30_000 })
+      .poll(async () => this.parseReading(await this.chamberTemp.innerText()), {
+        timeout: 30_000,
+      })
       .toBeGreaterThan(0);
+  }
+
+  /**
+   * Parse the numeric value out of a temperature readout. The home screen
+   * renders the unit inside the reading itself (e.g. "225°F") — the °F is part
+   * of the display, not a separate column — so we extract the leading number
+   * and still require a real positive temperature.
+   */
+  private parseReading(text: string): number {
+    const match = text.trim().match(/-?\d+(\.\d+)?/);
+    return match ? Number(match[0]) : NaN;
   }
 }

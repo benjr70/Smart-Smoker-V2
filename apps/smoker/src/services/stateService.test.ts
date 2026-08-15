@@ -1,4 +1,4 @@
-import { getCurrentSmokeProfile, getState, toggleSmoking } from './stateService';
+import { getCookStart, getCurrentSmokeProfile, getState, toggleSmoking } from './stateService';
 import { createApiClient } from '../api/client';
 import { createFakeBackend, FakeBackend } from '../api/fakeBackend';
 
@@ -28,6 +28,37 @@ afterEach(() => {
 });
 
 describe('stateService (deprecated shims)', () => {
+  describe('getCookStart', () => {
+    it('projects the current timeline down to its start stamp', async () => {
+      useBackend({
+        state: { smokeId: 's1', smoking: true },
+        timeline: { s1: { startedAt: '2026-08-15T10:00:00.000Z', finishedAt: null } },
+      });
+
+      const startedAt = await getCookStart();
+
+      expect(startedAt).toEqual(new Date('2026-08-15T10:00:00.000Z'));
+    });
+
+    it('resolves null when there is no session to have started', async () => {
+      useBackend({ state: null });
+
+      await expect(getCookStart()).resolves.toBeNull();
+    });
+
+    it('reads a named cook’s stamp directly, without consulting the state', async () => {
+      // No state seeded: with the id in hand there is nothing to ask it for.
+      useBackend({
+        state: null,
+        timeline: { s1: { startedAt: '2026-08-15T10:00:00.000Z', finishedAt: null } },
+      });
+
+      const startedAt = await getCookStart('s1');
+
+      expect(startedAt).toEqual(new Date('2026-08-15T10:00:00.000Z'));
+    });
+  });
+
   describe('toggleSmoking', () => {
     it('returns the toggled State document', async () => {
       useBackend({ state: { smokeId: 'smoke123', smoking: false } });

@@ -470,8 +470,9 @@ describe('the shape the chart is drawn in', () => {
   });
 
   /**
-   * The kiosk hands the chart a wide, short strip of an 800×480 panel; the
-   * review card in History hands it a small one on a page of other cards.
+   * The kiosk hands the chart the tall card beside the reading column of an
+   * 800×480 panel; the review card in History hands it a small one on a page
+   * of other cards.
    */
   it('draws wider on the touchscreen and smaller on a history card', () => {
     const { container: kiosk } = render(
@@ -481,7 +482,7 @@ describe('the shape the chart is drawn in', () => {
       <TemperatureChart data={cook} names={names} colors={colors} aspect="compact" />
     );
 
-    expect(kiosk.querySelector('svg')?.getAttribute('viewBox')).toBe('0 0 430 160');
+    expect(kiosk.querySelector('svg')?.getAttribute('viewBox')).toBe('0 0 440 240');
     expect(history.querySelector('svg')?.getAttribute('viewBox')).toBe('0 0 340 160');
   });
 

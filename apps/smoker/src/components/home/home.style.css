@@ -16,30 +16,20 @@
 /*
  * The chart has no rule here, which is the rule.
  *
- * It is given the whole width of the row it sits in and takes its height from
- * the shape it is drawn in — the touchscreen shape, which is cut for the strip
- * of the 800×480 panel the readouts and the two actions leave. Capping its
- * height here instead would letterbox it: the plot keeps its proportions, so a
- * height it is held to is a width it is held to as well, and the panel would
- * show either side of a chart drawn down the middle of it.
+ * It is given the whole width of its card — the right-hand share of the
+ * 800×480 panel beside the reading column — and takes its height from the
+ * shape it is drawn in, the touchscreen shape. Capping its height here instead
+ * would letterbox it: the plot keeps its proportions, so a height it is held
+ * to is a width it is held to as well, and the card would show either side of
+ * a chart drawn down the middle of it.
  */
 
-.text {
-  font-family: 'Roboto', 'Helvetica', 'Arial', sans-serif;
-  font-size: 1.5rem;
-  font-weight: 700;
-}
-
-.buttonContainer {
-  padding: 2%;
-}
-
 .button {
-  height: 50px;
+  height: 42px;
   width: 125px;
 }
 
 .wifiButton {
-  height: 50px;
-  width: 75px;
+  height: 42px;
+  width: 56px;
 }

@@ -8,7 +8,7 @@
  * for.
  */
 import '@testing-library/jest-dom';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import React from 'react';
 import { SessionConfig } from 'smoke-session/src';
 import { SmokeSessionProvider } from 'smoke-session/src/react';
@@ -109,31 +109,48 @@ describe('the home screen under the shared theme', () => {
 });
 
 /**
- * The mock's rebuilt touchscreen — a status pill, an elapsed clock, a reading
- * column, a chart card with a legend — is a later piece of work. Recolouring it
- * must not smuggle any of that in, so the screen is still the two actions it
- * always was, with nothing on it that counts.
+ * The mock's rebuilt touchscreen under the shared theme: the header's pill and
+ * the hero card are painted from the scheme's tokens, and the whole screen is
+ * set in the design typeface the app now bundles — which is the thing the
+ * device could not do while its faces lived on a font CDN.
  */
-describe('what the recolour adds to the home screen', () => {
-  it('adds no control beyond the two the screen already had', async () => {
+describe('the rebuilt home screen under the shared theme', () => {
+  it('still offers exactly the two controls: wifi, and start/stop', async () => {
     await renderTouchscreen();
 
     expect(screen.getAllByRole('button')).toHaveLength(2);
   });
 
-  /**
-   * The chart writes clock times along its time axis, which are the moments the
-   * cook was read at rather than the rebuilt screen's elapsed clock; the screen
-   * around it still keeps no clock of its own.
-   */
-  it('adds no elapsed clock outside the chart', async () => {
+  it('is set in the design typeface, not Roboto', async () => {
     await renderTouchscreen();
 
-    const clocks = screen
-      .queryAllByText(/\d+:\d{2}/)
-      .filter(text => text.closest('svg[aria-label="Temperature chart"]') === null);
+    const brand = screen.getByText('SMART SMOKER');
+    expect(getComputedStyle(brand).fontFamily).toContain('Plus Jakarta Sans');
+    expect(getComputedStyle(brand).fontFamily).not.toContain('Roboto');
+  });
 
-    expect(clocks).toEqual([]);
+  it('paints the hero reading’s label in the scheme’s chamber colour, live on a flip', async () => {
+    const backend = createPendingBackend();
+    const channel = createChannel();
+    await renderTouchscreen({ client: backend, subscription: channel });
+    await act(async () => {
+      backend.answer({ mode: 'dark', resolvedMode: 'dark' });
+      await flushPromises();
+    });
+
+    const hero = screen.getByTestId('smoker-chamber-card');
+    const heroLabel = within(hero).getByText('Chamber');
+    expect(heroLabel).toHaveStyle({ color: carbonDark.probes.chamber });
+
+    // A phone flips the installation light: the label repaints without the
+    // screen being reloaded or remounted.
+    await act(async () => {
+      channel.announce({ mode: 'light', resolvedMode: 'light' });
+      await flushPromises();
+    });
+
+    expect(within(screen.getByTestId('smoker-chamber-card')).getByText('Chamber')).toBe(heroLabel);
+    expect(heroLabel).toHaveStyle({ color: carbonLight.probes.chamber });
   });
 });
 

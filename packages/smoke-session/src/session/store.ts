@@ -130,10 +130,31 @@ export function createSessionStore(config: SessionConfig): SessionStore {
     }
   };
 
+  /**
+   * Read the cook's recorded start stamp — for the smoke the caller already
+   * knows the state names, when it knows one, so the adapter is not sent to
+   * re-read the state it was just read from. A stamp that cannot be read is a
+   * stamp the session does not have — the elapsed clock a host derives from it
+   * is decoration, so the failure never surfaces as a session error and the
+   * clock simply reads zero until a later read finds one.
+   */
+  const loadCookStart = async (smokeId?: string): Promise<void> => {
+    try {
+      const startedAt = await api.getCookStart(smokeId);
+      commit({ startedAt });
+    } catch {
+      commit({ startedAt: null });
+    }
+  };
+
   const loadState = async (): Promise<void> => {
     try {
       const state = await api.getSmokingState();
       commit({ smoking: state.smoking });
+      // The stamp read rides on this read's answer: the state just said which
+      // smoke it points at, so the stamp is read for that smoke rather than
+      // spending a second state round-trip working the session out again.
+      void loadCookStart(state.smokeId);
     } catch (cause) {
       surface({ source: 'state', message: errorMessage(cause) });
     }
@@ -164,9 +185,15 @@ export function createSessionStore(config: SessionConfig): SessionStore {
 
   const handleSmokeUpdate = (update: SmokeUpdate): void => {
     if (!started) return;
+    const wasSmoking = snapshot.smoking;
     // Monitor role applies smoking ONLY. Inbound names never clobber a probe
     // name the local user may be editing.
     commit({ smoking: update.smoking });
+    // A remote flip means another client started or stopped the cook; the
+    // stamp that wrote lives on the backend, so go and read it.
+    if (update.smoking !== wasSmoking) {
+      void loadCookStart();
+    }
   };
 
   const handleClear = async (): Promise<void> => {
@@ -178,11 +205,13 @@ export function createSessionStore(config: SessionConfig): SessionStore {
       } else {
         commit({ ...DEFAULT_PROBE_NAMES });
       }
-      commit({ initialTemps: [] });
+      // The cleared cook's stamp is gone with the cook: the elapsed clock
+      // stops counting a session that no longer exists.
+      commit({ initialTemps: [], startedAt: null });
     } catch {
       // A failed reload falls back to sensible defaults and a stopped smoke, so
       // the screen never shows stale or broken labels after a clear.
-      commit({ ...DEFAULT_PROBE_NAMES, smoking: false, initialTemps: [] });
+      commit({ ...DEFAULT_PROBE_NAMES, smoking: false, initialTemps: [], startedAt: null });
     }
   };
 
@@ -297,6 +326,7 @@ export function createSessionStore(config: SessionConfig): SessionStore {
 
   const handleSmokeUpdateSmoker = (update: SmokeUpdate): void => {
     if (!started) return;
+    const wasSmoking = snapshot.smoking;
     // Smoker role applies BOTH smoking and the names (unlike the monitor role,
     // which never lets inbound names clobber an in-progress local edit).
     commit({
@@ -306,6 +336,11 @@ export function createSessionStore(config: SessionConfig): SessionStore {
       probe2Name: update.probe2Name,
       probe3Name: update.probe3Name,
     });
+    // A remote flip means a phone started or stopped this cook; read the stamp
+    // the start wrote so the panel's elapsed clock counts from the truth.
+    if (update.smoking !== wasSmoking) {
+      void loadCookStart();
+    }
   };
 
   // --- command surface ---
@@ -315,6 +350,11 @@ export function createSessionStore(config: SessionConfig): SessionStore {
       const state = await api.toggleSmoking();
       socket.emitSmokeUpdate(currentSmokeUpdate(state.smoking));
       commit({ smoking: state.smoking });
+      // Starting is what writes the start stamp, so the read that follows the
+      // toggle is the one that finds it (and a stopped cook keeps its stamp —
+      // pausing does not un-start a cook). The toggle's answer names the
+      // smoke, so the stamp is read for it directly.
+      void loadCookStart(state.smokeId);
     } catch (cause) {
       // A failed toggle surfaces in lastError like the startup loads rather
       // than rejecting into a fire-and-forget caller (the button's onClick),
@@ -386,6 +426,8 @@ export function createSessionStore(config: SessionConfig): SessionStore {
       );
     }
     void loadProfile();
+    // The cook-start stamp is not loaded on its own: it rides on the state
+    // load, which learns which smoke the stamp belongs to on the way.
     void loadState();
     void loadTemps();
   };

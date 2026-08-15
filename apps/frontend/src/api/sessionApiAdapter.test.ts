@@ -13,11 +13,13 @@ function stubClient(overrides: {
   smokeProfile?: Partial<ApiClient['smokeProfile']>;
   state?: Partial<ApiClient['state']>;
   temps?: Partial<ApiClient['temps']>;
+  timeline?: Partial<ApiClient['timeline']>;
 }): ApiClient {
   return {
     smokeProfile: overrides.smokeProfile,
     state: overrides.state,
     temps: overrides.temps,
+    timeline: overrides.timeline,
   } as unknown as ApiClient;
 }
 
@@ -47,18 +49,18 @@ describe('createSessionApiPort', () => {
     expect(saveCurrent).toHaveBeenCalledWith(profile);
   });
 
-  test('getSmokingState projects the state singleton down to the smoking flag', async () => {
+  test('getSmokingState projects the state singleton down to the smoking flag and its smoke', async () => {
     const get = jest.fn().mockResolvedValue({ smokeId: 'abc', smoking: true } as State);
     const port = createSessionApiPort(stubClient({ state: { get } }));
 
-    await expect(port.getSmokingState()).resolves.toEqual({ smoking: true });
+    await expect(port.getSmokingState()).resolves.toEqual({ smoking: true, smokeId: 'abc' });
   });
 
   test('toggleSmoking flips through the client and returns the new smoking flag', async () => {
     const toggleSmoking = jest.fn().mockResolvedValue({ smokeId: 'abc', smoking: false } as State);
     const port = createSessionApiPort(stubClient({ state: { toggleSmoking } }));
 
-    await expect(port.toggleSmoking()).resolves.toEqual({ smoking: false });
+    await expect(port.toggleSmoking()).resolves.toEqual({ smoking: false, smokeId: 'abc' });
     expect(toggleSmoking).toHaveBeenCalledTimes(1);
   });
 
@@ -133,6 +135,32 @@ describe('createSessionApiPort', () => {
 
     expect(temp).toMatchObject({ ChamberTemp: 225, MeatTemp: 150, Meat2Temp: 0, Meat3Temp: 0 });
     expect(temp.date).toBeInstanceOf(Date);
+  });
+
+  test('getCookStart projects the current timeline down to its start stamp', async () => {
+    const startedAt = new Date('2026-08-15T10:00:00.000Z');
+    const getCurrent = jest.fn().mockResolvedValue({ startedAt, finishedAt: null });
+    const port = createSessionApiPort(stubClient({ timeline: { getCurrent } }));
+
+    await expect(port.getCookStart()).resolves.toEqual(startedAt);
+  });
+
+  test('getCookStart reads null when there is no session to have started', async () => {
+    const getCurrent = jest.fn().mockResolvedValue(null);
+    const port = createSessionApiPort(stubClient({ timeline: { getCurrent } }));
+
+    await expect(port.getCookStart()).resolves.toBeNull();
+  });
+
+  test('getCookStart reads a named cook’s stamp directly, sparing the state read', async () => {
+    const startedAt = new Date('2026-08-15T10:00:00.000Z');
+    const getById = jest.fn().mockResolvedValue({ startedAt, finishedAt: null });
+    const getCurrent = jest.fn();
+    const port = createSessionApiPort(stubClient({ timeline: { getById, getCurrent } }));
+
+    await expect(port.getCookStart('s1')).resolves.toEqual(startedAt);
+    expect(getById).toHaveBeenCalledWith('s1');
+    expect(getCurrent).not.toHaveBeenCalled();
   });
 
   test('postTempsBatch rejects: the monitor role never posts batches', async () => {

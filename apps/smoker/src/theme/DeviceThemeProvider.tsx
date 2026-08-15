@@ -1,3 +1,10 @@
+// The design typeface, bundled with the app: the four weights the design sets
+// its text in, served from this appliance's own bundle because the box may
+// have no route to any font host at all (see `selfHostedFont.test.ts`).
+import '@fontsource/plus-jakarta-sans/latin-400.css';
+import '@fontsource/plus-jakarta-sans/latin-500.css';
+import '@fontsource/plus-jakarta-sans/latin-600.css';
+import '@fontsource/plus-jakarta-sans/latin-700.css';
 import { GlobalStyles, Theme, ThemeProvider, createTheme } from '@mui/material';
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -17,22 +24,13 @@ import {
 import { createSocketAppearanceSubscription } from './socketAppearanceSubscription';
 
 /**
- * The typeface the touchscreen already ships. The shared theme also carries the
- * design's typeface, which this device has no bundled faces for and, on a
- * tailnet, no route to fetch — asking for it would silently drop the interface
- * onto whatever sans-serif the appliance happens to have. The recolour is a
- * matter of the palette, so the palette is taken from the shared theme and the
- * typography is left exactly as it was: Material-UI's Roboto stack, which the
- * app bundles.
- */
-const DEVICE_TYPOGRAPHY = createTheme().typography;
-
-/**
  * The shared theme's palette for a scheme, painted through the component
- * library, over the device's own typography.
+ * library. The typography is the shared theme's too — the design typeface,
+ * whose faces this app now bundles itself (imported above), so taking it no
+ * longer means asking a network the box may not have.
  */
 const deviceTheme = (colorScheme: ColorScheme): Theme =>
-  createTheme(withDesignPalette(createAppTheme(colorScheme)), { typography: DEVICE_TYPOGRAPHY });
+  createTheme(withDesignPalette(createAppTheme(colorScheme)));
 
 /**
  * Both themes, and both sets of custom properties, built once.

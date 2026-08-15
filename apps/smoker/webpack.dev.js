@@ -49,6 +49,15 @@ module.exports = {
         test: /\.css$/,
         use: ['style-loader', 'css-loader'],
       },
+      {
+        // The self-hosted design typeface: its face stylesheets point at font
+        // files with relative urls, which css-loader hands to webpack to emit
+        // alongside the bundle. Without this the build fails to resolve them
+        // and the appliance would have to fall back to a font CDN it may not
+        // be able to reach. Guarded by src/theme/selfHostedFont.test.ts.
+        test: /\.(woff2?|eot|ttf|otf)$/i,
+        type: 'asset/resource',
+      },
     ],
   },
   resolve: {
