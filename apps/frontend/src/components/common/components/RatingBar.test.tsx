@@ -43,19 +43,21 @@ describe('adjusting the score from the keyboard', () => {
     expect(onChange).toHaveBeenCalledWith(expected);
   });
 
-  it('clamps at the ends of the scale instead of stepping past them', () => {
+  it('reports nothing at the ends of the scale: a clamped press is not a change', () => {
     const onChange = jest.fn();
     const { unmount } = renderBar({ value: 10, onChange });
     fireEvent.keyDown(screen.getByRole('slider'), { key: 'ArrowUp' });
-    expect(onChange).toHaveBeenCalledWith(10);
+    fireEvent.keyDown(screen.getByRole('slider'), { key: 'End' });
     unmount();
 
     renderBar({ value: 0.5, onChange });
     fireEvent.keyDown(screen.getByRole('slider'), { key: 'ArrowDown' });
-    expect(onChange).toHaveBeenLastCalledWith(0.5);
+    fireEvent.keyDown(screen.getByRole('slider'), { key: 'Home' });
+
+    expect(onChange).not.toHaveBeenCalled();
   });
 
-  it('steps an unrated bar onto the bottom of the scale', () => {
+  it('steps an unrated bar up onto the bottom of the scale', () => {
     const onChange = jest.fn();
     renderBar({ value: 0, onChange });
 
@@ -63,6 +65,18 @@ describe('adjusting the score from the keyboard', () => {
 
     expect(onChange).toHaveBeenCalledWith(0.5);
   });
+
+  it.each([['ArrowLeft'], ['ArrowDown']])(
+    '%s leaves an unrated bar unrated instead of inventing the minimum',
+    key => {
+      const onChange = jest.fn();
+      renderBar({ value: 0, onChange });
+
+      fireEvent.keyDown(screen.getByRole('slider'), { key });
+
+      expect(onChange).not.toHaveBeenCalled();
+    }
+  );
 
   it('leaves other keys alone', () => {
     const onChange = jest.fn();

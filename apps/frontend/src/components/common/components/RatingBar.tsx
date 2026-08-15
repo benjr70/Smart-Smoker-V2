@@ -102,8 +102,11 @@ export function RatingBar({ label, value, onChange, testId }: RatingBarProps): J
   };
 
   // The slider keyboard contract: arrows step by half a point, Home and End
-  // jump to the ends. An unrated bar steps onto the bottom of the scale —
-  // clampHalfStep carries 0 + 0.5 to the 0.5 minimum on its own.
+  // jump to the ends. An unrated bar steps up onto the bottom of the scale —
+  // clampHalfStep carries 0 + 0.5 to the 0.5 minimum on its own — but stepping
+  // it down leaves it unrated: decrementing "no rating" must not invent one.
+  // A keypress that lands where the score already is reports nothing, so a
+  // clamped press at either end cannot claim a change nobody made.
   const onKeyDown = (event: React.KeyboardEvent<HTMLElement>): void => {
     const current = rated ? value : 0;
     let next: number;
@@ -114,6 +117,10 @@ export function RatingBar({ label, value, onChange, testId }: RatingBarProps): J
         break;
       case 'ArrowLeft':
       case 'ArrowDown':
+        if (!rated) {
+          event.preventDefault();
+          return;
+        }
         next = clampHalfStep(current - STEP);
         break;
       case 'Home':
@@ -126,6 +133,9 @@ export function RatingBar({ label, value, onChange, testId }: RatingBarProps): J
         return;
     }
     event.preventDefault();
+    if (rated && next === value) {
+      return;
+    }
     onChange(next);
   };
 
