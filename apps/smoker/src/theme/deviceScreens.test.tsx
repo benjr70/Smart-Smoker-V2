@@ -272,12 +272,12 @@ describe('the chart under the shared theme', () => {
 });
 
 describe('the wifi screen under the shared theme', () => {
-  it('shows its inputs and paints its connect action in the dark accent', async () => {
+  it('shows its entry fields and paints its connect action in the dark accent', async () => {
     await renderTouchscreen();
     await openWifiScreen();
 
-    expect(screen.getByLabelText('SSid')).toBeInTheDocument();
-    expect(screen.getByLabelText('Password')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /network/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /password/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Connect' })).toHaveStyle({
       backgroundColor: carbonDark.accent,
     });
