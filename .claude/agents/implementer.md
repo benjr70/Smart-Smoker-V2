@@ -5,7 +5,7 @@ description:
   red-green-refactor, stages files. Does not review its own work; does not run
   the smoke script (the verifier does). Use as a team-lead spawn, one per team.
 tools: Read, Edit, Write, Bash, Glob, Grep
-model: fable
+model: opus
 effort: medium
 ---
 
