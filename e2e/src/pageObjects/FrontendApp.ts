@@ -1252,19 +1252,11 @@ export class FrontendApp {
 
   /** Open a completed smoke's review from its history card. */
   async openReview(name: string): Promise<void> {
-    // The ratings card re-persists its value once it loads. Capture that
-    // load-time write here (listener set before the click that triggers it) so
-    // a later re-rating is the last write and isn't clobbered by this one
-    // landing late.
-    const ratingsPersisted = this.page
-      .waitForResponse(
-        res => res.url().includes('/api/ratings/') && res.request().method() === 'POST',
-        { timeout: 15_000 }
-      )
-      .catch(() => undefined);
+    // (The old MUI-star ratings card re-persisted its value on load; the
+    // rating-bar card only writes when a score actually changes, so there is
+    // no load-time write to wait out here any more.)
     await this.historyCardFor(name).getByTestId('smoke-card-view-button').click();
     await expect(this.page.getByTestId('review-presmoke-name')).toBeVisible();
-    await ratingsPersisted;
   }
 
   /**
@@ -1381,22 +1373,23 @@ export class FrontendApp {
   }
 
   /**
-   * Set the Overall Taste rating (1-10) on the currently-open review. The
-   * ratings card persists on change (`POST /api/ratings/:id`); wait for that
-   * write so a following reload reads the new value rather than racing it.
+   * Set the Overall Taste score (0.5–10, half steps) on the currently-open
+   * review. The rating bar persists on change (`POST /api/ratings/:id`); wait
+   * for that write so a following reload reads the new value rather than
+   * racing the persist.
    */
   async setOverallTaste(value: number): Promise<void> {
-    const accessibleName = `${value} Star${value === 1 ? '' : 's'}`;
-    // MUI's radio inputs are 1px visually-hidden elements stacked at the start,
-    // so clicking one lands on the first star. The clickable target is each
-    // star's <label>, which overlays its own star and is tied to the input by
-    // id — resolve that so the correct star is selected.
-    const inputId = await this.overallTasteRating
-      .getByRole('radio', { name: accessibleName, exact: true })
-      .getAttribute('id');
-    const star = inputId
-      ? this.overallTasteRating.locator(`label[for="${inputId}"]`)
-      : this.overallTasteRating.getByRole('radio', { name: accessibleName });
+    // The rating bar scores by pointer position: a score of v out of 10 sits
+    // v/10 of the way along it (tapping a segment's right half rounds up to
+    // its full point, the left half to its half point).
+    const bar = this.overallTasteRating;
+    const box = await bar.boundingBox();
+    if (!box) {
+      throw new Error('the Overall Taste rating bar is not on screen');
+    }
+    // Playwright positions are relative to the element; keep the extreme
+    // scores inside its hit area (the bar clamps overshoot anyway).
+    const x = Math.min(Math.max((box.width * value) / 10, 1), box.width - 1);
     await Promise.all([
       // Wait for the write that carries the new value so a following reload
       // reads it back rather than racing the persist.
@@ -1406,15 +1399,15 @@ export class FrontendApp {
           res.request().method() === 'POST' &&
           res.request().postDataJSON()?.overallTaste === value
       ),
-      star.click(),
+      bar.click({ position: { x, y: box.height / 2 } }),
     ]);
     await this.expectOverallTaste(value);
   }
 
-  /** Assert the Overall Taste rating shown on the open review. */
+  /** Assert the Overall Taste score shown on the open review. */
   async expectOverallTaste(value: number): Promise<void> {
     await expect(this.page.getByTestId('review-rating-overallTaste-value')).toHaveText(
-      `Overall Taste: ${value}`
+      `${value} / 10`
     );
   }
 
