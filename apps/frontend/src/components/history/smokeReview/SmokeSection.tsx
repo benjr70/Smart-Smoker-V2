@@ -75,11 +75,11 @@ export function SmokeSection({ smokeProfile, temps, timeline }: SmokeSectionProp
             data-testid="probe-legend-row"
             sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
           >
-            {/* The swatch is what carries the probe's colour — the same token
-                the chart draws that probe's line in, so a name and its line
-                match in either scheme. The name itself stays in text colour:
-                two of the light probe colours are chart colours first, and do
-                not clear the contrast threshold for small text on a card. */}
+            {/* The swatch is what carries the probe's colour — the same chart
+                token the chart strokes that probe's line in, so a name and its
+                line match in either scheme. The name itself stays in text
+                colour: two of the light chart colours do not clear the
+                contrast threshold for small text on a card. */}
             <Box
               component="span"
               aria-hidden="true"
@@ -89,7 +89,7 @@ export function SmokeSection({ smokeProfile, temps, timeline }: SmokeSectionProp
                 height: 10,
                 borderRadius: '3px',
                 flexShrink: 0,
-                backgroundColor: theme.design.probes[row.slot],
+                backgroundColor: theme.design.chart[row.slot],
               })}
             />
             <Box

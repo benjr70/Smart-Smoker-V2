@@ -119,29 +119,51 @@ describe.each(reviewCards)('the history detail card %s', (testId, card) => {
 });
 
 /**
- * The same four colours mark the probes on the history detail's legend. The
- * colour lives on the swatch beside each name rather than on the name itself:
- * two of the light probe colours are chart colours first, and do not clear the
- * contrast threshold for small text on a card.
+ * The legend on the history detail names each probe beside the chart, and the
+ * swatch by the name is the key to the plot: it must be the very colour the
+ * chart strokes that probe's line in, or the legend identifies nothing. The
+ * assertion reads the stroke off the rendered chart rather than naming a hex,
+ * so the two cannot drift apart again. The name itself stays in text colour:
+ * two of the light chart colours do not clear the contrast threshold for
+ * small text on a card.
  */
 describe('the history detail’s probe legend', () => {
-  const swatches: [string, keyof PaletteTokens['probes']][] = [
+  const swatches: [string, keyof PaletteTokens['chart']][] = [
     ['probe-legend-swatch-chamber', 'chamber'],
     ['probe-legend-swatch-probe1', 'probe1'],
     ['probe-legend-swatch-probe2', 'probe2'],
     ['probe-legend-swatch-probe3', 'probe3'],
   ];
 
-  it.each(swatches)('marks %s in the dark scheme’s probe colour', (testId, probe) => {
-    renderUnder('dark', <SmokeSection smokeProfile={smokeProfile()} temps={[]} timeline={null} />);
+  /** The colour the chart in this render actually strokes a series with. */
+  const strokeOf = (container: HTMLElement, series: string): string => {
+    const stroke = container.querySelector(`path[data-series="${series}"]`)?.getAttribute('stroke');
+    if (!stroke) throw new Error(`the chart drew no ${series} line`);
+    return stroke;
+  };
 
-    expect(screen.getByTestId(testId)).toHaveStyle({ backgroundColor: carbonDark.probes[probe] });
+  it.each(swatches)('paints %s in the very colour the dark chart draws it', (testId, probe) => {
+    const { container } = renderUnder(
+      'dark',
+      <SmokeSection smokeProfile={smokeProfile()} temps={[]} timeline={null} />
+    );
+
+    expect(screen.getByTestId(testId)).toHaveStyle({
+      backgroundColor: strokeOf(container, probe),
+    });
+    expect(strokeOf(container, probe)).toBe(carbonDark.chart[probe]);
   });
 
-  it.each(swatches)('marks %s in the light scheme’s probe colour', (testId, probe) => {
-    renderUnder('light', <SmokeSection smokeProfile={smokeProfile()} temps={[]} timeline={null} />);
+  it.each(swatches)('paints %s in the very colour the light chart draws it', (testId, probe) => {
+    const { container } = renderUnder(
+      'light',
+      <SmokeSection smokeProfile={smokeProfile()} temps={[]} timeline={null} />
+    );
 
-    expect(screen.getByTestId(testId)).toHaveStyle({ backgroundColor: carbonLight.probes[probe] });
+    expect(screen.getByTestId(testId)).toHaveStyle({
+      backgroundColor: strokeOf(container, probe),
+    });
+    expect(strokeOf(container, probe)).toBe(carbonLight.chart[probe]);
   });
 });
 
