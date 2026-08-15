@@ -101,7 +101,11 @@ const EMPTY_Y_DOMAIN: [number, number] = [0, 100];
  * bottom eighth of the plot. Targets are included so that a probe's dashed
  * target line is on the chart even before the meat has climbed anywhere near it.
  */
-export const tempYDomain = (data: ChartSample[], targets: ProbeTargets = {}): [number, number] => {
+export const tempYDomain = (
+  data: ChartSample[],
+  targets: ProbeTargets = {},
+  snapshot?: number
+): [number, number] => {
   let low = Number.POSITIVE_INFINITY;
   let high = Number.NEGATIVE_INFINITY;
 
@@ -113,6 +117,7 @@ export const tempYDomain = (data: ChartSample[], targets: ProbeTargets = {}): [n
 
   data.forEach(sample => SERIES_KEYS.forEach(series => consider(readingOf(sample, series))));
   Object.values(targets).forEach(consider);
+  if (snapshot !== undefined) consider(snapshot);
 
   if (low > high) return EMPTY_Y_DOMAIN;
   return [
@@ -293,13 +298,14 @@ export const timeDomainOf = (data: ChartSample[], now: number = Date.now()): [Da
 export const createScales = (
   data: ChartSample[],
   box: PlotBox,
-  targets: ProbeTargets = {}
+  targets: ProbeTargets = {},
+  snapshot?: number
 ): ChartScales => ({
   x: scaleTime()
     .domain(timeDomainOf(data))
     .range([box.margin.left, box.width - box.margin.right]),
   y: scaleLinear()
-    .domain(tempYDomain(data, targets))
+    .domain(tempYDomain(data, targets, snapshot))
     .range([box.height - box.margin.bottom, box.margin.top]),
 });
 

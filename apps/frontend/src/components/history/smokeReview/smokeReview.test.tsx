@@ -6,27 +6,44 @@ import { createFakeBackend, FakeBackend } from '../../../api/fakeBackend';
 import { Smoke } from '../../../api/types';
 import { SmokeReview } from './smokeReview';
 
-// The card children are mocked so each rendered piece is observable as a data
-// attribute; the screen's own job is to fetch the aggregate and hand each piece
-// to the right card. The fake client is injected through the provider instead
-// of mocking five separate service modules.
-jest.mock('../smokeCards/preSmokeCard', () => ({
-  PreSmokeCard: ({ preSmoke }: any) => (
-    <div data-testid="pre-smoke-card" data-presmoke={JSON.stringify(preSmoke)} />
-  ),
-}));
-jest.mock('../smokeCards/smokeProfileCard', () => ({
-  SmokeProfileCard: ({ smokeProfile, temps }: any) => (
+// The header, sections and ratings card are mocked so each rendered piece is
+// observable as a data attribute; the screen's own job is to fetch the
+// aggregate and hand each piece to the right part of the page. The fake client
+// is injected through the provider instead of mocking five separate service
+// modules.
+jest.mock('./ReviewHeader', () => ({
+  ReviewHeader: (props: any) => (
     <div
-      data-testid="smoke-profile-card"
-      data-smokeprofile={JSON.stringify(smokeProfile)}
-      data-temps={JSON.stringify(temps)}
+      data-testid="review-header"
+      data-name={props.name}
+      data-date={JSON.stringify(props.date)}
+      data-startedat={JSON.stringify(props.startedAt)}
+      data-overallrating={props.overallRating}
     />
   ),
 }));
-jest.mock('../smokeCards/postSmokeCard', () => ({
-  PostSmokeCard: ({ postSmoke }: any) => (
-    <div data-testid="post-smoke-card" data-postsmoke={JSON.stringify(postSmoke)} />
+jest.mock('./PreSmokeSection', () => ({
+  PreSmokeSection: ({ preSmoke, woodType }: any) => (
+    <div
+      data-testid="presmoke-section"
+      data-presmoke={JSON.stringify(preSmoke)}
+      data-woodtype={woodType}
+    />
+  ),
+}));
+jest.mock('./SmokeSection', () => ({
+  SmokeSection: ({ smokeProfile, temps, timeline }: any) => (
+    <div
+      data-testid="smoke-section"
+      data-smokeprofile={JSON.stringify(smokeProfile)}
+      data-temps={JSON.stringify(temps)}
+      data-timeline={JSON.stringify(timeline)}
+    />
+  ),
+}));
+jest.mock('./PostSmokeSection', () => ({
+  PostSmokeSection: ({ postSmoke }: any) => (
+    <div data-testid="postsmoke-section" data-postsmoke={JSON.stringify(postSmoke)} />
   ),
 }));
 jest.mock('../smokeCards/ratingsCard', () => ({
@@ -58,7 +75,7 @@ const renderReview = (backend: FakeBackend, smokeId: string) => {
 };
 
 describe('SmokeReview', () => {
-  test('loads the aggregate and hands each display piece to its card', async () => {
+  test('loads the aggregate and hands each display piece to its section', async () => {
     const backend = createFakeBackend({
       smoke: { records: { 'smoke-1': smokeAggregate('smoke-1') } },
       preSmoke: { records: { 'pre-smoke-1': { name: 'Brisket', weight: {}, steps: ['Trim'] } } },
@@ -81,6 +98,18 @@ describe('SmokeReview', () => {
           ],
         },
       },
+      timeline: {
+        records: {
+          'smoke-1': {
+            startedAt: '2026-08-01T10:00:00.000Z',
+            finishedAt: '2026-08-01T16:30:00.000Z',
+            durationMs: 23400000,
+            peakChamber: 268,
+            peakMeat: 203,
+            targetTemp: 203,
+          },
+        },
+      },
       postSmoke: { records: { 'post-smoke-1': { restTime: '30', steps: ['Rest'] } } },
       ratings: {
         records: {
@@ -99,18 +128,33 @@ describe('SmokeReview', () => {
 
     await waitFor(() => {
       const preSmoke = JSON.parse(
-        screen.getByTestId('pre-smoke-card').getAttribute('data-presmoke') ?? '{}'
+        screen.getByTestId('presmoke-section').getAttribute('data-presmoke') ?? '{}'
       );
       expect(preSmoke.name).toBe('Brisket');
     });
 
-    const profileCard = screen.getByTestId('smoke-profile-card');
-    expect(JSON.parse(profileCard.getAttribute('data-smokeprofile') ?? '{}').chamberName).toBe(
+    // The header gets the name, the day, the stamps and the overall score.
+    const header = screen.getByTestId('review-header');
+    expect(header.getAttribute('data-name')).toBe('Brisket');
+    expect(JSON.parse(header.getAttribute('data-date') ?? 'null')).toBe('2023-07-15T00:00:00.000Z');
+    expect(JSON.parse(header.getAttribute('data-startedat') ?? 'null')).toBe(
+      '2026-08-01T10:00:00.000Z'
+    );
+    expect(header.getAttribute('data-overallrating')).toBe('4');
+
+    // The pre-smoke section reads the wood from the profile.
+    expect(screen.getByTestId('presmoke-section').getAttribute('data-woodtype')).toBe('Hickory');
+
+    // The smoke section gets the profile, the cook and the derived timeline.
+    const smokeSection = screen.getByTestId('smoke-section');
+    expect(JSON.parse(smokeSection.getAttribute('data-smokeprofile') ?? '{}').chamberName).toBe(
       'My Chamber'
     );
-    expect(JSON.parse(profileCard.getAttribute('data-temps') ?? '[]')).toHaveLength(1);
+    expect(JSON.parse(smokeSection.getAttribute('data-temps') ?? '[]')).toHaveLength(1);
+    expect(JSON.parse(smokeSection.getAttribute('data-timeline') ?? 'null')?.targetTemp).toBe(203);
+
     expect(
-      JSON.parse(screen.getByTestId('post-smoke-card').getAttribute('data-postsmoke') ?? '{}')
+      JSON.parse(screen.getByTestId('postsmoke-section').getAttribute('data-postsmoke') ?? '{}')
         .restTime
     ).toBe('30');
     expect(
@@ -119,26 +163,26 @@ describe('SmokeReview', () => {
     ).toBe(4);
   });
 
-  test('renders the empty-default temps when the temps piece is absent', async () => {
+  test('renders the empty-default temps and a null timeline when those pieces are absent', async () => {
     const backend = createFakeBackend({
       smoke: { records: { 'smoke-1': smokeAggregate('smoke-1') } },
       preSmoke: { records: { 'pre-smoke-1': { name: 'Brisket', weight: {}, steps: [] } } },
-      // No temps record — the aggregate fills the empty default and the profile
-      // card still renders the rest of the review.
+      // No temps and no timeline — the aggregate fills the empty default and a
+      // null timeline, and the sections still render the rest of the review.
     });
 
     renderReview(backend, 'smoke-1');
 
     await waitFor(() => {
       const preSmoke = JSON.parse(
-        screen.getByTestId('pre-smoke-card').getAttribute('data-presmoke') ?? '{}'
+        screen.getByTestId('presmoke-section').getAttribute('data-presmoke') ?? '{}'
       );
       expect(preSmoke.name).toBe('Brisket');
     });
 
-    expect(
-      JSON.parse(screen.getByTestId('smoke-profile-card').getAttribute('data-temps') ?? '[]')
-    ).toEqual([]);
+    const smokeSection = screen.getByTestId('smoke-section');
+    expect(JSON.parse(smokeSection.getAttribute('data-temps') ?? '[]')).toEqual([]);
+    expect(JSON.parse(smokeSection.getAttribute('data-timeline') ?? '"unset"')).toBeNull();
   });
 
   test('raises the failure snackbar when the smoke parent cannot be read', async () => {

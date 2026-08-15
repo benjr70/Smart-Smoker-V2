@@ -58,8 +58,22 @@ export interface TemperatureChartProps {
   colors: ChartPalette;
   /** The configured target per meat probe; none are drawn when omitted. */
   targets?: ProbeTargets;
+  /**
+   * The one target the cook was actually run against, snapshotted when the
+   * smoke finished. Drawn as its own line in the label colour rather than any
+   * probe's, because it belongs to the cook, not to a probe's settings row.
+   * The wire's zero — no snapshot on record — draws nothing.
+   */
+  target?: number;
   /** The shape to draw in; the phone's when omitted. */
   aspect?: ChartAspect;
+  /**
+   * Whether the chart writes its own legend under the plot; it does unless
+   * told otherwise. A caller that names the lines itself — the history review
+   * says "Not used" where this legend would say "Probe 2" — turns it off, so
+   * the reader is not shown the same probe under two names.
+   */
+  legend?: boolean;
 }
 
 /** How heavily the lines are drawn, which is what makes them readable outdoors. */
@@ -95,9 +109,14 @@ function TemperatureChart({
   names,
   colors,
   targets = NO_TARGETS,
+  target,
   aspect = 'mobile',
+  legend = true,
 }: TemperatureChartProps): JSX.Element {
   const box = plotBoxOf(aspect);
+
+  /** The snapshot, if one was actually recorded; the wire's zero is none. */
+  const snapshot = target !== undefined && isReported(target) ? target : undefined;
 
   /**
    * The targets are taken apart before the drawing is derived, so that a caller
@@ -128,7 +147,7 @@ function TemperatureChart({
       probe2: probe2Target,
       probe3: probe3Target,
     });
-    const scales = createScales(cook, box, drawn);
+    const scales = createScales(cook, box, drawn, snapshot);
     return {
       scales,
       paths: SERIES_KEYS.map(series => ({ series, d: seriesPath(cook, series, scales) })),
@@ -140,8 +159,16 @@ function TemperatureChart({
         const y = scales.y(temperature);
         return { series, temperature, y, label: targetLabelAnchor(box, y) };
       }),
+      snapshotLine:
+        snapshot === undefined
+          ? undefined
+          : {
+              temperature: snapshot,
+              y: scales.y(snapshot),
+              label: targetLabelAnchor(box, scales.y(snapshot)),
+            },
     };
-  }, [cook, box, probe1Target, probe2Target, probe3Target]);
+  }, [cook, box, probe1Target, probe2Target, probe3Target, snapshot]);
 
   const plot = plotEdges(box);
   const anchors = axisLabelAnchors(box);
@@ -244,6 +271,29 @@ function TemperatureChart({
             </text>
           </g>
         ))}
+        {drawing.snapshotLine && (
+          <g>
+            <line
+              data-target="snapshot"
+              x1={plot.left}
+              x2={plot.right}
+              y1={drawing.snapshotLine.y}
+              y2={drawing.snapshotLine.y}
+              stroke={colors.label}
+              strokeDasharray={TARGET_DASH}
+            />
+            <text
+              data-target-label="snapshot"
+              x={drawing.snapshotLine.label.x}
+              y={drawing.snapshotLine.label.y}
+              fill={colors.label}
+              fontSize={LABEL_SIZE}
+              textAnchor="end"
+            >
+              {`TARGET ${formatTemperature(drawing.snapshotLine.temperature)}`}
+            </text>
+          </g>
+        )}
         {drawing.paths.map(({ series, d }) => (
           <path
             key={series}
@@ -323,41 +373,43 @@ function TemperatureChart({
           </g>
         ) : null}
       </svg>
-      <ul
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: '4px 16px',
-          listStyle: 'none',
-          margin: 0,
-          padding: '8px 0 0',
-        }}
-      >
-        {SERIES_KEYS.map(series => (
-          <li
-            key={series}
-            style={{
-              alignItems: 'center',
-              color: colors.label,
-              display: 'flex',
-              fontSize: 12,
-              gap: 6,
-            }}
-          >
-            <span
-              data-legend-swatch={series}
+      {legend && (
+        <ul
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '4px 16px',
+            listStyle: 'none',
+            margin: 0,
+            padding: '8px 0 0',
+          }}
+        >
+          {SERIES_KEYS.map(series => (
+            <li
+              key={series}
               style={{
-                backgroundColor: colors[series],
-                borderRadius: 2,
-                display: 'inline-block',
-                height: 3,
-                width: 14,
+                alignItems: 'center',
+                color: colors.label,
+                display: 'flex',
+                fontSize: 12,
+                gap: 6,
               }}
-            />
-            {names[series]}
-          </li>
-        ))}
-      </ul>
+            >
+              <span
+                data-legend-swatch={series}
+                style={{
+                  backgroundColor: colors[series],
+                  borderRadius: 2,
+                  display: 'inline-block',
+                  height: 3,
+                  width: 14,
+                }}
+              />
+              {names[series]}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

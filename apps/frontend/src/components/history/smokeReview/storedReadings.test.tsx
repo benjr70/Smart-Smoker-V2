@@ -93,7 +93,7 @@ const renderReview = (cook = storedCook) => {
 describe('the review of a smoke whose readings were stored as strings', () => {
   it('draws the cook rather than an empty chart', async () => {
     const { container } = renderReview();
-    await waitFor(() => expect(screen.getByText('Hickory Wood')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Hickory')).toBeInTheDocument());
 
     const drawn = Array.from(container.querySelectorAll('path[data-series]')).map(line =>
       line.getAttribute('d')
@@ -106,7 +106,7 @@ describe('the review of a smoke whose readings were stored as strings', () => {
 
   it('reaches the temperatures the cook actually recorded', async () => {
     const { container } = renderReview();
-    await waitFor(() => expect(screen.getByText('Hickory Wood')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Hickory')).toBeInTheDocument());
 
     // The axis is read rather than the paths: a string reading that slipped
     // through uncoerced would still be drawn somewhere, but the axis it was
@@ -140,7 +140,7 @@ describe('the review of a smoke whose readings come back newest-first', () => {
 
   it('rules its clock forwards, across the hours the cook covers', async () => {
     const { container } = renderReview(newestFirst);
-    await waitFor(() => expect(screen.getByText('Hickory Wood')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Hickory')).toBeInTheDocument());
 
     const axis = timeAxisOf(container);
 
@@ -154,7 +154,7 @@ describe('the review of a smoke whose readings come back newest-first', () => {
 
   it('draws the cook across the plot, from its left edge to its right', async () => {
     const { container } = renderReview(newestFirst);
-    await waitFor(() => expect(screen.getByText('Hickory Wood')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Hickory')).toBeInTheDocument());
 
     const xs = Array.from(container.querySelectorAll('path[data-series]'))
       .flatMap(line => (line.getAttribute('d') ?? '').match(/-?\d+(\.\d+)?(?=,)/g) ?? [])

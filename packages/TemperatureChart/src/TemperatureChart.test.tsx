@@ -141,6 +141,20 @@ describe('the frame around the cook', () => {
     expect(swatches).toHaveLength(4);
     expect(swatches[0]).toHaveStyle({ backgroundColor: colors.chamber });
   });
+
+  /**
+   * A caller that names the probes itself — the history review says "Not used"
+   * where the chart would say "Probe 2" — turns the built-in legend off, so the
+   * reader is not shown the same probe under two names a few pixels apart.
+   */
+  it('leaves the legend out for a caller that draws its own', () => {
+    const { container } = render(
+      <TemperatureChart data={cook} names={names} colors={colors} legend={false} />
+    );
+
+    expect(container.querySelectorAll('[data-legend-swatch]')).toHaveLength(0);
+    expect(screen.queryByText(names.probe1)).not.toBeInTheDocument();
+  });
 });
 
 /**
@@ -514,5 +528,55 @@ describe('a cook dated with strings', () => {
         formatClock(cook[1].date)
       )
     ).toBeInTheDocument();
+  });
+});
+
+/**
+ * A finished cook is read back with the one target that was actually in force —
+ * snapshotted when the smoke ended, not tied to any probe's settings row. It is
+ * drawn as its own line, in the label colour, so it reads as the plan the whole
+ * cook was run against rather than as any single probe's.
+ */
+describe('the snapshotted target line', () => {
+  const snapshotLine = (container: HTMLElement): SVGLineElement | null =>
+    container.querySelector<SVGLineElement>('line[data-target="snapshot"]');
+
+  it('draws one dashed line at the snapshotted temperature, labelled with it', () => {
+    const { container } = render(
+      <TemperatureChart data={cook} names={names} colors={colors} target={203} />
+    );
+
+    const line = snapshotLine(container);
+    expect(line).not.toBeNull();
+    expect(line?.getAttribute('stroke')).toBe(colors.label);
+    expect(line?.getAttribute('stroke-dasharray')).toBeTruthy();
+    expect(screen.getByText('TARGET 203°')).toBeInTheDocument();
+  });
+
+  it('keeps a snapshot above the cook inside the plot', () => {
+    const labelled = (container: HTMLElement): number[] =>
+      Array.from(container.querySelectorAll('text[data-temp-label]')).map(label =>
+        Number(label.getAttribute('data-temp-label'))
+      );
+
+    const { container } = render(
+      <TemperatureChart data={cook} names={names} colors={colors} target={400} />
+    );
+
+    expect(Math.max(...labelled(container))).toBeGreaterThanOrEqual(400);
+  });
+
+  it('draws none when no snapshot was recorded', () => {
+    const { container } = render(<TemperatureChart data={cook} names={names} colors={colors} />);
+
+    expect(snapshotLine(container)).toBeNull();
+  });
+
+  it('treats an unreported snapshot — the wire’s zero — as no snapshot at all', () => {
+    const { container } = render(
+      <TemperatureChart data={cook} names={names} colors={colors} target={0} />
+    );
+
+    expect(snapshotLine(container)).toBeNull();
   });
 });

@@ -164,6 +164,28 @@ const isSmokeStateLoad = (request: Request): boolean =>
 const isPostSmokeLoad = (request: Request): boolean =>
   request.method() === 'GET' && request.url().endsWith('/api/postSmoke/current');
 
+/** A step's own text, safe to embed in the regex that asserts its position. */
+const escapeForRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * The rest a wizard records as `HH:MM`, the way the history detail reads it
+ * back: `01:30` becomes `1h 30m`, and a rest under an hour drops the empty
+ * hours. The journeys keep speaking in the wizard's shape — it is what they
+ * typed — and translate here to what the review is expected to show.
+ */
+const humanizedRestOf = (restTime: string): string => {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(restTime.trim());
+  if (match === null) {
+    throw new Error(
+      `"${restTime}" is not the wizard's HH:MM rest-time shape, so what the review should ` +
+        `show for it cannot be derived`
+    );
+  }
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  return hours === 0 ? `${minutes}m` : `${hours}h ${String(minutes).padStart(2, '0')}m`;
+};
+
 /**
  * Tracks one wizard step's resource loads, so an entry point can hand back a
  * step that has *finished* loading.
@@ -916,7 +938,7 @@ export class FrontendApp {
    * assertion above while showing the operator a cook drawn off the plot.
    */
   async expectReviewChartRendered(): Promise<void> {
-    const card = this.page.getByTestId('review-smoke-card');
+    const card = this.page.getByTestId('review-smoke-section');
     await expect(card.getByRole('img', { name: 'Temperature chart' })).toBeVisible();
     const lines = card.locator('svg path[data-series]');
     await expect(lines).toHaveCount(4);
@@ -1271,13 +1293,13 @@ export class FrontendApp {
    */
   async expectReviewShows(fields: ReviewFields): Promise<void> {
     await expect(this.page.getByTestId('review-presmoke-name')).toHaveText(fields.name);
-    await expect(this.page.getByTestId('review-presmoke-details')).toContainText(fields.meatType);
-    await expect(this.page.getByTestId('review-presmoke-details')).toContainText(fields.weight);
+    await expect(this.page.getByTestId('review-presmoke-meattype')).toHaveText(fields.meatType);
+    await expect(this.page.getByTestId('review-presmoke-weight')).toContainText(fields.weight);
     if (fields.preSmokeSteps !== undefined) {
-      await this.expectReviewSteps('review-presmoke-step', fields.preSmokeSteps);
+      await this.expectReviewSteps('review-presmoke-section', fields.preSmokeSteps);
     }
     if (fields.preSmokeNotes !== undefined) {
-      await this.expectReviewNotes('review-presmoke-notes', fields.preSmokeNotes);
+      await this.expectReviewNotes('review-presmoke-section', fields.preSmokeNotes);
     }
     if (fields.chamberName !== undefined) {
       await expect(this.page.getByTestId('review-smoke-chambername')).toHaveText(
@@ -1290,31 +1312,41 @@ export class FrontendApp {
         await expect(this.page.getByTestId(`review-smoke-probe${probe}name`)).toHaveText(name);
       }
     }
-    await expect(this.page.getByTestId('review-smoke-woodtype')).toContainText(fields.woodType);
+    // The wood the cook ran on reads under "what went in" on the redesigned
+    // detail, so it is asserted where the design put it — the pre-smoke grid.
+    await expect(this.page.getByTestId('review-presmoke-wood')).toHaveText(fields.woodType);
     if (fields.smokeNotes !== undefined) {
-      await this.expectReviewNotes('review-smoke-notes', fields.smokeNotes);
+      await this.expectReviewNotes('review-smoke-section', fields.smokeNotes);
     }
-    await expect(this.page.getByTestId('review-postsmoke-resttime')).toContainText(fields.restTime);
+    await expect(this.page.getByTestId('review-postsmoke-resttime')).toHaveText(
+      humanizedRestOf(fields.restTime)
+    );
     if (fields.postSmokeSteps !== undefined) {
-      await this.expectReviewSteps('review-postsmoke-step', fields.postSmokeSteps);
+      await this.expectReviewSteps('review-postsmoke-section', fields.postSmokeSteps);
     }
     if (fields.postSmokeNotes !== undefined) {
-      await this.expectReviewNotes('review-postsmoke-notes', fields.postSmokeNotes);
+      await this.expectReviewNotes('review-postsmoke-section', fields.postSmokeNotes);
     }
   }
 
   /**
-   * Assert a review card lists exactly `steps`, in order.
+   * Assert a review section lists exactly `steps`, in order.
    *
-   * A card numbers each step as it renders it, so the expected text carries the
-   * position too — which is what makes this an assertion about *order* rather
-   * than about a set of strings that happen to be present.
+   * A section numbers each step as it renders it (a badge, then the step), so
+   * the expected text carries the position too — which is what makes this an
+   * assertion about *order* rather than about a set of strings that happen to
+   * be present. The steps live in the section's own step list, so the lookup is
+   * scoped to the section rather than to the page.
    */
-  private async expectReviewSteps(testId: string, steps: string[]): Promise<void> {
-    const rendered = this.page.getByTestId(testId);
+  private async expectReviewSteps(sectionTestId: string, steps: string[]): Promise<void> {
+    const rendered = this.page.getByTestId(sectionTestId).getByTestId('step-list-step');
     await expect(rendered).toHaveCount(steps.length);
     for (const [index, step] of steps.entries()) {
-      await expect(rendered.nth(index)).toHaveText(`${index + 1}. ${step}`);
+      // The number badge and the step are adjacent nodes, so the rendered text
+      // is the position, optional whitespace, then the step itself.
+      await expect(rendered.nth(index)).toHaveText(
+        new RegExp(`^${index + 1}\\s*${escapeForRegExp(step)}$`)
+      );
     }
   }
 
@@ -1332,14 +1364,16 @@ export class FrontendApp {
    * (The wizard-side reads are the opposite case: `toHaveValue` does not
    * normalise, so those keep asserting the exact text including its newlines.)
    */
-  private async expectReviewNotes(testId: string, notes: string): Promise<void> {
+  private async expectReviewNotes(sectionTestId: string, notes: string): Promise<void> {
     if (notes === '') {
       throw new Error(
-        `cannot assert the "${testId}" notes against an empty string: every card contains one, ` +
-          `so the check would pass no matter what the card shows`
+        `cannot assert the "${sectionTestId}" notes against an empty string: a section with no ` +
+          `note renders no note block, so the check must be handed the words that should be there`
       );
     }
-    await expect(this.page.getByTestId(testId)).toContainText(notes);
+    await expect(this.page.getByTestId(sectionTestId).getByTestId('note-block')).toContainText(
+      notes
+    );
   }
 
   private get overallTasteRating(): Locator {

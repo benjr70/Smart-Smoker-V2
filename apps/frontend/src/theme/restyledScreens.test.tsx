@@ -22,10 +22,10 @@ import { History } from '../components/history/history';
 import { Smoke } from '../components/smoke/smoke';
 import { PostSmokeStep } from '../components/smoke/postSmokeStep/PostSmokeStep';
 import { SmokeStepView } from '../components/smoke/smokeStep/smokeStep';
-import { PostSmokeCard } from '../components/history/smokeCards/postSmokeCard';
-import { PreSmokeCard } from '../components/history/smokeCards/preSmokeCard';
+import { PostSmokeSection } from '../components/history/smokeReview/PostSmokeSection';
+import { PreSmokeSection } from '../components/history/smokeReview/PreSmokeSection';
 import { RatingsCard } from '../components/history/smokeCards/ratingsCard';
-import { SmokeProfileCard } from '../components/history/smokeCards/smokeProfileCard';
+import { SmokeSection } from '../components/history/smokeReview/SmokeSection';
 import { Screens, WeightUnits } from '../components/common/interfaces/enums';
 import { DesignSurface, appTheme, carbonDark, carbonLight } from './index';
 
@@ -87,15 +87,20 @@ describe('the history list', () => {
 });
 
 /**
- * The four cards of the history detail each used to construct a private theme
- * saying "a card is white with round corners", which survived any scheme the
- * application chose. The card treatment is the shared theme's now, so each of
- * them follows the scheme like everything else.
+ * The sections of the history detail take their card surface from the shared
+ * theme rather than painting one of their own, so each follows the scheme like
+ * everything else.
  */
 const reviewCards: [string, JSX.Element][] = [
-  ['review-presmoke-card', <PreSmokeCard preSmoke={preSmoke()} key="pre" />],
-  ['review-smoke-card', <SmokeProfileCard smokeProfile={smokeProfile()} temps={[]} key="smoke" />],
-  ['review-postsmoke-card', <PostSmokeCard postSmoke={postSmoke()} key="post" />],
+  [
+    'review-presmoke-section',
+    <PreSmokeSection preSmoke={preSmoke()} woodType="Hickory" key="pre" />,
+  ],
+  [
+    'review-smoke-section',
+    <SmokeSection smokeProfile={smokeProfile()} temps={[]} timeline={null} key="smoke" />,
+  ],
+  ['review-postsmoke-section', <PostSmokeSection postSmoke={postSmoke()} key="post" />],
   ['review-ratings-card', <RatingsCard ratings={ratings()} key="ratings" />],
 ];
 
@@ -114,48 +119,51 @@ describe.each(reviewCards)('the history detail card %s', (testId, card) => {
 });
 
 /**
- * The same four colours name the probes on the history detail, where they sit on
- * a card rather than on the page.
+ * The legend on the history detail names each probe beside the chart, and the
+ * swatch by the name is the key to the plot: it must be the very colour the
+ * chart strokes that probe's line in, or the legend identifies nothing. The
+ * assertion reads the stroke off the rendered chart rather than naming a hex,
+ * so the two cannot drift apart again. The name itself stays in text colour:
+ * two of the light chart colours do not clear the contrast threshold for
+ * small text on a card.
  */
-describe('the history detail’s probe names', () => {
-  const names: [string, keyof PaletteTokens['probes']][] = [
-    ['review-smoke-chambername', 'chamber'],
-    ['review-smoke-probe1name', 'probe1'],
-    ['review-smoke-probe2name', 'probe2'],
-    ['review-smoke-probe3name', 'probe3'],
+describe('the history detail’s probe legend', () => {
+  const swatches: [string, keyof PaletteTokens['chart']][] = [
+    ['probe-legend-swatch-chamber', 'chamber'],
+    ['probe-legend-swatch-probe1', 'probe1'],
+    ['probe-legend-swatch-probe2', 'probe2'],
+    ['probe-legend-swatch-probe3', 'probe3'],
   ];
 
-  it.each(names)('names %s in the dark scheme’s probe colour', (testId, probe) => {
-    renderUnder('dark', <SmokeProfileCard smokeProfile={smokeProfile()} temps={[]} />);
+  /** The colour the chart in this render actually strokes a series with. */
+  const strokeOf = (container: HTMLElement, series: string): string => {
+    const stroke = container.querySelector(`path[data-series="${series}"]`)?.getAttribute('stroke');
+    if (!stroke) throw new Error(`the chart drew no ${series} line`);
+    return stroke;
+  };
 
-    expect(screen.getByTestId(testId)).toHaveStyle({ color: carbonDark.probes[probe] });
-  });
-
-  it.each(names)('names %s in the light scheme’s probe colour', (testId, probe) => {
-    renderUnder('light', <SmokeProfileCard smokeProfile={smokeProfile()} temps={[]} />);
-
-    expect(screen.getByTestId(testId)).toHaveStyle({ color: carbonLight.probes[probe] });
-  });
-});
-
-/**
- * The names are read against a card, in the probe colours, so they are held to
- * the threshold the palette promises them: large and bold. Set any smaller and
- * two of the light probe colours stop being readable text on a white card.
- */
-describe('the history detail’s probe names as text', () => {
-  it('sets them large and bold, which is what their colours are chosen for', () => {
-    renderUnder('light', <SmokeProfileCard smokeProfile={smokeProfile()} temps={[]} />);
-
-    ['review-smoke-chambername', 'review-smoke-probe1name', 'review-smoke-probe2name'].forEach(
-      testId => {
-        const name = screen.getByTestId(testId);
-
-        // WCAG counts text large from 14pt — 18.66px — when it is bold.
-        expect(parseFloat(getComputedStyle(name).fontSize)).toBeGreaterThanOrEqual(18.66);
-        expect(parseInt(getComputedStyle(name).fontWeight, 10)).toBeGreaterThanOrEqual(700);
-      }
+  it.each(swatches)('paints %s in the very colour the dark chart draws it', (testId, probe) => {
+    const { container } = renderUnder(
+      'dark',
+      <SmokeSection smokeProfile={smokeProfile()} temps={[]} timeline={null} />
     );
+
+    expect(screen.getByTestId(testId)).toHaveStyle({
+      backgroundColor: strokeOf(container, probe),
+    });
+    expect(strokeOf(container, probe)).toBe(carbonDark.chart[probe]);
+  });
+
+  it.each(swatches)('paints %s in the very colour the light chart draws it', (testId, probe) => {
+    const { container } = renderUnder(
+      'light',
+      <SmokeSection smokeProfile={smokeProfile()} temps={[]} timeline={null} />
+    );
+
+    expect(screen.getByTestId(testId)).toHaveStyle({
+      backgroundColor: strokeOf(container, probe),
+    });
+    expect(strokeOf(container, probe)).toBe(carbonLight.chart[probe]);
   });
 });
 
@@ -168,7 +176,10 @@ describe('the history detail’s probe names as text', () => {
  */
 describe('the temperature chart', () => {
   const screensWithAChart: [string, () => JSX.Element][] = [
-    ['the history detail', () => <SmokeProfileCard smokeProfile={smokeProfile()} temps={[]} />],
+    [
+      'the history detail',
+      () => <SmokeSection smokeProfile={smokeProfile()} temps={[]} timeline={null} />,
+    ],
     ['the smoke step', () => liveSmokeStep()],
   ];
 
@@ -230,7 +241,7 @@ describe('the temperature chart', () => {
       'light',
       <>
         <Repainter />
-        <SmokeProfileCard smokeProfile={smokeProfile()} temps={[]} />
+        <SmokeSection smokeProfile={smokeProfile()} temps={[]} timeline={null} />
       </>
     );
     const plot = container.querySelector('svg');

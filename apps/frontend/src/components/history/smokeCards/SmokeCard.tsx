@@ -3,27 +3,7 @@ import React from 'react';
 import { SmokeHistory } from '../../../api/types';
 import { TrashIcon } from '../../common/components/DesignIcons';
 import { StarRating } from '../../common/components/StarRating';
-
-/** Milliseconds in the units a cook is talked about in. */
-const MINUTE = 60 * 1000;
-const HOUR = 60 * MINUTE;
-
-/**
- * How long the cook ran, in the design's `6h 20m`.
- *
- * A cook whose length is not known — a session finished before the timestamps
- * existed, or one with no readings to derive it from — is tagged with an
- * em-dash. Showing `0h 00m` would be a claim about the cook rather than an
- * admission about the record.
- */
-const formatCookDuration = (durationMs: number | null): string => {
-  if (durationMs === null || !Number.isFinite(durationMs) || durationMs < 0) {
-    return '—';
-  }
-  const hours = Math.floor(durationMs / HOUR);
-  const minutes = Math.floor((durationMs % HOUR) / MINUTE);
-  return `${hours}h ${String(minutes).padStart(2, '0')}m`;
-};
+import { formatCookDuration } from '../../common/timeFormat';
 
 export interface SmokeCardProps {
   /** The cook this card is about. */
