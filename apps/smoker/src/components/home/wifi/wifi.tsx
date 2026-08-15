@@ -1,7 +1,7 @@
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import WifiIcon from '@mui/icons-material/Wifi';
 import WifiOffIcon from '@mui/icons-material/WifiOff';
-import { Button, IconButton, Typography } from '@mui/material';
+import { Button, ButtonBase, IconButton, Typography } from '@mui/material';
 import React, { useEffect, useState } from 'react';
 import { connectToWiFi, getConnection } from '../../../services/deviceService';
 import { VirtualKeyboard } from '../../keyboard/VirtualKeyboard';
@@ -42,8 +42,28 @@ const statusLabel = (state: ConnectionState): string => {
 };
 
 /**
+ * Why a connect attempt failed, in the words the header can show. The device
+ * service speaks axios errors, so the service's own message is preferred, then
+ * the error's, then a generic line — each step checked rather than assumed,
+ * because the value in a catch is whatever the network layer threw.
+ */
+const failureReason = (e: unknown): string => {
+  if (typeof e === 'object' && e !== null) {
+    const maybeAxiosError = e as { response?: { data?: { error?: unknown } }; message?: unknown };
+    const serviceError = maybeAxiosError.response?.data?.error;
+    if (typeof serviceError === 'string' && serviceError.length > 0) {
+      return serviceError;
+    }
+    if (typeof maybeAxiosError.message === 'string' && maybeAxiosError.message.length > 0) {
+      return maybeAxiosError.message;
+    }
+  }
+  return 'Connection error';
+};
+
+/**
  * One tappable entry field: a label over the value being typed, with a blinking
- * caret while it is the field the keyboard feeds. A real button, because a tap
+ * caret while it is the field the keyboard feeds. A button, because a tap
  * is all it responds to — there is no browser text input underneath; the
  * on-screen keyboard is the only way characters arrive.
  */
@@ -57,8 +77,8 @@ interface FieldProps {
 
 function Field({ label, value, active, masked, onActivate }: FieldProps): JSX.Element {
   return (
-    <button
-      type="button"
+    <ButtonBase
+      component="button"
       className={active ? 'wifiField wifiFieldActive' : 'wifiField'}
       onClick={onActivate}
     >
@@ -67,7 +87,7 @@ function Field({ label, value, active, masked, onActivate }: FieldProps): JSX.El
         {masked ? '•'.repeat(value.length) : value}
         {active && <span className="wifiCaret" data-testid="wifi-caret" aria-hidden="true" />}
       </span>
-    </button>
+    </ButtonBase>
   );
 }
 
@@ -124,16 +144,24 @@ export function Wifi(props: WifiProps): JSX.Element {
     setConnection({ kind: 'connecting' });
     try {
       await connectToWiFi({ ssid, password });
-      const result = await getConnection();
-      const connectedSsid = result && result.length > 0 ? result[0].ssid : ssid;
-      setConnection({ kind: 'connected', ssid: connectedSsid });
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.log(e);
-      setConnection({
-        kind: 'failed',
-        reason: e?.response?.data?.error || e?.message || 'Connection error',
-      });
+      setConnection({ kind: 'failed', reason: failureReason(e) });
+      return;
     }
+    // The join itself succeeded. The follow-up read only refines the network's
+    // name — if it comes back empty or fails outright (the device is mid
+    // network switch), the attempt is still a success, reported as typed.
+    let connectedSsid = ssid;
+    try {
+      const result = await getConnection();
+      if (result && result.length > 0) {
+        connectedSsid = result[0].ssid;
+      }
+    } catch (e: unknown) {
+      console.log(e);
+    }
+    setConnection({ kind: 'connected', ssid: connectedSsid });
   };
 
   const connected = connection.kind === 'connected';

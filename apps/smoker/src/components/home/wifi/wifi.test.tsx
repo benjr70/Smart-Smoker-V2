@@ -243,6 +243,26 @@ describe('the connection status', () => {
     consoleLogSpy.mockRestore();
   });
 
+  it('still reports connected, as entered, when the post-connect read fails', async () => {
+    const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
+    mockConnectToWiFi.mockResolvedValue({ success: true });
+    // The mount-time read finds nothing; the verification read after the join
+    // throws — the device is mid network switch. The join itself succeeded.
+    mockGetConnection
+      .mockResolvedValueOnce([])
+      .mockRejectedValueOnce(new Error('device busy switching networks'));
+    renderWifi();
+
+    tap('h');
+    tap('q');
+    fireEvent.click(screen.getByRole('button', { name: /^connect$/i }));
+
+    await screen.findByText('Connected: hq');
+    expect(screen.getByTestId('wifi-status')).toHaveClass('wifiStatus-connected');
+
+    consoleLogSpy.mockRestore();
+  });
+
   it('names the network as entered when the post-connect read comes back empty', async () => {
     mockConnectToWiFi.mockResolvedValue({ success: true });
     mockGetConnection.mockResolvedValue([]);

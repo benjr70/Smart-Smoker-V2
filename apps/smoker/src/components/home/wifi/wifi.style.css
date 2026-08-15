@@ -60,8 +60,10 @@
 /*
  * An entry field is a button — a tap is all it answers; the on-screen keyboard
  * below is the only way characters arrive. The active one wears the accent.
+ * The field is an MUI ButtonBase, whose root class zeroes padding and border at
+ * single-class strength; these rules ride on the row's class to outweigh it.
  */
-.wifiField {
+.wifiFieldRow .wifiField {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -76,7 +78,7 @@
   color: var(--mui-design-text);
 }
 
-.wifiFieldActive {
+.wifiFieldRow .wifiFieldActive {
   border-color: var(--mui-design-accent);
   box-shadow: 0 0 0 3px var(--mui-design-accentTint, rgba(218, 74, 46, 0.12));
 }
@@ -117,6 +119,8 @@
 
 .wifiKeyboard {
   flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 /* The version line, bottom-right as it has always been. */
@@ -129,8 +133,9 @@
 /*
  * The on-screen keyboard ships its own light theme — an off-white slab with
  * white keys — which is the largest thing on this screen and the one part of it
- * the component library cannot reach. Only its colours are overridden; every
- * size, radius and gap is left to the library. This file is imported after the
+ * the component library cannot reach. Its colours are overridden to the shared
+ * tokens here, and its geometry is restyled to the mock further down, both
+ * through the library's own CSS hooks. This file is imported after the
  * keyboard's own stylesheet, so these win at equal specificity.
  *
  * The keys keep the relationship the library gave them: they stand out of the
@@ -157,4 +162,75 @@
 .hg-theme-default .hg-button.hg-activeButton {
   background-color: var(--mui-design-accent);
   color: var(--mui-design-background);
+}
+
+/*
+ * The mock's keyboard geometry, sized for the 800×480 panel — the slice-10
+ * restyle DECISION.md (components/keyboard) defers here. Scoped to the wifi
+ * screen's keyboard well, through the same library hooks the colours use:
+ * `.hg-row` for the rows, `.hg-button` (and `data-skbtn`) for the keys.
+ */
+.wifiKeyboard .hg-theme-default {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 8px;
+  border-radius: 12px;
+}
+
+.wifiKeyboard .hg-theme-default .hg-row {
+  display: flex;
+  flex: 1;
+  gap: 6px;
+  margin: 0 0 6px;
+}
+
+.wifiKeyboard .hg-theme-default .hg-row:last-child {
+  margin-bottom: 0;
+}
+
+/* Thumb-sized caps: taller than the library default, evenly stretched. */
+.wifiKeyboard .hg-theme-default .hg-button {
+  flex: 1 1 0;
+  height: auto;
+  min-height: 48px;
+  margin: 0;
+  font-size: 1.15rem;
+  border-radius: 8px;
+}
+
+/*
+ * The mock indents the letter home row by half a key on both ends. The library
+ * names each visible layer on its wrapper, so the symbols layer — whose third
+ * row runs full width — is left alone.
+ */
+.wifiKeyboard .hg-layout-lower .hg-row:nth-child(3),
+.wifiKeyboard .hg-layout-upper .hg-row:nth-child(3) {
+  padding: 0 4.5%;
+}
+
+/*
+ * The functional caps, per the mock: shift and backspace enlarged to anchor the
+ * bottom letter row, the layer switch wider than a letter, the space bar
+ * spanning most of its row. Their darker face comes from an existing hairline
+ * token, so both schemes read them as a shade apart from the typing keys.
+ */
+.wifiKeyboard .hg-theme-default .hg-button[data-skbtn='{shift}'],
+.wifiKeyboard .hg-theme-default .hg-button[data-skbtn='{bksp}'] {
+  flex-grow: 1.6;
+  background-color: var(--mui-design-inputBorder);
+}
+
+.wifiKeyboard .hg-theme-default .hg-button[data-skbtn='{symbols}'],
+.wifiKeyboard .hg-theme-default .hg-button[data-skbtn='{abc}'] {
+  flex-grow: 1.5;
+  max-width: 20%;
+  background-color: var(--mui-design-inputBorder);
+  font-size: 1rem;
+}
+
+.wifiKeyboard .hg-theme-default .hg-button[data-skbtn='{space}'] {
+  flex-grow: 6;
+  font-size: 1rem;
 }
