@@ -100,13 +100,13 @@ describe('typing routes to the focused field', () => {
     renderWifi();
 
     // The network field starts active and carries the caret.
-    expect(networkField().className).toContain('wifiFieldActive');
-    expect(passwordField().className).not.toContain('wifiFieldActive');
+    expect(networkField()).toHaveClass('wifiFieldActive');
+    expect(passwordField()).not.toHaveClass('wifiFieldActive');
     expect(within(networkField()).getByTestId('wifi-caret')).toBeInTheDocument();
 
     fireEvent.click(passwordField());
-    expect(passwordField().className).toContain('wifiFieldActive');
-    expect(networkField().className).not.toContain('wifiFieldActive');
+    expect(passwordField()).toHaveClass('wifiFieldActive');
+    expect(networkField()).not.toHaveClass('wifiFieldActive');
     expect(within(passwordField()).getByTestId('wifi-caret')).toBeInTheDocument();
     expect(within(networkField()).queryByTestId('wifi-caret')).not.toBeInTheDocument();
 
@@ -167,7 +167,7 @@ describe('the connection status', () => {
     renderWifi();
 
     await screen.findByText('Connected: HomeNet');
-    expect(screen.getByTestId('wifi-status').className).toContain('wifiStatus-connected');
+    expect(screen.getByTestId('wifi-status')).toHaveClass('wifiStatus-connected');
   });
 
   it('shows not-connected when nothing is connected at mount', async () => {
@@ -175,7 +175,7 @@ describe('the connection status', () => {
     renderWifi();
 
     await screen.findByText('Not connected');
-    expect(screen.getByTestId('wifi-status').className).toContain('wifiStatus-idle');
+    expect(screen.getByTestId('wifi-status')).toHaveClass('wifiStatus-idle');
   });
 
   it('walks connecting → connected through a successful attempt', async () => {
@@ -193,14 +193,14 @@ describe('the connection status', () => {
     fireEvent.click(screen.getByRole('button', { name: /^connect$/i }));
 
     await screen.findByText('Connecting…');
-    expect(screen.getByTestId('wifi-status').className).toContain('wifiStatus-connecting');
+    expect(screen.getByTestId('wifi-status')).toHaveClass('wifiStatus-connecting');
     // While connecting, the button is held down so a second tap cannot overlap.
     expect(screen.getByRole('button', { name: /^connect$/i })).toBeDisabled();
 
     finishConnect({ success: true });
 
     await screen.findByText('Connected: NewNet');
-    expect(screen.getByTestId('wifi-status').className).toContain('wifiStatus-connected');
+    expect(screen.getByTestId('wifi-status')).toHaveClass('wifiStatus-connected');
   });
 
   it('shows the failure reason from the device service in the failed state', async () => {
@@ -212,7 +212,7 @@ describe('the connection status', () => {
     fireEvent.click(screen.getByRole('button', { name: /^connect$/i }));
 
     await screen.findByText('Invalid credentials');
-    expect(screen.getByTestId('wifi-status').className).toContain('wifiStatus-failed');
+    expect(screen.getByTestId('wifi-status')).toHaveClass('wifiStatus-failed');
   });
 
   it('falls back to the error message, then a generic reason, when the failure carries less', async () => {
