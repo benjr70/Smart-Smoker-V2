@@ -1,12 +1,129 @@
 /*
  * Colours come from the shared theme's custom properties, which the application
- * root puts on `:root` (see src/theme/DeviceThemeProvider.tsx). Layout rules are
- * untouched.
+ * root puts on `:root` (see src/theme/DeviceThemeProvider.tsx), so the screen
+ * reads the same in either scheme without naming a hex value of its own.
  */
 
-.button {
-  height: 50px;
-  width: 125px;
+.wifiScreen {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 100vh;
+  padding: 8px 12px;
+  box-sizing: border-box;
+}
+
+/* Header: back, title, live status on the right. */
+.wifiHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wifiTitle {
+  flex: 1;
+  font-weight: 700;
+}
+
+.wifiStatus {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+/* The status colours, per state, from the shared tokens. */
+.wifiStatus-connected {
+  color: var(--mui-design-success);
+}
+
+.wifiStatus-connecting {
+  color: var(--mui-design-accent);
+}
+
+.wifiStatus-failed {
+  color: var(--mui-design-danger);
+}
+
+.wifiStatus-idle {
+  color: var(--mui-design-textSecondary);
+}
+
+/* The field row: NETWORK, PASSWORD, Connect. */
+.wifiFieldRow {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  margin: 8px 0;
+}
+
+/*
+ * An entry field is a button — a tap is all it answers; the on-screen keyboard
+ * below is the only way characters arrive. The active one wears the accent.
+ */
+.wifiField {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 6px 12px;
+  text-align: left;
+  font: inherit;
+  background-color: var(--mui-design-surface);
+  border: 2px solid var(--mui-design-inputBorder);
+  border-radius: 8px;
+  color: var(--mui-design-text);
+}
+
+.wifiFieldActive {
+  border-color: var(--mui-design-accent);
+  box-shadow: 0 0 0 3px var(--mui-design-accentTint, rgba(218, 74, 46, 0.12));
+}
+
+.wifiFieldLabel {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--mui-design-textSecondary);
+}
+
+.wifiFieldValue {
+  display: flex;
+  align-items: center;
+  min-height: 1.4em;
+  font-size: 1.1rem;
+}
+
+/* The blinking caret in whichever field the keyboard feeds. */
+.wifiCaret {
+  display: inline-block;
+  width: 2px;
+  height: 1.2em;
+  margin-left: 2px;
+  background-color: var(--mui-design-accent);
+  animation: wifiCaretBlink 1s steps(1) infinite;
+}
+
+@keyframes wifiCaretBlink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.wifiConnectButton {
+  min-width: 125px;
+}
+
+.wifiKeyboard {
+  flex: 1;
+}
+
+/* The version line, bottom-right as it has always been. */
+.wifiVersion {
+  align-self: flex-end;
+  font-size: 0.75rem;
+  color: var(--mui-design-textSecondary);
 }
 
 /*
