@@ -45,11 +45,11 @@ Peer names are **not** hardcoded in workflows or this skill. They live in four
 GitHub Actions repository variables (Settings → Secrets and variables → Actions
 → Variables) and are consumed by the deploy workflows + scripts (issue #189):
 
-| Variable            | Example                                            | Read by                                                                 |
-| ------------------- | -------------------------------------------------- | ----------------------------------------------------------------------- |
+| Variable            | Example                                                | Read by                                                                 |
+| ------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------- |
 | `DEV_CLOUD_HOST`    | `smart-smoker-dev-cloud`                               | `.github/workflows/dev-deploy.yml`                                      |
 | `DEV_CLOUD_FQDN`    | `smart-smoker-dev-cloud.tail74646.ts.net`              | `.github/workflows/publish.yml` (nightly smoker `.env.prod`)            |
-| `DEVICE_HOST`       | `virtual-smoker`                                   | `.github/workflows/device-deploy.yml`                                   |
+| `DEVICE_HOST`       | `virtual-smoker`                                       | `.github/workflows/device-deploy.yml`                                   |
 | `CLOUD_BACKEND_URL` | `https://smart-smoker-dev-cloud.tail74646.ts.net:8443` | `dev-deploy.yml`, `device-deploy.yml`, `scripts/device-health-check.sh` |
 
 The runtime fallback when these are missing or drift after re-provisioning is

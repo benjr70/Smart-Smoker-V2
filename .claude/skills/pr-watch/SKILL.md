@@ -108,14 +108,14 @@ For the fix-loop, the implementer needs:
 Fetch 1 and 2 in a single Bash call, then bundle all three into a single context
 blob the implementer prompt embeds verbatim.
 
-### 4. Spawn implementer (Fable, medium effort)
+### 4. Spawn implementer (Opus, medium effort)
 
 Use the `Agent` tool. Subagent is the project's `implementer` definition
-(already pinned to Fable at medium effort, allowlist
+(already pinned to Opus at medium effort, allowlist
 Edit/Write/Bash/Read/Grep/Glob).
 
 - `subagent_type: implementer`
-- `model: fable`
+- `model: opus`
 - `run_in_background: false` ← blocking; we need the fix before next poll
 - `prompt`:
 

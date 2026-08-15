@@ -177,8 +177,8 @@ If the user passed `--dry-run`:
 === /team-dispatch <prd>: dry run ===
 
 Roster:
-  - implementer (fable, Edit/Write/Bash/Read/Grep/Glob)
-  - reviewer    (fable, Read/Grep/Glob/Bash — no Edit/Write)
+  - implementer (opus, Edit/Write/Bash/Read/Grep/Glob)
+  - reviewer    (opus, Read/Grep/Glob/Bash — no Edit/Write)
   - verifier    (opus, Read/Bash)
   - researcher  (fable, Read/Grep/Glob/WebFetch — spawned on-demand)
 
