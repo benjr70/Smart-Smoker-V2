@@ -22,6 +22,13 @@ export interface SmokeProfile {
 /** The persisted smoking flag, as returned by the state endpoints. */
 export interface SmokingState {
   smoking: boolean;
+  /**
+   * The id of the smoke the state document points at, when the backend names
+   * one (a fresh installation has no smoke to name). Carried so reads about
+   * that smoke — its start stamp, today — can be made directly, instead of
+   * each one re-reading the state to learn which smoke it is about.
+   */
+  smokeId?: string;
 }
 
 /**

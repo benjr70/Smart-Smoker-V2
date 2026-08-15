@@ -240,6 +240,20 @@ describe('session store — smoker role', () => {
       expect(harness.store.getSnapshot().startedAt).toEqual(STARTED);
     });
 
+    it('reads the stamp for the cook the state read already named, rather than re-deriving it', async () => {
+      const harness = createTestHarness({ role: 'smoker' });
+      harness.api.seedSmokeId('s1').seedCookStart(STARTED);
+
+      harness.store.start();
+      await harness.flush();
+
+      // The startup state read said which smoke this is; the stamp read is
+      // handed that id rather than sent to work the session out again — on the
+      // wire, one GET of the timeline instead of a second GET of the state.
+      expect(harness.store.getSnapshot().startedAt).toEqual(STARTED);
+      expect(harness.api.calls).toContainEqual({ method: 'getCookStart', args: ['s1'] });
+    });
+
     it('re-reads the stamp after toggling smoking, because starting is what writes it', async () => {
       const harness = createTestHarness({ role: 'smoker' });
       harness.store.start();

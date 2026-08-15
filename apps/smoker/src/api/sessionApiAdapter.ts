@@ -18,15 +18,19 @@ export const createSessionApi = (client: ApiClient): SessionApiPort => ({
   },
   getSmokingState: async (): Promise<SmokingState> => {
     const state = await client.state.getState();
-    return { smoking: state.smoking };
+    return { smoking: state.smoking, smokeId: state.smokeId };
   },
   toggleSmoking: async (): Promise<SmokingState> => {
     const state = await client.state.toggleSmoking();
-    return { smoking: state.smoking };
+    return { smoking: state.smoking, smokeId: state.smokeId };
   },
   getCurrentTemps: (): Promise<BatchTempDto[]> => client.temps.getCurrent(),
-  getCookStart: async (): Promise<Date | null> => {
-    const timeline = await client.timeline.getCurrent();
+  getCookStart: async (smokeId?: string): Promise<Date | null> => {
+    // A caller that already knows the smoke reads its stamp directly; one
+    // that does not lets the client compose the state read itself.
+    const timeline = smokeId
+      ? await client.timeline.getById(smokeId)
+      : await client.timeline.getCurrent();
     return timeline?.startedAt ?? null;
   },
   postTempsBatch: (batch: BatchTempDto[]): Promise<void> => client.temps.postBatch(batch),

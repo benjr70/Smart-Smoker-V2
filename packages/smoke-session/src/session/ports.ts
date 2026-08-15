@@ -60,8 +60,14 @@ export interface SessionApiPort {
    * has been recorded (no session, or a session never started). The stamp is
    * a fact about the cook read from the backend, never remembered locally, so
    * an elapsed clock derived from it survives a host restart.
+   *
+   * When the caller has just learned which smoke the state points at (a state
+   * load, a toggle), it passes the id and the adapter reads that cook's stamp
+   * directly. With no id — a remote flip, whose frame carries no id — the
+   * adapter works the current session out itself, at the cost of the state
+   * read that entails.
    */
-  getCookStart(): Promise<Date | null>;
+  getCookStart(smokeId?: string): Promise<Date | null>;
   /** Persist a batch of buffered readings (used by the smoker role). */
   postTempsBatch(batch: BatchTempDto[]): Promise<void>;
 }

@@ -139,6 +139,7 @@ export class FakeSessionApi implements SessionApiPort {
   private smoking = false;
   private temps: BatchTempDto[] = [];
   private cookStart: Date | null = null;
+  private smokeId?: string;
   private readonly failing = new Set<keyof SessionApiPort>();
   private postGate: Promise<void> | null = null;
   private releasePostGate: (() => void) | null = null;
@@ -164,6 +165,12 @@ export class FakeSessionApi implements SessionApiPort {
   /** Seed the recorded cook start returned by {@link getCookStart}. */
   seedCookStart(startedAt: Date | null): this {
     this.cookStart = startedAt;
+    return this;
+  }
+
+  /** Seed the id the state document names its smoke by. */
+  seedSmokeId(smokeId: string): this {
+    this.smokeId = smokeId;
     return this;
   }
 
@@ -195,14 +202,14 @@ export class FakeSessionApi implements SessionApiPort {
   async getSmokingState(): Promise<SmokingState> {
     this.calls.push({ method: 'getSmokingState', args: [] });
     this.guard('getSmokingState');
-    return { smoking: this.smoking };
+    return { smoking: this.smoking, smokeId: this.smokeId };
   }
 
   async toggleSmoking(): Promise<SmokingState> {
     this.calls.push({ method: 'toggleSmoking', args: [] });
     this.guard('toggleSmoking');
     this.smoking = !this.smoking;
-    return { smoking: this.smoking };
+    return { smoking: this.smoking, smokeId: this.smokeId };
   }
 
   async getCurrentTemps(): Promise<BatchTempDto[]> {
@@ -211,8 +218,8 @@ export class FakeSessionApi implements SessionApiPort {
     return this.temps;
   }
 
-  async getCookStart(): Promise<Date | null> {
-    this.calls.push({ method: 'getCookStart', args: [] });
+  async getCookStart(smokeId?: string): Promise<Date | null> {
+    this.calls.push({ method: 'getCookStart', args: smokeId === undefined ? [] : [smokeId] });
     this.guard('getCookStart');
     return this.cookStart;
   }

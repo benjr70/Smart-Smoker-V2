@@ -53,12 +53,12 @@ describe('session API adapter (SessionApiPort over the deep client)', () => {
     expect(cloud.store.smokeProfile.current).toEqual(profile);
   });
 
-  it('getSmokingState projects the state document down to the smoking flag', async () => {
+  it('getSmokingState projects the state document down to the smoking flag and its smoke', async () => {
     const { port } = buildPort({ state: { smokeId: 's1', smoking: true } });
 
     const result = await port.getSmokingState();
 
-    expect(result).toEqual({ smoking: true });
+    expect(result).toEqual({ smoking: true, smokeId: 's1' });
   });
 
   it('toggleSmoking flips the flag and returns the new smoking state', async () => {
@@ -66,7 +66,7 @@ describe('session API adapter (SessionApiPort over the deep client)', () => {
 
     const result = await port.toggleSmoking();
 
-    expect(result).toEqual({ smoking: true });
+    expect(result).toEqual({ smoking: true, smokeId: 's1' });
   });
 
   // The port projects `{ smoking: state.smoking }` off the raw result, so an
@@ -121,6 +121,19 @@ describe('session API adapter (SessionApiPort over the deep client)', () => {
     const { port } = buildPort({ state: null });
 
     await expect(port.getCookStart()).resolves.toBeNull();
+  });
+
+  it('getCookStart reads a named cook’s stamp directly, without consulting the state', async () => {
+    // No state seeded at all: with the id in hand there is nothing to consult
+    // it for, so the read succeeds anyway — and costs one request, not two.
+    const { port } = buildPort({
+      state: null,
+      timeline: { s1: { startedAt: '2026-08-15T10:00:00.000Z', finishedAt: null } },
+    });
+
+    const startedAt = await port.getCookStart('s1');
+
+    expect(startedAt?.getTime()).toBe(new Date('2026-08-15T10:00:00.000Z').getTime());
   });
 
   it('getCookStart resolves null when the cook has no recorded start', async () => {

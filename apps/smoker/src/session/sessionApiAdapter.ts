@@ -72,17 +72,17 @@ export function createSmokerSessionApi(): SessionApiPort {
     },
     async getSmokingState(): Promise<SmokingState> {
       const state = await getState();
-      return { smoking: state.smoking };
+      return { smoking: state.smoking, smokeId: state.smokeId };
     },
     async toggleSmoking(): Promise<SmokingState> {
       const state = await toggleSmokingService();
-      return { smoking: state.smoking };
+      return { smoking: state.smoking, smokeId: state.smokeId };
     },
     async getCurrentTemps(): Promise<BatchTempDto[]> {
       return asStoredCook(await getCurrentTemps());
     },
-    getCookStart(): Promise<Date | null> {
-      return getCookStartService();
+    getCookStart(smokeId?: string): Promise<Date | null> {
+      return getCookStartService(smokeId);
     },
     async postTempsBatch(batch: BatchTempDto[]): Promise<void> {
       await postTempsBatch(batch);

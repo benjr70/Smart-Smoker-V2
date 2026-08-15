@@ -118,11 +118,15 @@ export interface CookTimeline {
 }
 
 export interface TimelineResource {
+  /** GET `timeline/:id` — a named cook's timing, its stamp revived to a date. */
+  getById(smokeId: string): Promise<CookTimeline>;
   /**
    * The timing of the cook set up right now, or `null` when there is no
-   * session. Composed from the session state, because the cook this panel is
-   * relaying is whichever one the state points to — the same composition the
-   * web client makes for its own elapsed clock.
+   * session. Composed from the state resource's own read, because the cook
+   * this panel is relaying is whichever one the state points to — the same
+   * composition the web client makes for its own elapsed clock. A caller that
+   * already knows the smoke's id reads {@link getById} instead and spares the
+   * state round-trip.
    */
   getCurrent(): Promise<CookTimeline | null>;
 }
@@ -168,77 +172,85 @@ const isEmptyProfile = (raw: SmokeProfile | null | undefined): boolean =>
 export const createApiClient = (
   cloudTransport: TransportPort,
   deviceTransport: TransportPort
-): ApiClient => ({
-  state: {
+): ApiClient => {
+  const state: StateResource = {
     getState: () => cloudTransport.get<State>('state'),
     toggleSmoking: () => cloudTransport.put<State>('state/toggleSmoking'),
-  },
-  smokeProfile: {
+  };
+  const timeline: TimelineResource = {
+    getById: async (smokeId: string) => {
+      const stored = await cloudTransport.get<{
+        startedAt?: string | Date | null;
+      } | null>(`timeline/${smokeId}`);
+      return { startedAt: asMoment(stored?.startedAt) };
+    },
     getCurrent: async () => {
-      const raw = await cloudTransport.get<SmokeProfile | null>('smokeProfile/current');
-      return isEmptyProfile(raw) ? null : normalizeProfile(raw as SmokeProfile);
-    },
-    saveCurrent: (profile: SmokeProfile) =>
-      cloudTransport.post<SmokeProfile>('smokeProfile/current', profile),
-  },
-  temps: {
-    getCurrent: () => cloudTransport.get<TempData[]>('temps'),
-    postBatch: async (batch: TempData[]) => {
-      await cloudTransport.post<unknown>('temps/batch', batch);
-    },
-  },
-  device: {
-    connectToWiFi: (creds: WifiManager) =>
-      deviceTransport.post<unknown>('api/wifiManager/connect', creds),
-    getConnection: () => deviceTransport.get<unknown>('api/wifiManager/connection'),
-  },
-  appearance: {
-    get: async () => {
-      // The route answers with a complete document whether or not anything has
-      // ever been chosen, so the only body without an appearance block comes
-      // from a deployment older than the block itself. Both mean "nothing
-      // chosen here", which is the documented default rather than an absence
-      // the touchscreen would have to have an opinion about.
-      const response = await cloudTransport.get<{
-        appearance?: AppearancePreference;
-      } | null>('appSettings');
-      return response?.appearance ?? DEFAULT_APPEARANCE_PREFERENCE;
-    },
-  },
-  timeline: {
-    getCurrent: async () => {
-      // Whichever cook the state points to is the one whose timing matters;
-      // a fresh/reset backend answers `state` with an empty body, which is a
+      // Whichever cook the state points to is the one whose timing matters —
+      // read through the state resource, the one implementation of that read.
+      // A fresh/reset backend answers `state` with an empty body, which is a
       // session that does not exist rather than one that never started.
-      const state = await cloudTransport.get<State | null>('state');
-      if (!state || typeof state !== 'object' || !state.smokeId) {
+      const current = (await state.getState()) as State | null;
+      if (!current || typeof current !== 'object' || !current.smokeId) {
         return null;
       }
-      const timeline = await cloudTransport.get<{
-        startedAt?: string | Date | null;
-      } | null>(`timeline/${state.smokeId}`);
-      return { startedAt: asMoment(timeline?.startedAt) };
+      return timeline.getById(current.smokeId);
     },
-  },
-  probeTargets: {
-    get: async () => {
-      // The same document the appearance comes out of, read for a different
-      // block of it. Two reads rather than one shared read: they happen at
-      // different moments — the appearance at boot, the targets again whenever a
-      // cook starts — and a panel that is switched on for twelve hours can
-      // afford a request per cook far more easily than it can afford the two
-      // being coupled.
-      const response = await cloudTransport.get<{
-        probeTarget?: { probes?: ProbeTargetSetting[] };
-      } | null>('appSettings');
-      return (response?.probeTarget?.probes ?? []).map(({ slot, enabled, target }) => ({
-        slot,
-        enabled,
-        target,
-      }));
+  };
+  return {
+    state,
+    timeline,
+    smokeProfile: {
+      getCurrent: async () => {
+        const raw = await cloudTransport.get<SmokeProfile | null>('smokeProfile/current');
+        return isEmptyProfile(raw) ? null : normalizeProfile(raw as SmokeProfile);
+      },
+      saveCurrent: (profile: SmokeProfile) =>
+        cloudTransport.post<SmokeProfile>('smokeProfile/current', profile),
     },
-  },
-});
+    temps: {
+      getCurrent: () => cloudTransport.get<TempData[]>('temps'),
+      postBatch: async (batch: TempData[]) => {
+        await cloudTransport.post<unknown>('temps/batch', batch);
+      },
+    },
+    device: {
+      connectToWiFi: (creds: WifiManager) =>
+        deviceTransport.post<unknown>('api/wifiManager/connect', creds),
+      getConnection: () => deviceTransport.get<unknown>('api/wifiManager/connection'),
+    },
+    appearance: {
+      get: async () => {
+        // The route answers with a complete document whether or not anything has
+        // ever been chosen, so the only body without an appearance block comes
+        // from a deployment older than the block itself. Both mean "nothing
+        // chosen here", which is the documented default rather than an absence
+        // the touchscreen would have to have an opinion about.
+        const response = await cloudTransport.get<{
+          appearance?: AppearancePreference;
+        } | null>('appSettings');
+        return response?.appearance ?? DEFAULT_APPEARANCE_PREFERENCE;
+      },
+    },
+    probeTargets: {
+      get: async () => {
+        // The same document the appearance comes out of, read for a different
+        // block of it. Two reads rather than one shared read: they happen at
+        // different moments — the appearance at boot, the targets again whenever a
+        // cook starts — and a panel that is switched on for twelve hours can
+        // afford a request per cook far more easily than it can afford the two
+        // being coupled.
+        const response = await cloudTransport.get<{
+          probeTarget?: { probes?: ProbeTargetSetting[] };
+        } | null>('appSettings');
+        return (response?.probeTarget?.probes ?? []).map(({ slot, enabled, target }) => ({
+          slot,
+          enabled,
+          target,
+        }));
+      },
+    },
+  };
+};
 
 /** The cloud API base URL, read once from the environment. */
 const cloudBaseUrl = (): string | undefined => process.env.REACT_APP_CLOUD_URL_API;

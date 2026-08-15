@@ -34,11 +34,11 @@ export function createSessionApiPort(client: ApiClient): SessionApiPort {
       // DB), which serializes to an absent body; coerce to a real boolean so
       // the port contract (`smoking: boolean`) is never violated with
       // `undefined`.
-      return { smoking: state?.smoking ?? false };
+      return { smoking: state?.smoking ?? false, smokeId: state?.smokeId };
     },
     async toggleSmoking(): Promise<SmokingState> {
       const state = await client.state.toggleSmoking();
-      return { smoking: state?.smoking ?? false };
+      return { smoking: state?.smoking ?? false, smokeId: state?.smokeId };
     },
     async getCurrentTemps(): Promise<BatchTempDto[]> {
       const temps = await client.temps.getCurrent();
@@ -48,10 +48,13 @@ export function createSessionApiPort(client: ApiClient): SessionApiPort {
       // `date.getTime()` (per the BatchTempDto contract) never throw.
       return temps.map(temp => ({ ...temp, date: new Date(temp.date) }));
     },
-    async getCookStart(): Promise<Date | null> {
-      // The timeline resource already reads the session state and revives the
-      // stamps into Dates; the port wants only the start.
-      const timeline = await client.timeline.getCurrent();
+    async getCookStart(smokeId?: string): Promise<Date | null> {
+      // The timeline resource revives the stamps into Dates; the port wants
+      // only the start. A caller that already knows the smoke reads its stamp
+      // directly; one that does not lets the resource compose the state read.
+      const timeline = smokeId
+        ? await client.timeline.getById(smokeId)
+        : await client.timeline.getCurrent();
       return timeline?.startedAt ?? null;
     },
     postTempsBatch(): Promise<void> {

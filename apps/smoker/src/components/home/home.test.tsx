@@ -211,8 +211,11 @@ describe('the chart on the home screen', () => {
       // Drawn at the width it is given, rather than at a width of its own...
       expect(plot).toHaveAttribute('width', '100%');
       // ...it comes out short enough for the title above it and the legend
-      // under it to be on the 480px panel with it.
+      // under it to be on the 480px panel with it...
       expect(drawnHeight(plot)).toBeLessThanOrEqual(ROOM);
+      // ...and tall enough to be using the room its card was left, rather than
+      // a strip of it letterboxed over a blank band of card.
+      expect(drawnHeight(plot)).toBeGreaterThan(ROOM * 0.8);
     });
   });
 

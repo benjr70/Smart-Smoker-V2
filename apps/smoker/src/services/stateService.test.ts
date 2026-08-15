@@ -45,6 +45,18 @@ describe('stateService (deprecated shims)', () => {
 
       await expect(getCookStart()).resolves.toBeNull();
     });
+
+    it('reads a named cook’s stamp directly, without consulting the state', async () => {
+      // No state seeded: with the id in hand there is nothing to ask it for.
+      useBackend({
+        state: null,
+        timeline: { s1: { startedAt: '2026-08-15T10:00:00.000Z', finishedAt: null } },
+      });
+
+      const startedAt = await getCookStart('s1');
+
+      expect(startedAt).toEqual(new Date('2026-08-15T10:00:00.000Z'));
+    });
   });
 
   describe('toggleSmoking', () => {

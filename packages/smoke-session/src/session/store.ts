@@ -130,27 +130,33 @@ export function createSessionStore(config: SessionConfig): SessionStore {
     }
   };
 
-  const loadState = async (): Promise<void> => {
-    try {
-      const state = await api.getSmokingState();
-      commit({ smoking: state.smoking });
-    } catch (cause) {
-      surface({ source: 'state', message: errorMessage(cause) });
-    }
-  };
-
   /**
-   * Read the cook's recorded start stamp. A stamp that cannot be read is a
+   * Read the cook's recorded start stamp — for the smoke the caller already
+   * knows the state names, when it knows one, so the adapter is not sent to
+   * re-read the state it was just read from. A stamp that cannot be read is a
    * stamp the session does not have — the elapsed clock a host derives from it
    * is decoration, so the failure never surfaces as a session error and the
    * clock simply reads zero until a later read finds one.
    */
-  const loadCookStart = async (): Promise<void> => {
+  const loadCookStart = async (smokeId?: string): Promise<void> => {
     try {
-      const startedAt = await api.getCookStart();
+      const startedAt = await api.getCookStart(smokeId);
       commit({ startedAt });
     } catch {
       commit({ startedAt: null });
+    }
+  };
+
+  const loadState = async (): Promise<void> => {
+    try {
+      const state = await api.getSmokingState();
+      commit({ smoking: state.smoking });
+      // The stamp read rides on this read's answer: the state just said which
+      // smoke it points at, so the stamp is read for that smoke rather than
+      // spending a second state round-trip working the session out again.
+      void loadCookStart(state.smokeId);
+    } catch (cause) {
+      surface({ source: 'state', message: errorMessage(cause) });
     }
   };
 
@@ -346,8 +352,9 @@ export function createSessionStore(config: SessionConfig): SessionStore {
       commit({ smoking: state.smoking });
       // Starting is what writes the start stamp, so the read that follows the
       // toggle is the one that finds it (and a stopped cook keeps its stamp —
-      // pausing does not un-start a cook).
-      void loadCookStart();
+      // pausing does not un-start a cook). The toggle's answer names the
+      // smoke, so the stamp is read for it directly.
+      void loadCookStart(state.smokeId);
     } catch (cause) {
       // A failed toggle surfaces in lastError like the startup loads rather
       // than rejecting into a fire-and-forget caller (the button's onClick),
@@ -419,9 +426,10 @@ export function createSessionStore(config: SessionConfig): SessionStore {
       );
     }
     void loadProfile();
+    // The cook-start stamp is not loaded on its own: it rides on the state
+    // load, which learns which smoke the stamp belongs to on the way.
     void loadState();
     void loadTemps();
-    void loadCookStart();
   };
 
   const stop = (): void => {

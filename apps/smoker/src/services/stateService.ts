@@ -27,9 +27,16 @@ export const getState = (): Promise<State> => getDefaultApiClient().state.getSta
  * When the cook that is set up right now started, or `null` when nothing has
  * been started. Projected off the client's timeline read so the session port
  * adapter keeps importing every cloud read from this one place.
+ *
+ * A caller that already knows which smoke the state names (the session store
+ * learns it from its own state load) passes the id and the stamp is read
+ * directly; without one, the client composes the state read itself.
  */
-export const getCookStart = async (): Promise<Date | null> => {
-  const timeline = await getDefaultApiClient().timeline.getCurrent();
+export const getCookStart = async (smokeId?: string): Promise<Date | null> => {
+  const client = getDefaultApiClient();
+  const timeline = smokeId
+    ? await client.timeline.getById(smokeId)
+    : await client.timeline.getCurrent();
   return timeline?.startedAt ?? null;
 };
 
