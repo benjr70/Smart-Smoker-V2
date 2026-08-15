@@ -3,7 +3,7 @@ import React, { useMemo } from 'react';
 import { SmokeProfile, SmokeTimeline } from '../../../api/types';
 import { TempData } from 'temperaturechart/src/tempChart';
 import TemperatureChart from 'temperaturechart/src/TemperatureChart';
-import { decimate } from 'temperaturechart/src/chartGeometry';
+import { decimate, isReported } from 'temperaturechart/src/chartGeometry';
 import { useChartPalette } from '../../../theme';
 import { chartNamesOf } from '../../common/chartNames';
 import { DetailSection } from '../../common/components/DetailSection';
@@ -18,9 +18,16 @@ export interface SmokeSectionProps {
   timeline: SmokeTimeline | null;
 }
 
-/** A temperature on record as the grid writes one; nothing on record stays nothing. */
+/**
+ * A temperature on record as the grid writes one; nothing on record stays
+ * nothing. The wire's zero is the hardware's no-reading sentinel, not a
+ * temperature, and the grid shares the chart's rule for it — the same card
+ * must not claim the cook aimed at 0°F where the chart rules no target line.
+ */
 const formatTemp = (temperature: number | null | undefined): string | null =>
-  temperature === null || temperature === undefined ? null : `${Math.round(temperature)}°F`;
+  temperature !== null && temperature !== undefined && isReported(temperature)
+    ? `${Math.round(temperature)}°F`
+    : null;
 
 /** The four probe slots the legend lists, in the order the chart draws them. */
 const LEGEND_SLOTS = ['chamber', 'probe1', 'probe2', 'probe3'] as const;
@@ -105,6 +112,9 @@ export function SmokeSection({ smokeProfile, temps, timeline }: SmokeSectionProp
         colors={chartColors}
         target={timeline?.targetTemp ?? undefined}
         aspect="compact"
+        // The section's own legend above is the one legend this card gets: it
+        // knows which probes were never named, which the chart's cannot.
+        legend={false}
       />
       <NoteBlock label="Smoke Notes" note={smokeProfile.notes} />
     </DetailSection>

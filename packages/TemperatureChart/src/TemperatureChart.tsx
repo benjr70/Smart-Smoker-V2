@@ -67,6 +67,13 @@ export interface TemperatureChartProps {
   target?: number;
   /** The shape to draw in; the phone's when omitted. */
   aspect?: ChartAspect;
+  /**
+   * Whether the chart writes its own legend under the plot; it does unless
+   * told otherwise. A caller that names the lines itself — the history review
+   * says "Not used" where this legend would say "Probe 2" — turns it off, so
+   * the reader is not shown the same probe under two names.
+   */
+  legend?: boolean;
 }
 
 /** How heavily the lines are drawn, which is what makes them readable outdoors. */
@@ -104,6 +111,7 @@ function TemperatureChart({
   targets = NO_TARGETS,
   target,
   aspect = 'mobile',
+  legend = true,
 }: TemperatureChartProps): JSX.Element {
   const box = plotBoxOf(aspect);
 
@@ -365,41 +373,43 @@ function TemperatureChart({
           </g>
         ) : null}
       </svg>
-      <ul
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: '4px 16px',
-          listStyle: 'none',
-          margin: 0,
-          padding: '8px 0 0',
-        }}
-      >
-        {SERIES_KEYS.map(series => (
-          <li
-            key={series}
-            style={{
-              alignItems: 'center',
-              color: colors.label,
-              display: 'flex',
-              fontSize: 12,
-              gap: 6,
-            }}
-          >
-            <span
-              data-legend-swatch={series}
+      {legend && (
+        <ul
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '4px 16px',
+            listStyle: 'none',
+            margin: 0,
+            padding: '8px 0 0',
+          }}
+        >
+          {SERIES_KEYS.map(series => (
+            <li
+              key={series}
               style={{
-                backgroundColor: colors[series],
-                borderRadius: 2,
-                display: 'inline-block',
-                height: 3,
-                width: 14,
+                alignItems: 'center',
+                color: colors.label,
+                display: 'flex',
+                fontSize: 12,
+                gap: 6,
               }}
-            />
-            {names[series]}
-          </li>
-        ))}
-      </ul>
+            >
+              <span
+                data-legend-swatch={series}
+                style={{
+                  backgroundColor: colors[series],
+                  borderRadius: 2,
+                  display: 'inline-block',
+                  height: 3,
+                  width: 14,
+                }}
+              />
+              {names[series]}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

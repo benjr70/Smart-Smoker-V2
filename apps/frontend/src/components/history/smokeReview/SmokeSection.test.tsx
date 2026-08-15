@@ -84,6 +84,20 @@ describe('the smoke section', () => {
     });
   });
 
+  /**
+   * The wire's zero is the hardware's no-reading sentinel, not a temperature:
+   * the chart already refuses to rule a target at it, and the grid must tell
+   * the same story rather than claim the cook aimed at 0°F.
+   */
+  it('admits a zeroed timeline as unreported, the same as the chart does', () => {
+    showSection({ timeline: timeline({ targetTemp: 0, peakChamber: 0, peakMeat: 0 }) });
+
+    ['Target Temp', 'Peak Chamber', 'Peak Meat'].forEach(label => {
+      expect(fieldNamed(label)).toHaveTextContent('—');
+      expect(fieldNamed(label)).not.toHaveTextContent('0°F');
+    });
+  });
+
   it('draws the temperature log with the target line that was in force', () => {
     const { container } = showSection();
 
@@ -106,6 +120,18 @@ describe('the smoke section', () => {
     expect(legend[1]).toHaveTextContent('Brisket Flat');
     expect(legend[2]).toHaveTextContent('Not used');
     expect(legend[3]).toHaveTextContent('Not used');
+  });
+
+  /**
+   * The section's legend is the only one: the chart's built-in legend would
+   * label the same unnamed probe "Probe 2" directly below the row that says
+   * "Not used", and list the named ones twice.
+   */
+  it('keeps the section legend as the only legend on the card', () => {
+    const { container } = showSection();
+
+    expect(container.querySelectorAll('[data-legend-swatch]')).toHaveLength(0);
+    expect(screen.getAllByText('Brisket Flat')).toHaveLength(1);
   });
 
   it('keeps the smoke notes with the section', () => {

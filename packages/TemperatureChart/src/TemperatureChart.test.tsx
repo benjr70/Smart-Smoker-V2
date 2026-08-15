@@ -141,6 +141,20 @@ describe('the frame around the cook', () => {
     expect(swatches).toHaveLength(4);
     expect(swatches[0]).toHaveStyle({ backgroundColor: colors.chamber });
   });
+
+  /**
+   * A caller that names the probes itself — the history review says "Not used"
+   * where the chart would say "Probe 2" — turns the built-in legend off, so the
+   * reader is not shown the same probe under two names a few pixels apart.
+   */
+  it('leaves the legend out for a caller that draws its own', () => {
+    const { container } = render(
+      <TemperatureChart data={cook} names={names} colors={colors} legend={false} />
+    );
+
+    expect(container.querySelectorAll('[data-legend-swatch]')).toHaveLength(0);
+    expect(screen.queryByText(names.probe1)).not.toBeInTheDocument();
+  });
 });
 
 /**
