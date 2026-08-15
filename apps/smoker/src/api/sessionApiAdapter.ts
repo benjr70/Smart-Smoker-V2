@@ -25,5 +25,9 @@ export const createSessionApi = (client: ApiClient): SessionApiPort => ({
     return { smoking: state.smoking };
   },
   getCurrentTemps: (): Promise<BatchTempDto[]> => client.temps.getCurrent(),
+  getCookStart: async (): Promise<Date | null> => {
+    const timeline = await client.timeline.getCurrent();
+    return timeline?.startedAt ?? null;
+  },
   postTempsBatch: (batch: BatchTempDto[]): Promise<void> => client.temps.postBatch(batch),
 });

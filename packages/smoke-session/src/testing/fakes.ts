@@ -138,6 +138,7 @@ export class FakeSessionApi implements SessionApiPort {
   private profile: SmokeProfile | null = null;
   private smoking = false;
   private temps: BatchTempDto[] = [];
+  private cookStart: Date | null = null;
   private readonly failing = new Set<keyof SessionApiPort>();
   private postGate: Promise<void> | null = null;
   private releasePostGate: (() => void) | null = null;
@@ -157,6 +158,12 @@ export class FakeSessionApi implements SessionApiPort {
   /** Seed the chart baseline returned by {@link getCurrentTemps}. */
   seedTemps(temps: BatchTempDto[]): this {
     this.temps = temps;
+    return this;
+  }
+
+  /** Seed the recorded cook start returned by {@link getCookStart}. */
+  seedCookStart(startedAt: Date | null): this {
+    this.cookStart = startedAt;
     return this;
   }
 
@@ -202,6 +209,12 @@ export class FakeSessionApi implements SessionApiPort {
     this.calls.push({ method: 'getCurrentTemps', args: [] });
     this.guard('getCurrentTemps');
     return this.temps;
+  }
+
+  async getCookStart(): Promise<Date | null> {
+    this.calls.push({ method: 'getCookStart', args: [] });
+    this.guard('getCookStart');
+    return this.cookStart;
   }
 
   async postTempsBatch(batch: BatchTempDto[]): Promise<void> {

@@ -1,6 +1,7 @@
 import { BatchTempDto, SessionApiPort, SmokeProfile, SmokingState } from 'smoke-session/src';
 import { UNREPORTED } from 'temperaturechart/src/chartGeometry';
 import {
+  getCookStart as getCookStartService,
   getCurrentSmokeProfile,
   getState,
   toggleSmoking as toggleSmokingService,
@@ -79,6 +80,9 @@ export function createSmokerSessionApi(): SessionApiPort {
     },
     async getCurrentTemps(): Promise<BatchTempDto[]> {
       return asStoredCook(await getCurrentTemps());
+    },
+    getCookStart(): Promise<Date | null> {
+      return getCookStartService();
     },
     async postTempsBatch(batch: BatchTempDto[]): Promise<void> {
       await postTempsBatch(batch);

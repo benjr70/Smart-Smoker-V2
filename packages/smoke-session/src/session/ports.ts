@@ -55,6 +55,13 @@ export interface SessionApiPort {
   toggleSmoking(): Promise<SmokingState>;
   /** The chart history for the current smoke (baseline temps). */
   getCurrentTemps(): Promise<BatchTempDto[]>;
+  /**
+   * When the cook that is set up right now started, or `null` when no start
+   * has been recorded (no session, or a session never started). The stamp is
+   * a fact about the cook read from the backend, never remembered locally, so
+   * an elapsed clock derived from it survives a host restart.
+   */
+  getCookStart(): Promise<Date | null>;
   /** Persist a batch of buffered readings (used by the smoker role). */
   postTempsBatch(batch: BatchTempDto[]): Promise<void>;
 }

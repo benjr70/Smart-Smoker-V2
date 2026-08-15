@@ -48,6 +48,12 @@ export function createSessionApiPort(client: ApiClient): SessionApiPort {
       // `date.getTime()` (per the BatchTempDto contract) never throw.
       return temps.map(temp => ({ ...temp, date: new Date(temp.date) }));
     },
+    async getCookStart(): Promise<Date | null> {
+      // The timeline resource already reads the session state and revives the
+      // stamps into Dates; the port wants only the start.
+      const timeline = await client.timeline.getCurrent();
+      return timeline?.startedAt ?? null;
+    },
     postTempsBatch(): Promise<void> {
       return Promise.reject(
         new Error('SessionApiPort.postTempsBatch is not supported for the monitor role')

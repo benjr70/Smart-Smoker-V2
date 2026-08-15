@@ -84,7 +84,20 @@ export interface FakeBackendSeed {
      */
     probeTarget?: StoredProbeTargets;
   };
+  /**
+   * Each smoke's timing document, keyed by smoke id, with the stamps as the
+   * ISO strings JSON carries them in. An id with no entry models a backend
+   * without the timeline route (404), which is what the kernel answers for an
+   * unrouted read.
+   */
+  timeline?: Record<string, StoredTimeline>;
 }
+
+/** A cook's timing as the wire carries it: stamps are ISO strings or null. */
+export type StoredTimeline = {
+  startedAt: string | null;
+  finishedAt: string | null;
+};
 
 /** What the transport yields for an empty-body 200 (axios surfaces `''`). */
 const EMPTY_BODY = '';
@@ -106,6 +119,7 @@ interface FakeStore {
     appearance?: AppearancePreference;
     probeTarget?: StoredProbeTargets;
   };
+  timeline: Record<string, StoredTimeline>;
 }
 
 export type FakeBackend = FakeBackendKernel<FakeStore>;
@@ -128,6 +142,7 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
       appearance: seed.appSettings?.appearance,
       probeTarget: seed.appSettings?.probeTarget,
     },
+    timeline: seed.timeline ?? {},
   };
   const route = ({ method, path, body }: FakeRequest): unknown => {
     // Cloud API routes.
@@ -158,6 +173,14 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
       const batch = clone(body) as TempData[];
       store.temps.batches.push(batch);
       return { success: true, count: batch.length };
+    }
+
+    // A cook's timing, by smoke id. Unseeded ids fall through to the kernel's
+    // 404, modelling a backend without the timeline module.
+    const timelineMatch = /^timeline\/(.+)$/.exec(path);
+    if (timelineMatch && method === 'get') {
+      const stored = store.timeline[timelineMatch[1]];
+      return stored === undefined ? NO_ROUTE : clone(stored);
     }
 
     // The settings document, of which the device reads the appearance and the

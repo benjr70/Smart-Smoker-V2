@@ -195,6 +195,91 @@ describe('session store — smoker role', () => {
       expect(snap.probe2Name).toBe('Ribs');
       expect(snap.probe3Name).toBe('Wings');
     });
+
+    it('re-reads the cook start stamp when the flag flips remotely', async () => {
+      const harness = createTestHarness({ role: 'smoker' });
+      harness.store.start();
+      await harness.flush();
+      expect(harness.store.getSnapshot().startedAt).toBeNull();
+
+      // A phone starts the cook; the touchscreen hears the flag and reads the
+      // stamp the start wrote, so its elapsed clock starts from the truth.
+      const started = new Date('2026-08-15T10:00:00.000Z');
+      harness.api.seedCookStart(started);
+      harness.socket.injectSmokeUpdate({
+        smoking: true,
+        chamberName: 'Offset',
+        probe1Name: 'Brisket',
+        probe2Name: 'Ribs',
+        probe3Name: 'Wings',
+      });
+      await harness.flush();
+
+      expect(harness.store.getSnapshot().startedAt).toEqual(started);
+    });
+  });
+
+  /**
+   * When the cook that is set up right now started, carried on the snapshot so
+   * the panel's elapsed clock derives from the recorded stamp rather than from
+   * whenever its screen happened to mount — which is what lets the clock
+   * survive an appliance restart mid-cook.
+   */
+  describe('the cook start stamp', () => {
+    const STARTED = new Date('2026-08-15T10:00:00.000Z');
+
+    it('starts unknown, and reads the recorded stamp at startup', async () => {
+      const harness = createTestHarness({ role: 'smoker' });
+      harness.api.seedCookStart(STARTED);
+
+      expect(harness.store.getSnapshot().startedAt).toBeNull();
+
+      harness.store.start();
+      await harness.flush();
+
+      expect(harness.store.getSnapshot().startedAt).toEqual(STARTED);
+    });
+
+    it('re-reads the stamp after toggling smoking, because starting is what writes it', async () => {
+      const harness = createTestHarness({ role: 'smoker' });
+      harness.store.start();
+      await harness.flush();
+      expect(harness.store.getSnapshot().startedAt).toBeNull();
+
+      // Starting the cook stamps it on the backend; the read that follows the
+      // toggle is the one that finds it.
+      harness.api.seedCookStart(STARTED);
+      await harness.store.toggleSmoking();
+      await harness.flush();
+
+      expect(harness.store.getSnapshot().startedAt).toEqual(STARTED);
+    });
+
+    it('forgets the stamp when the session is cleared', async () => {
+      const harness = createTestHarness({ role: 'smoker' });
+      harness.api.seedCookStart(STARTED);
+      harness.store.start();
+      await harness.flush();
+      expect(harness.store.getSnapshot().startedAt).toEqual(STARTED);
+
+      harness.api.seedCookStart(null);
+      harness.socket.injectClear();
+      await harness.flush();
+
+      expect(harness.store.getSnapshot().startedAt).toBeNull();
+    });
+
+    it('treats an unreadable stamp as no stamp, and keeps the session alive', async () => {
+      const harness = createTestHarness({ role: 'smoker' });
+      harness.api.seedCookStart(STARTED).failNext('getCookStart');
+      harness.store.start();
+      await harness.flush();
+
+      const snap = harness.store.getSnapshot();
+      expect(snap.startedAt).toBeNull();
+      // A clock is decoration; its read failing is not a session error.
+      expect(snap.lastError).toBeNull();
+    });
   });
 
   describe('inbound clear (relayed cloud clear-signal)', () => {

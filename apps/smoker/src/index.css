@@ -1,8 +1,8 @@
 body {
   margin: 0;
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell',
-    'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  /* The design typeface, bundled by the theme provider; the fallbacks cover
+     the frame before the webfont paints, matching the shared theme's stack. */
+  font-family: 'Plus Jakarta Sans', 'Helvetica Neue', Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

@@ -34,6 +34,13 @@ export interface SessionSnapshot {
    * probes reads as connected, matching the legacy indicator's initial state.
    */
   wifiConnected: boolean;
+  /**
+   * When the current cook started, or `null` when no start is recorded. Read
+   * from the backend stamp (never accumulated locally) so an elapsed clock
+   * derived from it is right the instant a host mounts — including a host
+   * restarted six hours into a cook.
+   */
+  startedAt: Date | null;
   /** The most recent surfaced load failure, or `null` when healthy. */
   lastError: SessionError | null;
 }
@@ -61,6 +68,7 @@ export function createInitialSnapshot(now: Date): SessionSnapshot {
     connected: false,
     pendingBatchSize: 0,
     wifiConnected: true,
+    startedAt: null,
     lastError: null,
   };
 }

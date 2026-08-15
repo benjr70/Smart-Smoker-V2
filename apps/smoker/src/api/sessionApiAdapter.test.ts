@@ -105,6 +105,33 @@ describe('session API adapter (SessionApiPort over the deep client)', () => {
     expect(cloud.store.temps.batches).toEqual([batch]);
   });
 
+  it('getCookStart reads the current cook’s recorded start as a real Date', async () => {
+    const { port } = buildPort({
+      state: { smokeId: 's1', smoking: true },
+      timeline: { s1: { startedAt: '2026-08-15T10:00:00.000Z', finishedAt: null } },
+    });
+
+    const startedAt = await port.getCookStart();
+
+    expect(startedAt).toBeInstanceOf(Date);
+    expect(startedAt?.getTime()).toBe(new Date('2026-08-15T10:00:00.000Z').getTime());
+  });
+
+  it('getCookStart resolves null when there is no session to have started', async () => {
+    const { port } = buildPort({ state: null });
+
+    await expect(port.getCookStart()).resolves.toBeNull();
+  });
+
+  it('getCookStart resolves null when the cook has no recorded start', async () => {
+    const { port } = buildPort({
+      state: { smokeId: 's1', smoking: false },
+      timeline: { s1: { startedAt: null, finishedAt: null } },
+    });
+
+    await expect(port.getCookStart()).resolves.toBeNull();
+  });
+
   it('a failing call rejects with the typed ApiError rather than resolving undefined', async () => {
     const { cloud, port } = buildPort();
     cloud.injectFault({ method: 'get', path: 'smokeProfile/current', status: 500 });

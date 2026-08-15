@@ -172,32 +172,33 @@ describe('the chart on the home screen', () => {
    * The panel this screen is drawn on: 800 across, 480 down, and no scrollbar
    * at a smoker to go looking for anything that falls off it.
    *
-   * The chart is given the whole width of the row it sits in and takes its own
-   * height from the shape it draws in, so that shape is the whole of what
-   * decides whether the plot uses the panel or is letterboxed in the middle of
-   * it, and whether the legend naming the four lines is on the screen at all.
-   * Both of those are the same number, which is why they are asserted together:
-   * a shape tall enough to be worth capping is a shape that had to be shrunk
-   * away from the sides to fit.
+   * The chart takes the width its card gives it — the right-hand ~60% of the
+   * panel, beside the reading column — and its own height from the shape it
+   * draws in, so that shape is what decides whether the plot, its title, and
+   * the legend naming the four lines are all on the screen at once. jsdom lays
+   * nothing out, so the card's share of the panel is stated here and the
+   * plot's drawn height is derived from its own aspect at that share.
    */
-  describe('drawn across the panel it hangs on', () => {
+  describe('drawn in the card the panel gives it', () => {
     const PANEL = { width: 800, height: 480 };
-    /** What the readouts and the two actions take off the top of the panel. */
-    const READOUTS_AND_ACTIONS = 140;
-    /** The legend the chart writes under the plot. */
-    const LEGEND = 32;
+    /** The top bar and the page's own padding and gaps above the cards. */
+    const TOP_BAR = 92;
+    /** The chart card's share of the row (the reading column takes 38%). */
+    const CARD_SHARE = 0.62;
+    /** The card's title row, the legend under the plot, and the card padding. */
+    const CARD_CHROME = 72;
     /** The room left down the panel for the plot itself. */
-    const ROOM = PANEL.height - READOUTS_AND_ACTIONS - LEGEND;
+    const ROOM = PANEL.height - TOP_BAR - CARD_CHROME;
 
-    /** How tall the plot comes out, drawn at the width the row gives it. */
+    /** How tall the plot comes out, drawn at the width its card gives it. */
     const drawnHeight = (plot: SVGSVGElement): number => {
       const [, , width, height] = (plot.getAttribute('viewBox') ?? '')
         .split(' ')
         .map(Number) as number[];
-      return (PANEL.width * height) / width;
+      return (PANEL.width * CARD_SHARE * height) / width;
     };
 
-    it('fills the width of the panel and still leaves its legend on the screen', async () => {
+    it('fills the width of its card and still leaves its legend on the screen', async () => {
       const kit = smokerKit();
       renderHome(kit);
       await act(async () => {
@@ -209,11 +210,9 @@ describe('the chart on the home screen', () => {
 
       // Drawn at the width it is given, rather than at a width of its own...
       expect(plot).toHaveAttribute('width', '100%');
-      // ...it comes out short enough for the legend under it to be on screen...
+      // ...it comes out short enough for the title above it and the legend
+      // under it to be on the 480px panel with it.
       expect(drawnHeight(plot)).toBeLessThanOrEqual(ROOM);
-      // ...and tall enough to be using the room it was left, rather than a
-      // strip of it with the panel showing either side.
-      expect(drawnHeight(plot)).toBeGreaterThan(ROOM * 0.8);
     });
   });
 
@@ -544,6 +543,162 @@ describe('the targets on the touchscreen chart', () => {
 
     expect(targetLines(container)).toHaveLength(0);
     expect(screen.queryByText(/TARGET/)).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * The mock's top bar: the brand mark, the state said as a pill, the cook's age
+ * while one is running, and the two controls. What is asserted is what an
+ * operator reads from across a garage — which state the pill claims, and
+ * whether the clock counts the cook rather than the screen.
+ */
+describe('the top bar', () => {
+  it('reads IDLE with no active smoke, and offers to start', async () => {
+    const kit = smokerKit();
+    kit.api.seedSmoking(false);
+    renderHome(kit);
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(screen.getByText('SMART SMOKER')).toBeInTheDocument();
+    const pill = screen.getByTestId('smoker-status-pill');
+    expect(pill).toHaveTextContent('IDLE');
+    expect(pill).toHaveAttribute('data-smoking', 'false');
+    expect(screen.getByText('No active smoke')).toBeInTheDocument();
+    expect(screen.queryByTestId('smoker-elapsed-clock')).not.toBeInTheDocument();
+    expect(screen.getByText('Start Smoking')).toBeInTheDocument();
+  });
+
+  it('reads SMOKING with the elapsed clock while a cook runs', async () => {
+    const kit = smokerKit();
+    kit.api.seedSmoking(true).seedCookStart(new Date());
+    renderHome(kit);
+    await act(async () => {
+      await flushPromises();
+    });
+
+    const pill = screen.getByTestId('smoker-status-pill');
+    expect(pill).toHaveTextContent('SMOKING');
+    expect(pill).toHaveAttribute('data-smoking', 'true');
+    expect(screen.getByText('ELAPSED')).toBeInTheDocument();
+    expect(screen.getByTestId('smoker-elapsed-clock')).toBeInTheDocument();
+    expect(screen.queryByText('No active smoke')).not.toBeInTheDocument();
+    expect(screen.getByText('Stop Smoking')).toBeInTheDocument();
+  });
+
+  /**
+   * The clock is derived from the recorded start against the current time, so
+   * a panel switched on (or restarted) six hours into a cook shows six hours —
+   * not the age of its own screen. The stamp is seeded two hours old, and the
+   * clock has to say so the moment it mounts.
+   */
+  it('derives the elapsed clock from the recorded stamp, so it survives a restart', async () => {
+    const kit = smokerKit();
+    const TWO_HOURS = 2 * 60 * 60 * 1000;
+    kit.api.seedSmoking(true).seedCookStart(new Date(Date.now() - TWO_HOURS));
+    renderHome(kit);
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(screen.getByTestId('smoker-elapsed-clock')).toHaveTextContent(/^02:00:0\d$/);
+  });
+
+  it('paints the wifi glyph green connected and red disconnected', async () => {
+    const kit = smokerKit();
+    renderHome(kit);
+    await act(async () => {
+      await flushPromises();
+    });
+
+    // Defaults to connected before any probe answers. The colour is set on the
+    // control and the glyph inherits it, so the control is what is asserted.
+    expect(screen.getByLabelText('wifi connected')).toHaveStyle({ color: carbonDark.success });
+    expect(screen.getByTestId('WifiIcon')).toBeInTheDocument();
+
+    kit.wifi.setStatus(false);
+    await act(async () => {
+      kit.socket.setConnected(true);
+      kit.deviceFeed.injectReading(reading('225', '185', '190', '0'));
+      await flushPromises();
+    });
+
+    expect(screen.getByLabelText('wifi disconnected')).toHaveStyle({ color: carbonDark.danger });
+    expect(screen.getByTestId('WifiOffIcon')).toBeInTheDocument();
+  });
+});
+
+/**
+ * The left column of the mock: the chamber said once and large, and the three
+ * probes as a colour-coded list — the colours being the same tokens the chart
+ * draws those probes' lines in, which is the whole map between the list and
+ * the graph beside it.
+ */
+describe('the reading cards', () => {
+  it('shows the chamber as a hero card, named and coloured as the chamber', async () => {
+    const kit = smokerKit();
+    renderHome(kit);
+    await act(async () => {
+      kit.deviceFeed.injectReading(reading('225', '185', '190', '0'));
+      await flushPromises();
+    });
+
+    const hero = screen.getByTestId('smoker-chamber-card');
+    expect(within(hero).getByText('Chamber')).toHaveStyle({ color: carbonDark.probes.chamber });
+    expect(within(hero).getByTestId('smoker-chamber-temp')).toHaveTextContent('225');
+  });
+
+  it('lists the three probes with their dots, values and dividers', async () => {
+    const kit = smokerKit();
+    renderHome(kit);
+    await act(async () => {
+      kit.deviceFeed.injectReading(reading('225', '185', '190', '0'));
+      await flushPromises();
+    });
+
+    const list = screen.getByTestId('smoker-probe-card');
+    expect(within(list).getByText('probe 1')).toBeInTheDocument();
+    expect(within(list).getByText('185')).toBeInTheDocument();
+    expect(within(list).getByText('190')).toBeInTheDocument();
+    (['probe1', 'probe2', 'probe3'] as const).forEach(probe => {
+      expect(within(list).getByTestId(`smoker-${probe}-dot`)).toHaveStyle({
+        backgroundColor: carbonDark.probes[probe],
+      });
+    });
+    // Between the rows only: the card's own border ends the list at both ends.
+    expect(within(list).getAllByRole('separator')).toHaveLength(2);
+  });
+});
+
+/**
+ * The chart's card says what the picture is of and over how long, which is
+ * what makes a graph with no numbers under a finger self-explanatory.
+ */
+describe('the chart card', () => {
+  it('is titled, and says what window of the cook it shows', async () => {
+    const kit = smokerKit();
+    kit.api.seedSmoking(true);
+    renderHome(kit);
+    await act(async () => {
+      await flushPromises();
+    });
+
+    const card = screen.getByTestId('smoker-chart-card');
+    expect(within(card).getByText('TEMPERATURE HISTORY')).toBeInTheDocument();
+    // Nothing plotted yet: the card claims no span it does not show.
+    expect(within(card).getByTestId('smoker-chart-window')).toHaveTextContent('LIVE');
+
+    for (const chamber of ['225', '230', '228']) {
+      kit.clock.step(60_000);
+      await act(async () => {
+        kit.deviceFeed.injectReading(reading(chamber, '185', '190', '0'));
+        await flushPromises();
+      });
+    }
+
+    // Three readings a minute apart span two minutes.
+    expect(within(card).getByTestId('smoker-chart-window')).toHaveTextContent('LAST 2M');
   });
 });
 

@@ -1,6 +1,7 @@
 import { UNREPORTED, reportsIn, tempYDomain } from 'temperaturechart/src/chartGeometry';
 import { createSmokerSessionApi } from './sessionApiAdapter';
 import {
+  getCookStart,
   getCurrentSmokeProfile,
   getState,
   toggleSmoking as toggleSmokingService,
@@ -8,6 +9,7 @@ import {
 import { getCurrentTemps, postTempsBatch } from '../services/tempsService';
 
 jest.mock('../services/stateService', () => ({
+  getCookStart: jest.fn(),
   getCurrentSmokeProfile: jest.fn(),
   getState: jest.fn(),
   toggleSmoking: jest.fn(),
@@ -18,6 +20,7 @@ jest.mock('../services/tempsService', () => ({
   postTempsBatch: jest.fn(),
 }));
 
+const mockGetCookStart = getCookStart as jest.Mock;
 const mockGetProfile = getCurrentSmokeProfile as jest.Mock;
 const mockGetState = getState as jest.Mock;
 const mockToggleSmoking = toggleSmokingService as jest.Mock;
@@ -51,6 +54,15 @@ describe('createSmokerSessionApi', () => {
     const api = createSmokerSessionApi();
 
     await expect(api.getProfile()).resolves.toBeNull();
+  });
+
+  it('reads the recorded cook start through the state service', async () => {
+    const started = new Date('2026-08-15T10:00:00.000Z');
+    mockGetCookStart.mockResolvedValue(started);
+
+    const api = createSmokerSessionApi();
+
+    await expect(api.getCookStart()).resolves.toEqual(started);
   });
 
   it('reads the persisted smoking flag from state', async () => {

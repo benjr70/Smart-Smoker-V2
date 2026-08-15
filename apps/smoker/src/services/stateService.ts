@@ -24,6 +24,16 @@ export const toggleSmoking = (): Promise<State> => getDefaultApiClient().state.t
 export const getState = (): Promise<State> => getDefaultApiClient().state.getState();
 
 /**
+ * When the cook that is set up right now started, or `null` when nothing has
+ * been started. Projected off the client's timeline read so the session port
+ * adapter keeps importing every cloud read from this one place.
+ */
+export const getCookStart = async (): Promise<Date | null> => {
+  const timeline = await getDefaultApiClient().timeline.getCurrent();
+  return timeline?.startedAt ?? null;
+};
+
+/**
  * @deprecated Use `getDefaultApiClient().smokeProfile.getCurrent()` instead.
  * Returns the normalized profile (notes/woodType default to empty strings) and
  * rejects with the typed error on failure — the legacy swallow-and-resolve-

@@ -106,6 +106,27 @@ export interface ProbeTargetsResource {
   get(): Promise<ProbeTargetSetting[]>;
 }
 
+/**
+ * The one fact of a cook's timing the touchscreen has any use for: when it
+ * started, revived into a real `Date` (or `null` for a cook never started).
+ * The backend's timeline document carries more — a finish stamp, derived
+ * duration and peaks — none of which this panel displays, so none of it is
+ * carried here.
+ */
+export interface CookTimeline {
+  startedAt: Date | null;
+}
+
+export interface TimelineResource {
+  /**
+   * The timing of the cook set up right now, or `null` when there is no
+   * session. Composed from the session state, because the cook this panel is
+   * relaying is whichever one the state points to — the same composition the
+   * web client makes for its own elapsed clock.
+   */
+  getCurrent(): Promise<CookTimeline | null>;
+}
+
 export interface ApiClient {
   state: StateResource;
   smokeProfile: SmokeProfileResource;
@@ -113,7 +134,17 @@ export interface ApiClient {
   device: DeviceResource;
   appearance: AppearanceResource;
   probeTargets: ProbeTargetsResource;
+  timeline: TimelineResource;
 }
+
+/** A stamp off the wire as the moment it names, or `null` when there is none. */
+const asMoment = (value: string | Date | null | undefined): Date | null => {
+  if (!value) {
+    return null;
+  }
+  const moment = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(moment.getTime()) ? null : moment;
+};
 
 /**
  * Centralized read-path normalization: the optional-on-the-wire `notes` and
@@ -172,6 +203,21 @@ export const createApiClient = (
         appearance?: AppearancePreference;
       } | null>('appSettings');
       return response?.appearance ?? DEFAULT_APPEARANCE_PREFERENCE;
+    },
+  },
+  timeline: {
+    getCurrent: async () => {
+      // Whichever cook the state points to is the one whose timing matters;
+      // a fresh/reset backend answers `state` with an empty body, which is a
+      // session that does not exist rather than one that never started.
+      const state = await cloudTransport.get<State | null>('state');
+      if (!state || typeof state !== 'object' || !state.smokeId) {
+        return null;
+      }
+      const timeline = await cloudTransport.get<{
+        startedAt?: string | Date | null;
+      } | null>(`timeline/${state.smokeId}`);
+      return { startedAt: asMoment(timeline?.startedAt) };
     },
   },
   probeTargets: {

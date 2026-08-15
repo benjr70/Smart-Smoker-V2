@@ -13,11 +13,13 @@ function stubClient(overrides: {
   smokeProfile?: Partial<ApiClient['smokeProfile']>;
   state?: Partial<ApiClient['state']>;
   temps?: Partial<ApiClient['temps']>;
+  timeline?: Partial<ApiClient['timeline']>;
 }): ApiClient {
   return {
     smokeProfile: overrides.smokeProfile,
     state: overrides.state,
     temps: overrides.temps,
+    timeline: overrides.timeline,
   } as unknown as ApiClient;
 }
 
@@ -133,6 +135,21 @@ describe('createSessionApiPort', () => {
 
     expect(temp).toMatchObject({ ChamberTemp: 225, MeatTemp: 150, Meat2Temp: 0, Meat3Temp: 0 });
     expect(temp.date).toBeInstanceOf(Date);
+  });
+
+  test('getCookStart projects the current timeline down to its start stamp', async () => {
+    const startedAt = new Date('2026-08-15T10:00:00.000Z');
+    const getCurrent = jest.fn().mockResolvedValue({ startedAt, finishedAt: null });
+    const port = createSessionApiPort(stubClient({ timeline: { getCurrent } }));
+
+    await expect(port.getCookStart()).resolves.toEqual(startedAt);
+  });
+
+  test('getCookStart reads null when there is no session to have started', async () => {
+    const getCurrent = jest.fn().mockResolvedValue(null);
+    const port = createSessionApiPort(stubClient({ timeline: { getCurrent } }));
+
+    await expect(port.getCookStart()).resolves.toBeNull();
   });
 
   test('postTempsBatch rejects: the monitor role never posts batches', async () => {
