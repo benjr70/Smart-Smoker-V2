@@ -14,8 +14,10 @@ on the device pulls new images whenever it is next online.
 | `smoker.docker-compose.yml` | **Dispatch `Device Deploy`** — Watchtower recreates containers from the *running container's* config and never re-reads this file |
 
 Watchtower only sees a new image when `:latest` moves, and **`:latest` moves only when a
-GitHub Release is published**. Nightly builds publish `:nightly`, which the device must
-never run (see the warning below). Merging to master alone never updates the smoker.
+GitHub Release is published**. Releases are published by merging the release PR that
+release-please keeps open — see [Release Process](release-process.md). Nightly builds
+publish `:nightly`, which the device must never run (see the warning below). Merging a
+feature PR to master alone never updates the smoker; it only refreshes the release PR.
 
 ## What runs on the device
 

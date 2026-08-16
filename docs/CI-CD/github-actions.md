@@ -23,18 +23,44 @@ This directory contains GitHub Actions workflows for the Smart Smoker V2 project
 - `coverage-report`: Aggregates test results and generates summary
 - `all-tests-passed`: Final status check (required for merge)
 
+### `pr-title-lint.yml` - Conventional PR Title
+**Triggers**: Pull Requests to `master`
+**Purpose**: Validates the PR title against Conventional Commits, because the
+squashed title is what release-please parses for the version bump and changelog
+
+- Thin wrapper around `scripts/validate-pr-title.sh` — run the same script
+  locally before opening a PR
+- The title check is **advisory** today (warning annotation, not a red PR); the
+  `validator-tests` job that runs `scripts/validate-pr-title.test.sh` is
+  blocking
+- See [Release Process](release-process.md#2-pr-title-convention)
+
+### Release & Deployment Workflows
+- `release-please.yml`: Maintains the always-open release PR and, on merge, tags
+  the repo and publishes the GitHub Release. Authenticated with `RUNNER_PAT`
+  (not `GITHUB_TOKEN`, whose Releases do not trigger downstream workflows)
+- `prod-deploy.yml`: Fires on `release: published`. Builds backend + frontend
+  **from the release tag**, deploys prod over SSH with health check and
+  rollback, notifies Discord, then runs a blocking smoke gate. Also has a
+  `workflow_dispatch` version input as a re-deploy/rollback escape hatch
+- `release.yml`: Builds and publishes the smoker/device-service/electron-shell
+  images from the tag on `release: published` (manual version input kept as an
+  escape hatch). It deliberately has no smoker deploy job — publishing `:latest`
+  *is* the device deployment, applied by Watchtower on the device
+- `nightly.yml`: Nightly Dev Build & Deploy (publishes `:nightly` for dev-cloud)
+- `device-deploy.yml`: Device deployment over SSH (reusable + manual). Targets the virtual
+  smoker or the physical Pi; see [Physical Smoker Device](smoker-device.md)
+
+The full picture — what triggers a release PR, what merging it does, and the
+token requirements — is in [Release Process](release-process.md).
+
 ### Other Workflows
 - `install.yml`: Installation and setup workflow
 - `build.yml`: Application build validation (reusable)
 - `publish.yml`: Docker Hub publishing (reusable)
-- `cloud-deploy.yml`: Cloud environment deployment (reusable)
-- `device-deploy.yml`: Device deployment over SSH (reusable + manual). Targets the virtual
-  smoker or the physical Pi; see [Physical Smoker Device](smoker-device.md)
 - `docs.yml`: Documentation deployment
-- `nightly.yml`: Nightly Dev Build & Deploy (publishes `:nightly` for testing)
-- `release.yml`: Build and publish release images. Supports manual version input and Release
-  tag trigger. It deliberately has no smoker deploy job — publishing `:latest` *is* the
-  device deployment, applied by Watchtower on the device
+- `release-config-tests.yml`: Runs `scripts/release/release-please-config.test.sh`
+  to pin the release-please config choices
 
 ## Branch Protection
 
@@ -47,10 +73,14 @@ To enforce CI requirements:
 
 1. **Create Feature Branch**: `feature/SS2-XX-description`
 2. **Make Changes**: Develop and commit your changes
-3. **Create PR**: Open Pull Request to `master`
+3. **Create PR**: Open Pull Request to `master` with a conventional title
+   (`feat(scope): …`) and `Closes #N` in the body; validate locally with
+   `bash scripts/validate-pr-title.sh "<title>"`
 4. **CI Runs Automatically**: All tests run on your PR
 5. **Review Process**: Address any failing tests + get code review
-6. **Merge**: Once CI passes and approved, PR can be merged
+6. **Merge**: Once CI passes and approved, squash-merge the PR
+7. **Release**: when you want it in production, merge the release PR —
+   see [Release Process](release-process.md)
 
 ## CI Status Checks
 

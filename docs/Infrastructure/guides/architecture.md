@@ -17,7 +17,7 @@ Smart Smoker V2 infrastructure runs on a local Proxmox server with the following
 ### Deployment Environments
 
 - **Development**: dev-cloud (VMID 104) - Auto-deploy on master merge
-- **Production**: prod-cloud (VMID 106) - Manual deployment with approval
+- **Production**: prod-cloud (VMID 106) - Deployed on GitHub Release publish (merge of the release PR), gated by the `production` environment approval
 - **Testing**: virtual-smoker-device (VMID 9001) - Device simulation
 
 ### Services

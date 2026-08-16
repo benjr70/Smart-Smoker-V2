@@ -1,5 +1,15 @@
 # Pre-Cutover Production Verification Runbook (Issue #224)
 
+!!! warning "Historical runbook — trigger mechanics have moved on"
+    This describes the one-off gated verification of the temp prod host in
+    2026-06. One thing below is no longer how releases work: Releases are
+    **not** drafted by hand — merging the release-please PR cuts the tag and the
+    Release. The `production` environment gate described here (required reviewer
+    **benjr70** + 5-minute wait timer) is **still in place**, though PRD #498
+    plans to remove it so the release-PR merge becomes the sole approval. See
+    [Release Process](../../CI-CD/release-process.md). Keep this page for the
+    verification checklist and the troubleshooting table.
+
 Step-by-step **human-in-the-loop** guide for the first gated production
 release against the temp prod host, per PRD #216 "Cutover sequence" step 2.
 Everything automatable was verified by agent pre-flight on 2026-06-11; the
