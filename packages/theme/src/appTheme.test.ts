@@ -25,6 +25,43 @@ describe('the application theme — the Carbon light tokens it carries', () => {
     expect(design.textSecondary).toBe('#6B6B68');
   });
 
+  /**
+   * The design derives a field's fill from the palette it is painting in —
+   * `inputBg: dark ? alt : bg` — so a light field is the page tone and a dark
+   * one the alternate surface. What separates a field from what is behind it is
+   * the 1.5px `inputBorder` around it, not a contrasting fill: the design's own
+   * history header puts a page-toned field on a page-toned header and reads it
+   * by that hairline alone. A field is kept off the card colour in both
+   * palettes, which is the #517 defect.
+   */
+  it('fills form controls with the page background in the light palette', () => {
+    const { design } = createAppTheme('light');
+
+    expect(design.inputBg).toBe(design.background);
+    expect(design.inputBg).toBe('#F6F6F5');
+  });
+
+  it('fills them with the alternate surface in the dark palette', () => {
+    const { design } = createAppTheme('dark');
+
+    expect(design.inputBg).toBe(design.surfaceAlt);
+    expect(design.inputBg).toBe('#202020');
+  });
+
+  it('keeps the fill off the card a field sits on in either palette', () => {
+    (['light', 'dark'] as const).forEach(mode => {
+      const { design } = createAppTheme(mode);
+
+      expect(design.inputBg).not.toBe(design.surface);
+    });
+  });
+
+  /** The hairline that defines a field is the design's own input border. */
+  it('outlines a form control in the input hairline, not the surface one', () => {
+    expect(createAppTheme('light').design.inputBorder).toBe('#D2D2CE');
+    expect(createAppTheme('dark').design.inputBorder).toBe('#3A3A3A');
+  });
+
   it('carries the accent, danger and success colours', () => {
     const { design } = createAppTheme('light');
 

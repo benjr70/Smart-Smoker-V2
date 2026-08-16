@@ -13,5 +13,5 @@ import { DesignPalette, carbonDark, resolveDesignPalette } from 'theme/src';
  */
 export const useDesign = (): DesignPalette => {
   const { design } = useTheme();
-  return design ?? resolveDesignPalette(carbonDark);
+  return design ?? resolveDesignPalette(carbonDark, 'dark');
 };

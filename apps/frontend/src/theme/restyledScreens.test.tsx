@@ -400,6 +400,84 @@ describe('the smoke wizard', () => {
 });
 
 /**
+ * A field takes the fill the design derives from the palette — the alternate
+ * surface in the dark scheme, the page tone in the light one — and is separated
+ * from whatever is behind it by the design's 1.5px input hairline. A field left
+ * in Material-UI's transparent control took the card's colour instead, leaving
+ * the dark scheme's inputs invisible (#517). Both halves come from the shared
+ * theme, so the assertions here are that every screen's fields actually take
+ * them, on a card and on the bare page alike.
+ */
+describe('the form fields', () => {
+  /** The filled part of a control, given anything inside it. */
+  const fill = (element: HTMLElement): HTMLElement =>
+    (element.closest('.MuiInputBase-root') as HTMLElement) ?? element;
+
+  /** The element the hairline is on: an outlined control's fieldset, else the root. */
+  const outline = (element: HTMLElement): HTMLElement => {
+    const root = fill(element);
+    return (root.querySelector('.MuiOutlinedInput-notchedOutline') as HTMLElement) ?? root;
+  };
+
+  it('fills the pre-smoke fields with the alternate surface in the dark scheme', async () => {
+    renderUnder('dark', <Smoke />);
+
+    expect(fill(await screen.findByTestId('presmoke-name-input'))).toHaveStyle({
+      backgroundColor: carbonDark.surfaceAlt,
+    });
+    expect(fill(screen.getByTestId('presmoke-meat-type-input'))).toHaveStyle({
+      backgroundColor: carbonDark.surfaceAlt,
+    });
+  });
+
+  it('fills them with the page tone in the light scheme, not the card colour', async () => {
+    renderUnder('light', <Smoke />);
+
+    const name = fill(await screen.findByTestId('presmoke-name-input'));
+    expect(name).toHaveStyle({ backgroundColor: carbonLight.background });
+    expect(name).not.toHaveStyle({ backgroundColor: carbonLight.surface });
+  });
+
+  /**
+   * The pre-smoke form has no card behind it, so in the light scheme the field
+   * and the page it sits on are the same tone: the hairline is the whole of
+   * what makes the field visible.
+   */
+  it('draws the design’s hairline around a pre-smoke field on the bare page', async () => {
+    renderUnder('light', <Smoke />);
+
+    expect(outline(await screen.findByTestId('presmoke-name-input'))).toHaveStyle({
+      borderColor: carbonLight.inputBorder,
+      borderWidth: '1.5px',
+    });
+  });
+
+  it('fills the history search field the same way, not in the card colour', async () => {
+    renderUnder('dark', <History />);
+
+    const search = fill(await screen.findByRole('searchbox', { name: 'Search smoke history' }));
+    expect(search).toHaveStyle({ backgroundColor: carbonDark.surfaceAlt });
+    expect(search).not.toHaveStyle({ backgroundColor: carbonDark.surface });
+  });
+
+  /**
+   * The design's own history screen puts a page-toned search field on a
+   * page-toned sticky header and reads it by its hairline alone, so that is
+   * what is asserted: the fill matches the header, and the border is there.
+   */
+  it('reads the light-scheme history search field by its hairline on the page tone', async () => {
+    renderUnder('light', <History />);
+
+    const field = await screen.findByRole('searchbox', { name: 'Search smoke history' });
+    expect(fill(field)).toHaveStyle({ backgroundColor: carbonLight.background });
+    expect(outline(field)).toHaveStyle({
+      borderColor: carbonLight.inputBorder,
+      borderWidth: '1.5px',
+    });
+  });
+});
+
+/**
  * The bar is its own surface in the design — darker than a card in the dark
  * scheme, so it reads as the edge of the app rather than as another panel.
  */
