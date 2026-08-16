@@ -57,8 +57,12 @@ The Smart Smoker v2 project uses a clean, reusable workflow architecture that el
 - **Purpose**: Builds and publishes the device-side images for a release
 - **Process**:
   1. Build smoker apps — smoker, device-service, electron-shell — from the tag
-     (calls `build.yml` with mode="build-and-export")
-  2. Publish those Docker images with `:latest` + `:vX.Y.Z` (calls `publish.yml`)
+     (calls `build.yml` with mode="build", i.e. a compile-only validation; it
+     exports **no** Docker image artifacts)
+  2. Publish those Docker images with `:latest` + `:vX.Y.Z` (calls `publish.yml`
+     with mode="release" and `prebuild: true` — publish checks out fresh source
+     and rebuilds `dist/` itself, because those Dockerfiles COPY prebuilt
+     output)
 
   Smoker devices are not deployed to here: publishing `:latest` *is* their
   deployment, applied by Watchtower on the device.

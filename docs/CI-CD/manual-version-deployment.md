@@ -23,8 +23,10 @@ pins a specific version; dev-cloud runs `:nightly`; the physical smoker follows
 
 - The target version already exists in Docker Hub (`vX.Y.Z` for every image you
   intend to run) — check before dispatching anything
-- For local commands: Docker and Docker Compose on the target host, plus
-  `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY`
+- For local commands: Docker and Docker Compose on the target host, plus the
+  deploy directory's `.env` (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`,
+  `MONGO_ROOT_PASSWORD`, `MONGO_APP_PASSWORD`, `ENCODED_MONGO_APP_PASSWORD`) —
+  see [Option D](#option-d-local-shell-on-the-cloud-host)
 - For workflow dispatch: permission to run Actions on `master`
 
 ## Option A: Re-run the production deploy (`prod-deploy.yml`)
@@ -86,19 +88,55 @@ Notes:
 ## Option D: Local shell on the cloud host
 
 `cloud.docker-compose.yml` resolves images through a `VERSION` env var. Set it
-to pin the deployment:
+to pin the deployment.
+
+!!! danger "Run from the deploy directory — the secrets live in its `.env`"
+    `cloud.docker-compose.yml` interpolates the Mongo credentials
+    (`MONGO_ROOT_PASSWORD`, `MONGO_APP_PASSWORD`,
+    `ENCODED_MONGO_APP_PASSWORD`) and the VAPID keys from the environment.
+    `prod-deploy.yml` writes them to `<deploy_dir>/.env` (mode `600`) on every
+    deploy, and Docker Compose only auto-loads `.env` **from the directory you
+    run the command in**. Run from another directory and Compose substitutes
+    empty strings: Mongo initialises with a blank root password and the backend
+    fails authentication, so the break-glass path leaves prod down.
+
+    `cd` to the prod deploy directory (the `PROD_DEPLOY_DIR` repo variable —
+    the same directory that holds the compose file and `scripts/`) and confirm
+    `.env` is there before touching anything:
+
+    ```bash
+    cd "$PROD_DEPLOY_DIR"        # e.g. /opt/smart-smoker
+    test -f .env && grep -c MONGO_APP_PASSWORD .env
+    ```
+
+With that `.env` in place, `VERSION` is the only variable you supply:
 
 ```bash
-VERSION=v1.2.3 \
-VAPID_PUBLIC_KEY=<your_public_key> \
-VAPID_PRIVATE_KEY=<your_private_key> \
-docker compose -f cloud.docker-compose.yml pull
-
-VERSION=v1.2.3 \
-VAPID_PUBLIC_KEY=<your_public_key> \
-VAPID_PRIVATE_KEY=<your_private_key> \
-docker compose -f cloud.docker-compose.yml up -d --force-recreate
+cd "$PROD_DEPLOY_DIR"
+VERSION=v1.2.3 docker compose -f cloud.docker-compose.yml pull
+VERSION=v1.2.3 docker compose -f cloud.docker-compose.yml up -d --force-recreate
 ```
+
+If `.env` is missing or you are bringing the stack up somewhere else, recreate
+it first — do **not** pass these inline, and never invent new Mongo passwords
+for an existing data volume (the app user already exists; changing the values
+only breaks authentication):
+
+```bash
+# values come from the GitHub Actions secrets of the same name
+cat > .env <<'EOF'
+VAPID_PUBLIC_KEY=<vapid_public_key>
+VAPID_PRIVATE_KEY=<vapid_private_key>
+MONGO_ROOT_USER=admin
+MONGO_ROOT_PASSWORD=<mongo_root_password>
+MONGO_APP_PASSWORD=<mongo_app_password>
+ENCODED_MONGO_APP_PASSWORD=<mongo_app_password, percent-encoded for the URI>
+EOF
+chmod 600 .env
+```
+
+`ENCODED_MONGO_APP_PASSWORD` is `MONGO_APP_PASSWORD` URL-encoded because it is
+substituted into `DB_URL`; the pipeline computes it with `jq -sRr @uri`.
 
 Prefer Option A: it ships the current helper scripts, health-checks the result
 and runs the smoke gate. Use this only when Actions cannot reach the host.
@@ -111,9 +149,13 @@ Rollback is a deploy of an older version — pin and recreate:
 # Preferred: through the pipeline
 gh workflow run prod-deploy.yml -f version=v1.2.2
 
-# On the host, if Actions is unavailable
+# On the host, if Actions is unavailable — from the deploy dir, so .env loads
+cd "$PROD_DEPLOY_DIR"
 VERSION=v1.2.2 docker compose -f cloud.docker-compose.yml up -d --force-recreate
 ```
+
+The same `.env` requirement as [Option D](#option-d-local-shell-on-the-cloud-host)
+applies here.
 
 `scripts/rollback.sh` is shipped to the prod host on every deploy and is invoked
 automatically when the post-deploy health check fails.

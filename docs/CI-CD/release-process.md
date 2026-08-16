@@ -134,9 +134,14 @@ The script is the single source of truth for the rules: it takes a title (arg or
 `PR_TITLE` env var), prints the reason on stderr and exits `0`/`1`/`2`. Its own
 test suite is `scripts/validate-pr-title.test.sh`.
 
-`.github/workflows/pr-title-lint.yml` is a thin wrapper around that same script
-and runs on every PR. It is currently **advisory** (`continue-on-error`) — a bad
-title annotates a warning rather than turning the PR red — and it is not yet in
+`.github/workflows/pr-title-lint.yml` is a thin wrapper around that same script.
+Its `pull_request` trigger is scoped to `branches: [master]`, so it runs only on
+PRs **targeting `master`** — a stacked PR aimed at a feature branch gets no title
+check at all, and only the title of the PR that finally merges into `master`
+becomes the squashed subject release-please parses. Validate stacked titles
+yourself with the script above. The check is currently **advisory**
+(`continue-on-error`) — a bad title annotates a warning rather than turning the
+PR red — and it is not yet in
 branch protection. Flipping it to a required check is a maintainer settings
 change, done once the agent PR templates emit conventional titles. The
 `validator-tests` job in the same workflow is *not* advisory and must stay green.
