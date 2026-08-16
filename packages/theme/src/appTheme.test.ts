@@ -26,17 +26,18 @@ describe('the application theme — the Carbon light tokens it carries', () => {
   });
 
   /**
-   * The design fills a form control with the page background in the light
-   * scheme and with the alternate surface in the dark one, so that a field
-   * always reads as a well cut into the card it sits on rather than as part of
-   * it. The colour is therefore derived from the palette in effect rather than
-   * being a further colour a palette has to name.
+   * The design fills a form control with the alternate surface, in either
+   * palette: it is the one tone that is neither the card a field usually sits
+   * in nor the page a card-less screen puts it on, so a field reads as a well
+   * cut into whatever is behind it wherever it is placed. Filling it with the
+   * page background instead would make a field vanish on any card-less screen —
+   * the pre-smoke form and the history header among them.
    */
-  it('fills form controls with the page background in the light palette', () => {
+  it('fills form controls with the alternate surface in the light palette', () => {
     const { design } = createAppTheme('light');
 
-    expect(design.inputBg).toBe(design.background);
-    expect(design.inputBg).toBe('#F6F6F5');
+    expect(design.inputBg).toBe(design.surfaceAlt);
+    expect(design.inputBg).toBe('#ECECEA');
   });
 
   it('fills them with the alternate surface in the dark palette', () => {
@@ -44,6 +45,15 @@ describe('the application theme — the Carbon light tokens it carries', () => {
 
     expect(design.inputBg).toBe(design.surfaceAlt);
     expect(design.inputBg).toBe('#202020');
+  });
+
+  it('keeps the fill off both the card and the page in either palette', () => {
+    (['light', 'dark'] as const).forEach(mode => {
+      const { design } = createAppTheme(mode);
+
+      expect(design.inputBg).not.toBe(design.surface);
+      expect(design.inputBg).not.toBe(design.background);
+    });
   });
 
   it('carries the accent, danger and success colours', () => {

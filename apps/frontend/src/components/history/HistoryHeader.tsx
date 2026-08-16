@@ -177,6 +177,9 @@ export function HistoryHeader({
             </IconButton>
           ) : null
         }
+        // No fill here: the theme fills every input base with the design's
+        // field colour, so a hand-written one would be a second place to change
+        // it and a chance for this field to drift from the rest of them.
         sx={theme => ({
           marginTop: '12px',
           width: '100%',
@@ -185,7 +188,6 @@ export function HistoryHeader({
           borderRadius: '11px',
           fontSize: '0.9375rem',
           color: theme.design.text,
-          backgroundColor: theme.design.inputBg,
           border: `1.5px solid ${theme.design.inputBorder}`,
         })}
       />

@@ -20,5 +20,5 @@ import { carbonLight, resolveDesignPalette } from 'theme/src';
 export const useChartPalette = (): ChartPalette => {
   const { design } = useTheme();
 
-  return (design ?? resolveDesignPalette(carbonLight, 'light')).chart;
+  return (design ?? resolveDesignPalette(carbonLight)).chart;
 };

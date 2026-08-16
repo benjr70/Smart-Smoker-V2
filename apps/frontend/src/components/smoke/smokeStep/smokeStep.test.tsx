@@ -155,7 +155,7 @@ const targetLines = (container: HTMLElement): SVGLineElement[] =>
   Array.from(container.querySelectorAll<SVGLineElement>('line[data-target]'));
 
 /** The palette the smoke screen is painted in under test, which is the light one. */
-const designColours = resolveDesignPalette(carbonLight, 'light');
+const designColours = resolveDesignPalette(carbonLight);
 
 /** The chart colours the smoke screen draws under in a test. */
 const chartColours = designColours.chart;
