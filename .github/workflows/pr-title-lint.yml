@@ -3,15 +3,11 @@
 # on this repo is the PR title — so the title has to be a valid conventional
 # commit.
 #
-# ADVISORY for now: the title check runs and shows up on every PR, but it never
-# turns the PR red — `continue-on-error: true` (the repo's advisory convention,
-# cf. docker-build-pr.yml and terraform-plan.yml) keeps a bad title to a warning
-# annotation. Agent PR templates now emit conventional titles (#502 — team-pickup
-# skill + scripts/ralph/ralph-pr.sh, both pre-flighting this same validator), but
-# in-flight PRs opened before that may still be titled 'Closes #N: ...', and the
-# CI watchers treat any red check as a failure to grind on. The check is also NOT
-# in branch-protection required checks. The flip to blocking is a separate HITL
-# settings slice.
+# BLOCKING (flipped in HITL slice #504): a non-conventional title turns this
+# check red, and "Conventional PR title" is in master's branch-protection
+# required status checks — a bad title cannot merge. Agent PR templates emit
+# conventional titles (#502 — team-pickup skill + scripts/ralph/ralph-pr.sh,
+# both pre-flighting this same validator).
 #
 # The validator-tests job below is NOT advisory — it is a real test suite for
 # the script and must stay blocking.
@@ -44,19 +40,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Validate PR title (advisory)
+      - name: Validate PR title
         id: validate
-        continue-on-error: true
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: bash scripts/validate-pr-title.sh "$PR_TITLE"
-
-      - name: Advisory notice
-        if: steps.validate.outcome == 'failure'
-        env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-        run: |
-          echo "::warning title=PR title::Advisory: '$PR_TITLE' is not a valid conventional-commit subject. release-please builds the changelog from the squashed subject (this PR title). See the log above for the reason. This check becomes blocking in a later slice of PRD #498."
 
   validator-tests:
     name: Validator self-tests
