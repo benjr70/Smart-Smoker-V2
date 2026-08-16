@@ -133,6 +133,60 @@ want: ${want}"
 }
 
 #-------------------------------------------------------------------------------
+# Test 4b: a limits[] entry scoped to an ignored model (default "Fable") never
+# gates — account policy lets that model's weekly run to 100% while other
+# models keep working. The live 2026-08-16 shape: Fable weekly 100% active,
+# weekly_all 40% → binding is weekly_all, daemon keeps firing, and resetAt is
+# the weekly_all reset (never the ignored model's).
+#-------------------------------------------------------------------------------
+test_ignored_model_limit_never_gates() {
+    echo "TEST: ignored model limit never gates"
+
+    local out
+    out="$(cat <<'EOF' | usage_gate
+{ "five_hour": { "utilization": 2, "resets_at": "2026-08-16T17:10:00+00:00" },
+  "seven_day": { "utilization": 40, "resets_at": "2026-08-21T19:00:00+00:00" },
+  "limits": [
+    { "kind": "session", "percent": 2, "is_active": false,
+      "resets_at": "2026-08-16T17:10:00+00:00", "scope": null },
+    { "kind": "weekly_all", "percent": 40, "is_active": false,
+      "resets_at": "2026-08-21T19:00:00+00:00", "scope": null },
+    { "kind": "weekly_scoped", "percent": 100, "is_active": true,
+      "resets_at": "2026-08-21T19:00:00+00:00",
+      "scope": { "model": { "id": null, "display_name": "Fable" } } } ] }
+EOF
+)"
+
+    local want='{"remainPct":60.00,"resetAt":"2026-08-21T19:00:00+00:00","shouldFire":true}'
+    if [ "${out}" != "${want}" ]; then
+        fail "ignored model verdict" "got:  ${out}
+want: ${want}"
+        return
+    fi
+
+    # And an override: with the ignore list cleared, the same payload gates.
+    local out2
+    out2="$(cat <<'EOF' | USAGE_GATE_IGNORE_MODELS="" usage_gate
+{ "five_hour": { "utilization": 2, "resets_at": "2026-08-16T17:10:00+00:00" },
+  "seven_day": { "utilization": 40, "resets_at": "2026-08-21T19:00:00+00:00" },
+  "limits": [
+    { "kind": "weekly_scoped", "percent": 100, "is_active": true,
+      "resets_at": "2026-08-21T19:00:00+00:00",
+      "scope": { "model": { "id": null, "display_name": "Fable" } } } ] }
+EOF
+)"
+
+    local want2='{"remainPct":0.00,"resetAt":"2026-08-21T19:00:00+00:00","shouldFire":false}'
+    if [ "${out2}" != "${want2}" ]; then
+        fail "ignore-list override verdict" "got:  ${out2}
+want: ${want2}"
+        return
+    fi
+
+    pass "ignored model limit never gates"
+}
+
+#-------------------------------------------------------------------------------
 # Test 5: malformed / empty / limit-free payloads degrade (exit 3, non-firing
 # verdict) — the daemon falls back to the ccusage time-proxy.
 #-------------------------------------------------------------------------------
@@ -203,6 +257,7 @@ test_fresh_budget_fires
 test_spent_session_blocks
 test_weekly_wall_blocks
 test_per_model_limit_binds
+test_ignored_model_limit_never_gates
 test_malformed_degrades
 test_fetch_wires_token
 

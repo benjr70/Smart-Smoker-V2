@@ -5,7 +5,9 @@ description:
   before the implementer starts. Spawned on-demand by the lead for issues with a
   non-trivial "Interface Changes" section. No Bash, no Edit, no Write.
 tools: Read, Grep, Glob, WebFetch
-model: fable
+# model deliberately unpinned: inherits the lead session's model (Fable by
+# default), so a daemon-level fallback (AGENT_RUN_MODEL=opus when the Fable
+# weekly is spent) carries through to this agent too.
 effort: medium
 ---
 

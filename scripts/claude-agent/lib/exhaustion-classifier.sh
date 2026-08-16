@@ -13,6 +13,9 @@
 # issue and keeps the branch), and a genuine failure must classify as FAILED (so
 # it is surfaced for triage) — an out-of-gas event must never be mistaken for a
 # failure, and a real failure must never be silently treated as "just out of gas".
+# A zero exit always classifies OK: the run finished, so any limit-flavored
+# phrase in the transcript is incidental prose (an agent discussing rate
+# limits), not a cutoff notice.
 #
 # When the exhaustion notice carries an authoritative "resets at" instant, it is
 # scraped and normalized to ISO-8601 so the daemon can schedule the next wake off
@@ -108,12 +111,17 @@ exhaustion_classify() {
 
     text="$(cat)"
 
-    if printf '%s' "${text}" | grep -qiE "${_EC_EXHAUSTION_RE}"; then
-        status="EXHAUSTED"
-        reset="$(_ec_scrape_reset "${text}")"
-    elif [ "${exit_code}" -eq 0 ]; then
+    # Exit 0 means the run COMPLETED — it cannot have been cut off, whatever
+    # the transcript happens to mention. Observed live 2026-08-16: a fully
+    # successful reconcile run whose own summary prose said "rate-limit"
+    # classified EXHAUSTED and put the daemon to sleep for 5 days. Every real
+    # exhaustion cutoff observed so far exits nonzero.
+    if [ "${exit_code}" -eq 0 ]; then
         status="OK"
         reset=""
+    elif printf '%s' "${text}" | grep -qiE "${_EC_EXHAUSTION_RE}"; then
+        status="EXHAUSTED"
+        reset="$(_ec_scrape_reset "${text}")"
     else
         status="FAILED"
         reset=""

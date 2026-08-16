@@ -53,10 +53,12 @@ make_env() {
     mkdir -p "${dir}/repo/.git" "${dir}/logs"
     : > "${dir}/gh.log"
     : > "${dir}/git.log"
+    : > "${dir}/claude.log"
 
     printf '%s' "${fixture}" > "${dir}/fixture.txt"
     cat > "${dir}/claude-stub" <<EOF
 #!/usr/bin/env bash
+echo "\$*" >> "${dir}/claude.log"
 cat "${dir}/fixture.txt"
 exit ${claude_exit}
 EOF
@@ -461,6 +463,40 @@ ${out}"
 #-------------------------------------------------------------------------------
 # Run suite
 #-------------------------------------------------------------------------------
+#-------------------------------------------------------------------------------
+# Model fallback: AGENT_RUN_MODEL=opus (set by the daemon when the preferred
+# model's weekly is spent) must reach the claude CLI as `--model opus`; when
+# the env is unset, no --model flag is passed (session default).
+#-------------------------------------------------------------------------------
+test_model_fallback_env_pins_model() {
+    echo "TEST: AGENT_RUN_MODEL env pins the CLI model"
+
+    local dir
+    dir="$(make_env "clean run, nothing to note" 0)"
+    REPO_DIR="${dir}/repo" LOG_DIR="${dir}/logs" \
+        CLAUDE_BIN="${dir}/claude-stub" GH_BIN="${dir}/gh-stub" GIT_BIN="${dir}/git-stub" \
+        AGENT_RUN_MODEL="opus" \
+        bash "${AGENT_RUN}" >/dev/null 2>&1
+
+    if ! grep -q -- '--model opus' "${dir}/claude.log"; then
+        fail "fallback model not passed" "claude argv: $(cat "${dir}/claude.log")"
+        rm -rf "${dir}"
+        return
+    fi
+    rm -rf "${dir}"
+
+    dir="$(make_env "clean run, nothing to note" 0)"
+    run_agent "${dir}" >/dev/null 2>&1
+    if grep -q -- '--model' "${dir}/claude.log"; then
+        fail "unexpected --model without env" "claude argv: $(cat "${dir}/claude.log")"
+        rm -rf "${dir}"
+        return
+    fi
+    rm -rf "${dir}"
+
+    pass "AGENT_RUN_MODEL env pins the CLI model"
+}
+
 echo "=========================================="
 echo "agent-run tests"
 echo "=========================================="
@@ -475,6 +511,7 @@ test_failed_run_clears_its_own_lock
 test_failed_run_without_pick_touches_no_lock
 test_failed_reconcile_restores_done_lock
 test_bg_ceiling_lifted_for_claude
+test_model_fallback_env_pins_model
 
 echo ""
 echo "=========================================="

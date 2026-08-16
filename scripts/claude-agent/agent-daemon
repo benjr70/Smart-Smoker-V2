@@ -68,6 +68,14 @@ WORK_PROBE_INTERVAL="${WORK_PROBE_INTERVAL:-300}"       # secs between probes
 AGENT_DAEMON_FAIL_CAP="${AGENT_DAEMON_FAIL_CAP:-3}"     # consecutive-failure cap
 WORK_PROBE_CMD="${WORK_PROBE_CMD:-wp_scan}"             # eval'd; emits scan JSON
 USAGE_FETCH_CMD="${USAGE_FETCH_CMD:-usage_sensor_fetch}" # eval'd; OAuth usage JSON
+# Model fallback: the gate ignores the FABLE_FALLBACK_SCOPE model's weekly
+# (USAGE_GATE_IGNORE_MODELS) so it may run to 100% — but once it is effectively
+# spent, firing agents on it just errors. When its scoped weekly is at/above
+# FABLE_FALLBACK_PCT, the fire is passed AGENT_RUN_MODEL=<FABLE_FALLBACK_MODEL>
+# so the whole team runs on the fallback model until the weekly resets.
+FABLE_FALLBACK_SCOPE="${FABLE_FALLBACK_SCOPE:-Fable}"
+FABLE_FALLBACK_PCT="${FABLE_FALLBACK_PCT:-95}"
+FABLE_FALLBACK_MODEL="${FABLE_FALLBACK_MODEL:-opus}"
 
 log() { echo "[agent-daemon $(date -u +%Y-%m-%dT%H:%M:%SZ)] $*"; }
 
@@ -101,8 +109,9 @@ degraded_reset_iso() {
 # nothing about actual budget (observed live 2026-07-10: refused to fire at
 # "9.72% remaining" while the account sat at 81% real budget free).
 read_budget() {
-    local json gate_out gate_rc
+    local json gate_out gate_rc scoped_util
 
+    FIRE_MODEL=""
     json="$(eval "${USAGE_FETCH_CMD}" 2>/dev/null || true)"
     if [ -n "${json}" ]; then
         gate_out="$(printf '%s' "${json}" | usage_gate)" && gate_rc=0 || gate_rc=$?
@@ -111,6 +120,14 @@ read_budget() {
             SHOULD_FIRE="$(printf '%s' "${gate_out}" | jq -r '.shouldFire')"
             RESET_AT="$(printf '%s' "${gate_out}" | jq -r '.resetAt')"
             REMAIN_PCT="$(printf '%s' "${gate_out}" | jq -r '.remainPct')"
+            # The ignored model's weekly doesn't gate, but once it is spent the
+            # fire must run on the fallback model instead of erroring on it.
+            scoped_util="$(printf '%s' "${json}" | usage_scoped_util "${FABLE_FALLBACK_SCOPE}")"
+            if [ -n "${scoped_util}" ] \
+                && awk "BEGIN{exit !(${scoped_util} >= ${FABLE_FALLBACK_PCT})}"; then
+                FIRE_MODEL="${FABLE_FALLBACK_MODEL}"
+                log "${FABLE_FALLBACK_SCOPE} weekly at ${scoped_util}% (>= ${FABLE_FALLBACK_PCT}) — fires will run on ${FIRE_MODEL}"
+            fi
             return 0
         fi
     fi
@@ -228,7 +245,7 @@ main() {
             # (backoff below), not abort the daemon. PIPESTATUS[0] is agent-run's
             # own exit, unaffected by the tee.
             set +e
-            "${AGENT_RUN_CMD}" 2>&1 | tee "${fire_log}"
+            AGENT_RUN_MODEL="${FIRE_MODEL}" "${AGENT_RUN_CMD}" 2>&1 | tee "${fire_log}"
             fire_rc="${PIPESTATUS[0]}"
             set -e
 
