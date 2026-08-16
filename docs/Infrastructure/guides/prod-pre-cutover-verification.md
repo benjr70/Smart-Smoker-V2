@@ -21,7 +21,11 @@ approval gate, and judge real verification output.
 What fires when a GitHub Release is published:
 
 1. **`prod-deploy.yml`** — the pipeline under test:
-   `promote` (GitHub-hosted, retags `:nightly` → `vX.Y.Z` + `:latest`) →
+   `set-version` (GitHub-hosted, normalizes/validates the version and probes
+   Docker Hub for existing `vX.Y.Z` cloud images) →
+   `publish-cloud` (GitHub-hosted reusable `publish.yml`, builds
+   backend + frontend **from the release tag** and pushes `vX.Y.Z` + `:latest`;
+   **skipped** when both images already exist at that tag) →
    `deploy` (self-hosted `proxmox-runner`, gated by the `production`
    environment: required reviewer **benjr70** + 5-minute wait timer) →
    `smoke` (GitHub-hosted, blocking Playwright/API smoke against the public
@@ -43,25 +47,27 @@ Run each command; every one must match "expect" before proceeding.
 | - | ------- | ------ |
 | 1 | `gh api repos/benjr70/Smart-Smoker-V2/actions/runners --jq '.runners[] \| "\(.name) \(.status)"'` | `proxmox-runner online` |
 | 2 | `tailscale status \| grep smokecloud-2` | host listed, not `offline` |
-| 3 | `curl -fsS https://hub.docker.com/v2/repositories/benjr70/smart-smoker-backend/tags/nightly \| jq .last_updated` | timestamp from last night (repeat for `smart-smoker-frontend`) |
+| 3 | `git ls-remote --tags origin \| grep v1.6.0` | the tag you are about to release does **not** exist yet |
 | 4 | `gh run list --workflow=ansible-prod-cloud.yml --limit 1` | latest run `success` |
 | 5 | `gh variable list \| grep PROD` | `PROD_HOST=smokecloud-2`, `PROD_FQDN=smokecloud-2.tail74646.ts.net`, `PROD_DEPLOY_DIR=/opt/smart-smoker-prod` |
 | 6 | `gh secret list` | `SSH_PRIVATE_KEY`, `DOCKERHUB_*`, `VAPID_*`, `MONGO_*` present |
 
-The nightly images are what get promoted — **whatever was on `master` at the
-last nightly build is what ships**. If master moved since, either wait for
-tonight's nightly or trigger `nightly.yml` manually and let it finish first.
+The **release tag** is what ships — the cloud images are built fresh from the
+tagged commit, so `:nightly` is irrelevant to this pipeline. Whatever `master`
+points at when you cut the tag is what goes to prod.
 
 ## Step 2 — Pick the version
 
 Last release is `1.5.1` (2024). Recommended: **`v1.6.0`** (minor bump — new
-deploy pipeline, no breaking app change). `promote-images.sh` accepts
-`X.Y.Z` with optional `v` and normalizes to `vX.Y.Z`.
+deploy pipeline, no breaking app change). `set-version` accepts `X.Y.Z` with
+an optional `v`, trims whitespace, and fails fast on anything that is not
+`X.Y.Z`.
 
-⚠️ Promotion also moves the `:latest` tag for `smart-smoker-backend` /
+⚠️ A forward release also moves the `:latest` tag for `smart-smoker-backend` /
 `smart-smoker-frontend`. Nothing in CI consumes `:latest` (dev uses
 `:nightly`, prod composes pin `${VERSION}`), but be aware if anything ad-hoc
-pulls `latest`.
+pulls `latest`. A re-deploy of an **already-built** version skips
+`publish-cloud` entirely, so it cannot move `:latest` backwards.
 
 ## Step 3 — Cut the release
 
@@ -79,10 +85,12 @@ gh run list --limit 5
 # expect: "Production Deploy" (event: release) and "Release Smart Smoker v2" both queued/running
 ```
 
-## Step 4 — Watch promote, then approve the gate
+## Step 4 — Watch the image build, then approve the gate
 
-The `promote` job needs ~1 minute. When it completes, the `deploy` job
-pauses for the `production` environment gate:
+`set-version` is seconds; `publish-cloud` builds backend + frontend multi-arch
+from the tag and needs ~10–20 minutes (or is skipped in seconds if the tag's
+images already exist). When it completes, the `deploy` job pauses for the
+`production` environment gate:
 
 1. Open the run: `gh run watch` or Actions → **Production Deploy** → the
    release-triggered run.
@@ -214,10 +222,11 @@ issue. That unblocks #225 (cutover).
 
 | Symptom | Likely cause | Action |
 | ------- | ------------ | ------ |
-| `promote` fails | `:nightly` tag missing or Docker Hub creds | check pre-flight #3; re-run job |
-| `deploy` gate never appears | promote failed, or looking at the `release.yml` run by mistake | open the **Production Deploy** run |
+| `set-version` fails | malformed version input (must be `X.Y.Z` / `vX.Y.Z`) | re-dispatch with a valid version |
+| `publish-cloud` fails | build break at the tag, or Docker Hub creds | read the failing app's build log; check `gh secret list` for `DOCKERHUB_*` |
+| `deploy` gate never appears | `publish-cloud` failed, or looking at the `release.yml` run by mistake | open the **Production Deploy** run |
 | Health-check fails, rollback OK | new images broken | `ssh root@smokecloud-2 'cd /opt/smart-smoker-prod && docker compose -f cloud.docker-compose.yml logs --tail 100 backend'` |
 | `🛑 Rollback FAILED` | box in bad state | manual: `bash scripts/rollback.sh` on the box; worst case re-run ansible `setup-prod-cloud.yml` then redeploy |
 | Funnel URLs 404/timeout | tailscale serve state | `ssh root@smokecloud-2 'tailscale serve status'`; funnel CLI was modernized in #253/#254 — re-run deploy step or the two `tailscale funnel --bg` commands manually |
 | Smoke job red | check `prod-deploy-smoke-artifacts` | screenshots/traces in run artifacts; fix, then re-run via `workflow_dispatch` with the same version |
-| Need a clean re-run | any | `gh workflow run prod-deploy.yml -f version=v1.6.0` — fully idempotent (re-promotes same images, redeploys) |
+| Need a clean re-run | any | `gh workflow run prod-deploy.yml -f version=v1.6.0` — idempotent: `publish-cloud` is skipped because `vX.Y.Z` already exists, so the exact same images are redeployed |

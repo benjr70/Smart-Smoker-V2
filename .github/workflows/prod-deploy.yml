@@ -26,6 +26,7 @@ jobs:
     outputs:
       tag: ${{ steps.version.outputs.tag }}
       num: ${{ steps.version.outputs.num }}
+      images_exist: ${{ steps.images.outputs.exist }}
 
     steps:
       - name: Resolve version
@@ -33,23 +34,64 @@ jobs:
         shell: bash
         run: |
           if [[ "${{ github.event_name }}" == "release" ]]; then
-            TAG="${{ github.event.release.tag_name }}"
+            RAW="${{ github.event.release.tag_name }}"
           else
-            TAG="${{ inputs.version }}"
+            RAW="${{ inputs.version }}"
           fi
-          # Strip leading v/V then normalize to vX.Y.Z
-          NUM="${TAG#[vV]}"
+          # Trim whitespace (copy-pasted dispatch inputs often carry a trailing
+          # space) and normalize a leading V/v away, mirroring release.yml.
+          RAW="$(echo "$RAW" | xargs)"
+          NUM="${RAW#[vV]}"
+          # Fail fast on a malformed version instead of handing garbage to
+          # actions/checkout two reusable-workflow levels down, or minting a
+          # malformed Docker tag.
+          if [[ ! "$NUM" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Invalid version '${RAW}' — expected X.Y.Z or vX.Y.Z (e.g. 1.6.0 or v1.6.0)"
+            exit 1
+          fi
           echo "tag=v${NUM}" >> "$GITHUB_OUTPUT"
           echo "num=${NUM}"  >> "$GITHUB_OUTPUT"
+
+      # Immutability guard. `:vX.Y.Z` is meant to be built exactly once, by the
+      # release that minted the tag. A workflow_dispatch re-deploy of an
+      # already-released version (a rollback, or a re-run after a red smoke job)
+      # must NOT rebuild: the rebuild would overwrite an immutable tag with a
+      # different image, and because release mode also pushes `:latest` it would
+      # drag `:latest` backwards onto the older version. So probe Docker Hub —
+      # if both cloud images already exist at this tag, skip the build and
+      # deploy exactly the images that are already published.
+      - name: Check whether release images already exist
+        id: images
+        shell: bash
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+          EXIST=true
+          for app in backend frontend; do
+            IMAGE="${DOCKERHUB_USERNAME}/smart-smoker-${app}:${TAG}"
+            if docker manifest inspect "$IMAGE" >/dev/null 2>&1; then
+              echo "present: ${IMAGE}"
+            else
+              echo "absent:  ${IMAGE}"
+              EXIST=false
+            fi
+          done
+          docker logout || true
+          echo "exist=${EXIST}" >> "$GITHUB_OUTPUT"
 
   # Build the cloud images FROM THE RELEASE TAG rather than retagging whatever
   # `:nightly` happens to be. Promotion could ship a different commit than the
   # one that was released; building at the tag eliminates that race entirely.
-  # Release mode also pushes `:latest` for these images — harmless, nothing
-  # consumes it.
+  # Release mode also pushes `:latest` for these images — that is correct for a
+  # forward release, and the guard above is what keeps a backwards re-deploy
+  # from ever reaching this job.
   publish-cloud:
     name: Build and publish cloud images from tag
     needs: set-version
+    if: needs.set-version.outputs.images_exist != 'true'
     uses: ./.github/workflows/publish.yml
     with:
       apps: '["backend", "frontend"]'
@@ -69,6 +111,14 @@ jobs:
   deploy:
     name: Deploy to Production
     needs: [set-version, publish-cloud]
+    # publish-cloud is skipped when the tag's images already exist (re-deploy of
+    # an already-released version). A skipped `needs` would skip this job too, so
+    # accept success-or-skipped explicitly — a publish *failure* still blocks.
+    if: >-
+      ${{ !cancelled()
+      && needs.set-version.result == 'success'
+      && (needs.publish-cloud.result == 'success'
+      || needs.publish-cloud.result == 'skipped') }}
     runs-on: [self-hosted, linux, proxmox]
     environment: production
 
