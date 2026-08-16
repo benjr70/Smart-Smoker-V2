@@ -1,0 +1,66 @@
+# Conventional-commit PR-title lint (issue #499, PRD #498). release-please
+# derives the changelog and version bump from the squashed commit subject, which
+# on this repo is the PR title — so the title has to be a valid conventional
+# commit.
+#
+# ADVISORY for now: the title check runs and shows up on every PR, but it never
+# turns the PR red — `continue-on-error: true` (the repo's advisory convention,
+# cf. docker-build-pr.yml and terraform-plan.yml) keeps a bad title to a warning
+# annotation. That matters because agent PRs are still titled 'Closes #N: ...',
+# which this validator rejects, and the CI watchers treat any red check as a
+# failure to grind on. The check is also NOT in branch-protection required
+# checks. The flip to blocking is a separate HITL settings slice, done after the
+# agent PR templates comply.
+#
+# The validator-tests job below is NOT advisory — it is a real test suite for
+# the script and must stay blocking.
+#
+# All the rules live in scripts/validate-pr-title.sh (self-tested); this
+# workflow is a thin wrapper. The title is passed through an env var rather than
+# inline `${{ }}` interpolation so a crafted title cannot inject shell.
+
+name: PR Title Lint
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+    branches: [master]
+  push:
+    branches: [master]
+    paths:
+      - 'scripts/validate-pr-title.sh'
+      - 'scripts/validate-pr-title.test.sh'
+      - '.github/workflows/pr-title-lint.yml'
+
+jobs:
+  pr-title:
+    name: Conventional PR title
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate PR title (advisory)
+        id: validate
+        continue-on-error: true
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: bash scripts/validate-pr-title.sh "$PR_TITLE"
+
+      - name: Advisory notice
+        if: steps.validate.outcome == 'failure'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          echo "::warning title=PR title::Advisory: '$PR_TITLE' is not a valid conventional-commit subject. release-please builds the changelog from the squashed subject (this PR title). See the log above for the reason. This check becomes blocking in a later slice of PRD #498."
+
+  validator-tests:
+    name: Validator self-tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run the PR-title validator test suite
+        run: bash scripts/validate-pr-title.test.sh
