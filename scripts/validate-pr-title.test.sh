@@ -97,6 +97,9 @@ test_invalid_titles_fail_with_reason() {
         "just a plain sentence"
         "FEAT: shouting"
         "feat(): empty scope"
+        "feat( scope): leading space in scope"
+        "feat(scope ): trailing space in scope"
+        "feat(my scope): inner space in scope"
     )
 
     local title
@@ -121,23 +124,34 @@ test_invalid_titles_fail_with_reason() {
 test_legacy_closes_shape_gets_targeted_message() {
     echo "TEST: legacy 'Closes #N: ...' title points at the conventional format"
 
-    run_validator "Closes #484: UI parity slice 10"
-    if [ "${RUN_STATUS}" -eq 0 ]; then
-        fail "legacy Closes title should be rejected" "exit 0"
-        return
-    fi
-    if ! grep -qi "closes #" <<<"${RUN_STDERR}"; then
-        fail "legacy Closes title should be named in the reason" "stderr: ${RUN_STDERR}"
-        return
-    fi
-    if ! grep -qi "body" <<<"${RUN_STDERR}"; then
-        fail "legacy Closes reason should say to move it to the PR body" "stderr: ${RUN_STDERR}"
-        return
-    fi
-    if ! grep -q "feat(scope)" <<<"${RUN_STDERR}"; then
-        fail "legacy Closes reason should show the conventional format" "stderr: ${RUN_STDERR}"
-        return
-    fi
+    # Spacing between "Closes" and "#N" varies in the wild; every shape should
+    # get the same targeted guidance rather than a generic type/scope error.
+    local legacy_titles=(
+        "Closes #484: UI parity slice 10"
+        "Closes#499: add thing"
+        "closes  #12: lowercase, double space"
+    )
+
+    local title
+    for title in "${legacy_titles[@]}"; do
+        run_validator "${title}"
+        if [ "${RUN_STATUS}" -eq 0 ]; then
+            fail "legacy Closes title should be rejected" "accepted '${title}'"
+            return
+        fi
+        if ! grep -qi "closes #" <<<"${RUN_STDERR}"; then
+            fail "legacy Closes title should be named in the reason" "'${title}' stderr: ${RUN_STDERR}"
+            return
+        fi
+        if ! grep -qi "body" <<<"${RUN_STDERR}"; then
+            fail "legacy Closes reason should say to move it to the PR body" "'${title}' stderr: ${RUN_STDERR}"
+            return
+        fi
+        if ! grep -q "feat(scope)" <<<"${RUN_STDERR}"; then
+            fail "legacy Closes reason should show the conventional format" "'${title}' stderr: ${RUN_STDERR}"
+            return
+        fi
+    done
 
     pass "legacy Closes title rejected with a targeted message"
 }
@@ -164,6 +178,11 @@ test_unknown_type_reason_lists_accepted_types() {
             return
         fi
     done
+
+    if ! grep -q "feat, fix, chore" <<<"${RUN_STDERR}"; then
+        fail "accepted types should be a comma-space list" "stderr: ${RUN_STDERR}"
+        return
+    fi
 
     pass "unknown type reason lists accepted types"
 }

@@ -15,9 +15,12 @@ set -uo pipefail
 
 VALID_TYPES=(feat fix chore docs ci refactor test perf build style revert)
 
+# Bash expands ${array[*]} with only the *first* character of IFS, so join on a
+# comma and widen to comma-space afterwards.
 types_csv() {
-    local IFS=', '
-    echo "${VALID_TYPES[*]}"
+    local IFS=','
+    local joined="${VALID_TYPES[*]}"
+    echo "${joined//,/, }"
 }
 
 format_help() {
@@ -53,10 +56,12 @@ reject() {
     exit 1
 }
 
-# Rejects the legacy `Closes #N: ...` shape with a targeted message.
+# Rejects the legacy `Closes #N: ...` shape with a targeted message. The space
+# before the `#` is optional so `Closes#499: ...` gets the same guidance instead
+# of falling through to a misleading type/scope error.
 check_legacy_closes_shape() {
     local title="$1"
-    if [[ "${title}" =~ ^[Cc]loses[[:space:]]+#[0-9]+ ]]; then
+    if [[ "${title}" =~ ^[Cc]loses[[:space:]]*#[0-9]+ ]]; then
         reject "legacy 'Closes #N: ...' shape is no longer allowed in PR titles.
   Use the conventional format — e.g. 'feat(scope): short description' — and
   move 'Closes #N' into the PR body."
@@ -74,7 +79,7 @@ check_conventional_shape() {
     local prefix="${title%%:*}"
     local remainder="${title#*:}"
 
-    if ! [[ "${prefix}" =~ ^([a-z]+)(\(([^()[:space:]][^()]*)\))?(!)?$ ]]; then
+    if ! [[ "${prefix}" =~ ^([a-z]+)(\(([^()[:space:]]+)\))?(!)?$ ]]; then
         local lowered="${prefix,,}"
         if [[ "${prefix}" != "${lowered}" ]]; then
             reject "type/scope '${prefix}' must be lowercase."
