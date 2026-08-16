@@ -17,14 +17,29 @@
 # packages/TemperatureChart is the exception that does need care: frontend and
 # smoker depend on it by range, so the config ALSO rewrites
 # $.dependencies.temperaturechart in both apps. Without that, the first major
-# release moves the package to 2.0.0, the stale ^1.0.0 range stops matching,
-# npm gives up on the workspace link and tries to fetch the generic public name
-# `temperaturechart` from registry.npmjs.org — `npm ci` fails. release-please's
-# generic-json updater preserves the range operator, so ^1.0.0 becomes ^2.0.0.
+# release moves the package to 2.0.0, the stale ^1.0.0 range stops matching and
+# `npm ci` fails EUSAGE ("Missing: temperaturechart@1.0.0 from lock file").
+# release-please's generic-json updater preserves the range operator, so ^1.0.0
+# becomes ^2.0.0 and the workspace link keeps resolving. The nested workspace
+# entries in package-lock.json are NOT rewritten by a release and do not need to
+# be: npm resolves a linked workspace from the workspace's own package.json, so
+# stale lock version fields are inert (verified with npm 11.5.1 against both the
+# full workspace and the partial topology in apps/device-service/Dockerfile).
+# scripts/release/release-please-config.test.sh pins both halves of that.
 #
 # Bump rules are release-please defaults — feat->minor, fix->patch,
 # `!`/BREAKING CHANGE->major — and a run whose commits are only
 # chore/docs/ci/refactor produces no release PR at all.
+#
+# IMPORTANT — this workflow's only input is the Conventional Commits prefix on
+# each squash-merge PR title, and nothing enforces that prefix yet. Master's
+# current `Closes #NNN: ...` titles are unparseable, so until the cutover lands
+# this workflow will legitimately open NO release PR. Enforcement is sequenced
+# in separate slices of PRD #498: #499 adds an advisory PR-title lint, #502 puts
+# conventional prefixes in the agent PR templates, and #504 (HITL) flips the
+# title lint to a required check and sets the repo to squash-only. Releases
+# start tracking master when #504 lands; before then, an empty run here means
+# "no conventional titles", not "no changes".
 #
 # Auth is deliberately the runner PAT, NOT the default GITHUB_TOKEN: Releases
 # created by GITHUB_TOKEN do not emit `release: published` events, so

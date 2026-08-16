@@ -17,10 +17,8 @@
 # Parsed with jq/grep rather than by running release-please so the suite is
 # fast, hermetic and needs no network.
 #
-# NOTE: no CI workflow executes this suite yet. Issue #500 is a new-files-only
-# slice (its AC forbids editing existing workflows) and claude-agent-tests.yml
-# is path-filtered to scripts/claude-agent/**, so wiring this into CI is a
-# later slice. Until then, run it by hand when touching release config.
+# CI runs this suite via .github/workflows/release-config-tests.yml, which is
+# path-filtered to the release config, manifest, workflows and this script.
 #
 # Run: bash scripts/release/release-please-config.test.sh
 
@@ -304,6 +302,124 @@ test_dependent_ranges_bumped_with_their_package() {
 }
 
 #-------------------------------------------------------------------------------
+# Behavior 2c (critical): a release PR must leave `npm ci` working. release-please
+# rewrites package.json files but NEVER the nested workspace entries inside the
+# root package-lock.json (the node release-type only touches the lock's top-level
+# `version` / `.packages[""].version`). Measured with npm 11.5.1 on this repo:
+#
+#   * bump root + all five package.jsons to 2.0.0 and both temperaturechart
+#     ranges to ^2.0.0, leaving `.packages["apps/*"].version` and
+#     `.packages["apps/frontend"].dependencies.temperaturechart` stale in the
+#     lock -> `npm ci --dry-run --legacy-peer-deps` EXITS 0, both for the full
+#     workspace and for the partial topology in apps/device-service/Dockerfile
+#     (`npm ci -w device-service`). npm resolves a linked workspace from the
+#     workspace's own package.json, so stale lock version fields are inert.
+#   * bump packages/TemperatureChart to 2.0.0 but leave the dependents at
+#     ^1.0.0 -> npm ci fails EUSAGE "Missing: temperaturechart@1.0.0 from lock
+#     file".
+#
+# So exactly two things keep the lock valid across a release, and both are
+# config-shaped, which is what this test pins:
+#   1. every bumped package is present in the lock ONLY as a workspace link
+#      (`link: true`), never a registry-resolved tarball whose version npm would
+#      validate against the new number, and
+#   2. every dependency edge recorded IN THE LOCK onto a bumped package is a
+#      range the config rewrites (or a path/`*` range that cannot go stale).
+# The sibling test above derives (2) from the package.json files; this one
+# derives it from package-lock.json, so an edge that exists only in the lock
+# (or a lock/manifest drift) is caught too.
+#-------------------------------------------------------------------------------
+bumped_package_paths() {
+    # Root (owned by the node release-type) + every $.version extra-file.
+    printf 'package.json\n'
+    jq -r '.packages["."]["extra-files"] // [] | .[] | select(.jsonpath == "$.version") | .path' "${CONFIG_FILE}"
+}
+
+test_release_bump_cannot_desync_lockfile() {
+    echo "TEST: a release bump leaves package-lock.json valid for npm ci"
+
+    local lock_file="${REPO_ROOT}/package-lock.json"
+    if [ ! -f "${lock_file}" ]; then
+        fail "release bump cannot desync lockfile" "missing ${lock_file}"
+        return
+    fi
+
+    local path name bumped_names=()
+    while IFS= read -r path; do
+        [ -z "${path}" ] && continue
+        [ -f "${REPO_ROOT}/${path}" ] || continue
+        name="$(jq -r '.name // empty' "${REPO_ROOT}/${path}")"
+        [ -n "${name}" ] && bumped_names+=("${name}")
+    done <<< "$(bumped_package_paths)"
+
+    if [ "${#bumped_names[@]}" -eq 0 ]; then
+        fail "release bump cannot desync lockfile" "no bumped packages resolved from config"
+        return
+    fi
+
+    # NB: `jq --args` would swallow the filename as a positional, so the name
+    # list is marshalled into a JSON array and passed with --argjson.
+    local names_json
+    names_json="$(printf '%s\n' "${bumped_names[@]}" | jq -R . | jq -s .)"
+
+    # (1) Bumped packages must appear in the lock as workspace links only.
+    local not_linked
+    not_linked="$(jq -r --argjson names "${names_json}" '
+        .packages | to_entries
+        | map(select(.key | startswith("node_modules/")))
+        | map(select((.key | sub("^.*node_modules/"; "")) as $n | $names | index($n)))
+        | map(select(.value.link != true))
+        | .[].key' "${lock_file}")"
+    if [ -n "${not_linked}" ]; then
+        fail "release bump cannot desync lockfile" \
+             "these lock entries resolve a bumped package from the registry instead of linking the workspace — a version bump would desync npm ci: $(echo "${not_linked}" | tr '\n' ' ')"
+        return
+    fi
+
+    # (2) Every dependency edge in the lock onto a bumped package must be a
+    # range the config rewrites, or a range that cannot go stale.
+    local edges edge owner section dep required covered missing=()
+    edges="$(jq -r --argjson names "${names_json}" '
+        .packages | to_entries[] as $e
+        | ["dependencies","devDependencies","peerDependencies","optionalDependencies"][] as $s
+        | ($e.value[$s] // {}) | to_entries[]
+        | select(.key as $k | $names | index($k))
+        | "\($e.key)\t\($s)\t\(.key)\t\(.value)"' "${lock_file}")"
+
+    while IFS=$'\t' read -r owner section name dep; do
+        [ -z "${owner}" ] && continue
+        case "${dep}" in
+            workspace:* | file:* | link:* | portal:* | '*') continue ;;
+        esac
+
+        # Lock keys for workspace members are their directory; the config
+        # rewrites the manifest inside it.
+        edge="${owner%/}/package.json"
+        [ "${owner}" = "" ] && edge="package.json"
+        if [ ! -f "${REPO_ROOT}/${edge}" ]; then
+            missing+=("${owner} ${section}.${name} (${dep}) has no rewritable manifest")
+            continue
+        fi
+
+        required="\$.${section}.${name}"
+        covered="$(jq -r --arg p "${edge}" --arg j "${required}" \
+            '.packages["."]["extra-files"] // [] | map(select(.path == $p and .jsonpath == $j)) | length' \
+            "${CONFIG_FILE}")"
+        if [ "${covered}" = "0" ]; then
+            missing+=("${edge} ${section}.${name} (${dep})")
+        fi
+    done <<< "${edges}"
+
+    if [ "${#missing[@]}" -gt 0 ]; then
+        fail "release bump cannot desync lockfile" \
+             "package-lock.json records these ranges onto bumped packages but the config never rewrites them — npm ci fails EUSAGE after the bump: ${missing[*]}"
+        return
+    fi
+
+    pass "a release bump leaves package-lock.json valid for npm ci"
+}
+
+#-------------------------------------------------------------------------------
 # Behavior 3 (critical): the workflow runs on push to master and authenticates
 # the release-please action with the runner PAT. Releases created with the
 # default GITHUB_TOKEN do not emit `release: published` events, so release.yml
@@ -355,6 +471,47 @@ test_workflow_uses_pat_on_push_to_master() {
 }
 
 #-------------------------------------------------------------------------------
+# Behavior 4: this suite is actually wired into CI, and its path filter covers
+# every file it guards. A suite nobody runs cannot catch anything, and a filter
+# that misses (say) release-please-config.json means the guarded file can change
+# without the guard ever executing.
+#-------------------------------------------------------------------------------
+test_suite_runs_in_ci_over_all_guarded_paths() {
+    echo "TEST: a CI workflow runs this suite and filters on every guarded path"
+
+    local ci_file="${REPO_ROOT}/.github/workflows/release-config-tests.yml"
+    if [ ! -f "${ci_file}" ]; then
+        fail "suite runs in CI over all guarded paths" "missing ${ci_file}"
+        return
+    fi
+
+    if ! grep -q 'bash scripts/release/release-please-config.test.sh' "${ci_file}"; then
+        fail "suite runs in CI over all guarded paths" \
+             "${ci_file} never invokes this suite"
+        return
+    fi
+
+    local guarded missing=() entry
+    guarded="$(printf '%s\n' \
+        "release-please-config.json" \
+        ".release-please-manifest.json" \
+        "scripts/release/" \
+        ".github/workflows/release-please.yml")"
+
+    while IFS= read -r entry; do
+        grep -q "'${entry}" "${ci_file}" || missing+=("${entry}")
+    done <<< "${guarded}"
+
+    if [ "${#missing[@]}" -gt 0 ]; then
+        fail "suite runs in CI over all guarded paths" \
+             "workflow path filter does not cover: ${missing[*]}"
+        return
+    fi
+
+    pass "a CI workflow runs this suite and filters on every guarded path"
+}
+
+#-------------------------------------------------------------------------------
 # Run suite
 #-------------------------------------------------------------------------------
 echo "=========================================="
@@ -365,7 +522,9 @@ test_manifest_bootstraps_root_at_current_version
 test_config_declares_single_node_root_package
 test_extra_files_cover_every_app_package_json
 test_dependent_ranges_bumped_with_their_package
+test_release_bump_cannot_desync_lockfile
 test_workflow_uses_pat_on_push_to_master
+test_suite_runs_in_ci_over_all_guarded_paths
 
 echo ""
 echo "=========================================="
