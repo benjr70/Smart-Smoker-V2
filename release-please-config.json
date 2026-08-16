@@ -1,0 +1,19 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "changelog-path": "CHANGELOG.md",
+      "include-component-in-tag": false,
+      "extra-files": [
+        { "type": "json", "path": "apps/backend/package.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "apps/frontend/package.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "apps/smoker/package.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "apps/device-service/package.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "packages/TemperatureChart/package.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "apps/frontend/package.json", "jsonpath": "$.dependencies.temperaturechart" },
+        { "type": "json", "path": "apps/smoker/package.json", "jsonpath": "$.dependencies.temperaturechart" }
+      ]
+    }
+  }
+}

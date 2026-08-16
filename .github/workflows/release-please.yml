@@ -1,0 +1,61 @@
+# release-please: maintains the release PR and, on merge, tags + publishes the
+# GitHub Release (#500, PRD #498).
+#
+# Manifest mode with a single repo-wide version (release-please-config.json +
+# .release-please-manifest.json, bootstrapped at 1.7.0). The node release-type
+# bumps the root package.json and root CHANGELOG.md; five workspace
+# package.jsons ride along as extra-files — apps/backend, apps/frontend,
+# apps/smoker, apps/device-service and packages/TemperatureChart — so every
+# shipped app stays in lockstep with the repo version.
+#
+# The other workspaces (packages/theme, packages/api-transport,
+# packages/smoke-session and e2e) are deliberately excluded: they are internal,
+# never published, and versioning them adds churn to every release PR for no
+# consumer benefit. They stay at 1.0.0, so the `^1.0.0` ranges that
+# apps/frontend and apps/smoker use to link them keep resolving.
+#
+# packages/TemperatureChart is the exception that does need care: frontend and
+# smoker depend on it by range, so the config ALSO rewrites
+# $.dependencies.temperaturechart in both apps. Without that, the first major
+# release moves the package to 2.0.0, the stale ^1.0.0 range stops matching,
+# npm gives up on the workspace link and tries to fetch the generic public name
+# `temperaturechart` from registry.npmjs.org — `npm ci` fails. release-please's
+# generic-json updater preserves the range operator, so ^1.0.0 becomes ^2.0.0.
+#
+# Bump rules are release-please defaults — feat->minor, fix->patch,
+# `!`/BREAKING CHANGE->major — and a run whose commits are only
+# chore/docs/ci/refactor produces no release PR at all.
+#
+# Auth is deliberately the runner PAT, NOT the default GITHUB_TOKEN: Releases
+# created by GITHUB_TOKEN do not emit `release: published` events, so
+# release.yml (build + publish of the smoker images) would never fire on merge.
+# scripts/release/release-please-config.test.sh locks that choice.
+#
+# This workflow only opens/updates the release PR and cuts the Release; it does
+# not build or deploy anything itself.
+
+name: Release Please
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-please-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run release-please
+        uses: googleapis/release-please-action@v4
+        with:
+          # PAT (not GITHUB_TOKEN) so the published Release triggers the
+          # downstream `release: published` workflows.
+          token: ${{ secrets.RUNNER_PAT }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
