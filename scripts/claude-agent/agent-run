@@ -91,10 +91,21 @@ echo                          | tee -a "$LOG_FILE"
 # override (e.g. the systemd EnvironmentFile drop-in) if one is already set.
 export CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS="${CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS:-0}"
 
+# AGENT_RUN_MODEL (set by the daemon when the preferred model's weekly is
+# spent, e.g. Fable at 100%) pins the whole run — the lead session and every
+# subagent that inherits its model — to the fallback model. Empty/unset means
+# the session default.
+MODEL_ARGS=()
+if [ -n "${AGENT_RUN_MODEL:-}" ]; then
+  MODEL_ARGS=(--model "${AGENT_RUN_MODEL}")
+  echo "model:  ${AGENT_RUN_MODEL} (AGENT_RUN_MODEL fallback)" | tee -a "$LOG_FILE"
+fi
+
 set +e
 "$CLAUDE_BIN" \
   --permission-mode bypassPermissions \
   --print \
+  "${MODEL_ARGS[@]}" \
   "/team-pickup$DRY_RUN_FLAG" \
   2>&1 | tee -a "$LOG_FILE"
 EXIT_CODE=${PIPESTATUS[0]}

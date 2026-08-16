@@ -25,7 +25,8 @@
 #                           {"remainPct":<0..100>,"resetAt":"<iso>","shouldFire":<bool>}
 #                       remainPct is 100 minus the WORST utilization across
 #                       every limit the account reports (session five_hour,
-#                       weekly seven_day, and any per-model weekly present):
+#                       weekly seven_day, and any per-model weekly present,
+#                       minus models listed in USAGE_GATE_IGNORE_MODELS):
 #                       the binding constraint gates the fire, and resetAt is
 #                       that binding limit's resets_at — when the constraint
 #                       actually frees. shouldFire mirrors the Budget Gate
@@ -42,8 +43,14 @@
 #   USAGE_CREDS_FILE  credentials path (default ~/.claude/.credentials.json)
 #   CURL_BIN          curl binary (default curl) — injectable for tests
 #   BUDGET_GATE_MIN_PCT  fire threshold shared with the Budget Gate (default 25)
+#   USAGE_GATE_IGNORE_MODELS  comma-separated model display names whose scoped
+#                     limits[] entries never gate (default "Fable"): the account
+#                     policy is that a per-model weekly may run to 100% — other
+#                     models keep working, so it must not put the daemon to
+#                     sleep or drive resetAt
 
 : "${BUDGET_GATE_MIN_PCT:=${BUDGET_FRESH_PCT:-25}}"
+: "${USAGE_GATE_IGNORE_MODELS:=Fable}"
 
 # usage_sensor_fetch: print the endpoint's JSON on stdout, non-zero on failure.
 usage_sensor_fetch() {
@@ -61,6 +68,23 @@ usage_sensor_fetch() {
         -H "anthropic-beta: oauth-2025-04-20"
 }
 
+# usage_scoped_util: endpoint JSON on stdin, model display name in $1 →
+# prints that model's scoped-limit utilization percent (max across matching
+# limits[] entries, active or not), or nothing when the model has no scoped
+# limit / the payload is unusable. Pure; case-insensitive on the name. Lets
+# the daemon see an ignored model's real burn (e.g. Fable at 100%) even
+# though usage_gate no longer lets it gate the fire.
+usage_scoped_util() {
+    local name="$1"
+    jq -r --arg name "${name}" '
+        [ .limits[]?
+          | select(type == "object" and (.percent | type) == "number")
+          | select(((.scope.model.display_name // "") | ascii_downcase)
+                   == ($name | ascii_downcase))
+          | .percent ]
+        | max // empty' 2>/dev/null
+}
+
 # usage_gate: endpoint JSON on stdin → verdict JSON on stdout.
 usage_gate() {
     local payload binding util reset remain_pct should_fire
@@ -76,13 +100,17 @@ usage_gate() {
     # named fields are the stable contract; the limits[] array (when present)
     # is folded in too so a new limit kind gates correctly without a code
     # change. Entries without a numeric utilization/percent are ignored.
-    binding="$(printf '%s' "${payload}" | jq -c '
-        [ ( .five_hour, .seven_day, .seven_day_opus, .seven_day_sonnet
+    binding="$(printf '%s' "${payload}" | jq -c \
+        --arg ignore "${USAGE_GATE_IGNORE_MODELS}" '
+        ($ignore | split(",") | map(ascii_downcase) | map(select(. != ""))) as $ig
+        | [ ( .five_hour, .seven_day, .seven_day_opus, .seven_day_sonnet
             | select(type == "object" and (.utilization | type) == "number")
             | {u: .utilization, r: (.resets_at // "")} ),
           ( .limits[]?
             | select(type == "object" and (.percent | type) == "number")
             | select(.is_active != false)
+            | ((.scope.model.display_name // "") | ascii_downcase) as $m
+            | select(($ig | index($m)) == null)
             | {u: .percent, r: (.resets_at // "")} ) ]
         | max_by(.u) // empty' 2>/dev/null)"
 

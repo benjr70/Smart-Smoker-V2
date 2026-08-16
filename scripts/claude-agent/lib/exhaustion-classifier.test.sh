@@ -43,6 +43,36 @@ fi
 . "${LIB}"
 
 #-------------------------------------------------------------------------------
+# Test 1b: a SUCCESSFUL run (exit 0) whose transcript merely *mentions* a
+# limit-flavored phrase is OK, not EXHAUSTED. Observed live 2026-08-16: a
+# reconcile run's own summary said "fail for rate-limit/network reason" and the
+# false EXHAUSTED verdict put the daemon to sleep for 5 days. Exit 0 = the run
+# completed; it cannot have been cut off.
+#-------------------------------------------------------------------------------
+test_success_mentioning_rate_limit_is_ok() {
+    echo "TEST: exit-0 run mentioning rate-limit classifies as OK"
+
+    local out status reset
+    out="$(printf '%s\n' \
+        "=== agent-run 20260816T021433Z ===" \
+        "reconcile: pr-reconcile: PASS — 3 comment(s) addressed" \
+        "main one — docker manifest inspect fail for rate-limit/network reason" \
+        "read as image absent, guard fail OPEN into rebuild" \
+        "=== agent-run exit 0 ===" \
+        | exhaustion_classify 0)"
+
+    status="$(printf '%s' "${out}" | jq -r '.status')"
+    reset="$(printf '%s' "${out}" | jq -r '.resetAt')"
+
+    if [ "${status}" != "OK" ] || [ -n "${reset}" ]; then
+        fail "exit-0 prose mention should be OK" "got: ${out}"
+        return
+    fi
+
+    pass "exit-0 run mentioning rate-limit classifies as OK"
+}
+
+#-------------------------------------------------------------------------------
 # Test 1: clean success output + exit 0 → OK, no resetAt (behavior 1; AC 1).
 #-------------------------------------------------------------------------------
 test_clean_success_is_ok() {
@@ -258,6 +288,7 @@ echo "exhaustion-classifier.sh tests"
 echo "=========================================="
 
 test_clean_success_is_ok
+test_success_mentioning_rate_limit_is_ok
 test_genuine_failure_is_failed_not_exhausted
 test_usage_limit_with_reset_is_exhausted
 test_usage_limit_without_reset_is_exhausted_no_resetat
