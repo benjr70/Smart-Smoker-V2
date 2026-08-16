@@ -53,9 +53,13 @@ benjr70/smart-smoker-electron-shell:nightly
 
 ### Promotion Flow
 
-1. Build once on master merge → push `:nightly`
-2. When cutting a release, retag the same image digest to `:vX.Y.Z` and `:latest`
-3. Verify `:vX.Y.Z` and `:latest` point to the same digest for that release
+1. Build once on master merge → push `:nightly` (dev cloud consumes this)
+2. When cutting a release, `prod-deploy.yml` builds the cloud images
+   (backend + frontend) **from the release tag** and pushes `:vX.Y.Z` +
+   `:latest`. Retagging `:nightly` is no longer used: `:nightly` can be a
+   different commit than the one that was tagged.
+3. Re-deploying an already-released version skips the build entirely, so
+   `:vX.Y.Z` stays immutable and `:latest` never moves backwards
 
 **Why This Matters**:
 - **Rollback**: Switch to `:vX.Y.Z` instantly; floating tags move
@@ -218,7 +222,8 @@ See [Rollback](../deployment/rollback.md) for automated rollback procedures.
 ### Tag Management
 
 1. **Never Re-tag**: Immutable tags (`vX.Y.Z`) should never change
-2. **Promote, Don't Rebuild**: Retag same digest for releases
+2. **Build Once Per Tag**: Cloud release images are built from the release tag
+   once; re-deploys reuse the published digest instead of rebuilding
 3. **Document Versions**: Keep changelog of versions
 
 ### Watchtower
