@@ -40,12 +40,47 @@ echo ""
 #   RALPH_PR_TITLE  full title, bypassing derivation (still validated)
 VALIDATE_TITLE_SCRIPT="${REPO_ROOT}/scripts/validate-pr-title.sh"
 
-# Strips the boilerplate "PRD:" / "PRD -" lead-in so the changelog line reads as
-# a description of the change rather than of the tracking document.
+trim() {
+  sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' <<<"$1"
+}
+
+# Strips the boilerplate "PRD:" / "PRD -" / "PRD —" lead-in so the changelog
+# line reads as a description of the change rather than of the tracking
+# document.
+#
+# The en/em dashes are ERE *alternatives*, never members of a bracket
+# expression: a bracket expression is a set of characters, and under LC_ALL=C
+# (systemd/cron have no locale) each multibyte dash decomposes into its bytes,
+# so `[:–—-]` would strip a single byte off a dash and leave mojibake behind.
 strip_prd_prefix() {
+  trim "$(sed -E 's/^[[:space:]]*PRD[[:space:]]*(:|-|–|—)[[:space:]]*//' <<<"$1")"
+}
+
+# Removes any issue reference the PRD title carried. A `Closes #123` that
+# survives into the PR title would, on squash-merge, land in the commit subject:
+# GitHub would auto-close an unrelated issue and release-please would print the
+# ref in the changelog. Issue references belong in the body only.
+strip_issue_refs() {
   local subject="$1"
-  subject="$(sed -E 's/^[[:space:]]*PRD[[:space:]]*[:–—-][[:space:]]*//' <<<"$subject")"
-  sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' <<<"$subject"
+  local nocasematch_was_set=0
+  shopt -q nocasematch && nocasematch_was_set=1
+  shopt -s nocasematch
+
+  # Closing-keyword references first (the auto-close hazard), then any bare
+  # `#123` left over (changelog noise). BASH_REMATCH[0] is removed literally, so
+  # each pass strictly shrinks the string and the loops terminate.
+  while [[ "$subject" =~ (close[sd]?|fix(e[sd])?|resolve[sd]?)[[:space:]]*#[0-9]+ ]]; do
+    subject="${subject//"${BASH_REMATCH[0]}"/}"
+  done
+  while [[ "$subject" =~ \#[0-9]+ ]]; do
+    subject="${subject//"${BASH_REMATCH[0]}"/}"
+  done
+
+  [ "$nocasematch_was_set" -eq 1 ] || shopt -u nocasematch
+
+  # Tidy up the separators the removal orphaned (e.g. "Closes #12: sweep").
+  subject="$(sed -E 's/[[:space:]]+/ /g; s/^[[:space:]]*[-:,;]+[[:space:]]*//; s/[[:space:]]*[-:,;]+[[:space:]]*$//' <<<"$subject")"
+  trim "$subject"
 }
 
 build_pr_title() {
@@ -53,6 +88,7 @@ build_pr_title() {
   local scope="${RALPH_PR_SCOPE:-}"
   local subject
   subject="$(strip_prd_prefix "$PRD_TITLE")"
+  subject="$(strip_issue_refs "$subject")"
 
   if [ -n "$scope" ]; then
     echo "${type}(${scope}): ${subject}"
@@ -69,6 +105,17 @@ if ! env -u PR_TITLE bash "$VALIDATE_TITLE_SCRIPT" "$PR_TITLE_TEXT" >/dev/null; 
   echo "ERROR: refusing to open a PR — the generated title is not a valid conventional-commit subject (reason above)." >&2
   echo "       Title was: '${PR_TITLE_TEXT}'" >&2
   echo "       Set RALPH_PR_TITLE=\"feat(scope): ...\" to override it." >&2
+  exit 1
+fi
+
+# The validator's legacy guard is ^-anchored, so a ref anywhere else in the
+# subject slips through it. Derivation strips those; an explicit
+# RALPH_PR_TITLE override could still smuggle one in, and on squash-merge it
+# would auto-close an unrelated issue and pollute the changelog.
+if [[ "$PR_TITLE_TEXT" =~ \#[0-9]+ ]]; then
+  echo "ERROR: refusing to open a PR — the title carries an issue reference ('${BASH_REMATCH[0]}')." >&2
+  echo "       Title was: '${PR_TITLE_TEXT}'" >&2
+  echo "       Issue references belong in the PR body ('Closes #N'), not in the squash-merge subject." >&2
   exit 1
 fi
 

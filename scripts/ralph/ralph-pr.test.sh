@@ -187,6 +187,8 @@ test_varied_prd_titles_pass_validator() {
     local prd_titles=(
         "PRD: Notifications overhaul"
         "PRD - UI 1:1 parity with the mock"
+        "PRD – en-dash lead-in"
+        "PRD — em-dash lead-in"
         "Backend data-integrity hardening"
         "PRD: Closes #123 regression sweep"
     )
@@ -215,6 +217,54 @@ test_varied_prd_titles_pass_validator() {
     done
 
     pass "varied PRD titles all yield validator-clean PR titles"
+}
+
+#-------------------------------------------------------------------------------
+# Test 2b: subject derivation is exact — lead-in stripped byte-for-byte, issue
+# references removed. The en/em-dash rows are the locale regression: with the
+# dashes inside a bracket expression, LC_ALL=C strips one byte of the multibyte
+# dash and leaves mojibake in the subject (which the validator would accept).
+#-------------------------------------------------------------------------------
+test_subject_derivation_is_exact() {
+    echo "TEST: derived subject strips the PRD lead-in and any issue reference"
+
+    # <PRD title>|<expected PR title>
+    local cases=(
+        "PRD: Notifications overhaul|feat: Notifications overhaul"
+        "PRD - UI 1:1 parity with the mock|feat: UI 1:1 parity with the mock"
+        "PRD – en-dash lead-in|feat: en-dash lead-in"
+        "PRD — em-dash lead-in|feat: em-dash lead-in"
+        "Backend data-integrity hardening|feat: Backend data-integrity hardening"
+        "PRD: Closes #123 regression sweep|feat: regression sweep"
+        "PRD — Fixes #7: probe offset drift|feat: probe offset drift"
+        "PRD: rework the #42 alert path|feat: rework the alert path"
+    )
+
+    local row prd_title expected title
+    for row in "${cases[@]}"; do
+        prd_title="${row%%|*}"
+        expected="${row#*|}"
+
+        MOCK_PRD_TITLE="${prd_title}"
+        MOCK_DONE_ISSUES_JSON="${DEFAULT_DONE_ISSUES_JSON}"
+        run_ralph_pr 498
+
+        if [ "${RUN_STATUS}" -ne 0 ] || [ ! -f "${PR_CREATE_ARGS_FILE}" ]; then
+            fail "PR should be opened for PRD title '${prd_title}'" "exit=${RUN_STATUS} stderr: ${RUN_STDERR}"
+            cleanup_run
+            return
+        fi
+
+        title="$(recorded_flag_value "--title")"
+        cleanup_run
+
+        if [ "${title}" != "${expected}" ]; then
+            fail "PRD '${prd_title}' should derive '${expected}'" "got: '${title}'"
+            return
+        fi
+    done
+
+    pass "derived subject strips the PRD lead-in and any issue reference"
 }
 
 #-------------------------------------------------------------------------------
@@ -274,22 +324,73 @@ test_body_contains_closes_lines() {
 # Test 5: the issue reference must NOT live in the title
 #-------------------------------------------------------------------------------
 test_title_has_no_issue_reference() {
-    echo "TEST: PR title carries no 'Closes #N' issue reference"
+    echo "TEST: PR title carries no issue reference, even when the PRD title does"
+
+    # A PRD title that itself carries a closing keyword + ref is the dangerous
+    # case: leaving it in the title would auto-close #123 on squash-merge.
+    local prd_titles=(
+        "PRD: Release Please — merge release PR = auto prod deploy"
+        "PRD: Closes #123 regression sweep"
+        "PRD — resolves #77 flaky temps socket"
+        "PRD: tidy up #404 handling"
+    )
+
+    local prd_title title
+    for prd_title in "${prd_titles[@]}"; do
+        MOCK_PRD_TITLE="${prd_title}"
+        MOCK_DONE_ISSUES_JSON="${DEFAULT_DONE_ISSUES_JSON}"
+        run_ralph_pr 498
+
+        if [ "${RUN_STATUS}" -ne 0 ] || [ ! -f "${PR_CREATE_ARGS_FILE}" ]; then
+            fail "PR should be opened for PRD title '${prd_title}'" "exit=${RUN_STATUS} stderr: ${RUN_STDERR}"
+            cleanup_run
+            return
+        fi
+
+        title="$(recorded_flag_value "--title")"
+        cleanup_run
+
+        if grep -qiE "(clos|fix|resolv)[a-z]* *#[0-9]+" <<<"${title}"; then
+            fail "closing reference belongs in the body, not the title" "PRD '${prd_title}' -> title '${title}'"
+            return
+        fi
+
+        if grep -qE "#[0-9]+" <<<"${title}"; then
+            fail "issue numbers must not reach the changelog subject" "PRD '${prd_title}' -> title '${title}'"
+            return
+        fi
+    done
+
+    pass "PR title carries no issue reference, even when the PRD title does"
+}
+
+#-------------------------------------------------------------------------------
+# Test 5b: an override that smuggles an issue ref past the validator's
+# ^-anchored legacy guard is still refused.
+#-------------------------------------------------------------------------------
+test_override_with_embedded_issue_ref_refuses_to_open_pr() {
+    echo "TEST: a title override with an embedded issue ref aborts before gh pr create"
 
     MOCK_PRD_TITLE="PRD: Release Please — merge release PR = auto prod deploy"
     MOCK_DONE_ISSUES_JSON="${DEFAULT_DONE_ISSUES_JSON}"
-    run_ralph_pr 498
+    run_ralph_pr 498 RALPH_PR_TITLE="feat: Closes #123 regression sweep"
 
-    local title
-    title="$(recorded_flag_value "--title")"
+    local status="${RUN_STATUS}" stderr="${RUN_STDERR}"
+    local pr_created="no"
+    [ -f "${PR_CREATE_ARGS_FILE}" ] && pr_created="yes"
     cleanup_run
 
-    if grep -qiE "closes *#[0-9]+" <<<"${title}"; then
-        fail "issue reference belongs in the body, not the title" "title: '${title}'"
+    if [ "${status}" -eq 0 ] || [ "${pr_created}" = "yes" ]; then
+        fail "title-borne issue ref must not open a PR" "exit=${status} pr_created=${pr_created}"
         return
     fi
 
-    pass "PR title carries no 'Closes #N' issue reference"
+    if ! grep -qF "issue reference" <<<"${stderr}"; then
+        fail "abort reason should name the issue reference" "stderr: ${stderr}"
+        return
+    fi
+
+    pass "a title override with an embedded issue ref aborts before gh pr create"
 }
 
 #-------------------------------------------------------------------------------
@@ -391,9 +492,11 @@ echo "=========================================="
 
 test_generated_title_passes_validator
 test_varied_prd_titles_pass_validator
+test_subject_derivation_is_exact
 test_title_carries_prd_description
 test_body_contains_closes_lines
 test_title_has_no_issue_reference
+test_override_with_embedded_issue_ref_refuses_to_open_pr
 test_invalid_title_override_refuses_to_open_pr
 test_type_and_scope_overrides
 test_empty_subject_aborts

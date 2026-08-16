@@ -335,18 +335,26 @@ only pollute the changelog.
   `<area> slice N:` bookkeeping so it reads as a changelog line.
 
 Validate the title with the slice-1 validator **before** calling `gh pr create`.
-On failure, the validator prints the reason on stderr: fix the title and
-re-validate (do not open the PR with a title that fails, and do not edit the
-validator).
+On failure, the validator prints the reason on stderr: rewrite the title and
+re-validate, up to **3 attempts** total. Only if all three fail does this become
+a §6b park — a green, pushed slice must not be handed to a human over a typo you
+made one line earlier. Never open the PR with a title that fails, and never edit
+the validator.
 
 ```bash
 PR_TITLE="feat(agent): conventional PR titles for team-pickup and ralph"  # example
 
-if ! bash scripts/validate-pr-title.sh "$PR_TITLE"; then
-  # Reason is on stderr above — rewrite PR_TITLE to `<type>(<scope>): <desc>`
-  # and re-run this check. Never skip it.
-  goto §6b with FAIL_REASON="PR title failed validate-pr-title.sh"
-fi
+ATTEMPT=1
+until bash scripts/validate-pr-title.sh "$PR_TITLE"; do
+  # Reason is on stderr above. Rewrite PR_TITLE to `<type>(<scope>): <desc>`,
+  # correcting exactly what the validator named (unknown/uppercase type,
+  # missing space after the colon, empty subject, leading `Closes #N`), then
+  # loop to re-validate. Never skip the check.
+  ATTEMPT=$((ATTEMPT + 1))
+  if [ "$ATTEMPT" -gt 3 ]; then
+    goto §6b with FAIL_REASON="PR title failed validate-pr-title.sh after 3 attempts: <last reason>"
+  fi
+done
 ```
 
 Then:

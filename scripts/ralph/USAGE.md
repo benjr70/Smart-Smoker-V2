@@ -152,7 +152,9 @@ be conventional commits — `<type>(<scope>): <description>` — and must **not*
 carry the issue reference; the per-issue `Closes #N` lines stay in the PR body,
 which is what auto-closes them on merge.
 
-`ralph-pr.sh` derives `feat: <PRD title minus its "PRD:" prefix>` and runs
+`ralph-pr.sh` derives `feat: <PRD title minus its "PRD:" prefix>`, drops any
+issue reference the PRD title carried (a `Closes #123` in the subject would
+auto-close an unrelated issue on squash-merge), and runs
 `scripts/validate-pr-title.sh` on it before calling `gh pr create`. If the title
 is not valid the script prints the validator's reason and exits without opening
 a PR. Override the pieces when the default is wrong:
