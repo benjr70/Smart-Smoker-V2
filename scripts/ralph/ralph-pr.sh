@@ -27,6 +27,54 @@ echo "PRD #${PRD_NUMBER}: ${PRD_TITLE}"
 echo "Branch: ${BRANCH_NAME} → ${BASE_BRANCH}"
 echo ""
 
+# --- PR title (Conventional Commits, PRD #498) --------------------------------
+# The repo squash-merges, so the PR title becomes the commit subject that
+# release-please parses for the version bump and changelog. It must therefore
+# be `<type>[(scope)][!]: <description>` and must NOT carry the issue
+# reference — `Closes #N` lines live in the body, which is what actually
+# auto-closes issues on merge.
+#
+# Overrides (all optional):
+#   RALPH_PR_TYPE   conventional type, default `feat`
+#   RALPH_PR_SCOPE  optional scope, e.g. `backend`
+#   RALPH_PR_TITLE  full title, bypassing derivation (still validated)
+VALIDATE_TITLE_SCRIPT="${REPO_ROOT}/scripts/validate-pr-title.sh"
+
+# Strips the boilerplate "PRD:" / "PRD -" lead-in so the changelog line reads as
+# a description of the change rather than of the tracking document.
+strip_prd_prefix() {
+  local subject="$1"
+  subject="$(sed -E 's/^[[:space:]]*PRD[[:space:]]*[:–—-][[:space:]]*//' <<<"$subject")"
+  sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' <<<"$subject"
+}
+
+build_pr_title() {
+  local type="${RALPH_PR_TYPE:-feat}"
+  local scope="${RALPH_PR_SCOPE:-}"
+  local subject
+  subject="$(strip_prd_prefix "$PRD_TITLE")"
+
+  if [ -n "$scope" ]; then
+    echo "${type}(${scope}): ${subject}"
+  else
+    echo "${type}: ${subject}"
+  fi
+}
+
+PR_TITLE_TEXT="${RALPH_PR_TITLE:-$(build_pr_title)}"
+
+# Pre-flight against the same validator the PR-title check runs, so a bad title
+# fails here instead of as a red check on an already-open PR.
+if ! env -u PR_TITLE bash "$VALIDATE_TITLE_SCRIPT" "$PR_TITLE_TEXT" >/dev/null; then
+  echo "ERROR: refusing to open a PR — the generated title is not a valid conventional-commit subject (reason above)." >&2
+  echo "       Title was: '${PR_TITLE_TEXT}'" >&2
+  echo "       Set RALPH_PR_TITLE=\"feat(scope): ...\" to override it." >&2
+  exit 1
+fi
+
+echo "PR title: ${PR_TITLE_TEXT}"
+echo ""
+
 # Gather closed issues with ralph:done label
 DONE_ISSUES=$(gh issue list --label "ralph:done" --state closed --json number,title --limit 50 \
   | jq -r '.[] | "- Closes #\(.number): \(.title)"')
@@ -50,7 +98,7 @@ fi
 PR_URL=$(gh pr create \
   --base "$BASE_BRANCH" \
   --head "$BRANCH_NAME" \
-  --title "feat: ${PRD_TITLE}" \
+  --title "${PR_TITLE_TEXT}" \
   --body "$(cat <<EOF
 ## Summary
 

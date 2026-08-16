@@ -6,11 +6,12 @@
 # ADVISORY for now: the title check runs and shows up on every PR, but it never
 # turns the PR red — `continue-on-error: true` (the repo's advisory convention,
 # cf. docker-build-pr.yml and terraform-plan.yml) keeps a bad title to a warning
-# annotation. That matters because agent PRs are still titled 'Closes #N: ...',
-# which this validator rejects, and the CI watchers treat any red check as a
-# failure to grind on. The check is also NOT in branch-protection required
-# checks. The flip to blocking is a separate HITL settings slice, done after the
-# agent PR templates comply.
+# annotation. Agent PR templates now emit conventional titles (#502 — team-pickup
+# skill + scripts/ralph/ralph-pr.sh, both pre-flighting this same validator), but
+# in-flight PRs opened before that may still be titled 'Closes #N: ...', and the
+# CI watchers treat any red check as a failure to grind on. The check is also NOT
+# in branch-protection required checks. The flip to blocking is a separate HITL
+# settings slice.
 #
 # The validator-tests job below is NOT advisory — it is a real test suite for
 # the script and must stay blocking.
@@ -30,6 +31,8 @@ on:
     paths:
       - 'scripts/validate-pr-title.sh'
       - 'scripts/validate-pr-title.test.sh'
+      - 'scripts/ralph/ralph-pr.sh'
+      - 'scripts/ralph/ralph-pr.test.sh'
       - '.github/workflows/pr-title-lint.yml'
 
 jobs:
@@ -64,3 +67,8 @@ jobs:
 
       - name: Run the PR-title validator test suite
         run: bash scripts/validate-pr-title.test.sh
+
+      # Agent PR-creation path (#502): ralph-pr.sh must build titles this
+      # validator accepts, so its suite is gated here alongside the validator's.
+      - name: Run the ralph PR-script test suite
+        run: bash scripts/ralph/ralph-pr.test.sh

@@ -144,6 +144,26 @@ When satisfied, open a PR:
 ./scripts/ralph/ralph-pr.sh <prd-issue-number> develop
 ```
 
+### PR title convention
+
+The repo squash-merges, so the PR title becomes the commit subject that
+release-please parses for the version bump and CHANGELOG (PRD #498). Titles must
+be conventional commits — `<type>(<scope>): <description>` — and must **not**
+carry the issue reference; the per-issue `Closes #N` lines stay in the PR body,
+which is what auto-closes them on merge.
+
+`ralph-pr.sh` derives `feat: <PRD title minus its "PRD:" prefix>` and runs
+`scripts/validate-pr-title.sh` on it before calling `gh pr create`. If the title
+is not valid the script prints the validator's reason and exits without opening
+a PR. Override the pieces when the default is wrong:
+
+```bash
+RALPH_PR_TYPE=fix RALPH_PR_SCOPE=backend ./scripts/ralph/ralph-pr.sh 42
+RALPH_PR_TITLE="feat(frontend): live temperature chart" ./scripts/ralph/ralph-pr.sh 42
+```
+
+Tests: `bash scripts/ralph/ralph-pr.test.sh`.
+
 ## Monitoring
 
 ### Local Progress Log
