@@ -16,6 +16,17 @@ import { ACCENT_TINT_ALPHA, PaletteTokens, ThemeMode, carbonLight, paletteTokens
 export interface DesignPalette extends PaletteTokens {
   /** The accent at the design's tint alpha, for accent-tinted backgrounds. */
   accentTint: string;
+  /**
+   * The fill behind a form control.
+   *
+   * A field reads as a well cut into the card it sits on, so it is filled with
+   * a tone the card is not: the page background in a light palette, where the
+   * card is the lightest surface, and the alternate surface in a dark one,
+   * where the page is darker than the card and a field sunk into it would
+   * disappear. Derived from the palette rather than named by it, so a further
+   * palette gets its fields right by declaring which mode it is.
+   */
+  inputBg: string;
   /** The design typeface, ahead of the fallbacks that cover the first frame. */
   fontFamily: string;
 }
@@ -42,10 +53,11 @@ declare module '@mui/material/styles' {
  */
 const FONT_FAMILY = ['"Plus Jakarta Sans"', '"Helvetica Neue"', 'Arial', 'sans-serif'].join(', ');
 
-/** Everything a token set implies, resolved once. */
-export const resolveDesignPalette = (tokens: PaletteTokens): DesignPalette => ({
+/** Everything a token set implies, resolved once for the mode it paints in. */
+export const resolveDesignPalette = (tokens: PaletteTokens, mode: ThemeMode): DesignPalette => ({
   ...tokens,
   accentTint: alpha(tokens.accent, ACCENT_TINT_ALPHA),
+  inputBg: mode === 'dark' ? tokens.surfaceAlt : tokens.background,
   fontFamily: FONT_FAMILY,
 });
 
@@ -60,7 +72,7 @@ export const resolveDesignPalette = (tokens: PaletteTokens): DesignPalette => ({
  * can therefore take this theme without being repainted or re-typed by it.
  */
 export const createThemeFromTokens = (mode: 'light' | 'dark', tokens: PaletteTokens): Theme =>
-  createTheme({ palette: { mode }, design: resolveDesignPalette(tokens) });
+  createTheme({ palette: { mode }, design: resolveDesignPalette(tokens, mode) });
 
 /** The application theme for a shipped palette mode. */
 export const createAppTheme = (mode: ThemeMode): Theme =>
@@ -80,8 +92,8 @@ export const createColorSchemeTheme = (
 ): CssVarsTheme =>
   extendTheme({
     colorSchemes: {
-      light: { design: resolveDesignPalette(tokens.light) },
-      dark: { design: resolveDesignPalette(tokens.dark) },
+      light: { design: resolveDesignPalette(tokens.light, 'light') },
+      dark: { design: resolveDesignPalette(tokens.dark, 'dark') },
     },
   });
 
@@ -113,7 +125,7 @@ const withoutCustomProperties = (theme: Theme): Theme => {
 export const withDesignPalette = (outer: Theme): Theme => {
   // A restyled screen has to look right wherever it is mounted, including under
   // a theme built by a bare `createTheme()`, which carries no design palette.
-  const design = outer.design ?? resolveDesignPalette(carbonLight);
+  const design = outer.design ?? resolveDesignPalette(carbonLight, 'light');
 
   const painted = createTheme({
     typography: { fontFamily: design.fontFamily },
@@ -140,6 +152,25 @@ export const withDesignPalette = (outer: Theme): Theme => {
     // than globally. The card radius the design asks for is set on MuiCard
     // alone.
     components: {
+      // Every form control is filled, the design's way round: Material-UI's
+      // outlined control is transparent and so takes the colour of whatever it
+      // is dropped onto, which in the dark scheme is the card it sits on. Set
+      // on the input rather than on each screen, so a field is right wherever
+      // one is added.
+      MuiOutlinedInput: {
+        styleOverrides: { root: { backgroundColor: design.inputBg } },
+      },
+      // The filled control tints itself, and tints itself again on hover and
+      // while focused, so all three states have to name the design's fill.
+      MuiFilledInput: {
+        styleOverrides: {
+          root: {
+            backgroundColor: design.inputBg,
+            '&:hover': { backgroundColor: design.inputBg },
+            '&.Mui-focused': { backgroundColor: design.inputBg },
+          },
+        },
+      },
       MuiCard: {
         defaultProps: { elevation: 0 },
         styleOverrides: {

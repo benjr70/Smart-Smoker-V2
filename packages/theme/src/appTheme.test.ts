@@ -25,6 +25,27 @@ describe('the application theme — the Carbon light tokens it carries', () => {
     expect(design.textSecondary).toBe('#6B6B68');
   });
 
+  /**
+   * The design fills a form control with the page background in the light
+   * scheme and with the alternate surface in the dark one, so that a field
+   * always reads as a well cut into the card it sits on rather than as part of
+   * it. The colour is therefore derived from the palette in effect rather than
+   * being a further colour a palette has to name.
+   */
+  it('fills form controls with the page background in the light palette', () => {
+    const { design } = createAppTheme('light');
+
+    expect(design.inputBg).toBe(design.background);
+    expect(design.inputBg).toBe('#F6F6F5');
+  });
+
+  it('fills them with the alternate surface in the dark palette', () => {
+    const { design } = createAppTheme('dark');
+
+    expect(design.inputBg).toBe(design.surfaceAlt);
+    expect(design.inputBg).toBe('#202020');
+  });
+
   it('carries the accent, danger and success colours', () => {
     const { design } = createAppTheme('light');
 

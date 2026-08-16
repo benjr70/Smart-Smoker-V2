@@ -185,7 +185,7 @@ export function HistoryHeader({
           borderRadius: '11px',
           fontSize: '0.9375rem',
           color: theme.design.text,
-          backgroundColor: theme.design.surface,
+          backgroundColor: theme.design.inputBg,
           border: `1.5px solid ${theme.design.inputBorder}`,
         })}
       />

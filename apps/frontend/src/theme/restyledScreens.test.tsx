@@ -400,6 +400,55 @@ describe('the smoke wizard', () => {
 });
 
 /**
+ * A field is a well cut into the card it sits on: filled with the page
+ * background in the light scheme and with the alternate surface in the dark
+ * one, never with the card's own colour — which is what a field left in
+ * Material-UI's transparent outlined control took, leaving the dark scheme's
+ * inputs invisible (#517). The fill comes from the shared theme, so the
+ * assertions here are that every screen's fields actually take it.
+ */
+describe('the form fields', () => {
+  /** The filled part of a control, given anything inside it. */
+  const fill = (element: HTMLElement): HTMLElement =>
+    (element.closest('.MuiInputBase-root') as HTMLElement) ?? element;
+
+  it('fills the pre-smoke fields with the alternate surface in the dark scheme', async () => {
+    renderUnder('dark', <Smoke />);
+
+    expect(fill(await screen.findByTestId('presmoke-name-input'))).toHaveStyle({
+      backgroundColor: carbonDark.surfaceAlt,
+    });
+    expect(fill(screen.getByTestId('presmoke-meat-type-input'))).toHaveStyle({
+      backgroundColor: carbonDark.surfaceAlt,
+    });
+  });
+
+  it('fills them with the page background in the light scheme', async () => {
+    renderUnder('light', <Smoke />);
+
+    expect(fill(await screen.findByTestId('presmoke-name-input'))).toHaveStyle({
+      backgroundColor: carbonLight.background,
+    });
+  });
+
+  it('fills the history search field the same way, not in the card colour', async () => {
+    renderUnder('dark', <History />);
+
+    const search = fill(await screen.findByRole('searchbox', { name: 'Search smoke history' }));
+    expect(search).toHaveStyle({ backgroundColor: carbonDark.surfaceAlt });
+    expect(search).not.toHaveStyle({ backgroundColor: carbonDark.surface });
+  });
+
+  it('fills the history search field with the page background in the light scheme', async () => {
+    renderUnder('light', <History />);
+
+    expect(
+      fill(await screen.findByRole('searchbox', { name: 'Search smoke history' }))
+    ).toHaveStyle({ backgroundColor: carbonLight.background });
+  });
+});
+
+/**
  * The bar is its own surface in the design — darker than a card in the dark
  * scheme, so it reads as the edge of the app rather than as another panel.
  */
