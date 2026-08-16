@@ -1,0 +1,49 @@
+# Conventional-commit PR-title lint (issue #499, PRD #498). release-please
+# derives the changelog and version bump from the squashed commit subject, which
+# on this repo is the PR title — so the title has to be a valid conventional
+# commit.
+#
+# ADVISORY for now: the check runs and shows up on every PR, but it is NOT in
+# the branch-protection required checks. The required-flip is a separate HITL
+# settings slice, done after the agent PR templates comply.
+#
+# All the rules live in scripts/validate-pr-title.sh (self-tested); this
+# workflow is a thin wrapper. The title is passed through an env var rather than
+# inline `${{ }}` interpolation so a crafted title cannot inject shell.
+
+name: PR Title Lint
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+    branches: [master]
+  push:
+    branches: [master]
+    paths:
+      - 'scripts/validate-pr-title.sh'
+      - 'scripts/validate-pr-title.test.sh'
+      - '.github/workflows/pr-title-lint.yml'
+
+jobs:
+  pr-title:
+    name: Conventional PR title
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate PR title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: bash scripts/validate-pr-title.sh "$PR_TITLE"
+
+  validator-tests:
+    name: Validator self-tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run the PR-title validator test suite
+        run: bash scripts/validate-pr-title.test.sh
