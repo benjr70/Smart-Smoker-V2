@@ -44,30 +44,51 @@ The Smart Smoker v2 project uses a clean, reusable workflow architecture that el
   2. Build validation (calls `build.yml` with mode="build")
 - **Benefits**: Fast feedback, parallel execution, no redundant installs
 
-#### 5. `release.yml` - Production Deployment
-- **Purpose**: Complete release pipeline for production
+#### 5. `release-please.yml` - Release Cutter
+- **Purpose**: Keeps the release PR (version bump + CHANGELOG) up to date on
+  every push to `master`, and on merge tags `vX.Y.Z` + publishes the GitHub
+  Release
+- **Builds nothing itself** — it only produces the `release: published` event
+  that the two pipelines below listen for
+- **Auth**: `RUNNER_PAT`, not `GITHUB_TOKEN` (see
+  [Release Process](release-process.md#5-token-requirements-runner_pat))
+
+#### 6. `release.yml` - Smoker Release Pipeline
+- **Purpose**: Builds and publishes the device-side images for a release
 - **Process**:
-  1. Build smoker apps (calls `build.yml` with mode="build-and-export")
-  2. Build cloud apps (calls `build.yml` with mode="build-and-export") 
-  3. Publish all Docker images (calls `publish.yml`)
-  4. Deploy to cloud infrastructure (conditional)
+  1. Build smoker apps — smoker, device-service, electron-shell — from the tag
+     (calls `build.yml` with mode="build-and-export")
+  2. Publish those Docker images with `:latest` + `:vX.Y.Z` (calls `publish.yml`)
 
   Smoker devices are not deployed to here: publishing `:latest` *is* their
   deployment, applied by Watchtower on the device.
 
+#### 7. `prod-deploy.yml` - Production Pipeline
+- **Purpose**: Turns a published Release into a running production cloud
+- **Process**:
+  1. Resolve + validate the version from the release tag (or dispatch input)
+  2. Probe Docker Hub; skip the build when `:vX.Y.Z` already exists
+  3. Build backend + frontend **from the release tag** (calls `publish.yml` with
+     mode="release", `prebuild: true`) — no `:nightly` promotion
+  4. Deploy over SSH from the proxmox runner via `scripts/deploy-cloud.sh`,
+     with health check, rollback and Discord notification — the job targets the
+     `production` environment, which still gates it on a required-reviewer
+     approval + 5-minute wait timer (removal pending)
+  5. Blocking post-deploy smoke gate on a GitHub-hosted runner
+
 ### Deployment Workflows
 
-#### 6. `device-deploy.yml` - Device Deployment
+#### 8. `device-deploy.yml` - Device Deployment
 - **Purpose**: Deploys a compose file to a smoker device (virtual or the physical Pi) over
   SSH, with backup, health check and automatic rollback
 - **Note**: Only needed when the compose file changes. Image updates reach devices via
   Watchtower — see [Physical Smoker Device](smoker-device.md)
 
-#### 7. `cloud-deploy.yml` - Cloud Deployment  
-- **Purpose**: Deploys to cloud infrastructure
-- **Unchanged**: Existing deployment logic
+#### 9. `dev-deploy.yml` / `nightly.yml` - Development Cloud
+- **Purpose**: Build and deploy `:nightly` to dev-cloud on master merges
+- **Note**: `:nightly` never reaches production or the physical device
 
-#### 8. `docs.yml` - Documentation
+#### 10. `docs.yml` - Documentation
 - **Purpose**: Builds and deploys documentation
 - **Unchanged**: Existing MkDocs deployment
 
@@ -104,12 +125,17 @@ build.yml (mode: "build") → Validates builds
 
 ### Production Release
 ```yaml
-# release.yml calls:
+# merge of the release PR → release-please.yml tags vX.Y.Z + publishes a Release
+#
+# release.yml (release: published) calls:
 build.yml (smoker apps, mode: "build-and-export") → Creates artifacts
-build.yml (cloud apps, mode: "build-and-export") → Creates artifacts
-publish.yml → Pushes all Docker images (`:latest` + `:vX.Y.Z`)
-cloud-deploy.yml → Deploys to cloud (conditional)
+publish.yml → Pushes device images (`:latest` + `:vX.Y.Z`)
 # devices: Watchtower picks up `:latest` on its next poll
+#
+# prod-deploy.yml (release: published) calls:
+publish.yml (backend + frontend, mode: "release", ref: vX.Y.Z) → builds from the tag
+scripts/deploy-cloud.sh over SSH → deploys prod pinned to vX.Y.Z
+scripts/smoke → blocking post-deploy gate
 ```
 
 ## Usage Examples
@@ -153,11 +179,14 @@ secrets: inherit
 ├── 
 ├── # Orchestrator Workflows  
 ├── ci-tests.yml             # PR validation & testing
-├── release.yml              # Production release pipeline
+├── pr-title-lint.yml        # Conventional PR title (release-please input)
+├── release-please.yml       # Release PR → tag + GitHub Release
+├── release.yml              # Smoker image release pipeline
 ├── 
 ├── # Deployment Workflows
+├── prod-deploy.yml          # Production cloud: build from tag, deploy, smoke
+├── dev-deploy.yml           # Dev cloud deployment (`:nightly`)
 ├── device-deploy.yml        # Smoker device deployment (compose changes only)
-├── cloud-deploy.yml         # Cloud infrastructure deployment
 └── docs.yml                 # Documentation deployment
 ```
 

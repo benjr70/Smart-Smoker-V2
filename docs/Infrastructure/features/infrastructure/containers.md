@@ -120,7 +120,7 @@ services:
 ### Production (Cloud)
 
 **Tag**: `vX.Y.Z` (pinned versions)  
-**Deployment**: Manual deployment with approval  
+**Deployment**: On GitHub Release publish (merge of the release PR), then the `production` environment approval gate — required reviewer + 5-minute wait timer, pending removal ([Release Process](../../../CI-CD/release-process.md))  
 **Location**: prod-cloud
 
 ```yaml

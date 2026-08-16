@@ -369,10 +369,10 @@ SSH_PRIVATE_KEY: <ed25519-private-key>  # SSH key for deployment to dev-cloud
    - Click **Add secret**
 4. Test SSH connectivity from the runner to verify setup
 
-**Runner Auto-Registration** (Required for runner self-healing):
+**Runner Auto-Registration and Releases** (Required for runner self-healing **and** for release-please):
 
 ```yaml
-RUNNER_PAT: <fine-grained-pat>  # GitHub PAT for auto-registering runners
+RUNNER_PAT: <fine-grained-pat>  # GitHub PAT for auto-registering runners + cutting releases
 ```
 
 **How to Set Up RUNNER_PAT**:
@@ -381,10 +381,21 @@ RUNNER_PAT: <fine-grained-pat>  # GitHub PAT for auto-registering runners
 2. Token name: `smart-smoker-runner-autoregister`
 3. Expiration: No expiration (or 1 year max)
 4. Repository access: Only `benjr70/Smart-Smoker-V2`
-5. Permissions: Repository > Administration: Read and write
+5. Permissions: Repository >
+   - Administration: Read and write (runner registration)
+   - Contents: Read and write (release commit, `vX.Y.Z` tag, GitHub Release)
+   - Pull requests: Read and write (open/update the release PR)
+
+   A classic PAT with the `repo` scope covers the release half.
 6. Copy the token and add as a GitHub Secret named `RUNNER_PAT`
 
 **On-Runner Storage**: The Ansible role also deploys the PAT to `/etc/github-runner/pat` (0600, root-only) for the self-healing timer script that auto-re-registers stale runners.
+
+**Why not `GITHUB_TOKEN` for releases**: GitHub suppresses workflow events for
+actions taken by `GITHUB_TOKEN`, so a Release created with it emits no
+`release: published` event and neither `prod-deploy.yml` nor `release.yml` would
+fire. If this PAT expires, the release PR silently stops updating — see
+[Release Process](../../../CI-CD/release-process.md#5-token-requirements-runner_pat).
 
 **Other Secrets**:
 ```yaml

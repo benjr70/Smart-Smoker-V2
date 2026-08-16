@@ -64,7 +64,10 @@ The Smart Smoker V2 infrastructure supports multiple deployment environments: de
 - Frontend: `https://smokecloud.tail74646.ts.net`
 
 **Deployment**:
-- Manual deployment with approval
+- Deployed on GitHub Release publish (merge of the release PR), then one
+  approval at the `production` environment gate — required reviewer + 5-minute
+  wait timer, pending removal
+  (see [Release Process](../../../CI-CD/release-process.md))
 - Tagged stable releases
 - Production database
 - Health monitoring
@@ -111,7 +114,7 @@ The Smart Smoker V2 infrastructure supports multiple deployment environments: de
 |---------|------------|------------|
 | Resources | 2 CPU, 4GB RAM | 4 CPU, 8GB RAM |
 | Storage | 20GB | 40GB |
-| Deployment | Auto/manual | Manual approval |
+| Deployment | Auto on master merge | On Release publish (release-PR merge) + environment approval |
 | Monitoring | Basic | Comprehensive |
 | Backups | Daily | Daily + LXC snapshots |
 | Access | Internal only | Public via Tailscale |

@@ -40,7 +40,9 @@ GitHub Repository
 
 ### Cloud Deployment Workflow
 
-**File**: `.github/workflows/cloud-deploy.yml`
+**File**: `.github/workflows/prod-deploy.yml` (the former `cloud-deploy.yml` has
+been deleted; the steps below now live in that workflow's `deploy` job, which
+calls `scripts/deploy-cloud.sh` over SSH)
 
 **Workflow Steps**:
 
@@ -157,7 +159,11 @@ GitHub Repository
 ### Production Environment
 
 **Location**: prod-cloud (VMID 106) or Raspberry Pi  
-**Trigger**: Manual deployment approval  
+**Trigger**: GitHub Release published — i.e. the maintainer merging the
+release PR ([Release Process](../../../CI-CD/release-process.md)). The deploy
+job then waits on the `production` environment gate (required reviewer +
+5-minute wait timer); removing that gate so the release-PR merge is the sole
+approval is a pending maintainer settings change  
 **Access**: Tailscale funnel (public access)  
 **Features**:
 - Tagged stable releases

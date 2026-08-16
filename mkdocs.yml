@@ -68,10 +68,13 @@ nav:
       - Testing Template: Packages/testing-template.md
   - CI/CD:
       - CI-CD/index.md
+      - Release Process: CI-CD/release-process.md
       - GitHub Actions: CI-CD/github-actions.md
       - Test Coverage: CI-CD/test-coverage.md
       - Dependency Management: CI-CD/dependency-management.md
+      - Workflow Architecture: CI-CD/workflow-architecture.md
       - Deployment & Infrastructure: CI-CD/deployment-infrastructure.md
+      - Manual Deployment Runbook: CI-CD/manual-version-deployment.md
       - Physical Smoker Device: CI-CD/smoker-device.md
       - Claude Agent VM: CI-CD/claude-agent-vm.md
   - Harness:

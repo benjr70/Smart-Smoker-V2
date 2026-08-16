@@ -4,11 +4,19 @@ This document covers production deployment processes, container orchestration, n
 
 ## Version Deployments
 
-To create a new production deployment:
+Production deploys are cut by **merging the release PR** that release-please
+keeps open on `master`. That single merge bumps every `package.json`, updates
+`CHANGELOG.md`, tags `vX.Y.Z`, publishes the GitHub Release, builds the cloud
+images from that tag and deploys production behind a blocking smoke gate. The
+deploy job still stops at the `production` environment gate (required reviewer +
+5-minute wait timer) for one approval click; removing that gate is a pending
+maintainer settings change.
 
-1. **Update version** in `package.json`
-2. **Create a version tag** in GitHub for that commit
-3. **Create a GitHub Release** with tag `vX.Y.Z` (preferred) or run the `Release Smart Smoker v2` action manually
+Do not hand-edit versions, hand-cut tags or draft Releases manually — that path
+skips the changelog and the version bumps. See
+[Release Process](release-process.md) for the full flow, and
+[Manual Deployment Runbook](manual-version-deployment.md) for the
+re-deploy/rollback escape hatches.
 
 ## Container Deployment
 

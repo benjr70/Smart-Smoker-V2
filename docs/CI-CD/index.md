@@ -7,11 +7,24 @@ This section covers Continuous Integration, Continuous Deployment, and infrastru
 The Smart Smoker V2 project uses a comprehensive CI/CD pipeline that includes:
 
 - **Automated Testing**: GitHub Actions run tests on every PR
+- **Automated Releases**: release-please turns conventional PR titles into a
+  release PR; merging it tags, publishes the Release and drives the production
+  deploy (which still pauses at the `production` environment approval gate until
+  that setting is removed)
 - **Container Deployment**: Docker containers deployed via watchtower and GitHub Actions
 - **Network Management**: Tailscale for secure private networking
 - **Monitoring**: Portainer for container management and monitoring
 
 ## Documentation Structure
+
+### [Release Process](release-process.md)
+How a merged PR becomes a production deploy:
+- **release-please**: conventional PR titles → always-open release PR
+- **One-click release**: merging the release PR tags, publishes and deploys
+  (plus the still-present `production` approval gate — pending removal)
+- **PR title convention**: types, scopes, `!`, `Closes #N` in the body, and the local validator
+- **Token requirements**: why `RUNNER_PAT` (not `GITHUB_TOKEN`) and what breaks when it expires
+- **Escape hatches**: `workflow_dispatch` re-deploys and rollback
 
 ### [GitHub Actions CI/CD](github-actions.md)
 Comprehensive guide to the automated testing and deployment workflows:
@@ -50,13 +63,12 @@ Comprehensive guide to managing dependencies across the monorepo:
 
 ### [Deployment & Infrastructure](deployment-infrastructure.md)
 Production deployment processes and infrastructure management:
-- **Version Deployments**: Release process with GitHub tags
 - **Container Orchestration**: Docker with watchtower auto-deployment
 - **Network Configuration**: Tailscale setup and SSL management
 - **Monitoring Setup**: Portainer installation and configuration
 
-### [Manual Version Deployment](manual-version-deployment.md)
-Runbook for deploying specific container versions to the cloud using GitHub Actions or local Docker Compose, including rollback and verification steps.
+### [Manual Deployment Runbook](manual-version-deployment.md)
+Escape hatches only — re-deploying or rolling back a specific `vX.Y.Z` via `workflow_dispatch` or local Docker Compose, with verification steps. The normal release path is [Release Process](release-process.md).
 
 ## Quick Reference
 
@@ -89,10 +101,16 @@ Every PR must pass these automated checks:
 1. **Create Feature Branch**: `feature/SS2-XX-description`
 2. **Develop & Test Locally**: Run tests and code quality checks before pushing
 3. **Code Quality**: Use `npm run check` for linting and formatting
-4. **Create Pull Request**: CI automatically runs all tests and quality checks
-5. **Code Review**: Requires approval + passing tests + code quality
-6. **Merge to Master**: Triggers deployment workflows
-7. **Production Release**: Tag version for container updates
+4. **Create Pull Request**: title must be conventional
+   (`feat(scope): …`, `fix: …`); put `Closes #N` in the body. Check it first
+   with `bash scripts/validate-pr-title.sh "<title>"`
+5. **CI**: automatically runs all tests and quality checks
+6. **Code Review**: Requires approval + passing tests + code quality
+7. **Squash-merge to Master**: the PR title becomes the commit release-please
+   reads; dev-cloud redeploys from `:nightly`
+8. **Production Release**: merge the release PR that release-please keeps open —
+   that tags, publishes and deploys prod. See
+   [Release Process](release-process.md)
 
 ## Architecture Diagram
 
