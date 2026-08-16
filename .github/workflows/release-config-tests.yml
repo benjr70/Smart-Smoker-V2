@@ -1,0 +1,43 @@
+# Runs the release-please configuration suite (#500, PRD #498). The release
+# pipeline is config-only — a manifest, a config file and a workflow — so a bad
+# edit produces no test failure anywhere else in CI and only surfaces at cut
+# time as a broken or silently-skipped release. scripts/release/*.test.sh
+# statically checks the manifest bootstrap, the extra-files set that keeps all
+# six package.jsons in lockstep, the lockfile-consistency invariant and the
+# RUNNER_PAT (not GITHUB_TOKEN) auth choice. Path-filtered to the release files
+# themselves, and needs only bash + jq, both present on ubuntu-latest.
+
+name: Release Config Tests
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'release-please-config.json'
+      - '.release-please-manifest.json'
+      - 'scripts/release/**'
+      - '.github/workflows/release-please.yml'
+      - '.github/workflows/release-config-tests.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'release-please-config.json'
+      - '.release-please-manifest.json'
+      - 'scripts/release/**'
+      - '.github/workflows/release-please.yml'
+      - '.github/workflows/release-config-tests.yml'
+
+jobs:
+  release-config-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify prerequisites (bash + jq)
+        run: |
+          bash --version | head -1
+          jq --version
+
+      - name: Run release-please config suite
+        run: bash scripts/release/release-please-config.test.sh
