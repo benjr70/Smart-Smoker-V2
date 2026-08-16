@@ -1,20 +1,20 @@
 /**
- * The fill behind a form control, as a rendered field rather than as a token.
+ * A form control's fill and hairline, as a rendered field rather than as tokens.
  *
- * The design fills every input, textarea and select with `inputBg` — the
- * alternate surface, in either scheme — so that a field reads as a well cut
- * into whatever is behind it: the card it usually sits in, or the page itself
- * on a card-less screen. Material-UI's own outlined control is transparent,
- * which in the dark scheme left every field the colour of the card and all but
- * invisible (#517); filling with the page background instead would have moved
- * the same defect onto the card-less screens.
+ * The design paints every input, textarea and select `background: inputBg` plus
+ * `border: 1.5px solid inputBorder`, and derives the fill from the palette:
+ * the alternate surface in the dark scheme, the page tone in the light one. It
+ * is the hairline that makes a field a field — the design's history header puts
+ * a page-toned field on a page-toned header and reads it by the border alone —
+ * so both halves are asserted here, and the fill is only ever required to stay
+ * off the card a field sits on, which is the #517 defect.
  *
  * Every variant is covered, because the fill is registered on the input base
  * that all of them are built from rather than on the outlined one alone.
  *
  * These render through the provider the application root uses, so what is
- * asserted is the colour a field actually paints in under a scheme, not the
- * shape of a style override.
+ * asserted is what a field actually paints under a scheme, not the shape of a
+ * style override.
  */
 import {
   Card,
@@ -62,6 +62,16 @@ const control = (testId: string): HTMLElement => {
   return (root.querySelector('.MuiInputBase-root') as HTMLElement) ?? root;
 };
 
+/**
+ * The element a control's hairline is drawn on. The outlined control draws it
+ * in the fieldset it needs anyway for the notch a floating label cuts; every
+ * other variant draws it on the input base itself.
+ */
+const hairline = (testId: string): HTMLElement => {
+  const root = control(testId);
+  return (root.querySelector('.MuiOutlinedInput-notchedOutline') as HTMLElement) ?? root;
+};
+
 describe('the fill behind a form control', () => {
   let system: ReturnType<typeof stubSystemColorScheme>;
 
@@ -93,19 +103,82 @@ describe('the fill behind a form control', () => {
     expect(control('search')).toHaveStyle({ backgroundColor: carbonDark.surfaceAlt });
   });
 
-  it('is the alternate surface in the light scheme as well, off both card and page', () => {
+  /**
+   * The design's light field is the page tone, and is read against the card it
+   * sits on by its hairline. What it must not be is the card colour, which is
+   * what Material-UI's transparent control gave it.
+   */
+  it('is the page background in the light scheme, not the card it sits on', () => {
     renderFormUnder('light');
 
-    expect(control('name')).toHaveStyle({ backgroundColor: carbonLight.surfaceAlt });
+    expect(control('name')).toHaveStyle({ backgroundColor: carbonLight.background });
     expect(control('name')).not.toHaveStyle({ backgroundColor: carbonLight.surface });
-    expect(control('name')).not.toHaveStyle({ backgroundColor: carbonLight.background });
   });
 
-  it('fills every light-scheme variant off the page it may sit directly on', () => {
+  it('fills every light-scheme variant with that same page tone', () => {
     renderFormUnder('light');
 
     ['notes', 'unit', 'wood', 'weight', 'search'].forEach(id => {
-      expect(control(id)).toHaveStyle({ backgroundColor: carbonLight.surfaceAlt });
+      expect(control(id)).toHaveStyle({ backgroundColor: carbonLight.background });
     });
+  });
+});
+
+/**
+ * The hairline is what separates a field from whatever is behind it, so it is
+ * the affordance the light scheme rests on entirely: a page-toned field in the
+ * history header or on the card-less pre-smoke form is legible only because of
+ * this border.
+ */
+describe('the hairline around a form control', () => {
+  let system: ReturnType<typeof stubSystemColorScheme>;
+
+  beforeEach(() => {
+    system = stubSystemColorScheme();
+    localStorage.clear();
+  });
+  afterEach(() => system.restore());
+
+  it('is the design’s input border in the light scheme, not the surface hairline', () => {
+    renderFormUnder('light');
+
+    expect(hairline('name')).toHaveStyle({
+      borderColor: carbonLight.inputBorder,
+      borderWidth: '1.5px',
+      borderStyle: 'solid',
+    });
+    expect(hairline('name')).not.toHaveStyle({ borderColor: carbonLight.border });
+  });
+
+  it('is the design’s input border in the dark scheme too', () => {
+    renderFormUnder('dark');
+
+    expect(hairline('name')).toHaveStyle({
+      borderColor: carbonDark.inputBorder,
+      borderWidth: '1.5px',
+    });
+  });
+
+  it('is drawn around every variant, whichever element carries it', () => {
+    renderFormUnder('light');
+
+    ['notes', 'unit', 'wood', 'weight', 'search'].forEach(id => {
+      expect(hairline(id)).toHaveStyle({
+        borderColor: carbonLight.inputBorder,
+        borderWidth: '1.5px',
+      });
+    });
+  });
+
+  /**
+   * One hairline per field: the outlined control's root must not draw a second
+   * line just outside the fieldset that already carries it.
+   */
+  it('leaves the outlined control’s own root unbordered, so the fieldset is the only line', () => {
+    renderFormUnder('light');
+
+    expect(control('name')).not.toHaveStyle({ borderStyle: 'solid' });
+    // The variants with no fieldset of their own are the ones that draw it.
+    expect(control('search')).toHaveStyle({ borderStyle: 'solid' });
   });
 });

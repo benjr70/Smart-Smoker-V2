@@ -177,9 +177,11 @@ export function HistoryHeader({
             </IconButton>
           ) : null
         }
-        // No fill here: the theme fills every input base with the design's
-        // field colour, so a hand-written one would be a second place to change
-        // it and a chance for this field to drift from the rest of them.
+        // Neither fill nor hairline here: the theme gives every input base the
+        // design's field colour and its 1.5px input border, so hand-written
+        // ones would be a second place to change them and a chance for this
+        // field to drift from the rest of them. Only the radius this particular
+        // field is drawn with is its own.
         sx={theme => ({
           marginTop: '12px',
           width: '100%',
@@ -188,7 +190,6 @@ export function HistoryHeader({
           borderRadius: '11px',
           fontSize: '0.9375rem',
           color: theme.design.text,
-          border: `1.5px solid ${theme.design.inputBorder}`,
         })}
       />
 
