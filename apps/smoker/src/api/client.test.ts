@@ -288,7 +288,7 @@ describe('smoker api client', () => {
           current: {
             startedAt: '2026-08-15T10:00:00.000Z',
             finishedAt: null,
-            estimate: { state: 'ok', eta: '2026-08-15T16:30:00.000Z' },
+            estimate: { state: 'ok', eta: '2026-08-15T16:30:00.000Z', hoursRemaining: 6.5 },
           },
         },
       });
@@ -298,6 +298,10 @@ describe('smoker api client', () => {
       expect(current?.startedAt?.toISOString()).toBe('2026-08-15T10:00:00.000Z');
       expect(current?.estimate.state).toBe('ok');
       expect(current?.estimate.eta?.toISOString()).toBe('2026-08-15T16:30:00.000Z');
+      // How long is left comes off the same read as the moment it names: a
+      // clock time on its own says nothing about which day it is on, and six
+      // and a half hours is what tells an overnight cook from an imminent one.
+      expect(current?.estimate.hoursRemaining).toBe(6.5);
       expect(cloud.requests).toEqual([
         { method: 'get', path: 'timeline/current', body: undefined },
       ]);
@@ -317,7 +321,7 @@ describe('smoker api client', () => {
 
       const current = await client.timeline.getCurrent();
 
-      expect(current?.estimate).toEqual({ state: null, eta: null });
+      expect(current?.estimate).toEqual({ state: null, eta: null, hoursRemaining: null });
     });
 
     /**

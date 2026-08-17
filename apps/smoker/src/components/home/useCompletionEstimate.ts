@@ -56,6 +56,22 @@ export const useCompletionEstimate = (
     };
   }, []);
 
+  /**
+   * Which read is which: the number the next one is given, and the newest one
+   * whose answer is on the bar.
+   *
+   * The panel asks again every minute whether or not the last answer has
+   * arrived, so a read held up by a slow link can land behind a newer one. It
+   * is not cancelled by that newer one — an answer is worth having whichever
+   * read fetched it, and dropping the older one outright would leave the bar
+   * bare whenever the newer read fails, which is the one thing this hook
+   * promises not to do. Newer simply beats older: a late answer is news about a
+   * cook the screen has already been told more recent news of, and drawing it
+   * would take a time off the bar for a whole minute.
+   */
+  const nextRead = useRef(0);
+  const shownRead = useRef(-1);
+
   useEffect(() => {
     if (!smoking) {
       // Nothing is being cooked to anything, so there is nothing to ask about
@@ -65,10 +81,18 @@ export const useCompletionEstimate = (
     }
     let reading = true;
     const read = (): void => {
+      const readNumber = nextRead.current;
+      nextRead.current += 1;
       void port
         .getCurrent()
         .then(current => {
+          // The cook may have been put out, or the screen left the panel, while
+          // this was being read: neither leaves an answer worth showing.
           if (!reading || !onScreen.current) return;
+          // A read overtaken by a newer one that is already on the bar is
+          // history.
+          if (readNumber < shownRead.current) return;
+          shownRead.current = readNumber;
           setEstimate(current?.estimate ?? null);
         })
         .catch(() => undefined);

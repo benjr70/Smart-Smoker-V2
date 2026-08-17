@@ -132,13 +132,22 @@ export type CompletionState = 'warming' | 'ok' | 'stalled' | 'paused' | 'done';
  * touchscreen has any use for: how it is going, and the moment itself.
  *
  * The estimate carries more — a rate, a progress percentage, the temperatures
- * behind them — and the web card shows all of it. This panel shows a clock time
- * beside the elapsed clock and nothing else, so nothing else is carried here.
+ * behind them — and the web card shows all of it. This panel shows when the
+ * cook will be done and how long that is away, so those two are carried and
+ * nothing else is.
  */
 export interface CookCompletionEstimate {
   state: CompletionState | null;
   /** When the meat is expected to reach its target. */
   eta: Date | null;
+  /**
+   * How long that is from now, in hours, or `null` when the backend cannot say.
+   *
+   * Read alongside the moment rather than worked out from it: a clock time on
+   * its own does not say which day it falls on, and an overnight cook due at
+   * 8:15 reads exactly like one due in ten minutes without it.
+   */
+  hoursRemaining: number | null;
 }
 
 /** The cook in progress: when it started, and when it will be done. */
@@ -189,6 +198,7 @@ type WireCurrentTimeline = {
   estimate?: {
     state?: CompletionState | null;
     eta?: string | Date | null;
+    hoursRemaining?: number | null;
   } | null;
 };
 
@@ -258,6 +268,7 @@ export const createApiClient = (
         estimate: {
           state: raw.estimate?.state ?? null,
           eta: asMoment(raw.estimate?.eta),
+          hoursRemaining: raw.estimate?.hoursRemaining ?? null,
         },
       };
     },

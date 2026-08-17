@@ -137,10 +137,19 @@ function fakeCurrentCook(estimate: CookCompletionEstimate | null = null) {
   };
 }
 
-/** An estimate in one of the backend's states, due at the given moment. */
-const estimateOf = (state: CompletionState | null, eta: Date | null): CookCompletionEstimate => ({
+/**
+ * An estimate in one of the backend's states, due at the given moment — and,
+ * where it is given, how long that is away. A backend with a moment but no span
+ * for it is the default, because that is the case the bar has to fall back for.
+ */
+const estimateOf = (
+  state: CompletionState | null,
+  eta: Date | null,
+  hoursRemaining: number | null = null
+): CookCompletionEstimate => ({
   state,
   eta,
+  hoursRemaining,
 });
 
 function renderHome(
@@ -671,6 +680,48 @@ describe('the top bar', () => {
     });
 
     /**
+     * How long is left, set against the time itself.
+     *
+     * A clock time says nothing about which day it falls on: an overnight cook
+     * due at 8:15 in the morning reads exactly like one due in ten minutes, and
+     * an operator who reads it the second way goes to bed. The span beside it is
+     * what tells the two apart, and it is the same span — off the same read —
+     * that the web card writes out as `~12h 10m remaining`.
+     */
+    it('sets how long is left beside the time, so an overnight cook reads as one', async () => {
+      renderHome(
+        smoking(),
+        fakeProbeTargets([]),
+        fakeCurrentCook(estimateOf('ok', HALF_PAST_FOUR, 12 + 10 / 60))
+      );
+      await act(async () => {
+        await flushPromises();
+      });
+
+      expect(screen.getByTestId('smoker-eta')).toHaveTextContent(asClockTime(HALF_PAST_FOUR));
+      expect(screen.getByTestId('smoker-eta-remaining')).toHaveTextContent('~12h 10m');
+    });
+
+    /**
+     * A backend that has a moment but no span for it — an older deployment, or
+     * an estimate whose rate has gone — leaves the time standing on its own
+     * rather than putting a made-up span under it.
+     */
+    it('shows the time alone when there is no span to set beside it', async () => {
+      renderHome(
+        smoking(),
+        fakeProbeTargets([]),
+        fakeCurrentCook(estimateOf('ok', HALF_PAST_FOUR))
+      );
+      await act(async () => {
+        await flushPromises();
+      });
+
+      expect(screen.getByTestId('smoker-eta')).toHaveTextContent(asClockTime(HALF_PAST_FOUR));
+      expect(screen.queryByTestId('smoker-eta-remaining')).not.toBeInTheDocument();
+    });
+
+    /**
      * Every other state is an estimate the panel has nothing to say about: a
      * cook still warming has no moment yet, a stalled or paused one has one
      * nobody should plan around, and a done one has arrived. The touchscreen
@@ -707,12 +758,6 @@ describe('the top bar', () => {
     });
 
     /**
-     * A backend that cannot be reached — or one older than the estimator, which
-     * answers with no running cook at all — leaves the top bar as it was. The
-     * clock goes on counting: the cook is still running whether or not anything
-     * can say when it ends.
-     */
-    /**
      * The panel has no push channel for the estimate, so it re-asks: a cook
      * that was still warming when the operator walked away has a time on it
      * when they walk back, without anybody touching the glass.
@@ -743,6 +788,56 @@ describe('the top bar', () => {
       }
     });
 
+    /**
+     * A read is not raced by the one after it. The panel asks again every
+     * minute whether or not the last answer has arrived, so a read held up by a
+     * slow link can land behind a newer one — and its answer is about a cook the
+     * screen has already been told more recent news of. Drawing it would wipe a
+     * time off the bar for a whole minute, so it is let go instead.
+     */
+    it('lets a slow read that lands behind a newer one go rather than drawing it', async () => {
+      jest.useFakeTimers();
+      try {
+        const waiting: Array<(cook: CurrentCookTimeline | null) => void> = [];
+        renderHome(smoking(), fakeProbeTargets([]), {
+          getCurrent: () =>
+            new Promise<CurrentCookTimeline | null>(resolve => {
+              waiting.push(resolve);
+            }),
+        });
+        await act(async () => {
+          await Promise.resolve();
+        });
+
+        // The minute's read answers first, with a cook that is on track.
+        await act(async () => {
+          jest.advanceTimersByTime(ESTIMATE_REFRESH_MS);
+          await Promise.resolve();
+        });
+        await act(async () => {
+          waiting[1]({ startedAt: new Date(), estimate: estimateOf('ok', HALF_PAST_FOUR) });
+          await Promise.resolve();
+        });
+        expect(screen.getByTestId('smoker-eta')).toHaveTextContent(asClockTime(HALF_PAST_FOUR));
+
+        // The switch-on read wanders in behind it, still saying "warming".
+        await act(async () => {
+          waiting[0]({ startedAt: new Date(), estimate: estimateOf('warming', null) });
+          await Promise.resolve();
+        });
+
+        expect(screen.getByTestId('smoker-eta')).toHaveTextContent(asClockTime(HALF_PAST_FOUR));
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    /**
+     * A backend that cannot be reached — or one older than the estimator, which
+     * answers with no running cook at all — leaves the top bar as it was. The
+     * clock goes on counting: the cook is still running whether or not anything
+     * can say when it ends.
+     */
     it('leaves the clock alone when there is no estimate to be had', async () => {
       renderHome(smoking(), fakeProbeTargets([]), {
         getCurrent: () => Promise.reject(new Error('the panel cannot reach the cloud')),

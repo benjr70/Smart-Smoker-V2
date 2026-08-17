@@ -109,6 +109,8 @@ export type StoredTimeline = {
   estimate?: {
     state: 'warming' | 'ok' | 'stalled' | 'paused' | 'done' | null;
     eta: string | null;
+    /** How long is left, as the backend serves it — absent where it cannot say. */
+    hoursRemaining?: number | null;
   };
 };
 
