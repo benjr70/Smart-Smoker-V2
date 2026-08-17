@@ -18,8 +18,34 @@ export type FakeDoc = Record<string, any>;
  * actually carry the field, which is how MongoDB reads it too.
  */
 const fieldMatches = (value: unknown, expected: unknown): boolean => {
-  if (expected && typeof expected === 'object' && '$ne' in expected) {
-    return !fieldMatches(value, (expected as { $ne: unknown }).$ne);
+  // An object of `$` keys is a set of conditions, all of which must hold;
+  // anything else — a Date, say — is a plain value, compared as one.
+  if (
+    expected &&
+    typeof expected === 'object' &&
+    Object.keys(expected).some((key) => key.startsWith('$'))
+  ) {
+    return Object.entries(expected as Record<string, unknown>).every(
+      ([operator, operand]) => {
+        switch (operator) {
+          case '$ne':
+            return !fieldMatches(value, operand);
+          case '$gte':
+            return (
+              value !== null &&
+              value !== undefined &&
+              new Date(value as string).getTime() >=
+                new Date(operand as string).getTime()
+            );
+          case '$in':
+            return (operand as unknown[]).some((one) =>
+              fieldMatches(value, one),
+            );
+          default:
+            throw new Error(`fake model does not implement ${operator}`);
+        }
+      },
+    );
   }
   if (expected === null) {
     return value === null || value === undefined;
@@ -49,12 +75,19 @@ const query = (rows: FakeDoc[], one: boolean) => {
   let sort: FakeDoc | null = null;
   let limit: number | null = null;
   const chain = {
+    /**
+     * What the caller narrowed the query with, readable afterwards — so a test
+     * can hold a polled read to being a bounded one.
+     */
+    applied: {} as { sort?: FakeDoc; limit?: number },
     sort(spec: FakeDoc) {
       sort = spec;
+      chain.applied.sort = spec;
       return chain;
     },
     limit(count: number) {
       limit = count;
+      chain.applied.limit = count;
       return chain;
     },
     async exec() {
@@ -70,6 +103,51 @@ const query = (rows: FakeDoc[], one: boolean) => {
     },
   };
   return chain;
+};
+
+/**
+ * The one aggregation this module makes: `$match` on a filter, then a single
+ * `$group` of `$max` over `$convert`-ed fields — the peaks of a series read
+ * without pulling the series across the wire.
+ *
+ * `$max` skips what it cannot read, as MongoDB's does, and a group over no
+ * documents at all produces no row rather than a row of nulls.
+ */
+const aggregated = (rows: FakeDoc[], pipeline: FakeDoc[]): FakeDoc[] => {
+  const matched = pipeline.reduce<FakeDoc[]>(
+    (kept, stage) =>
+      stage.$match ? kept.filter((doc) => matches(doc, stage.$match)) : kept,
+    rows,
+  );
+  const group = pipeline.find((stage) => stage.$group)?.$group;
+  if (!group) {
+    return matched;
+  }
+  if (matched.length === 0) {
+    return [];
+  }
+  const peak = (field: string): number | null =>
+    matched.reduce<number | null>((highest, doc) => {
+      const value = Number(doc[field]);
+      if (
+        doc[field] === undefined ||
+        doc[field] === '' ||
+        !Number.isFinite(value)
+      ) {
+        return highest;
+      }
+      return highest === null || value > highest ? value : highest;
+    }, null);
+  return [
+    Object.entries(group).reduce<FakeDoc>((row, [name, spec]) => {
+      if (name === '_id') {
+        return { ...row, _id: null };
+      }
+      const input = (spec as { $max: { $convert: { input: string } } }).$max
+        .$convert.input;
+      return { ...row, [name]: peak(input.replace(/^\$/, '')) };
+    }, {}),
+  ];
 };
 
 /** A fake model over `docs`; writes mutate the array the caller passed in. */
@@ -92,6 +170,13 @@ export const fakeModel = (docs: FakeDoc[]) => ({
       docs.filter((doc) => matches(doc, filter)),
       true,
     );
+  },
+  aggregate(pipeline: FakeDoc[]) {
+    return {
+      async exec() {
+        return aggregated(docs, pipeline);
+      },
+    };
   },
   updateOne(filter: FakeDoc, update: { $set: FakeDoc }) {
     const target = docs.find((doc) => matches(doc, filter));

@@ -24,6 +24,16 @@ export interface EstimateInput {
    * when there is no such history — see `history-rate.ts`.
    */
   historicalRate?: number | null;
+  /**
+   * The highest the watched probe has read this cook, where the caller knows it
+   * from beyond the readings it handed over.
+   *
+   * A reader that takes a long cook's series in slices — its opening and its
+   * last half hour — can hold no reading at the target while the meat passed it
+   * hours ago, and "Ready now" must not fall back to a projection because of
+   * how the series was read.
+   */
+  peakTemp?: number | null;
 }
 
 /** The projection, as every client reads it. */
@@ -158,7 +168,11 @@ const blended = (
 const reachedTarget = (
   readings: EstimateReading[],
   target: number | null,
-): boolean => target !== null && readings.some((row) => row.temp >= target);
+  peak?: number | null,
+): boolean =>
+  target !== null &&
+  (readings.some((row) => row.temp >= target) ||
+    (typeof peak === 'number' && peak >= target));
 
 /**
  * How far the meat has come, as a percentage of the climb it was set.
@@ -196,6 +210,29 @@ const partial = (
   ...known,
 });
 
+/**
+ * Whether this user's cooking history would change this projection at all.
+ *
+ * Asked *before* the history is read, because reading it costs a query per past
+ * cook on a route the clients poll for the length of a cook — and the answer is
+ * discarded outright for most of that cook. History only reaches the numbers
+ * while an ETA is being projected (a watched probe, on the heat, not yet done)
+ * and while the live window is not yet full: at half an hour of readings its
+ * weight is zero, and every poll after that would be paying for a term
+ * multiplied by nothing.
+ */
+export function needsHistoricalRate(input: EstimateInput): boolean {
+  const { readings, target, now } = input;
+  if (
+    target === null ||
+    !input.smoking ||
+    reachedTarget(readings, target, input.peakTemp)
+  ) {
+    return false;
+  }
+  return windowMinutes(inWindow(readings, now)) < LIVE_WINDOW_MINUTES;
+}
+
 /** How the cook is going, and when it will be over. */
 export function estimateCompletion(input: EstimateInput): CompletionEstimate {
   const { readings, target, now } = input;
@@ -213,7 +250,7 @@ export function estimateCompletion(input: EstimateInput): CompletionEstimate {
     targetTemp: target,
     progressPercent: progressOf(startTemp, current, target),
   };
-  if (reachedTarget(readings, target)) {
+  if (reachedTarget(readings, target, input.peakTemp)) {
     return partial({
       ...known,
       state: 'done',
@@ -237,15 +274,24 @@ export function estimateCompletion(input: EstimateInput): CompletionEstimate {
     // Ahead of "warming", because a cook off the heat is paused whether or not
     // it had gathered enough data first, and "Calculating" would promise a
     // number that is not coming.
-    return partial({ ...going, state: 'paused' });
+    //
+    // The rate shown is the probe's own, not the blend: a cook off the heat is
+    // reported as doing what it is doing, and history has no business claiming
+    // movement in a smoker that is switched off.
+    return partial({ ...known, ratePerHour: liveRate, state: 'paused' });
   }
   if (window.length < 2 || rate === null) {
-    // No rate from the probe, and none from the user's past cooks either:
-    // nothing honest can be said about a finish yet.
-    return partial({ ...known, state: 'warming' });
+    // The probe has not given two readings to draw a line through, so there is
+    // no finish to project yet — but whatever rate there is, which at this
+    // point is the one the user's own past cooks recorded, is worth showing
+    // rather than dropping on the floor.
+    return partial({ ...going, state: 'warming' });
   }
   if (stalled(liveRate, cookMinutes)) {
-    return partial({ ...going, state: 'stalled' });
+    // Again the probe's own rate rather than the blend: "Stalled — 10.6°F/hr"
+    // reports a climb that is not happening, and the number beside the word
+    // has to agree with it.
+    return partial({ ...known, ratePerHour: liveRate, state: 'stalled' });
   }
   if (rate <= 0) {
     // Not yet a stall — too early to call one — but a rate of nothing projects

@@ -1,4 +1,4 @@
-import { estimateCompletion } from './completion-estimate';
+import { estimateCompletion, needsHistoricalRate } from './completion-estimate';
 
 const NOW = new Date('2026-08-17T18:00:00.000Z');
 
@@ -117,6 +117,37 @@ describe('estimateCompletion', () => {
       });
 
       expect(estimate.state).toBe('done');
+    });
+
+    /**
+     * A reader that takes the series in slices — the opening of the cook and
+     * the last half hour — can hold no reading at or above the target while the
+     * meat plainly reached one an hour ago. The peak it is told about settles
+     * it, so the card does not fall back out of "Ready now".
+     */
+    it('is done when the peak of the cook reached the target, whatever the readings in hand say', () => {
+      const estimate = estimateCompletion({
+        readings: [ago(30, 199), ago(15, 200), ago(0, 201)],
+        target: 203,
+        smoking: true,
+        now: NOW,
+        peakTemp: 204,
+      });
+
+      expect(estimate.state).toBe('done');
+      expect(estimate.progressPercent).toBe(100);
+    });
+
+    it('is not done on a peak that never reached the target', () => {
+      const estimate = estimateCompletion({
+        readings: [ago(30, 140), ago(15, 145), ago(0, 150)],
+        target: 203,
+        smoking: true,
+        now: NOW,
+        peakTemp: 150,
+      });
+
+      expect(estimate.state).toBe('ok');
     });
 
     it('is done rather than paused when the cook is taken off the heat', () => {
@@ -283,6 +314,50 @@ describe('estimateCompletion', () => {
       expect(estimate.ratePerHour).toBeNull();
     });
 
+    it('reports what past cooks say before the probe has given a second reading', () => {
+      const estimate = estimateCompletion({
+        readings: [ago(45, 70), ago(5, 78)],
+        target: 203,
+        smoking: true,
+        now: NOW,
+        historicalRate: 10,
+      });
+
+      // Still calculating — one reading in the window is no climb of its own —
+      // but there is a rate to show, and it is the one past cooks recorded.
+      expect(estimate.state).toBe('warming');
+      expect(estimate.ratePerHour).toBe(10);
+      expect(estimate.eta).toBeNull();
+    });
+
+    it('shows a stalled cook what it is actually doing, not what history expects', () => {
+      const estimate = estimateCompletion({
+        readings: [ago(180, 149), ago(20, 149.7), ago(0, 150)],
+        target: 203,
+        smoking: true,
+        now: NOW,
+        historicalRate: 30,
+      });
+
+      // The meat is not moving: a blended "10.6 °F/hr" beside the word
+      // "Stalled" would report a climb nothing is climbing.
+      expect(estimate.state).toBe('stalled');
+      expect(estimate.ratePerHour).toBeCloseTo(0.9, 5);
+    });
+
+    it('shows a paused cook what the probe was doing, not what history expects', () => {
+      const estimate = estimateCompletion({
+        readings: [ago(15, 145), ago(0, 150)],
+        target: 203,
+        smoking: false,
+        now: NOW,
+        historicalRate: 100,
+      });
+
+      expect(estimate.state).toBe('paused');
+      expect(estimate.ratePerHour).toBeCloseTo(20, 5);
+    });
+
     it('does not let a brisk history talk a stalled cook out of its stall', () => {
       const estimate = estimateCompletion({
         readings: [ago(180, 149), ago(20, 149.7), ago(0, 150)],
@@ -314,5 +389,58 @@ describe('estimateCompletion', () => {
       startTemp: null,
       targetTemp: null,
     });
+  });
+});
+
+/**
+ * Reading the user's history costs a query per past cook, on a route the
+ * clients poll for the whole length of a cook. The projection knows when that
+ * read would change nothing, and says so before it is made.
+ */
+describe('needsHistoricalRate', () => {
+  const young = [ago(10, 140), ago(0, 145)];
+
+  it.each([
+    ['nothing has been read yet', { readings: [] }],
+    ['the window holds one reading', { readings: [ago(5, 140)] }],
+    ['the window holds ten minutes', { readings: young }],
+    [
+      'the window holds just under half an hour',
+      { readings: [ago(29, 100), ago(0, 140)] },
+    ],
+  ])('is worth reading when %s', (_case, input) => {
+    expect(
+      needsHistoricalRate({
+        readings: [],
+        target: 203,
+        smoking: true,
+        now: NOW,
+        ...input,
+      }),
+    ).toBe(true);
+  });
+
+  it.each([
+    ['no probe is being watched', { target: null }],
+    ['the cook is off the heat', { smoking: false }],
+    ['the meat is already at its target', { target: 145 }],
+    [
+      'the cook has half an hour of its own',
+      { readings: [ago(30, 100), ago(0, 140)] },
+    ],
+    [
+      'a long cook has a full window of its own',
+      { readings: [ago(300, 40), ago(45, 80), ago(30, 100), ago(0, 140)] },
+    ],
+  ])('is not worth reading when %s', (_case, input) => {
+    expect(
+      needsHistoricalRate({
+        readings: young,
+        target: 203,
+        smoking: true,
+        now: NOW,
+        ...input,
+      }),
+    ).toBe(false);
   });
 });

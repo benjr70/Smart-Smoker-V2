@@ -55,8 +55,11 @@ const MIN_COOKS = 2;
  * Nothing wider than that: containment would group "Pork" with "Pork Shoulder",
  * which are different cuts that cook at different rates, and an alias table
  * would be a second opinion about meat kept in two places.
+ *
+ * Exported so a reader that has to *find* the matching cooks — rather than be
+ * handed them — groups them by the same rule this module samples them by.
  */
-const isSameMeat = (
+export const isSameMeat = (
   meat: string | null | undefined,
   other: string | null | undefined,
 ): boolean => {
@@ -65,11 +68,27 @@ const isSameMeat = (
   if (left === '' || right === '') {
     return false;
   }
-  return editDistance(left, right) <= MEAT_MATCH_DISTANCE;
+  return editDistance(left, right) <= allowedDistance(left, right);
 };
 
-/** How many typed characters apart two meat descriptions may be. */
+/** How many typed characters apart two meat descriptions may ever be. */
 export const MEAT_MATCH_DISTANCE = 2;
+
+/**
+ * How many typed characters apart *these two* descriptions may be: two, but
+ * never more than half of the shorter of them.
+ *
+ * Two edits is a typo in "brisket" and most of the word in "ham" — which is
+ * exactly two edits from "lamb", a different animal that cooks at a different
+ * rate. Scaling the forgiveness to the length of what was typed keeps the
+ * tolerance the long names need without letting the short ones dissolve into
+ * each other.
+ */
+const allowedDistance = (left: string, right: string): number =>
+  Math.min(
+    MEAT_MATCH_DISTANCE,
+    Math.floor(Math.min(left.length, right.length) / 2),
+  );
 
 /**
  * The Levenshtein distance between two words: how many single-character

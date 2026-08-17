@@ -30,7 +30,10 @@ export interface TimelineSmoke {
 }
 
 /** The three probes a piece of meat can be on. */
-const MEAT_FIELDS = ['MeatTemp', 'Meat2Temp', 'Meat3Temp'] as const;
+export const MEAT_FIELDS = ['MeatTemp', 'Meat2Temp', 'Meat3Temp'] as const;
+
+/** Every field of a reading that carries a temperature. */
+export const TEMP_FIELDS = ['ChamberTemp', ...MEAT_FIELDS] as const;
 
 /** A stored reading as the number it claims to be, or `null` when it is not one. */
 const asReading = (
@@ -51,19 +54,35 @@ const SLOT_FIELDS: Record<string, keyof TimelineReading> = {
 };
 
 /**
- * One probe's readings, dated and numeric, from `from` onwards.
+ * The stored field a watched probe's readings are under, or `undefined` for a
+ * slot nothing is recorded under. Exported so a reader asking the store about
+ * one probe names the same field this derivation reads it from.
+ */
+export const probeField = (
+  slot: string | null | undefined,
+): keyof TimelineReading | undefined => (slot ? SLOT_FIELDS[slot] : undefined);
+
+/**
+ * One probe's readings, dated and above zero, from `from` onwards.
  *
  * Anchored at the cook's start rather than at the first row of the series
  * because a session is set up while the meat is still being trimmed: the probe
  * sitting on the counter at room temperature is not where this cook began, and
  * a progress bar measuring from it would open the cook part-full.
+ *
+ * Zero is dropped for the same reason the first meat reading of a past cook is
+ * (see {@link firstMeatReading}): a probe that is unplugged, or not yet pushed
+ * into the meat, records zero, and zero is not a temperature anything took. Kept,
+ * it would anchor the climb at 0°F and read the moment the probe goes in as a
+ * hundred-and-fifty-degree jump — half an hour of which projects a finish minutes
+ * away — while a probe left out all cook would read as no progress for ever.
  */
 export const probeSeries = (
   readings: TimelineReading[],
   slot: string | null | undefined,
   from: Date | null,
 ): EstimateReading[] => {
-  const field = slot ? SLOT_FIELDS[slot] : undefined;
+  const field = probeField(slot);
   if (!field) {
     return [];
   }
@@ -76,6 +95,7 @@ export const probeSeries = (
       (row): row is EstimateReading =>
         row.date !== null &&
         row.temp !== null &&
+        row.temp > 0 &&
         (from === null || row.date >= from),
     )
     .sort((a, b) => a.date.getTime() - b.date.getTime());

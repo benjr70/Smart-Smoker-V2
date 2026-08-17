@@ -73,6 +73,39 @@ describe('sampleHistoricalRate', () => {
       expect(rateFor(typed)).toBeNull();
     });
 
+    /**
+     * Two edits is most of a three-letter word: "ham" and "lamb" are two edits
+     * apart and are not the same animal, and a forgiveness that swallows whole
+     * words is not typo tolerance any more.
+     */
+    it.each([
+      ['Ham', 'Lamb'],
+      ['Cod', 'Pork'],
+      ['Ribs', 'Rib Roast'],
+    ])('reads a short %s as a different meat to %s', (typed, current) => {
+      expect(
+        sampleHistoricalRate([cook(typed, 20, 4), cook(typed, 20, 16)], {
+          meatType: current,
+          weight: 4,
+          weightUnit: 'lb',
+        }),
+      ).toBeNull();
+    });
+
+    it.each([
+      ['Lamb', 'Lam'],
+      ['Ribs', 'ribs '],
+      ['Chicken', 'Chickn'],
+    ])('still reads a mistyped %s as %s', (typed, current) => {
+      expect(
+        sampleHistoricalRate([cook(typed, 20, 4), cook(typed, 20, 16)], {
+          meatType: current,
+          weight: 4,
+          weightUnit: 'lb',
+        }),
+      ).toBeCloseTo(30, 5);
+    });
+
     it('leaves out a past cook that never recorded what it was', () => {
       expect(
         sampleHistoricalRate(
