@@ -41,9 +41,15 @@ export interface SmokeProps {
    * asks rather than routes.
    */
   onViewHistory?: () => void;
+  /**
+   * Where the smoke step's completion card sends a cook who is watching no
+   * probe. Asked for the same reason as the history: the wizard does not know
+   * how this application navigates.
+   */
+  onOpenSettings?: () => void;
 }
 
-export function Smoke({ onViewHistory }: SmokeProps = {}): JSX.Element {
+export function Smoke({ onViewHistory, onOpenSettings }: SmokeProps = {}): JSX.Element {
   const client = useApiClient();
   const notify = useApiSnackbar();
   const [activeStep, setActiveStep] = React.useState(0);
@@ -149,7 +155,7 @@ export function Smoke({ onViewHistory }: SmokeProps = {}): JSX.Element {
         step = <PreSmokeStep nextButton={nextButton} />;
         break;
       case 1:
-        step = <SmokeStep nextButton={nextButton} />;
+        step = <SmokeStep nextButton={nextButton} onOpenSettings={onOpenSettings} />;
         break;
       case 2:
         step = <PostSmokeStep nextButton={nextButton} />;

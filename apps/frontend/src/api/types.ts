@@ -242,6 +242,46 @@ export interface SmokeTimeline {
 }
 
 /**
+ * How the cook in progress is going, as the backend judges it: warming up, on
+ * track, stalled, off the heat, or done — and `null` when no probe is being
+ * watched, so there is nothing to be going towards at all.
+ */
+export type CompletionState = 'warming' | 'ok' | 'stalled' | 'paused' | 'done';
+
+/**
+ * When the cook in progress will be done, derived server-side on every read.
+ *
+ * Nullable throughout, and for two different reasons the card tells apart by the
+ * state: a `warming` cook has no numbers *yet*, while a `null` state means no
+ * probe is being watched and there is nothing to estimate towards.
+ *
+ * `eta` is a `Date` here rather than the ISO string the wire carries, converted
+ * in the client's read path for the same reason the timeline's stamps are: the
+ * card formats it as a clock time, and formatting a string is a card reading
+ * "Invalid Date" to whoever is planning dinner around it.
+ */
+export interface CompletionEstimate {
+  state: CompletionState | null;
+  /** When the meat is expected to reach its target. */
+  eta: Date | null;
+  /** How long that is from now, in hours. */
+  hoursRemaining: number | null;
+  /** How fast the meat is climbing, °F/hr. */
+  ratePerHour: number | null;
+  /** How far it has come from where it started, as a percentage. */
+  progressPercent: number | null;
+  /** The first reading of the cook on the watched probe, °F. */
+  startTemp: number | null;
+  /** What the watched probe is set to be done at, °F. */
+  targetTemp: number | null;
+}
+
+/** The cook in progress: its timeline so far, and where it is going. */
+export interface CurrentSmokeTimeline extends SmokeTimeline {
+  estimate: CompletionEstimate;
+}
+
+/**
  * The composed review read-model: a smoke parent plus its five resolved child
  * resources, the shape the history review screen renders. The deep client's
  * review-aggregate call fetches the parent, then the children in parallel, and

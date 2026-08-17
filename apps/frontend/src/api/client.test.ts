@@ -5,7 +5,7 @@
 /* eslint-disable testing-library/no-await-sync-query */
 import { NotificationSettings, Smoke, SmokeHistory, SmokeProfile, TempData, rating } from './types';
 import { createApiClient } from './client';
-import { createFakeBackend } from './fakeBackend';
+import { NO_CURRENT_TIMELINE, createFakeBackend } from './fakeBackend';
 import { ApiError } from 'api-transport/src';
 // The product's own statement of "nothing chosen yet", asserted against rather
 // than restated here: the API layer keeps its own wire copy, and these two
@@ -1256,24 +1256,50 @@ describe('timeline client — the cook clock', () => {
     });
   });
 
-  test('the current cook has no timeline until a session is set up', async () => {
-    const backend = createFakeBackend({ state: { smokeId: '', smoking: false } });
+  // Each fake backend is its own world. A test that reaches into the store and
+  // starts the running cook must not be editing the empty cook every later test
+  // in the run begins from — that is an order-dependent failure, and the kind
+  // nobody reads a diff to find.
+  test('an unseeded running cook is a copy of the empty one, not the empty one itself', () => {
+    const backend = createFakeBackend();
 
-    expect(await createApiClient(backend).timeline.getCurrent()).toBeNull();
+    backend.store.timeline.current.startedAt = '2025-01-01T12:00:00.000Z';
+
+    expect(NO_CURRENT_TIMELINE.startedAt).toBeNull();
+    expect(createFakeBackend().store.timeline.current.startedAt).toBeNull();
   });
 
-  test('the current cook resolves its timeline through the session state', async () => {
+  test('with no session set up, the current cook is timed and estimated as nothing', async () => {
+    const backend = createFakeBackend({ state: { smokeId: '', smoking: false } });
+
+    const timeline = await createApiClient(backend).timeline.getCurrent();
+
+    // Not an absent read: there is always a current cook to ask about, it is
+    // simply empty — and every field of it reads as the absence the screens
+    // render as an em-dash.
+    expect(timeline?.startedAt).toBeNull();
+    expect(timeline?.estimate.state).toBeNull();
+  });
+
+  test('the current cook is read from the running-cook route, estimate and all', async () => {
     const backend = createFakeBackend({
       state: { smokeId: 'smoke-1', smoking: true },
       timeline: {
-        records: {
-          'smoke-1': {
-            startedAt: '2025-01-01T12:00:00.000Z',
-            finishedAt: null,
-            durationMs: null,
-            peakChamber: 240,
-            peakMeat: 150,
-            targetTemp: null,
+        current: {
+          startedAt: '2025-01-01T12:00:00.000Z',
+          finishedAt: null,
+          durationMs: null,
+          peakChamber: 240,
+          peakMeat: 150,
+          targetTemp: null,
+          estimate: {
+            state: 'ok',
+            eta: '2025-01-01T18:00:00.000Z',
+            hoursRemaining: 2.5,
+            ratePerHour: 8.2,
+            progressPercent: 62,
+            startTemp: 45,
+            targetTemp: 203,
           },
         },
       },
@@ -1282,5 +1308,76 @@ describe('timeline client — the cook clock', () => {
     const timeline = await createApiClient(backend).timeline.getCurrent();
 
     expect(timeline?.startedAt).toEqual(new Date('2025-01-01T12:00:00.000Z'));
+    // The card counts down to this moment, so a string here is arithmetic on
+    // text — the same failure the stamps are converted for.
+    expect(timeline?.estimate.eta).toEqual(new Date('2025-01-01T18:00:00.000Z'));
+    expect(timeline?.estimate).toMatchObject({
+      state: 'ok',
+      hoursRemaining: 2.5,
+      ratePerHour: 8.2,
+      progressPercent: 62,
+      startTemp: 45,
+      targetTemp: 203,
+    });
+  });
+
+  /**
+   * A browser holds whatever bundle it last loaded, and a cloud backend can be
+   * a deployment behind it. The route this client asks for did not always
+   * exist: an older backend takes "current" for a smoke id and rejects it (400),
+   * or has nothing at that address (404). Neither is a reason to fail the smoke
+   * screen — there is simply no estimate to show yet.
+   */
+  test('a backend too old to know the running-cook route is answered as no cook', async () => {
+    const backend = createFakeBackend({ state: { smokeId: 'smoke-1', smoking: true } });
+    backend.injectFault({ method: 'get', path: 'timeline/current', status: 400 });
+
+    expect(await createApiClient(backend).timeline.getCurrent()).toBeNull();
+  });
+
+  // An outage is not a missing feature: the screens tell the user when the cook
+  // clock cannot be read, and they can only do that if the read still fails.
+  test('an unreachable backend still fails the running-cook read', async () => {
+    const backend = createFakeBackend({ state: { smokeId: 'smoke-1', smoking: true } });
+    backend.injectFault({ method: 'get', path: 'timeline/current', status: 500 });
+
+    await expect(createApiClient(backend).timeline.getCurrent()).rejects.toBeInstanceOf(ApiError);
+  });
+
+  test('a running cook with no probe being watched has an estimate of nothing', async () => {
+    const backend = createFakeBackend({
+      state: { smokeId: 'smoke-1', smoking: true },
+      timeline: {
+        current: {
+          startedAt: '2025-01-01T12:00:00.000Z',
+          finishedAt: null,
+          durationMs: null,
+          peakChamber: 240,
+          peakMeat: 150,
+          targetTemp: null,
+          estimate: {
+            state: null,
+            eta: null,
+            hoursRemaining: null,
+            ratePerHour: null,
+            progressPercent: null,
+            startTemp: null,
+            targetTemp: null,
+          },
+        },
+      },
+    });
+
+    const timeline = await createApiClient(backend).timeline.getCurrent();
+
+    expect(timeline?.estimate).toEqual({
+      state: null,
+      eta: null,
+      hoursRemaining: null,
+      ratePerHour: null,
+      progressPercent: null,
+      startTemp: null,
+      targetTemp: null,
+    });
   });
 });

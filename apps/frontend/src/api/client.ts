@@ -6,7 +6,7 @@
  * routing, aggregates and the ordered delete cascade. It throws typed errors —
  * it never resolves `undefined`.
  */
-import { TransportPort, createHttpTransport } from 'api-transport/src';
+import { ApiError, TransportPort, createHttpTransport } from 'api-transport/src';
 import { UNREPORTED } from 'temperaturechart/src/chartGeometry';
 import { PushNotConfiguredError } from './errors';
 import { SmokeEventPort, noopEventPort } from './events';
@@ -15,6 +15,8 @@ import {
   AppearancePreference,
   ApplicationSettings,
   ChamberAlertSettings,
+  CompletionEstimate,
+  CurrentSmokeTimeline,
   NotificationSettings,
   ProbeTargetAlertSettings,
   ProbeTargetEntry,
@@ -263,12 +265,19 @@ export interface TimelineResource {
   /** GET `timeline/:id` — a stored cook's timing, stamps read back as dates. */
   getById(id: string): Promise<SmokeTimeline>;
   /**
-   * The timing of the cook set up right now, or `null` when there is no
-   * session. Composed from the session state, because the cook a client is
-   * looking at is whichever one the state points to — there is no separate
-   * "current" route to keep in step with it.
+   * GET `timeline/current` — the cook set up right now: its timing so far, and
+   * when it is expected to be done.
+   *
+   * One read of the route that owns the running cook, rather than the session
+   * state followed by a by-id read of whatever it pointed at: the estimate is
+   * derived from three collections the client cannot compose, and a client that
+   * resolved the cook itself would be a second opinion about which cook is
+   * current. A deployment too old to serve the route rejects the read — as an
+   * unknown id, or as nothing found — and that is answered with `null` rather
+   * than an error, so a client ahead of its backend degrades to "no estimate"
+   * instead of failing the screen.
    */
-  getCurrent(): Promise<SmokeTimeline | null>;
+  getCurrent(): Promise<CurrentSmokeTimeline | null>;
 }
 
 export interface HistoryResource {
@@ -382,6 +391,33 @@ const normalizeTimeline = (raw: WireTimeline): SmokeTimeline => ({
   peakChamber: raw?.peakChamber ?? null,
   peakMeat: raw?.peakMeat ?? null,
   targetTemp: raw?.targetTemp ?? null,
+});
+
+/**
+ * The running cook as JSON carries it: the timeline's two stamps and the
+ * estimate's `eta` are strings, since JSON has no date type.
+ */
+type WireCurrentTimeline = WireTimeline & {
+  estimate?: (Omit<CompletionEstimate, 'eta'> & { eta: string | Date | null }) | null;
+};
+
+/**
+ * Read-path normalization for the running cook: the stamps and the estimated
+ * completion moment all become `Date`s, and an absent estimate block — which is
+ * what a deployment older than the estimator answers with — reads as an estimate
+ * of nothing rather than as `undefined` every caller would have to guard.
+ */
+const normalizeCurrentTimeline = (raw: WireCurrentTimeline): CurrentSmokeTimeline => ({
+  ...normalizeTimeline(raw),
+  estimate: {
+    state: raw?.estimate?.state ?? null,
+    eta: asMoment(raw?.estimate?.eta),
+    hoursRemaining: raw?.estimate?.hoursRemaining ?? null,
+    ratePerHour: raw?.estimate?.ratePerHour ?? null,
+    progressPercent: raw?.estimate?.progressPercent ?? null,
+    startTemp: raw?.estimate?.startTemp ?? null,
+    targetTemp: raw?.estimate?.targetTemp ?? null,
+  },
 });
 
 /**
@@ -741,12 +777,23 @@ export const createApiClient = (
   },
   timeline: {
     getById: (id: string) => transport.get<WireTimeline>(`timeline/${id}`).then(normalizeTimeline),
-    getCurrent: async (): Promise<SmokeTimeline | null> => {
-      const state = await transport.get<State>('state');
-      if (!state?.smokeId) {
-        return null;
-      }
-      return transport.get<WireTimeline>(`timeline/${state.smokeId}`).then(normalizeTimeline);
+    getCurrent: async (): Promise<CurrentSmokeTimeline | null> => {
+      const raw = await transport
+        .get<WireCurrentTimeline | null>('timeline/current')
+        .catch((error: unknown) => {
+          // A deployment older than the estimator has no such route: "current"
+          // falls into its by-id route and is rejected as a malformed id (400),
+          // or simply is not found (404). Either way the answer is that this
+          // backend cannot say what the running cook is — which is the same
+          // nothing a client with no session gets, and is the degradation the
+          // screens already render as an em-dash. Every other failure, an
+          // outage above all, still throws: the cook clock says so out loud.
+          if (error instanceof ApiError && (error.status === 400 || error.status === 404)) {
+            return null;
+          }
+          throw error;
+        });
+      return raw ? normalizeCurrentTimeline(raw) : null;
     },
   },
   history: {

@@ -31,14 +31,25 @@ import { WeightUnits } from '../common/interfaces/enums';
 import { Smoke, delay } from './smoke';
 
 jest.mock('./smokeStep/smokeStep', () => ({
-  SmokeStep: ({ nextButton }: { nextButton: JSX.Element }) => (
-    <div data-testid="smoke-step">{nextButton}</div>
+  SmokeStep: ({
+    nextButton,
+    onOpenSettings,
+  }: {
+    nextButton: JSX.Element;
+    onOpenSettings?: () => void;
+  }) => (
+    <div data-testid="smoke-step">
+      <button data-testid="smoke-step-open-settings" onClick={onOpenSettings}>
+        Settings
+      </button>
+      {nextButton}
+    </div>
   ),
 }));
 
 let backend: FakeBackend;
 
-const renderWizard = (onViewHistory?: () => void) => {
+const renderWizard = (onViewHistory?: () => void, onOpenSettings?: () => void) => {
   // A session already under way: both steps have a stored document, which is
   // what the save-on-leave needs — a step whose load failed deliberately writes
   // nothing back (see `useCurrentResource`), so a wizard over an empty backend
@@ -63,7 +74,7 @@ const renderWizard = (onViewHistory?: () => void) => {
       <DesignSurface>
         <ApiClientProvider client={createApiClient(backend)}>
           <SnackbarProvider>
-            <Smoke onViewHistory={onViewHistory} />
+            <Smoke onViewHistory={onViewHistory} onOpenSettings={onOpenSettings} />
           </SnackbarProvider>
         </ApiClientProvider>
       </DesignSurface>
@@ -172,6 +183,20 @@ describe('the wizard header', () => {
 });
 
 describe('the wizard step control', () => {
+  it('hands the smoke step the way to the settings screen', async () => {
+    // The completion card's no-probe prompt links to settings, and the wizard
+    // is the only thing between that card and the shell that navigates.
+    const user = userEvent.setup();
+    const onOpenSettings = jest.fn();
+    renderWizard(undefined, onOpenSettings);
+    await screen.findByTestId('presmoke-name-input');
+
+    await user.click(segment('Smoke'));
+    await user.click(await screen.findByTestId('smoke-step-open-settings'));
+
+    expect(onOpenSettings).toHaveBeenCalledTimes(1);
+  });
+
   it('shows the step whose segment was tapped', async () => {
     const user = userEvent.setup();
     renderWizard();

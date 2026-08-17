@@ -11,6 +11,7 @@ import { ApiClientProvider, createApiClient } from '../../../api';
 import {
   createFakeBackend,
   FakeBackend,
+  NO_CURRENT_TIMELINE,
   StoredApplicationSettings,
 } from '../../../api/fakeBackend';
 import { DesignSurface, carbonLight, resolveDesignPalette } from '../../../theme';
@@ -364,32 +365,113 @@ describe('the target lines on the smoke screen', () => {
 });
 
 describe('the shape of the step', () => {
-  test('is the design’s three cards and nothing else — no estimated completion', async () => {
-    const { container } = renderView();
+  test('is the design’s four cards, under the status bar, in the design’s order', async () => {
+    renderView();
 
     await act(async () => {
       await flushPromises();
     });
 
-    // Every card on the step, in the order it is read down the screen. Stated
-    // as the whole list rather than as three separate presence checks, because
-    // what this is guarding is as much what is absent as what is there: the
-    // design's Estimated Completion card is deliberately not built (target
-    // temperatures stay settings-managed), and a list is what notices a fourth
-    // card appearing.
-    const cards = Array.from(container.querySelectorAll('[data-testid$="-card"]')).map(card =>
-      card.getAttribute('data-testid')
-    );
+    // Everything the step is made of, in the order it is read down the screen.
+    // Stated as the whole list rather than as separate presence checks, because
+    // the order is the design's and a card is as easy to insert in the wrong
+    // place as to leave out: the estimate belongs under the status bar and
+    // above the readings, where the question it answers is asked.
+    // Queried by id rather than walked: Testing Library answers in document
+    // order, which is the order being asserted.
+    const parts = screen
+      .getAllByTestId(/^smoke-status-bar$|-card$/)
+      .map(part => part.getAttribute('data-testid'));
 
-    expect(cards).toEqual(['smoke-temps-card', 'smoke-chart-card', 'smoke-details-card']);
-    expect(screen.queryByText(/estimated completion/i)).not.toBeInTheDocument();
+    expect(parts).toEqual([
+      'smoke-status-bar',
+      'smoke-completion-card',
+      'smoke-temps-card',
+      'smoke-chart-card',
+      'smoke-details-card',
+    ]);
   });
 });
 
-/**
- * The four readings, as the design lays them out: one card, a row per channel,
- * and in each row a dot, the name it was given, and what it is reading.
- */
+describe('the estimate on the step', () => {
+  /** A cook the backend says has reached its target, watched on probe 1. */
+  const backendWithFinishedMeat = () =>
+    createFakeBackend({
+      state: { smokeId: 'smoke-1', smoking: true },
+      appSettings: { settings: settingsWatching({ probe1: 203 }) },
+      timeline: {
+        current: {
+          ...NO_CURRENT_TIMELINE,
+          startedAt: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString(),
+          estimate: {
+            state: 'done',
+            eta: null,
+            hoursRemaining: 0,
+            ratePerHour: 1.2,
+            progressPercent: 100,
+            startTemp: 45,
+            targetTemp: 203,
+          },
+        },
+      },
+    });
+
+  /**
+   * The elapsed clock and the estimate are two halves of one answer, and the
+   * backend derives that answer from three collections on every call. The step
+   * asks for it once: two hooks each polling the running cook would double the
+   * work the server does for a screen that is open for the length of a cook.
+   */
+  test('asks for the running cook once, for both the clock and the estimate', async () => {
+    const backend = backendWithFinishedMeat();
+    renderView(harness(), backend);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('completion-headline')).toHaveTextContent('Ready now')
+    );
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(backend.requests.filter(request => request.path === 'timeline/current')).toHaveLength(1);
+    // And the clock above the card is drawn from that same read.
+    expect(screen.getByTestId('smoke-status-bar')).toHaveTextContent('08:00:00');
+  });
+
+  test('shows the running cook’s estimate as the backend answers it', async () => {
+    renderView(harness(), backendWithFinishedMeat());
+
+    await waitFor(() =>
+      expect(screen.getByTestId('completion-headline')).toHaveTextContent('Ready now')
+    );
+  });
+
+  /**
+   * Reaching the target is a thing to be told, not a thing to be acted on: a
+   * pitmaster building bark keeps cooking past it, so nothing advances the
+   * wizard, finishes the smoke or puts the fire out on the app's own initiative.
+   */
+  test('a cook that is done is reported and nothing more', async () => {
+    const backend = backendWithFinishedMeat();
+    renderView(harness(), backend);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('completion-headline')).toHaveTextContent('Ready now')
+    );
+    await act(async () => {
+      await flushPromises();
+    });
+
+    // The step is still the step: every card is where it was, and the control
+    // still offers to stop the cook rather than having stopped it.
+    expect(screen.getByTestId('smoke-temps-card')).toBeInTheDocument();
+    expect(screen.getByTestId('next-button')).toBeInTheDocument();
+    // Nothing was written: no finish, no session change, no settings save. The
+    // screen only ever read.
+    expect(backend.requests.filter(request => request.method !== 'get')).toEqual([]);
+  });
+});
+
 describe('the temperature rows', () => {
   /** Each channel, and the probe colour it is identified by. */
   const channels: [string, keyof typeof probeColours][] = [
@@ -911,15 +993,9 @@ describe('SmokeStepView — the cook status bar', () => {
     createFakeBackend({
       state: { smokeId: 'smoke-1', smoking: true },
       timeline: {
-        records: {
-          'smoke-1': {
-            startedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-            finishedAt: null,
-            durationMs: null,
-            peakChamber: null,
-            peakMeat: null,
-            targetTemp: null,
-          },
+        current: {
+          ...NO_CURRENT_TIMELINE,
+          startedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
         },
       },
     });

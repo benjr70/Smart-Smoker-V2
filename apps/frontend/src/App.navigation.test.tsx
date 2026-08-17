@@ -16,10 +16,19 @@ import React from 'react';
 import App from './App';
 
 jest.mock('./components/smoke/smoke', () => ({
-  Smoke: ({ onViewHistory }: { onViewHistory?: () => void }) => (
+  Smoke: ({
+    onViewHistory,
+    onOpenSettings,
+  }: {
+    onViewHistory?: () => void;
+    onOpenSettings?: () => void;
+  }) => (
     <div data-testid="smoke-component">
       <button data-testid="smoke-complete-view-history" onClick={onViewHistory}>
         View History
+      </button>
+      <button data-testid="smoke-completion-settings" onClick={onOpenSettings}>
+        Watch a probe in Settings
       </button>
     </div>
   ),
@@ -75,6 +84,18 @@ describe('the destination the bottom bar lights', () => {
     expect(screen.getByTestId('history-component')).toBeInTheDocument();
     expect(screen.queryByTestId('smoke-component')).not.toBeInTheDocument();
     expect(litDestinations()).toEqual(['History']);
+  });
+
+  it('follows the completion card’s way to the settings', () => {
+    // The estimate cannot be made until a probe is being watched, and the card
+    // says so with a link — which has to actually arrive at the settings
+    // screen, under the tab that names it.
+    render(<App />);
+
+    fireEvent.click(screen.getByTestId('smoke-completion-settings'));
+
+    expect(screen.getByTestId('settings-component')).toBeInTheDocument();
+    expect(litDestinations()).toEqual(['Settings']);
   });
 
   it('goes back to lighting Smoke when the user taps back', () => {
