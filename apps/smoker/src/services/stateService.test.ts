@@ -31,8 +31,7 @@ describe('stateService (deprecated shims)', () => {
   describe('getCookStart', () => {
     it('projects the current timeline down to its start stamp', async () => {
       useBackend({
-        state: { smokeId: 's1', smoking: true },
-        timeline: { s1: { startedAt: '2026-08-15T10:00:00.000Z', finishedAt: null } },
+        timeline: { current: { startedAt: '2026-08-15T10:00:00.000Z', finishedAt: null } },
       });
 
       const startedAt = await getCookStart();

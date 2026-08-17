@@ -7,7 +7,7 @@
  * device-service base URL — and routes each resource call to the correct one.
  * It throws typed errors; it never resolves `undefined`.
  */
-import { TransportPort, createHttpTransport } from 'api-transport/src';
+import { ApiError, TransportPort, createHttpTransport } from 'api-transport/src';
 import { resolveDeviceUrl } from './deviceUrl';
 import {
   AppearancePreference,
@@ -117,18 +117,65 @@ export interface CookTimeline {
   startedAt: Date | null;
 }
 
+/**
+ * How the cook in progress is going, as the backend judges it: warming up, on
+ * track, stalled, off the heat, or done — and `null` when no probe is being
+ * watched, so there is nothing to be going towards at all.
+ *
+ * The web client's own copy of this union (`frontend/src/api/types.ts`) names
+ * the same five states, because both read them off the same route.
+ */
+export type CompletionState = 'warming' | 'ok' | 'stalled' | 'paused' | 'done';
+
+/**
+ * When the running cook will be done, as much of the backend's estimate as the
+ * touchscreen has any use for: how it is going, and the moment itself.
+ *
+ * The estimate carries more — a rate, a progress percentage, the temperatures
+ * behind them — and the web card shows all of it. This panel shows when the
+ * cook will be done and how long that is away, so those two are carried and
+ * nothing else is.
+ */
+export interface CookCompletionEstimate {
+  state: CompletionState | null;
+  /** When the meat is expected to reach its target. */
+  eta: Date | null;
+  /**
+   * How long that is from now, in hours, or `null` when the backend cannot say.
+   *
+   * Read alongside the moment rather than worked out from it: a clock time on
+   * its own does not say which day it falls on, and an overnight cook due at
+   * 8:15 reads exactly like one due in ten minutes without it.
+   */
+  hoursRemaining: number | null;
+}
+
+/** The cook in progress: when it started, and when it will be done. */
+export interface CurrentCookTimeline extends CookTimeline {
+  estimate: CookCompletionEstimate;
+}
+
 export interface TimelineResource {
   /** GET `timeline/:id` — a named cook's timing, its stamp revived to a date. */
   getById(smokeId: string): Promise<CookTimeline>;
   /**
-   * The timing of the cook set up right now, or `null` when there is no
-   * session. Composed from the state resource's own read, because the cook
-   * this panel is relaying is whichever one the state points to — the same
-   * composition the web client makes for its own elapsed clock. A caller that
-   * already knows the smoke's id reads {@link getById} instead and spares the
-   * state round-trip.
+   * GET `timeline/current` — the cook set up right now: when it started, and
+   * when it is expected to be done.
+   *
+   * One read of the route that owns the running cook, rather than the state
+   * followed by a by-id read of whatever it pointed at: the estimate is derived
+   * from three collections this panel cannot compose, and the web client reads
+   * the very same route, so both screens show one answer rather than two
+   * opinions. A caller that already knows the smoke's id reads {@link getById}
+   * instead, which spares the derivation entirely.
+   *
+   * A deployment too old to serve the route rejects the read — as an unknown id
+   * (400), or as nothing found (404) — and that is answered with `null` rather
+   * than an error, so a panel ahead of its backend degrades to "no cook" instead
+   * of failing the one screen with no reload button. Every other failure, an
+   * outage above all, still rejects.
    */
-  getCurrent(): Promise<CookTimeline | null>;
+  getCurrent(): Promise<CurrentCookTimeline | null>;
 }
 
 export interface ApiClient {
@@ -140,6 +187,20 @@ export interface ApiClient {
   probeTargets: ProbeTargetsResource;
   timeline: TimelineResource;
 }
+
+/**
+ * The running cook as JSON carries it: the start stamp and the estimated
+ * moment are strings, since JSON has no date type, and the estimate block is
+ * absent altogether from a deployment older than the estimator.
+ */
+type WireCurrentTimeline = {
+  startedAt?: string | Date | null;
+  estimate?: {
+    state?: CompletionState | null;
+    eta?: string | Date | null;
+    hoursRemaining?: number | null;
+  } | null;
+};
 
 /** A stamp off the wire as the moment it names, or `null` when there is none. */
 const asMoment = (value: string | Date | null | undefined): Date | null => {
@@ -185,15 +246,31 @@ export const createApiClient = (
       return { startedAt: asMoment(stored?.startedAt) };
     },
     getCurrent: async () => {
-      // Whichever cook the state points to is the one whose timing matters —
-      // read through the state resource, the one implementation of that read.
-      // A fresh/reset backend answers `state` with an empty body, which is a
-      // session that does not exist rather than one that never started.
-      const current = (await state.getState()) as State | null;
-      if (!current || typeof current !== 'object' || !current.smokeId) {
+      const raw = await cloudTransport
+        .get<WireCurrentTimeline | null>('timeline/current')
+        .catch((error: unknown) => {
+          // "This backend cannot say what the running cook is" — the same
+          // nothing a panel with no session gets, and the same nothing the web
+          // client makes of it.
+          if (error instanceof ApiError && (error.status === 400 || error.status === 404)) {
+            return null;
+          }
+          throw error;
+        });
+      if (!raw || typeof raw !== 'object') {
         return null;
       }
-      return timeline.getById(current.smokeId);
+      return {
+        startedAt: asMoment(raw.startedAt),
+        // An absent estimate block — what a deployment older than the estimator
+        // answers with — reads as an estimate of nothing rather than as an
+        // absence the top bar would have to have an opinion about.
+        estimate: {
+          state: raw.estimate?.state ?? null,
+          eta: asMoment(raw.estimate?.eta),
+          hoursRemaining: raw.estimate?.hoursRemaining ?? null,
+        },
+      };
     },
   };
   return {

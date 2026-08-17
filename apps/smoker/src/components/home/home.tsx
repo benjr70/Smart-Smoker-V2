@@ -9,6 +9,8 @@ import { DEFAULT_PROBE_NAMES } from 'smoke-session/src/session/domain';
 import './home.style.css';
 import { useChartPalette } from '../../theme/chartPalette';
 import { useDesign } from '../../theme/useDesign';
+import { CookCompletionEstimate } from '../../api';
+import { CurrentCookReadPort, useCompletionEstimate } from './useCompletionEstimate';
 import { ProbeTargetsReadPort, useProbeTargets } from './useProbeTargets';
 import { useTemperatureSeries } from './useTemperatureSeries';
 import { Wifi } from './wifi/wifi';
@@ -181,9 +183,54 @@ export interface HomeProps {
    * one says instead.
    */
   probeTargets?: ProbeTargetsReadPort;
+  /**
+   * Where the running cook — and the backend's estimate of when it will be
+   * done — is read from. Defaults to the backend this appliance runs against.
+   */
+  currentCook?: CurrentCookReadPort;
 }
 
-export function Home({ probeTargets }: HomeProps = {}): JSX.Element {
+/**
+ * How long is left, in the compact hand the top bar has room for: `~12h 10m`.
+ *
+ * The same span the web card writes out as `~12h 10m remaining`, with the word
+ * dropped — on a bar that already says ELAPSED beside a running clock, what a
+ * second duration means is not in doubt, and the 800×480 panel has room for the
+ * number rather than the sentence.
+ */
+const remainingIn = (hours: number): string => {
+  const totalMinutes = Math.max(0, Math.round(hours * 60));
+  return `~${Math.floor(totalMinutes / 60)}h ${String(totalMinutes % 60).padStart(2, '0')}m`;
+};
+
+/**
+ * When the cook will be done, as the top bar says it: a clock time in the
+ * reader's own locale and zone with how long that is away set beside it, and
+ * nothing at all unless the backend says the cook is on track.
+ *
+ * The span is there because a clock time does not carry a day. A cook due at
+ * 8:15 tomorrow morning reads exactly like one due in ten minutes, and the one
+ * decision this readout exists to inform — whether to stay by the smoker — is
+ * the one that gets made wrongly. It is left off when the backend has a moment
+ * but cannot say how far away it is; the moment alone is still true.
+ *
+ * The other states are estimates the panel has nothing useful to say about — a
+ * warming cook has no moment yet, a stalled or paused one has one nobody should
+ * plan around, a done one has arrived — and this screen is read from across a
+ * garage, where a caveat is not read at all. The web card, held in a hand, says
+ * all of them in words.
+ */
+const etaReadout = (
+  estimate: CookCompletionEstimate | null
+): { at: string; away: string | null } | null =>
+  estimate?.state === 'ok' && estimate.eta
+    ? {
+        at: estimate.eta.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+        away: estimate.hoursRemaining === null ? null : remainingIn(estimate.hoursRemaining),
+      }
+    : null;
+
+export function Home({ probeTargets, currentCook }: HomeProps = {}): JSX.Element {
   const session = useSmokeSession();
   const design = useDesign();
   // The cook so far, recorded and thinned by the hook; the chart is handed it
@@ -198,6 +245,10 @@ export function Home({ probeTargets }: HomeProps = {}): JSX.Element {
   // so the clock is right the instant the panel comes up — including a panel
   // restarted six hours into a cook.
   const elapsed = useElapsed(session.startedAt);
+  // When the backend expects this cook to be done, re-read on its own cadence
+  // while one is running — the same answer, off the same route, that the web
+  // card is showing whoever is not standing at the smoker.
+  const eta = etaReadout(useCompletionEstimate(session.smoking, currentCook));
   // The only genuinely local state: which sub-screen is showing. Returning to
   // the home screen refreshes the chart baseline (the wifi screen may have run
   // for a while).
@@ -281,6 +332,49 @@ export function Home({ probeTargets }: HomeProps = {}): JSX.Element {
             >
               {elapsed}
             </Typography>
+            {/* When it will be done, set beside how long it has been going and
+                in the same hand — one more reading of the same cook, not a
+                card. It appears only while the backend says the cook is on
+                track, so a moment on this screen is always one to plan around;
+                every other state simply leaves the bar as it was. */}
+            {eta !== null && (
+              <>
+                <Typography
+                  component="span"
+                  sx={{ ...overline, marginLeft: '8px', color: design.textSecondary }}
+                >
+                  ETA
+                </Typography>
+                <Typography
+                  component="span"
+                  data-testid="smoker-eta"
+                  sx={{
+                    fontVariantNumeric: 'tabular-nums',
+                    fontWeight: 700,
+                    fontSize: 18,
+                    color: design.text,
+                  }}
+                >
+                  {eta.at}
+                </Typography>
+                {/* How far away that is, in the quieter ink the labels are in:
+                    a clock time carries no day, and this is what tells a cook
+                    due overnight from one due before the beer is finished. */}
+                {eta.away !== null && (
+                  <Typography
+                    component="span"
+                    data-testid="smoker-eta-remaining"
+                    sx={{
+                      fontVariantNumeric: 'tabular-nums',
+                      fontSize: 14,
+                      color: design.textSecondary,
+                    }}
+                  >
+                    {eta.away}
+                  </Typography>
+                )}
+              </>
+            )}
           </Box>
         ) : (
           <Typography component="span" sx={{ fontSize: 14, color: design.textSecondary }}>

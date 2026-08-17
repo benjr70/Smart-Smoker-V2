@@ -30,7 +30,7 @@ export const getState = (): Promise<State> => getDefaultApiClient().state.getSta
  *
  * A caller that already knows which smoke the state names (the session store
  * learns it from its own state load) passes the id and the stamp is read
- * directly; without one, the client composes the state read itself.
+ * directly; without one, the running cook's own route is asked who it is.
  */
 export const getCookStart = async (smokeId?: string): Promise<Date | null> => {
   const client = getDefaultApiClient();

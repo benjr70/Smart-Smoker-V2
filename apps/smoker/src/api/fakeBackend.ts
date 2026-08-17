@@ -89,14 +89,29 @@ export interface FakeBackendSeed {
    * ISO strings JSON carries them in. An id with no entry models a backend
    * without the timeline route (404), which is what the kernel answers for an
    * unrouted read.
+   *
+   * The running cook is one of those keys — `current` — because that is what it
+   * is on the backend too: a route beside the by-id ones, declared ahead of them
+   * so `current` is never taken for an id. It is the only entry that carries an
+   * estimate, and an entry without one models a deployment older than it.
    */
   timeline?: Record<string, StoredTimeline>;
 }
 
-/** A cook's timing as the wire carries it: stamps are ISO strings or null. */
+/**
+ * A cook's timing as the wire carries it: stamps are ISO strings or null, and
+ * the estimated completion — served for the running cook only — is one more of
+ * them.
+ */
 export type StoredTimeline = {
   startedAt: string | null;
   finishedAt: string | null;
+  estimate?: {
+    state: 'warming' | 'ok' | 'stalled' | 'paused' | 'done' | null;
+    eta: string | null;
+    /** How long is left, as the backend serves it — absent where it cannot say. */
+    hoursRemaining?: number | null;
+  };
 };
 
 /** What the transport yields for an empty-body 200 (axios surfaces `''`). */
