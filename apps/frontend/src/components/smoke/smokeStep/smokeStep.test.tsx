@@ -147,16 +147,6 @@ function renderView(kit = harness(), backend: FakeBackend = createFakeBackend())
   return { ...utils, ...kit };
 }
 
-/**
- * The chart's own drawing, read off the SVG.
- *
- * Testing Library has no query that reaches inside an SVG — a `path` is not a
- * role, a label or a text node — and what these tests are about is exactly what
- * the chart drew. The access is stated once, here, so the suite below has none
- * of it, and the rule that forbids it is answered in this one place rather than
- * silenced test by test.
- */
-/* eslint-disable testing-library/no-node-access */
 /** The four lines the chart draws, in the order it draws them. */
 const seriesPaths = (container: HTMLElement): SVGPathElement[] =>
   Array.from(container.querySelectorAll<SVGPathElement>('path[data-series]'));
@@ -164,19 +154,6 @@ const seriesPaths = (container: HTMLElement): SVGPathElement[] =>
 /** The dashed target lines the chart rules across the plot. */
 const targetLines = (container: HTMLElement): SVGLineElement[] =>
   Array.from(container.querySelectorAll<SVGLineElement>('line[data-target]'));
-
-/** The line the chart drew for one channel, as its path data. */
-const seriesPath = (container: HTMLElement, series: string): string =>
-  container.querySelector(`path[data-series="${series}"]`)?.getAttribute('d') ?? '';
-
-/** The card the chart raises under a finger on the plot. */
-const hoverCard = (container: HTMLElement): HTMLElement =>
-  container.querySelector('[data-hover-card]') as unknown as HTMLElement;
-
-/** The colour chips of the chart's legend, in the order it prints them. */
-const legendSwatches = (card: HTMLElement): Element[] =>
-  Array.from(card.querySelectorAll('[data-legend-swatch]'));
-/* eslint-enable testing-library/no-node-access */
 
 /** The palette the smoke screen is painted in under test, which is the light one. */
 const designColours = resolveDesignPalette(carbonLight, 'light');
@@ -262,10 +239,10 @@ describe('the chart on the smoke screen', () => {
 
     // The same names label the readings under a finger on the plot.
     fireEvent(
-      screen.getByRole('img', { name: 'Temperature chart' }),
+      container.querySelector('svg') as SVGSVGElement,
       new MouseEvent('pointermove', { bubbles: true, clientX: 193 })
     );
-    const card = hoverCard(container);
+    const card = container.querySelector('[data-hover-card]') as unknown as HTMLElement;
 
     ['Chamber', 'Probe 1', 'Probe 2', 'Probe 3'].forEach(name =>
       expect(within(card).getByText(name)).toBeInTheDocument()
@@ -438,6 +415,28 @@ describe('the estimate on the step', () => {
         },
       },
     });
+
+  /**
+   * The elapsed clock and the estimate are two halves of one answer, and the
+   * backend derives that answer from three collections on every call. The step
+   * asks for it once: two hooks each polling the running cook would double the
+   * work the server does for a screen that is open for the length of a cook.
+   */
+  test('asks for the running cook once, for both the clock and the estimate', async () => {
+    const backend = backendWithFinishedMeat();
+    renderView(harness(), backend);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('completion-headline')).toHaveTextContent('Ready now')
+    );
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(backend.requests.filter(request => request.path === 'timeline/current')).toHaveLength(1);
+    // And the clock above the card is drawn from that same read.
+    expect(screen.getByTestId('smoke-status-bar')).toHaveTextContent('08:00:00');
+  });
 
   test('shows the running cook’s estimate as the backend answers it', async () => {
     renderView(harness(), backendWithFinishedMeat());
@@ -692,13 +691,13 @@ describe('the wood picker', () => {
 
 describe('the chart card', () => {
   test('heads the plot with what it is, and keeps its legend under it in the same card', async () => {
-    renderView();
+    const { container } = renderView();
 
     const card = await screen.findByTestId('smoke-chart-card');
     expect(within(card).getByText('TEMPERATURE HISTORY')).toBeInTheDocument();
 
     const plot = within(card).getByRole('img', { name: 'Temperature chart' });
-    const swatches = legendSwatches(card);
+    const swatches = card.querySelectorAll('[data-legend-swatch]');
     expect(swatches).toHaveLength(4);
     // The legend belongs to the plot above it, so it is inside the same card
     // and after it — a key printed above a graph names lines nobody has seen
@@ -706,7 +705,7 @@ describe('the chart card', () => {
     expect(plot.compareDocumentPosition(swatches[0])).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     // And there is exactly one plot on the screen: the card holds the chart,
     // it does not sit beside a second copy of it.
-    expect(screen.getAllByRole('img', { name: 'Temperature chart' })).toHaveLength(1);
+    expect(container.querySelectorAll('svg[role="img"]')).toHaveLength(1);
   });
 });
 
@@ -886,7 +885,8 @@ describe('SmokeStepView', () => {
     });
 
     // One reading is a dot, not a line: nothing has been drawn between moments.
-    const chamberLine = (): string => seriesPath(container, 'chamber');
+    const chamberLine = (): string =>
+      container.querySelector('path[data-series="chamber"]')?.getAttribute('d') ?? '';
     expect(chamberLine()).not.toMatch(/[LC]/);
 
     // A newer baseline is now available; a refresh must re-pull it.

@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { CompletionEstimate } from '../../../api';
@@ -219,6 +219,55 @@ describe('the target editor', () => {
     await userEvent.type(targetInput(), '190{Enter}');
 
     expect(onTargetChange).toHaveBeenCalledWith(190);
+  });
+
+  /**
+   * A phone's keyboard leaves the field as soon as Enter is pressed, so the
+   * blur arrives right behind the Enter that already committed. One edit is one
+   * write: a second POST of the same temperature is a wasted write and a wasted
+   * re-read of the estimate behind it.
+   */
+  test('Enter followed by leaving the field writes the target once', async () => {
+    const onTargetChange = jest.fn();
+    renderCard({ estimate: onTrack(), onTargetChange });
+
+    await userEvent.clear(targetInput());
+    await userEvent.type(targetInput(), '190{Enter}');
+    await userEvent.tab();
+
+    expect(onTargetChange).toHaveBeenCalledTimes(1);
+    expect(onTargetChange).toHaveBeenCalledWith(190);
+  });
+
+  /**
+   * Nothing is re-read after a save that failed, so nothing else would ever
+   * clear the edit: the field would sit on 208 for the rest of the cook while
+   * the caption under it read 203, and the cook would believe a target had been
+   * set that never was.
+   */
+  test('a target that could not be saved is let go of, not left in the field', async () => {
+    const onTargetChange = jest.fn().mockResolvedValue(false);
+    renderCard({ estimate: onTrack(), onTargetChange });
+
+    await userEvent.click(screen.getByTestId('completion-target-up'));
+
+    expect(onTargetChange).toHaveBeenCalledWith(208);
+    await waitFor(() => expect(targetInput().value).toBe('203'));
+    expect(screen.getByTestId('completion-target-caption')).toHaveTextContent('Target 203°F');
+  });
+
+  test('a saved target stays in the field until the re-read confirms it', async () => {
+    const onTargetChange = jest.fn().mockResolvedValue(true);
+    renderCard({ estimate: onTrack(), onTargetChange });
+
+    await userEvent.click(screen.getByTestId('completion-target-up'));
+
+    // The estimate has not come back yet — the card is still holding the old
+    // one — and the row must not snap back to 203 in the meantime.
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(targetInput().value).toBe('208');
   });
 
   test('a field left empty keeps the target it had', async () => {

@@ -6,7 +6,7 @@
  * routing, aggregates and the ordered delete cascade. It throws typed errors —
  * it never resolves `undefined`.
  */
-import { TransportPort, createHttpTransport } from 'api-transport/src';
+import { ApiError, TransportPort, createHttpTransport } from 'api-transport/src';
 import { UNREPORTED } from 'temperaturechart/src/chartGeometry';
 import { PushNotConfiguredError } from './errors';
 import { SmokeEventPort, noopEventPort } from './events';
@@ -272,8 +272,10 @@ export interface TimelineResource {
    * state followed by a by-id read of whatever it pointed at: the estimate is
    * derived from three collections the client cannot compose, and a client that
    * resolved the cook itself would be a second opinion about which cook is
-   * current. A deployment too old to serve the route answers nothing, which
-   * reads back as `null`.
+   * current. A deployment too old to serve the route rejects the read — as an
+   * unknown id, or as nothing found — and that is answered with `null` rather
+   * than an error, so a client ahead of its backend degrades to "no estimate"
+   * instead of failing the screen.
    */
   getCurrent(): Promise<CurrentSmokeTimeline | null>;
 }
@@ -776,7 +778,21 @@ export const createApiClient = (
   timeline: {
     getById: (id: string) => transport.get<WireTimeline>(`timeline/${id}`).then(normalizeTimeline),
     getCurrent: async (): Promise<CurrentSmokeTimeline | null> => {
-      const raw = await transport.get<WireCurrentTimeline | null>('timeline/current');
+      const raw = await transport
+        .get<WireCurrentTimeline | null>('timeline/current')
+        .catch((error: unknown) => {
+          // A deployment older than the estimator has no such route: "current"
+          // falls into its by-id route and is rejected as a malformed id (400),
+          // or simply is not found (404). Either way the answer is that this
+          // backend cannot say what the running cook is — which is the same
+          // nothing a client with no session gets, and is the degradation the
+          // screens already render as an em-dash. Every other failure, an
+          // outage above all, still throws: the cook clock says so out loud.
+          if (error instanceof ApiError && (error.status === 400 || error.status === 404)) {
+            return null;
+          }
+          throw error;
+        });
       return raw ? normalizeCurrentTimeline(raw) : null;
     },
   },

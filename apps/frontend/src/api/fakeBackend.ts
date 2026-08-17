@@ -366,7 +366,10 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
     history: seed.history ?? [],
     timeline: {
       records: seed.timeline?.records ?? {},
-      current: seed.timeline?.current ?? NO_CURRENT_TIMELINE,
+      // Copied, never aliased: a test that reaches into the store and moves the
+      // running cook on must not be editing the constant every other test in
+      // the run starts from.
+      current: seed.timeline?.current ?? clone(NO_CURRENT_TIMELINE),
     },
   };
   const route = ({ method, path, body }: FakeRequest): unknown => {

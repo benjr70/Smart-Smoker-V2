@@ -275,11 +275,6 @@ describe('advancing through the wizard', () => {
     renderWizard();
     await screen.findByTestId('presmoke-name-input');
 
-    // The row the button sits in, which is the thing being asserted about: what
-    // is checked here is a layout relationship between a control and its
-    // container, and Testing Library has no query for "the element around this
-    // one" — a foot row is not a role, a label or a text node.
-    // eslint-disable-next-line testing-library/no-node-access
     const foot = () => nextButton().parentElement as HTMLElement;
     expect(getComputedStyle(foot()).flexDirection).toBe('row-reverse');
     // Not stretched across the form: the button is as wide as it needs to be.

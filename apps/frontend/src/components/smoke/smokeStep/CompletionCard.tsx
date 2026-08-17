@@ -1,7 +1,7 @@
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
 import { Box, Card, IconButton, Link, TextField, Typography } from '@mui/material';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { CompletionEstimate } from '../../../api';
 import { DesignPalette } from '../../../theme';
 
@@ -16,8 +16,14 @@ export interface CompletionCardProps {
   estimate: CompletionEstimate | null;
   /** The probe the estimate is being taken to, or `null` when none is watched. */
   probe: WatchedProbe | null;
-  /** Commit an edited target temperature. */
-  onTargetChange: (target: number) => void;
+  /**
+   * Commit an edited target temperature.
+   *
+   * Answering `false` means the temperature was not stored — an outage, a
+   * refused write — and the field lets go of the edit rather than going on
+   * showing a target nobody has. A caller that cannot tell may answer nothing.
+   */
+  onTargetChange: (target: number) => void | Promise<boolean>;
   /**
    * Where the no-probe prompt's "Settings" goes. The card does not know how
    * this application navigates — that is the shell's business — so it asks,
@@ -125,30 +131,56 @@ export function CompletionCard({
   // until it is left, and follows the stored target the rest of the time.
   const [draft, setDraft] = useState<string | null>(null);
   const shown = draft ?? (target === null ? '' : String(target));
+  // The temperature already sent, if it is the one in the field. Enter commits,
+  // and a phone leaves the field straight afterwards — without this the blur
+  // would send the identical target a second time, and ask for a second re-read
+  // of the estimate to go with it.
+  const sent = useRef<string | null>(null);
 
   // A target the server has confirmed replaces whatever is in the field: the
   // estimate is re-read after every edit, so this is how the row stops showing
   // an edit of its own and goes back to showing the cook's actual target.
   useEffect(() => {
     setDraft(null);
+    sent.current = null;
   }, [target]);
+
+  /** Let go of the edit: the field goes back to showing the stored target. */
+  const abandonDraft = (): void => {
+    setDraft(null);
+    sent.current = null;
+  };
 
   /**
    * Save a temperature, once it is one: clamped, and shown as saved until the
    * re-read estimate confirms it — the row must not snap back to the old number
    * in the beat between the write and the read that follows it.
+   *
+   * A save that does not land is a different matter. Nothing is re-read, so
+   * nothing would ever clear the edit, and the field would go on showing a
+   * temperature the cook believes was saved while the caption under it reads the
+   * real one. So the edit is dropped and the row tells the truth instead.
    */
   const commit = (value: number): void => {
     const clamped = clampTarget(value);
     setDraft(String(clamped));
-    onTargetChange(clamped);
+    sent.current = String(clamped);
+    void Promise.resolve(onTargetChange(clamped)).then(saved => {
+      if (saved === false) {
+        abandonDraft();
+      }
+    });
   };
 
   /** Leaving the field commits what was typed; an empty field commits nothing. */
   const commitDraft = (): void => {
     const typed = Number(draft);
     if (draft === null || draft.trim() === '' || Number.isNaN(typed)) {
-      setDraft(null);
+      abandonDraft();
+      return;
+    }
+    // Already sent by the Enter that preceded this blur: one edit is one write.
+    if (draft === sent.current) {
       return;
     }
     commit(typed);
@@ -244,7 +276,12 @@ export function CompletionCard({
               size="small"
               variant="outlined"
               value={shown}
-              onChange={event => setDraft(event.target.value)}
+              // Typing makes the field an edit again: whatever was last sent is
+              // no longer what is in it.
+              onChange={event => {
+                sent.current = null;
+                setDraft(event.target.value);
+              }}
               onBlur={commitDraft}
               // Enter is how a phone keyboard leaves a number field, so it has
               // to commit the same edit that walking away from the field does.
