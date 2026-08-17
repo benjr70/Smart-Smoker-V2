@@ -9,8 +9,10 @@ import { getDefaultApiClient, useCookStart } from '../../../api';
 import { createSessionApiPort } from '../../../api/sessionApiAdapter';
 import { useChartPalette } from '../../../theme';
 import { chartNamesOf } from '../../common/chartNames';
+import { CompletionCard } from './CompletionCard';
 import { SmokeStatusBar } from './SmokeStatusBar';
 import { TemperatureChannel, TemperatureRow } from './TemperatureRow';
+import { useCompletionEstimate } from './useCompletionEstimate';
 import { useProbeTargets } from './useProbeTargets';
 import { useTemperatureSeries } from './useTemperatureSeries';
 
@@ -27,6 +29,12 @@ const WOOD_TYPES = ['Hickory', 'Post Oak', 'Pecan', 'Cherry', 'Apple', 'Mesquite
 
 type SmokeStepProps = {
   nextButton: JSX.Element;
+  /**
+   * Where the completion card's "Settings" prompt goes, offered to a cook that
+   * is watching no probe. The step does not know how this application
+   * navigates — that is the shell's business — so it passes the question up.
+   */
+  onOpenSettings?: () => void;
 };
 
 /**
@@ -41,12 +49,10 @@ type SmokeStepProps = {
  * unmounts this view and persists the profile draft (names + notes + wood type)
  * exactly as the old unmount effect did.
  *
- * What the step *looks* like is the design's: a column of cards — the readings,
- * the chart under its own heading, and the wood and notes the cook is described
- * with — with the status bar above them and the control that lights the cook
- * between the chart and the description. There is deliberately no Estimated
- * Completion card: target temperatures stay settings-managed, and the design's
- * estimate is the one part of this screen the product is not building.
+ * What the step *looks* like is the design's: a column of cards — when the cook
+ * will be done, the readings, the chart under its own heading, and the wood and
+ * notes the cook is described with — with the status bar above them and the
+ * control that lights the cook between the chart and the description.
  */
 export function SmokeStepView(props: SmokeStepProps): JSX.Element {
   const session = useSmokeSession({ flushProfileOnUnmount: true });
@@ -60,6 +66,11 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
   // When the cook started, as the backend stamped it — re-read whenever smoking
   // is switched, which is the moment the stamp is written.
   const startedAt = useCookStart(session.smoking);
+  // When the cook will be done, as the backend projects it, and the probe it is
+  // being taken to. Re-read whenever smoking is switched — that is one of the
+  // two things this screen can change about the answer; the other is the target,
+  // which the card edits through this same hook.
+  const completion = useCompletionEstimate(session.smoking);
 
   /**
    * The four readings in the order the design lists them, each paired with the
@@ -106,6 +117,15 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
     // carry no margins and none of them has to know what it is next to.
     <Grid item xs={12} sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
       <SmokeStatusBar smoking={session.smoking} startedAt={startedAt} />
+      {/* The question the screen exists to answer, above the numbers it is
+          answered from — and it answers it and nothing else: reaching the
+          target moves no step and sends no message. */}
+      <CompletionCard
+        estimate={completion.estimate}
+        probe={completion.probe}
+        onTargetChange={completion.setTarget}
+        onOpenSettings={props.onOpenSettings}
+      />
       <Card data-testid="smoke-temps-card">
         {readings.map((reading, index) => (
           <React.Fragment key={reading.channel}>
@@ -261,7 +281,7 @@ export function SmokeStep(props: SmokeStepProps): JSX.Element {
 
   return (
     <SmokeSessionProvider config={configRef.current}>
-      <SmokeStepView nextButton={props.nextButton} />
+      <SmokeStepView nextButton={props.nextButton} onOpenSettings={props.onOpenSettings} />
     </SmokeSessionProvider>
   );
 }

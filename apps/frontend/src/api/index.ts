@@ -10,6 +10,9 @@
  */
 export type {
   ChamberAlertSettings,
+  CompletionEstimate,
+  CompletionState,
+  CurrentSmokeTimeline,
   NotificationSettings,
   PostSmoke,
   PreSmoke,

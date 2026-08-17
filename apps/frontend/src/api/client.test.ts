@@ -1256,24 +1256,37 @@ describe('timeline client — the cook clock', () => {
     });
   });
 
-  test('the current cook has no timeline until a session is set up', async () => {
+  test('with no session set up, the current cook is timed and estimated as nothing', async () => {
     const backend = createFakeBackend({ state: { smokeId: '', smoking: false } });
 
-    expect(await createApiClient(backend).timeline.getCurrent()).toBeNull();
+    const timeline = await createApiClient(backend).timeline.getCurrent();
+
+    // Not an absent read: there is always a current cook to ask about, it is
+    // simply empty — and every field of it reads as the absence the screens
+    // render as an em-dash.
+    expect(timeline?.startedAt).toBeNull();
+    expect(timeline?.estimate.state).toBeNull();
   });
 
-  test('the current cook resolves its timeline through the session state', async () => {
+  test('the current cook is read from the running-cook route, estimate and all', async () => {
     const backend = createFakeBackend({
       state: { smokeId: 'smoke-1', smoking: true },
       timeline: {
-        records: {
-          'smoke-1': {
-            startedAt: '2025-01-01T12:00:00.000Z',
-            finishedAt: null,
-            durationMs: null,
-            peakChamber: 240,
-            peakMeat: 150,
-            targetTemp: null,
+        current: {
+          startedAt: '2025-01-01T12:00:00.000Z',
+          finishedAt: null,
+          durationMs: null,
+          peakChamber: 240,
+          peakMeat: 150,
+          targetTemp: null,
+          estimate: {
+            state: 'ok',
+            eta: '2025-01-01T18:00:00.000Z',
+            hoursRemaining: 2.5,
+            ratePerHour: 8.2,
+            progressPercent: 62,
+            startTemp: 45,
+            targetTemp: 203,
           },
         },
       },
@@ -1282,5 +1295,53 @@ describe('timeline client — the cook clock', () => {
     const timeline = await createApiClient(backend).timeline.getCurrent();
 
     expect(timeline?.startedAt).toEqual(new Date('2025-01-01T12:00:00.000Z'));
+    // The card counts down to this moment, so a string here is arithmetic on
+    // text — the same failure the stamps are converted for.
+    expect(timeline?.estimate.eta).toEqual(new Date('2025-01-01T18:00:00.000Z'));
+    expect(timeline?.estimate).toMatchObject({
+      state: 'ok',
+      hoursRemaining: 2.5,
+      ratePerHour: 8.2,
+      progressPercent: 62,
+      startTemp: 45,
+      targetTemp: 203,
+    });
+  });
+
+  test('a running cook with no probe being watched has an estimate of nothing', async () => {
+    const backend = createFakeBackend({
+      state: { smokeId: 'smoke-1', smoking: true },
+      timeline: {
+        current: {
+          startedAt: '2025-01-01T12:00:00.000Z',
+          finishedAt: null,
+          durationMs: null,
+          peakChamber: 240,
+          peakMeat: 150,
+          targetTemp: null,
+          estimate: {
+            state: null,
+            eta: null,
+            hoursRemaining: null,
+            ratePerHour: null,
+            progressPercent: null,
+            startTemp: null,
+            targetTemp: null,
+          },
+        },
+      },
+    });
+
+    const timeline = await createApiClient(backend).timeline.getCurrent();
+
+    expect(timeline?.estimate).toEqual({
+      state: null,
+      eta: null,
+      hoursRemaining: null,
+      ratePerHour: null,
+      progressPercent: null,
+      startTemp: null,
+      targetTemp: null,
+    });
   });
 });

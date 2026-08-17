@@ -3,7 +3,7 @@ import { act, render, renderHook, screen, waitFor } from '@testing-library/react
 import React from 'react';
 import { ApiClientProvider } from './ApiClientProvider';
 import { createApiClient } from './client';
-import { createFakeBackend, FakeBackend } from './fakeBackend';
+import { createFakeBackend, FakeBackend, NO_CURRENT_TIMELINE } from './fakeBackend';
 import { SnackbarProvider } from './SnackbarProvider';
 import { COOK_START_REFRESH_MS, useCookStart } from './useCookStart';
 
@@ -23,18 +23,7 @@ const renderCookStartHook = (backend: FakeBackend, smoking: boolean) => {
 const backendWithStart = (startedAt: string | null) =>
   createFakeBackend({
     state: { smokeId: 'smoke-1', smoking: true },
-    timeline: {
-      records: {
-        'smoke-1': {
-          startedAt,
-          finishedAt: null,
-          durationMs: null,
-          peakChamber: null,
-          peakMeat: null,
-          targetTemp: null,
-        },
-      },
-    },
+    timeline: { current: { ...NO_CURRENT_TIMELINE, startedAt } },
   });
 
 describe('useCookStart', () => {
@@ -60,7 +49,7 @@ describe('useCookStart', () => {
     await waitFor(() => expect(result.current).toBeNull());
 
     // The backend stamps the start as smoking is switched on.
-    backend.store.timeline['smoke-1'].startedAt = '2026-08-01T10:00:00.000Z';
+    backend.store.timeline.current.startedAt = '2026-08-01T10:00:00.000Z';
     rerender({ isSmoking: true });
 
     await waitFor(() => expect(result.current).toEqual(new Date('2026-08-01T10:00:00.000Z')));
@@ -68,7 +57,7 @@ describe('useCookStart', () => {
 
   test('says so when the cook timer cannot be read', async () => {
     const backend = backendWithStart('2026-08-01T10:00:00.000Z');
-    backend.injectFault({ method: 'get', path: 'timeline/smoke-1', status: 500 });
+    backend.injectFault({ method: 'get', path: 'timeline/current', status: 500 });
 
     const { result } = renderCookStartHook(backend, true);
 
@@ -90,8 +79,10 @@ describe('useCookStart', () => {
 
       await waitFor(() => expect(result.current).toEqual(new Date('2026-08-01T10:00:00.000Z')));
 
-      // The touchscreen finishes the cook: the backend session is cleared.
+      // The touchscreen finishes the cook: the backend session is cleared, and
+      // the running-cook route answers with a cook of nothing.
       backend.store.state = { smokeId: '', smoking: false };
+      backend.store.timeline.current = { ...NO_CURRENT_TIMELINE };
       await act(async () => {
         jest.advanceTimersByTime(COOK_START_REFRESH_MS);
       });
@@ -113,7 +104,7 @@ describe('useCookStart', () => {
 
       await waitFor(() => expect(result.current).toEqual(new Date('2026-08-01T10:00:00.000Z')));
 
-      backend.injectFault({ method: 'get', path: 'timeline/smoke-1', status: 500 });
+      backend.injectFault({ method: 'get', path: 'timeline/current', status: 500 });
       await act(async () => {
         jest.advanceTimersByTime(COOK_START_REFRESH_MS);
       });
@@ -131,7 +122,7 @@ describe('useCookStart', () => {
     jest.useFakeTimers();
     try {
       const backend = backendWithStart('2026-08-01T10:00:00.000Z');
-      backend.injectFault({ method: 'get', path: 'timeline/smoke-1', status: 500 });
+      backend.injectFault({ method: 'get', path: 'timeline/current', status: 500 });
       renderCookStartHook(backend, true);
 
       await screen.findByText('Could not load the cook timer.');
@@ -154,7 +145,7 @@ describe('useCookStart', () => {
   // whatever they are looking at now.
   test('says nothing about a screen the user has already left', async () => {
     const backend = backendWithStart('2026-08-01T10:00:00.000Z');
-    backend.injectFault({ method: 'get', path: 'timeline/smoke-1', status: 500 });
+    backend.injectFault({ method: 'get', path: 'timeline/current', status: 500 });
     const client = createApiClient(backend);
     const Timer = (): null => {
       useCookStart(true);

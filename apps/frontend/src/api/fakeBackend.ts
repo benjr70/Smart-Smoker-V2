@@ -16,6 +16,7 @@ import {
 } from 'api-transport/src';
 import {
   ApplicationSettings,
+  CompletionEstimate,
   PostSmoke,
   ProbeTargetAlertSettings,
   ProbeTargetEntry,
@@ -71,6 +72,38 @@ export type StoredApplicationSettings = Omit<ApplicationSettings, 'probeTarget'>
 export type StoredSmokeTimeline = Omit<SmokeTimeline, 'startedAt' | 'finishedAt'> & {
   startedAt: string | null;
   finishedAt: string | null;
+};
+
+/**
+ * The running cook as it comes off `timeline/current`: a timeline with the
+ * estimate block beside it, whose completion moment is an ISO string for the
+ * same reason the stamps are.
+ */
+export type StoredCurrentTimeline = StoredSmokeTimeline & {
+  estimate: Omit<CompletionEstimate, 'eta'> & { eta: string | null };
+};
+
+/**
+ * What the route answers for an installation with no cook set up: a timeline of
+ * nothing, and an estimate of nothing. The real backend answers this rather than
+ * a 404 — there is always a "current cook", it is simply empty.
+ */
+export const NO_CURRENT_TIMELINE: StoredCurrentTimeline = {
+  startedAt: null,
+  finishedAt: null,
+  durationMs: null,
+  peakChamber: null,
+  peakMeat: null,
+  targetTemp: null,
+  estimate: {
+    state: null,
+    eta: null,
+    hoursRemaining: null,
+    ratePerHour: null,
+    progressPercent: null,
+    startTemp: null,
+    targetTemp: null,
+  },
 };
 
 export interface FakeBackendSeed {
@@ -134,6 +167,12 @@ export interface FakeBackendSeed {
   history?: SmokeHistory[];
   timeline?: {
     records?: Record<string, StoredSmokeTimeline>;
+    /**
+     * The running cook, as `GET timeline/current` serves it. Absent models an
+     * installation with no cook set up, which answers {@link
+     * NO_CURRENT_TIMELINE} rather than nothing.
+     */
+    current?: StoredCurrentTimeline;
   };
 }
 
@@ -278,7 +317,10 @@ interface FakeStore {
     finish: Smoke | Record<string, never>;
   };
   history: SmokeHistory[];
-  timeline: Record<string, StoredSmokeTimeline>;
+  timeline: {
+    records: Record<string, StoredSmokeTimeline>;
+    current: StoredCurrentTimeline;
+  };
 }
 
 export type FakeBackend = FakeBackendKernel<FakeStore>;
@@ -322,7 +364,10 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
       finish: seed.smoke?.finish ?? {},
     },
     history: seed.history ?? [],
-    timeline: seed.timeline?.records ?? {},
+    timeline: {
+      records: seed.timeline?.records ?? {},
+      current: seed.timeline?.current ?? NO_CURRENT_TIMELINE,
+    },
   };
   const route = ({ method, path, body }: FakeRequest): unknown => {
     const segments = path.split('/');
@@ -542,8 +587,12 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
       }
     }
 
+    if (resource === 'timeline' && method === 'get' && id === 'current') {
+      return clone(store.timeline.current);
+    }
+
     if (resource === 'timeline' && method === 'get' && id !== undefined) {
-      const record = store.timeline[id];
+      const record = store.timeline.records[id];
       if (!record) {
         throw new ApiError({ status: 404, path, method });
       }

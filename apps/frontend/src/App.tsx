@@ -51,7 +51,12 @@ class App extends React.Component<{}, { currentScreen: Screens }> {
         // Finishing a smoke ends on the design's completion screen, whose one
         // action is to go and look at what was just archived. The wizard has no
         // idea how this application navigates, so it asks and this decides.
-        screen = <Smoke onViewHistory={this.historyOnClick} />;
+        // The completion card's no-probe prompt is the second way out of the
+        // wizard that is not a tap on the bar: it asks for the settings screen,
+        // and this is what knows where that is.
+        screen = (
+          <Smoke onViewHistory={this.historyOnClick} onOpenSettings={this.settingsOnClick} />
+        );
         break;
       case Screens.HISTORY:
         screen = <History />;

@@ -408,9 +408,9 @@ const rows: ContractRow[] = [
     expected: { method: 'get', path: 'timeline/smoke-1', body: undefined },
   },
   {
-    name: 'timeline.getCurrent → GET timeline/:id of the session smoke',
+    name: 'timeline.getCurrent → GET timeline/current',
     run: c => c.timeline.getCurrent(),
-    expected: { method: 'get', path: 'timeline/smoke-1', body: undefined },
+    expected: { method: 'get', path: 'timeline/current', body: undefined },
   },
   // history
   {
