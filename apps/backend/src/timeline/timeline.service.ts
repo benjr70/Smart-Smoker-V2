@@ -8,15 +8,33 @@ import {
 } from '../appSettings/app-settings.schema';
 import { SmokeDocument, SmokeStatus } from '../smoke/smoke.schema';
 import { TempDocument } from '../temps/temps.schema';
+import { StateDocument } from '../State/state.schema';
+import { PreSmoke, PreSmokeDocument } from '../presmoke/presmoke.schema';
+import { estimateCompletion } from './completion-estimate';
+import { CurrentCook, sampleHistoricalRate } from './history-rate';
 import {
   deriveTimeline,
   durationBetween,
+  firstMeatReading,
   momentOf,
+  probeSeries,
   TimelineReading,
   TimelineSmoke,
 } from './timeline.derive';
-import { SmokeTimeline } from './timeline.dto';
-import { primaryWatchedTarget } from './watched-probe';
+import { CurrentSmokeTimeline, SmokeTimeline } from './timeline.dto';
+import { primaryWatchedProbe, primaryWatchedTarget } from './watched-probe';
+
+/**
+ * How many of the user's most recent finished cooks the historical rate is read
+ * from.
+ */
+const HISTORY_SAMPLE_SIZE = 10;
+
+/**
+ * How many rows from the start of a past cook are read looking for the first
+ * reading the meat actually took.
+ */
+const OPENING_ROWS = 50;
 
 /**
  * The timing of a cook: when it started, when it ended, how long it ran, how
@@ -36,6 +54,9 @@ export class TimelineService {
     @InjectModel('Temp') private readonly tempModel: Model<TempDocument>,
     @InjectModel(ApplicationSettings.name)
     private readonly settingsModel: Model<ApplicationSettingsDocument>,
+    @InjectModel('state') private readonly stateModel: Model<StateDocument>,
+    @InjectModel(PreSmoke.name)
+    private readonly preSmokeModel: Model<PreSmokeDocument>,
   ) {}
 
   /**
@@ -73,6 +94,89 @@ export class TimelineService {
         { $set: { finishedAt: new Date(), targetTemp } },
       )
       .exec();
+  }
+
+  /**
+   * The cook in progress: its timeline so far, and when it will be done.
+   *
+   * `now` is a parameter rather than read from the clock inside, so that the
+   * projection is a function of its inputs and can be exercised against a fixed
+   * moment.
+   */
+  async getCurrentTimeline(
+    now: Date = new Date(),
+  ): Promise<CurrentSmokeTimeline> {
+    const state = await this.stateModel.findOne().exec();
+    const smoke = state?.smokeId
+      ? await this.smokeModel.findById(state.smokeId).exec()
+      : null;
+    // The series is read once and derived from twice: the timeline and the
+    // projection want the same readings, and a running cook's series is the
+    // largest read this route makes.
+    const readings = smoke ? await this.readings(smoke) : [];
+    const timeline = smoke
+      ? deriveTimeline(asTimelineSmoke(smoke), readings)
+      : deriveTimeline({ complete: false }, []);
+    const settings = withSettingsDefaults(
+      await this.settingsModel.findOne().exec(),
+    );
+    const probe = primaryWatchedProbe(settings);
+    return {
+      ...timeline,
+      estimate: estimateCompletion({
+        readings: probeSeries(readings, probe?.slot, timeline.startedAt),
+        target: probe?.target ?? null,
+        smoking: state?.smoking === true,
+        now,
+        historicalRate: await this.historicalRate(smoke),
+      }),
+    };
+  }
+
+  /**
+   * What this user's past cooks say the meat on the smoker climbs at, or `null`
+   * when their history cannot say.
+   *
+   * Only the most recent cooks are read: the whole point of the sample is the
+   * middle of it, a hundredth cook cannot move that, and every cook read costs a
+   * pre-smoke and a first-reading query on a route the clients poll.
+   */
+  private async historicalRate(
+    smoke: StoredSmoke | null,
+  ): Promise<number | null> {
+    const current = await this.cookOf(smoke);
+    if (!current?.meatType) {
+      // Nothing was typed into the pre-smoke form, so no past cook can be
+      // matched to this one and the history read is not worth making.
+      return null;
+    }
+    const completed = await this.smokeModel
+      .find({ status: SmokeStatus.Complete })
+      .sort({ date: -1 })
+      .limit(HISTORY_SAMPLE_SIZE)
+      .exec();
+    const cooks = await Promise.all(
+      completed.map(async (past) => ({
+        ...(await this.cookOf(past)),
+        targetTemp: past.targetTemp ?? null,
+        durationMs: await this.getDurationMs(past),
+        startTemp: firstMeatReading(await this.openingReadings(past)),
+      })),
+    );
+    return sampleHistoricalRate(cooks, current);
+  }
+
+  /** What a cook was of and what it weighed, from its pre-smoke stage. */
+  private async cookOf(smoke: StoredSmoke | null): Promise<CurrentCook | null> {
+    if (!smoke?.preSmokeId) {
+      return null;
+    }
+    const preSmoke = await this.preSmokeModel.findById(smoke.preSmokeId).exec();
+    return {
+      meatType: preSmoke?.meatType ?? null,
+      weight: preSmoke?.weight?.weight ?? null,
+      weightUnit: preSmoke?.weight?.unit ?? null,
+    };
   }
 
   /** A stored cook's timeline, by id; an unknown id derives nothing. */
@@ -136,6 +240,29 @@ export class TimelineService {
     return edge ? momentOf(edge) : null;
   }
 
+  /**
+   * The opening rows of a cook's series, oldest first — enough of them to find
+   * where the meat started.
+   *
+   * Not merely the first row: a cook records while the chamber comes up to heat
+   * and the meat probes still read zero, and reading the climb from that one
+   * row would find no meat reading at all and drop the whole cook out of the
+   * history sample. Bounded, because a whole series is tens of thousands of
+   * rows and this is read once per past cook on a polled route.
+   */
+  private async openingReadings(
+    smoke: StoredSmoke,
+  ): Promise<TimelineReading[]> {
+    if (!smoke.tempsId) {
+      return [];
+    }
+    return this.tempModel
+      .find({ tempsId: smoke.tempsId, date: { $ne: null } })
+      .sort({ date: 1 })
+      .limit(OPENING_ROWS)
+      .exec();
+  }
+
   /** Every reading of a cook, oldest first; none at all when it stored none. */
   private async readings(smoke: {
     tempsId?: string;
@@ -159,6 +286,8 @@ export interface StoredSmoke {
   finishedAt?: Date | null;
   targetTemp?: number | null;
   tempsId?: string;
+  /** The pre-smoke stage carrying what the cook was of, and what it weighed. */
+  preSmokeId?: string;
   status?: SmokeStatus;
 }
 

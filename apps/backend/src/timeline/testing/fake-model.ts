@@ -47,17 +47,22 @@ const ordered = (rows: FakeDoc[], sort: FakeDoc | null): FakeDoc[] => {
 /** A chainable query over the matched rows, resolved by `exec()`. */
 const query = (rows: FakeDoc[], one: boolean) => {
   let sort: FakeDoc | null = null;
+  let limit: number | null = null;
   const chain = {
     sort(spec: FakeDoc) {
       sort = spec;
       return chain;
     },
     limit(count: number) {
-      rows = rows.slice(0, count);
+      limit = count;
       return chain;
     },
     async exec() {
-      const result = ordered(rows, sort);
+      // Ordered before limited, as MongoDB does it: a limit applied to the
+      // rows in storage order would answer a different ten cooks than the ten
+      // most recent the caller asked for.
+      const sorted = ordered(rows, sort);
+      const result = limit === null ? sorted : sorted.slice(0, limit);
       if (!one) {
         return result;
       }

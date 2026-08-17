@@ -4,7 +4,9 @@ import {
   ApplicationSettings,
   ApplicationSettingsSchema,
 } from '../appSettings/app-settings.schema';
+import { PreSmoke, PreSmokeSchema } from '../presmoke/presmoke.schema';
 import { SmokeSchema } from '../smoke/smoke.schema';
+import { stateSchema } from '../State/state.schema';
 import { TempSchema } from '../temps/temps.schema';
 import { TimelineController } from './timeline.controller';
 import { TimelineService } from './timeline.service';
@@ -21,6 +23,12 @@ import { TimelineService } from './timeline.service';
     MongooseModule.forFeature([
       { name: 'Smoke', schema: SmokeSchema },
       { name: 'Temp', schema: TempSchema },
+      // The session's own collections: which cook is running and whether it is
+      // smoking, and what that cook is of — read directly here for the same
+      // reason as the three above. Depending on `StateModule` would close a
+      // cycle, since the state stamps its start through this service.
+      { name: 'state', schema: stateSchema },
+      { name: PreSmoke.name, schema: PreSmokeSchema },
       {
         name: ApplicationSettings.name,
         schema: ApplicationSettingsSchema,

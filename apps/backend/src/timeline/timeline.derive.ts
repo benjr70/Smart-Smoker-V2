@@ -1,3 +1,4 @@
+import { EstimateReading } from './completion-estimate';
 import { SmokeTimeline } from './timeline.dto';
 
 /**
@@ -40,6 +41,62 @@ const asReading = (
   }
   const reading = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(reading) ? reading : null;
+};
+
+/** Which stored field carries each probe slot's readings. */
+const SLOT_FIELDS: Record<string, keyof TimelineReading> = {
+  probe1: 'MeatTemp',
+  probe2: 'Meat2Temp',
+  probe3: 'Meat3Temp',
+};
+
+/**
+ * One probe's readings, dated and numeric, from `from` onwards.
+ *
+ * Anchored at the cook's start rather than at the first row of the series
+ * because a session is set up while the meat is still being trimmed: the probe
+ * sitting on the counter at room temperature is not where this cook began, and
+ * a progress bar measuring from it would open the cook part-full.
+ */
+export const probeSeries = (
+  readings: TimelineReading[],
+  slot: string | null | undefined,
+  from: Date | null,
+): EstimateReading[] => {
+  const field = slot ? SLOT_FIELDS[slot] : undefined;
+  if (!field) {
+    return [];
+  }
+  return readings
+    .map((row) => ({
+      date: momentOf(row),
+      temp: asReading(row[field] as string | number | null | undefined),
+    }))
+    .filter(
+      (row): row is EstimateReading =>
+        row.date !== null &&
+        row.temp !== null &&
+        (from === null || row.date >= from),
+    )
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
+};
+
+/**
+ * The first meat reading a cook recorded, °F — whichever probe the meat was on
+ * — or `null` when it recorded none. Where that cook's climb started.
+ */
+export const firstMeatReading = (
+  readings: TimelineReading[],
+): number | null => {
+  for (const row of readings) {
+    for (const field of MEAT_FIELDS) {
+      const value = asReading(row[field]);
+      if (value !== null && value > 0) {
+        return value;
+      }
+    }
+  }
+  return null;
 };
 
 /** The highest of the given fields across the whole series, or `null` if none read. */

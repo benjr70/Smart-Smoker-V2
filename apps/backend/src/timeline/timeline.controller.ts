@@ -1,7 +1,7 @@
 import { Controller, Get, Param } from '@nestjs/common';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { ParseObjectIdPipe } from '../common/parse-object-id.pipe';
-import { SmokeTimeline } from './timeline.dto';
+import { CurrentSmokeTimeline, SmokeTimeline } from './timeline.dto';
 import { TimelineService } from './timeline.service';
 
 /**
@@ -17,6 +17,20 @@ import { TimelineService } from './timeline.service';
 @Controller('api/timeline')
 export class TimelineController {
   constructor(private readonly timelineService: TimelineService) {}
+
+  /**
+   * The cook in progress, with its estimated completion.
+   *
+   * Declared ahead of the by-id route, which would otherwise claim `current` as
+   * an id and reject it as a malformed one. Its own route rather than a field on
+   * the state, because it is derived from three collections on every read and
+   * the clients poll it on the cadence they already poll a running cook with.
+   */
+  @Get('/current')
+  @ApiOkResponse({ type: CurrentSmokeTimeline })
+  getCurrentTimeline(): Promise<CurrentSmokeTimeline> {
+    return this.timelineService.getCurrentTimeline();
+  }
 
   @Get('/:id')
   @ApiOkResponse({ type: SmokeTimeline })
