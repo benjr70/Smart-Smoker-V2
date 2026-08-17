@@ -273,6 +273,89 @@ describe('smoker api client', () => {
     });
   });
 
+  describe('timeline resource (cloud base URL)', () => {
+    /**
+     * The running cook is read from the route that owns it, in one request,
+     * rather than from the state followed by a by-id read of whatever it
+     * pointed at: the estimate beside the stamp is derived from three
+     * collections the panel cannot compose, and the same route is what the web
+     * client reads, so both screens are looking at one answer.
+     */
+    it('getCurrent reads the running cook from `timeline/current`, in one request', async () => {
+      const { cloud, device, client } = buildClient({
+        state: { smokeId: 'smoke-1', smoking: true },
+        timeline: {
+          current: {
+            startedAt: '2026-08-15T10:00:00.000Z',
+            finishedAt: null,
+            estimate: { state: 'ok', eta: '2026-08-15T16:30:00.000Z' },
+          },
+        },
+      });
+
+      const current = await client.timeline.getCurrent();
+
+      expect(current?.startedAt?.toISOString()).toBe('2026-08-15T10:00:00.000Z');
+      expect(current?.estimate.state).toBe('ok');
+      expect(current?.estimate.eta?.toISOString()).toBe('2026-08-15T16:30:00.000Z');
+      expect(cloud.requests).toEqual([
+        { method: 'get', path: 'timeline/current', body: undefined },
+      ]);
+      expect(device.requests).toEqual([]);
+    });
+
+    /**
+     * A deployment older than the estimator has no estimate block to send. The
+     * panel is handed an estimate of nothing rather than an absence every caller
+     * would have to guard, and shows no ETA — which is what it shows for a cook
+     * that has none.
+     */
+    it('reads a body with no estimate block as an estimate of nothing', async () => {
+      const { client } = buildClient({
+        timeline: { current: { startedAt: '2026-08-15T10:00:00.000Z', finishedAt: null } },
+      });
+
+      const current = await client.timeline.getCurrent();
+
+      expect(current?.estimate).toEqual({ state: null, eta: null });
+    });
+
+    /**
+     * A deployment older than the route rejects the read — as an unknown id, or
+     * as nothing found — and that is the same nothing a panel with no session
+     * gets, rather than a failure the one screen with no reload button has to
+     * render.
+     */
+    it.each([400, 404])('resolves null when the backend cannot say (%i)', async status => {
+      const { cloud, client } = buildClient({
+        timeline: { current: { startedAt: null, finishedAt: null } },
+      });
+      cloud.injectFault({ method: 'get', path: 'timeline/current', status });
+
+      await expect(client.timeline.getCurrent()).resolves.toBeNull();
+    });
+
+    it('lets an outage through rather than passing it off as no cook', async () => {
+      const { cloud, client } = buildClient();
+      cloud.injectFault({ method: 'get', path: 'timeline/current', status: 503 });
+
+      const error = (await client.timeline.getCurrent().catch(e => e)) as ApiError;
+
+      expect(error).toBeInstanceOf(ApiError);
+      expect(error.status).toBe(503);
+    });
+
+    it('getById reads a named cook’s stamp, revived to a date', async () => {
+      const { client } = buildClient({
+        timeline: { s1: { startedAt: '2026-08-15T10:00:00.000Z', finishedAt: null } },
+      });
+
+      await expect(client.timeline.getById('s1')).resolves.toEqual({
+        startedAt: new Date('2026-08-15T10:00:00.000Z'),
+      });
+    });
+  });
+
   describe('failure mapping', () => {
     it('surfaces an HTTP failure as the typed ApiError with method/path/status', async () => {
       const { cloud, client } = buildClient();

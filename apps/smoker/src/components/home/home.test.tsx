@@ -2,6 +2,7 @@ import React from 'react';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { Home } from './home';
+import { ESTIMATE_REFRESH_MS } from './useCompletionEstimate';
 import { SessionConfig, SmokeProfile, decodeEvents } from 'smoke-session/src';
 import { SmokeSessionProvider } from 'smoke-session/src/react';
 import {
@@ -13,7 +14,12 @@ import {
 } from 'smoke-session/src/testing';
 import { plotBoxOf } from 'temperaturechart/src/chartGeometry';
 import { carbonDark } from 'theme/src';
-import { ProbeTargetSetting } from '../../api';
+import {
+  CompletionState,
+  CookCompletionEstimate,
+  CurrentCookTimeline,
+  ProbeTargetSetting,
+} from '../../api';
 
 // The package's flushPromises leans on node's setImmediate, absent in the CRA
 // jsdom test env; a setTimeout(0) drain settles the store's fire-and-forget
@@ -119,10 +125,32 @@ const watching = (slot: string, target: number): ProbeTargetSetting => ({
   target,
 });
 
-function renderHome(kit: SmokerKit, probeTargets = fakeProbeTargets([])) {
+/**
+ * A stand-in for the running cook as the backend answers it, so a test can put
+ * the panel in front of a cook that is on track, one that has stalled, and one
+ * nothing is being estimated for at all.
+ */
+function fakeCurrentCook(estimate: CookCompletionEstimate | null = null) {
+  return {
+    getCurrent: async (): Promise<CurrentCookTimeline | null> =>
+      estimate === null ? null : { startedAt: new Date(), estimate },
+  };
+}
+
+/** An estimate in one of the backend's states, due at the given moment. */
+const estimateOf = (state: CompletionState | null, eta: Date | null): CookCompletionEstimate => ({
+  state,
+  eta,
+});
+
+function renderHome(
+  kit: SmokerKit,
+  probeTargets = fakeProbeTargets([]),
+  currentCook = fakeCurrentCook()
+) {
   return render(
     <SmokeSessionProvider config={kit.config}>
-      <Home probeTargets={probeTargets} />
+      <Home probeTargets={probeTargets} currentCook={currentCook} />
     </SmokeSessionProvider>
   );
 }
@@ -606,6 +634,126 @@ describe('the top bar', () => {
     });
 
     expect(screen.getByTestId('smoker-elapsed-clock')).toHaveTextContent(/^02:00:0\d$/);
+  });
+
+  /**
+   * When the cook will be done, beside how long it has been going.
+   *
+   * A clock time and nothing else: the panel is read from across a garage, and
+   * the one thing worth crossing it for is what time to be back. The rate, the
+   * progress and the editable target are the web card's business — the operator
+   * planning around them is holding a phone, not standing at the smoker.
+   */
+  describe('the ETA beside the clock', () => {
+    /** Half past four, as the reader's own locale writes a clock time. */
+    const HALF_PAST_FOUR = new Date('2026-08-15T16:30:00.000Z');
+    const asClockTime = (moment: Date): string =>
+      moment.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+    const smoking = (): SmokerKit => {
+      const kit = smokerKit();
+      kit.api.seedSmoking(true).seedCookStart(new Date());
+      return kit;
+    };
+
+    it('shows when the cook will be done while the estimate is on track', async () => {
+      renderHome(
+        smoking(),
+        fakeProbeTargets([]),
+        fakeCurrentCook(estimateOf('ok', HALF_PAST_FOUR))
+      );
+      await act(async () => {
+        await flushPromises();
+      });
+
+      expect(screen.getByText('ETA')).toBeInTheDocument();
+      expect(screen.getByTestId('smoker-eta')).toHaveTextContent(asClockTime(HALF_PAST_FOUR));
+    });
+
+    /**
+     * Every other state is an estimate the panel has nothing to say about: a
+     * cook still warming has no moment yet, a stalled or paused one has one
+     * nobody should plan around, and a done one has arrived. The touchscreen
+     * shows nothing rather than a caveat there is no room to read.
+     */
+    it.each<CompletionState | null>(['warming', 'stalled', 'paused', 'done', null])(
+      'shows nothing at all while the estimate is %s',
+      async state => {
+        renderHome(
+          smoking(),
+          fakeProbeTargets([]),
+          fakeCurrentCook(estimateOf(state, HALF_PAST_FOUR))
+        );
+        await act(async () => {
+          await flushPromises();
+        });
+
+        expect(screen.getByTestId('smoker-elapsed-clock')).toBeInTheDocument();
+        expect(screen.queryByText('ETA')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('smoker-eta')).not.toBeInTheDocument();
+      }
+    );
+
+    it('shows nothing when no cook is running, whatever the last estimate said', async () => {
+      const kit = smokerKit();
+      kit.api.seedSmoking(false);
+      renderHome(kit, fakeProbeTargets([]), fakeCurrentCook(estimateOf('ok', HALF_PAST_FOUR)));
+      await act(async () => {
+        await flushPromises();
+      });
+
+      expect(screen.getByText('No active smoke')).toBeInTheDocument();
+      expect(screen.queryByTestId('smoker-eta')).not.toBeInTheDocument();
+    });
+
+    /**
+     * A backend that cannot be reached — or one older than the estimator, which
+     * answers with no running cook at all — leaves the top bar as it was. The
+     * clock goes on counting: the cook is still running whether or not anything
+     * can say when it ends.
+     */
+    /**
+     * The panel has no push channel for the estimate, so it re-asks: a cook
+     * that was still warming when the operator walked away has a time on it
+     * when they walk back, without anybody touching the glass.
+     */
+    it('re-reads the running cook a minute later, and shows what it says then', async () => {
+      jest.useFakeTimers();
+      try {
+        const answers = [estimateOf('warming', null), estimateOf('ok', HALF_PAST_FOUR)];
+        renderHome(smoking(), fakeProbeTargets([]), {
+          getCurrent: async (): Promise<CurrentCookTimeline | null> => ({
+            startedAt: new Date(),
+            estimate: answers.shift() ?? estimateOf('ok', HALF_PAST_FOUR),
+          }),
+        });
+        await act(async () => {
+          await Promise.resolve();
+        });
+        expect(screen.queryByTestId('smoker-eta')).not.toBeInTheDocument();
+
+        await act(async () => {
+          jest.advanceTimersByTime(ESTIMATE_REFRESH_MS);
+          await Promise.resolve();
+        });
+
+        expect(screen.getByTestId('smoker-eta')).toHaveTextContent(asClockTime(HALF_PAST_FOUR));
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('leaves the clock alone when there is no estimate to be had', async () => {
+      renderHome(smoking(), fakeProbeTargets([]), {
+        getCurrent: () => Promise.reject(new Error('the panel cannot reach the cloud')),
+      });
+      await act(async () => {
+        await flushPromises();
+      });
+
+      expect(screen.getByTestId('smoker-elapsed-clock')).toBeInTheDocument();
+      expect(screen.queryByTestId('smoker-eta')).not.toBeInTheDocument();
+    });
   });
 
   it('paints the wifi glyph green connected and red disconnected', async () => {

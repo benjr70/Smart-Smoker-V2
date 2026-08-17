@@ -27,7 +27,7 @@ export const createSessionApi = (client: ApiClient): SessionApiPort => ({
   getCurrentTemps: (): Promise<BatchTempDto[]> => client.temps.getCurrent(),
   getCookStart: async (smokeId?: string): Promise<Date | null> => {
     // A caller that already knows the smoke reads its stamp directly; one
-    // that does not lets the client compose the state read itself.
+    // that does not asks the running cook's own route who it is.
     const timeline = smokeId
       ? await client.timeline.getById(smokeId)
       : await client.timeline.getCurrent();

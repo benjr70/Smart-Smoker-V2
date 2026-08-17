@@ -106,9 +106,11 @@ describe('session API adapter (SessionApiPort over the deep client)', () => {
   });
 
   it('getCookStart reads the current cook’s recorded start as a real Date', async () => {
+    // The running cook comes off the route that owns it, so the state is not
+    // consulted for which cook that is — seeding none proves it.
     const { port } = buildPort({
-      state: { smokeId: 's1', smoking: true },
-      timeline: { s1: { startedAt: '2026-08-15T10:00:00.000Z', finishedAt: null } },
+      state: null,
+      timeline: { current: { startedAt: '2026-08-15T10:00:00.000Z', finishedAt: null } },
     });
 
     const startedAt = await port.getCookStart();
@@ -138,8 +140,7 @@ describe('session API adapter (SessionApiPort over the deep client)', () => {
 
   it('getCookStart resolves null when the cook has no recorded start', async () => {
     const { port } = buildPort({
-      state: { smokeId: 's1', smoking: false },
-      timeline: { s1: { startedAt: null, finishedAt: null } },
+      timeline: { current: { startedAt: null, finishedAt: null } },
     });
 
     await expect(port.getCookStart()).resolves.toBeNull();

@@ -416,9 +416,10 @@ const ProbeRow = ({
     <Typography variant="body2" sx={{ flexGrow: 1 }}>
       {probe.name}
     </Typography>
-    {/* The mock tags the first watched probe with the cook's ETA. The estimate
-        itself is not computed anywhere yet, so the tag marks which probe it will
-        describe rather than claiming a time the app does not know. */}
+    {/* The mock tags the first watched probe with the cook's ETA. The tag marks
+        which probe the estimate is taken to — the cook screen and the
+        touchscreen both say when it will get there — rather than repeating a
+        time that belongs beside the cook. */}
     {showEta && <Chip size="small" label="ETA" data-testid="settings-probe-eta" />}
     <TextField
       label={`${probe.name} target`}

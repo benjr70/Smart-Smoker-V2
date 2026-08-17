@@ -30,6 +30,11 @@ export { createFakeBackend } from './fakeBackend';
 export type {
   ApiClient,
   AppearanceResource,
+  CompletionState,
+  CookCompletionEstimate,
+  CookTimeline,
+  CurrentCookTimeline,
+  TimelineResource,
   StateResource,
   SmokeProfileResource,
   TempsResource,
