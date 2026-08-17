@@ -7,10 +7,15 @@
 #
 # Strategy: two complementary checks against the real repo (no mocks — the
 # subject under test IS the checked-in config set).
-#   1. Static: every workspace .eslintrc.js that sets `parserOptions.project`
-#      must also set `tsconfigRootDir`, otherwise resolution is cwd-dependent
-#      and breaks whenever eslint is invoked from a different directory
-#      (lint-staged runs it from the repo root).
+#   1. Static: EVERY eslintrc in the repo (root config included, any depth,
+#      .js/.cjs/.json) that sets `parserOptions.project` — in the top-level
+#      block or in any single `overrides` entry — must pin an absolute
+#      `tsconfigRootDir` in that same block. The check loads the config with
+#      node and inspects the resolved values, so it is block-scoped and accepts
+#      any spelling that resolves to an absolute path (`__dirname`,
+#      `path.resolve(__dirname, '..')`, …). Without such a pin, project
+#      resolution is cwd-dependent and breaks whenever eslint is invoked from a
+#      different directory (lint-staged runs it from the repo root).
 #   2. Behavioral: running eslint from the repo root on a type-aware workspace
 #      file must exit clean with no "Parsing error" — the exact symptom of #454.
 #
@@ -23,6 +28,11 @@
 # violation in the backend source tree and requiring eslint to flag it from the
 # repo root. A config-load crash or a missing binary fails these instead of
 # quietly matching no substring.
+#
+# CI: run by the `lint-config` job in .github/workflows/ci-tests.yml. That
+# workflow's path filter is a deliberate superset of this suite's discovery
+# scope (it matches every `.eslintrc*` in the repo), so the two cannot drift
+# into a config that is discovered but never CI-guarded.
 
 set -uo pipefail
 
@@ -33,6 +43,19 @@ ESLINT_BIN="${REPO_ROOT}/node_modules/.bin/eslint"
 TESTS_RUN=0
 TESTS_FAILED=0
 FAILED_NAMES=()
+
+# Files this suite creates in the working tree. Removed by the EXIT trap so an
+# interrupt, a CI cancellation or any early exit can never leave a
+# deliberately-lint-failing canary behind for someone else to `git add`.
+CANARY_ABS=""
+INSPECT_JS=""
+
+cleanup() {
+    [ -n "${CANARY_ABS}" ] && rm -f "${CANARY_ABS}"
+    [ -n "${INSPECT_JS}" ] && rm -f "${INSPECT_JS}"
+    return 0
+}
+trap cleanup EXIT INT TERM
 
 pass() {
     TESTS_RUN=$((TESTS_RUN + 1))
@@ -55,40 +78,128 @@ if [ ! -x "${ESLINT_BIN}" ]; then
     echo "FATAL: ${ESLINT_BIN} missing — run 'npm run bootstrap' first"
     exit 2
 fi
+if ! command -v node >/dev/null 2>&1; then
+    echo "FATAL: node not on PATH — the static check loads eslint configs with node"
+    exit 2
+fi
+
+# Config inspector: loads one eslintrc and reports, per config block, whether a
+# block that sets `parserOptions.project` also pins an absolute
+# `tsconfigRootDir`. Written to a temp file (cleaned up by the EXIT trap) rather
+# than inlined, so quoting stays sane.
+INSPECT_JS="$(mktemp "${TMPDIR:-/tmp}/eslint-config-inspect.XXXXXX.js")"
+cat > "${INSPECT_JS}" <<'INSPECT'
+const fs = require('fs');
+const path = require('path');
+
+const file = process.argv[2];
+let config;
+try {
+  if (/\.(js|cjs)$/.test(file)) {
+    config = require(file);
+  } else if (/\.json$/.test(file)) {
+    config = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } else {
+    console.log(`LOAD_ERROR unsupported config extension: ${file}`);
+    process.exit(2);
+  }
+} catch (err) {
+  console.log(`LOAD_ERROR ${err.message}`);
+  process.exit(2);
+}
+
+const problems = [];
+let typeAwareBlocks = 0;
+
+// Walk the top-level block and every `overrides` entry independently: the pin
+// only protects the block it lives in, so a second override adding `project`
+// without its own pin must still be caught.
+const visit = (block, label) => {
+  if (!block || typeof block !== 'object') return;
+  const parserOptions = block.parserOptions;
+  if (parserOptions && parserOptions.project) {
+    typeAwareBlocks += 1;
+    const root = parserOptions.tsconfigRootDir;
+    if (typeof root !== 'string' || root.length === 0) {
+      problems.push(`${label}: sets parserOptions.project but no parserOptions.tsconfigRootDir`);
+    } else if (!path.isAbsolute(root)) {
+      problems.push(`${label}: tsconfigRootDir "${root}" is not absolute, so project resolution still depends on cwd`);
+    } else if (!fs.existsSync(root)) {
+      problems.push(`${label}: tsconfigRootDir "${root}" does not exist`);
+    }
+  }
+  if (Array.isArray(block.overrides)) {
+    block.overrides.forEach((entry, i) => visit(entry, `${label} > overrides[${i}]`));
+  }
+};
+
+visit(config, 'top level');
+
+if (problems.length > 0) {
+  problems.forEach((problem) => console.log(`PROBLEM ${problem}`));
+  process.exit(1);
+}
+console.log(`OK type-aware blocks: ${typeAwareBlocks}`);
+INSPECT
 
 #-------------------------------------------------------------------------------
-# Test 1: any config with parserOptions.project also pins tsconfigRootDir
+# Test 1: any config block with parserOptions.project pins an absolute
+#         tsconfigRootDir — repo-wide, root config included
 #-------------------------------------------------------------------------------
 test_project_configs_pin_tsconfig_root_dir() {
-    echo "TEST: workspace eslint configs using parserOptions.project pin tsconfigRootDir"
+    echo "TEST: every eslint config using parserOptions.project pins an absolute tsconfigRootDir"
 
-    # Search scope is mirrored by the path filter in
-    # .github/workflows/lint-config-tests.yml — change both together.
+    # Repo-wide discovery: no directory allow-list and no depth cap, so a config
+    # added anywhere (including the repo root, which the previous scope missed)
+    # is covered. Build output and dependencies are pruned.
     local configs=()
     while IFS= read -r cfg; do
         configs+=("${cfg}")
-    done < <(cd "${REPO_ROOT}" && find apps packages e2e -maxdepth 2 -name '.eslintrc.js' \
-        -not -path '*/node_modules/*' 2>/dev/null | sort)
+    done < <(cd "${REPO_ROOT}" && find . \
+        \( -name node_modules -o -name dist -o -name build -o -name coverage -o -name .git -o -name .webpack \) -prune -o \
+        -type f \( -name '.eslintrc.js' -o -name '.eslintrc.cjs' -o -name '.eslintrc.json' \) -print 2>/dev/null \
+        | sed 's|^\./||' | sort)
 
     if [ ${#configs[@]} -eq 0 ]; then
-        fail "found workspace eslint configs" "no apps/*/.eslintrc.js or packages/*/.eslintrc.js discovered"
+        fail "found eslint configs" "no .eslintrc.{js,cjs,json} discovered under ${REPO_ROOT}"
         return
     fi
-    pass "found ${#configs[@]} workspace eslint config(s)"
+    pass "found ${#configs[@]} eslint config(s), repo-wide"
 
-    local cfg
+    local cfg out status total_type_aware=0 blocks
     for cfg in "${configs[@]}"; do
-        if ! grep -q 'project:' "${REPO_ROOT}/${cfg}"; then
-            # Config is not type-aware; cwd cannot affect project resolution.
+        out="$(node "${INSPECT_JS}" "${REPO_ROOT}/${cfg}" 2>&1)"
+        status=$?
+
+        if [ "${status}" -eq 2 ]; then
+            fail "${cfg} pins tsconfigRootDir for every type-aware block" \
+                "config could not be loaded: $(echo "${out}" | tr -d '\n' | cut -c1-300)"
             continue
         fi
-        if grep -q 'tsconfigRootDir: __dirname' "${REPO_ROOT}/${cfg}"; then
-            pass "${cfg} pins tsconfigRootDir: __dirname"
-        else
-            fail "${cfg} pins tsconfigRootDir: __dirname" \
-                "sets parserOptions.project but not tsconfigRootDir — resolution is cwd-relative (issue #454)"
+        if [ "${status}" -ne 0 ]; then
+            fail "${cfg} pins tsconfigRootDir for every type-aware block" \
+                "$(echo "${out}" | sed 's/^PROBLEM //' | tr '\n' ';') (issue #454)"
+            continue
         fi
+
+        blocks="$(echo "${out}" | sed -n 's/^OK type-aware blocks: //p')"
+        blocks="${blocks:-0}"
+        total_type_aware=$((total_type_aware + blocks))
+        if [ "${blocks}" -eq 0 ]; then
+            # Not type-aware; cwd cannot affect project resolution here.
+            continue
+        fi
+        pass "${cfg} pins an absolute tsconfigRootDir in all ${blocks} type-aware block(s)"
     done
+
+    # Guard against a vacuous pass: if nothing in the repo is type-aware any
+    # more, the check above asserted nothing and the suite must say so.
+    if [ "${total_type_aware}" -eq 0 ]; then
+        fail "at least one config is type-aware" \
+            "no config sets parserOptions.project — the static check asserted nothing"
+    else
+        pass "static check exercised ${total_type_aware} type-aware config block(s)"
+    fi
 }
 
 # Run the repo's eslint from the repo root, JSON reporter, on one file.
@@ -155,17 +266,27 @@ test_eslint_from_repo_root_reports_real_violations() {
     echo "TEST: eslint run from repo root reports a planted violation in backend source"
 
     local canary="apps/backend/src/__eslint-cwd-canary.ts"
-    local canary_abs="${REPO_ROOT}/${canary}"
+
+    if [ -e "${REPO_ROOT}/${canary}" ]; then
+        fail "planted violation is reported" \
+            "${canary} already exists — refusing to overwrite (stray canary from an earlier run?)"
+        return
+    fi
+
+    # Registered with the EXIT trap *before* the file is created, so an
+    # interrupt between here and the explicit rm still removes it.
+    CANARY_ABS="${REPO_ROOT}/${canary}"
 
     # `let` that is never reassigned trips prefer-const from the backend config's
     # @typescript-eslint/recommended extend; the export keeps this valid TS.
-    cat > "${canary_abs}" <<'CANARY'
+    cat > "${CANARY_ABS}" <<'CANARY'
 let canaryUnreassigned = 1;
 export const canaryValue = canaryUnreassigned;
 CANARY
 
     run_eslint_from_root "${canary}"
-    rm -f "${canary_abs}"
+    rm -f "${CANARY_ABS}"
+    CANARY_ABS=""
 
     if [ "${RUN_STATUS}" -eq 2 ]; then
         fail "planted violation is reported" \
