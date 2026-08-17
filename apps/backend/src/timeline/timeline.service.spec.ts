@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { SmokeStatus } from '../smoke/smoke.schema';
 import { ApplicationSettings } from '../appSettings/app-settings.schema';
+import { PreSmoke } from '../presmoke/presmoke.schema';
 import { TimelineService } from './timeline.service';
 import { FakeDoc, fakeModel } from './testing/fake-model';
 
@@ -23,16 +24,30 @@ describe('TimelineService', () => {
   let smokes: FakeDoc[];
   let temps: FakeDoc[];
   let settings: FakeDoc[];
+  let states: FakeDoc[];
+  let preSmokes: FakeDoc[];
+
+  /** The models the service was built on, so a test can watch what it reads. */
+  let models: {
+    temps: ReturnType<typeof fakeModel>;
+    preSmokes: ReturnType<typeof fakeModel>;
+  };
 
   const build = async (): Promise<TimelineService> => {
+    models = { temps: fakeModel(temps), preSmokes: fakeModel(preSmokes) };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TimelineService,
         { provide: getModelToken('Smoke'), useValue: fakeModel(smokes) },
-        { provide: getModelToken('Temp'), useValue: fakeModel(temps) },
+        { provide: getModelToken('Temp'), useValue: models.temps },
         {
           provide: getModelToken(ApplicationSettings.name),
           useValue: fakeModel(settings),
+        },
+        { provide: getModelToken('state'), useValue: fakeModel(states) },
+        {
+          provide: getModelToken(PreSmoke.name),
+          useValue: models.preSmokes,
         },
       ],
     }).compile();
@@ -40,6 +55,8 @@ describe('TimelineService', () => {
   };
 
   beforeEach(async () => {
+    states = [];
+    preSmokes = [];
     smokes = [
       {
         _id: 'smoke-id',
@@ -146,6 +163,404 @@ describe('TimelineService', () => {
       expect(
         await service.getDurationMs({ status: SmokeStatus.Complete }),
       ).toBeNull();
+    });
+  });
+
+  describe('getCurrentTimeline', () => {
+    const NOW = new Date('2026-08-17T18:00:00.000Z');
+
+    /** A reading of the cook in progress, `minutesAgo` before the fixed now. */
+    const running = (minutesAgo: number, meat: string): FakeDoc => ({
+      tempsId: 'live-temps',
+      date: new Date(NOW.getTime() - minutesAgo * 60_000),
+      ChamberTemp: '250',
+      MeatTemp: meat,
+      Meat2Temp: '0',
+      Meat3Temp: '0',
+    });
+
+    /** A cook in progress, being watched on probe 1 at 203°F. */
+    const startTheCook = (): FakeDoc => {
+      const live: FakeDoc = {
+        _id: 'live-smoke',
+        tempsId: 'live-temps',
+        status: SmokeStatus.InProgress,
+        startedAt: new Date(NOW.getTime() - 60 * 60_000),
+      };
+      smokes.push(live);
+      states.push({ _id: 'state-id', smokeId: 'live-smoke', smoking: true });
+      settings.push({
+        _id: 'settings-id',
+        probeTarget: {
+          enabled: true,
+          probes: [{ slot: 'probe1', enabled: true, target: 203 }],
+        },
+      });
+      return live;
+    };
+
+    it('answers the running cook’s timeline with its projected finish', async () => {
+      startTheCook();
+      temps.push(running(60, '143'), running(30, '153'), running(0, '163'));
+      service = await build();
+
+      const timeline = await service.getCurrentTimeline(NOW);
+
+      expect(timeline.startedAt).toEqual(new Date('2026-08-17T17:00:00.000Z'));
+      expect(timeline.peakMeat).toBe(163);
+      expect(timeline.estimate.state).toBe('ok');
+      expect(timeline.estimate.targetTemp).toBe(203);
+      expect(timeline.estimate.startTemp).toBe(143);
+      expect(timeline.estimate.ratePerHour).toBeCloseTo(20, 5);
+      // 40°F to go at 20°F/hr.
+      expect(timeline.estimate.eta).toEqual(
+        new Date('2026-08-17T20:00:00.000Z'),
+      );
+    });
+
+    it('measures progress from the first reading after the cook started', async () => {
+      startTheCook();
+      temps.push(
+        // Taken while the meat was still being trimmed, before Start Smoking.
+        running(180, '40'),
+        running(60, '143'),
+        running(0, '163'),
+      );
+      service = await build();
+
+      const { estimate } = await service.getCurrentTimeline(NOW);
+
+      expect(estimate.startTemp).toBe(143);
+      // 20°F of the 60°F between 143°F and the 203°F target.
+      expect(estimate.progressPercent).toBeCloseTo(100 / 3, 5);
+    });
+
+    it('reads the probe the watch list names, not the first one wired in', async () => {
+      startTheCook();
+      settings[0].probeTarget.probes = [
+        { slot: 'probe1', enabled: false, target: 203 },
+        { slot: 'probe2', enabled: true, target: 165 },
+      ];
+      temps.push(
+        { ...running(60, '143'), Meat2Temp: '105' },
+        { ...running(30, '153'), Meat2Temp: '115' },
+        { ...running(0, '163'), Meat2Temp: '125' },
+      );
+      service = await build();
+
+      const { estimate } = await service.getCurrentTimeline(NOW);
+
+      expect(estimate.targetTemp).toBe(165);
+      expect(estimate.startTemp).toBe(105);
+      expect(estimate.ratePerHour).toBeCloseTo(20, 5);
+    });
+
+    it('estimates nothing towards a target nobody set', async () => {
+      startTheCook();
+      settings[0].probeTarget.probes = [
+        { slot: 'probe1', enabled: false, target: 203 },
+      ];
+      temps.push(running(60, '143'), running(0, '163'));
+      service = await build();
+
+      const { estimate, peakMeat } = await service.getCurrentTimeline(NOW);
+
+      // The cook is still read — only the projection has nothing to say.
+      expect(peakMeat).toBe(163);
+      expect(estimate.state).toBeNull();
+      expect(estimate.targetTemp).toBeNull();
+      expect(estimate.eta).toBeNull();
+    });
+
+    it('answers an empty timeline and an empty estimate when nothing is cooking', async () => {
+      service = await build();
+
+      const timeline = await service.getCurrentTimeline(NOW);
+
+      expect(timeline.startedAt).toBeNull();
+      expect(timeline.estimate.state).toBeNull();
+    });
+
+    /**
+     * A finished cook of `meatType` weighing `weight` lb that climbed from 40°F
+     * to its 200°F target over `hours`.
+     */
+    const pastCook = (
+      id: string,
+      meatType: string,
+      weight: number,
+      hours: number,
+    ) => {
+      smokes.push({
+        _id: id,
+        preSmokeId: `pre-${id}`,
+        tempsId: `temps-${id}`,
+        status: SmokeStatus.Complete,
+        startedAt: new Date(NOW.getTime() - (hours + 100) * 60 * 60_000),
+        finishedAt: new Date(NOW.getTime() - 100 * 60 * 60_000),
+        targetTemp: 200,
+      });
+      preSmokes.push({
+        _id: `pre-${id}`,
+        meatType,
+        weight: { weight, unit: 'lb' },
+      });
+      temps.push({
+        tempsId: `temps-${id}`,
+        date: new Date(NOW.getTime() - (hours + 100) * 60 * 60_000),
+        ChamberTemp: '210',
+        MeatTemp: '40',
+        Meat2Temp: '0',
+        Meat3Temp: '0',
+      });
+    };
+
+    it('leans on past cooks of the same meat while the cook is young', async () => {
+      const live = startTheCook();
+      live.preSmokeId = 'pre-live';
+      live.startedAt = new Date(NOW.getTime() - 15 * 60_000);
+      preSmokes.push({
+        _id: 'pre-live',
+        meatType: 'Brisket',
+        weight: { weight: 4, unit: 'lb' },
+      });
+      // Past briskets: 10°F/hr on 4lb and 5°F/hr on 16lb both normalize to 20,
+      // which at the 4lb on the smoker predicts 10°F/hr.
+      pastCook('past-a', 'Brisket', 4, 16);
+      pastCook('past-b', 'Brisket', 16, 32);
+      // A quarter of an hour of its own, climbing at 20°F/hr: half the weight
+      // on each, so 15°F/hr.
+      temps.push(running(15, '145'), running(0, '150'));
+      service = await build();
+
+      const { estimate } = await service.getCurrentTimeline(NOW);
+
+      expect(estimate.ratePerHour).toBeCloseTo(15, 5);
+    });
+
+    it('projects from the cook alone when the user has never smoked this meat', async () => {
+      const live = startTheCook();
+      live.preSmokeId = 'pre-live';
+      live.startedAt = new Date(NOW.getTime() - 15 * 60_000);
+      preSmokes.push({
+        _id: 'pre-live',
+        meatType: 'Brisket',
+        weight: { weight: 4, unit: 'lb' },
+      });
+      pastCook('past-a', 'Pork Shoulder', 4, 16);
+      pastCook('past-b', 'Pork Shoulder', 16, 32);
+      temps.push(running(15, '145'), running(0, '150'));
+      service = await build();
+
+      const { estimate } = await service.getCurrentTimeline(NOW);
+
+      expect(estimate.ratePerHour).toBeCloseTo(20, 5);
+    });
+
+    it('finds a past cook’s start under the rows recorded before the probe went in', async () => {
+      const live = startTheCook();
+      live.preSmokeId = 'pre-live';
+      live.startedAt = new Date(NOW.getTime() - 15 * 60_000);
+      preSmokes.push({
+        _id: 'pre-live',
+        meatType: 'Brisket',
+        weight: { weight: 4, unit: 'lb' },
+      });
+      pastCook('past-a', 'Brisket', 4, 16);
+      pastCook('past-b', 'Brisket', 16, 32);
+      // Both cooks recorded a while with every meat probe reading zero — the
+      // chamber coming up to heat before the meat went on.
+      ['past-a', 'past-b'].forEach((id) => {
+        temps.push({
+          tempsId: `temps-${id}`,
+          date: new Date(NOW.getTime() - 200 * 60 * 60_000),
+          ChamberTemp: '180',
+          MeatTemp: '0',
+          Meat2Temp: '0',
+          Meat3Temp: '0',
+        });
+      });
+      temps.push(running(15, '145'), running(0, '150'));
+      service = await build();
+
+      const { estimate } = await service.getCurrentTimeline(NOW);
+
+      // The same blend as when the zero rows are absent: the cooks are still in
+      // the sample, started from their first real reading.
+      expect(estimate.ratePerHour).toBeCloseTo(15, 5);
+    });
+
+    it('reads past cooks that recorded nothing without falling over', async () => {
+      const live = startTheCook();
+      live.preSmokeId = 'pre-live';
+      live.startedAt = new Date(NOW.getTime() - 15 * 60_000);
+      preSmokes.push({
+        _id: 'pre-live',
+        meatType: 'Brisket',
+        weight: { weight: 4, unit: 'lb' },
+      });
+      pastCook('past-a', 'Brisket', 4, 16);
+      pastCook('past-b', 'Brisket', 16, 32);
+      // A cook that kept no series, and one whose pre-smoke was never saved.
+      smokes.push(
+        { _id: 'past-c', status: SmokeStatus.Complete, preSmokeId: 'pre-c' },
+        { _id: 'past-d', status: SmokeStatus.Complete },
+      );
+      preSmokes.push({ _id: 'pre-c', meatType: 'Brisket', weight: {} });
+      temps.push(running(15, '145'), running(0, '150'));
+      service = await build();
+
+      const { estimate } = await service.getCurrentTimeline(NOW);
+
+      expect(estimate.ratePerHour).toBeCloseTo(15, 5);
+    });
+
+    describe('what it costs to poll', () => {
+      /**
+       * Every read of the running series must be bounded: by a lower bound on
+       * the date, or by a row limit. A `find` over the whole series grows with
+       * the length of the cook, and this route is polled for the whole of it.
+       */
+      const seriesReads = (): { filter: FakeDoc; limit?: number }[] => {
+        const spy = models.temps.find as unknown as jest.Mock;
+        return spy.mock.calls.map(([filter], index) => ({
+          filter,
+          limit: spy.mock.results[index].value.applied.limit,
+        }));
+      };
+
+      it('never reads the running series whole', async () => {
+        startTheCook();
+        smokes[smokes.length - 1].startedAt = new Date(
+          NOW.getTime() - 720 * 60_000,
+        );
+        // Twelve hours of a cook, a reading every two minutes, climbing 10°F/hr.
+        for (let minutesAgo = 720; minutesAgo >= 0; minutesAgo -= 2) {
+          temps.push(running(minutesAgo, String(160 - minutesAgo / 6)));
+        }
+        service = await build();
+        jest.spyOn(models.temps, 'find');
+
+        const { estimate, peakMeat } = await service.getCurrentTimeline(NOW);
+
+        expect(peakMeat).toBe(160);
+        expect(estimate.startTemp).toBe(40);
+        expect(estimate.ratePerHour).toBeCloseTo(10, 5);
+        expect(seriesReads().length).toBeGreaterThan(0);
+        seriesReads().forEach(({ filter, limit }) => {
+          expect(filter.date?.$gte ?? limit ?? null).not.toBeNull();
+        });
+      });
+
+      it('leaves the user’s history unread once the cook has half an hour of its own', async () => {
+        const live = startTheCook();
+        live.preSmokeId = 'pre-live';
+        preSmokes.push({
+          _id: 'pre-live',
+          meatType: 'Brisket',
+          weight: { weight: 4, unit: 'lb' },
+        });
+        pastCook('past-a', 'Brisket', 4, 16);
+        pastCook('past-b', 'Brisket', 16, 32);
+        temps.push(running(45, '130'), running(30, '140'), running(0, '160'));
+        service = await build();
+        jest.spyOn(models.preSmokes, 'find');
+        jest.spyOn(models.preSmokes, 'findById');
+
+        const { estimate } = await service.getCurrentTimeline(NOW);
+
+        // The probe's own half hour is the whole of the answer, so history
+        // would only have been multiplied by nothing.
+        expect(estimate.ratePerHour).toBeCloseTo(40, 5);
+        expect(models.preSmokes.find).not.toHaveBeenCalled();
+        expect(models.preSmokes.findById).not.toHaveBeenCalled();
+      });
+
+      it('leaves the user’s history unread when no probe is being watched', async () => {
+        startTheCook();
+        settings[0].probeTarget.probes = [
+          { slot: 'probe1', enabled: false, target: 203 },
+        ];
+        temps.push(running(15, '145'), running(0, '150'));
+        service = await build();
+        jest.spyOn(models.preSmokes, 'findById');
+
+        await service.getCurrentTimeline(NOW);
+
+        expect(models.preSmokes.findById).not.toHaveBeenCalled();
+      });
+
+      it('leaves the user’s history unread once the meat is done', async () => {
+        const live = startTheCook();
+        live.preSmokeId = 'pre-live';
+        preSmokes.push({ _id: 'pre-live', meatType: 'Brisket' });
+        temps.push(running(15, '200'), running(0, '204'));
+        service = await build();
+        jest.spyOn(models.preSmokes, 'findById');
+
+        const { estimate } = await service.getCurrentTimeline(NOW);
+
+        expect(estimate.state).toBe('done');
+        expect(models.preSmokes.findById).not.toHaveBeenCalled();
+      });
+    });
+
+    it('stays done on a long cook whose target was passed hours ago', async () => {
+      const live = startTheCook();
+      live.startedAt = new Date(NOW.getTime() - 12 * 60 * 60_000);
+      temps.push(
+        running(700, '150'),
+        // Passed its target six hours ago; resting, and cooling, since.
+        running(360, '205'),
+        running(15, '160'),
+        running(0, '158'),
+      );
+      service = await build();
+
+      expect((await service.getCurrentTimeline(NOW)).estimate.state).toBe(
+        'done',
+      );
+    });
+
+    it('reads a past cook older than the ten most recent', async () => {
+      const live = startTheCook();
+      live.preSmokeId = 'pre-live';
+      live.startedAt = new Date(NOW.getTime() - 15 * 60_000);
+      preSmokes.push({
+        _id: 'pre-live',
+        meatType: 'Brisket',
+        weight: { weight: 4, unit: 'lb' },
+      });
+      pastCook('past-a', 'Brisket', 4, 16);
+      pastCook('past-b', 'Brisket', 16, 32);
+      // A dozen cooks of something else since, every one of them more recent
+      // than the two briskets: a brisket is still estimated from briskets.
+      for (let index = 0; index < 12; index += 1) {
+        pastCook(`chicken-${index}`, 'Chicken', 5, 2);
+      }
+      temps.push(running(15, '145'), running(0, '150'));
+      service = await build();
+
+      const { estimate } = await service.getCurrentTimeline(NOW);
+
+      expect(estimate.ratePerHour).toBeCloseTo(15, 5);
+    });
+
+    it('reads the clock itself when no moment is handed to it', async () => {
+      const timeline = await service.getCurrentTimeline();
+
+      expect(timeline.estimate.state).toBeNull();
+    });
+
+    it('suspends the projection while smoking is switched off', async () => {
+      startTheCook();
+      states[0].smoking = false;
+      temps.push(running(60, '143'), running(30, '153'), running(0, '163'));
+      service = await build();
+
+      expect((await service.getCurrentTimeline(NOW)).estimate.state).toBe(
+        'paused',
+      );
     });
   });
 

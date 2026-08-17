@@ -8,15 +8,45 @@ import {
 } from '../appSettings/app-settings.schema';
 import { SmokeDocument, SmokeStatus } from '../smoke/smoke.schema';
 import { TempDocument } from '../temps/temps.schema';
+import { StateDocument } from '../State/state.schema';
+import { PreSmoke, PreSmokeDocument } from '../presmoke/presmoke.schema';
+import {
+  estimateCompletion,
+  LIVE_WINDOW_MINUTES,
+  needsHistoricalRate,
+} from './completion-estimate';
+import { CurrentCook, isSameMeat, sampleHistoricalRate } from './history-rate';
 import {
   deriveTimeline,
   durationBetween,
+  firstMeatReading,
+  MEAT_FIELDS,
   momentOf,
+  probeField,
+  probeSeries,
+  TEMP_FIELDS,
   TimelineReading,
   TimelineSmoke,
 } from './timeline.derive';
-import { SmokeTimeline } from './timeline.dto';
-import { primaryWatchedTarget } from './watched-probe';
+import { CurrentSmokeTimeline, SmokeTimeline } from './timeline.dto';
+import { primaryWatchedProbe, primaryWatchedTarget } from './watched-probe';
+
+/**
+ * How many rows from the start of a cook are read looking for the first reading
+ * the meat actually took.
+ *
+ * Not merely the first row: a cook records while the chamber comes up to heat
+ * and the meat probes still read zero, and a probe pushed in late reads zero for
+ * a while after that. At a row every ten seconds or so this is the better part
+ * of half an hour of that, which is longer than any of it lasts.
+ */
+const OPENING_ROWS = 200;
+
+/** The fields a series' peaks are asked for, and the shape they come back in. */
+const PEAK_FIELDS = TEMP_FIELDS;
+
+/** The highest each probe read across a cook, absent where none did. */
+type SeriesPeaks = Partial<Record<(typeof PEAK_FIELDS)[number], number | null>>;
 
 /**
  * The timing of a cook: when it started, when it ended, how long it ran, how
@@ -36,6 +66,9 @@ export class TimelineService {
     @InjectModel('Temp') private readonly tempModel: Model<TempDocument>,
     @InjectModel(ApplicationSettings.name)
     private readonly settingsModel: Model<ApplicationSettingsDocument>,
+    @InjectModel('state') private readonly stateModel: Model<StateDocument>,
+    @InjectModel(PreSmoke.name)
+    private readonly preSmokeModel: Model<PreSmokeDocument>,
   ) {}
 
   /**
@@ -73,6 +106,251 @@ export class TimelineService {
         { $set: { finishedAt: new Date(), targetTemp } },
       )
       .exec();
+  }
+
+  /**
+   * The cook in progress: its timeline so far, and when it will be done.
+   *
+   * `now` is a parameter rather than read from the clock inside, so that the
+   * projection is a function of its inputs and can be exercised against a fixed
+   * moment.
+   */
+  async getCurrentTimeline(
+    now: Date = new Date(),
+  ): Promise<CurrentSmokeTimeline> {
+    const state = await this.stateModel.findOne().exec();
+    const smoke = state?.smokeId
+      ? await this.smokeModel.findById(state.smokeId).exec()
+      : null;
+    const settings = withSettingsDefaults(
+      await this.settingsModel.findOne().exec(),
+    );
+    const probe = primaryWatchedProbe(settings);
+    if (!smoke) {
+      return {
+        ...deriveTimeline({ complete: false }, []),
+        estimate: estimateCompletion({
+          readings: [],
+          target: probe?.target ?? null,
+          smoking: state?.smoking === true,
+          now,
+        }),
+      };
+    }
+    const peaks = await this.peaksOf(smoke);
+    const timeline = await this.runningTimeline(smoke, peaks);
+    const input = {
+      readings: probeSeries(
+        await this.estimateReadings(smoke, timeline.startedAt, now),
+        probe?.slot,
+        timeline.startedAt,
+      ),
+      target: probe?.target ?? null,
+      smoking: state?.smoking === true,
+      now,
+      peakTemp: probe ? peaks[probeField(probe.slot)] ?? null : null,
+    };
+    return {
+      ...timeline,
+      estimate: estimateCompletion({
+        ...input,
+        // Asked of the projection first: reading the user's history costs a
+        // query per past cook of the meat, and for most of a cook the answer
+        // would be weighted to nothing and thrown away.
+        historicalRate: needsHistoricalRate(input)
+          ? await this.historicalRate(smoke)
+          : null,
+      }),
+    };
+  }
+
+  /**
+   * The running cook's timeline, read without loading the cook.
+   *
+   * `deriveTimeline` reads its numbers off the whole series, which is the right
+   * shape for a finished cook read once and the wrong one for a cook in progress
+   * polled every minute: the series only grows, so the cost of a poll would grow
+   * with it all cook long. The same numbers are read here from the stamps, the
+   * two edges of the series, and a peak the store computes itself.
+   */
+  private async runningTimeline(
+    smoke: StoredSmoke,
+    peaks: SeriesPeaks,
+  ): Promise<SmokeTimeline> {
+    const startedAt = smoke.startedAt ?? (await this.edgeReading(smoke, 1));
+    const finishedAt =
+      smoke.finishedAt ??
+      (smoke.status === SmokeStatus.Complete
+        ? await this.edgeReading(smoke, -1)
+        : null);
+    return {
+      startedAt: startedAt ?? null,
+      finishedAt: finishedAt ?? null,
+      durationMs: durationBetween(startedAt ?? null, finishedAt ?? null),
+      peakChamber: peaks.ChamberTemp ?? null,
+      peakMeat: MEAT_FIELDS.reduce<number | null>((highest, field) => {
+        const value = peaks[field] ?? null;
+        return value !== null && (highest === null || value > highest)
+          ? value
+          : highest;
+      }, null),
+      targetTemp: smoke.targetTemp ?? null,
+    };
+  }
+
+  /**
+   * The highest each probe ever read this cook, computed in the store.
+   *
+   * A `$max` over the series rather than a read of it: the peaks are a fact
+   * about every row, and the alternative to asking MongoDB for them is pulling
+   * a twelve-hour cook across the wire on every poll to reduce it here.
+   */
+  private async peaksOf(smoke: StoredSmoke): Promise<SeriesPeaks> {
+    if (!smoke.tempsId) {
+      return {};
+    }
+    const [peaks] = await this.tempModel
+      .aggregate([
+        { $match: { tempsId: smoke.tempsId } },
+        {
+          $group: PEAK_FIELDS.reduce<{ _id: null } & Record<string, unknown>>(
+            (group, field) => ({
+              ...group,
+              // Readings are stored as strings, and a `$max` over strings is
+              // alphabetical: it would call 99°F hotter than 203°F.
+              [field]: {
+                $max: {
+                  $convert: {
+                    input: `$${field}`,
+                    to: 'double',
+                    onError: null,
+                    onNull: null,
+                  },
+                },
+              },
+            }),
+            { _id: null },
+          ),
+        },
+      ])
+      .exec();
+    return peaks ?? {};
+  }
+
+  /**
+   * The rows the projection is read from: where the cook started, and what it
+   * has been doing lately.
+   *
+   * Two bounded slices rather than the series between them, because that is all
+   * the projection reads: the progress bar is anchored at the cook's first
+   * reading, and the climb rate is a line through the last half hour. Whatever
+   * happened in the middle of a twelve-hour cook is already in the peaks.
+   */
+  private async estimateReadings(
+    smoke: StoredSmoke,
+    startedAt: Date | null,
+    now: Date,
+  ): Promise<TimelineReading[]> {
+    const [opening, recent] = await Promise.all([
+      this.openingReadings(smoke, startedAt),
+      this.readingsSince(
+        smoke,
+        new Date(now.getTime() - LIVE_WINDOW_MINUTES * 60_000),
+      ),
+    ]);
+    // The two slices overlap on a young cook, and the same row counted twice
+    // would weight one moment double in the line through them.
+    const byMoment = new Map<number, TimelineReading>();
+    [...opening, ...recent].forEach((row) => {
+      const moment = momentOf(row);
+      if (moment) {
+        byMoment.set(moment.getTime(), row);
+      }
+    });
+    return [...byMoment.values()];
+  }
+
+  /**
+   * What this user's past cooks say the meat on the smoker climbs at, or `null`
+   * when their history cannot say.
+   *
+   * Every completed cook counts, however long ago it was: a user with four
+   * briskets behind a winter of chicken has brisket history, and a cap on
+   * recency would tell them they had none. What is kept small instead is the
+   * cost of that — the pre-smokes are read in one query and the cooks that turn
+   * out to be of another meat are dropped before anything else is read of them.
+   */
+  private async historicalRate(
+    smoke: StoredSmoke | null,
+  ): Promise<number | null> {
+    const current = await this.cookOf(smoke);
+    if (!current?.meatType) {
+      // Nothing was typed into the pre-smoke form, so no past cook can be
+      // matched to this one and the history read is not worth making.
+      return null;
+    }
+    const completed = await this.smokeModel
+      .find({ status: SmokeStatus.Complete })
+      .exec();
+    const sameMeat = await this.sameMeatCooks(completed, current.meatType);
+    const cooks = await Promise.all(
+      sameMeat.map(async ({ smoke: past, cook }) => ({
+        ...cook,
+        targetTemp: past.targetTemp ?? null,
+        durationMs: await this.getDurationMs(past),
+        startTemp: firstMeatReading(await this.openingReadings(past)),
+      })),
+    );
+    return sampleHistoricalRate(cooks, current);
+  }
+
+  /**
+   * The completed cooks that were of the same meat as the one on the smoker,
+   * with what each was and weighed.
+   *
+   * The pre-smokes come back in a single query rather than one per cook: which
+   * cooks match is decided from them, and the per-cook reads that follow are
+   * then made only for the handful that do.
+   */
+  private async sameMeatCooks(
+    completed: StoredSmoke[],
+    meatType: string,
+  ): Promise<{ smoke: StoredSmoke; cook: CurrentCook }[]> {
+    const preSmokes = await this.preSmokeModel
+      .find({
+        _id: { $in: completed.map((past) => past.preSmokeId).filter(Boolean) },
+      })
+      .exec();
+    const byId = new Map(
+      preSmokes.map((preSmoke) => [String(preSmoke._id), preSmoke]),
+    );
+    return completed
+      .map((past) => ({
+        smoke: past,
+        preSmoke: past.preSmokeId ? byId.get(String(past.preSmokeId)) : null,
+      }))
+      .filter(({ preSmoke }) => isSameMeat(preSmoke?.meatType, meatType))
+      .map(({ smoke: past, preSmoke }) => ({
+        smoke: past,
+        cook: {
+          meatType: preSmoke?.meatType ?? null,
+          weight: preSmoke?.weight?.weight ?? null,
+          weightUnit: preSmoke?.weight?.unit ?? null,
+        },
+      }));
+  }
+
+  /** What a cook was of and what it weighed, from its pre-smoke stage. */
+  private async cookOf(smoke: StoredSmoke | null): Promise<CurrentCook | null> {
+    if (!smoke?.preSmokeId) {
+      return null;
+    }
+    const preSmoke = await this.preSmokeModel.findById(smoke.preSmokeId).exec();
+    return {
+      meatType: preSmoke?.meatType ?? null,
+      weight: preSmoke?.weight?.weight ?? null,
+      weightUnit: preSmoke?.weight?.unit ?? null,
+    };
   }
 
   /** A stored cook's timeline, by id; an unknown id derives nothing. */
@@ -136,6 +414,50 @@ export class TimelineService {
     return edge ? momentOf(edge) : null;
   }
 
+  /**
+   * The opening rows of a cook's series, oldest first — enough of them to find
+   * where the meat started, and no more.
+   *
+   * Bounded twice over: from the cook's start, so the rows recorded while the
+   * meat was still being trimmed are not read at all, and by a row count,
+   * because a whole series is tens of thousands of rows and this is read on a
+   * polled route.
+   */
+  private async openingReadings(
+    smoke: StoredSmoke,
+    from: Date | null = null,
+  ): Promise<TimelineReading[]> {
+    if (!smoke.tempsId) {
+      return [];
+    }
+    return this.tempModel
+      .find({
+        tempsId: smoke.tempsId,
+        date: from ? { $ne: null, $gte: from } : { $ne: null },
+      })
+      .sort({ date: 1 })
+      .limit(OPENING_ROWS)
+      .exec();
+  }
+
+  /**
+   * A cook's readings from `since` onwards, oldest first — the half hour the
+   * climb rate is drawn through, whose size is the window's rather than the
+   * cook's.
+   */
+  private async readingsSince(
+    smoke: StoredSmoke,
+    since: Date,
+  ): Promise<TimelineReading[]> {
+    if (!smoke.tempsId) {
+      return [];
+    }
+    return this.tempModel
+      .find({ tempsId: smoke.tempsId, date: { $ne: null, $gte: since } })
+      .sort({ date: 1 })
+      .exec();
+  }
+
   /** Every reading of a cook, oldest first; none at all when it stored none. */
   private async readings(smoke: {
     tempsId?: string;
@@ -159,6 +481,8 @@ export interface StoredSmoke {
   finishedAt?: Date | null;
   targetTemp?: number | null;
   tempsId?: string;
+  /** The pre-smoke stage carrying what the cook was of, and what it weighed. */
+  preSmokeId?: string;
   status?: SmokeStatus;
 }
 

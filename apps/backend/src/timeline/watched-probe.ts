@@ -1,4 +1,20 @@
-import { ApplicationSettings } from '../appSettings/app-settings.schema';
+import {
+  ApplicationSettings,
+  ProbeTargetEntry,
+} from '../appSettings/app-settings.schema';
+
+/**
+ * The probe the cook is judged by: the first one being watched, in slot order.
+ *
+ * The same choice the finished cook's target snapshot is made from (see
+ * {@link primaryWatchedTarget}) and the same one the settings screen's "ETA"
+ * chip already claims, so the estimate is read off the probe the user was told
+ * it would be read off. `null` when nothing is being watched.
+ */
+export const primaryWatchedProbe = (
+  settings: ApplicationSettings,
+): ProbeTargetEntry | null =>
+  settings.probeTarget.probes.find((probe) => probe.enabled) ?? null;
 
 /**
  * The temperature the cook was being taken to, as one number.
@@ -16,5 +32,4 @@ import { ApplicationSettings } from '../appSettings/app-settings.schema';
  */
 export const primaryWatchedTarget = (
   settings: ApplicationSettings,
-): number | null =>
-  settings.probeTarget.probes.find((probe) => probe.enabled)?.target ?? null;
+): number | null => primaryWatchedProbe(settings)?.target ?? null;

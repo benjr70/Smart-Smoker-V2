@@ -1,4 +1,4 @@
-import { deriveTimeline } from './timeline.derive';
+import { deriveTimeline, probeSeries } from './timeline.derive';
 
 /** A recorded reading, as the temps collection stores one: everything a string. */
 const reading = (
@@ -82,5 +82,66 @@ describe('deriveTimeline', () => {
       peakMeat: null,
       targetTemp: null,
     });
+  });
+});
+
+describe('probeSeries', () => {
+  const started = new Date('2026-08-01T10:00:00.000Z');
+
+  it('reads one probe’s readings from the cook’s start onwards', () => {
+    const series = probeSeries(
+      [
+        reading('2026-08-01T09:00:00.000Z', '200', '68'),
+        reading('2026-08-01T10:30:00.000Z', '250', '110'),
+        reading('2026-08-01T11:30:00.000Z', '250', '140'),
+      ],
+      'probe1',
+      started,
+    );
+
+    expect(series).toEqual([
+      { date: new Date('2026-08-01T10:30:00.000Z'), temp: 110 },
+      { date: new Date('2026-08-01T11:30:00.000Z'), temp: 140 },
+    ]);
+  });
+
+  /**
+   * A probe that is not in the meat reads zero, and zero is not a temperature
+   * this cook took: anchoring the progress bar there would open every cook a
+   * fifth full and read the moment the probe goes in as a hundred-degree climb.
+   */
+  it('leaves out the zeroes an unplugged probe records', () => {
+    const series = probeSeries(
+      [
+        reading('2026-08-01T10:05:00.000Z', '250', '0'),
+        reading('2026-08-01T10:20:00.000Z', '250', '0'),
+        reading('2026-08-01T10:30:00.000Z', '250', '150'),
+        reading('2026-08-01T11:30:00.000Z', '250', '160'),
+      ],
+      'probe1',
+      started,
+    );
+
+    expect(series.map((row) => row.temp)).toEqual([150, 160]);
+  });
+
+  it('reads nothing at all from a probe that never left zero', () => {
+    expect(
+      probeSeries(
+        [reading('2026-08-01T10:05:00.000Z', '250', '0')],
+        'probe1',
+        started,
+      ),
+    ).toEqual([]);
+  });
+
+  it('reads nothing when no probe is named', () => {
+    expect(
+      probeSeries(
+        [reading('2026-08-01T10:05:00.000Z', '250', '90')],
+        null,
+        null,
+      ),
+    ).toEqual([]);
   });
 });
