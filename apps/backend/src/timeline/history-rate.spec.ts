@@ -74,12 +74,10 @@ describe('sampleHistoricalRate', () => {
     });
 
     /**
-     * Two edits is most of a three-letter word: "ham" and "lamb" are two edits
-     * apart and are not the same animal, and a forgiveness that swallows whole
-     * words is not typo tolerance any more.
+     * Three edits apart is a different meat however short the words are: the
+     * forgiveness is a flat two typed characters, not a share of the word.
      */
     it.each([
-      ['Ham', 'Lamb'],
       ['Cod', 'Pork'],
       ['Ribs', 'Rib Roast'],
     ])('reads a short %s as a different meat to %s', (typed, current) => {
@@ -92,7 +90,13 @@ describe('sampleHistoricalRate', () => {
       ).toBeNull();
     });
 
+    /**
+     * The two characters are forgiven whole, on short words as much as long
+     * ones: "Ham" and "Lamb" are exactly two edits apart and so group together,
+     * the same as "Brisket" and "Brskt" do.
+     */
     it.each([
+      ['Ham', 'Lamb'],
       ['Lamb', 'Lam'],
       ['Ribs', 'ribs '],
       ['Chicken', 'Chickn'],

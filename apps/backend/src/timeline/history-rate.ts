@@ -68,27 +68,17 @@ export const isSameMeat = (
   if (left === '' || right === '') {
     return false;
   }
-  return editDistance(left, right) <= allowedDistance(left, right);
+  return editDistance(left, right) <= MEAT_MATCH_DISTANCE;
 };
 
-/** How many typed characters apart two meat descriptions may ever be. */
-export const MEAT_MATCH_DISTANCE = 2;
-
 /**
- * How many typed characters apart *these two* descriptions may be: two, but
- * never more than half of the shorter of them.
+ * How many typed characters apart two meat descriptions may be and still name
+ * the same thing.
  *
- * Two edits is a typo in "brisket" and most of the word in "ham" — which is
- * exactly two edits from "lamb", a different animal that cooks at a different
- * rate. Scaling the forgiveness to the length of what was typed keeps the
- * tolerance the long names need without letting the short ones dissolve into
- * each other.
+ * Flat, rather than a share of the word's length: the tolerance is for the
+ * keyboard, and a keyboard slips as easily in a short word as a long one.
  */
-const allowedDistance = (left: string, right: string): number =>
-  Math.min(
-    MEAT_MATCH_DISTANCE,
-    Math.floor(Math.min(left.length, right.length) / 2),
-  );
+export const MEAT_MATCH_DISTANCE = 2;
 
 /**
  * The Levenshtein distance between two words: how many single-character
