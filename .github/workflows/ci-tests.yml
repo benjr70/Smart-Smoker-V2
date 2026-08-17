@@ -8,10 +8,57 @@ on:
       - 'packages/**'
       - 'package.json'
       - '.github/workflows/**'
+      # For the `lint-config` job below: every eslintrc anywhere in the repo,
+      # plus the suite itself. This is a deliberate superset of the suite's own
+      # repo-wide discovery, so the two cannot drift apart into a config that is
+      # checked locally but never guarded in CI.
+      - '.eslintrc*'
+      - '**/.eslintrc*'
+      - 'scripts/eslint-tsconfig-root.test.sh'
   push:
     branches: [master]
 
 jobs:
+  # Guards the eslint configs against the cwd-relative `parserOptions.project`
+  # bug (#454). CI lints each app from inside its own directory, so a config
+  # that only resolves its tsconfig relative to the process cwd looks healthy in
+  # CI while every local commit touching that app is rejected by the pre-commit
+  # hook (lint-staged runs eslint from the repo root).
+  lint-config:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.7.0'
+
+      - name: Use npm 10
+        run: npm i -g npm@10
+
+      - name: Cache Node Modules
+        uses: actions/cache@v4
+        env:
+          cache-name: cache-node-modules
+        with:
+          path: |
+            node_modules
+            */*/node_modules
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+            ${{ runner.os }}-build-
+
+      # The behavioral half of the suite runs the real eslint binary, so the
+      # workspace install is required (--legacy-peer-deps per repo convention).
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Run eslint config suite
+        run: bash scripts/eslint-tsconfig-root.test.sh
+
   # Run tests for all applications
   test-apps:
     uses: ./.github/workflows/test.yml

@@ -2,6 +2,10 @@ module.exports = {
   parser: '@typescript-eslint/parser',
   parserOptions: {
     project: 'tsconfig.json',
+    // Resolve `project` against this config's directory rather than the
+    // process cwd, so linting works when eslint is invoked from the repo root
+    // (e.g. lint-staged in the pre-commit hook) as well as from inside the app.
+    tsconfigRootDir: __dirname,
     sourceType: 'module',
   },
   plugins: ['@typescript-eslint/eslint-plugin'],
