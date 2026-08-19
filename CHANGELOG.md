@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.9.0](https://github.com/benjr70/Smart-Smoker-V2/compare/v1.8.0...v1.9.0) (2026-08-17)
+
+
+### Features
+
+* **backend:** estimate when the running cook will be done ([#521](https://github.com/benjr70/Smart-Smoker-V2/issues/521)) ([78ea547](https://github.com/benjr70/Smart-Smoker-V2/commit/78ea5476a9ec5bd7c24fc6c1a0c3e56a479f0106))
+* **frontend:** show when the running cook will be done ([#522](https://github.com/benjr70/Smart-Smoker-V2/issues/522)) ([32596b1](https://github.com/benjr70/Smart-Smoker-V2/commit/32596b1597f8b674f7e793700f70296b30f206cd))
+* **smoker:** show when the running cook will be done on the top bar ([#523](https://github.com/benjr70/Smart-Smoker-V2/issues/523)) ([1b067bf](https://github.com/benjr70/Smart-Smoker-V2/commit/1b067bfc18d8488f13671a7842f1c8ff782221ad))
+
+
+### Bug Fixes
+
+* **backend:** resolve eslint parserOptions.project against the config dir ([#519](https://github.com/benjr70/Smart-Smoker-V2/issues/519)) ([127232a](https://github.com/benjr70/Smart-Smoker-V2/commit/127232a6b36938d023e8457a00d66611cd6fefa4))
+
 ## [1.8.0](https://github.com/benjr70/Smart-Smoker-V2/compare/v1.7.0...v1.8.0) (2026-08-16)
 
 
