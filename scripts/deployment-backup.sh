@@ -19,15 +19,22 @@ echo "=========================================="
 # Create backup directory (persistent location with fallback)
 mkdir -p "${BACKUP_DIR}"
 
+# Cleanup old backups BEFORE creating the new one — the docker save below
+# needs the disk space now, not after the backup completes (keep last 2)
+echo "Cleaning up old backups (keeping last 2)..."
+(cd "${BACKUP_BASE_DIR}" && ls -dt backup-* 2>/dev/null | grep -v "backup-${TIMESTAMP}" | tail -n +3 | xargs rm -rf 2>/dev/null) || true
+
 echo "Creating pre-deployment backup in: ${BACKUP_DIR}"
 
 # Save current Docker image information
 echo "Saving current Docker image information..."
 docker images --format "{{.ID}}|{{.Repository}}:{{.Tag}}|{{.CreatedAt}}" | grep "benjr70/smart-smoker" > "${BACKUP_DIR}/image-info.txt" || echo "No images found"
 
-# Save actual image layers for rollback
+# Save actual image layers for rollback — only the images the RUNNING
+# containers use; saving every historical tag balloons the tarball and
+# has filled the disk before
 echo "Saving Docker images..."
-IMAGES=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep "benjr70/smart-smoker" || echo "")
+IMAGES=$(docker ps --format "{{.Image}}" | grep "benjr70/smart-smoker" | sort -u | tr '\n' ' ' || echo "")
 if [ -n "$IMAGES" ]; then
     docker save $IMAGES | gzip > "${BACKUP_DIR}/docker-images.tar.gz"
     BACKUP_SIZE=$(du -sh "${BACKUP_DIR}/docker-images.tar.gz" | cut -f1)
@@ -87,11 +94,6 @@ EOF
 
 # Record backup location for rollback script (persistent location)
 echo "${BACKUP_DIR}" > "${BACKUP_BASE_DIR}/last-deployment-backup.txt"
-
-# Cleanup old backups (keep last 5)
-echo "Cleaning up old backups (keeping last 5)..."
-cd "${BACKUP_BASE_DIR}"
-ls -dt backup-* 2>/dev/null | tail -n +6 | xargs rm -rf 2>/dev/null || true
 
 echo "✅ Backup created successfully: ${BACKUP_DIR}"
 echo "Backup location saved to: ${BACKUP_BASE_DIR}/last-deployment-backup.txt"
