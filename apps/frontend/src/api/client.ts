@@ -240,11 +240,14 @@ export interface SmokeResource {
   getAll(): Promise<Smoke[]>;
   /** POST `smoke/finish` — finalize the current smoke. */
   finish(): Promise<Smoke>;
-  /** DELETE `smoke/:id` — remove a stored smoke and everything under it. */
-  deleteById(id: string): Promise<void>;
   /**
    * Delete a smoke and its five child records: one DELETE `smoke/:id`, which
    * the backend answers by removing the children before the smoke itself.
+   *
+   * This is the only way to delete a smoke, and it is named for what it does:
+   * the route is deep, so there is no shallow parent-only delete to offer (a
+   * `deleteById` beside it, shallow as it is on every other resource, would
+   * read as one and take the whole cook with it).
    *
    * The ordering that makes the operation retryable — children first, parent
    * last, so a failure never orphans anything — is the server's now; it used to
@@ -729,9 +732,6 @@ export const createApiClient = (
     getById: (id: string) => transport.get<Smoke>(`smoke/${id}`),
     getAll: () => transport.get<Smoke[]>('smoke/all'),
     finish: () => transport.post<Smoke>('smoke/finish'),
-    deleteById: async (id: string) => {
-      await transport.delete<void>(`smoke/${id}`);
-    },
     deleteCascade: async (id: string) => {
       // One request: the backend's delete route removes the cook's five
       // children before the cook itself. Ordering the cascade from here meant

@@ -6,6 +6,7 @@ import { Smoke, SmokeDocument, SmokeStatus } from './smoke.schema';
 import { SmokeDto } from './smokeDto';
 import { StateService } from '../State/state.service';
 import { TimelineService } from '../timeline/timeline.service';
+import { tempSeriesFilter } from '../temps/temp-series.filter';
 
 @Injectable()
 export class SmokeService extends BaseService<SmokeDocument> {
@@ -72,14 +73,15 @@ export class SmokeService extends BaseService<SmokeDocument> {
   }
 
   /**
-   * Temps are a series, not a document: every reading of the cook carries the
-   * same `tempsId`, so the whole series is removed by that shared id.
+   * Temps are a series, not a document: the readings of the cook are removed
+   * together, by the id they share and by the first reading that id came from
+   * (see {@link tempSeriesFilter}).
    */
   private async deleteTempSeries(tempsId?: string): Promise<void> {
     if (!tempsId) {
       return;
     }
-    await this.tempModel.deleteMany({ tempsId }).exec();
+    await this.tempModel.deleteMany(tempSeriesFilter(tempsId)).exec();
   }
 
   /**

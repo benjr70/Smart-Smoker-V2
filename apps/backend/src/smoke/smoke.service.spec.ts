@@ -7,6 +7,8 @@ import { SmokeDto } from './smokeDto';
 import { StateService } from '../State/state.service';
 import { TimelineService } from '../timeline/timeline.service';
 import { createMockModel } from '../common/testing/create-mock-model';
+import { Types } from 'mongoose';
+import { tempSeriesFilter } from '../temps/temp-series.filter';
 
 describe('SmokeService', () => {
   let service: SmokeService;
@@ -284,10 +286,28 @@ describe('SmokeService', () => {
 
       await service.deleteDeep('test-smoke-id');
 
-      expect(mockTempModel.deleteMany).toHaveBeenCalledWith({
-        tempsId: 'temps-id',
-      });
+      expect(mockTempModel.deleteMany).toHaveBeenCalledWith(
+        tempSeriesFilter('temps-id'),
+      );
       expect(mockTempModel.deleteOne).not.toHaveBeenCalled();
+    });
+
+    /**
+     * The reading the series is named after carries no `tempsId` of its own, so
+     * a cascade that matched the id alone would leave one orphan per cook.
+     */
+    it('removes the first reading of the series along with the rest', async () => {
+      const seriesId = new Types.ObjectId().toString();
+      jest.spyOn(service, 'getById').mockResolvedValue({
+        ...mockSmokeDocument,
+        tempsId: seriesId,
+      } as unknown as SmokeDocument);
+
+      await service.deleteDeep('test-smoke-id');
+
+      expect(mockTempModel.deleteMany).toHaveBeenCalledWith({
+        $or: [{ tempsId: seriesId }, { _id: seriesId }],
+      });
     });
 
     it('deletes what a legacy smoke does have when child ids are missing', async () => {

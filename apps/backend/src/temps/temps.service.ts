@@ -4,6 +4,7 @@ import { Model } from 'mongoose';
 import { BaseService } from '../common/base.service';
 import { CurrentSmokeService } from '../common/current-smoke.service';
 import { TempDto } from './tempDto';
+import { tempSeriesFilter } from './temp-series.filter';
 import { Temp, TempDocument } from './temps.schema';
 
 @Injectable()
@@ -92,9 +93,10 @@ export class TempsService extends BaseService<TempDocument> {
 
   /**
    * Temps are addressed by their shared `tempsId` (a smoke's temp series), not
-   * by `_id` — so this overrides the by-id `delete` from BaseService.
+   * by `_id` — so this overrides the by-id `delete` from BaseService. The whole
+   * series goes, first reading included; see {@link tempSeriesFilter}.
    */
   async delete(id: string) {
-    return this.model.deleteMany({ tempsId: id });
+    return this.model.deleteMany(tempSeriesFilter(id));
   }
 }

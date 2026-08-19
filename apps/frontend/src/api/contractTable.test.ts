@@ -397,8 +397,10 @@ const rows: ContractRow[] = [
     expected: { method: 'post', path: 'smoke/finish', body: undefined },
   },
   {
-    name: 'smoke.deleteById → DELETE smoke/:id (deep delete)',
-    run: c => c.smoke.deleteById('smoke-1'),
+    // The route is a deep delete, so the client's only smoke delete is the
+    // cascade; there is no shallow `deleteById` on this resource.
+    name: 'smoke.deleteCascade → DELETE smoke/:id (deep delete)',
+    run: c => c.smoke.deleteCascade('smoke-1'),
     expected: { method: 'delete', path: 'smoke/smoke-1', body: undefined },
   },
   // timeline
@@ -432,6 +434,22 @@ describe('endpoint-contract table — method + exact legacy path (+ projected wr
 });
 
 describe('endpoint-contract table — aggregate operations emit the full path set', () => {
+  /**
+   * DELETE `smoke/:id` is a deep delete, and there is no shallow one behind it.
+   * A second, plainly-named `deleteById` sitting beside the cascade — shallow on
+   * all five other resources — would read as the way to drop the parent alone
+   * and would quietly take the cook's whole record with it.
+   */
+  test('the smoke resource offers one delete, and its name says the delete is deep', () => {
+    const client = createApiClient(fullySeededBackend());
+
+    const deleteOperations = Object.keys(client.smoke).filter(name =>
+      name.toLowerCase().includes('delete')
+    );
+
+    expect(deleteOperations).toEqual(['deleteCascade']);
+  });
+
   test('smoke.deleteCascade emits exactly one delete of the parent path', async () => {
     const backend = fullySeededBackend();
     const client = createApiClient(backend);
