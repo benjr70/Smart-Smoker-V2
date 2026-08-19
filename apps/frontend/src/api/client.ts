@@ -240,15 +240,17 @@ export interface SmokeResource {
   getAll(): Promise<Smoke[]>;
   /** POST `smoke/finish` — finalize the current smoke. */
   finish(): Promise<Smoke>;
-  /** DELETE `smoke/:id` — remove a stored smoke parent record only. */
+  /** DELETE `smoke/:id` — remove a stored smoke and everything under it. */
   deleteById(id: string): Promise<void>;
   /**
-   * Ordered cascade delete replacing the buggy legacy orchestration. The parent
-   * is fetched first (a typed {@link ApiError} propagates if it is missing —
-   * zero deletes are issued), then the five child records are deleted, and the
-   * parent is deleted **last**. A failure anywhere in the cascade rejects with
-   * the typed error and leaves the parent record intact: the operation is
-   * retryable and can never orphan child records.
+   * Delete a smoke and its five child records: one DELETE `smoke/:id`, which
+   * the backend answers by removing the children before the smoke itself.
+   *
+   * The ordering that makes the operation retryable — children first, parent
+   * last, so a failure never orphans anything — is the server's now; it used to
+   * be six requests issued from here, which made every network hiccup between
+   * them a way to end up half-deleted. A failure rejects with the typed
+   * {@link ApiError} and the same call can simply be made again.
    */
   deleteCascade(id: string): Promise<void>;
   /**
@@ -731,19 +733,9 @@ export const createApiClient = (
       await transport.delete<void>(`smoke/${id}`);
     },
     deleteCascade: async (id: string) => {
-      // Fetch the parent first: a missing parent throws the typed ApiError here,
-      // before any delete is issued.
-      const smoke = await transport.get<Smoke>(`smoke/${id}`);
-      // Delete the five children (in parallel); any rejection propagates and the
-      // parent delete below is never reached, so the parent survives.
-      await Promise.all([
-        transport.delete<void>(`presmoke/${smoke.preSmokeId}`),
-        transport.delete<void>(`smokeProfile/${smoke.smokeProfileId}`),
-        transport.delete<void>(`temps/${smoke.tempsId}`),
-        transport.delete<void>(`postSmoke/${smoke.postSmokeId}`),
-        transport.delete<void>(`ratings/${smoke.ratingId}`),
-      ]);
-      // Parent last, so a partial cascade can be retried without orphaning.
+      // One request: the backend's delete route removes the cook's five
+      // children before the cook itself. Ordering the cascade from here meant
+      // six round trips any of which could be the last one to arrive.
       await transport.delete<void>(`smoke/${id}`);
     },
     getReview: async (id: string): Promise<SmokeReview> => {

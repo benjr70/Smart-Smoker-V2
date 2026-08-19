@@ -147,14 +147,14 @@ describe('useHistory', () => {
     expect(result.current.history.map(row => row.smokeId)).toEqual(['smoke-2']);
   });
 
-  test('a mid-cascade delete failure raises the snackbar and leaves the parent in the refreshed list', async () => {
+  test('a failed delete raises the snackbar and leaves the smoke in the refreshed list', async () => {
     const backend = createFakeBackend({
       history: [historyRow('smoke-1', 'Brisket'), historyRow('smoke-2', 'Pork')],
       smoke: { records: { 'smoke-1': smokeAggregate('smoke-1') } },
     });
-    // A child delete fails: the client deletes the parent last, so the parent
-    // (and its history row) survives and the operation stays retryable.
-    backend.injectFault({ method: 'delete', path: 'presmoke/pre-smoke-1', status: 500 });
+    // The one delete the removal issues fails, so nothing was removed and the
+    // smoke (with its history row) is still there to be deleted again.
+    backend.injectFault({ method: 'delete', path: 'smoke/smoke-1', status: 500 });
 
     const wrapper = ({ children }: { children: React.ReactNode }) => (
       <ApiClientProvider client={createApiClient(backend)}>

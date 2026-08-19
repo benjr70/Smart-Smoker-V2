@@ -29,6 +29,7 @@ describe('SmokeController', () => {
         .mockResolvedValue({ ...mockSmoke, status: SmokeStatus.Complete }),
       getByIdOrThrow: jest.fn().mockResolvedValue(mockSmoke),
       delete: jest.fn().mockResolvedValue({ deletedCount: 1 }),
+      deleteDeep: jest.fn().mockResolvedValue({ deletedCount: 1 }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -82,12 +83,14 @@ describe('SmokeController', () => {
   });
 
   describe('DeleteById', () => {
-    it('should delete smoke by id', async () => {
+    it('deletes the smoke and everything recorded about it', async () => {
       const id = 'test-id';
 
       const result = await controller.DeleteById(id);
 
-      expect(mockSmokeService.delete).toHaveBeenCalledWith(id);
+      expect(mockSmokeService.deleteDeep).toHaveBeenCalledWith(id);
+      // The shallow single-document delete would leave the children orphaned.
+      expect(mockSmokeService.delete).not.toHaveBeenCalled();
       expect(result).toEqual({ deletedCount: 1 });
     });
   });

@@ -339,6 +339,10 @@ describe('History', () => {
     expect(screen.getByRole('heading', { name: 'Pork' })).toBeInTheDocument();
     expect(backend.store.smoke.records['smoke-1']).toBeUndefined();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    // Removing a cook is one request: the backend deletes what hung off it.
+    expect(backend.requests.filter(request => request.method === 'delete')).toEqual([
+      { method: 'delete', path: 'smoke/smoke-1', body: undefined },
+    ]);
   });
 
   test('declining the confirmation leaves the smoke where it was', async () => {
@@ -362,7 +366,7 @@ describe('History', () => {
       history: [historyRow('smoke-1', 'Brisket')],
       smoke: { records: { 'smoke-1': smokeAggregate('smoke-1') } },
     });
-    backend.injectFault({ method: 'delete', path: 'presmoke/pre-smoke-1', status: 500 });
+    backend.injectFault({ method: 'delete', path: 'smoke/smoke-1', status: 500 });
 
     renderHistory(backend);
 

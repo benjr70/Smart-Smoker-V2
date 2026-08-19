@@ -581,10 +581,24 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
         return clone(record);
       }
       if (method === 'delete' && id !== undefined) {
+        const record = store.smoke.records[id];
+        // The route is a deep delete: an unknown smoke is a 404 and removes
+        // nothing, exactly as the backend's `getByIdOrThrow` makes it.
+        if (!record) {
+          throw new ApiError({ status: 404, path, method });
+        }
+        // The cook's five children go first, then the cook — the backend's
+        // ordering, mirrored so a delete here leaves the same store behind.
+        // Absent child ids (legacy records) remove nothing and fail nothing.
+        delete store.preSmoke.records[record.preSmokeId];
+        delete store.smokeProfile.records[record.smokeProfileId];
+        delete store.temps.records[record.tempsId];
+        delete store.postSmoke.records[record.postSmokeId];
+        delete store.ratings.records[record.ratingId];
         delete store.smoke.records[id];
         // History is a derived read-model on the real backend, so deleting a
-        // smoke removes its history row too; mirror that here so a cascade
-        // delete is reflected in the refreshed list.
+        // smoke removes its history row too; mirror that here so the delete is
+        // reflected in the refreshed list.
         store.history = store.history.filter(row => row.smokeId !== id);
         return {};
       }
