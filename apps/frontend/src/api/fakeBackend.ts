@@ -240,15 +240,15 @@ const fakeTotal = (values: (number | null)[]): number | null => {
 };
 
 /**
- * `01:30` and a half-typed `2` — the two shapes the wizard's masked `HH:MM`
- * field produces. A bare number is hours, as the mask's leading digits are;
- * anything else is a rest nobody recorded.
+ * `01:30` and a bare `30` — the two shapes the wizard's masked `HH:MM` field
+ * produces. A bare number is minutes, as the backend reads it; anything else
+ * is a rest nobody recorded, and rests for no time.
  */
-const restMs = (restTime: string | undefined): number | null => {
+const restMs = (restTime: string | undefined): number => {
   const written = (restTime ?? '').trim();
   const colon = /^(\d{1,3}):([0-5]?\d)$/.exec(written);
   if (colon) return (Number(colon[1]) * 60 + Number(colon[2])) * 60_000;
-  return /^\d+(\.\d+)?$/.test(written) ? Number(written) * 3_600_000 : null;
+  return /^\d+(\.\d+)?$/.test(written) ? Number(written) * 60_000 : 0;
 };
 
 /** Case-folded grouping, most-used first, under the most frequent spelling. */

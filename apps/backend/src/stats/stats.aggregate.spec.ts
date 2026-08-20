@@ -123,14 +123,12 @@ describe('aggregateStats', () => {
       ['spelled-out hours', '2 hours', 120 * MINUTE],
       ['minutes on their own', '45m', 45 * MINUTE],
       ['spelled-out minutes', '45 minutes', 45 * MINUTE],
-      // The wizard's field is masked `HH:MM`, so the digits somebody stops
-      // typing after are the hours they got as far as — `2` is two hours.
-      ['a bare number is the hours of a half-typed mask', '2', 2 * 60 * MINUTE],
-      ['a bare decimal number is hours too', '1.5', 90 * MINUTE],
+      ['a bare number is minutes', '30', 30 * MINUTE],
+      ['a bare decimal number is minutes too', '1.5', 1.5 * MINUTE],
       ['hours alone with a suffix', '3h', 180 * MINUTE],
-      ['nothing was written', '', null],
-      ['nothing was recorded at all', null, null],
-      ['what was written makes no sense', 'a while', null],
+      ['nothing was written', '', 0],
+      ['nothing was recorded at all', null, 0],
+      ['what was written makes no sense', 'a while', 0],
     ];
 
     it.each(rests)('%s', (_case, restTime, restMs) => {
@@ -147,13 +145,13 @@ describe('aggregateStats', () => {
       expect(stats.totalRestMs).toBe(90 * MINUTE);
     });
 
-    it('admits no rest is on record rather than reporting no rest was taken', () => {
+    it('totals no rest when nothing legible was ever written down', () => {
       const stats = aggregateStats([
         cook({ smokeId: 'a', restTime: '' }),
         cook({ smokeId: 'b', restTime: 'a while' }),
       ]);
 
-      expect(stats.totalRestMs).toBeNull();
+      expect(stats.totalRestMs).toBe(0);
       expect(stats.totalSessions).toBe(2);
     });
   });

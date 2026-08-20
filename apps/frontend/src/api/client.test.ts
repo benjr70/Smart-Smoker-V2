@@ -1459,7 +1459,7 @@ describe('stats client — archive read', () => {
     expect(backend.requests).toContainEqual({ method: 'get', path: 'stats', body: undefined });
   });
 
-  test('a cook nobody weighed or rested leaves those figures unrecorded', async () => {
+  test('a cook nobody weighed leaves the weight unrecorded and the rest at zero', async () => {
     const backend = createFakeBackend({
       smoke: {
         all: [
@@ -1485,7 +1485,7 @@ describe('stats client — archive read', () => {
     expect(stats.totalSessions).toBe(1);
     expect(stats.totalPounds).toBeNull();
     expect(stats.approximateServings).toBeNull();
-    expect(stats.totalRestMs).toBeNull();
+    expect(stats.totalRestMs).toBe(0);
   });
 
   test('an archive with nothing completed in it reads as no sessions at all', async () => {

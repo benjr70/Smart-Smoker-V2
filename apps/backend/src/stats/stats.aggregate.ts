@@ -97,25 +97,24 @@ const SUFFIXED_REST =
 const BARE_REST = /^\d+(?:\.\d+)?$/;
 
 /**
- * How long a cook rested, in milliseconds, or `null` when the record does not
- * say — from whatever was typed into a free text box.
+ * How long a cook rested, in milliseconds, from whatever was typed into a free
+ * text box.
  *
  * The field has never been validated, so the archive holds every shape a person
  * reaches for: the wizard's `01:30`, `1h 30m`, `2 hours`, `45m`, and — often —
- * a bare number, which is read as *hours*. That is what the field that produced
- * it means: the rest is typed into a mask of `HH:MM`, so the digits somebody
- * stops after are the hours they got as far as, and a `2` left in the box is
- * two hours rather than the two minutes no one rests a brisket for.
+ * a bare number, which is read as *minutes*. A rest is the short tail of a cook
+ * that is measured in hours, so the unit a lone number is most likely to have
+ * been meant in is the smaller one, and reading it as hours would inflate a
+ * lifetime total by whole days on the strength of a guess.
  *
- * Anything else says nothing about how long the cook rested, and is answered
- * with `null` rather than with a zero: a phrase that names no length cannot be
- * guessed into one, and a cook whose rest was never written down did not rest
- * for no time.
+ * A rest that says nothing — blank, or a phrase that names no length — counts
+ * as no rest rather than as an unknown: the statistic is a lifetime sum, and a
+ * sum is not made more honest by dropping the cooks it cannot read.
  */
-export const parseRestMs = (restTime: string | null): number | null => {
+export const parseRestMs = (restTime: string | null): number => {
   const written = (restTime ?? '').trim().toLowerCase();
   if (written === '') {
-    return null;
+    return 0;
   }
 
   const colon = COLON_REST.exec(written);
@@ -124,7 +123,7 @@ export const parseRestMs = (restTime: string | null): number | null => {
   }
 
   if (BARE_REST.test(written)) {
-    return Number(written) * HOUR_MS;
+    return Number(written) * MINUTE_MS;
   }
 
   const suffixed = SUFFIXED_REST.exec(written);
@@ -134,7 +133,7 @@ export const parseRestMs = (restTime: string | null): number | null => {
     );
   }
 
-  return null;
+  return 0;
 };
 
 /** The sum of the numbers there are, or `null` when there are none. */
@@ -369,11 +368,10 @@ export function aggregateStats(records: CookRecord[]): StatsDto {
       .map(weighedPounds)
       .filter((pounds): pounds is number => pounds !== null),
   );
-  const restMs = total(
-    cooks
-      .map((cook) => parseRestMs(cook.restTime))
-      .filter((ms): ms is number => ms !== null),
-  );
+  // Every cook contributes: one that recorded no rest contributes nothing, so
+  // an archive nobody wrote a rest into totals zero rather than admitting it
+  // does not know — the rests it can read are still the whole of the answer.
+  const restMs = total(cooks.map((cook) => parseRestMs(cook.restTime)));
   const meats = tally(cooks, (cook) => cook.meatType);
   const woods = tally(cooks, (cook) => cook.woodType);
 
