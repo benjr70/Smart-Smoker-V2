@@ -39,6 +39,9 @@ jest.mock('./components/history/history', () => ({
 jest.mock('./components/settings/settings', () => ({
   Settings: () => <div data-testid="settings-component" />,
 }));
+jest.mock('./components/stats/stats', () => ({
+  Stats: () => <div data-testid="stats-component" />,
+}));
 
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
@@ -53,7 +56,7 @@ const destination = (name: string): HTMLElement => screen.getByRole('button', { 
 
 /** What the bar is lighting, as a list, the way a person reading it would. */
 const litDestinations = (): string[] =>
-  ['Smoke', 'History', 'Settings'].filter(name =>
+  ['Smoke', 'History', 'Stats', 'Settings'].filter(name =>
     destination(name).classList.contains('Mui-selected')
   );
 
@@ -96,6 +99,16 @@ describe('the destination the bottom bar lights', () => {
 
     expect(screen.getByTestId('settings-component')).toBeInTheDocument();
     expect(litDestinations()).toEqual(['Settings']);
+  });
+
+  it('takes the user to the stats and lights the tab that names them', () => {
+    render(<App />);
+
+    fireEvent.click(destination('Stats'));
+
+    expect(screen.getByTestId('stats-component')).toBeInTheDocument();
+    expect(screen.queryByTestId('smoke-component')).not.toBeInTheDocument();
+    expect(litDestinations()).toEqual(['Stats']);
   });
 
   it('goes back to lighting Smoke when the user taps back', () => {

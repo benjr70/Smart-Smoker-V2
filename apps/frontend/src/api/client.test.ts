@@ -3,7 +3,15 @@
  * the sync-query rule's name heuristic mis-fires on it.
  */
 /* eslint-disable testing-library/no-await-sync-query */
-import { NotificationSettings, Smoke, SmokeHistory, SmokeProfile, TempData, rating } from './types';
+import {
+  NotificationSettings,
+  PreSmoke,
+  Smoke,
+  SmokeHistory,
+  SmokeProfile,
+  TempData,
+  rating,
+} from './types';
 import { createApiClient } from './client';
 import { NO_CURRENT_TIMELINE, createFakeBackend } from './fakeBackend';
 import { ApiError } from 'api-transport/src';
@@ -1379,5 +1387,95 @@ describe('timeline client — the cook clock', () => {
       startTemp: null,
       targetTemp: null,
     });
+  });
+});
+
+describe('stats client — archive read', () => {
+  test('resolves statistics derived from the fixtures the backend holds', async () => {
+    const backend = createFakeBackend({
+      smoke: {
+        all: [
+          {
+            preSmokeId: 'pre-1',
+            smokeProfileId: 'prof-1',
+            postSmokeId: 'post-1',
+            ratingId: 'rate-1',
+            tempsId: 'temps-1',
+            date: new Date('2026-04-20T12:00:00Z'),
+            status: 1,
+            _id: 'smoke-1',
+          } as Smoke,
+        ],
+      },
+      preSmoke: {
+        records: {
+          'pre-1': {
+            name: 'Sunday brisket',
+            meatType: 'Brisket',
+            weight: { weight: 12, unit: 'LB' },
+            steps: [],
+            notes: '',
+          } as unknown as PreSmoke,
+        },
+      },
+      smokeProfile: { records: { 'prof-1': { woodType: 'Hickory' } } },
+      postSmoke: {
+        records: { 'post-1': { restTime: '01:30', steps: [], notes: '' } },
+      },
+      ratings: {
+        records: {
+          'rate-1': {
+            smokeFlavor: 8,
+            seasoning: 7,
+            tenderness: 9,
+            overallTaste: 8,
+            notes: '',
+          },
+        },
+      },
+      timeline: {
+        records: {
+          'smoke-1': {
+            startedAt: '2026-04-20T06:00:00.000Z',
+            finishedAt: '2026-04-20T14:00:00.000Z',
+            durationMs: 8 * 60 * 60 * 1000,
+            peakChamber: 265,
+            peakMeat: 203,
+            targetTemp: 203,
+          },
+        },
+      },
+    });
+
+    const stats = await createApiClient(backend).stats.get();
+
+    expect(stats.totalSessions).toBe(1);
+    expect(stats.totalPounds).toBe(12);
+    expect(stats.totalCookMs).toBe(8 * 60 * 60 * 1000);
+    expect(stats.totalRestMs).toBe(90 * 60 * 1000);
+    expect(stats.averageRating).toBe(8);
+    expect(stats.byMeat).toEqual([{ meatType: 'Brisket', sessions: 1, pounds: 12 }]);
+    expect(stats.byWood).toEqual([{ woodType: 'Hickory', sessions: 1 }]);
+    expect(backend.requests).toContainEqual({ method: 'get', path: 'stats', body: undefined });
+  });
+
+  test('an archive with nothing completed in it reads as no sessions at all', async () => {
+    const stats = await createApiClient(createFakeBackend()).stats.get();
+
+    expect(stats.totalSessions).toBe(0);
+    expect(stats.totalPounds).toBeNull();
+    expect(stats.byMeat).toEqual([]);
+  });
+
+  test('rejects with the typed ApiError on failure', async () => {
+    const backend = createFakeBackend();
+    backend.injectFault({ method: 'get', path: 'stats', status: 503 });
+
+    const error = (await createApiClient(backend)
+      .stats.get()
+      .catch(e => e)) as ApiError;
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.status).toBe(503);
   });
 });

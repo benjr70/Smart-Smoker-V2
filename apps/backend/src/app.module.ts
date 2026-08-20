@@ -22,6 +22,7 @@ import { EventsModule } from './websocket/events.module';
 import { ConfigModule } from '@nestjs/config';
 import { RatingsModel } from './ratings/ratings.module';
 import { HistoryModule } from './history/history.module';
+import { StatsModule } from './stats/stats.module';
 import { LoggerMiddleware } from './logger.middleware';
 import { NotificationsModule } from './notifications/notifications.module';
 import { HealthModule } from './health/health.module';
@@ -51,6 +52,7 @@ console.log(process.env.NODE_ENV);
     PostSmokeModule,
     RatingsModel,
     HistoryModule,
+    StatsModule,
     TimelineModule,
     NotificationsModule,
     HealthModule,

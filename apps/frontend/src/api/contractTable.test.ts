@@ -418,6 +418,12 @@ const rows: ContractRow[] = [
     run: c => c.history.list(),
     expected: { method: 'get', path: 'history', body: undefined },
   },
+  // stats
+  {
+    name: 'stats.get → GET stats',
+    run: c => c.stats.get(),
+    expected: { method: 'get', path: 'stats', body: undefined },
+  },
 ];
 
 describe('endpoint-contract table — method + exact legacy path (+ projected write body)', () => {

@@ -13,6 +13,7 @@ export type {
   CompletionEstimate,
   CompletionState,
   CurrentSmokeTimeline,
+  MeatStat,
   NotificationSettings,
   PostSmoke,
   PreSmoke,
@@ -26,9 +27,12 @@ export type {
   SmokeReview,
   SmokeTimeline,
   State,
+  StatRecord,
+  Stats,
   TargetPresets,
   TargetSource,
   TempData,
+  WoodStat,
   rating,
 } from './types';
 export type { FaultInjection, HttpMethod, RecordedRequest, TransportPort } from 'api-transport/src';
@@ -49,6 +53,7 @@ export type {
   SmokeProfileResource,
   SmokeResource,
   StateResource,
+  StatsResource,
   TempsResource,
   TimelineResource,
 } from './client';
@@ -67,3 +72,5 @@ export type { UseHistoryResult } from './useHistory';
 export { useHistory } from './useHistory';
 export type { UseReviewResult } from './useReview';
 export { useReview } from './useReview';
+export type { StatsStatus, UseStatsResult } from './useStats';
+export { useStats } from './useStats';

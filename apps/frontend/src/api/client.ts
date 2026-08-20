@@ -29,6 +29,7 @@ import {
   SmokeReview,
   SmokeTimeline,
   State,
+  Stats,
   TargetPresets,
   TempData,
   rating,
@@ -285,6 +286,17 @@ export interface HistoryResource {
   list(): Promise<SmokeHistory[]>;
 }
 
+export interface StatsResource {
+  /**
+   * GET `stats` — the lifetime statistics of the archive, already derived.
+   *
+   * Nothing is computed on this side: every normalization rule (pounds,
+   * free-text rest, folded spellings, which cook holds a record) lives in one
+   * place on the backend, so the screen and any other reader cannot drift.
+   */
+  get(): Promise<Stats>;
+}
+
 export interface ApiClient {
   temps: TempsResource;
   smokeProfile: SmokeProfileResource;
@@ -297,6 +309,7 @@ export interface ApiClient {
   smoke: SmokeResource;
   timeline: TimelineResource;
   history: HistoryResource;
+  stats: StatsResource;
 }
 
 /**
@@ -798,6 +811,9 @@ export const createApiClient = (
   },
   history: {
     list: () => transport.get<SmokeHistory[]>('history'),
+  },
+  stats: {
+    get: () => transport.get<Stats>('stats'),
   },
 });
 

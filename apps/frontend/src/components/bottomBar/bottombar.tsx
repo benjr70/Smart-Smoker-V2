@@ -3,7 +3,7 @@ import './bottomBar.style.css';
 import BottomNavigation from '@mui/material/BottomNavigation';
 import BottomNavigationAction from '@mui/material/BottomNavigationAction';
 import { Box, Grid } from '@mui/material';
-import { FlameIcon, HistoryIcon, SettingsIcon } from '../common/components/DesignIcons';
+import { FlameIcon, HistoryIcon, SettingsIcon, StatsIcon } from '../common/components/DesignIcons';
 import { Screens } from '../common/interfaces/enums';
 
 /**
@@ -25,19 +25,19 @@ interface buttonBarProps {
   currentScreen: Screens;
   smokeOnClick: any;
   historyOnClick: any;
+  statsOnClick: any;
   settingsOnClick: any;
 }
 
 /**
- * The three destinations, in the order the design puts them, each with the
+ * The four destinations, in the order the design puts them, each with the
  * screen it leads to — which is also how the bar recognises the screen in
- * effect as one of its own. The design draws a fourth — Stats — which is
- * deliberately not built (see the parent PRD's carve-outs), so it is not
- * offered here either: a tab leading nowhere is worse than an absent one.
+ * effect as one of its own.
  */
 const destinations = [
   { label: 'Smoke', icon: <FlameIcon />, testId: 'nav-smoke', screen: Screens.HOME },
   { label: 'History', icon: <HistoryIcon />, testId: 'nav-history', screen: Screens.HISTORY },
+  { label: 'Stats', icon: <StatsIcon />, testId: 'nav-stats', screen: Screens.STATS },
   { label: 'Settings', icon: <SettingsIcon />, testId: 'nav-settings', screen: Screens.SETTINGS },
 ] as const;
 
@@ -47,7 +47,15 @@ export function BottomBar(props: buttonBarProps) {
   // which is what the index of a screen that is not here comes to.
   const value = destinations.findIndex(destination => destination.screen === props.currentScreen);
 
-  const handlers = [props.smokeOnClick, props.historyOnClick, props.settingsOnClick];
+  // In the same order as the destinations above: what the bar reports is a
+  // position, and these two lists drifting apart is a tab that goes somewhere
+  // else entirely.
+  const handlers = [
+    props.smokeOnClick,
+    props.historyOnClick,
+    props.statsOnClick,
+    props.settingsOnClick,
+  ];
 
   return (
     <>

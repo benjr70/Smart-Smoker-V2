@@ -345,3 +345,71 @@ export interface PushSubscriptionPayload {
     auth: string;
   };
 }
+
+/**
+ * One personal record: the cook that holds it, and the number it holds it with.
+ *
+ * The value is raw — milliseconds, pounds, °F, a 0–10 score — because how a
+ * record reads is the screen's business, not the wire's.
+ */
+export interface StatRecord {
+  smokeId: string;
+  /** The cook's name, or — for an unnamed cook — its meat and its day. */
+  label: string;
+  /** ISO, or `null` for a cook with no date recorded. */
+  date: string | null;
+  value: number;
+}
+
+/** How much of one meat has been cooked, and how often. */
+export interface MeatStat {
+  meatType: string;
+  sessions: number;
+  pounds: number;
+}
+
+/** How often one wood has been burned. */
+export interface WoodStat {
+  woodType: string;
+  sessions: number;
+}
+
+/**
+ * Everything the Stats screen shows, derived server-side.
+ *
+ * Every aggregate is nullable, and all of them are `null` for an archive with
+ * nothing completed in it: a user who has never finished a cook has not cooked
+ * for zero hours, they have no average at all. `totalSessions` is the one
+ * figure that is always a number, and it is what tells the screen whether it is
+ * looking at statistics or at an empty archive.
+ */
+export interface Stats {
+  totalSessions: number;
+  /** Time on the smoker across every cook whose length is known, ms. */
+  totalCookMs: number | null;
+  totalPounds: number | null;
+  approximateServings: number | null;
+  /** Mean overall-taste score across the cooks that were rated, 0–10. */
+  averageRating: number | null;
+  averageCookMs: number | null;
+  totalRestMs: number | null;
+  woodTypeCount: number;
+  meatTypeCount: number;
+  records: {
+    highestRated: StatRecord | null;
+    longestCook: StatRecord | null;
+    heaviestCut: StatRecord | null;
+    /** `null` until finished cooks carry a stamped chamber peak. */
+    hottestChamber: StatRecord | null;
+  };
+  /** Per-meat totals, most-cooked first. */
+  byMeat: MeatStat[];
+  /** Per-wood totals, most-burned first. */
+  byWood: WoodStat[];
+  categoryAverages: {
+    smokeFlavor: number | null;
+    seasoning: number | null;
+    tenderness: number | null;
+    overallTaste: number | null;
+  };
+}

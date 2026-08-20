@@ -1,6 +1,7 @@
 export enum Screens {
   HOME = 'HOME',
   HISTORY = 'HISTORY',
+  STATS = 'STATS',
   SETTINGS = 'SETTINGS',
 }
 

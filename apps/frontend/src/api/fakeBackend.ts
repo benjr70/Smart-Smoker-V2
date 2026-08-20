@@ -27,6 +27,8 @@ import {
   SmokeProfile,
   SmokeTimeline,
   State,
+  StatRecord,
+  Stats,
   TempData,
   rating,
 } from './types';
@@ -104,6 +106,170 @@ export const NO_CURRENT_TIMELINE: StoredCurrentTimeline = {
     startTemp: null,
     targetTemp: null,
   },
+};
+
+/**
+ * The archive statistics, derived from the fixtures this fake already holds.
+ *
+ * Deliberately not a seeded field: the real `GET stats` is a projection of the
+ * cooks in the database, and a fake that let a test seed the answer directly
+ * would let a screen test pass against numbers no archive could produce. Tests
+ * seed cooks and their children — the same fixtures every other route is served
+ * from — and read the statistics those cooks add up to.
+ *
+ * This is a simplified stand-in for the backend's aggregator, covering the rules
+ * the frontend has any business depending on (completed cooks only, pounds,
+ * colon/bare rest, folded spellings, unrated cooks excluded from averages). It
+ * is not a second implementation of the aggregator's edge cases: those are the
+ * backend's to get right, and its own suite is where they are pinned.
+ */
+const deriveStats = (store: FakeStore): Stats => {
+  const cooks = store.smoke.all.filter(smoke => smoke.status === 1);
+  if (cooks.length === 0) {
+    return EMPTY_STATS;
+  }
+
+  const joined = cooks.map(smoke => {
+    const preSmoke = store.preSmoke.records[smoke.preSmokeId];
+    const weight = Number((preSmoke?.weight as { weight?: number })?.weight ?? 0);
+    const unit = String((preSmoke?.weight as { unit?: string })?.unit ?? 'LB').toUpperCase();
+    const pounds = Number.isFinite(weight)
+      ? weight * (unit === 'OZ' ? 1 / 16 : unit === 'KG' ? 2.20462 : 1)
+      : 0;
+    return {
+      smokeId: smoke._id ?? '',
+      date: smoke.date ? new Date(smoke.date) : null,
+      name: preSmoke?.name ?? '',
+      meatType: preSmoke?.meatType ?? '',
+      woodType: store.smokeProfile.records[smoke.smokeProfileId]?.woodType ?? '',
+      restMs: restMinutes(store.postSmoke.records[smoke.postSmokeId]?.restTime) * 60_000,
+      pounds,
+      durationMs: (smoke._id ? store.timeline.records[smoke._id]?.durationMs : null) ?? null,
+      rating: store.ratings.records[smoke.ratingId],
+    };
+  });
+
+  const durations = joined
+    .map(cook => cook.durationMs)
+    .filter((ms): ms is number => typeof ms === 'number');
+  const totalPounds = joined.reduce((sum, cook) => sum + cook.pounds, 0);
+  const scores = (category: keyof rating): number[] =>
+    joined
+      .map(cook => Number(cook.rating?.[category] ?? 0))
+      .filter(score => Number.isFinite(score) && score > 0);
+  const meats = fakeTally(joined.map(cook => ({ name: cook.meatType, pounds: cook.pounds })));
+  const woods = fakeTally(joined.map(cook => ({ name: cook.woodType, pounds: 0 })));
+  const record = (valueOf: (cook: (typeof joined)[number]) => number | null): StatRecord | null => {
+    const held = joined
+      .map(cook => ({ cook, value: valueOf(cook) }))
+      .filter(
+        (entry): entry is { cook: (typeof joined)[number]; value: number } => entry.value !== null
+      );
+    if (held.length === 0) return null;
+    const best = held.reduce((leader, entry) => (entry.value > leader.value ? entry : leader));
+    return {
+      smokeId: best.cook.smokeId,
+      label: best.cook.name || best.cook.meatType || 'Unnamed cook',
+      date: best.cook.date ? best.cook.date.toISOString() : null,
+      value: best.value,
+    };
+  };
+
+  return {
+    totalSessions: joined.length,
+    totalCookMs: durations.length === 0 ? null : durations.reduce((a, b) => a + b, 0),
+    totalPounds: fakeRound(totalPounds),
+    approximateServings: Math.round(totalPounds * 2.5),
+    averageRating: fakeMean(scores('overallTaste')),
+    averageCookMs:
+      durations.length === 0
+        ? null
+        : Math.round(durations.reduce((a, b) => a + b, 0) / durations.length),
+    totalRestMs: joined.reduce((sum, cook) => sum + cook.restMs, 0),
+    woodTypeCount: woods.length,
+    meatTypeCount: meats.length,
+    records: {
+      highestRated: record(cook => Number(cook.rating?.overallTaste) || null),
+      longestCook: record(cook => cook.durationMs),
+      heaviestCut: record(cook => cook.pounds || null),
+      hottestChamber: null,
+    },
+    byMeat: meats.map(group => ({
+      meatType: group.name,
+      sessions: group.sessions,
+      pounds: fakeRound(group.pounds),
+    })),
+    byWood: woods.map(group => ({ woodType: group.name, sessions: group.sessions })),
+    categoryAverages: {
+      smokeFlavor: fakeMean(scores('smokeFlavor')),
+      seasoning: fakeMean(scores('seasoning')),
+      tenderness: fakeMean(scores('tenderness')),
+      overallTaste: fakeMean(scores('overallTaste')),
+    },
+  };
+};
+
+/** What the real endpoint answers for an archive with nothing completed in it. */
+const EMPTY_STATS: Stats = {
+  totalSessions: 0,
+  totalCookMs: null,
+  totalPounds: null,
+  approximateServings: null,
+  averageRating: null,
+  averageCookMs: null,
+  totalRestMs: null,
+  woodTypeCount: 0,
+  meatTypeCount: 0,
+  records: { highestRated: null, longestCook: null, heaviestCut: null, hottestChamber: null },
+  byMeat: [],
+  byWood: [],
+  categoryAverages: { smokeFlavor: null, seasoning: null, tenderness: null, overallTaste: null },
+};
+
+const fakeRound = (value: number): number => Math.round(value * 10) / 10;
+
+const fakeMean = (values: number[]): number | null =>
+  values.length === 0 ? null : fakeRound(values.reduce((a, b) => a + b, 0) / values.length);
+
+/** `01:30` and a bare number of minutes — the two shapes the wizard produces. */
+const restMinutes = (restTime: string | undefined): number => {
+  const written = (restTime ?? '').trim();
+  const colon = /^(\d{1,3}):([0-5]?\d)$/.exec(written);
+  if (colon) return Number(colon[1]) * 60 + Number(colon[2]);
+  return /^\d+(\.\d+)?$/.test(written) ? Number(written) : 0;
+};
+
+/** Case-folded grouping, most-used first, under the most frequent spelling. */
+const fakeTally = (
+  entries: { name: string; pounds: number }[]
+): { name: string; sessions: number; pounds: number }[] => {
+  const groups = new Map<
+    string,
+    { spellings: Map<string, number>; sessions: number; pounds: number }
+  >();
+  entries.forEach(({ name, pounds }) => {
+    const written = name.trim();
+    if (written === '') return;
+    const key = written.toLowerCase();
+    const group = groups.get(key) ?? {
+      spellings: new Map<string, number>(),
+      sessions: 0,
+      pounds: 0,
+    };
+    group.sessions += 1;
+    group.pounds += pounds;
+    group.spellings.set(written, (group.spellings.get(written) ?? 0) + 1);
+    groups.set(key, group);
+  });
+  return [...groups.values()]
+    .map(group => ({
+      name: [...group.spellings.entries()].reduce((best, entry) =>
+        entry[1] >= best[1] ? entry : best
+      )[0],
+      sessions: group.sessions,
+      pounds: group.pounds,
+    }))
+    .sort((a, b) => b.sessions - a.sessions || a.name.localeCompare(b.name));
 };
 
 export interface FakeBackendSeed {
@@ -604,6 +770,10 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
 
     if (resource === 'history' && method === 'get' && id === undefined) {
       return clone(store.history);
+    }
+
+    if (resource === 'stats' && method === 'get' && id === undefined) {
+      return deriveStats(store);
     }
 
     return NO_ROUTE;
