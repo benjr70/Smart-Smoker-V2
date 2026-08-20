@@ -66,14 +66,14 @@ describe('aggregateStats', () => {
   });
 
   describe('weights, whatever they were weighed in', () => {
-    const weighings: [string, number | null, string | null, number][] = [
+    const weighings: [string, number | null, string | null, number | null][] = [
       ['pounds are already pounds', 12, 'LB', 12],
       ['ounces are sixteen to the pound', 24, 'OZ', 1.5],
       ['kilograms are 2.20462 pounds', 2, 'KG', 4.4],
       ['a lower-cased unit is the same unit', 32, 'oz', 2],
       ['a padded unit is the same unit', 5, ' LB ', 5],
-      ['an unweighed cut weighs nothing', null, 'LB', 0],
-      ['a unit nobody recognises weighs nothing', 5, 'STONE', 0],
+      ['an unweighed cut adds nothing to weigh', null, 'LB', null],
+      ['a unit nobody recognises adds nothing to weigh', 5, 'STONE', null],
     ];
 
     it.each(weighings)('%s', (_case, weight, weightUnit, pounds) => {
@@ -82,6 +82,28 @@ describe('aggregateStats', () => {
       expect(stats.totalPounds).toBe(pounds);
       // The session counts however it was weighed, or whether it was at all.
       expect(stats.totalSessions).toBe(1);
+    });
+
+    it('weighs the archive by the cooks that were weighed, counting them all', () => {
+      const stats = aggregateStats([
+        cook({ smokeId: 'weighed', weight: 10, weightUnit: 'LB' }),
+        cook({ smokeId: 'unweighed', weight: null }),
+      ]);
+
+      expect(stats.totalPounds).toBe(10);
+      expect(stats.approximateServings).toBe(25);
+      expect(stats.totalSessions).toBe(2);
+    });
+
+    it('admits it has no weights rather than claiming an archive of nothing', () => {
+      const stats = aggregateStats([
+        cook({ smokeId: 'a', weight: null }),
+        cook({ smokeId: 'b', weight: null }),
+      ]);
+
+      expect(stats.totalPounds).toBeNull();
+      expect(stats.approximateServings).toBeNull();
+      expect(stats.totalSessions).toBe(2);
     });
   });
 
@@ -94,19 +116,21 @@ describe('aggregateStats', () => {
 
   describe('rest, however it was written down', () => {
     const MINUTE = 60 * 1000;
-    const rests: [string, string | null, number][] = [
+    const rests: [string, string | null, number | null][] = [
       ['the wizard writes a colon', '01:30', 90 * MINUTE],
       ['a long rest in colon form', '12:05', 725 * MINUTE],
       ['hours and minutes with suffixes', '1h 30m', 90 * MINUTE],
       ['spelled-out hours', '2 hours', 120 * MINUTE],
       ['minutes on their own', '45m', 45 * MINUTE],
       ['spelled-out minutes', '45 minutes', 45 * MINUTE],
-      ['a bare number is minutes', '90', 90 * MINUTE],
-      ['a bare decimal number is minutes', '1.5', 1.5 * MINUTE],
+      // The wizard's field is masked `HH:MM`, so the digits somebody stops
+      // typing after are the hours they got as far as — `2` is two hours.
+      ['a bare number is the hours of a half-typed mask', '2', 2 * 60 * MINUTE],
+      ['a bare decimal number is hours too', '1.5', 90 * MINUTE],
       ['hours alone with a suffix', '3h', 180 * MINUTE],
-      ['nothing was written', '', 0],
-      ['nothing was recorded at all', null, 0],
-      ['what was written makes no sense', 'a while', 0],
+      ['nothing was written', '', null],
+      ['nothing was recorded at all', null, null],
+      ['what was written makes no sense', 'a while', null],
     ];
 
     it.each(rests)('%s', (_case, restTime, restMs) => {
@@ -121,6 +145,16 @@ describe('aggregateStats', () => {
       ]);
 
       expect(stats.totalRestMs).toBe(90 * MINUTE);
+    });
+
+    it('admits no rest is on record rather than reporting no rest was taken', () => {
+      const stats = aggregateStats([
+        cook({ smokeId: 'a', restTime: '' }),
+        cook({ smokeId: 'b', restTime: 'a while' }),
+      ]);
+
+      expect(stats.totalRestMs).toBeNull();
+      expect(stats.totalSessions).toBe(2);
     });
   });
 

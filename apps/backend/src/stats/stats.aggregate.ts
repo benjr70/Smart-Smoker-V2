@@ -97,22 +97,25 @@ const SUFFIXED_REST =
 const BARE_REST = /^\d+(?:\.\d+)?$/;
 
 /**
- * How long a cook rested, in milliseconds, from whatever was typed into a free
- * text box.
+ * How long a cook rested, in milliseconds, or `null` when the record does not
+ * say — from whatever was typed into a free text box.
  *
  * The field has never been validated, so the archive holds every shape a person
- * reaches for: the wizard's `01:30`, `1h 30m`, `2 hours`, `45m`, and — most
- * often — a bare number, which is read as minutes because that is what somebody
- * typing one number about resting meat means.
+ * reaches for: the wizard's `01:30`, `1h 30m`, `2 hours`, `45m`, and — often —
+ * a bare number, which is read as *hours*. That is what the field that produced
+ * it means: the rest is typed into a mask of `HH:MM`, so the digits somebody
+ * stops after are the hours they got as far as, and a `2` left in the box is
+ * two hours rather than the two minutes no one rests a brisket for.
  *
- * Anything else rests for no time at all. That is the honest reading: a total
- * is a sum of times, and a phrase that names no length cannot be guessed into
- * one without inventing hours the user never rested.
+ * Anything else says nothing about how long the cook rested, and is answered
+ * with `null` rather than with a zero: a phrase that names no length cannot be
+ * guessed into one, and a cook whose rest was never written down did not rest
+ * for no time.
  */
-export const parseRestMs = (restTime: string | null): number => {
+export const parseRestMs = (restTime: string | null): number | null => {
   const written = (restTime ?? '').trim().toLowerCase();
   if (written === '') {
-    return 0;
+    return null;
   }
 
   const colon = COLON_REST.exec(written);
@@ -121,7 +124,7 @@ export const parseRestMs = (restTime: string | null): number => {
   }
 
   if (BARE_REST.test(written)) {
-    return Number(written) * MINUTE_MS;
+    return Number(written) * HOUR_MS;
   }
 
   const suffixed = SUFFIXED_REST.exec(written);
@@ -131,8 +134,12 @@ export const parseRestMs = (restTime: string | null): number => {
     );
   }
 
-  return 0;
+  return null;
 };
+
+/** The sum of the numbers there are, or `null` when there are none. */
+const total = (values: number[]): number | null =>
+  values.length === 0 ? null : values.reduce((a, b) => a + b, 0);
 
 /** A number rounded to `places` decimals, so totals do not read as float noise. */
 const round = (value: number, places = 1): number => {
@@ -354,20 +361,34 @@ export function aggregateStats(records: CookRecord[]): StatsDto {
   const durations = cooks
     .map((cook) => cook.durationMs)
     .filter((ms): ms is number => ms !== null && Number.isFinite(ms));
-  const totalPounds = cooks.reduce((sum, cook) => sum + poundsOf(cook), 0);
+  // Only the cuts somebody weighed: an archive nobody recorded a weight in has
+  // no poundage at all, and rounding a sum of nothing to `0` would tell the
+  // screen a fact about the meat instead of about the record.
+  const totalPounds = total(
+    cooks
+      .map(weighedPounds)
+      .filter((pounds): pounds is number => pounds !== null),
+  );
+  const restMs = total(
+    cooks
+      .map((cook) => parseRestMs(cook.restTime))
+      .filter((ms): ms is number => ms !== null),
+  );
   const meats = tally(cooks, (cook) => cook.meatType);
   const woods = tally(cooks, (cook) => cook.woodType);
 
   return {
     ...EMPTY_ARCHIVE,
     totalSessions: cooks.length,
-    totalCookMs:
-      durations.length === 0 ? null : durations.reduce((a, b) => a + b, 0),
-    totalPounds: round(totalPounds),
-    approximateServings: Math.round(totalPounds * SERVINGS_PER_POUND),
+    totalCookMs: total(durations),
+    totalPounds: totalPounds === null ? null : round(totalPounds),
+    approximateServings:
+      totalPounds === null
+        ? null
+        : Math.round(totalPounds * SERVINGS_PER_POUND),
     averageRating: mean(scoresIn(cooks, 'overallTaste')),
     averageCookMs: mean(durations, 0),
-    totalRestMs: cooks.reduce((sum, c) => sum + parseRestMs(c.restTime), 0),
+    totalRestMs: restMs,
     woodTypeCount: woods.size,
     meatTypeCount: meats.size,
     byMeat: [...meats.values()]

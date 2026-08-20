@@ -21,8 +21,9 @@ const byId = <T extends { _id?: unknown }>(docs: T[]): Map<string, T> =>
  * services, for the reason the timeline module does: those services read one
  * document at a time, which is a query per cook per stage, and this read wants
  * every cook at once. The children come back in one query per collection —
- * an `$in` over the ids the completed smokes point at — so the whole archive
- * costs five reads however many cooks are in it.
+ * an `$in` over the ids the completed smokes point at — and every cook's length
+ * in one grouped read of the temperatures, so the whole archive costs six reads
+ * however many cooks are in it.
  *
  * The arithmetic is not here: joining is this module's job, and every rule
  * about what the numbers mean belongs to the pure aggregator, which has no
@@ -81,41 +82,43 @@ export class StatsService {
     const profileById = byId(profiles);
     const postSmokeById = byId(postSmokes);
     const ratingById = byId(ratings);
+    // Every cook's length in one grouped read of the temperatures rather than a
+    // pair of queries per cook: asked one at a time, the cheapest read on the
+    // screen would be the one that grew with the archive.
+    const durations = await this.timelineService.getDurationsMs(smokes);
 
-    return Promise.all(
-      smokes.map(async (smoke) => {
-        const preSmoke = preSmokeById.get(String(smoke.preSmokeId));
-        const profile = profileById.get(String(smoke.smokeProfileId));
-        const postSmoke = postSmokeById.get(String(smoke.postSmokeId));
-        const rating = ratingById.get(String(smoke.ratingId));
-        return {
-          smokeId: String(smoke['_id']),
-          completed: smoke.status === SmokeStatus.Complete,
-          date: smoke.date ? new Date(smoke.date) : null,
-          name: preSmoke?.name ?? null,
-          meatType: preSmoke?.meatType ?? null,
-          weight: preSmoke?.weight?.weight ?? null,
-          weightUnit: preSmoke?.weight?.unit ?? null,
-          woodType: profile?.woodType ?? null,
-          restTime: postSmoke?.restTime ?? null,
-          // Stamped where the cook was stamped, derived from its first and last
-          // readings where it was not — which is what puts cooks recorded
-          // before the stamps existed into the totals rather than out of them.
-          durationMs: await this.timelineService.getDurationMs(smoke),
-          // The hottest the chamber ran is stamped onto a cook at finish by a
-          // later slice; until then no cook carries one, and the record it
-          // would hold stays empty rather than being invented here.
-          peakChamber: null,
-          ratings: rating
-            ? {
-                smokeFlavor: rating.smokeFlavor ?? null,
-                seasoning: rating.seasoning ?? null,
-                tenderness: rating.tenderness ?? null,
-                overallTaste: rating.overallTaste ?? null,
-              }
-            : null,
-        };
-      }),
-    );
+    return smokes.map((smoke, index) => {
+      const preSmoke = preSmokeById.get(String(smoke.preSmokeId));
+      const profile = profileById.get(String(smoke.smokeProfileId));
+      const postSmoke = postSmokeById.get(String(smoke.postSmokeId));
+      const rating = ratingById.get(String(smoke.ratingId));
+      return {
+        smokeId: String(smoke['_id']),
+        completed: smoke.status === SmokeStatus.Complete,
+        date: smoke.date ? new Date(smoke.date) : null,
+        name: preSmoke?.name ?? null,
+        meatType: preSmoke?.meatType ?? null,
+        weight: preSmoke?.weight?.weight ?? null,
+        weightUnit: preSmoke?.weight?.unit ?? null,
+        woodType: profile?.woodType ?? null,
+        restTime: postSmoke?.restTime ?? null,
+        // Stamped where the cook was stamped, derived from its first and last
+        // readings where it was not — which is what puts cooks recorded
+        // before the stamps existed into the totals rather than out of them.
+        durationMs: durations[index],
+        // The hottest the chamber ran is stamped onto a cook at finish by a
+        // later slice; until then no cook carries one, and the record it
+        // would hold stays empty rather than being invented here.
+        peakChamber: null,
+        ratings: rating
+          ? {
+              smokeFlavor: rating.smokeFlavor ?? null,
+              seasoning: rating.seasoning ?? null,
+              tenderness: rating.tenderness ?? null,
+              overallTaste: rating.overallTaste ?? null,
+            }
+          : null,
+      };
+    });
   }
 }

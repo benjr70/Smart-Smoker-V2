@@ -9,6 +9,27 @@ import { StatsService } from './stats.service';
 
 const HOUR = 60 * 60 * 1000;
 
+/**
+ * A model that remembers how often it was asked anything, so a read can be held
+ * to a fixed number of queries rather than one per cook.
+ */
+const countingModel = (docs: FakeDoc[]) => {
+  const model = fakeModel(docs);
+  const counter = { reads: 0 };
+  (['find', 'findOne', 'findById', 'aggregate'] as const).forEach((method) => {
+    const original = model[method].bind(model) as (
+      ...args: unknown[]
+    ) => unknown;
+    (model as unknown as Record<string, unknown>)[method] = (
+      ...args: unknown[]
+    ) => {
+      counter.reads += 1;
+      return original(...args);
+    };
+  });
+  return { model, counter };
+};
+
 describe('StatsService', () => {
   let smokes: FakeDoc[];
   let preSmokes: FakeDoc[];
@@ -16,8 +37,11 @@ describe('StatsService', () => {
   let postSmokes: FakeDoc[];
   let ratings: FakeDoc[];
   let temps: FakeDoc[];
+  let tempReads: { reads: number };
 
   const build = async (): Promise<StatsService> => {
+    const counted = countingModel(temps);
+    tempReads = counted.counter;
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         StatsService,
@@ -27,7 +51,7 @@ describe('StatsService', () => {
         // there are not.
         TimelineService,
         { provide: getModelToken('Smoke'), useValue: fakeModel(smokes) },
-        { provide: getModelToken('Temp'), useValue: fakeModel(temps) },
+        { provide: getModelToken('Temp'), useValue: counted.model },
         { provide: getModelToken('state'), useValue: fakeModel([]) },
         {
           provide: getModelToken(ApplicationSettings.name),
@@ -142,6 +166,39 @@ describe('StatsService', () => {
       smokeId: 'legacy',
       label: 'Pork butt · Nov 2, 2025',
     });
+  });
+
+  it('costs the same number of reads whether the archive holds one cook or ten', async () => {
+    // Every one of them unstamped, so each would otherwise be two more queries
+    // hunting for the ends of its series.
+    for (let index = 0; index < 10; index += 1) {
+      smokes.push({
+        _id: `legacy-${index}`,
+        preSmokeId: `pre-${index}`,
+        tempsId: `temps-${index}`,
+        date: new Date('2025-11-02T12:00:00.000Z'),
+        status: SmokeStatus.Complete,
+      });
+      preSmokes.push({ _id: `pre-${index}`, meatType: 'Pork butt' });
+      temps.push(
+        {
+          tempsId: `temps-${index}`,
+          date: new Date('2025-11-02T07:00:00.000Z'),
+          ChamberTemp: '210',
+        },
+        {
+          tempsId: `temps-${index}`,
+          date: new Date('2025-11-02T17:00:00.000Z'),
+          ChamberTemp: '250',
+        },
+      );
+    }
+
+    const stats = await (await build()).getStats();
+
+    expect(stats.totalSessions).toBe(10);
+    expect(stats.totalCookMs).toBe(100 * HOUR);
+    expect(tempReads.reads).toBe(1);
   });
 
   it('says nothing about an installation that has never finished a cook', async () => {

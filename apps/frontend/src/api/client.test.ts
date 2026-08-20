@@ -1459,6 +1459,35 @@ describe('stats client — archive read', () => {
     expect(backend.requests).toContainEqual({ method: 'get', path: 'stats', body: undefined });
   });
 
+  test('a cook nobody weighed or rested leaves those figures unrecorded', async () => {
+    const backend = createFakeBackend({
+      smoke: {
+        all: [
+          {
+            preSmokeId: 'pre-1',
+            postSmokeId: 'post-1',
+            date: new Date('2026-04-20T12:00:00Z'),
+            status: 1,
+            _id: 'smoke-1',
+          } as Smoke,
+        ],
+      },
+      preSmoke: {
+        records: {
+          'pre-1': { meatType: 'Brisket', steps: [], notes: '' } as unknown as PreSmoke,
+        },
+      },
+      postSmoke: { records: { 'post-1': { restTime: '', steps: [], notes: '' } } },
+    });
+
+    const stats = await createApiClient(backend).stats.get();
+
+    expect(stats.totalSessions).toBe(1);
+    expect(stats.totalPounds).toBeNull();
+    expect(stats.approximateServings).toBeNull();
+    expect(stats.totalRestMs).toBeNull();
+  });
+
   test('an archive with nothing completed in it reads as no sessions at all', async () => {
     const stats = await createApiClient(createFakeBackend()).stats.get();
 

@@ -106,11 +106,14 @@ export class StatsDto {
   @ApiProperty({ nullable: true, type: Number })
   totalCookMs: number | null;
 
-  /** Meat cooked across every session, pounds. */
+  /**
+   * Meat cooked across the sessions that were weighed, pounds — `null` when no
+   * cook recorded a weight, which is not the same as having cooked none.
+   */
   @ApiProperty({ nullable: true, type: Number })
   totalPounds: number | null;
 
-  /** Roughly how many people that fed. */
+  /** Roughly how many people that fed; `null` wherever the pounds are. */
   @ApiProperty({ nullable: true, type: Number })
   approximateServings: number | null;
 
@@ -122,7 +125,10 @@ export class StatsDto {
   @ApiProperty({ nullable: true, type: Number })
   averageCookMs: number | null;
 
-  /** Rest after the smoker, summed across every cook, ms. */
+  /**
+   * Rest after the smoker, summed across the cooks that wrote one down, ms —
+   * `null` when none of them did.
+   */
   @ApiProperty({ nullable: true, type: Number })
   totalRestMs: number | null;
 

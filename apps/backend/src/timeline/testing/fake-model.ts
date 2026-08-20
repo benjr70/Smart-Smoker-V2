@@ -105,13 +105,64 @@ const query = (rows: FakeDoc[], one: boolean) => {
   return chain;
 };
 
+/** A field path as an aggregation writes one: `$ChamberTemp`. */
+const pathOf = (expression: unknown): string =>
+  typeof expression === 'string'
+    ? expression.replace(/^\$/, '')
+    : pathOf(
+        (expression as { $convert: { input: string } }).$convert?.input ?? '',
+      );
+
+/** Whether an accumulator's input is `$convert`-ed, and so read as a number. */
+const isConverted = (expression: unknown): boolean =>
+  typeof expression === 'object' &&
+  expression !== null &&
+  '$convert' in (expression as Record<string, unknown>);
+
 /**
- * The one aggregation this module makes: `$match` on a filter, then a single
- * `$group` of `$max` over `$convert`-ed fields — the peaks of a series read
- * without pulling the series across the wire.
+ * The extreme of one field across a group, in the direction asked for.
  *
- * `$max` skips what it cannot read, as MongoDB's does, and a group over no
- * documents at all produces no row rather than a row of nulls.
+ * Numbers where the pipeline converted them — the peaks of a series, whose
+ * readings are stored as strings — and otherwise whatever was stored, compared
+ * as MongoDB compares dates. What cannot be read is skipped, as `$max` skips it.
+ */
+const extremeOf = (
+  rows: FakeDoc[],
+  field: string,
+  direction: 1 | -1,
+  converted: boolean,
+): unknown => {
+  const readable = rows
+    .map((doc) => doc[field])
+    .filter(
+      (value) =>
+        value !== undefined &&
+        value !== null &&
+        value !== '' &&
+        (!converted || Number.isFinite(Number(value))),
+    );
+  if (readable.length === 0) {
+    return null;
+  }
+  const ranked = readable.map((value) =>
+    converted ? Number(value) : new Date(value as string).getTime(),
+  );
+  const best = ranked.reduce(
+    (leader, value, index) =>
+      (value - ranked[leader]) * direction > 0 ? index : leader,
+    0,
+  );
+  return converted ? ranked[best] : readable[best];
+};
+
+/**
+ * The aggregations this module makes: `$match` on a filter, then a single
+ * `$group` of `$min`/`$max` — the peaks of a series, or the two ends of each of
+ * many series, read without pulling any of them across the wire.
+ *
+ * A group with an `_id` of `null` produces one row for everything matched; an
+ * `_id` naming a field produces one row per distinct value of it. A group over
+ * no documents at all produces no rows rather than rows of nulls.
  */
 const aggregated = (rows: FakeDoc[], pipeline: FakeDoc[]): FakeDoc[] => {
   const matched = pipeline.reduce<FakeDoc[]>(
@@ -126,28 +177,34 @@ const aggregated = (rows: FakeDoc[], pipeline: FakeDoc[]): FakeDoc[] => {
   if (matched.length === 0) {
     return [];
   }
-  const peak = (field: string): number | null =>
-    matched.reduce<number | null>((highest, doc) => {
-      const value = Number(doc[field]);
-      if (
-        doc[field] === undefined ||
-        doc[field] === '' ||
-        !Number.isFinite(value)
-      ) {
-        return highest;
-      }
-      return highest === null || value > highest ? value : highest;
-    }, null);
-  return [
-    Object.entries(group).reduce<FakeDoc>((row, [name, spec]) => {
-      if (name === '_id') {
-        return { ...row, _id: null };
-      }
-      const input = (spec as { $max: { $convert: { input: string } } }).$max
-        .$convert.input;
-      return { ...row, [name]: peak(input.replace(/^\$/, '')) };
-    }, {}),
-  ];
+  const keyPath = group._id === null ? null : pathOf(group._id);
+  const buckets = new Map<unknown, FakeDoc[]>();
+  matched.forEach((doc) => {
+    const key = keyPath === null ? null : doc[keyPath];
+    buckets.set(key, [...(buckets.get(key) ?? []), doc]);
+  });
+  return [...buckets.entries()].map(([key, bucket]) =>
+    Object.entries(group).reduce<FakeDoc>(
+      (row, [name, spec]) => {
+        if (name === '_id') {
+          return row;
+        }
+        const accumulator = spec as Record<string, unknown>;
+        const direction = '$min' in accumulator ? -1 : 1;
+        const input = accumulator.$min ?? accumulator.$max;
+        return {
+          ...row,
+          [name]: extremeOf(
+            bucket,
+            pathOf(input),
+            direction,
+            isConverted(input),
+          ),
+        };
+      },
+      { _id: key ?? null },
+    ),
+  );
 };
 
 /** A fake model over `docs`; writes mutate the array the caller passed in. */

@@ -119,7 +119,8 @@ export const NO_CURRENT_TIMELINE: StoredCurrentTimeline = {
  *
  * This is a simplified stand-in for the backend's aggregator, covering the rules
  * the frontend has any business depending on (completed cooks only, pounds,
- * colon/bare rest, folded spellings, unrated cooks excluded from averages). It
+ * colon/bare rest, an archive with nothing on record left null, folded
+ * spellings, unrated cooks excluded from averages). It
  * is not a second implementation of the aggregator's edge cases: those are the
  * backend's to get right, and its own suite is where they are pinned.
  */
@@ -142,8 +143,8 @@ const deriveStats = (store: FakeStore): Stats => {
       name: preSmoke?.name ?? '',
       meatType: preSmoke?.meatType ?? '',
       woodType: store.smokeProfile.records[smoke.smokeProfileId]?.woodType ?? '',
-      restMs: restMinutes(store.postSmoke.records[smoke.postSmokeId]?.restTime) * 60_000,
-      pounds,
+      restMs: restMs(store.postSmoke.records[smoke.postSmokeId]?.restTime),
+      pounds: preSmoke?.weight ? pounds : null,
       durationMs: (smoke._id ? store.timeline.records[smoke._id]?.durationMs : null) ?? null,
       rating: store.ratings.records[smoke.ratingId],
     };
@@ -152,12 +153,13 @@ const deriveStats = (store: FakeStore): Stats => {
   const durations = joined
     .map(cook => cook.durationMs)
     .filter((ms): ms is number => typeof ms === 'number');
-  const totalPounds = joined.reduce((sum, cook) => sum + cook.pounds, 0);
+  const totalPounds = fakeTotal(joined.map(cook => cook.pounds));
+  const totalRestMs = fakeTotal(joined.map(cook => cook.restMs));
   const scores = (category: keyof rating): number[] =>
     joined
       .map(cook => Number(cook.rating?.[category] ?? 0))
       .filter(score => Number.isFinite(score) && score > 0);
-  const meats = fakeTally(joined.map(cook => ({ name: cook.meatType, pounds: cook.pounds })));
+  const meats = fakeTally(joined.map(cook => ({ name: cook.meatType, pounds: cook.pounds ?? 0 })));
   const woods = fakeTally(joined.map(cook => ({ name: cook.woodType, pounds: 0 })));
   const record = (valueOf: (cook: (typeof joined)[number]) => number | null): StatRecord | null => {
     const held = joined
@@ -178,14 +180,14 @@ const deriveStats = (store: FakeStore): Stats => {
   return {
     totalSessions: joined.length,
     totalCookMs: durations.length === 0 ? null : durations.reduce((a, b) => a + b, 0),
-    totalPounds: fakeRound(totalPounds),
-    approximateServings: Math.round(totalPounds * 2.5),
+    totalPounds: totalPounds === null ? null : fakeRound(totalPounds),
+    approximateServings: totalPounds === null ? null : Math.round(totalPounds * 2.5),
     averageRating: fakeMean(scores('overallTaste')),
     averageCookMs:
       durations.length === 0
         ? null
         : Math.round(durations.reduce((a, b) => a + b, 0) / durations.length),
-    totalRestMs: joined.reduce((sum, cook) => sum + cook.restMs, 0),
+    totalRestMs,
     woodTypeCount: woods.length,
     meatTypeCount: meats.length,
     records: {
@@ -231,12 +233,22 @@ const fakeRound = (value: number): number => Math.round(value * 10) / 10;
 const fakeMean = (values: number[]): number | null =>
   values.length === 0 ? null : fakeRound(values.reduce((a, b) => a + b, 0) / values.length);
 
-/** `01:30` and a bare number of minutes — the two shapes the wizard produces. */
-const restMinutes = (restTime: string | undefined): number => {
+/** The sum of the figures on record, or null when none of them are. */
+const fakeTotal = (values: (number | null)[]): number | null => {
+  const known = values.filter((value): value is number => value !== null);
+  return known.length === 0 ? null : known.reduce((a, b) => a + b, 0);
+};
+
+/**
+ * `01:30` and a half-typed `2` — the two shapes the wizard's masked `HH:MM`
+ * field produces. A bare number is hours, as the mask's leading digits are;
+ * anything else is a rest nobody recorded.
+ */
+const restMs = (restTime: string | undefined): number | null => {
   const written = (restTime ?? '').trim();
   const colon = /^(\d{1,3}):([0-5]?\d)$/.exec(written);
-  if (colon) return Number(colon[1]) * 60 + Number(colon[2]);
-  return /^\d+(\.\d+)?$/.test(written) ? Number(written) : 0;
+  if (colon) return (Number(colon[1]) * 60 + Number(colon[2])) * 60_000;
+  return /^\d+(\.\d+)?$/.test(written) ? Number(written) * 3_600_000 : null;
 };
 
 /** Case-folded grouping, most-used first, under the most frequent spelling. */

@@ -166,6 +166,86 @@ describe('TimelineService', () => {
     });
   });
 
+  describe('getDurationsMs', () => {
+    /** A second cook, with a series of its own to be found the ends of. */
+    const seedSecondSeries = (): void => {
+      temps.push(
+        {
+          tempsId: 'other-temps',
+          date: new Date('2026-08-02T08:00:00.000Z'),
+          ChamberTemp: '200',
+        },
+        {
+          tempsId: 'other-temps',
+          date: new Date('2026-08-02T11:00:00.000Z'),
+          ChamberTemp: '240',
+        },
+      );
+    };
+
+    it('answers a whole archive the same as it answers one cook at a time', async () => {
+      seedSecondSeries();
+      service = await build();
+      const archive = [
+        {
+          tempsId: 'temps-id',
+          status: SmokeStatus.Complete,
+          startedAt: new Date('2026-08-01T10:00:00.000Z'),
+          finishedAt: new Date('2026-08-01T16:00:00.000Z'),
+        },
+        { tempsId: 'temps-id', status: SmokeStatus.Complete },
+        { tempsId: 'other-temps', status: SmokeStatus.Complete },
+        { tempsId: 'temps-id', status: SmokeStatus.InProgress },
+        { status: SmokeStatus.Complete },
+      ];
+
+      expect(await service.getDurationsMs(archive)).toEqual(
+        await Promise.all(archive.map((smoke) => service.getDurationMs(smoke))),
+      );
+    });
+
+    it('reads the series once however many cooks are asked about', async () => {
+      seedSecondSeries();
+      service = await build();
+      const reads = jest.spyOn(models.temps, 'aggregate');
+
+      await service.getDurationsMs([
+        { tempsId: 'temps-id', status: SmokeStatus.Complete },
+        { tempsId: 'temps-id', status: SmokeStatus.Complete },
+        { tempsId: 'other-temps', status: SmokeStatus.Complete },
+      ]);
+
+      expect(reads).toHaveBeenCalledTimes(1);
+    });
+
+    it('asks the store nothing about an archive whose cooks are all stamped', async () => {
+      const reads = jest.spyOn(models.temps, 'aggregate');
+
+      const durations = await service.getDurationsMs([
+        {
+          tempsId: 'temps-id',
+          status: SmokeStatus.Complete,
+          startedAt: new Date('2026-08-01T10:00:00.000Z'),
+          finishedAt: new Date('2026-08-01T16:00:00.000Z'),
+        },
+      ]);
+
+      expect(durations).toEqual([6 * 60 * 60 * 1000]);
+      expect(reads).not.toHaveBeenCalled();
+    });
+
+    it('answers nothing for a cook whose readings all lack a date', async () => {
+      temps = [{ tempsId: 'temps-id', ChamberTemp: '200' }];
+      service = await build();
+
+      expect(
+        await service.getDurationsMs([
+          { tempsId: 'temps-id', status: SmokeStatus.Complete },
+        ]),
+      ).toEqual([null]);
+    });
+  });
+
   describe('getCurrentTimeline', () => {
     const NOW = new Date('2026-08-17T18:00:00.000Z');
 
