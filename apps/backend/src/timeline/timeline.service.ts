@@ -390,6 +390,81 @@ export class TimelineService {
   }
 
   /**
+   * How long each of many cooks ran — the same answer as {@link getDurationMs},
+   * for a whole archive at once.
+   *
+   * The reason it exists is the cost: `getDurationMs` costs up to two queries
+   * per unstamped cook, which is a fan-out that grows with the archive, and the
+   * stats read asks about every cook there has ever been. The ends of every
+   * series come back instead in one grouped read of the temperatures — a
+   * `$min`/`$max` per `tempsId` — and cooks that carry stamps are answered from
+   * those without the store being asked at all.
+   *
+   * Answers are in the order the cooks were given, so a caller may zip them
+   * back onto whatever it read them from.
+   */
+  async getDurationsMs(smokes: StoredSmoke[]): Promise<(number | null)[]> {
+    const wanted = smokes.filter(
+      (smoke) => Boolean(smoke.tempsId) && this.needsReadings(smoke),
+    );
+    const edges = await this.seriesEdges([
+      ...new Set(wanted.map((smoke) => String(smoke.tempsId))),
+    ]);
+    return smokes.map((smoke) => {
+      const edge = smoke.tempsId ? edges.get(String(smoke.tempsId)) : undefined;
+      const startedAt = smoke.startedAt ?? edge?.first ?? null;
+      const finishedAt =
+        smoke.finishedAt ??
+        (smoke.status === SmokeStatus.Complete ? edge?.last ?? null : null);
+      return durationBetween(startedAt, finishedAt);
+    });
+  }
+
+  /** Whether a cook's ends have to be hunted for in its readings. */
+  private needsReadings(smoke: StoredSmoke): boolean {
+    return (
+      !smoke.startedAt ||
+      (!smoke.finishedAt && smoke.status === SmokeStatus.Complete)
+    );
+  }
+
+  /**
+   * The first and last *dated* reading of each of many series, in one query.
+   *
+   * Undated rows are excluded in the match for the reason
+   * {@link edgeReading} excludes them: a row stored without a moment would
+   * otherwise be the earliest thing in the cook and leave it with no length.
+   */
+  private async seriesEdges(
+    tempsIds: string[],
+  ): Promise<Map<string, { first: Date | null; last: Date | null }>> {
+    if (tempsIds.length === 0) {
+      return new Map();
+    }
+    const rows = await this.tempModel
+      .aggregate([
+        { $match: { tempsId: { $in: tempsIds }, date: { $ne: null } } },
+        {
+          $group: {
+            _id: '$tempsId',
+            first: { $min: '$date' },
+            last: { $max: '$date' },
+          },
+        },
+      ])
+      .exec();
+    return new Map(
+      (rows as { _id: unknown; first: unknown; last: unknown }[]).map((row) => [
+        String(row._id),
+        {
+          first: row.first ? new Date(row.first as string) : null,
+          last: row.last ? new Date(row.last as string) : null,
+        },
+      ]),
+    );
+  }
+
+  /**
    * The moment of a cook's first (`1`) or last (`-1`) *dated* reading, if it
    * kept any.
    *

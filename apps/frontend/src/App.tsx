@@ -7,6 +7,7 @@ import { Screens } from './components/common/interfaces/enums';
 import { History } from './components/history/history';
 import { Settings } from './components/settings/settings';
 import { Smoke } from './components/smoke/smoke';
+import { Stats } from './components/stats/stats';
 import { DesignSurface, appTheme } from './theme';
 import { SharedAppearanceProvider } from './theme/SharedAppearance';
 import { createSocketAppearanceSubscription } from './theme/socketAppearanceSubscription';
@@ -23,6 +24,7 @@ class App extends React.Component<{}, { currentScreen: Screens }> {
     super(props);
     this.smokeOnClick = this.smokeOnClick.bind(this);
     this.historyOnClick = this.historyOnClick.bind(this);
+    this.statsOnClick = this.statsOnClick.bind(this);
     this.settingsOnClick = this.settingsOnClick.bind(this);
     this.state = { currentScreen: Screens.HOME };
   }
@@ -32,6 +34,9 @@ class App extends React.Component<{}, { currentScreen: Screens }> {
   }
   historyOnClick() {
     this.setState({ currentScreen: Screens.HISTORY });
+  }
+  statsOnClick() {
+    this.setState({ currentScreen: Screens.STATS });
   }
   settingsOnClick() {
     this.setState({ currentScreen: Screens.SETTINGS });
@@ -60,6 +65,9 @@ class App extends React.Component<{}, { currentScreen: Screens }> {
         break;
       case Screens.HISTORY:
         screen = <History />;
+        break;
+      case Screens.STATS:
+        screen = <Stats />;
         break;
       case Screens.SETTINGS:
         screen = <Settings />;
@@ -97,6 +105,7 @@ class App extends React.Component<{}, { currentScreen: Screens }> {
                   currentScreen={this.state.currentScreen}
                   smokeOnClick={this.smokeOnClick}
                   historyOnClick={this.historyOnClick}
+                  statsOnClick={this.statsOnClick}
                   settingsOnClick={this.settingsOnClick}
                 ></BottomBar>
               </Grid>

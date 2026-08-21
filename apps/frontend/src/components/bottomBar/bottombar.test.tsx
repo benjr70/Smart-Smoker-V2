@@ -1,5 +1,5 @@
 /**
- * The bottom bar: the three destinations the application has, the one in
+ * The bottom bar: the four destinations the application has, the one in
  * effect, and the space it leaves for itself.
  *
  * The bar is rendered for real — themed exactly as the application root themes
@@ -21,6 +21,7 @@ import { BOTTOM_BAR_HEIGHT, BottomBar } from './bottombar';
 const handlers = () => ({
   smokeOnClick: jest.fn(),
   historyOnClick: jest.fn(),
+  statsOnClick: jest.fn(),
   settingsOnClick: jest.fn(),
 });
 
@@ -51,12 +52,13 @@ const labelOf = (name: string) =>
   within(destination(name)).getByText(name, { selector: 'span' }) as HTMLElement;
 
 describe('the bottom bar', () => {
-  it('offers Smoke, History and Settings, and nothing else', () => {
+  it('offers Smoke, History, Stats and Settings, and nothing else', () => {
     showBar();
 
     expect(screen.getAllByRole('button').map(action => action.textContent)).toEqual([
       'Smoke',
       'History',
+      'Stats',
       'Settings',
     ]);
   });
@@ -70,7 +72,7 @@ describe('the bottom bar', () => {
   it('draws each destination in the design outline icon family', () => {
     showBar();
 
-    ['Smoke', 'History', 'Settings'].forEach(name => {
+    ['Smoke', 'History', 'Stats', 'Settings'].forEach(name => {
       const icon = within(destination(name)).getByTestId('design-icon');
       // The design's icons are stroked outlines that take the colour of the
       // destination around them; Material's are filled glyphs that do not.
@@ -87,6 +89,10 @@ describe('the bottom bar', () => {
     expect(props.historyOnClick).toHaveBeenCalledTimes(1);
     expect(props.smokeOnClick).not.toHaveBeenCalled();
     expect(props.settingsOnClick).not.toHaveBeenCalled();
+    expect(props.statsOnClick).not.toHaveBeenCalled();
+
+    await user.click(destination('Stats'));
+    expect(props.statsOnClick).toHaveBeenCalledTimes(1);
 
     await user.click(destination('Settings'));
     expect(props.settingsOnClick).toHaveBeenCalledTimes(1);
@@ -106,6 +112,11 @@ describe('the bottom bar', () => {
 
     expect(destination('History')).toHaveStyle({ color: carbonLight.accent });
     expect(destination('Smoke')).not.toHaveStyle({ color: carbonLight.accent });
+
+    bar.arriveAt(Screens.STATS);
+
+    expect(destination('Stats')).toHaveStyle({ color: carbonLight.accent });
+    expect(destination('History')).not.toHaveStyle({ color: carbonLight.accent });
   });
 
   /**
@@ -166,6 +177,7 @@ describe('the bottom bar', () => {
             currentScreen={Screens.HOME}
             smokeOnClick={undefined as never}
             historyOnClick={jest.fn()}
+            statsOnClick={jest.fn()}
             settingsOnClick={jest.fn()}
           />
         </DesignSurface>

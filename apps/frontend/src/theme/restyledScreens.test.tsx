@@ -509,13 +509,14 @@ describe('the bottom navigation', () => {
     expect(screen.getByTestId('nav-smoke')).toHaveStyle({ color: carbonDark.accent });
   });
 
-  /** A recolour adds no destination: the mock's fourth tab is not built here. */
-  it('offers the three destinations it always offered, and no fourth', () => {
+  /** The mock's four destinations, all of them now built. */
+  it('offers the four destinations the design draws, and no fifth', () => {
     renderUnder('light', <BottomBar {...navigationHandlers()} />);
 
     expect(screen.getAllByRole('button').map(action => action.textContent)).toEqual([
       'Smoke',
       'History',
+      'Stats',
       'Settings',
     ]);
   });
@@ -525,6 +526,7 @@ const navigationHandlers = () => ({
   currentScreen: Screens.HOME,
   smokeOnClick: jest.fn(),
   historyOnClick: jest.fn(),
+  statsOnClick: jest.fn(),
   settingsOnClick: jest.fn(),
 });
 

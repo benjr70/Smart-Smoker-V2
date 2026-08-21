@@ -62,6 +62,18 @@ export function HistoryIcon({ size }: DesignIconProps = {}): JSX.Element {
   );
 }
 
+/** Rising bars: a lifetime of cooking added up, the Stats destination. */
+export function StatsIcon({ size }: DesignIconProps = {}): JSX.Element {
+  return (
+    <OutlineIcon size={size}>
+      <path d="M6 20V13" />
+      <path d="M12 20V7" />
+      <path d="M18 20v-5" />
+      <path d="M3 20h18" />
+    </OutlineIcon>
+  );
+}
+
 /** The lens: the search field it sits in. */
 export function SearchIcon({ size }: DesignIconProps = {}): JSX.Element {
   return (

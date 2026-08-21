@@ -198,6 +198,7 @@ const renderBar = () =>
           currentScreen={Screens.HOME}
           smokeOnClick={jest.fn()}
           historyOnClick={jest.fn()}
+          statsOnClick={jest.fn()}
           settingsOnClick={jest.fn()}
         />
       </DesignSurface>
