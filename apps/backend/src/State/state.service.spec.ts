@@ -1,4 +1,4 @@
-import { Logger } from '@nestjs/common';
+import { Logger, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { StateService } from './state.service';
@@ -116,6 +116,24 @@ describe('StateService', () => {
         { _id: 'test-id' },
         updateDto,
       );
+      expect(result).toEqual(mockStateDocument);
+    });
+
+    /**
+     * The write succeeds but the read-back finds nothing — the singleton was
+     * deleted underneath us. Resolving `undefined` here is what let a
+     * non-nullable `Promise<State>` lie to every caller; a miss is now a 404
+     * rather than a 200 with an empty body.
+     */
+    it('throws NotFoundException when the singleton disappears mid-update', async () => {
+      jest
+        .spyOn(service, 'GetState')
+        .mockResolvedValueOnce(mockStateDocument as State)
+        .mockResolvedValueOnce(undefined);
+
+      await expect(
+        service.updateCurrent({ smokeId: 'gone', smoking: false }),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 
@@ -137,7 +155,9 @@ describe('StateService', () => {
         ...currentState,
         smoking: false,
       });
-      expect(result.smoking).toBe(false);
+      // `?.` rather than `!`: a null result is a real outcome of
+      // toggleSmoking, and reading through it must fail the assertion.
+      expect(result?.smoking).toBe(false);
     });
 
     it('should toggle smoking to true when currently false', async () => {
@@ -157,7 +177,7 @@ describe('StateService', () => {
         ...currentState,
         smoking: true,
       });
-      expect(result.smoking).toBe(true);
+      expect(result?.smoking).toBe(true);
     });
 
     it('should not toggle smoking when smokeId is empty', async () => {

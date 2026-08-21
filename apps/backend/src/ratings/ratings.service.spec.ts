@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { RatingsService } from './ratings.service';
@@ -108,6 +109,31 @@ describe('RatingsService', () => {
         'Smoke not found',
       );
     });
+
+    /**
+     * `getCurrentSmoke()` is nullable and nothing is cooking on a fresh
+     * install, which used to dereference null and answer a 500. A read with
+     * nothing to read is an empty answer, not a server fault.
+     */
+    it('returns null when there is no active smoke', async () => {
+      mockSmokeService.getCurrentSmoke.mockResolvedValue(null);
+
+      const result = await service.getCurrentRating();
+
+      expect(result).toBeNull();
+      expect(mockRatingsModel.findById).not.toHaveBeenCalled();
+    });
+
+    it('returns null when the active smoke has no rating linked yet', async () => {
+      mockSmokeService.getCurrentSmoke.mockResolvedValue(
+        mockSmokeWithoutRating,
+      );
+
+      const result = await service.getCurrentRating();
+
+      expect(result).toBeNull();
+      expect(mockRatingsModel.findById).not.toHaveBeenCalled();
+    });
   });
 
   describe('saveCurrentRatings', () => {
@@ -149,6 +175,20 @@ describe('RatingsService', () => {
         expectedSmokeDto,
       );
       expect(result).toEqual(mockRatings);
+    });
+
+    /**
+     * Saving a rating with nothing cooking has no aggregate to attach to.
+     * `CurrentSmokeService.upsertCurrent` already answers that with a 404 for
+     * every other child entity; ratings now agrees instead of dereferencing
+     * null into a 500.
+     */
+    it('throws NotFoundException when there is no active smoke to rate', async () => {
+      mockSmokeService.getCurrentSmoke.mockResolvedValue(null);
+
+      await expect(
+        service.saveCurrentRatings(mockRatingsDto),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
 
     it('should handle smoke service errors during save', async () => {

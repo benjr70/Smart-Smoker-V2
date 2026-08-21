@@ -43,8 +43,9 @@ export class PreSmokeController {
     return this.preSmokeService.update(id, dto);
   }
 
+  /** Empty body when no smoke is active or it has no pre-smoke yet. */
   @Get('')
-  getById(): Promise<PreSmoke> {
+  getById(): Promise<PreSmoke | null> {
     return this.preSmokeService.GetByCurrent();
   }
 

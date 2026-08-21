@@ -7,8 +7,12 @@ import { SmokeStatus } from '../smoke/smoke.schema';
 
 describe('CurrentSmokeService', () => {
   let service: CurrentSmokeService;
-  let stateService: jest.Mocked<Partial<StateService>>;
-  let smokeService: jest.Mocked<Partial<SmokeService>>;
+  // Collaborators are stubbed as bare jest mocks: the real signatures return
+  // Mongoose documents, and `jest.Mocked<Partial<Service>>` would make every
+  // member optional — forcing a `?.` or `!` at each stubbing site instead of
+  // saying what these actually are.
+  let stateService: { GetState: jest.Mock; create: jest.Mock };
+  let smokeService: { getById: jest.Mock; update: jest.Mock };
 
   const activeSmoke = {
     _id: 'smoke-1',
@@ -98,6 +102,21 @@ describe('CurrentSmokeService', () => {
       expect(load).toHaveBeenCalledWith('post-1');
       expect(result).toBe(child);
     });
+
+    /**
+     * The smoke still carries the foreign key but the child row is gone —
+     * a deleted document, or a half-written aggregate. That is the same
+     * "nothing to show" situation as an unlinked key, so it resolves to the
+     * fallback rather than handing the caller a null it was never told about.
+     */
+    it('returns the fallback when the linked child no longer exists', async () => {
+      const load = jest.fn().mockResolvedValue(null);
+
+      const result = await service.readCurrent('postSmokeId', load, fallback);
+
+      expect(load).toHaveBeenCalledWith('post-1');
+      expect(result).toBe(fallback);
+    });
   });
 
   describe('upsertCurrent', () => {
@@ -155,6 +174,50 @@ describe('CurrentSmokeService', () => {
           status: SmokeStatus.InProgress,
         }),
       );
+    });
+
+    /**
+     * The smoke still carries the foreign key but the child row is gone, so
+     * the update lands on nothing. `readCurrent` already calls that "nothing
+     * active" and answers the fallback; the write path agrees by creating a
+     * fresh child and relinking it, instead of 404-ing forever on a form the
+     * client was just served with a 200.
+     */
+    it('recreates and relinks the child when the linked id is dangling', async () => {
+      const update = jest
+        .fn()
+        .mockRejectedValue(new NotFoundException('PostSmoke post-1 not found'));
+      const created = { note: 'recreated' };
+      const create = jest
+        .fn()
+        .mockResolvedValue({ result: created, childId: 'post-new' });
+
+      const result = await service.upsertCurrent('postSmokeId', {
+        update,
+        create,
+      });
+
+      expect(update).toHaveBeenCalledWith('post-1');
+      expect(result).toBe(created);
+      expect(smokeService.update).toHaveBeenCalledWith(
+        'smoke-1',
+        expect.objectContaining({
+          postSmokeId: 'post-new',
+          preSmokeId: 'pre-1',
+          tempsId: 'temps-1',
+        }),
+      );
+    });
+
+    it('propagates a non-404 failure from the update path', async () => {
+      const update = jest.fn().mockRejectedValue(new Error('Database error'));
+      const create = jest.fn();
+
+      await expect(
+        service.upsertCurrent('postSmokeId', { update, create }),
+      ).rejects.toThrow('Database error');
+      expect(create).not.toHaveBeenCalled();
+      expect(smokeService.update).not.toHaveBeenCalled();
     });
 
     it('invokes onResolveSmoke when provided on the create path', async () => {

@@ -116,6 +116,14 @@ describe('PreSmokeController', () => {
       expect(mockPreSmokeService.GetByCurrent).toHaveBeenCalled();
       expect(result).toEqual(mockPreSmoke);
     });
+
+    // A fresh install has no active smoke, so the endpoint answers an empty
+    // body rather than inventing a pre-smoke.
+    it('relays null when nothing is cooking', async () => {
+      mockPreSmokeService.GetByCurrent = jest.fn().mockResolvedValue(null);
+
+      await expect(controller.getById()).resolves.toBeNull();
+    });
   });
 
   describe('DeleteById', () => {

@@ -29,6 +29,25 @@ import { LoggerModule } from 'nestjs-pino';
 
 const ENV = process.env.NODE_ENV;
 console.log(process.env.NODE_ENV);
+
+/**
+ * The connection string is required, not optional. Passing an unset `DB_URL`
+ * straight through reached Mongoose as `undefined` and failed deep inside
+ * `openUri()`; failing here names the missing variable instead.
+ *
+ * Read on call, never at module load: `ConfigModule.forRoot()` is what copies
+ * `.env` into `process.env`, and it only runs once evaluation reaches its
+ * entry in the `imports` array just below this one.
+ */
+const requireDbUrl = (): string => {
+  const dbUrl = process.env.DB_URL;
+  if (!dbUrl) {
+    throw new Error(
+      'DB_URL is not set: the backend needs a MongoDB connection string to start',
+    );
+  }
+  return dbUrl;
+};
 @Module({
   imports: [
     LoggerModule.forRoot({
@@ -57,7 +76,7 @@ console.log(process.env.NODE_ENV);
     ConfigModule.forRoot({
       envFilePath: !ENV ? '.env' : `.env.${ENV}`,
     }),
-    MongooseModule.forRoot(process.env.DB_URL),
+    MongooseModule.forRoot(requireDbUrl()),
   ],
   controllers: [AppController],
   providers: [

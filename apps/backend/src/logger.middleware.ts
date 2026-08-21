@@ -16,9 +16,9 @@ export class LoggerMiddleware implements NestMiddleware {
 const getResponseLog = (res: Response, url: string) => {
   const rawResponse = res.write;
   const rawResponseEnd = res.end;
-  const chunkBuffers = [];
+  const chunkBuffers: Buffer[] = [];
   res.write = (...chunks) => {
-    const resArgs = [];
+    const resArgs: (string | Uint8Array)[] = [];
     for (let i = 0; i < chunks.length; i++) {
       resArgs[i] = chunks[i];
       if (!resArgs[i]) {
@@ -32,7 +32,7 @@ const getResponseLog = (res: Response, url: string) => {
     return rawResponse.apply(res, resArgs);
   };
   res.end = (...chunk) => {
-    const resArgs = [];
+    const resArgs: (string | Uint8Array)[] = [];
     for (let i = 0; i < chunk.length; i++) {
       resArgs[i] = chunk[i];
     }

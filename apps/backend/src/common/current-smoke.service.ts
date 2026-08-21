@@ -32,6 +32,10 @@ interface UpsertHandlers<T> {
  *                    links the new child id back onto the Smoke, preserving the
  *                    sibling foreign keys.
  * - `currentSmoke` → self-heals a missing state doc exactly once.
+ *
+ * Reads and writes agree on what a dangling child link means: `readCurrent`
+ * answers the fallback and `upsertCurrent` recreates the child, so the empty
+ * form a read hands out is always one a write can save.
  */
 @Injectable()
 export class CurrentSmokeService {
@@ -53,7 +57,7 @@ export class CurrentSmokeService {
 
   async readCurrent<T>(
     key: SmokeChildKey,
-    load: (childId: string) => Promise<T>,
+    load: (childId: string) => Promise<T | null>,
     fallback: T,
   ): Promise<T> {
     const smoke = await this.currentSmoke();
@@ -64,7 +68,11 @@ export class CurrentSmokeService {
     if (!childId) {
       return fallback;
     }
-    return load(childId);
+    // `load` is a by-id lookup, so it is nullable: the key can outlive the
+    // document it points at. A dangling link is the same "nothing active"
+    // answer as an unlinked key, and the fallback is what the caller asked
+    // for in that case.
+    return (await load(childId)) ?? fallback;
   }
 
   async upsertCurrent<T>(
@@ -78,7 +86,18 @@ export class CurrentSmokeService {
 
     const existingChildId = smoke[key];
     if (existingChildId) {
-      return handlers.update(existingChildId);
+      try {
+        return await handlers.update(existingChildId);
+      } catch (error) {
+        if (!(error instanceof NotFoundException)) {
+          throw error;
+        }
+        // The link is dangling: the key outlived the document it points at.
+        // `readCurrent` answers that with the fallback — a healthy, empty
+        // form — so the write path has to agree, or the client is handed a
+        // 200 it can never save. Falling through to create relinks a fresh
+        // child id onto the smoke and heals the aggregate.
+      }
     }
 
     const { result, childId } = await handlers.create();

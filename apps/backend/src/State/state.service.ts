@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  OnModuleInit,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { BaseService } from '../common/base.service';
@@ -74,11 +79,18 @@ export class StateService
       // Create a new state if none exists
       return this.create(stateDto);
     }
-    return this.model
-      .findOneAndUpdate({ _id: state['_id'].toString() }, stateDto)
-      .then(() => {
-        return this.GetState();
-      });
+    await this.model.findOneAndUpdate(
+      { _id: state['_id'].toString() },
+      stateDto,
+    );
+    const updated = await this.GetState();
+    if (!updated) {
+      // The write landed but the read-back is empty: the singleton was removed
+      // underneath us. Callers are promised a State, so say so loudly instead
+      // of handing back an undefined that every caller would dereference.
+      throw new NotFoundException('state not found after update');
+    }
+    return updated;
   }
 
   /**

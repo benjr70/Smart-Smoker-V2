@@ -24,8 +24,12 @@ export class StateController {
     return this.stateService.create(dto);
   }
 
+  /**
+   * Empty body when there is no smoke to toggle. Clients already treat that as
+   * "nothing changed" — the previous `Promise<State>` simply hid it.
+   */
   @Put('/toggleSmoking')
-  toggleSmoking(): Promise<State> {
+  toggleSmoking(): Promise<State | null> {
     return this.stateService.toggleSmoking();
   }
 
