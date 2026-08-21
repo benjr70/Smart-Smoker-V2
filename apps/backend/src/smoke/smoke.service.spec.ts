@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { SmokeService } from './smoke.service';
@@ -5,12 +6,24 @@ import { Smoke, SmokeDocument, SmokeStatus } from './smoke.schema';
 import { SmokeDto } from './smokeDto';
 import { StateService } from '../State/state.service';
 import { TimelineService } from '../timeline/timeline.service';
+import { createMockModel } from '../common/testing/create-mock-model';
+import { Types } from 'mongoose';
+import { tempSeriesFilter } from '../temps/temp-series.filter';
 
 describe('SmokeService', () => {
   let service: SmokeService;
   let mockSmokeModel: any;
   let mockStateService: Partial<StateService>;
   let mockTimelineService: { stampFinish: jest.Mock };
+  let mockPreSmokeModel: any;
+  let mockSmokeProfileModel: any;
+  let mockTempModel: any;
+  let mockPostSmokeModel: any;
+  let mockRatingsModel: any;
+  // Every delete the deep delete issues, in the order it issued them, so the
+  // "children before parent" ordering can be asserted as a fact rather than
+  // inferred from five independent mocks.
+  let deleteLog: string[];
 
   const mockSmoke: Smoke = {
     preSmokeId: 'pre-smoke-id',
@@ -48,7 +61,37 @@ describe('SmokeService', () => {
     mockSmokeModel.findOneAndUpdate = jest
       .fn()
       .mockResolvedValue(mockSmokeDocument);
-    mockSmokeModel.deleteOne = jest.fn().mockResolvedValue({ deletedCount: 1 });
+    deleteLog = [];
+    mockSmokeModel.deleteOne = jest.fn().mockImplementation((filter) => ({
+      exec: jest.fn().mockImplementation(async () => {
+        deleteLog.push(`smoke:${filter._id}`);
+        return { deletedCount: 1 };
+      }),
+    }));
+
+    // A child collection whose removals announce themselves into the shared
+    // log, so the order the cascade ran in survives the call.
+    const childModel = (label: string) =>
+      createMockModel({
+        deleteOne: jest.fn().mockImplementation((filter: any) => ({
+          exec: jest.fn().mockImplementation(async () => {
+            deleteLog.push(`${label}:${filter._id}`);
+            return { deletedCount: 1 };
+          }),
+        })),
+        deleteMany: jest.fn().mockImplementation((filter: any) => ({
+          exec: jest.fn().mockImplementation(async () => {
+            deleteLog.push(`${label}:${JSON.stringify(filter)}`);
+            return { deletedCount: 3 };
+          }),
+        })),
+      });
+
+    mockPreSmokeModel = childModel('preSmoke');
+    mockSmokeProfileModel = childModel('smokeProfile');
+    mockTempModel = childModel('temp');
+    mockPostSmokeModel = childModel('postSmoke');
+    mockRatingsModel = childModel('ratings');
 
     mockStateService = {
       GetState: jest.fn().mockResolvedValue(mockState),
@@ -73,6 +116,14 @@ describe('SmokeService', () => {
           provide: TimelineService,
           useValue: mockTimelineService,
         },
+        { provide: getModelToken('PreSmoke'), useValue: mockPreSmokeModel },
+        {
+          provide: getModelToken('SmokeProfile'),
+          useValue: mockSmokeProfileModel,
+        },
+        { provide: getModelToken('Temp'), useValue: mockTempModel },
+        { provide: getModelToken('PostSmoke'), useValue: mockPostSmokeModel },
+        { provide: getModelToken('Ratings'), useValue: mockRatingsModel },
       ],
     }).compile();
 
@@ -180,6 +231,117 @@ describe('SmokeService', () => {
 
       expect(await service.FinishSmoke()).toBeNull();
       expect(mockTimelineService.stampFinish).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('deleteDeep', () => {
+    it('removes the parent smoke and all five of its children', async () => {
+      jest
+        .spyOn(service, 'getById')
+        .mockResolvedValue(mockSmokeDocument as unknown as SmokeDocument);
+
+      await service.deleteDeep('test-smoke-id');
+
+      expect(mockPreSmokeModel.deleteOne).toHaveBeenCalledWith({
+        _id: 'pre-smoke-id',
+      });
+      expect(mockSmokeProfileModel.deleteOne).toHaveBeenCalledWith({
+        _id: 'profile-id',
+      });
+      expect(mockPostSmokeModel.deleteOne).toHaveBeenCalledWith({
+        _id: 'post-smoke-id',
+      });
+      expect(mockRatingsModel.deleteOne).toHaveBeenCalledWith({
+        _id: 'rating-id',
+      });
+      expect(mockSmokeModel.deleteOne).toHaveBeenCalledWith({
+        _id: 'test-smoke-id',
+      });
+    });
+
+    it('deletes every child before the parent, so a failure is retryable', async () => {
+      jest
+        .spyOn(service, 'getById')
+        .mockResolvedValue(mockSmokeDocument as unknown as SmokeDocument);
+
+      await service.deleteDeep('test-smoke-id');
+
+      expect(deleteLog).toHaveLength(6);
+      expect(deleteLog[deleteLog.length - 1]).toBe('smoke:test-smoke-id');
+      expect(deleteLog.slice(0, 5).sort()).toEqual(
+        [
+          'preSmoke:pre-smoke-id',
+          'smokeProfile:profile-id',
+          'temp:{"tempsId":"temps-id"}',
+          'postSmoke:post-smoke-id',
+          'ratings:rating-id',
+        ].sort(),
+      );
+    });
+
+    it('removes the temperature series by its shared id, not a single reading', async () => {
+      jest
+        .spyOn(service, 'getById')
+        .mockResolvedValue(mockSmokeDocument as unknown as SmokeDocument);
+
+      await service.deleteDeep('test-smoke-id');
+
+      expect(mockTempModel.deleteMany).toHaveBeenCalledWith(
+        tempSeriesFilter('temps-id'),
+      );
+      expect(mockTempModel.deleteOne).not.toHaveBeenCalled();
+    });
+
+    /**
+     * The reading the series is named after carries no `tempsId` of its own, so
+     * a cascade that matched the id alone would leave one orphan per cook.
+     */
+    it('removes the first reading of the series along with the rest', async () => {
+      const seriesId = new Types.ObjectId().toString();
+      jest.spyOn(service, 'getById').mockResolvedValue({
+        ...mockSmokeDocument,
+        tempsId: seriesId,
+      } as unknown as SmokeDocument);
+
+      await service.deleteDeep('test-smoke-id');
+
+      expect(mockTempModel.deleteMany).toHaveBeenCalledWith({
+        $or: [{ tempsId: seriesId }, { _id: seriesId }],
+      });
+    });
+
+    it('deletes what a legacy smoke does have when child ids are missing', async () => {
+      jest.spyOn(service, 'getById').mockResolvedValue({
+        _id: 'legacy-smoke-id',
+        preSmokeId: 'pre-smoke-id',
+        tempsId: '',
+        status: SmokeStatus.Complete,
+      } as unknown as SmokeDocument);
+
+      await expect(
+        service.deleteDeep('legacy-smoke-id'),
+      ).resolves.toBeDefined();
+
+      expect(mockPreSmokeModel.deleteOne).toHaveBeenCalledWith({
+        _id: 'pre-smoke-id',
+      });
+      expect(mockTempModel.deleteMany).not.toHaveBeenCalled();
+      expect(mockSmokeProfileModel.deleteOne).not.toHaveBeenCalled();
+      expect(mockPostSmokeModel.deleteOne).not.toHaveBeenCalled();
+      expect(mockRatingsModel.deleteOne).not.toHaveBeenCalled();
+      expect(mockSmokeModel.deleteOne).toHaveBeenCalledWith({
+        _id: 'legacy-smoke-id',
+      });
+    });
+
+    it('deletes nothing at all when the smoke itself is gone', async () => {
+      jest.spyOn(service, 'getById').mockResolvedValue(null);
+
+      await expect(service.deleteDeep('missing')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+
+      expect(deleteLog).toEqual([]);
     });
   });
 });

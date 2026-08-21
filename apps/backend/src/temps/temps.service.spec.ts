@@ -1,7 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { NotFoundException } from '@nestjs/common';
+import { Types } from 'mongoose';
 import { TempsService } from './temps.service';
+import { tempSeriesFilter } from './temp-series.filter';
 import { Temp } from './temps.schema';
 import { TempDto } from './tempDto';
 import { CurrentSmokeService } from '../common/current-smoke.service';
@@ -354,10 +356,34 @@ describe('TempsService', () => {
     it('removes every row in a tempsId group', async () => {
       const result = await service.delete('group-to-drop');
 
-      expect(model.deleteMany).toHaveBeenCalledWith({
-        tempsId: 'group-to-drop',
-      });
+      expect(model.deleteMany).toHaveBeenCalledWith(
+        tempSeriesFilter('group-to-drop'),
+      );
       expect(result).toEqual({ deletedCount: 5 });
+    });
+
+    /**
+     * The series is named after its own first reading, and that reading carries
+     * no `tempsId` — so a delete that matched the id alone would leave it
+     * behind, one orphan per cook, forever.
+     */
+    it('removes the first reading, which the series is named after', async () => {
+      const seriesId = new Types.ObjectId().toString();
+
+      await service.delete(seriesId);
+
+      const filter = model.deleteMany.mock.calls[0][0];
+      expect(filter).toEqual({
+        $or: [{ tempsId: seriesId }, { _id: seriesId }],
+      });
+    });
+
+    it('matches on tempsId alone when the series id is not an object id', async () => {
+      await service.delete('legacy-series');
+
+      expect(model.deleteMany).toHaveBeenCalledWith({
+        tempsId: 'legacy-series',
+      });
     });
   });
 });

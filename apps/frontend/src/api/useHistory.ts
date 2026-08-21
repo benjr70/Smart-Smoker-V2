@@ -6,9 +6,9 @@
  * remove operation. A failed read leaves the list empty and raises the app-root
  * failure snackbar instead of throwing into render (the old unguarded
  * `result.reverse()` crashed the screen on a failed fetch). A failed remove
- * likewise raises the snackbar and, because the client's cascade deletes the
- * parent last, the refreshed list still contains the smoke so the delete is
- * retryable.
+ * likewise raises the snackbar and, because the delete is a single request the
+ * backend either carries out or does not, the refreshed list still contains the
+ * smoke so the delete is retryable.
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useApiClient } from './ApiClientProvider';
@@ -32,7 +32,7 @@ export interface UseHistoryResult {
   status: HistoryStatus;
   /** Re-reads the history list from the backend. */
   refresh: () => Promise<void>;
-  /** Cascade-deletes a smoke and refreshes the list. */
+  /** Deletes a smoke — and everything recorded about it — then refreshes. */
   remove: (smokeId: string) => Promise<void>;
 }
 

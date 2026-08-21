@@ -1060,13 +1060,18 @@ const seedFullSmoke = () =>
     },
   });
 
-describe('smoke client — ordered cascade delete', () => {
-  test('a fully seeded smoke removes all five children and then the parent', async () => {
+describe('smoke client — cascade delete', () => {
+  test('one delete request removes the smoke and all five of its children', async () => {
     const backend = seedFullSmoke();
     const client = createApiClient(backend);
 
     await client.smoke.deleteCascade('smoke-1');
 
+    // The cascade is the backend's: the client asks once and asks for nothing
+    // else — no parent read, no per-child delete.
+    expect(backend.requests).toEqual([
+      { method: 'delete', path: 'smoke/smoke-1', body: undefined },
+    ]);
     expect(backend.store.preSmoke.records['pre-1']).toBeUndefined();
     expect(backend.store.smokeProfile.records['prof-1']).toBeUndefined();
     expect(backend.store.temps.records['temps-1']).toBeUndefined();
@@ -1075,26 +1080,21 @@ describe('smoke client — ordered cascade delete', () => {
     expect(backend.store.smoke.records['smoke-1']).toBeUndefined();
   });
 
-  test('an injected child-delete failure leaves the parent present and rejects with the typed error', async () => {
+  test('a failed delete rejects with the typed error and leaves the smoke intact', async () => {
     const backend = seedFullSmoke();
     const client = createApiClient(backend);
-    backend.injectFault({ method: 'delete', path: 'temps/temps-1', status: 500 });
+    backend.injectFault({ method: 'delete', path: 'smoke/smoke-1', status: 500 });
 
     const error = (await client.smoke.deleteCascade('smoke-1').catch(e => e)) as ApiError;
 
     expect(error).toBeInstanceOf(ApiError);
     expect(error.status).toBe(500);
-    // Parent must survive so the operation is retryable with no orphans.
+    // Nothing was removed, so the same one request can simply be retried.
     expect(backend.store.smoke.records['smoke-1']).toEqual(seededSmoke);
-    // The parent delete must never have been issued.
-    expect(backend.requests).not.toContainEqual({
-      method: 'delete',
-      path: 'smoke/smoke-1',
-      body: undefined,
-    });
+    expect(backend.store.preSmoke.records['pre-1']).toBeDefined();
   });
 
-  test('a nonexistent smoke rejects and issues zero delete calls', async () => {
+  test('a nonexistent smoke rejects and leaves every seeded record untouched', async () => {
     const backend = seedFullSmoke();
     const client = createApiClient(backend);
 
@@ -1102,9 +1102,6 @@ describe('smoke client — ordered cascade delete', () => {
 
     expect(error).toBeInstanceOf(ApiError);
     expect(error.status).toBe(404);
-    // Not a single delete was issued.
-    expect(backend.requests.filter(r => r.method === 'delete')).toHaveLength(0);
-    // Every seeded record is untouched.
     expect(backend.store.smoke.records['smoke-1']).toEqual(seededSmoke);
     expect(backend.store.preSmoke.records['pre-1']).toBeDefined();
     expect(backend.store.temps.records['temps-1']).toBeDefined();

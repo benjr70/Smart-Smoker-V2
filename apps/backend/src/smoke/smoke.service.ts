@@ -6,6 +6,7 @@ import { Smoke, SmokeDocument, SmokeStatus } from './smoke.schema';
 import { SmokeDto } from './smokeDto';
 import { StateService } from '../State/state.service';
 import { TimelineService } from '../timeline/timeline.service';
+import { tempSeriesFilter } from '../temps/temp-series.filter';
 
 @Injectable()
 export class SmokeService extends BaseService<SmokeDocument> {
@@ -13,6 +14,23 @@ export class SmokeService extends BaseService<SmokeDocument> {
     @InjectModel('Smoke') model: Model<SmokeDocument>,
     private stateService: StateService,
     private readonly timeline: TimelineService,
+    /**
+     * The children are reached through their models rather than their
+     * services. Every one of those services already depends on `SmokeModule`
+     * (directly, or through `CommonModule`), so injecting them here would close
+     * a DI cycle. Removing a row is a model operation and carries no policy of
+     * the owning service, so the collections are addressed directly.
+     */
+    @InjectModel('PreSmoke')
+    private readonly preSmokeModel: Model<unknown>,
+    @InjectModel('SmokeProfile')
+    private readonly smokeProfileModel: Model<unknown>,
+    @InjectModel('Temp')
+    private readonly tempModel: Model<unknown>,
+    @InjectModel('PostSmoke')
+    private readonly postSmokeModel: Model<unknown>,
+    @InjectModel('Ratings')
+    private readonly ratingsModel: Model<unknown>,
   ) {
     super(model, 'Smoke');
   }
@@ -20,6 +38,50 @@ export class SmokeService extends BaseService<SmokeDocument> {
   create(smokeDto: SmokeDto): Promise<SmokeDocument> {
     smokeDto.date = new Date();
     return super.create(smokeDto);
+  }
+
+  /**
+   * Delete a cook and everything recorded about it: its pre-smoke, its smoke
+   * profile, its whole temperature series, its post-smoke and its rating.
+   *
+   * The children go first and the parent last. A failure part-way therefore
+   * leaves the smoke still pointing at whatever survived — a state the same
+   * request can be retried against — rather than orphaning children behind a
+   * parent that no longer exists to name them.
+   *
+   * A child id that is absent (legacy cooks were written before some of these
+   * existed) removes nothing and fails nothing: the aim is that after this
+   * call, nothing of the cook remains.
+   */
+  async deleteDeep(id: string) {
+    const smoke = await this.getByIdOrThrow(id);
+    await Promise.all([
+      this.deleteChild(this.preSmokeModel, smoke.preSmokeId),
+      this.deleteChild(this.smokeProfileModel, smoke.smokeProfileId),
+      this.deleteTempSeries(smoke.tempsId),
+      this.deleteChild(this.postSmokeModel, smoke.postSmokeId),
+      this.deleteChild(this.ratingsModel, smoke.ratingId),
+    ]);
+    return this.delete(id);
+  }
+
+  private async deleteChild(child: Model<unknown>, id?: string): Promise<void> {
+    if (!id) {
+      return;
+    }
+    await child.deleteOne({ _id: id }).exec();
+  }
+
+  /**
+   * Temps are a series, not a document: the readings of the cook are removed
+   * together, by the id they share and by the first reading that id came from
+   * (see {@link tempSeriesFilter}).
+   */
+  private async deleteTempSeries(tempsId?: string): Promise<void> {
+    if (!tempsId) {
+      return;
+    }
+    await this.tempModel.deleteMany(tempSeriesFilter(tempsId)).exec();
   }
 
   /**

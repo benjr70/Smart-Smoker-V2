@@ -397,8 +397,10 @@ const rows: ContractRow[] = [
     expected: { method: 'post', path: 'smoke/finish', body: undefined },
   },
   {
-    name: 'smoke.deleteById → DELETE smoke/:id',
-    run: c => c.smoke.deleteById('smoke-1'),
+    // The route is a deep delete, so the client's only smoke delete is the
+    // cascade; there is no shallow `deleteById` on this resource.
+    name: 'smoke.deleteCascade → DELETE smoke/:id (deep delete)',
+    run: c => c.smoke.deleteCascade('smoke-1'),
     expected: { method: 'delete', path: 'smoke/smoke-1', body: undefined },
   },
   // timeline
@@ -431,30 +433,34 @@ describe('endpoint-contract table — method + exact legacy path (+ projected wr
   });
 });
 
-describe('endpoint-contract table — aggregate operations emit the full ordered path set', () => {
-  test('smoke.deleteCascade emits the parent read, five child deletes, then the parent delete last', async () => {
+describe('endpoint-contract table — aggregate operations emit the full path set', () => {
+  /**
+   * DELETE `smoke/:id` is a deep delete, and there is no shallow one behind it.
+   * A second, plainly-named `deleteById` sitting beside the cascade — shallow on
+   * all five other resources — would read as the way to drop the parent alone
+   * and would quietly take the cook's whole record with it.
+   */
+  test('the smoke resource offers one delete, and its name says the delete is deep', () => {
+    const client = createApiClient(fullySeededBackend());
+
+    const deleteOperations = Object.keys(client.smoke).filter(name =>
+      name.toLowerCase().includes('delete')
+    );
+
+    expect(deleteOperations).toEqual(['deleteCascade']);
+  });
+
+  test('smoke.deleteCascade emits exactly one delete of the parent path', async () => {
     const backend = fullySeededBackend();
     const client = createApiClient(backend);
 
     await client.smoke.deleteCascade('smoke-1');
 
-    // Parent is read first so a missing parent throws before any delete.
-    expect(backend.requests[0]).toEqual({ method: 'get', path: 'smoke/smoke-1', body: undefined });
-    // All five children are deleted at their exact legacy paths.
-    const childDeletes: RecordedRequest[] = [
-      { method: 'delete', path: 'presmoke/pre-1', body: undefined },
-      { method: 'delete', path: 'smokeProfile/prof-1', body: undefined },
-      { method: 'delete', path: 'temps/temps-1', body: undefined },
-      { method: 'delete', path: 'postSmoke/post-1', body: undefined },
-      { method: 'delete', path: 'ratings/rate-1', body: undefined },
-    ];
-    childDeletes.forEach(req => expect(backend.requests).toContainEqual(req));
-    // Parent delete is emitted last so a partial cascade never orphans children.
-    expect(backend.requests[backend.requests.length - 1]).toEqual({
-      method: 'delete',
-      path: 'smoke/smoke-1',
-      body: undefined,
-    });
+    // The cascade is the backend's: one request, at the parent path. No child
+    // path is addressed from here any more.
+    expect(backend.requests).toEqual([
+      { method: 'delete', path: 'smoke/smoke-1', body: undefined },
+    ]);
   });
 
   test('smoke.getReview reads the parent, its five children and the cook timeline at their exact paths', async () => {
