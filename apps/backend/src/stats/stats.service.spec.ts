@@ -233,7 +233,9 @@ describe('StatsService', () => {
 
     expect(stats.totalSessions).toBe(10);
     expect(stats.totalCookMs).toBe(100 * HOUR);
-    expect(tempReads.reads).toBe(1);
+    // Two grouped reads however many cooks there are: the ends of every series,
+    // and the peak of every cook that has none stamped yet.
+    expect(tempReads.reads).toBe(2);
   });
 
   it('says nothing about an installation that has never finished a cook', async () => {
@@ -253,6 +255,75 @@ describe('StatsService', () => {
     expect(stats.totalSessions).toBe(0);
     expect(stats.totalPounds).toBeNull();
     expect(stats.byMeat).toEqual([]);
+  });
+
+  describe('the hottest chamber a cook ever ran', () => {
+    /** One finished, fully stamped cook whose series ran `chamber`. */
+    const stampedCook = (id: string, chamber: string[]): void => {
+      smokes.push({
+        _id: id,
+        preSmokeId: `pre-${id}`,
+        tempsId: `temps-${id}`,
+        date: new Date('2026-04-20T12:00:00.000Z'),
+        startedAt: new Date('2026-04-20T06:00:00.000Z'),
+        finishedAt: new Date('2026-04-20T14:00:00.000Z'),
+        status: SmokeStatus.Complete,
+      });
+      preSmokes.push({ _id: `pre-${id}`, name: id, meatType: 'Brisket' });
+      chamber.forEach((value, index) =>
+        temps.push({
+          tempsId: `temps-${id}`,
+          date: new Date(2026, 3, 20, 6 + index),
+          ChamberTemp: value,
+        }),
+      );
+    };
+
+    it('backfills the peak of a cook finished before peaks were stamped', async () => {
+      // Lexically the larger of the two, numerically the cooler.
+      stampedCook('legacy', ['99', '245']);
+
+      const stats = await (await build()).recalculate();
+
+      expect(smokes[0].peakChamber).toBe(245);
+      expect(stats.records.hottestChamber).toMatchObject({
+        smokeId: 'legacy',
+        value: 245,
+      });
+    });
+
+    it('never reads a cook’s readings for its peak twice', async () => {
+      stampedCook('legacy', ['210', '245']);
+      const service = await build();
+      await service.recalculate();
+
+      tempReads.reads = 0;
+      const stats = await service.recalculate();
+
+      expect(tempReads.reads).toBe(0);
+      expect(stats.records.hottestChamber).toMatchObject({ value: 245 });
+    });
+
+    it('reports the hottest of the cooks that carry a peak', async () => {
+      stampedCook('cooler', ['180']);
+      stampedCook('hotter', ['310']);
+
+      const stats = await (await build()).recalculate();
+
+      expect(stats.records.hottestChamber).toMatchObject({
+        smokeId: 'hotter',
+        value: 310,
+      });
+    });
+
+    it('holds no record while no cook recorded a chamber at all', async () => {
+      stampedCook('unrecorded', []);
+
+      const stats = await (await build()).recalculate();
+
+      expect(stats.totalSessions).toBe(1);
+      expect(stats.records.hottestChamber).toBeNull();
+    });
   });
 
   describe('the stored aggregate', () => {

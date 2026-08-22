@@ -19,6 +19,18 @@ describe('SmokeSchema constraints', () => {
     expect(error?.errors.status).toBeDefined();
   });
 
+  it('keeps the peak chamber a finished cook was stamped with', () => {
+    const doc = new SmokeModel({
+      status: SmokeStatus.Complete,
+      peakChamber: 268,
+    });
+
+    expect(doc.validateSync()).toBeUndefined();
+    // A field the schema does not declare is dropped on the way to storage, so
+    // the stamp has to be part of the schema rather than merely written.
+    expect(doc.toObject().peakChamber).toBe(268);
+  });
+
   it('rejects a status outside the SmokeStatus enum', () => {
     const doc = new SmokeModel({ status: 99 });
 

@@ -100,12 +100,79 @@ export class TimelineService {
   async stampFinish(smokeId: string): Promise<void> {
     const stored = await this.settingsModel.findOne().exec();
     const targetTemp = primaryWatchedTarget(withSettingsDefaults(stored));
+    const smoke = await this.smokeModel.findById(smokeId).exec();
+    const peakChamber = smoke ? await this.peakChamberOf(smoke) : null;
     await this.smokeModel
       .updateOne(
         { _id: smokeId, finishedAt: null },
-        { $set: { finishedAt: new Date(), targetTemp } },
+        {
+          $set: {
+            finishedAt: new Date(),
+            targetTemp,
+            // Only where the cook recorded one: a series with no readable
+            // chamber reading has no peak, and stamping a `null` would claim
+            // the archive had been asked and the answer was nothing.
+            ...(peakChamber === null ? {} : { peakChamber }),
+          },
+        },
       )
       .exec();
+  }
+
+  /**
+   * The hottest a cook's chamber ever ran, from its readings — the number that
+   * is stamped at finish and backfilled onto cooks finished before the stamp
+   * existed.
+   *
+   * The store's own `$max` rather than a series pulled across the wire to be
+   * reduced here — a twelve-hour cook is tens of thousands of rows, and the
+   * only number wanted of them is one.
+   */
+  private async peakChamberOf(smoke: StoredSmoke): Promise<number | null> {
+    return (await this.peaksOf(smoke)).ChamberTemp ?? null;
+  }
+
+  /**
+   * The hottest chamber reading of each of many series, in one query — the
+   * number stamped onto a cook at finish, asked of a whole archive at once.
+   *
+   * Exists for the same reason {@link getDurationsMs} does: the statistics
+   * rebuild backfills the peaks of every cook that has none, and asked one at a
+   * time that would be a query per cook. A series nothing readable was recorded
+   * for is absent from the answer rather than present as a zero.
+   */
+  async peakChambersOf(tempsIds: string[]): Promise<Map<string, number>> {
+    if (tempsIds.length === 0) {
+      return new Map();
+    }
+    const rows = await this.tempModel
+      .aggregate([
+        { $match: { tempsId: { $in: tempsIds } } },
+        {
+          $group: {
+            _id: '$tempsId',
+            // Converted before the `$max`: readings are stored as strings, and
+            // a `$max` over strings is alphabetical — `'99'` sorts above
+            // `'245'`, so it would call 99°F the hotter of the two.
+            peak: {
+              $max: {
+                $convert: {
+                  input: '$ChamberTemp',
+                  to: 'double',
+                  onError: null,
+                  onNull: null,
+                },
+              },
+            },
+          },
+        },
+      ])
+      .exec();
+    return new Map(
+      (rows as { _id: unknown; peak: unknown }[])
+        .filter((row) => typeof row.peak === 'number' && isFinite(row.peak))
+        .map((row) => [String(row._id), row.peak as number]),
+    );
   }
 
   /**
