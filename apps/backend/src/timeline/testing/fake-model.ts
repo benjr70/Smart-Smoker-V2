@@ -95,7 +95,13 @@ const query = (rows: FakeDoc[], one: boolean) => {
       // rows in storage order would answer a different ten cooks than the ten
       // most recent the caller asked for.
       const sorted = ordered(rows, sort);
-      const result = limit === null ? sorted : sorted.slice(0, limit);
+      // Copies, because a document that has been read is a snapshot of
+      // storage and not a live handle into it: a later write does not reach
+      // back into the object the caller is already holding, and code that
+      // reads a field it has just written to the store must read it back.
+      const result = (limit === null ? sorted : sorted.slice(0, limit)).map(
+        (doc) => ({ ...doc }),
+      );
       if (!one) {
         return result;
       }
@@ -241,6 +247,24 @@ export const fakeModel = (docs: FakeDoc[]) => ({
         return docs.filter((doc) => matches(doc, filter)).length;
       },
     };
+  },
+  /**
+   * Many updates in one round trip, applied in the order they were given —
+   * how a whole archive's worth of stamps is written without a query per
+   * document.
+   */
+  async bulkWrite(
+    operations: {
+      updateOne: { filter: FakeDoc; update: { $set?: FakeDoc } };
+    }[],
+  ) {
+    operations.forEach(({ updateOne }) => {
+      const target = docs.find((doc) => matches(doc, updateOne.filter));
+      if (target) {
+        Object.assign(target, updateOne.update.$set ?? {});
+      }
+    });
+    return { modifiedCount: operations.length };
   },
   /**
    * `upsert` inserts the document the filter describes when nothing matches —

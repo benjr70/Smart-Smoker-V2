@@ -96,12 +96,22 @@ export class TimelineService {
    * still read 203°F after the next one is set up for chicken. Conditional for
    * the same reason as the start — a finish that already happened is not
    * moved, and its snapshot is not rewritten.
+   *
+   * The cook is read before any of that work is done, and a finish that has
+   * already happened stops here: the guard on the write would reject it
+   * anyway, and everything between the two — a settings read and a scan of the
+   * whole series for its peak — would have been done to be thrown away. The
+   * guard still stands, because two clients finishing at once can both get
+   * past this read.
    */
   async stampFinish(smokeId: string): Promise<void> {
+    const smoke = await this.smokeModel.findById(smokeId).exec();
+    if (!smoke || smoke.finishedAt) {
+      return;
+    }
     const stored = await this.settingsModel.findOne().exec();
     const targetTemp = primaryWatchedTarget(withSettingsDefaults(stored));
-    const smoke = await this.smokeModel.findById(smokeId).exec();
-    const peakChamber = smoke ? await this.peakChamberOf(smoke) : null;
+    const peakChamber = await this.peakChamberOf(smoke);
     await this.smokeModel
       .updateOne(
         { _id: smokeId, finishedAt: null },
@@ -109,9 +119,13 @@ export class TimelineService {
           $set: {
             finishedAt: new Date(),
             targetTemp,
-            // Only where the cook recorded one: a series with no readable
-            // chamber reading has no peak, and stamping a `null` would claim
-            // the archive had been asked and the answer was nothing.
+            // Recorded whatever the readings said, so that a cook whose series
+            // held nothing readable is never scanned for a peak again — see
+            // the field's own note.
+            peakChamberScanned: true,
+            // The peak itself only where the cook recorded one: a series with
+            // no readable chamber reading has no peak, and a stamped zero
+            // would be a claim about how the cook ran.
             ...(peakChamber === null ? {} : { peakChamber }),
           },
         },
@@ -124,12 +138,16 @@ export class TimelineService {
    * is stamped at finish and backfilled onto cooks finished before the stamp
    * existed.
    *
-   * The store's own `$max` rather than a series pulled across the wire to be
-   * reduced here — a twelve-hour cook is tens of thousands of rows, and the
-   * only number wanted of them is one.
+   * Asked of {@link peakChambersOf} rather than of the peaks of every probe:
+   * the chamber is the only one wanted here, and the four meat maxima the
+   * fuller aggregation computes would be four accumulators nobody reads.
    */
   private async peakChamberOf(smoke: StoredSmoke): Promise<number | null> {
-    return (await this.peaksOf(smoke)).ChamberTemp ?? null;
+    if (!smoke.tempsId) {
+      return null;
+    }
+    const peaks = await this.peakChambersOf([String(smoke.tempsId)]);
+    return peaks.get(String(smoke.tempsId)) ?? null;
   }
 
   /**

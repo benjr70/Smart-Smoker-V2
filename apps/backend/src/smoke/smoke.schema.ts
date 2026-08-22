@@ -67,6 +67,20 @@ export class Smoke {
   @Prop()
   peakChamber?: number;
 
+  /**
+   * Whether this cook's readings have been searched for a peak chamber
+   * temperature — set at finish, and by the backfill that catches up with
+   * cooks finished before peaks were stamped.
+   *
+   * Separate from the peak itself because a search can come back with nothing:
+   * a cook that recorded no readable chamber reading has no peak to stamp, and
+   * without a mark saying it was asked, every future statistics rebuild would
+   * ask its series again forever. The pair reads as: no mark, never asked;
+   * mark and a peak, that is the peak; mark and no peak, there was none.
+   */
+  @Prop()
+  peakChamberScanned?: boolean;
+
   @Prop({
     required: true,
     type: Number,

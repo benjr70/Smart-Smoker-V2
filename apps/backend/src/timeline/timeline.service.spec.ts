@@ -704,6 +704,17 @@ describe('TimelineService', () => {
       expect((await service.getTimeline('smoke-id')).finishedAt).toEqual(first);
     });
 
+    it('reads nothing of an already finished cook’s series', async () => {
+      await service.stampFinish('smoke-id');
+      const reads = jest.spyOn(models.temps, 'aggregate');
+
+      await service.stampFinish('smoke-id');
+
+      // A retried finish is rejected by the guard on the write, so scanning
+      // the series first is a whole cook's readings read to be thrown away.
+      expect(reads).not.toHaveBeenCalled();
+    });
+
     it('stamps how hot the chamber ever ran onto the cook', async () => {
       await service.stampFinish('smoke-id');
 
@@ -729,6 +740,16 @@ describe('TimelineService', () => {
 
       expect(smokes[0].peakChamber ?? null).toBeNull();
       expect(smokes[0].finishedAt).toBeInstanceOf(Date);
+    });
+
+    it('records that a cook with no readings was asked for a peak', async () => {
+      temps.length = 0;
+
+      await service.stampFinish('smoke-id');
+
+      // So the statistics rebuild knows the answer was nothing, rather than
+      // going back to its series for the same nothing every time.
+      expect(smokes[0].peakChamberScanned).toBe(true);
     });
   });
 });

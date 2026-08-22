@@ -31,6 +31,19 @@ describe('SmokeSchema constraints', () => {
     expect(doc.toObject().peakChamber).toBe(268);
   });
 
+  it('keeps the mark that a cook’s readings were searched for a peak', () => {
+    const doc = new SmokeModel({
+      status: SmokeStatus.Complete,
+      peakChamberScanned: true,
+    });
+
+    expect(doc.validateSync()).toBeUndefined();
+    // A cook whose series held nothing readable carries the mark and no peak,
+    // which is how "asked, and there was nothing" is told from "never asked".
+    expect(doc.toObject().peakChamberScanned).toBe(true);
+    expect(doc.toObject().peakChamber).toBeUndefined();
+  });
+
   it('rejects a status outside the SmokeStatus enum', () => {
     const doc = new SmokeModel({ status: 99 });
 
