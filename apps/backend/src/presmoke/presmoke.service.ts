@@ -8,6 +8,8 @@ import { StateService } from '../State/state.service';
 import { PreSmoke, PreSmokeDocument } from './presmoke.schema';
 import { PreSmokeDto } from './presmokeDto';
 import { SmokeStatus } from '../smoke/smoke.schema';
+import { markStatsStale } from '../stats/mark-stats-stale';
+import { StatsService } from '../stats/stats.service';
 
 @Injectable()
 export class PreSmokeService extends BaseService<PreSmokeDocument> {
@@ -15,8 +17,24 @@ export class PreSmokeService extends BaseService<PreSmokeDocument> {
     @InjectModel(PreSmoke.name) model: Model<PreSmokeDocument>,
     private stateService: StateService,
     private smokeService: SmokeService,
+    private readonly stats: StatsService,
   ) {
     super(model, 'PreSmoke');
+  }
+
+  /**
+   * What was cooked, and how much of it, are the numbers the Stats screen is
+   * mostly made of — so every write here leaves the stored statistics out of
+   * date. Correcting a meat type or a weight moves no cook in or out of the
+   * archive, which is the only change that read can notice by itself.
+   *
+   * Marked while the cook is still running too, which costs a rebuild the next
+   * time somebody opens the screen. That is the cheap side of the trade: the
+   * alternative is deciding here whether this document belongs to a finished
+   * cook, which is a walk this service has no reason to do on every save.
+   */
+  protected async afterWrite(): Promise<void> {
+    await markStatsStale(this.stats, 'pre-smoke');
   }
 
   async save(preSmokeDto: PreSmokeDto): Promise<PreSmoke> {

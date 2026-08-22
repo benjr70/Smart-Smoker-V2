@@ -57,9 +57,11 @@ export class StatsService {
       return this.recalculate();
     }
     // The only query the served path costs: a count, not a read of the cooks.
-    // It is what catches the changes nothing announced — a restored backup, a
-    // row deleted by hand — so a wrong aggregate is wrong until the next read
-    // rather than until somebody notices.
+    // It is the second of two guards and the weaker one — every service whose
+    // documents feed these numbers marks the aggregate stale when it writes
+    // one (see {@link markStatsStale}), because an edited weight or a deleted
+    // score leaves this count exactly where it was. What the count catches is
+    // what nothing announced at all: a restored backup, a row changed by hand.
     const completed = await this.completedCount();
     return completed === stored.completedSmokes
       ? stored.aggregate
@@ -75,23 +77,37 @@ export class StatsService {
    * every stored aggregate self-correcting.
    */
   async recalculate(): Promise<StatsDto> {
+    // Read before the archive is read, so anything that declares the archive
+    // stale from here on is known to have landed after this computation saw it.
+    const before = await this.snapshotModel.findOne({}).exec();
+    const revision = before?.revision ?? 0;
+
     const aggregate = aggregateStats(await this.joinedCooks());
-    await this.snapshotModel
+    const computed = {
+      aggregate,
+      // What it was derived from, so the guard compares against the archive
+      // this run actually saw.
+      completedSmokes: aggregate.totalSessions,
+      computedAt: new Date(),
+    };
+
+    // Clearing the flag is a claim that the stored numbers account for
+    // everything that has been declared stale — true only if nothing was
+    // declared stale while the cooks were being read, which is what matching
+    // on the revision asks.
+    const claimed = await this.snapshotModel
       .updateOne(
-        {},
-        {
-          $set: {
-            aggregate,
-            dirty: false,
-            // What it was derived from, so the guard compares against the
-            // archive this run actually saw.
-            completedSmokes: aggregate.totalSessions,
-            computedAt: new Date(),
-          },
-        },
-        { upsert: true },
+        { revision },
+        { $set: { ...computed, dirty: false } },
+        { upsert: !before },
       )
       .exec();
+    if (claimed.matchedCount === 0 && !claimed.upsertedCount) {
+      // Something changed the numbers mid-read. These are still better numbers
+      // than the ones stored, so they are kept — but the flag stands, and the
+      // next read rebuilds over the change this one missed.
+      await this.snapshotModel.updateOne({}, { $set: computed }).exec();
+    }
     return aggregate;
   }
 
@@ -106,7 +122,14 @@ export class StatsService {
    */
   async markDirty(): Promise<void> {
     await this.snapshotModel
-      .updateOne({}, { $set: { dirty: true } }, { upsert: true })
+      .updateOne(
+        {},
+        // The counter is bumped with the flag so that a rebuild already in
+        // flight can tell this write happened behind its back and leave the
+        // flag standing for the read after it.
+        { $set: { dirty: true }, $inc: { revision: 1 } },
+        { upsert: true },
+      )
       .exec();
   }
 

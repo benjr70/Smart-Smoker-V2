@@ -6,12 +6,14 @@ import { PreSmokeDto } from './presmokeDto';
 import { StateService } from '../State/state.service';
 import { SmokeService } from '../smoke/smoke.service';
 import { SmokeStatus } from '../smoke/smoke.schema';
+import { StatsService } from '../stats/stats.service';
 
 describe('PreSmokeService', () => {
   let service: PreSmokeService;
   let mockPreSmokeModel: any;
   let mockStateService: Partial<StateService>;
   let mockSmokeService: Partial<SmokeService>;
+  let mockStatsService: { markDirty: jest.Mock };
 
   const mockWeight = {
     unit: 'lbs',
@@ -78,9 +80,15 @@ describe('PreSmokeService', () => {
       update: jest.fn().mockResolvedValue(mockSmoke),
     };
 
+    mockStatsService = { markDirty: jest.fn().mockResolvedValue(undefined) };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PreSmokeService,
+        {
+          provide: StatsService,
+          useValue: mockStatsService,
+        },
         {
           provide: getModelToken(PreSmoke.name),
           useValue: mockPreSmokeModel,
@@ -222,6 +230,21 @@ describe('PreSmokeService', () => {
       // We can't really test this properly without fixing the service logic
     });
     */
+  });
+
+  describe('the statistics the meat belongs to', () => {
+    it('marks them stale when a cook’s pre-smoke is edited', async () => {
+      mockPreSmokeModel.findByIdAndUpdate = jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue(mockPreSmokeDocument),
+      });
+
+      // The meat, its weight and its name are all counted on the Stats screen,
+      // and correcting any of them moves no cook in or out of the archive —
+      // the count guard would never see the edit.
+      await service.update('presmoke-id', mockPreSmoke as PreSmokeDto);
+
+      expect(mockStatsService.markDirty).toHaveBeenCalled();
+    });
   });
 
   // create / getAll / getById / update / delete are inherited from BaseService

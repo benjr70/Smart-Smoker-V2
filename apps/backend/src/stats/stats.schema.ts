@@ -32,6 +32,18 @@ export class StatsSnapshot {
   @Prop({ default: false })
   dirty: boolean;
 
+  /**
+   * How many times the archive has been declared stale, ever.
+   *
+   * A rebuild reads this before it reads the cooks and only clears {@link
+   * dirty} if it is still the same afterwards. Without it, a score written
+   * while the rebuild was reading would have its flag cleared by a computation
+   * that never saw it, and — the cook count being unchanged — nothing would
+   * ever notice again.
+   */
+  @Prop({ default: 0 })
+  revision: number;
+
   /** How many completed cooks {@link aggregate} was derived from. */
   @Prop({ default: 0 })
   completedSmokes: number;

@@ -195,5 +195,44 @@ describe('RatingsService', () => {
       expect(mockStatsService.markDirty).toHaveBeenCalled();
       expect(mockStatsService.recalculate).not.toHaveBeenCalled();
     });
+
+    it('still saves the score when the flag cannot be written', async () => {
+      mockStatsService.markDirty.mockRejectedValue(new Error('mongo hiccup'));
+
+      // The score is in the database by the time the flag is written. Failing
+      // here would tell the pitmaster their rating did not save, and their
+      // retry would write it a second time.
+      await expect(
+        service.update('rating-id-123', mockRatingsDto),
+      ).resolves.toBeDefined();
+    });
+
+    it('marks them stale when a score is deleted', async () => {
+      // A delete changes the averages as surely as a write does, and it leaves
+      // the number of completed cooks alone — so nothing but the flag would
+      // ever notice the stored numbers still count the score that is gone.
+      await service.delete('rating-id-123');
+
+      expect(mockStatsService.markDirty).toHaveBeenCalled();
+    });
+
+    it('marks them stale again once the cook points at its new score', async () => {
+      mockSmokeService.getCurrentSmoke.mockResolvedValue(
+        mockSmokeWithoutRating,
+      );
+
+      await service.saveCurrentRatings(mockRatingsDto);
+
+      // The rating exists before the cook points at it, and a rebuild in that
+      // window reads an archive where the cook has no score — then clears the
+      // flag the create had set. Marking again after the link means no rebuild
+      // can end without having seen the score.
+      const lastMark = Math.max(
+        ...mockStatsService.markDirty.mock.invocationCallOrder,
+      );
+      expect(lastMark).toBeGreaterThan(
+        mockSmokeService.update.mock.invocationCallOrder[0],
+      );
+    });
   });
 });

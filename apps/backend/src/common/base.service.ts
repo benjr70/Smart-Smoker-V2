@@ -18,9 +18,24 @@ export abstract class BaseService<TDoc> {
     protected readonly label: string,
   ) {}
 
+  /**
+   * Announced after every write this service makes, whatever the write was.
+   *
+   * A service whose documents are an ingredient of something derived overrides
+   * this to say so once, instead of remembering to say it in each of `create`,
+   * `update` and `delete` — the place such a rule is most often forgotten is
+   * the third one.
+   */
+  protected afterWrite(): Promise<void> {
+    // Nothing is derived from these documents unless a subclass says so.
+    return Promise.resolve();
+  }
+
   async create(dto: Partial<TDoc>): Promise<TDoc> {
     const created = new this.model(dto as TDoc);
-    return created.save();
+    const saved = await created.save();
+    await this.afterWrite();
+    return saved;
   }
 
   async getAll(): Promise<TDoc[]> {
@@ -46,10 +61,13 @@ export abstract class BaseService<TDoc> {
     if (!updated) {
       throw new NotFoundException(`${this.label} ${id} not found`);
     }
+    await this.afterWrite();
     return updated;
   }
 
   async delete(id: string) {
-    return this.model.deleteOne({ _id: id }).exec();
+    const deleted = await this.model.deleteOne({ _id: id }).exec();
+    await this.afterWrite();
+    return deleted;
   }
 }

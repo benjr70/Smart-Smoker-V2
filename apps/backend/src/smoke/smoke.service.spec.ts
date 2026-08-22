@@ -269,6 +269,23 @@ describe('SmokeService', () => {
       );
     });
 
+    it('still finishes the cook when the statistics cannot be recomputed', async () => {
+      jest
+        .spyOn(service, 'getCurrentSmoke')
+        .mockResolvedValue(mockSmokeDocument as Smoke);
+      const finished = {
+        ...mockSmokeDocument,
+        status: SmokeStatus.Complete,
+      } as unknown as SmokeDocument;
+      jest.spyOn(service, 'update').mockResolvedValue(finished);
+      mockStatsService.recalculate.mockRejectedValue(new Error('mongo hiccup'));
+
+      // The cook is already complete in the archive by the time the statistics
+      // are touched. Failing the request here would tell the pitmaster their
+      // cook did not finish — and the stats read heals itself anyway.
+      await expect(service.FinishSmoke()).resolves.toBe(finished);
+    });
+
     it('recomputes nothing when there was no cook to finish', async () => {
       jest.spyOn(service, 'getCurrentSmoke').mockResolvedValue(null);
 
@@ -313,6 +330,19 @@ describe('SmokeService', () => {
       // Last of all: statistics recomputed while the smoke was still there
       // would count the cook that was just deleted.
       expect(deleteLog[deleteLog.length - 1]).toBe('stats:recalculate');
+    });
+
+    it('reports the delete as done when the statistics cannot be recomputed', async () => {
+      jest
+        .spyOn(service, 'getById')
+        .mockResolvedValue(mockSmokeDocument as unknown as SmokeDocument);
+      mockStatsService.recalculate.mockRejectedValue(new Error('mongo hiccup'));
+
+      // Nothing of the cook is left by now, so a retry of this request would
+      // only 404. The count guard rebuilds the statistics on the next read.
+      await expect(service.deleteDeep('test-smoke-id')).resolves.toEqual({
+        deletedCount: 1,
+      });
     });
 
     it('deletes every child before the parent, so a failure is retryable', async () => {

@@ -249,20 +249,29 @@ export const fakeModel = (docs: FakeDoc[]) => ({
    */
   updateOne(
     filter: FakeDoc,
-    update: { $set: FakeDoc },
+    update: { $set?: FakeDoc; $inc?: Record<string, number> },
     options: { upsert?: boolean } = {},
   ) {
     const target = docs.find((doc) => matches(doc, filter));
     if (target) {
-      Object.assign(target, update.$set);
+      Object.assign(target, update.$set ?? {});
+      Object.entries(update.$inc ?? {}).forEach(([field, by]) => {
+        target[field] = ((target[field] as number) ?? 0) + by;
+      });
     } else if (options.upsert) {
-      docs.push({ ...filter, ...update.$set });
+      // What Mongo inserts for an upsert nothing matched: the filter's own
+      // equalities, the `$set`, and each `$inc` field starting from its step.
+      docs.push({ ...filter, ...(update.$set ?? {}), ...(update.$inc ?? {}) });
     }
     return {
       async exec() {
         return target
-          ? { modifiedCount: 1, upsertedCount: 0 }
-          : { modifiedCount: 0, upsertedCount: options.upsert ? 1 : 0 };
+          ? { matchedCount: 1, modifiedCount: 1, upsertedCount: 0 }
+          : {
+              matchedCount: 0,
+              modifiedCount: 0,
+              upsertedCount: options.upsert ? 1 : 0,
+            };
       },
     };
   },

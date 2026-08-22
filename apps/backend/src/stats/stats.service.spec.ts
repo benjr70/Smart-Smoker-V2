@@ -46,12 +46,15 @@ describe('StatsService', () => {
    * a cached read apart from a recomputed one.
    */
   let archiveReads: { reads: number };
+  /** The archive's model, so a test can stage a write inside a read of it. */
+  let smokeModel: ReturnType<typeof countingModel>['model'];
 
   const build = async (): Promise<StatsService> => {
     const counted = countingModel(temps);
     tempReads = counted.counter;
     const countedSmokes = countingModel(smokes);
     archiveReads = countedSmokes.counter;
+    smokeModel = countedSmokes.model;
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         StatsService,
@@ -331,5 +334,52 @@ describe('StatsService', () => {
 
       expect(rebuilt).toEqual(fromScratch);
     });
+
+    it('leaves the flag standing when something is marked stale mid-rebuild', async () => {
+      completedCook('smoke-1', 'Brisket', 12);
+      const service = await build();
+      await service.getStats();
+      await service.markDirty();
+      // A rating written in the window between the rebuild reading the archive
+      // and storing what it read. Clearing the flag on the way out would bury
+      // that score forever: the cook count is unchanged, so nothing else would
+      // ever notice the stored numbers had missed it.
+      scoreTheCookDuringTheNextArchiveRead(service);
+
+      await service.getStats();
+
+      expect(snapshots[0]).toMatchObject({ dirty: true });
+      const readsAfterRace = archiveReads.reads;
+      expect((await service.getStats()).averageRating).toBe(9);
+      expect(archiveReads.reads).toBeGreaterThan(readsAfterRace);
+    });
   });
+
+  /**
+   * Score the one cook while the archive is being read for a rebuild — the race
+   * a stats read cannot see happening, staged so it happens every time.
+   */
+  const scoreTheCookDuringTheNextArchiveRead = (
+    service: StatsService,
+  ): void => {
+    type ArchiveRead = (filter?: FakeDoc) => { exec(): Promise<FakeDoc[]> };
+    const model = smokeModel as unknown as Record<string, unknown>;
+    const readArchive = (model.find as ArchiveRead).bind(smokeModel);
+    let raced = false;
+    model.find = (filter: FakeDoc = {}) => {
+      const found = readArchive(filter);
+      return {
+        async exec() {
+          const cooks = await found.exec();
+          if (!raced) {
+            raced = true;
+            ratings.push({ _id: 'rating-1', overallTaste: 9 });
+            smokes[0].ratingId = 'rating-1';
+            await service.markDirty();
+          }
+          return cooks;
+        },
+      };
+    };
+  };
 });

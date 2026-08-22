@@ -3,6 +3,7 @@ import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { RatingsService } from '../ratings/ratings.service';
 import { CurrentSmokeService } from '../common/current-smoke.service';
+import { StatsService } from '../stats/stats.service';
 import { Smoke } from '../smoke/smoke.schema';
 import { SmokeProfileService } from './smokeProfile.service';
 import { SmokeProFileDto } from './smokeProfileDto';
@@ -17,6 +18,7 @@ describe('SmokeProfileService', () => {
     upsertCurrent: jest.Mock;
   };
   let ratingsService: { saveCurrentRatings: jest.Mock };
+  let stats: { markDirty: jest.Mock };
 
   const dto: SmokeProFileDto = {
     chamberName: 'Big Green Egg',
@@ -53,6 +55,7 @@ describe('SmokeProfileService', () => {
     };
 
     ratingsService = { saveCurrentRatings: jest.fn().mockResolvedValue({}) };
+    stats = { markDirty: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -60,6 +63,7 @@ describe('SmokeProfileService', () => {
         { provide: getModelToken('SmokeProfile'), useValue: model },
         { provide: CurrentSmokeService, useValue: currentSmoke },
         { provide: RatingsService, useValue: ratingsService },
+        { provide: StatsService, useValue: stats },
       ],
     }).compile();
 
@@ -180,6 +184,17 @@ describe('SmokeProfileService', () => {
       await expect(service.saveCurrentSmokeProfile(dto)).rejects.toBeInstanceOf(
         NotFoundException,
       );
+    });
+  });
+
+  describe('the statistics the wood belongs to', () => {
+    it('marks them stale when a cook’s profile is edited', async () => {
+      // Which wood a cook was smoked over is counted on the Stats screen, and
+      // changing it moves no cook in or out of the archive — the count guard
+      // would never see it, so the write has to say so itself.
+      await service.update('profile-1', dto);
+
+      expect(stats.markDirty).toHaveBeenCalled();
     });
   });
 
