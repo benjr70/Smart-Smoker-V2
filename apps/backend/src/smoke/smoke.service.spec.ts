@@ -6,6 +6,7 @@ import { Smoke, SmokeDocument, SmokeStatus } from './smoke.schema';
 import { SmokeDto } from './smokeDto';
 import { StateService } from '../State/state.service';
 import { TimelineService } from '../timeline/timeline.service';
+import { StatsService } from '../stats/stats.service';
 import { createMockModel } from '../common/testing/create-mock-model';
 import { Types } from 'mongoose';
 import { tempSeriesFilter } from '../temps/temp-series.filter';
@@ -15,6 +16,7 @@ describe('SmokeService', () => {
   let mockSmokeModel: any;
   let mockStateService: Partial<StateService>;
   let mockTimelineService: { stampFinish: jest.Mock };
+  let mockStatsService: { recalculate: jest.Mock };
   let mockPreSmokeModel: any;
   let mockSmokeProfileModel: any;
   let mockTempModel: any;
@@ -101,6 +103,15 @@ describe('SmokeService', () => {
       stampFinish: jest.fn().mockResolvedValue(undefined),
     };
 
+    // The statistics recompute announces itself into the same log as the
+    // deletes, so "after everything was removed" is a fact the test can read
+    // rather than an ordering it has to assume.
+    mockStatsService = {
+      recalculate: jest.fn().mockImplementation(async () => {
+        deleteLog.push('stats:recalculate');
+      }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SmokeService,
@@ -115,6 +126,10 @@ describe('SmokeService', () => {
         {
           provide: TimelineService,
           useValue: mockTimelineService,
+        },
+        {
+          provide: StatsService,
+          useValue: mockStatsService,
         },
         { provide: getModelToken('PreSmoke'), useValue: mockPreSmokeModel },
         {
@@ -232,6 +247,52 @@ describe('SmokeService', () => {
       expect(await service.FinishSmoke()).toBeNull();
       expect(mockTimelineService.stampFinish).not.toHaveBeenCalled();
     });
+
+    it('recomputes the statistics the finished cook has just joined', async () => {
+      jest
+        .spyOn(service, 'getCurrentSmoke')
+        .mockResolvedValue(mockSmokeDocument as Smoke);
+      jest.spyOn(service, 'update').mockResolvedValue({
+        ...mockSmokeDocument,
+        status: SmokeStatus.Complete,
+      } as unknown as SmokeDocument);
+
+      await service.FinishSmoke();
+
+      expect(mockStatsService.recalculate).toHaveBeenCalled();
+      // After the cook was marked complete, never before: statistics computed
+      // over an archive the cook is not yet in would leave it out.
+      expect(
+        mockStatsService.recalculate.mock.invocationCallOrder[0],
+      ).toBeGreaterThan(
+        (service.update as jest.Mock).mock.invocationCallOrder[0],
+      );
+    });
+
+    it('still finishes the cook when the statistics cannot be recomputed', async () => {
+      jest
+        .spyOn(service, 'getCurrentSmoke')
+        .mockResolvedValue(mockSmokeDocument as Smoke);
+      const finished = {
+        ...mockSmokeDocument,
+        status: SmokeStatus.Complete,
+      } as unknown as SmokeDocument;
+      jest.spyOn(service, 'update').mockResolvedValue(finished);
+      mockStatsService.recalculate.mockRejectedValue(new Error('mongo hiccup'));
+
+      // The cook is already complete in the archive by the time the statistics
+      // are touched. Failing the request here would tell the pitmaster their
+      // cook did not finish — and the stats read heals itself anyway.
+      await expect(service.FinishSmoke()).resolves.toBe(finished);
+    });
+
+    it('recomputes nothing when there was no cook to finish', async () => {
+      jest.spyOn(service, 'getCurrentSmoke').mockResolvedValue(null);
+
+      await service.FinishSmoke();
+
+      expect(mockStatsService.recalculate).not.toHaveBeenCalled();
+    });
   });
 
   describe('deleteDeep', () => {
@@ -259,6 +320,31 @@ describe('SmokeService', () => {
       });
     });
 
+    it('recomputes the statistics once nothing of the cook is left', async () => {
+      jest
+        .spyOn(service, 'getById')
+        .mockResolvedValue(mockSmokeDocument as unknown as SmokeDocument);
+
+      await service.deleteDeep('test-smoke-id');
+
+      // Last of all: statistics recomputed while the smoke was still there
+      // would count the cook that was just deleted.
+      expect(deleteLog[deleteLog.length - 1]).toBe('stats:recalculate');
+    });
+
+    it('reports the delete as done when the statistics cannot be recomputed', async () => {
+      jest
+        .spyOn(service, 'getById')
+        .mockResolvedValue(mockSmokeDocument as unknown as SmokeDocument);
+      mockStatsService.recalculate.mockRejectedValue(new Error('mongo hiccup'));
+
+      // Nothing of the cook is left by now, so a retry of this request would
+      // only 404. The count guard rebuilds the statistics on the next read.
+      await expect(service.deleteDeep('test-smoke-id')).resolves.toEqual({
+        deletedCount: 1,
+      });
+    });
+
     it('deletes every child before the parent, so a failure is retryable', async () => {
       jest
         .spyOn(service, 'getById')
@@ -266,9 +352,11 @@ describe('SmokeService', () => {
 
       await service.deleteDeep('test-smoke-id');
 
-      expect(deleteLog).toHaveLength(6);
-      expect(deleteLog[deleteLog.length - 1]).toBe('smoke:test-smoke-id');
-      expect(deleteLog.slice(0, 5).sort()).toEqual(
+      const deletes = deleteLog.filter((entry) => !entry.startsWith('stats:'));
+
+      expect(deletes).toHaveLength(6);
+      expect(deletes[deletes.length - 1]).toBe('smoke:test-smoke-id');
+      expect(deletes.slice(0, 5).sort()).toEqual(
         [
           'preSmoke:pre-smoke-id',
           'smokeProfile:profile-id',

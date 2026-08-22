@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { BaseService } from '../common/base.service';
@@ -7,13 +7,24 @@ import { SmokeDto } from './smokeDto';
 import { StateService } from '../State/state.service';
 import { TimelineService } from '../timeline/timeline.service';
 import { tempSeriesFilter } from '../temps/temp-series.filter';
+import { StatsService } from '../stats/stats.service';
 
 @Injectable()
 export class SmokeService extends BaseService<SmokeDocument> {
+  private readonly logger = new Logger(SmokeService.name);
+
   constructor(
     @InjectModel('Smoke') model: Model<SmokeDocument>,
     private stateService: StateService,
     private readonly timeline: TimelineService,
+    /**
+     * The statistics of the archive, recomputed by the two things this service
+     * does that change what the archive holds. Injected directly rather than
+     * announced on an event bus: there is one listener, and a recompute that
+     * has finished before the request returns is what lets the Stats screen be
+     * right the moment it is opened.
+     */
+    private readonly stats: StatsService,
     /**
      * The children are reached through their models rather than their
      * services. Every one of those services already depends on `SmokeModule`
@@ -62,7 +73,32 @@ export class SmokeService extends BaseService<SmokeDocument> {
       this.deleteChild(this.postSmokeModel, smoke.postSmokeId),
       this.deleteChild(this.ratingsModel, smoke.ratingId),
     ]);
-    return this.delete(id);
+    const deleted = await this.delete(id);
+    // Only once nothing of the cook is left: statistics recomputed mid-cascade
+    // would count a session that is on its way out.
+    await this.restatArchive('after deleting smoke ' + id);
+    return deleted;
+  }
+
+  /**
+   * Recompute the stored statistics for work that has already been committed,
+   * without letting them fail it.
+   *
+   * The cook is finished, or gone, by the time this runs. A recompute that
+   * throws here would answer a request that succeeded with a 500, and the
+   * client's natural retry — delete it again, finish it again — has nothing
+   * left to do and would only fail differently. The statistics carry their own
+   * staleness guards, so the worst this costs is that the next Stats read
+   * rebuilds instead of being served.
+   */
+  private async restatArchive(occasion: string): Promise<void> {
+    try {
+      await this.stats.recalculate();
+    } catch (error) {
+      this.logger.warn(
+        `Statistics were not recomputed ${occasion}; the next stats read will rebuild them. ${error}`,
+      );
+    }
   }
 
   private async deleteChild(child: Model<unknown>, id?: string): Promise<void> {
@@ -120,7 +156,12 @@ export class SmokeService extends BaseService<SmokeDocument> {
         ratingId: smoke.ratingId,
         status: SmokeStatus.Complete,
       };
-      return await this.update(smoke['_id'].toString(), smokeDto);
+      const finished = await this.update(smoke['_id'].toString(), smokeDto);
+      // Statistics count completed cooks, so they are recomputed after the
+      // cook became one — this is the moment a session joins the archive, and
+      // the pitmaster who finishes a cook looks at their stats next.
+      await this.restatArchive('after finishing the cook');
+      return finished;
     });
   }
 }

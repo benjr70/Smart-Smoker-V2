@@ -3,6 +3,8 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { BaseService } from '../common/base.service';
 import { CurrentSmokeService } from '../common/current-smoke.service';
+import { markStatsStale } from '../stats/mark-stats-stale';
+import { StatsService } from '../stats/stats.service';
 import { PostSmoke, PostSmokeDocument } from './postSmoke.schema';
 import { PostSmokeDto } from './postSmokeDto';
 
@@ -11,8 +13,19 @@ export class PostSmokeService extends BaseService<PostSmokeDocument> {
   constructor(
     @InjectModel('PostSmoke') model: Model<PostSmokeDocument>,
     private readonly currentSmoke: CurrentSmokeService,
+    private readonly stats: StatsService,
   ) {
     super(model, 'PostSmoke');
+  }
+
+  /**
+   * How long a cook rested is one of the numbers the Stats screen averages, so
+   * every write here leaves the stored statistics out of date — and none of
+   * these writes changes how many completed cooks the archive holds, which is
+   * the only change the stats read can notice by itself.
+   */
+  protected async afterWrite(): Promise<void> {
+    await markStatsStale(this.stats, 'post-smoke');
   }
 
   getCurrentPostSmoke(): Promise<PostSmoke> {

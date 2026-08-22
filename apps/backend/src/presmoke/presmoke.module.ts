@@ -5,6 +5,7 @@ import { PreSmokeController } from './presmoke.controller';
 import { PreSmokeService } from './presmoke.service';
 import { StateModule } from 'src/State/state.module';
 import { SmokeModule } from 'src/smoke/smoke.module';
+import { StatsModule } from '../stats/stats.module';
 
 @Module({
   imports: [
@@ -13,6 +14,9 @@ import { SmokeModule } from 'src/smoke/smoke.module';
     ]),
     StateModule,
     SmokeModule,
+    // The meat and its weight are ingredients of the statistics; writing them
+    // marks the stored aggregate stale.
+    StatsModule,
   ],
   controllers: [PreSmokeController],
   providers: [PreSmokeService],

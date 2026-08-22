@@ -7,6 +7,7 @@ import { SmokeSchema } from '../smoke/smoke.schema';
 import { SmokeProFileSchema } from '../smokeProfile/smokeProfile.schema';
 import { TimelineModule } from '../timeline/timeline.module';
 import { StatsController } from './stats.controller';
+import { StatsSnapshot, StatsSnapshotSchema } from './stats.schema';
 import { StatsService } from './stats.service';
 
 /**
@@ -27,6 +28,9 @@ import { StatsService } from './stats.service';
       { name: 'SmokeProfile', schema: SmokeProFileSchema },
       { name: 'PostSmoke', schema: PostSmokeSchema },
       { name: 'Ratings', schema: RatingsSchema },
+      // The statistics themselves, stored: the read serves this document and
+      // recomputes the archive only when it says it has gone stale.
+      { name: StatsSnapshot.name, schema: StatsSnapshotSchema },
     ]),
     TimelineModule,
   ],

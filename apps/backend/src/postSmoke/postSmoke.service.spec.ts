@@ -5,6 +5,7 @@ import { PostSmokeService } from './postSmoke.service';
 import { PostSmoke } from './postSmoke.schema';
 import { PostSmokeDto } from './postSmokeDto';
 import { CurrentSmokeService } from '../common/current-smoke.service';
+import { StatsService } from '../stats/stats.service';
 
 const query = <T>(value: T) => ({ exec: jest.fn().mockResolvedValue(value) });
 
@@ -15,6 +16,7 @@ describe('PostSmokeService', () => {
     readCurrent: jest.Mock;
     upsertCurrent: jest.Mock;
   };
+  let stats: { markDirty: jest.Mock };
 
   const existing: PostSmoke = {
     restTime: '30 minutes',
@@ -44,9 +46,12 @@ describe('PostSmokeService', () => {
       upsertCurrent: jest.fn(),
     };
 
+    stats = { markDirty: jest.fn().mockResolvedValue(undefined) };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PostSmokeService,
+        { provide: StatsService, useValue: stats },
         { provide: getModelToken('PostSmoke'), useValue: model },
         { provide: CurrentSmokeService, useValue: currentSmoke },
       ],
@@ -133,6 +138,17 @@ describe('PostSmokeService', () => {
       await expect(service.saveCurrentPostSmoke(dto)).rejects.toBeInstanceOf(
         NotFoundException,
       );
+    });
+  });
+
+  describe('the statistics the rest time belongs to', () => {
+    it('marks them stale when a cook’s post-smoke is edited', async () => {
+      // Rest time is one of the numbers on the Stats screen, and editing it
+      // leaves the number of completed cooks alone — so nothing but the flag
+      // would ever tell the stored aggregate it had gone out of date.
+      await service.update('post-1', dto);
+
+      expect(stats.markDirty).toHaveBeenCalled();
     });
   });
 

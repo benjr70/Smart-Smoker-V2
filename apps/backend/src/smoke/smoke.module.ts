@@ -10,6 +10,7 @@ import { PostSmokeSchema } from 'src/postSmoke/postSmoke.schema';
 import { RatingsSchema } from 'src/ratings/ratings.schema';
 import { StateModule } from 'src/State/state.module';
 import { TimelineModule } from 'src/timeline/timeline.module';
+import { StatsModule } from 'src/stats/stats.module';
 
 @Module({
   imports: [
@@ -28,6 +29,11 @@ import { TimelineModule } from 'src/timeline/timeline.module';
     StateModule,
     // The cook's finish, and the target it was taken to, are stamped here.
     TimelineModule,
+    // Finishing and deleting a cook are the two things that change what the
+    // archive holds, so both recompute the stored statistics. `StatsModule`
+    // owns its collections directly and imports no feature module of its own,
+    // which is what lets this depend on it without closing a cycle.
+    StatsModule,
   ],
   controllers: [SmokeController],
   providers: [SmokeService],
