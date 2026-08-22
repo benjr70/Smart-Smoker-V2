@@ -31,6 +31,20 @@ export const formatPounds = (pounds: number | null): string =>
 export const formatScore = (score: number | null): string =>
   score === null ? NOT_RECORDED : score.toFixed(1);
 
+/**
+ * A chamber temperature the way the smoke screens read one — `287°F`, whole
+ * degrees, because a tenth of a degree of pit heat is noise.
+ *
+ * There is no absent case: a temperature nobody recorded is a record nobody
+ * holds, and the record row says that rather than formatting a missing number.
+ */
+export const formatTemperature = (degrees: number): string =>
+  `${formatCount(Math.round(degrees))}°F`;
+
+/** `1 cook` / `4 cooks`: a count and the noun it agrees with. */
+export const formatPlural = (count: number, noun: string): string =>
+  `${formatCount(count)} ${count === 1 ? noun : `${noun}s`}`;
+
 /** A plain count, or an em-dash for a figure the archive does not have. */
 export const formatNumber = (value: number | null): string =>
   value === null ? NOT_RECORDED : formatCount(value);
