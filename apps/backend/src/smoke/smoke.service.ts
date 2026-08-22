@@ -7,6 +7,7 @@ import { SmokeDto } from './smokeDto';
 import { StateService } from '../State/state.service';
 import { TimelineService } from '../timeline/timeline.service';
 import { tempSeriesFilter } from '../temps/temp-series.filter';
+import { StatsService } from '../stats/stats.service';
 
 @Injectable()
 export class SmokeService extends BaseService<SmokeDocument> {
@@ -14,6 +15,14 @@ export class SmokeService extends BaseService<SmokeDocument> {
     @InjectModel('Smoke') model: Model<SmokeDocument>,
     private stateService: StateService,
     private readonly timeline: TimelineService,
+    /**
+     * The statistics of the archive, recomputed by the two things this service
+     * does that change what the archive holds. Injected directly rather than
+     * announced on an event bus: there is one listener, and a recompute that
+     * has finished before the request returns is what lets the Stats screen be
+     * right the moment it is opened.
+     */
+    private readonly stats: StatsService,
     /**
      * The children are reached through their models rather than their
      * services. Every one of those services already depends on `SmokeModule`
@@ -62,7 +71,11 @@ export class SmokeService extends BaseService<SmokeDocument> {
       this.deleteChild(this.postSmokeModel, smoke.postSmokeId),
       this.deleteChild(this.ratingsModel, smoke.ratingId),
     ]);
-    return this.delete(id);
+    const deleted = await this.delete(id);
+    // Only once nothing of the cook is left: statistics recomputed mid-cascade
+    // would count a session that is on its way out.
+    await this.stats.recalculate();
+    return deleted;
   }
 
   private async deleteChild(child: Model<unknown>, id?: string): Promise<void> {
@@ -120,7 +133,12 @@ export class SmokeService extends BaseService<SmokeDocument> {
         ratingId: smoke.ratingId,
         status: SmokeStatus.Complete,
       };
-      return await this.update(smoke['_id'].toString(), smokeDto);
+      const finished = await this.update(smoke['_id'].toString(), smokeDto);
+      // Statistics count completed cooks, so they are recomputed after the
+      // cook became one — this is the moment a session joins the archive, and
+      // the pitmaster who finishes a cook looks at their stats next.
+      await this.stats.recalculate();
+      return finished;
     });
   }
 }

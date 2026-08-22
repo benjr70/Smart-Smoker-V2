@@ -5,11 +5,13 @@ import { RatingsDto } from './ratingsDto';
 import { SmokeService } from '../smoke/smoke.service';
 import { SmokeDto } from '../smoke/smokeDto';
 import { createMockModel } from '../common/testing/create-mock-model';
+import { StatsService } from '../stats/stats.service';
 
 describe('RatingsService', () => {
   let service: RatingsService;
   let mockRatingsModel: any;
   let mockSmokeService: any;
+  let mockStatsService: { markDirty: jest.Mock; recalculate: jest.Mock };
 
   const mockRatingsDto: RatingsDto = {
     smokeFlavor: 4,
@@ -62,6 +64,11 @@ describe('RatingsService', () => {
       update: jest.fn(),
     };
 
+    mockStatsService = {
+      markDirty: jest.fn().mockResolvedValue(undefined),
+      recalculate: jest.fn().mockResolvedValue(undefined),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         RatingsService,
@@ -72,6 +79,10 @@ describe('RatingsService', () => {
         {
           provide: SmokeService,
           useValue: mockSmokeService,
+        },
+        {
+          provide: StatsService,
+          useValue: mockStatsService,
         },
       ],
     }).compile();
@@ -163,4 +174,26 @@ describe('RatingsService', () => {
 
   // create / getById / update / delete are inherited from BaseService and
   // verified once at the BaseService boundary (base.service.spec.ts).
+
+  describe('the statistics a score belongs to', () => {
+    it('marks them stale when an old cook is re-scored, without recomputing', async () => {
+      await service.update('rating-id-123', mockRatingsDto);
+
+      expect(mockStatsService.markDirty).toHaveBeenCalled();
+      // Four sliders auto-save as they are dragged; recomputing the whole
+      // archive behind each of them is what the dirty flag exists to avoid.
+      expect(mockStatsService.recalculate).not.toHaveBeenCalled();
+    });
+
+    it('marks them stale when the running cook is rated for the first time', async () => {
+      mockSmokeService.getCurrentSmoke.mockResolvedValue(
+        mockSmokeWithoutRating,
+      );
+
+      await service.saveCurrentRatings(mockRatingsDto);
+
+      expect(mockStatsService.markDirty).toHaveBeenCalled();
+      expect(mockStatsService.recalculate).not.toHaveBeenCalled();
+    });
+  });
 });

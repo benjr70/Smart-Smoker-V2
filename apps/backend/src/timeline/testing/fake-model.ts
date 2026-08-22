@@ -235,14 +235,34 @@ export const fakeModel = (docs: FakeDoc[]) => ({
       },
     };
   },
-  updateOne(filter: FakeDoc, update: { $set: FakeDoc }) {
+  countDocuments(filter: FakeDoc = {}) {
+    return {
+      async exec() {
+        return docs.filter((doc) => matches(doc, filter)).length;
+      },
+    };
+  },
+  /**
+   * `upsert` inserts the document the filter describes when nothing matches —
+   * how the singletons of this codebase are written, so the first write needs
+   * no separate create.
+   */
+  updateOne(
+    filter: FakeDoc,
+    update: { $set: FakeDoc },
+    options: { upsert?: boolean } = {},
+  ) {
     const target = docs.find((doc) => matches(doc, filter));
     if (target) {
       Object.assign(target, update.$set);
+    } else if (options.upsert) {
+      docs.push({ ...filter, ...update.$set });
     }
     return {
       async exec() {
-        return { modifiedCount: target ? 1 : 0 };
+        return target
+          ? { modifiedCount: 1, upsertedCount: 0 }
+          : { modifiedCount: 0, upsertedCount: options.upsert ? 1 : 0 };
       },
     };
   },

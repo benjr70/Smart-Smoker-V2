@@ -5,6 +5,7 @@ import { PreSmoke } from '../presmoke/presmoke.schema';
 import { SmokeStatus } from '../smoke/smoke.schema';
 import { FakeDoc, fakeModel } from '../timeline/testing/fake-model';
 import { TimelineService } from '../timeline/timeline.service';
+import { StatsSnapshot } from './stats.schema';
 import { StatsService } from './stats.service';
 
 const HOUR = 60 * 60 * 1000;
@@ -37,11 +38,20 @@ describe('StatsService', () => {
   let postSmokes: FakeDoc[];
   let ratings: FakeDoc[];
   let temps: FakeDoc[];
+  let snapshots: FakeDoc[];
   let tempReads: { reads: number };
+  /**
+   * How many times the archive itself was read. A rebuild reads it; a served
+   * cache only counts it, which is a different query — so this is what tells
+   * a cached read apart from a recomputed one.
+   */
+  let archiveReads: { reads: number };
 
   const build = async (): Promise<StatsService> => {
     const counted = countingModel(temps);
     tempReads = counted.counter;
+    const countedSmokes = countingModel(smokes);
+    archiveReads = countedSmokes.counter;
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         StatsService,
@@ -50,8 +60,12 @@ describe('StatsService', () => {
         // it actually gives — stamps where there are stamps, readings where
         // there are not.
         TimelineService,
-        { provide: getModelToken('Smoke'), useValue: fakeModel(smokes) },
+        { provide: getModelToken('Smoke'), useValue: countedSmokes.model },
         { provide: getModelToken('Temp'), useValue: counted.model },
+        {
+          provide: getModelToken(StatsSnapshot.name),
+          useValue: fakeModel(snapshots),
+        },
         { provide: getModelToken('state'), useValue: fakeModel([]) },
         {
           provide: getModelToken(ApplicationSettings.name),
@@ -82,7 +96,25 @@ describe('StatsService', () => {
     postSmokes = [];
     ratings = [];
     temps = [];
+    snapshots = [];
   });
+
+  /** One finished cook of `meat`, weighing `pounds`, scored `score`. */
+  const completedCook = (id: string, meat: string, pounds: number): void => {
+    smokes.push({
+      _id: id,
+      preSmokeId: `pre-${id}`,
+      date: new Date('2026-04-20T12:00:00.000Z'),
+      startedAt: new Date('2026-04-20T06:00:00.000Z'),
+      finishedAt: new Date('2026-04-20T14:00:00.000Z'),
+      status: SmokeStatus.Complete,
+    });
+    preSmokes.push({
+      _id: `pre-${id}`,
+      meatType: meat,
+      weight: { weight: pounds, unit: 'LB' },
+    });
+  };
 
   it('derives the archive from every completed cook and its five documents', async () => {
     smokes.push({
@@ -218,5 +250,86 @@ describe('StatsService', () => {
     expect(stats.totalSessions).toBe(0);
     expect(stats.totalPounds).toBeNull();
     expect(stats.byMeat).toEqual([]);
+  });
+
+  describe('the stored aggregate', () => {
+    it('computes and stores the archive when nothing has been stored yet', async () => {
+      completedCook('smoke-1', 'Brisket', 12);
+
+      const stats = await (await build()).getStats();
+
+      expect(stats.totalSessions).toBe(1);
+      expect(snapshots).toEqual([
+        expect.objectContaining({
+          aggregate: stats,
+          dirty: false,
+          completedSmokes: 1,
+        }),
+      ]);
+    });
+
+    it('serves the stored aggregate again without reading the archive', async () => {
+      completedCook('smoke-1', 'Brisket', 12);
+      const service = await build();
+
+      const first = await service.getStats();
+      const readsAfterFirst = archiveReads.reads;
+      const second = await service.getStats();
+
+      expect(second).toEqual(first);
+      expect(archiveReads.reads).toBe(readsAfterFirst);
+    });
+
+    it('rebuilds once for a dirty aggregate and stops being dirty', async () => {
+      completedCook('smoke-1', 'Brisket', 12);
+      const service = await build();
+      await service.getStats();
+      // What a rating write leaves behind: the numbers changed, nothing
+      // recomputed them.
+      ratings.push({ _id: 'rating-1', overallTaste: 9 });
+      smokes[0].ratingId = 'rating-1';
+      await service.markDirty();
+
+      const rebuilt = await service.getStats();
+      const readsAfterRebuild = archiveReads.reads;
+      await service.getStats();
+
+      expect(rebuilt.averageRating).toBe(9);
+      expect(snapshots[0]).toMatchObject({ dirty: false });
+      expect(archiveReads.reads).toBe(readsAfterRebuild);
+    });
+
+    it('rebuilds when the archive holds a different number of cooks than it was told', async () => {
+      completedCook('smoke-1', 'Brisket', 12);
+      const service = await build();
+      await service.getStats();
+      // Finished by something that never announced itself — a hand-edit, a
+      // restored backup — so the flag is still clear and only the count knows.
+      completedCook('smoke-2', 'Pork butt', 8);
+
+      const healed = await service.getStats();
+
+      expect(healed.totalSessions).toBe(2);
+      expect(snapshots[0]).toMatchObject({ completedSmokes: 2 });
+    });
+
+    it('rebuilds to exactly what a first computation of the same archive gives', async () => {
+      completedCook('smoke-1', 'Brisket', 12);
+      completedCook('smoke-2', 'Pork butt', 8);
+      postSmokes.push({ _id: 'post-1', restTime: '45m' });
+      smokes[0].postSmokeId = 'post-1';
+      ratings.push({ _id: 'rating-1', overallTaste: 7, tenderness: 6 });
+      smokes[1].ratingId = 'rating-1';
+      const service = await build();
+      await service.getStats();
+      await service.markDirty();
+
+      const rebuilt = await service.getStats();
+      // The same archive, read by an installation that has never computed it.
+      snapshots = [];
+      const fromScratch = await (await build()).getStats();
+
+      expect(rebuilt).toEqual(fromScratch);
+    });
   });
 });
