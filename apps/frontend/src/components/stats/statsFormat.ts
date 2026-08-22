@@ -24,12 +24,36 @@ export const formatPounds = (pounds: number | null): string =>
   pounds === null ? NOT_RECORDED : `${formatCount(pounds)} lbs`;
 
 /**
+ * Weight summed over a group of cooks, where a zero is an absence rather than a
+ * figure: entering a weight is optional, so a meat smoked three times with none
+ * of them weighed adds up to `0`. Printing `0 lbs` there would assert a weight
+ * the archive never recorded — the same claim the headline card refuses to make
+ * when it says "no weights on record" — so an unweighed group gets the em-dash.
+ */
+export const formatSummedPounds = (pounds: number): string =>
+  pounds > 0 ? formatPounds(pounds) : NOT_RECORDED;
+
+/**
  * A score out of ten, to one decimal — `8.6` — or an em-dash when no cook has
  * been rated. Zero is never printed here: the backend leaves an unrated archive
  * null rather than scoring it nothing.
  */
 export const formatScore = (score: number | null): string =>
   score === null ? NOT_RECORDED : score.toFixed(1);
+
+/**
+ * A chamber temperature the way the smoke screens read one — `287°F`, whole
+ * degrees, because a tenth of a degree of pit heat is noise.
+ *
+ * There is no absent case: a temperature nobody recorded is a record nobody
+ * holds, and the record row says that rather than formatting a missing number.
+ */
+export const formatTemperature = (degrees: number): string =>
+  `${formatCount(Math.round(degrees))}°F`;
+
+/** `1 cook` / `4 cooks`: a count and the noun it agrees with. */
+export const formatPlural = (count: number, noun: string): string =>
+  `${formatCount(count)} ${count === 1 ? noun : `${noun}s`}`;
 
 /** A plain count, or an em-dash for a figure the archive does not have. */
 export const formatNumber = (value: number | null): string =>

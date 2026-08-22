@@ -1,14 +1,31 @@
 import { Box, Typography } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import React from 'react';
-import { Stats } from '../../api';
+import { MeatStat, Stats, WoodStat } from '../../api';
+import { StatBarRow } from './StatBarRow';
+import { StatRecordRow } from './StatRecordRow';
 import { StatsEmpty } from './StatsEmpty';
+import { StatsSection } from './StatsSection';
 import {
   formatCount,
   formatDuration,
   formatNumber,
+  formatPlural,
   formatPounds,
   formatScore,
+  formatSummedPounds,
+  formatTemperature,
 } from './statsFormat';
+
+/** Ratings are scored out of ten, everywhere in the app. */
+const SCORE_SCALE = 10;
+
+/** The most-cooked meat's total, which every bar in a section is drawn against. */
+const largest = (values: number[]): number => Math.max(1, ...values);
+
+/** Most cooked first; the wire's order is not what the ranking is read from. */
+const bySessions = <T extends { sessions: number }>(rows: T[]): T[] =>
+  [...rows].sort((left, right) => right.sessions - left.sessions);
 
 export interface StatsContentProps {
   /** The archive, already derived. */
@@ -133,6 +150,18 @@ function StatCell({
  * would ever see.
  */
 export function StatsContent({ stats }: StatsContentProps): JSX.Element {
+  const { design } = useTheme();
+
+  // The chart's four reading colours, reused so a breakdown of five meats does
+  // not need five more tokens invented for it: the rotation only has to tell
+  // adjacent bars apart.
+  const rotation = [
+    design.probes.chamber,
+    design.probes.probe1,
+    design.probes.probe2,
+    design.probes.probe3,
+  ];
+
   if (stats.totalSessions === 0) {
     return <StatsEmpty />;
   }
@@ -203,6 +232,144 @@ export function StatsContent({ stats }: StatsContentProps): JSX.Element {
           <StatCell key={cell.testId} {...cell} />
         ))}
       </Box>
+      <StatsSection testId="stats-records" title="Personal records">
+        <StatRecordRow
+          testId="stat-record-highest-rated"
+          label="Highest rated"
+          record={stats.records.highestRated}
+          format={value => `${formatScore(value)} / 10`}
+        />
+        <StatRecordRow
+          testId="stat-record-longest-cook"
+          label="Longest cook"
+          record={stats.records.longestCook}
+          format={formatDuration}
+        />
+        <StatRecordRow
+          testId="stat-record-heaviest-cut"
+          label="Heaviest cut"
+          record={stats.records.heaviestCut}
+          format={formatPounds}
+        />
+        <StatRecordRow
+          testId="stat-record-hottest-chamber"
+          label="Hottest chamber"
+          record={stats.records.hottestChamber}
+          format={formatTemperature}
+        />
+      </StatsSection>
+      <MeatSection meats={stats.byMeat} rotation={rotation} />
+      <WoodSection woods={stats.byWood} color={design.accent} />
+      <ScoreSection averages={stats.categoryAverages} color={design.accent} />
     </Box>
+  );
+}
+
+/** The by-meat breakdown: what has been through the smoker, most-cooked first. */
+function MeatSection({
+  meats,
+  rotation,
+}: {
+  meats: MeatStat[];
+  rotation: string[];
+}): JSX.Element | null {
+  if (meats.length === 0) return null;
+
+  const ranked = bySessions(meats);
+  const most = largest(ranked.map(meat => meat.sessions));
+
+  return (
+    // The note says what the two figures on each row are, in the order they are
+    // written, as the design has it.
+    <StatsSection testId="stats-by-meat" title="By meat" note="sessions · pounds">
+      {ranked.map((meat, index) => (
+        <StatBarRow
+          key={meat.meatType}
+          testId="stat-meat-row"
+          label={meat.meatType}
+          value={`${formatPlural(meat.sessions, 'session')} · ${formatSummedPounds(meat.pounds)}`}
+          fraction={meat.sessions / most}
+          color={rotation[index % rotation.length]}
+        />
+      ))}
+    </StatsSection>
+  );
+}
+
+/**
+ * The note above the wood bars: the answer to "which wood do I reach for?"
+ * stated outright, rather than left to be read off the longest bar.
+ *
+ * Only when there is an answer, though. Woods burned equally often draw bars of
+ * exactly equal length, so naming one of them as leading would be contradicted
+ * by the chart directly beneath the sentence — and which one got named would
+ * turn on nothing but how the sort happened to break the tie.
+ */
+function woodLeaderNote(ranked: WoodStat[]): string {
+  const leaders = ranked.filter(wood => wood.sessions === ranked[0].sessions);
+
+  if (leaders.length === 1) return `${leaders[0].woodType} leads`;
+  if (leaders.length === 2) return `${leaders[0].woodType} & ${leaders[1].woodType} tie`;
+  // Beyond two, the names stop fitting on the line and stop being the point.
+  return `${formatCount(leaders.length)}-way tie`;
+}
+
+/** The favourite-wood breakdown, and which wood that actually is. */
+function WoodSection({ woods, color }: { woods: WoodStat[]; color: string }): JSX.Element | null {
+  if (woods.length === 0) return null;
+
+  const ranked = bySessions(woods);
+  const most = largest(ranked.map(wood => wood.sessions));
+
+  return (
+    <StatsSection testId="stats-by-wood" title="Favorite wood" note={woodLeaderNote(ranked)}>
+      {ranked.map(wood => (
+        <StatBarRow
+          key={wood.woodType}
+          testId="stat-wood-row"
+          label={wood.woodType}
+          value={formatPlural(wood.sessions, 'cook')}
+          fraction={wood.sessions / most}
+          color={color}
+        />
+      ))}
+    </StatsSection>
+  );
+}
+
+/**
+ * The average score per rating category.
+ *
+ * These bars are the one set on the screen not drawn against each other: a
+ * category is scored out of ten, and shrinking the scale to the best category
+ * would turn every archive's strongest score into a full bar.
+ */
+function ScoreSection({
+  averages,
+  color,
+}: {
+  averages: Stats['categoryAverages'];
+  color: string;
+}): JSX.Element {
+  const categories: { testId: string; label: string; score: number | null }[] = [
+    { testId: 'stat-score-smoke-flavor', label: 'Smoke flavor', score: averages.smokeFlavor },
+    { testId: 'stat-score-seasoning', label: 'Seasoning', score: averages.seasoning },
+    { testId: 'stat-score-tenderness', label: 'Tenderness', score: averages.tenderness },
+    { testId: 'stat-score-overall-taste', label: 'Overall taste', score: averages.overallTaste },
+  ];
+
+  return (
+    <StatsSection testId="stats-scores" title="Average scores" note="all sessions">
+      {categories.map(category => (
+        <StatBarRow
+          key={category.testId}
+          testId={category.testId}
+          label={category.label}
+          value={formatScore(category.score)}
+          fraction={category.score === null ? 0 : category.score / SCORE_SCALE}
+          color={color}
+        />
+      ))}
+    </StatsSection>
   );
 }
