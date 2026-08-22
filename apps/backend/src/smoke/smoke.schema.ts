@@ -53,6 +53,34 @@ export class Smoke {
   @Prop()
   targetTemp?: number;
 
+  /**
+   * The hottest the chamber ever ran this cook, °F, taken from its readings at
+   * the moment it was finished.
+   *
+   * Stamped rather than derived on read because a finished cook's series never
+   * changes again, and the statistics screen asks this of every cook there has
+   * ever been — deriving it would scan the whole temperature archive on every
+   * read. Optional: a cook that recorded no readings has no peak, and cooks
+   * finished before this field existed are backfilled the first time the
+   * statistics are rebuilt over them.
+   */
+  @Prop()
+  peakChamber?: number;
+
+  /**
+   * Whether this cook's readings have been searched for a peak chamber
+   * temperature — set at finish, and by the backfill that catches up with
+   * cooks finished before peaks were stamped.
+   *
+   * Separate from the peak itself because a search can come back with nothing:
+   * a cook that recorded no readable chamber reading has no peak to stamp, and
+   * without a mark saying it was asked, every future statistics rebuild would
+   * ask its series again forever. The pair reads as: no mark, never asked;
+   * mark and a peak, that is the peak; mark and no peak, there was none.
+   */
+  @Prop()
+  peakChamberScanned?: boolean;
+
   @Prop({
     required: true,
     type: Number,

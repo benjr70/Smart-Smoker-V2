@@ -96,16 +96,101 @@ export class TimelineService {
    * still read 203°F after the next one is set up for chicken. Conditional for
    * the same reason as the start — a finish that already happened is not
    * moved, and its snapshot is not rewritten.
+   *
+   * The cook is read before any of that work is done, and a finish that has
+   * already happened stops here: the guard on the write would reject it
+   * anyway, and everything between the two — a settings read and a scan of the
+   * whole series for its peak — would have been done to be thrown away. The
+   * guard still stands, because two clients finishing at once can both get
+   * past this read.
    */
   async stampFinish(smokeId: string): Promise<void> {
+    const smoke = await this.smokeModel.findById(smokeId).exec();
+    if (!smoke || smoke.finishedAt) {
+      return;
+    }
     const stored = await this.settingsModel.findOne().exec();
     const targetTemp = primaryWatchedTarget(withSettingsDefaults(stored));
+    const peakChamber = await this.peakChamberOf(smoke);
     await this.smokeModel
       .updateOne(
         { _id: smokeId, finishedAt: null },
-        { $set: { finishedAt: new Date(), targetTemp } },
+        {
+          $set: {
+            finishedAt: new Date(),
+            targetTemp,
+            // Recorded whatever the readings said, so that a cook whose series
+            // held nothing readable is never scanned for a peak again — see
+            // the field's own note.
+            peakChamberScanned: true,
+            // The peak itself only where the cook recorded one: a series with
+            // no readable chamber reading has no peak, and a stamped zero
+            // would be a claim about how the cook ran.
+            ...(peakChamber === null ? {} : { peakChamber }),
+          },
+        },
       )
       .exec();
+  }
+
+  /**
+   * The hottest a cook's chamber ever ran, from its readings — the number that
+   * is stamped at finish and backfilled onto cooks finished before the stamp
+   * existed.
+   *
+   * Asked of {@link peakChambersOf} rather than of the peaks of every probe:
+   * the chamber is the only one wanted here, and the four meat maxima the
+   * fuller aggregation computes would be four accumulators nobody reads.
+   */
+  private async peakChamberOf(smoke: StoredSmoke): Promise<number | null> {
+    if (!smoke.tempsId) {
+      return null;
+    }
+    const peaks = await this.peakChambersOf([String(smoke.tempsId)]);
+    return peaks.get(String(smoke.tempsId)) ?? null;
+  }
+
+  /**
+   * The hottest chamber reading of each of many series, in one query — the
+   * number stamped onto a cook at finish, asked of a whole archive at once.
+   *
+   * Exists for the same reason {@link getDurationsMs} does: the statistics
+   * rebuild backfills the peaks of every cook that has none, and asked one at a
+   * time that would be a query per cook. A series nothing readable was recorded
+   * for is absent from the answer rather than present as a zero.
+   */
+  async peakChambersOf(tempsIds: string[]): Promise<Map<string, number>> {
+    if (tempsIds.length === 0) {
+      return new Map();
+    }
+    const rows = await this.tempModel
+      .aggregate([
+        { $match: { tempsId: { $in: tempsIds } } },
+        {
+          $group: {
+            _id: '$tempsId',
+            // Converted before the `$max`: readings are stored as strings, and
+            // a `$max` over strings is alphabetical — `'99'` sorts above
+            // `'245'`, so it would call 99°F the hotter of the two.
+            peak: {
+              $max: {
+                $convert: {
+                  input: '$ChamberTemp',
+                  to: 'double',
+                  onError: null,
+                  onNull: null,
+                },
+              },
+            },
+          },
+        },
+      ])
+      .exec();
+    return new Map(
+      (rows as { _id: unknown; peak: unknown }[])
+        .filter((row) => typeof row.peak === 'number' && isFinite(row.peak))
+        .map((row) => [String(row._id), row.peak as number]),
+    );
   }
 
   /**

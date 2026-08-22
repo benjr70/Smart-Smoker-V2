@@ -11,6 +11,23 @@ import { CookRecord, aggregateStats } from './stats.aggregate';
 import { StatsDto } from './stats.dto';
 import { StatsSnapshot, StatsSnapshotDocument } from './stats.schema';
 
+/**
+ * One cook's peak stamp as a bulk write carries it: the mark that its readings
+ * were searched, and the peak where the search found one.
+ *
+ * Spelled out rather than inferred at the call because Mongoose's own bulk
+ * operation type is a union wide enough that resolving an inline literal
+ * against it costs the compiler more than the whole rest of this file.
+ */
+interface PeakStamp {
+  updateOne: {
+    filter: { _id: unknown };
+    update: {
+      $set: { peakChamberScanned: true; peakChamber?: number };
+    };
+  };
+}
+
 /** Documents by id, for joining a parent to the children it points at. */
 const byId = <T extends { _id?: unknown }>(docs: T[]): Map<string, T> =>
   new Map(docs.map((doc) => [String(doc._id), doc]));
@@ -133,6 +150,68 @@ export class StatsService {
       .exec();
   }
 
+  /**
+   * Give every finished cook whose readings have never been searched for a peak
+   * chamber temperature one, and record on the cook that they now have been.
+   *
+   * The backfill is lazy rather than a deploy-time migration: a cook's series
+   * never changes after it is finished, so the peak computed here is the peak
+   * forever, and writing it back means the temperature archive is scanned at
+   * most once per cook — by whichever rebuild happened to meet it first.
+   *
+   * "Searched" is what is recorded, not merely "found": a series holding no
+   * readable chamber reading yields no peak, and a cook left with neither a
+   * peak nor a mark would be indistinguishable from one nobody had asked yet,
+   * so every future rebuild would ask its readings again for the same nothing.
+   * It is marked and left without a peak instead — a stamped zero would be a
+   * claim about how the cook ran, and the cook must still hold no record.
+   *
+   * The stamps go back in a single `bulkWrite` rather than an update apiece:
+   * this runs inside a `GET /stats`, and the first rebuild over a legacy
+   * archive would otherwise fire as many concurrent round trips as there are
+   * cooks in it.
+   *
+   * Returns what was computed, so the caller need not re-read the documents it
+   * already holds.
+   */
+  private async stampMissingPeaks(
+    smokes: SmokeDocument[],
+  ): Promise<Map<string, number>> {
+    const unsearched = smokes.filter(
+      (smoke) =>
+        !smoke.peakChamberScanned && !Number.isFinite(smoke.peakChamber),
+    );
+    const withSeries = unsearched.filter((smoke) => Boolean(smoke.tempsId));
+    if (withSeries.length === 0) {
+      return new Map();
+    }
+    const peaks = await this.timelineService.peakChambersOf([
+      ...new Set(withSeries.map((smoke) => String(smoke.tempsId))),
+    ]);
+    const stamped = new Map<string, number>();
+    const stamps: PeakStamp[] = withSeries.map((smoke) => {
+      const peak = peaks.get(String(smoke.tempsId));
+      if (peak !== undefined) {
+        stamped.set(String(smoke['_id']), peak);
+      }
+      return {
+        updateOne: {
+          filter: { _id: smoke['_id'] },
+          update: {
+            $set: {
+              peakChamberScanned: true,
+              ...(peak === undefined ? {} : { peakChamber: peak }),
+            },
+          },
+        },
+      };
+    });
+    await this.smokeModel.bulkWrite(
+      stamps as unknown as Parameters<Model<SmokeDocument>['bulkWrite']>[0],
+    );
+    return stamped;
+  }
+
   /** How many finished cooks the archive holds, counted rather than read. */
   private async completedCount(): Promise<number> {
     return this.smokeModel
@@ -169,6 +248,10 @@ export class StatsService {
       this.ratingsModel.find({ _id: { $in: ids('ratingId') } }).exec(),
     ]);
 
+    // Before anything is joined: a cook finished before peaks were stamped has
+    // one computed and written back, so this is the last time its readings are
+    // ever looked at.
+    const backfilled = await this.stampMissingPeaks(smokes);
     const preSmokeById = byId(preSmokes);
     const profileById = byId(profiles);
     const postSmokeById = byId(postSmokes);
@@ -197,10 +280,16 @@ export class StatsService {
         // readings where it was not — which is what puts cooks recorded
         // before the stamps existed into the totals rather than out of them.
         durationMs: durations[index],
-        // The hottest the chamber ran is stamped onto a cook at finish by a
-        // later slice; until then no cook carries one, and the record it
-        // would hold stays empty rather than being invented here.
-        peakChamber: null,
+        // Stamped at finish, or backfilled just now for a cook finished before
+        // the stamp existed. A cook that recorded no readable chamber reading
+        // has none, and holds no record rather than holding one with a zero.
+        //
+        // A stored value that is not a temperature is read as no value at all,
+        // which is the same test the backfill decides by — anything looser
+        // would shadow the peak that very backfill just computed.
+        peakChamber: Number.isFinite(smoke.peakChamber)
+          ? (smoke.peakChamber as number)
+          : backfilled.get(String(smoke['_id'])) ?? null,
         ratings: rating
           ? {
               smokeFlavor: rating.smokeFlavor ?? null,

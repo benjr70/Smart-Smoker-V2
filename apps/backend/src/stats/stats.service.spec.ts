@@ -12,22 +12,29 @@ const HOUR = 60 * 60 * 1000;
 
 /**
  * A model that remembers how often it was asked anything, so a read can be held
- * to a fixed number of queries rather than one per cook.
+ * to a fixed number of queries rather than one per cook — and how often it was
+ * told anything, so the same can be asked of what a rebuild writes back.
  */
 const countingModel = (docs: FakeDoc[]) => {
   const model = fakeModel(docs);
-  const counter = { reads: 0 };
-  (['find', 'findOne', 'findById', 'aggregate'] as const).forEach((method) => {
-    const original = model[method].bind(model) as (
-      ...args: unknown[]
-    ) => unknown;
-    (model as unknown as Record<string, unknown>)[method] = (
-      ...args: unknown[]
-    ) => {
-      counter.reads += 1;
-      return original(...args);
-    };
-  });
+  const counter = { reads: 0, writes: 0 };
+  const count = (methods: readonly string[], of: 'reads' | 'writes'): void => {
+    methods.forEach((method) => {
+      const original = (
+        (model as unknown as Record<string, unknown>)[method] as (
+          ...args: unknown[]
+        ) => unknown
+      ).bind(model);
+      (model as unknown as Record<string, unknown>)[method] = (
+        ...args: unknown[]
+      ) => {
+        counter[of] += 1;
+        return original(...args);
+      };
+    });
+  };
+  count(['find', 'findOne', 'findById', 'aggregate'], 'reads');
+  count(['updateOne', 'bulkWrite'], 'writes');
   return { model, counter };
 };
 
@@ -40,6 +47,8 @@ describe('StatsService', () => {
   let temps: FakeDoc[];
   let snapshots: FakeDoc[];
   let tempReads: { reads: number };
+  /** What the rebuild wrote back onto the archive, and in how many trips. */
+  let archiveWrites: { writes: number };
   /**
    * How many times the archive itself was read. A rebuild reads it; a served
    * cache only counts it, which is a different query — so this is what tells
@@ -54,6 +63,7 @@ describe('StatsService', () => {
     tempReads = counted.counter;
     const countedSmokes = countingModel(smokes);
     archiveReads = countedSmokes.counter;
+    archiveWrites = countedSmokes.counter;
     smokeModel = countedSmokes.model;
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -233,7 +243,9 @@ describe('StatsService', () => {
 
     expect(stats.totalSessions).toBe(10);
     expect(stats.totalCookMs).toBe(100 * HOUR);
-    expect(tempReads.reads).toBe(1);
+    // Two grouped reads however many cooks there are: the ends of every series,
+    // and the peak of every cook that has none stamped yet.
+    expect(tempReads.reads).toBe(2);
   });
 
   it('says nothing about an installation that has never finished a cook', async () => {
@@ -253,6 +265,119 @@ describe('StatsService', () => {
     expect(stats.totalSessions).toBe(0);
     expect(stats.totalPounds).toBeNull();
     expect(stats.byMeat).toEqual([]);
+  });
+
+  describe('the hottest chamber a cook ever ran', () => {
+    /** One finished, fully stamped cook whose series ran `chamber`. */
+    const stampedCook = (id: string, chamber: string[]): void => {
+      smokes.push({
+        _id: id,
+        preSmokeId: `pre-${id}`,
+        tempsId: `temps-${id}`,
+        date: new Date('2026-04-20T12:00:00.000Z'),
+        startedAt: new Date('2026-04-20T06:00:00.000Z'),
+        finishedAt: new Date('2026-04-20T14:00:00.000Z'),
+        status: SmokeStatus.Complete,
+      });
+      preSmokes.push({ _id: `pre-${id}`, name: id, meatType: 'Brisket' });
+      chamber.forEach((value, index) =>
+        temps.push({
+          tempsId: `temps-${id}`,
+          date: new Date(2026, 3, 20, 6 + index),
+          ChamberTemp: value,
+        }),
+      );
+    };
+
+    it('backfills the peak of a cook finished before peaks were stamped', async () => {
+      // Lexically the larger of the two, numerically the cooler.
+      stampedCook('legacy', ['99', '245']);
+
+      const stats = await (await build()).recalculate();
+
+      expect(smokes[0].peakChamber).toBe(245);
+      expect(stats.records.hottestChamber).toMatchObject({
+        smokeId: 'legacy',
+        value: 245,
+      });
+    });
+
+    it('never reads a cook’s readings for its peak twice', async () => {
+      stampedCook('legacy', ['210', '245']);
+      const service = await build();
+      await service.recalculate();
+
+      tempReads.reads = 0;
+      const stats = await service.recalculate();
+
+      expect(tempReads.reads).toBe(0);
+      expect(stats.records.hottestChamber).toMatchObject({ value: 245 });
+    });
+
+    it('never re-reads the readings of a cook whose series held nothing readable', async () => {
+      // A series that was recorded, but of which nothing converts to a
+      // temperature: there is no peak to stamp, and without a record that it
+      // was asked this cook's readings would be re-scanned by every rebuild.
+      stampedCook('unreadable', ['', 'n/a']);
+      const service = await build();
+      await service.recalculate();
+
+      tempReads.reads = 0;
+      const stats = await service.recalculate();
+
+      expect(tempReads.reads).toBe(0);
+      expect(stats.records.hottestChamber).toBeNull();
+    });
+
+    it('backfills a whole archive of legacy cooks in one round trip', async () => {
+      for (let index = 0; index < 5; index += 1) {
+        stampedCook(`legacy-${index}`, ['210', `24${index}`]);
+      }
+
+      await (await build()).recalculate();
+
+      // A write per cook would be as many concurrent trips as the archive is
+      // long, fired from inside a GET /stats.
+      expect(archiveWrites.writes).toBe(1);
+      expect(smokes.map((smoke) => smoke.peakChamber)).toEqual([
+        240, 241, 242, 243, 244,
+      ]);
+    });
+
+    it('uses the peak it just computed for a cook whose stored one is not a number', async () => {
+      stampedCook('nonsense', ['245']);
+      // What a peak stamped from a reading nothing could be made of looks like
+      // in storage: present, and no temperature.
+      smokes[0].peakChamber = Number.NaN;
+
+      const stats = await (await build()).recalculate();
+
+      expect(stats.records.hottestChamber).toMatchObject({
+        smokeId: 'nonsense',
+        value: 245,
+      });
+    });
+
+    it('reports the hottest of the cooks that carry a peak', async () => {
+      stampedCook('cooler', ['180']);
+      stampedCook('hotter', ['310']);
+
+      const stats = await (await build()).recalculate();
+
+      expect(stats.records.hottestChamber).toMatchObject({
+        smokeId: 'hotter',
+        value: 310,
+      });
+    });
+
+    it('holds no record while no cook recorded a chamber at all', async () => {
+      stampedCook('unrecorded', []);
+
+      const stats = await (await build()).recalculate();
+
+      expect(stats.totalSessions).toBe(1);
+      expect(stats.records.hottestChamber).toBeNull();
+    });
   });
 
   describe('the stored aggregate', () => {
