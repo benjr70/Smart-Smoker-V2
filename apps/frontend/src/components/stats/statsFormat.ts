@@ -24,6 +24,16 @@ export const formatPounds = (pounds: number | null): string =>
   pounds === null ? NOT_RECORDED : `${formatCount(pounds)} lbs`;
 
 /**
+ * Weight summed over a group of cooks, where a zero is an absence rather than a
+ * figure: entering a weight is optional, so a meat smoked three times with none
+ * of them weighed adds up to `0`. Printing `0 lbs` there would assert a weight
+ * the archive never recorded — the same claim the headline card refuses to make
+ * when it says "no weights on record" — so an unweighed group gets the em-dash.
+ */
+export const formatSummedPounds = (pounds: number): string =>
+  pounds > 0 ? formatPounds(pounds) : NOT_RECORDED;
+
+/**
  * A score out of ten, to one decimal — `8.6` — or an em-dash when no cook has
  * been rated. Zero is never printed here: the backend leaves an unrated archive
  * null rather than scoring it nothing.

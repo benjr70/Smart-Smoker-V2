@@ -205,6 +205,29 @@ describe('the Stats screen', () => {
     expect(within(rows[2]).getByTestId('stat-bar-fill')).toHaveStyle({ width: '16.7%' });
   });
 
+  test('does not credit a weight to meats nobody weighed', () => {
+    // Weight is optional on a cook, so a meat can have been smoked three times
+    // with nothing entered for any of them. The backend sums that to zero, and
+    // `0 lbs` would state a weight the archive never recorded — the same claim
+    // the hero card refuses to make when it says "no weights on record".
+    renderStats({
+      ...archive,
+      byMeat: [{ meatType: 'Brisket', sessions: 3, pounds: 0 }],
+    });
+
+    const row = screen.getByTestId('stat-meat-row');
+    expect(row).toHaveTextContent('3 sessions');
+    expect(row).toHaveTextContent('—');
+    expect(row).not.toHaveTextContent('0 lbs');
+  });
+
+  test('titles the meat breakdown the way the design does', () => {
+    renderStats(archive);
+
+    expect(screen.getByTestId('stats-by-meat-note')).toHaveTextContent('sessions · pounds');
+    expect(screen.getByTestId('stats-scores-note')).toHaveTextContent('all sessions');
+  });
+
   test('gives each meat its own colour out of the probe rotation', () => {
     renderStats(archive);
 
@@ -230,6 +253,37 @@ describe('the Stats screen', () => {
     expect(rows[1]).toHaveTextContent('Apple');
     expect(rows[1]).toHaveTextContent('1 cook');
     expect(rows[1]).not.toHaveTextContent('1 cooks');
+  });
+
+  test('does not crown a leader when two woods are burned equally often', () => {
+    // The bars under the note are exactly as long as each other here, so
+    // naming either wood as leading would be contradicted by the chart itself
+    // — and which of the two got named would flip on the sort.
+    renderStats({
+      ...archive,
+      byWood: [
+        { woodType: 'Apple', sessions: 5 },
+        { woodType: 'Hickory', sessions: 5 },
+      ],
+    });
+
+    const note = screen.getByTestId('stats-by-wood-note');
+    expect(note).toHaveTextContent('Apple & Hickory tie');
+    expect(note).not.toHaveTextContent('leads');
+  });
+
+  test('calls a tie between three or more woods what it is', () => {
+    renderStats({
+      ...archive,
+      byWood: [
+        { woodType: 'Apple', sessions: 5 },
+        { woodType: 'Hickory', sessions: 5 },
+        { woodType: 'Cherry', sessions: 5 },
+        { woodType: 'Oak', sessions: 2 },
+      ],
+    });
+
+    expect(screen.getByTestId('stats-by-wood-note')).toHaveTextContent('3-way tie');
   });
 
   test('scores each rating category against ten, to a tenth', () => {

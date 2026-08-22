@@ -13,6 +13,7 @@ import {
   formatPlural,
   formatPounds,
   formatScore,
+  formatSummedPounds,
   formatTemperature,
 } from './statsFormat';
 
@@ -278,19 +279,39 @@ function MeatSection({
   const most = largest(ranked.map(meat => meat.sessions));
 
   return (
-    <StatsSection testId="stats-by-meat" title="By meat" note={formatPlural(ranked.length, 'type')}>
+    // The note says what the two figures on each row are, in the order they are
+    // written, as the design has it.
+    <StatsSection testId="stats-by-meat" title="By meat" note="sessions · pounds">
       {ranked.map((meat, index) => (
         <StatBarRow
           key={meat.meatType}
           testId="stat-meat-row"
           label={meat.meatType}
-          value={`${formatPlural(meat.sessions, 'session')} · ${formatPounds(meat.pounds)}`}
+          value={`${formatPlural(meat.sessions, 'session')} · ${formatSummedPounds(meat.pounds)}`}
           fraction={meat.sessions / most}
           color={rotation[index % rotation.length]}
         />
       ))}
     </StatsSection>
   );
+}
+
+/**
+ * The note above the wood bars: the answer to "which wood do I reach for?"
+ * stated outright, rather than left to be read off the longest bar.
+ *
+ * Only when there is an answer, though. Woods burned equally often draw bars of
+ * exactly equal length, so naming one of them as leading would be contradicted
+ * by the chart directly beneath the sentence — and which one got named would
+ * turn on nothing but how the sort happened to break the tie.
+ */
+function woodLeaderNote(ranked: WoodStat[]): string {
+  const leaders = ranked.filter(wood => wood.sessions === ranked[0].sessions);
+
+  if (leaders.length === 1) return `${leaders[0].woodType} leads`;
+  if (leaders.length === 2) return `${leaders[0].woodType} & ${leaders[1].woodType} tie`;
+  // Beyond two, the names stop fitting on the line and stop being the point.
+  return `${formatCount(leaders.length)}-way tie`;
 }
 
 /** The favourite-wood breakdown, and which wood that actually is. */
@@ -301,13 +322,7 @@ function WoodSection({ woods, color }: { woods: WoodStat[]; color: string }): JS
   const most = largest(ranked.map(wood => wood.sessions));
 
   return (
-    <StatsSection
-      testId="stats-by-wood"
-      title="Favorite wood"
-      // The answer to "which wood do I reach for?" stated outright, rather than
-      // left to be read off the longest bar.
-      note={`${ranked[0].woodType} leads`}
-    >
+    <StatsSection testId="stats-by-wood" title="Favorite wood" note={woodLeaderNote(ranked)}>
       {ranked.map(wood => (
         <StatBarRow
           key={wood.woodType}
@@ -344,7 +359,7 @@ function ScoreSection({
   ];
 
   return (
-    <StatsSection testId="stats-scores" title="Average scores" note="out of 10">
+    <StatsSection testId="stats-scores" title="Average scores" note="all sessions">
       {categories.map(category => (
         <StatBarRow
           key={category.testId}
