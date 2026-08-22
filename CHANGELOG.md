@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.10.0](https://github.com/benjr70/Smart-Smoker-V2/compare/v1.9.0...v1.10.0) (2026-08-22)
+
+
+### Features
+
+* **backend:** delete a smoke and its children in one server-side cascade ([#532](https://github.com/benjr70/Smart-Smoker-V2/issues/532)) ([9e02606](https://github.com/benjr70/Smart-Smoker-V2/commit/9e02606da78ed5c409d96a00f1e4ae77ab61ba9c))
+* **backend:** serve stats from a stored, self-healing aggregate ([#534](https://github.com/benjr70/Smart-Smoker-V2/issues/534)) ([e46b853](https://github.com/benjr70/Smart-Smoker-V2/commit/e46b8533f2b76842c29bd8f5375515b8271ba21c))
+* **backend:** stamp peak chamber at finish with lazy legacy backfill ([#535](https://github.com/benjr70/Smart-Smoker-V2/issues/535)) ([48cc4ac](https://github.com/benjr70/Smart-Smoker-V2/commit/48cc4ac234843ee7972ee1ce3f8759fadc14b352))
+* **frontend:** full Stats screen parity with records, breakdowns and score bars ([#536](https://github.com/benjr70/Smart-Smoker-V2/issues/536)) ([b2fec9f](https://github.com/benjr70/Smart-Smoker-V2/commit/b2fec9f58f14f679808b9e7990eaf494eadb6252))
+* **monorepo:** add stats aggregator, endpoint and Stats tab ([#533](https://github.com/benjr70/Smart-Smoker-V2/issues/533)) ([3b9f1bc](https://github.com/benjr70/Smart-Smoker-V2/commit/3b9f1bce987743fecc40ae3043ca127ef7b9c908))
+
+
+### Bug Fixes
+
+* **scripts:** stop pre-deploy backup from filling the disk ([#524](https://github.com/benjr70/Smart-Smoker-V2/issues/524)) ([87b9728](https://github.com/benjr70/Smart-Smoker-V2/commit/87b9728c9d408e4b9b7927f15474d90a9ea37b32))
+
 ## [1.9.0](https://github.com/benjr70/Smart-Smoker-V2/compare/v1.8.0...v1.9.0) (2026-08-17)
 
 
