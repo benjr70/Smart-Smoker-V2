@@ -108,7 +108,7 @@ const createSettingsCollection = <T>(seed: T | null = null) => {
       }),
     ),
     /** Every document in the collection right now. */
-    all: () => documents.map((document) => ({ ...(document as object) } as T)),
+    all: () => documents.map((document) => ({ ...(document as object) }) as T),
   };
 };
 
@@ -267,7 +267,7 @@ describe('AppSettingsService', () => {
             enabled: true,
             probes: [{ slot: 'probe1', enabled: true, target }],
           },
-        } as unknown as ApplicationSettings);
+        }) as unknown as ApplicationSettings;
 
       it('treats a target that is not the shipped default as the user’s own', async () => {
         const reading = await serviceReading(legacyDocument(145));
