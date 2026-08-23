@@ -2,8 +2,41 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { EventsGateway } from './events.gateway';
 import { StateService } from '../State/state.service';
 import { TempsService } from '../temps/temps.service';
+import { StaleCookService } from '../staleCook/stale-cook.service';
 import { TempDto } from '../temps/tempDto';
 import { Logger } from '@nestjs/common';
+
+/** One device frame, as the relay receives it. */
+const reading = (date: Date = new Date()) =>
+  JSON.stringify({
+    probeTemp1: '150',
+    probeTemp2: '160',
+    probeTemp3: '170',
+    chamberTemp: '225',
+    date,
+  });
+
+/**
+ * Freeze the wall clock the gateway reads.
+ *
+ * Jest's own fake timers cannot be installed in this environment (they try to
+ * replace a read-only `performance` global), and only the clock matters here —
+ * nothing under test schedules anything.
+ */
+const RealDate = Date;
+const useFrozenClock = (now: Date): void => {
+  global.Date = class extends RealDate {
+    constructor(value?: number | string | Date) {
+      super(value === undefined ? now.getTime() : (value as number));
+    }
+    static now(): number {
+      return now.getTime();
+    }
+  } as DateConstructor;
+};
+const restoreClock = (): void => {
+  global.Date = RealDate;
+};
 
 /** Let the promise chain `handleEvent` starts settle. */
 const settle = () => new Promise((resolve) => setImmediate(resolve));
@@ -17,6 +50,7 @@ describe('EventsGateway', () => {
   let gateway: EventsGateway;
   let mockStateService: Partial<StateService>;
   let mockTempsService: Partial<TempsService>;
+  let mockStaleCookService: { autoStopIfStale: jest.Mock };
   let mockServer: MockServer;
 
   const mockState = {
@@ -37,10 +71,15 @@ describe('EventsGateway', () => {
       saveNewTemp: jest.fn(),
     };
 
-    // Deliberately only the two collaborators the gateway is allowed to have.
-    // Alert evaluation is owned by the notifications service on its own
-    // interval, so a gateway that still reached for it could not be constructed
-    // here at all.
+    mockStaleCookService = {
+      autoStopIfStale: jest.fn().mockResolvedValue(null),
+    };
+
+    // Deliberately only the three collaborators the gateway is allowed to have:
+    // the state it reads, the series it writes, and the one service that
+    // decides an abandoned cook is over. Alert evaluation is owned by the
+    // notifications service on its own interval, so a gateway that still
+    // reached for it could not be constructed here at all.
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EventsGateway,
@@ -51,6 +90,10 @@ describe('EventsGateway', () => {
         {
           provide: TempsService,
           useValue: mockTempsService,
+        },
+        {
+          provide: StaleCookService,
+          useValue: mockStaleCookService,
         },
       ],
     }).compile();
@@ -238,6 +281,154 @@ describe('EventsGateway', () => {
       expect(mockServer.emit).toHaveBeenCalledWith('events', testData);
       expect(mockStateService.GetState).toHaveBeenCalled();
       expect(mockTempsService.saveNewTemp).not.toHaveBeenCalled();
+      // A session nobody is smoking has no cook to abandon, and the guard that
+      // drops the reading runs before anything asks.
+      expect(mockStaleCookService.autoStopIfStale).not.toHaveBeenCalled();
+    });
+
+    /**
+     * The reading that arrives after the box has been off for a fortnight is
+     * what ends the cook nobody ended — and it must not land in that cook's
+     * series on its way past. Storing it would re-date the very cook the stop
+     * just stamped at its last real reading.
+     */
+    it('auto-stops a cook the gap says is over and stores nothing into it', async () => {
+      mockStaleCookService.autoStopIfStale.mockResolvedValue({
+        smokeId: 'test-smoke-id',
+        finishedAt: new Date('2026-08-01T12:00:00Z'),
+        idleHours: 340,
+      });
+
+      for (let i = 0; i < 11; i++) {
+        await gateway.handleEvent(reading());
+      }
+
+      expect(mockStaleCookService.autoStopIfStale).toHaveBeenCalled();
+      expect(mockTempsService.saveNewTemp).not.toHaveBeenCalled();
+    });
+
+    // The overwhelmingly common case: a cook in progress, readings arriving as
+    // they always did. Nothing about it changes.
+    it('stores a reading that arrived inside the threshold', async () => {
+      for (let i = 0; i < 11; i++) {
+        await gateway.handleEvent(reading());
+      }
+
+      expect(mockStaleCookService.autoStopIfStale).toHaveBeenCalled();
+      expect(mockTempsService.saveNewTemp).toHaveBeenCalledTimes(1);
+    });
+
+    /**
+     * The in-memory last-seen is what a running backend answers from, and a
+     * backend restarted during the gap has none — which is the shape the fix
+     * has to survive, because the box coming back on is exactly when the
+     * backend has just started too. Nothing remembered means the store decides.
+     */
+    it('consults the store on its first stored reading after a restart', async () => {
+      for (let i = 0; i < 11; i++) {
+        await gateway.handleEvent(reading());
+      }
+
+      expect(mockStaleCookService.autoStopIfStale).toHaveBeenCalledTimes(1);
+    });
+
+    /**
+     * The guard exists so a cook does not pay for a query every eleven
+     * messages: a reading stored minutes ago is proof no configured threshold —
+     * the smallest of which is an hour — can have been crossed.
+     */
+    it('answers from memory rather than querying again minutes later', async () => {
+      for (let i = 0; i < 11; i++) {
+        await gateway.handleEvent(reading());
+      }
+      expect(mockTempsService.saveNewTemp).toHaveBeenCalledTimes(1);
+      mockStaleCookService.autoStopIfStale.mockClear();
+
+      for (let i = 0; i < 11; i++) {
+        await gateway.handleEvent(reading());
+      }
+
+      expect(mockTempsService.saveNewTemp).toHaveBeenCalledTimes(2);
+      expect(mockStaleCookService.autoStopIfStale).not.toHaveBeenCalled();
+    });
+
+    // Once an hour has passed since the last stored reading, memory can no
+    // longer rule out a crossed threshold, so the store is asked again.
+    it('queries again once the shortest possible threshold has elapsed', async () => {
+      useFrozenClock(new Date('2026-08-01T12:00:00Z'));
+      try {
+        for (let i = 0; i < 11; i++) {
+          await gateway.handleEvent(reading());
+        }
+        mockStaleCookService.autoStopIfStale.mockClear();
+        useFrozenClock(new Date('2026-08-01T13:30:00Z'));
+
+        for (let i = 0; i < 11; i++) {
+          await gateway.handleEvent(reading());
+        }
+
+        expect(mockStaleCookService.autoStopIfStale).toHaveBeenCalledTimes(1);
+      } finally {
+        restoreClock();
+      }
+    });
+
+    // After a stop there is no cook to be recent about, so the next reading
+    // goes back to the store rather than trusting a last-seen that belonged to
+    // the session just ended.
+    it('forgets what it stored once a cook has been auto-stopped', async () => {
+      const logSpy = jest.spyOn(Logger, 'log').mockImplementation();
+      useFrozenClock(new Date('2026-08-01T12:00:00Z'));
+      try {
+        for (let i = 0; i < 11; i++) {
+          await gateway.handleEvent(reading());
+        }
+
+        // A fortnight later the box comes back on, and the cook is ended.
+        useFrozenClock(new Date('2026-08-15T12:00:00Z'));
+        mockStaleCookService.autoStopIfStale.mockResolvedValue({
+          smokeId: 'test-smoke-id',
+          finishedAt: new Date('2026-08-01T12:00:00Z'),
+          idleHours: 336,
+        });
+        for (let i = 0; i < 11; i++) {
+          await gateway.handleEvent(reading());
+        }
+        mockStaleCookService.autoStopIfStale.mockClear();
+        mockStaleCookService.autoStopIfStale.mockResolvedValue(null);
+
+        // The reading a minute later belongs to whatever runs next, and the
+        // gateway remembers nothing that would let it skip the question.
+        useFrozenClock(new Date('2026-08-15T12:01:00Z'));
+        for (let i = 0; i < 11; i++) {
+          await gateway.handleEvent(reading());
+        }
+
+        expect(mockStaleCookService.autoStopIfStale).toHaveBeenCalledTimes(1);
+      } finally {
+        restoreClock();
+        logSpy.mockRestore();
+      }
+    });
+
+    // The check exists to tidy up a dead cook; a live one must not lose its
+    // readings because that check could not reach the database.
+    it('stores the reading anyway when the staleness check fails', async () => {
+      const errorSpy = jest.spyOn(Logger, 'error').mockImplementation();
+      mockStaleCookService.autoStopIfStale.mockRejectedValue(
+        new Error('mongo is down'),
+      );
+
+      for (let i = 0; i < 11; i++) {
+        await gateway.handleEvent(reading());
+      }
+
+      expect(mockTempsService.saveNewTemp).toHaveBeenCalledTimes(1);
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('mongo is down'),
+        'Websocket',
+      );
+      errorSpy.mockRestore();
     });
   });
 
