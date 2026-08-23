@@ -4,6 +4,7 @@ import { Types } from 'mongoose';
 import { ApplicationSettings } from '../appSettings/app-settings.schema';
 import { PreSmoke } from '../presmoke/presmoke.schema';
 import { SmokeStatus } from '../smoke/smoke.schema';
+import { PushDispatcherService } from '../pushDispatcher/push-dispatcher.service';
 import { StateService } from '../State/state.service';
 import { StatsService } from '../stats/stats.service';
 import { FakeDoc, fakeModel } from '../timeline/testing/fake-model';
@@ -89,12 +90,15 @@ describe('StaleCookService', () => {
   let profiles: FakeDoc[];
   /** The socket every app is listening on, as this service reaches it. */
   let events: { broadcastSmokeUpdate: jest.Mock };
+  /** The push boundary: what reaches a phone that is nowhere near the box. */
+  let push: { notify: jest.Mock };
   /** The real stamping the manual End Smoke flow goes through. */
   let timeline: TimelineService;
 
   const build = async (): Promise<StaleCookService> => {
     stats = { recalculate: jest.fn().mockResolvedValue(undefined) };
     events = { broadcastSmokeUpdate: jest.fn() };
+    push = { notify: jest.fn().mockResolvedValue(1) };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         StaleCookService,
@@ -102,6 +106,7 @@ describe('StaleCookService', () => {
         StateService,
         { provide: StatsService, useValue: stats },
         { provide: EventsGateway, useValue: events },
+        { provide: PushDispatcherService, useValue: push },
         {
           provide: getModelToken('SmokeProfile'),
           useValue: fakeModel(profiles),
@@ -322,6 +327,123 @@ describe('StaleCookService', () => {
       expect(storedState().smoking).toBe(false);
       expect(storedSmoke().finishedAt).toEqual(
         new Date('2026-08-01T15:55:00.000Z'),
+      );
+    });
+  });
+
+  /**
+   * The pitmaster is not at the box — that is the whole reason the cook went
+   * stale. A stop nobody hears about is a cook they will not come back and
+   * finish, so the one place that ends abandoned cooks is also the one place
+   * that tells them it happened, whichever trigger noticed.
+   *
+   * The number in the message is the *threshold*, not how long the readings
+   * have actually been silent: "auto-stopped after 6 hours idle" is the rule
+   * the box just applied, and it is the sentence that makes sense of a stop the
+   * user did not ask for whether they read it an hour later or a fortnight on.
+   */
+  describe('telling the pitmaster their cook was stopped', () => {
+    it('pushes once, naming the threshold that stopped the cook', async () => {
+      await service.autoStopIfStale(NEXT_DAY);
+
+      expect(push.notify).toHaveBeenCalledTimes(1);
+      expect(push.notify).toHaveBeenCalledWith(
+        'Smoker',
+        'Cook auto-stopped after 6 hours idle — open the app to finish it',
+      );
+    });
+
+    // The push is a courtesy on top of a write that has already happened. A
+    // phone that cannot be reached — no VAPID keys, no subscriptions, the push
+    // service down — must not undo the stop or fail the poll that noticed it.
+    it('stops the cook even when the push cannot be delivered', async () => {
+      push.notify.mockRejectedValue(new Error('push down'));
+
+      const stopped = await service.autoStopIfStale(NEXT_DAY);
+
+      expect(stopped).toMatchObject({ smokeId: 'smoke-id' });
+      expect(storedSmoke().finishedAt).toEqual(
+        new Date('2026-08-01T15:55:00.000Z'),
+      );
+      expect(storedState().smoking).toBe(false);
+    });
+
+    it('stops the cook even when the push throws on the way out', async () => {
+      push.notify.mockImplementation(() => {
+        throw new Error('no dispatcher');
+      });
+
+      const stopped = await service.autoStopIfStale(NEXT_DAY);
+
+      expect(stopped).toMatchObject({ smokeId: 'smoke-id' });
+      expect(storedState().smoking).toBe(false);
+    });
+
+    it('says nothing when the readings are still arriving', async () => {
+      await service.autoStopIfStale(new Date('2026-08-01T17:00:00.000Z'));
+
+      expect(push.notify).not.toHaveBeenCalled();
+    });
+
+    it('says nothing when the session was not smoking to begin with', async () => {
+      storedState().smoking = false;
+
+      await service.autoStopIfStale(NEXT_DAY);
+
+      expect(push.notify).not.toHaveBeenCalled();
+    });
+
+    // The stop this tail is finishing off was pushed when it was stamped;
+    // pushing again would tell the pitmaster twice about one cook.
+    it('says nothing when finishing off a cook that was already stamped', async () => {
+      storedSmoke().finishedAt = new Date('2026-08-01T15:00:00.000Z');
+
+      await service.autoStopIfStale(NEXT_DAY);
+
+      expect(push.notify).not.toHaveBeenCalled();
+    });
+
+    it('pushes once when two triggers notice the same stale cook', async () => {
+      await Promise.all([
+        service.autoStopIfStale(NEXT_DAY),
+        service.autoStopIfStale(NEXT_DAY),
+      ]);
+
+      expect(push.notify).toHaveBeenCalledTimes(1);
+    });
+
+    it('names the configured threshold rather than the default', async () => {
+      settings[0].autoStop = { idleHours: 12 };
+
+      await service.autoStopIfStale(NEXT_DAY);
+
+      expect(push.notify).toHaveBeenCalledWith(
+        'Smoker',
+        expect.stringContaining('after 12 hours idle'),
+      );
+    });
+
+    // Half an hour, an hour and a half: thresholds an operator may well set,
+    // and a message reading "1.5 hours" rather than "1.5000000000000002".
+    it('names a fractional threshold as it was configured', async () => {
+      settings[0].autoStop = { idleHours: 1.5 };
+
+      await service.autoStopIfStale(NEXT_DAY);
+
+      expect(push.notify).toHaveBeenCalledWith(
+        'Smoker',
+        expect.stringContaining('after 1.5 hours idle'),
+      );
+    });
+
+    it('says one hour in the singular', async () => {
+      settings[0].autoStop = { idleHours: 1 };
+
+      await service.autoStopIfStale(NEXT_DAY);
+
+      expect(push.notify).toHaveBeenCalledWith(
+        'Smoker',
+        expect.stringContaining('after 1 hour idle'),
       );
     });
   });

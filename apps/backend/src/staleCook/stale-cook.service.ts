@@ -5,6 +5,7 @@ import {
   ApplicationSettings,
   ApplicationSettingsDocument,
 } from '../appSettings/app-settings.schema';
+import { PushDispatcherService } from '../pushDispatcher/push-dispatcher.service';
 import { SmokeDocument } from '../smoke/smoke.schema';
 import {
   DEFAULT_SMOKE_PROFILE,
@@ -19,7 +20,7 @@ import { EventsGateway } from '../websocket/events.gateway';
  * How long a cook still marked as smoking may go without a reading before it is
  * taken to be over, when the settings document does not say.
  *
- * The setting itself is the threshold's home (see {@link idleThresholdMs}); this
+ * The setting itself is the threshold's home (see {@link idleThresholdHours}); this
  * is what a document written before the field existed reads as, and what the
  * shipped default is.
  */
@@ -47,7 +48,20 @@ export interface AutoStoppedCook {
   finishedAt: Date;
   /** How long its readings had been silent when the threshold was crossed. */
   idleHours: number;
+  /** The configured silence that ended it — the rule, not the measurement. */
+  thresholdHours: number;
 }
+
+/**
+ * Hours as a sentence says them: a whole number carries no decimal point, a
+ * fractional threshold keeps the digits the operator typed, and one hour is
+ * singular. Rounded first, because a stored threshold is a float and
+ * `5.999999999` is six hours to everyone but a computer.
+ */
+const formatHours = (hours: number): string => {
+  const rounded = Number(hours.toFixed(2));
+  return `${rounded} ${rounded === 1 ? 'hour' : 'hours'}`;
+};
 
 /**
  * The one place that decides an abandoned cook is over, and ends it.
@@ -94,6 +108,12 @@ export class StaleCookService {
      */
     @Inject(forwardRef(() => EventsGateway))
     private readonly events: EventsGateway,
+    /**
+     * The phones. The socket only reaches an app that is open, and the whole
+     * premise of a stale cook is that nobody is looking — see
+     * {@link announcePush}.
+     */
+    private readonly push: PushDispatcherService,
     /**
      * The cook itself, read through its model rather than `SmokeService`:
      * that service depends on the state and on the statistics, both of which
@@ -160,7 +180,8 @@ export class StaleCookService {
     const storedIdleMs = lastReading.storedAt
       ? now.getTime() - lastReading.storedAt.getTime()
       : idleMs;
-    const threshold = await this.idleThresholdMs();
+    const thresholdHours = await this.idleThresholdHours();
+    const threshold = thresholdHours * MS_PER_HOUR;
     if (idleMs <= threshold || storedIdleMs <= threshold) {
       return null;
     }
@@ -176,7 +197,7 @@ export class StaleCookService {
       await this.switchOff(smoke);
       return null;
     }
-    return this.stop(smoke, lastReadingAt, idleMs);
+    return this.stop(smoke, lastReadingAt, idleMs, thresholdHours);
   }
 
   /**
@@ -197,6 +218,7 @@ export class StaleCookService {
     smoke: StoppableCook,
     finishedAt: Date,
     idleMs: number,
+    thresholdHours: number,
   ): Promise<AutoStoppedCook | null> {
     const smokeId = String(smoke._id);
     const stamped = await this.timeline.stampFinishAt(smokeId, finishedAt);
@@ -205,7 +227,50 @@ export class StaleCookService {
       return null;
     }
     await this.restatArchive(smokeId);
-    return { smokeId, finishedAt, idleHours: idleMs / MS_PER_HOUR };
+    await this.announcePush(smokeId, thresholdHours);
+    return {
+      smokeId,
+      finishedAt,
+      idleHours: idleMs / MS_PER_HOUR,
+      thresholdHours,
+    };
+  }
+
+  /**
+   * Tell the pitmaster, wherever they are, that the box ended their cook.
+   *
+   * The socket announcement only reaches an app that is already open, and a
+   * cook goes stale precisely because nobody is watching one; the push is the
+   * only thing that reaches somebody who walked away days ago and never pressed
+   * End Smoke. It rides here, in the branch that won the conditional stamp and
+   * after the stop is committed, so two triggers racing produce one push and no
+   * push is ever sent for a stop that did not happen.
+   *
+   * The number it carries is the threshold rather than the measured silence:
+   * the rule the box applied is what explains a stop the user did not ask for,
+   * and it reads the same whenever they get to the message.
+   *
+   * A push that cannot be delivered is logged and swallowed, like the socket
+   * announcement and the statistics: the read that noticed is a poll of a
+   * timeline or a reading arriving, and neither may fail because a phone could
+   * not be reached. The stop is already written.
+   */
+  private async announcePush(
+    smokeId: string,
+    thresholdHours: number,
+  ): Promise<void> {
+    try {
+      await this.push.notify(
+        'Smoker',
+        `Cook auto-stopped after ${formatHours(
+          thresholdHours,
+        )} idle — open the app to finish it`,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Smoke ${smokeId} was auto-stopped but no push could be delivered. ${error}`,
+      );
+    }
   }
 
   /**
@@ -293,15 +358,13 @@ export class StaleCookService {
    * quietly applying the default. A lean read is of what is stored, so
    * whichever slice arrives first, the other works the day it lands.
    */
-  private async idleThresholdMs(): Promise<number> {
+  private async idleThresholdHours(): Promise<number> {
     const stored: unknown = await this.settingsModel.findOne().lean().exec();
     const hours = (stored as StoredAutoStopSettings | null)?.autoStop
       ?.idleHours;
-    return (
-      (typeof hours === 'number' && isFinite(hours) && hours > 0
-        ? hours
-        : DEFAULT_AUTO_STOP_IDLE_HOURS) * MS_PER_HOUR
-    );
+    return typeof hours === 'number' && isFinite(hours) && hours > 0
+      ? hours
+      : DEFAULT_AUTO_STOP_IDLE_HOURS;
   }
 }
 

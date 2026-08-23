@@ -4,6 +4,7 @@ import {
   ApplicationSettings,
   ApplicationSettingsSchema,
 } from '../appSettings/app-settings.schema';
+import { PushDispatcherModule } from '../pushDispatcher/push-dispatcher.module';
 import { SmokeSchema } from '../smoke/smoke.schema';
 import { SmokeProFileSchema } from '../smokeProfile/smokeProfile.schema';
 import { StateModule } from '../State/state.module';
@@ -48,6 +49,9 @@ import { StaleCookService } from './stale-cook.service';
     // Forward-referenced since the gateway became a trigger: the reading path
     // there asks this module whether the cook it arrived into is over.
     forwardRef(() => EventsModule),
+    // The socket only reaches an open app, and nobody is looking at a stale
+    // cook; the push is what reaches the pitmaster who walked away.
+    PushDispatcherModule,
   ],
   providers: [StaleCookService, StaleCookMiddleware],
   exports: [StaleCookService, StaleCookMiddleware],
