@@ -37,6 +37,13 @@ const fieldMatches = (value: unknown, expected: unknown): boolean => {
               new Date(value as string).getTime() >=
                 new Date(operand as string).getTime()
             );
+          case '$lte':
+            return (
+              value !== null &&
+              value !== undefined &&
+              new Date(value as string).getTime() <=
+                new Date(operand as string).getTime()
+            );
           case '$in':
             return (operand as unknown[]).some((one) =>
               fieldMatches(value, one),

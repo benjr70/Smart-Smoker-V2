@@ -752,4 +752,43 @@ describe('TimelineService', () => {
       expect(smokes[0].peakChamberScanned).toBe(true);
     });
   });
+
+  describe('stampFinishAt', () => {
+    /** Where the real cook ended: its last reading before the box went quiet. */
+    const COOK_ENDED = new Date('2026-08-01T15:55:00.000Z');
+
+    it('records the cook as having finished at the moment it was given', async () => {
+      await service.stampFinishAt('smoke-id', COOK_ENDED);
+
+      expect(smokes[0].finishedAt).toEqual(COOK_ENDED);
+    });
+
+    /**
+     * A session nobody ended keeps collecting whatever the box records next —
+     * a hot grill firing weeks later lands in the old cook's series. That was
+     * not this cook's chamber, so the peak is scanned over the cook's own
+     * window and stops where the cook did.
+     */
+    it('scans the peak over the cook’s window and not the strays after it', async () => {
+      temps.push(reading('2026-08-20T18:00:00.000Z', '470', '70'));
+      service = await build();
+
+      await service.stampFinishAt('smoke-id', COOK_ENDED);
+
+      expect(smokes[0].peakChamber).toBe(268);
+    });
+
+    it('says whether this call is the one that stamped the finish', async () => {
+      expect(await service.stampFinishAt('smoke-id', COOK_ENDED)).toBe(true);
+
+      expect(await service.stampFinishAt('smoke-id', new Date())).toBe(false);
+      expect(smokes[0].finishedAt).toEqual(COOK_ENDED);
+    });
+
+    it('stamps nothing for a cook that does not exist', async () => {
+      expect(await service.stampFinishAt('no-such-smoke', COOK_ENDED)).toBe(
+        false,
+      );
+    });
+  });
 });

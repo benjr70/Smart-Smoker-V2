@@ -111,6 +111,25 @@ export class StateService
     return updated;
   }
 
+  /**
+   * Switch smoking off for a cook that is over, and say whether this call is
+   * the one that switched it.
+   *
+   * Conditional on the flag still being on, and on the session still being the
+   * one named, so the two triggers of an auto-stop racing each other cannot
+   * both report a stop — and so a stop decided about yesterday's cook cannot
+   * switch off a cook the user has since started.
+   *
+   * Distinct from {@link toggleSmoking}: this is not a toggle (a second call
+   * must not switch smoking back on) and it stamps no start.
+   */
+  async stopSmoking(smokeId: string): Promise<boolean> {
+    const result = await this.model
+      .updateOne({ smokeId, smoking: true }, { $set: { smoking: false } })
+      .exec();
+    return result.modifiedCount > 0;
+  }
+
   async clearSmoke() {
     const stateDto: StateDto = {
       smokeId: '',

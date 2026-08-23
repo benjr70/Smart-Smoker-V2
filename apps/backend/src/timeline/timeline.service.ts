@@ -89,7 +89,27 @@ export class TimelineService {
   }
 
   /**
-   * Record that a cook is over, and what it was being taken to.
+   * Record that a cook the user has just ended is over, as of now — the manual
+   * End Smoke path, expressed through {@link stampFinishAt}.
+   *
+   * A cook stopped earlier keeps the moment it was stopped at: the guard inside
+   * is what makes an End Smoke pressed a week after the readings stopped record
+   * the cook that happened rather than the week that followed it.
+   */
+  async stampFinish(smokeId: string): Promise<boolean> {
+    return this.stampFinishAt(smokeId, new Date());
+  }
+
+  /**
+   * Record that a cook was over at a given moment, and what it was being taken
+   * to.
+   *
+   * The moment is a parameter because a cook does not always end when somebody
+   * notices it has: a session whose readings stopped yesterday finished
+   * yesterday, and stamping the moment of the noticing would record a cook that
+   * ran until the app was next opened. The peak is scanned over the rows at or
+   * before that moment for the same reason — a stray firing of the box after
+   * the cook is not the cook's peak.
    *
    * The target is snapshotted here rather than read back later because the
    * settings it comes from go on being edited: a cook finished at 203°F must
@@ -103,21 +123,25 @@ export class TimelineService {
    * whole series for its peak — would have been done to be thrown away. The
    * guard still stands, because two clients finishing at once can both get
    * past this read.
+   *
+   * Answers whether this call is the one that stamped, so a caller may do the
+   * work that must happen once per finish (recompute the statistics, tell the
+   * user) exactly once even when two of them race.
    */
-  async stampFinish(smokeId: string): Promise<void> {
+  async stampFinishAt(smokeId: string, finishedAt: Date): Promise<boolean> {
     const smoke = await this.smokeModel.findById(smokeId).exec();
     if (!smoke || smoke.finishedAt) {
-      return;
+      return false;
     }
     const stored = await this.settingsModel.findOne().exec();
     const targetTemp = primaryWatchedTarget(withSettingsDefaults(stored));
-    const peakChamber = await this.peakChamberOf(smoke);
-    await this.smokeModel
+    const peakChamber = await this.peakChamberOf(smoke, finishedAt);
+    const result = await this.smokeModel
       .updateOne(
         { _id: smokeId, finishedAt: null },
         {
           $set: {
-            finishedAt: new Date(),
+            finishedAt,
             targetTemp,
             // Recorded whatever the readings said, so that a cook whose series
             // held nothing readable is never scanned for a peak again — see
@@ -131,6 +155,16 @@ export class TimelineService {
         },
       )
       .exec();
+    return result.modifiedCount > 0;
+  }
+
+  /**
+   * The moment of a cook's newest dated reading, or `null` when it has kept
+   * none — what "the readings stopped at" means to the auto-stop, and the
+   * moment an abandoned cook's finish is backdated to.
+   */
+  async lastReadingAt(smoke: StoredSmoke): Promise<Date | null> {
+    return this.edgeReading(smoke, -1);
   }
 
   /**
@@ -142,11 +176,14 @@ export class TimelineService {
    * the chamber is the only one wanted here, and the four meat maxima the
    * fuller aggregation computes would be four accumulators nobody reads.
    */
-  private async peakChamberOf(smoke: StoredSmoke): Promise<number | null> {
+  private async peakChamberOf(
+    smoke: StoredSmoke,
+    until: Date | null = null,
+  ): Promise<number | null> {
     if (!smoke.tempsId) {
       return null;
     }
-    const peaks = await this.peakChambersOf([String(smoke.tempsId)]);
+    const peaks = await this.peakChambersOf([String(smoke.tempsId)], until);
     return peaks.get(String(smoke.tempsId)) ?? null;
   }
 
@@ -158,14 +195,29 @@ export class TimelineService {
    * rebuild backfills the peaks of every cook that has none, and asked one at a
    * time that would be a query per cook. A series nothing readable was recorded
    * for is absent from the answer rather than present as a zero.
+   *
+   * `until` bounds the scan to the rows at or before a moment — the cook's
+   * window. A series may run on past the cook that recorded it (the box is
+   * fired up again weeks later against a session nobody ended), and the hottest
+   * of those later rows is not a fact about the cook. Undated rows are excluded
+   * with the bound, because a row that cannot say when it was read cannot be
+   * placed inside the window.
    */
-  async peakChambersOf(tempsIds: string[]): Promise<Map<string, number>> {
+  async peakChambersOf(
+    tempsIds: string[],
+    until: Date | null = null,
+  ): Promise<Map<string, number>> {
     if (tempsIds.length === 0) {
       return new Map();
     }
     const rows = await this.tempModel
       .aggregate([
-        { $match: { tempsId: { $in: tempsIds } } },
+        {
+          $match: {
+            tempsId: { $in: tempsIds },
+            ...(until ? { date: { $ne: null, $lte: until } } : {}),
+          },
+        },
         {
           $group: {
             _id: '$tempsId',
