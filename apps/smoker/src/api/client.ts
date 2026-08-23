@@ -9,6 +9,8 @@
  */
 import { ApiError, TransportPort, createHttpTransport } from 'api-transport/src';
 import { resolveDeviceUrl } from './deviceUrl';
+import { SmokeEventPort, noopEventPort } from './events';
+import { createSocketEventPort } from './socketEventAdapter';
 import {
   AppearancePreference,
   ProbeTargetSetting,
@@ -41,6 +43,110 @@ export interface StateResource {
   /** PUT `state/toggleSmoking` — flip the smoking flag; returns the new state. */
   toggleSmoking(): Promise<State>;
 }
+
+/**
+ * Getting out from under a cook nobody finished.
+ *
+ * The three calls the phone's wizard makes when it archives a cook and moves
+ * on, offered to the touchscreen as well — because the panel is where the next
+ * cook is lit, and lighting one over a session the backend already stopped is
+ * exactly how a finished cook's series gets a second cook appended to it.
+ *
+ * They are separate calls rather than one, because that is what they are on the
+ * backend: an archive, a state that lets go of what it archived, and the
+ * pre-smoke save that creates what comes next.
+ */
+export interface SessionResource {
+  /**
+   * POST `smoke/finish` — archive the cook the state points at.
+   *
+   * Sends nothing. A cook the backend auto-stopped already carries the finish
+   * it really ended at, and the finish flow keeps that stamp rather than moving
+   * it to the moment somebody got round to pressing the button.
+   */
+  finish(): Promise<void>;
+  /**
+   * PUT `state/clearSmoke` — leave the state pointing at no cook, and tell every
+   * screen watching that it did.
+   *
+   * The write alone is half the job. A screen holds the cook's chart baseline
+   * for as long as nothing tells it otherwise, and the backend only ever says so
+   * when a client asks it to — it rebroadcasts a `clear` a client emits and
+   * announces nothing by itself. So the panel emits one, exactly as the web
+   * client does; without it the archived cook's series stays under the next
+   * cook's readings on this screen and on every phone connected, which is the
+   * pollution this recovery exists to end.
+   */
+  clear(): Promise<void>;
+  /**
+   * POST `presmoke` — begin the next session, and wait for it to *be* the
+   * session.
+   *
+   * A pre-smoke saved while no cook is current is what creates one on the
+   * backend; there is no route that makes a session any other way. The document
+   * sent is the blank one the wizard's first step starts on, so what the phone
+   * shows next is an empty form rather than something the panel invented.
+   *
+   * Resolves only once the state names the new smoke. The save is answered
+   * before the smoke it creates has been linked to the state — the backend does
+   * not await that write — so for a beat there is no current cook, and anything
+   * done to "the current cook" in that beat is done to nothing at all: the
+   * smoking toggle finds no smoke id, changes nothing, and answers with an empty
+   * body nobody can tell from a flag that was already off. Rejects when the
+   * session never becomes current, because that is a recovery that did not
+   * happen and the panel has to be able to say so.
+   */
+  startNew(): Promise<void>;
+}
+
+/**
+ * The blank pre-smoke a fresh session begins from — the same empty document the
+ * wizard's first step starts on, spelled out here because this is the only
+ * place the touchscreen ever writes one.
+ */
+const BLANK_PRE_SMOKE = {
+  name: '',
+  meatType: '',
+  weight: { unit: 'LB' },
+  steps: [''],
+  notes: '',
+};
+
+/**
+ * How long a new session is given to become the current one, and how often the
+ * state is looked at while it does. Half a second is far longer than the link
+ * takes and far shorter than anybody will stand in a garage wondering whether
+ * the smoker is lit.
+ */
+const NEW_SESSION_ATTEMPTS = 10;
+const NEW_SESSION_POLL_MS = 50;
+
+/** A pause between two looks at the state. */
+const pause = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Wait until the state names a cook, which is what makes a freshly created
+ * session the one every other route acts on.
+ *
+ * A state read that fails is treated as "not yet" rather than as an answer — the
+ * link may well have landed — so only the whole budget running out ends the
+ * wait, and it ends it as a rejection.
+ */
+const awaitCurrentSmoke = async (transport: TransportPort): Promise<void> => {
+  for (let attempt = 0; attempt < NEW_SESSION_ATTEMPTS; attempt += 1) {
+    const current = await transport.get<State | null>('state').catch(() => null);
+    if (current?.smokeId) {
+      return;
+    }
+    await pause(NEW_SESSION_POLL_MS);
+  }
+  throw new ApiError({
+    status: undefined,
+    path: 'presmoke',
+    method: 'post',
+    message: 'The new session never became the current one',
+  });
+};
 
 export interface SmokeProfileResource {
   /**
@@ -107,11 +213,13 @@ export interface ProbeTargetsResource {
 }
 
 /**
- * The one fact of a cook's timing the touchscreen has any use for: when it
- * started, revived into a real `Date` (or `null` for a cook never started).
- * The backend's timeline document carries more — a finish stamp, derived
- * duration and peaks — none of which this panel displays, so none of it is
- * carried here.
+ * The one fact of a *stored* cook's timing the touchscreen has any use for:
+ * when it started, revived into a real `Date` (or `null` for a cook never
+ * started). The backend's timeline document carries more — a derived duration
+ * and the peaks — none of which this panel displays, so none of it is carried
+ * here. The finish stamp rides on the running cook alone (see {@link
+ * CurrentCookTimeline}), which is the only cook it tells the panel anything
+ * about.
  */
 export interface CookTimeline {
   startedAt: Date | null;
@@ -150,8 +258,19 @@ export interface CookCompletionEstimate {
   hoursRemaining: number | null;
 }
 
-/** The cook in progress: when it started, and when it will be done. */
+/**
+ * The cook in progress: when it started, whether it has already been finished,
+ * and when it will be done.
+ *
+ * The finish stamp is here and not on {@link CookTimeline} because it means
+ * something only of the *current* cook: a stamp on the cook the state still
+ * points at is one the backend stopped by itself when its readings dried up,
+ * and nobody has walked the End Smoke wizard on yet. That is the one thing the
+ * panel has to know before it lights the smoker again.
+ */
 export interface CurrentCookTimeline extends CookTimeline {
+  /** When the cook finished, or `null` while it is still going. */
+  finishedAt: Date | null;
   estimate: CookCompletionEstimate;
 }
 
@@ -180,6 +299,7 @@ export interface TimelineResource {
 
 export interface ApiClient {
   state: StateResource;
+  session: SessionResource;
   smokeProfile: SmokeProfileResource;
   temps: TempsResource;
   device: DeviceResource;
@@ -195,6 +315,7 @@ export interface ApiClient {
  */
 type WireCurrentTimeline = {
   startedAt?: string | Date | null;
+  finishedAt?: string | Date | null;
   estimate?: {
     state?: CompletionState | null;
     eta?: string | Date | null;
@@ -232,11 +353,28 @@ const isEmptyProfile = (raw: SmokeProfile | null | undefined): boolean =>
 
 export const createApiClient = (
   cloudTransport: TransportPort,
-  deviceTransport: TransportPort
+  deviceTransport: TransportPort,
+  events: SmokeEventPort = noopEventPort
 ): ApiClient => {
   const state: StateResource = {
     getState: () => cloudTransport.get<State>('state'),
     toggleSmoking: () => cloudTransport.put<State>('state/toggleSmoking'),
+  };
+  const session: SessionResource = {
+    finish: async () => {
+      await cloudTransport.post<unknown>('smoke/finish');
+    },
+    clear: async () => {
+      await cloudTransport.put<unknown>('state/clearSmoke');
+      // Announced after the write has landed, so a screen that answers the
+      // signal by re-reading the session finds the cleared one rather than the
+      // cook being archived.
+      events.emitClear();
+    },
+    startNew: async () => {
+      await cloudTransport.post<unknown>('presmoke', BLANK_PRE_SMOKE);
+      await awaitCurrentSmoke(cloudTransport);
+    },
   };
   const timeline: TimelineResource = {
     getById: async (smokeId: string) => {
@@ -262,6 +400,7 @@ export const createApiClient = (
       }
       return {
         startedAt: asMoment(raw.startedAt),
+        finishedAt: asMoment(raw.finishedAt),
         // An absent estimate block — what a deployment older than the estimator
         // answers with — reads as an estimate of nothing rather than as an
         // absence the top bar would have to have an opinion about.
@@ -275,6 +414,7 @@ export const createApiClient = (
   };
   return {
     state,
+    session,
     timeline,
     smokeProfile: {
       getCurrent: async () => {
@@ -343,7 +483,13 @@ const deviceBaseUrl = (): string => resolveDeviceUrl(DEVICE_FALLBACK_URL);
 
 /** Builds the production client backed by the two HTTP (axios) transports. */
 export const createProductionApiClient = (): ApiClient =>
-  createApiClient(createHttpTransport(cloudBaseUrl()), createHttpTransport(deviceBaseUrl()));
+  createApiClient(
+    createHttpTransport(cloudBaseUrl()),
+    createHttpTransport(deviceBaseUrl()),
+    // The one side-effect adapter the client is paired with, so letting go of a
+    // cook broadcasts over the websocket as well as writing to the API.
+    createSocketEventPort()
+  );
 
 let defaultClient: ApiClient | undefined;
 

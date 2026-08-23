@@ -11,6 +11,8 @@ import { useChartPalette } from '../../../theme';
 import { chartNamesOf } from '../../common/chartNames';
 import { CompletionCard } from './CompletionCard';
 import { SmokeStatusBar } from './SmokeStatusBar';
+import { StaleCookDialog } from './StaleCookDialog';
+import { useSmokingToggle } from './useSmokingToggle';
 import { TemperatureChannel, TemperatureRow } from './TemperatureRow';
 import { useRunningCook } from './useRunningCook';
 import { useProbeTargets } from './useProbeTargets';
@@ -70,6 +72,16 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
   // screen can change about the estimate; the other is the target, which the
   // card edits through this same hook.
   const cook = useRunningCook(session.smoking);
+  // Lighting the smoker, guarded: a session whose cook the backend already
+  // stopped is asked about rather than lit, so the next cook's readings never
+  // land in the last one's series. Recovering from one starts the description
+  // over as well — this step is left mounted throughout, and what it is holding
+  // is what it saves on the way out, so a new cook would otherwise inherit the
+  // archived one's notes and wood.
+  const toggle = useSmokingToggle(session.smoking, session.toggleSmoking, () => {
+    session.setNotes('');
+    session.setWoodType('');
+  });
 
   /**
    * The four readings in the order the design lists them, each paired with the
@@ -194,11 +206,17 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
           // colour itself, so the border is stated rather than left to that
           // default.
           sx={theme => (session.smoking ? { borderColor: theme.design.danger } : {})}
-          onClick={() => void session.toggleSmoking()}
+          onClick={() => toggle.request()}
         >
           {session.smoking ? 'Stop Smoking' : 'Start Smoking'}
         </Button>
       </Grid>
+      <StaleCookDialog
+        open={toggle.prompting}
+        working={toggle.working}
+        onConfirm={toggle.confirm}
+        onCancel={toggle.dismiss}
+      />
       <Card data-testid="smoke-details-card" sx={{ padding: '14px' }}>
         {/* The picker keeps its type-anything behaviour and gains the look of
             the design's select: the list is always offered behind a chevron,

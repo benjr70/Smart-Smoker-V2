@@ -9,7 +9,12 @@ const buildClient = (
 ) => {
   const cloud = createFakeBackend(cloudSeed);
   const device = createFakeBackend(deviceSeed);
-  return { cloud, device, client: createApiClient(cloud, device) };
+  // What the panel broadcasts, recorded rather than sent: the socket is the
+  // client's one side-effect, and a test asserts on it the same way it asserts
+  // on a request.
+  const broadcasts: string[] = [];
+  const events = { emitClear: () => broadcasts.push('clear') };
+  return { cloud, device, broadcasts, client: createApiClient(cloud, device, events) };
 };
 
 describe('smoker api client', () => {
@@ -309,6 +314,35 @@ describe('smoker api client', () => {
     });
 
     /**
+     * A cook the backend stopped by itself carries a finish stamp while it is
+     * still the current session — that stamp is the one thing that tells a
+     * session waiting to be finished from one waiting to be cooked, so the
+     * panel is given it.
+     */
+    it('getCurrent revives the finish stamp of a cook that was auto-stopped', async () => {
+      const { client } = buildClient({
+        timeline: {
+          current: {
+            startedAt: '2026-08-20T12:00:00.000Z',
+            finishedAt: '2026-08-20T21:30:00.000Z',
+          },
+        },
+      });
+
+      const current = await client.timeline.getCurrent();
+
+      expect(current?.finishedAt).toEqual(new Date('2026-08-20T21:30:00.000Z'));
+    });
+
+    it('reads a cook still running as one with no finish stamp', async () => {
+      const { client } = buildClient({
+        timeline: { current: { startedAt: '2026-08-20T12:00:00.000Z', finishedAt: null } },
+      });
+
+      await expect(client.timeline.getCurrent()).resolves.toMatchObject({ finishedAt: null });
+    });
+
+    /**
      * A deployment older than the estimator has no estimate block to send. The
      * panel is handed an estimate of nothing rather than an absence every caller
      * would have to guard, and shows no ETA — which is what it shows for a cook
@@ -357,6 +391,125 @@ describe('smoker api client', () => {
       await expect(client.timeline.getById('s1')).resolves.toEqual({
         startedAt: new Date('2026-08-15T10:00:00.000Z'),
       });
+    });
+  });
+
+  /**
+   * What the panel needs to recover from a cook nobody finished: the very calls
+   * the wizard on the phone makes, in one place, so the touchscreen composes the
+   * same recovery rather than inventing one of its own.
+   */
+  describe('session resource (cloud base URL)', () => {
+    it('finish archives the cook the state points at via POST `smoke/finish`', async () => {
+      const { cloud, device, client } = buildClient({
+        state: { smokeId: 'smoke-1', smoking: false },
+      });
+
+      await client.session.finish();
+
+      // Nothing is sent: what the cook finished at is the stamp the backend
+      // already holds, and this call must not offer one of its own.
+      expect(cloud.requests).toEqual([{ method: 'post', path: 'smoke/finish', body: undefined }]);
+      expect(device.requests).toEqual([]);
+    });
+
+    it('clear leaves the state pointing at no cook via PUT `state/clearSmoke`', async () => {
+      const { cloud, client } = buildClient({ state: { smokeId: 'smoke-1', smoking: true } });
+
+      await client.session.clear();
+
+      expect(cloud.requests).toEqual([
+        { method: 'put', path: 'state/clearSmoke', body: undefined },
+      ]);
+      expect(cloud.store.state).toEqual({ smokeId: '', smoking: false });
+    });
+
+    /**
+     * The write is half the job. Every screen watching keeps the cleared cook's
+     * chart baseline until something tells it not to, and the backend tells
+     * nobody on its own — it rebroadcasts the `clear` a client emits. Without
+     * this the panel's own chart, and any phone connected, draws the next cook
+     * on top of the one that was just archived.
+     */
+    it('clear announces the cleared session over the websocket, as the web client does', async () => {
+      const { broadcasts, client } = buildClient({ state: { smokeId: 'smoke-1', smoking: true } });
+
+      await client.session.clear();
+
+      expect(broadcasts).toEqual(['clear']);
+    });
+
+    /**
+     * A client built without an emitter — the fake-backend one every other test
+     * here uses — still clears: the broadcast is a side-effect of the write, not
+     * a precondition for it, so the REST behaviour can be exercised with no
+     * socket anywhere near it.
+     */
+    it('clears without an emitter when none was injected', async () => {
+      const cloud = createFakeBackend({ state: { smokeId: 'smoke-1', smoking: true } });
+      const client = createApiClient(cloud, createFakeBackend());
+
+      await expect(client.session.clear()).resolves.toBeUndefined();
+
+      expect(cloud.store.state).toEqual({ smokeId: '', smoking: false });
+    });
+
+    it('says nothing over the websocket when the state could not be cleared', async () => {
+      const { cloud, broadcasts, client } = buildClient({
+        state: { smokeId: 'smoke-1', smoking: true },
+      });
+      cloud.injectFault({ method: 'put', path: 'state/clearSmoke', status: 503 });
+
+      await expect(client.session.clear()).rejects.toBeInstanceOf(ApiError);
+
+      // Nothing was let go of, so nothing is announced: a screen that reset
+      // itself here would be showing a cook the backend still holds.
+      expect(broadcasts).toEqual([]);
+    });
+
+    /**
+     * Saving a pre-smoke with no cook current is what creates the next one on
+     * the backend — there is no other route that does — so the blank document
+     * the wizard's first step starts on is what the panel sends.
+     */
+    it('startNew creates the next session by saving a blank pre-smoke', async () => {
+      const { cloud, client } = buildClient({ state: { smokeId: '', smoking: false } });
+
+      await client.session.startNew();
+
+      expect(cloud.requests[0]).toEqual({
+        method: 'post',
+        path: 'presmoke',
+        body: { name: '', meatType: '', weight: { unit: 'LB' }, steps: [''], notes: '' },
+      });
+      expect(cloud.store.state?.smokeId).toBeTruthy();
+    });
+
+    /**
+     * The save is answered before the smoke it creates is linked to the state,
+     * so a caller that takes the answer as the session would act on no cook at
+     * all — the smoking toggle finds no id, flips nothing, and says so with an
+     * empty body indistinguishable from a flag that was already off.
+     */
+    it('startNew resolves only once the new session is the current one', async () => {
+      const { cloud, client } = buildClient({ state: { smokeId: '', smoking: false } });
+
+      await client.session.startNew();
+
+      // It looked at the state more than once, because the first look still
+      // showed the gap the backend leaves.
+      expect(cloud.requests.filter(request => request.path === 'state').length).toBeGreaterThan(1);
+      expect(cloud.store.state?.smokeId).toBe('smoke-next');
+    });
+
+    it('startNew rejects when the session never becomes the current one', async () => {
+      const { cloud, client } = buildClient({ state: { smokeId: '', smoking: false } });
+      // The state cannot be read for as long as the call is willing to wait, so
+      // whether the session exists is a question with no answer — which is not
+      // something to resolve successfully over.
+      cloud.injectFault({ method: 'get', path: 'state', status: 503 });
+
+      await expect(client.session.startNew()).rejects.toBeInstanceOf(ApiError);
     });
   });
 
