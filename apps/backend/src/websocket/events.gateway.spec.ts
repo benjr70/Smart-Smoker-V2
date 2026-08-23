@@ -411,9 +411,37 @@ describe('EventsGateway', () => {
       }
     });
 
-    // The check exists to tidy up a dead cook; a live one must not lose its
-    // readings because that check could not reach the database.
-    it('stores the reading anyway when the staleness check fails', async () => {
+    /**
+     * Nothing to report is not the same as nothing happened. The service ends
+     * the cook and reports no stop on two paths — a cook that already carried a
+     * finish stamp, and a stop that lost the conditional stamp to the timeline
+     * poll — and a reading stored after either of those lands in a session
+     * whose finish is already backdated, which is the pollution the whole slice
+     * exists to prevent. The flag is what says whether the cook survived.
+     */
+    it('stores nothing when the cook was ended without a stop to report', async () => {
+      mockStaleCookService.autoStopIfStale.mockResolvedValue(null);
+      mockStateService.GetState = jest
+        .fn()
+        .mockResolvedValueOnce(mockState)
+        .mockResolvedValue({ ...mockState, smoking: false });
+
+      for (let i = 0; i < 11; i++) {
+        await gateway.handleEvent(reading());
+      }
+
+      expect(mockStaleCookService.autoStopIfStale).toHaveBeenCalledTimes(1);
+      expect(mockTempsService.saveNewTemp).not.toHaveBeenCalled();
+    });
+
+    /**
+     * A stored reading is the newest reading, and the newest reading is what
+     * both triggers measure the silence from — so storing one on a check that
+     * never answered resets the gap to nothing and the abandoned cook is never
+     * noticed again. Dropping the reading costs one sample of a cook that is
+     * probably not running; storing it costs the cure.
+     */
+    it('stores nothing when the staleness check fails', async () => {
       const errorSpy = jest.spyOn(Logger, 'error').mockImplementation();
       mockStaleCookService.autoStopIfStale.mockRejectedValue(
         new Error('mongo is down'),
@@ -423,11 +451,45 @@ describe('EventsGateway', () => {
         await gateway.handleEvent(reading());
       }
 
-      expect(mockTempsService.saveNewTemp).toHaveBeenCalledTimes(1);
+      expect(mockTempsService.saveNewTemp).not.toHaveBeenCalled();
       expect(errorSpy).toHaveBeenCalledWith(
         expect.stringContaining('mongo is down'),
         'Websocket',
       );
+      errorSpy.mockRestore();
+    });
+
+    // A failed check answers nothing at all, so it must not be mistaken for a
+    // recent store: the next sampled reading asks again rather than skipping
+    // the question for an hour.
+    it('asks again on the next reading after a failed check', async () => {
+      const errorSpy = jest.spyOn(Logger, 'error').mockImplementation();
+      mockStaleCookService.autoStopIfStale.mockRejectedValue(
+        new Error('mongo is down'),
+      );
+
+      for (let i = 0; i < 22; i++) {
+        await gateway.handleEvent(reading());
+      }
+
+      expect(mockStaleCookService.autoStopIfStale).toHaveBeenCalledTimes(2);
+      errorSpy.mockRestore();
+    });
+
+    // The confirming read is as unable to answer as the check itself when the
+    // database is unreachable, and an unanswered question is not a live cook.
+    it('stores nothing when the confirming state read fails', async () => {
+      const errorSpy = jest.spyOn(Logger, 'error').mockImplementation();
+      mockStateService.GetState = jest
+        .fn()
+        .mockResolvedValueOnce(mockState)
+        .mockRejectedValue(new Error('mongo is down'));
+
+      for (let i = 0; i < 11; i++) {
+        await gateway.handleEvent(reading());
+      }
+
+      expect(mockTempsService.saveNewTemp).not.toHaveBeenCalled();
       errorSpy.mockRestore();
     });
   });

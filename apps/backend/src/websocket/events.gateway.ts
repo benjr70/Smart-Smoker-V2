@@ -107,9 +107,9 @@ export class EventsGateway {
    * Relay one device reading to every client, and persist every eleventh one.
    *
    * `async` rather than floating `.then()`s on purpose: the relay is the
-   * hottest path in the application and it reaches the database up to three
-   * times — to read the state, to check the cook has not been abandoned, and to
-   * store the reading — so an unattended rejection from any of them is a
+   * hottest path in the application and it reaches the database several times —
+   * to read the state, to check the cook has not been abandoned, and to store
+   * the reading — so an unattended rejection from any of them is a
    * process-level crash. Awaiting hands the promise to Nest, and the try/catch
    * around each call means neither a missing state document nor an unreachable
    * database can stop temperatures flowing to the clients: the emit above has
@@ -182,10 +182,23 @@ export class EventsGateway {
    * the one service that owns the decision, which reads the configured
    * threshold and the newest stored reading for itself.
    *
-   * A check that throws is not allowed to cost the reading. The relay has
-   * already emitted it, and dropping the store as well would punish a live cook
-   * for a database blip on a check that exists to tidy up a dead one; the
-   * caller falls through to the save it would have done before this existed.
+   * Only a reported stop proves the cook is over; nothing reported does not
+   * prove it survived. The service deliberately reports nothing on two paths
+   * that end the cook all the same — one that already carried a finish stamp,
+   * and a stop that lost the conditional stamp to the timeline poll racing it —
+   * and a reading stored after either of those lands in a session whose finish
+   * has just been backdated, which is the pollution this trigger exists to
+   * prevent. So a quiet answer is settled against the smoking flag the stop
+   * itself switches off, rather than assumed to mean a live cook.
+   *
+   * Nothing is stored on a check that could not answer, either. The reading the
+   * caller would have saved becomes the cook's newest, and the newest reading
+   * is what both triggers measure the silence from: one stored on a failed
+   * check resets the gap to nothing and the abandoned cook is never noticed
+   * again by anything. That is a far worse trade than the sample it costs — the
+   * relay has already emitted the reading to every screen, the check only runs
+   * when the cook may well be dead anyway, and the next sampled reading asks
+   * again, since a failure leaves nothing remembered to skip the question with.
    */
   private async stoppedStaleCook(now: Date): Promise<boolean> {
     if (
@@ -196,25 +209,40 @@ export class EventsGateway {
     }
     try {
       const stopped = await this.staleCook.autoStopIfStale(now);
-      if (!stopped) {
+      if (stopped) {
+        this.forgetLastStored();
+        Logger.log(
+          `Reading arrived ${stopped.idleHours.toFixed(
+            1,
+          )}h after the last one; smoke ${
+            stopped.smokeId
+          } was auto-stopped and the reading dropped`,
+          'Websocket',
+        );
+        return true;
+      }
+      if ((await this.stateService.GetState())?.smoking) {
         return false;
       }
-      // Nothing is remembered about a cook that has ended: the next reading
-      // starts a new one, and has to consult the store to place itself.
-      this.lastStoredAt = null;
-      Logger.log(
-        `Reading arrived ${stopped.idleHours.toFixed(
-          1,
-        )}h after the last one; smoke ${
-          stopped.smokeId
-        } was auto-stopped and the reading dropped`,
-        'Websocket',
-      );
+      // The cook was ended by a path with nothing to report. It is over as
+      // surely as a reported stop leaves it, and the reading is dropped for the
+      // same reason.
+      this.forgetLastStored();
       return true;
     } catch (err) {
       this.logDatabaseFailure('could not check for an abandoned cook', err);
-      return false;
+      return true;
     }
+  }
+
+  /**
+   * Forget what this instance last stored, so the next reading goes back to the
+   * store. Called wherever the cook the memory belonged to has ended: what
+   * follows is a different session, and only the indexed newest-reading lookup
+   * can place it.
+   */
+  private forgetLastStored(): void {
+    this.lastStoredAt = null;
   }
 
   /**
