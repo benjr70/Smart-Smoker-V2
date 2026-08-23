@@ -29,6 +29,24 @@ const MESSAGES_PER_STORED_READING = 11;
  */
 export const APPEARANCE_EVENT = 'appearance';
 
+/**
+ * The `smokeUpdate` frame: whether the cook is running, and what its four
+ * probes are called.
+ *
+ * Restated here for the same reason {@link APPEARANCE_EVENT} is — this service
+ * ships beside no copy of the client packages — and it is exactly the five
+ * fields, in the order, that every client already sends and applies. The names
+ * travel with the flag because the apps apply the whole frame; a frame missing
+ * them would relabel the screen it arrived at.
+ */
+export interface SmokeUpdateFrame {
+  smoking: boolean;
+  chamberName: string;
+  probe1Name: string;
+  probe2Name: string;
+  probe3Name: string;
+}
+
 @WebSocketGateway({
   cors: {
     origin: '*',
@@ -138,6 +156,22 @@ export class EventsGateway {
   handleSmokeUpdate(@MessageBody() data: string) {
     Logger.log(`Update Smoking: ${data}`, 'Websocket');
     this.server.emit('smokeUpdate', data);
+  }
+
+  /**
+   * Tell every connected client that the backend itself changed the smoking
+   * flag.
+   *
+   * Server-initiated, unlike {@link handleSmokeUpdate}, which relays a flip a
+   * client made. The apps hold the flag in memory and learn of changes only
+   * from this event, and their Stop button is a toggle over what they hold: a
+   * client that never heard the backend switch smoking off would flip it back
+   * on and restart a cook that was ended. Sent on the same event a client's own
+   * flip rides, so nothing on the receiving side has to learn a new frame.
+   */
+  broadcastSmokeUpdate(update: SmokeUpdateFrame): void {
+    Logger.log(`Smoking is now ${update.smoking}`, 'Websocket');
+    this.server.emit('smokeUpdate', update);
   }
 
   @SubscribeMessage('clear')

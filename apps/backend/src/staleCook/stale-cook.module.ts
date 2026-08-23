@@ -5,9 +5,11 @@ import {
   ApplicationSettingsSchema,
 } from '../appSettings/app-settings.schema';
 import { SmokeSchema } from '../smoke/smoke.schema';
+import { SmokeProFileSchema } from '../smokeProfile/smokeProfile.schema';
 import { StateModule } from '../State/state.module';
 import { StatsModule } from '../stats/stats.module';
 import { TimelineModule } from '../timeline/timeline.module';
+import { EventsModule } from '../websocket/events.module';
 import { StaleCookMiddleware } from './stale-cook.middleware';
 import { StaleCookService } from './stale-cook.service';
 
@@ -29,6 +31,7 @@ import { StaleCookService } from './stale-cook.service';
   imports: [
     MongooseModule.forFeature([
       { name: 'Smoke', schema: SmokeSchema },
+      { name: 'SmokeProfile', schema: SmokeProFileSchema },
       {
         name: ApplicationSettings.name,
         schema: ApplicationSettingsSchema,
@@ -40,6 +43,9 @@ import { StaleCookService } from './stale-cook.service';
     StateModule,
     TimelineModule,
     StatsModule,
+    // A stop the apps are never told about is toggled straight back on by the
+    // next Stop press on a screen that still thinks the cook is running.
+    EventsModule,
   ],
   providers: [StaleCookService, StaleCookMiddleware],
   exports: [StaleCookService, StaleCookMiddleware],

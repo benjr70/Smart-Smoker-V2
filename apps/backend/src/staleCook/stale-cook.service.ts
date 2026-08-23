@@ -6,9 +6,14 @@ import {
   ApplicationSettingsDocument,
 } from '../appSettings/app-settings.schema';
 import { SmokeDocument } from '../smoke/smoke.schema';
+import {
+  DEFAULT_SMOKE_PROFILE,
+  SmokeProFileDocument,
+} from '../smokeProfile/smokeProfile.schema';
 import { StateService } from '../State/state.service';
 import { StatsService } from '../stats/stats.service';
 import { TimelineService } from '../timeline/timeline.service';
+import { EventsGateway } from '../websocket/events.gateway';
 
 /**
  * How long a cook still marked as smoking may go without a reading before it is
@@ -21,6 +26,18 @@ import { TimelineService } from '../timeline/timeline.service';
 const DEFAULT_AUTO_STOP_IDLE_HOURS = 6;
 
 const MS_PER_HOUR = 60 * 60 * 1000;
+
+/**
+ * The cook being stopped, as the stop itself reads one: which cook it is, and
+ * where to find what its probes are called.
+ *
+ * Structural rather than the stored document type so the stop is written
+ * against the two fields it uses, and so a caller may hand over a lean object.
+ */
+interface StoppableCook {
+  _id: unknown;
+  smokeProfileId?: string;
+}
 
 /** What an auto-stop did, for the caller that has to tell somebody about it. */
 export interface AutoStoppedCook {
@@ -66,6 +83,12 @@ export class StaleCookService {
      */
     private readonly stats: StatsService,
     /**
+     * The socket every app is listening on. A stop the clients are not told
+     * about is undone by the next press of a Stop button that still believes
+     * the cook is running — see {@link announceStop}.
+     */
+    private readonly events: EventsGateway,
+    /**
      * The cook itself, read through its model rather than `SmokeService`:
      * that service depends on the state and on the statistics, both of which
      * are dependencies here, so injecting it would close a DI cycle. The read
@@ -74,6 +97,14 @@ export class StaleCookService {
     @InjectModel('Smoke') private readonly smokeModel: Model<SmokeDocument>,
     @InjectModel(ApplicationSettings.name)
     private readonly settingsModel: Model<ApplicationSettingsDocument>,
+    /**
+     * What the cook's probes are called, read through its model for the same
+     * reason the cook is: the service that wraps it drags the statistics, the
+     * ratings and the current-smoke reader in behind it, and all this needs is
+     * a find-by-id for the names the stop announcement carries.
+     */
+    @InjectModel('SmokeProfile')
+    private readonly profileModel: Model<SmokeProFileDocument>,
   ) {}
 
   /**
@@ -87,7 +118,9 @@ export class StaleCookService {
    * deliberately paused, or one they are ending through the wizard, is theirs
    * to finish), the cook has at least one dated reading (a session prepared the
    * night before is not abandoned, it has not started), and the newest reading
-   * is older than the threshold.
+   * is older than the threshold — by the device's clock and by the store's
+   * alike, so that a smoker whose clock is behind cannot have a live cook
+   * stopped underneath it.
    *
    * A stale cook that already carries a finish is not stopped again — but its
    * smoking flag is still switched off, which is how a stop interrupted between
@@ -105,12 +138,24 @@ export class StaleCookService {
     if (!smoke) {
       return null;
     }
-    const lastReadingAt = await this.timeline.lastReadingAt(smoke);
-    if (!lastReadingAt) {
+    const lastReading = await this.timeline.lastReading(smoke);
+    if (!lastReading) {
       return null;
     }
+    const lastReadingAt = lastReading.readAt;
     const idleMs = now.getTime() - lastReadingAt.getTime();
-    if (idleMs <= (await this.idleThresholdMs())) {
+    // Both clocks have to call the cook silent. The reading's date is the
+    // device's, and a smoker whose clock is behind reports a cook that is
+    // plainly alive as ancient; the store's own record of when it accepted
+    // that reading cannot be moved by any device. Stopping a live cook is the
+    // expensive mistake — the gateway drops readings once smoking is off, so
+    // the rest of a real cook would go unrecorded — and leaving a zombie one
+    // running an hour longer is not.
+    const storedIdleMs = lastReading.storedAt
+      ? now.getTime() - lastReading.storedAt.getTime()
+      : idleMs;
+    const threshold = await this.idleThresholdMs();
+    if (idleMs <= threshold || storedIdleMs <= threshold) {
       return null;
     }
     // A cook that already carries a finish has been stopped — by an earlier
@@ -122,10 +167,10 @@ export class StaleCookService {
     // statistics are left alone, because the stop itself was reported when it
     // was stamped.
     if (smoke.finishedAt) {
-      await this.state.stopSmoking(String(smoke._id));
+      await this.switchOff(smoke);
       return null;
     }
-    return this.stop(String(smoke._id), lastReadingAt, idleMs);
+    return this.stop(smoke, lastReadingAt, idleMs);
   }
 
   /**
@@ -143,17 +188,64 @@ export class StaleCookService {
    * and the only one that recomputes the statistics.
    */
   private async stop(
-    smokeId: string,
+    smoke: StoppableCook,
     finishedAt: Date,
     idleMs: number,
   ): Promise<AutoStoppedCook | null> {
+    const smokeId = String(smoke._id);
     const stamped = await this.timeline.stampFinishAt(smokeId, finishedAt);
-    await this.state.stopSmoking(smokeId);
+    await this.switchOff(smoke);
     if (!stamped) {
       return null;
     }
     await this.restatArchive(smokeId);
     return { smokeId, finishedAt, idleHours: idleMs / MS_PER_HOUR };
+  }
+
+  /**
+   * Switch the session's smoking flag off, and tell the apps it went off.
+   *
+   * The two belong together wherever the flag is flipped. The apps hold the
+   * flag in memory and only ever learn it changed from the socket, and their
+   * Stop button toggles what they hold: a kiosk that was left showing the
+   * abandoned cook would flip a stop it never heard about straight back on,
+   * restarting the cook this service just ended. Only the call that actually
+   * flipped announces, so two triggers racing produce one announcement.
+   */
+  private async switchOff(smoke: StoppableCook): Promise<void> {
+    if (await this.state.stopSmoking(String(smoke._id))) {
+      await this.announceStop(smoke);
+    }
+  }
+
+  /**
+   * Tell every connected app the cook is no longer smoking, without letting a
+   * silent socket fail the read that noticed.
+   *
+   * The frame carries the cook's names because that is what a `smokeUpdate`
+   * is and the apps apply all of it; a session that never had a profile
+   * written is announced with the names it would be served on a fresh read,
+   * rather than blanks that would wipe the labels on screen.
+   */
+  private async announceStop(smoke: StoppableCook): Promise<void> {
+    try {
+      const profile = smoke.smokeProfileId
+        ? await this.profileModel.findById(smoke.smokeProfileId).exec()
+        : null;
+      this.events.broadcastSmokeUpdate({
+        smoking: false,
+        chamberName: profile?.chamberName ?? DEFAULT_SMOKE_PROFILE.chamberName,
+        probe1Name: profile?.probe1Name ?? DEFAULT_SMOKE_PROFILE.probe1Name,
+        probe2Name: profile?.probe2Name ?? DEFAULT_SMOKE_PROFILE.probe2Name,
+        probe3Name: profile?.probe3Name ?? DEFAULT_SMOKE_PROFILE.probe3Name,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Smoke ${String(
+          smoke._id,
+        )} was auto-stopped but the clients could not be told; they will read the stopped state on their next load. ${error}`,
+      );
+    }
   }
 
   /**
@@ -186,9 +278,17 @@ export class StaleCookService {
    * predates the field, or one carrying nonsense, reads as the shipped default
    * rather than as `undefined` — which would compare as "never idle" and leave
    * the zombie cooks this exists to end.
+   *
+   * Read lean, which here is not an optimisation: hydrating a document against
+   * the settings schema returns only the paths that schema declares, and the
+   * auto-stop block is written by a different slice from this reader. Until
+   * both have landed a hydrated read would hand back a document with no
+   * threshold on it whatever the operator had stored, and this would go on
+   * quietly applying the default. A lean read is of what is stored, so
+   * whichever slice arrives first, the other works the day it lands.
    */
   private async idleThresholdMs(): Promise<number> {
-    const stored = await this.settingsModel.findOne().exec();
+    const stored: unknown = await this.settingsModel.findOne().lean().exec();
     const hours = (stored as StoredAutoStopSettings | null)?.autoStop
       ?.idleHours;
     return (

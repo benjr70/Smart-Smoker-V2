@@ -1,5 +1,6 @@
 import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
+import { Types } from 'mongoose';
 import { ApplicationSettings } from '../appSettings/app-settings.schema';
 import { PreSmoke } from '../presmoke/presmoke.schema';
 import { SmokeStatus } from '../smoke/smoke.schema';
@@ -7,10 +8,27 @@ import { StateService } from '../State/state.service';
 import { StatsService } from '../stats/stats.service';
 import { FakeDoc, fakeModel } from '../timeline/testing/fake-model';
 import { TimelineService } from '../timeline/timeline.service';
+import { EventsGateway } from '../websocket/events.gateway';
 import { StaleCookService } from './stale-cook.service';
 
-/** A reading of the cook, as the smoker stores one: temperatures as strings. */
-const reading = (date: string, chamber: string): FakeDoc => ({
+/**
+ * A reading of the cook, as the smoker stores one: temperatures as strings, and
+ * a date the *device* put on it.
+ *
+ * `storedAt` is the other clock — when the backend accepted the row, which is
+ * what its `_id` carries. Left off where a test does not care, exactly as the
+ * rows written before ids were looked at leave it off.
+ */
+const reading = (
+  date: string,
+  chamber: string,
+  storedAt?: string,
+): FakeDoc => ({
+  ...(storedAt
+    ? {
+        _id: Types.ObjectId.createFromTime(new Date(storedAt).getTime() / 1000),
+      }
+    : {}),
   tempsId: 'temps-id',
   date: new Date(date),
   ChamberTemp: chamber,
@@ -22,6 +40,45 @@ const reading = (date: string, chamber: string): FakeDoc => ({
 /** The moment the app is next opened: a day after the readings stopped. */
 const NEXT_DAY = new Date('2026-08-02T16:00:00.000Z');
 
+/**
+ * The settings model as Mongoose behaves while the auto-stop block is not yet
+ * a declared path on the schema: a hydrated read drops it, and only a lean
+ * read gives back what is actually stored.
+ *
+ * Worth modelling rather than assuming away, because the threshold ships in a
+ * different slice from the reader: a reader written against the hydrated
+ * document silently ignores every configured threshold until both have landed,
+ * and no compiler or plain fake can tell.
+ */
+const strictSettingsModel = (docs: FakeDoc[]) => {
+  const model = fakeModel(docs);
+  return {
+    ...model,
+    findOne(filter: FakeDoc = {}) {
+      const stored = model.findOne(filter);
+      let lean = false;
+      const chain = {
+        lean() {
+          lean = true;
+          return chain;
+        },
+        async exec(): Promise<FakeDoc | null> {
+          const doc = (await stored.exec()) as FakeDoc | null;
+          if (!doc || lean) {
+            return doc;
+          }
+          // Hydration returns the paths the schema declares and no others,
+          // and the auto-stop block is not one of them yet.
+          const declared = { ...doc };
+          delete declared.autoStop;
+          return declared;
+        },
+      };
+      return chain;
+    },
+  };
+};
+
 describe('StaleCookService', () => {
   let service: StaleCookService;
   let smokes: FakeDoc[];
@@ -29,23 +86,32 @@ describe('StaleCookService', () => {
   let states: FakeDoc[];
   let settings: FakeDoc[];
   let stats: { recalculate: jest.Mock };
+  let profiles: FakeDoc[];
+  /** The socket every app is listening on, as this service reaches it. */
+  let events: { broadcastSmokeUpdate: jest.Mock };
   /** The real stamping the manual End Smoke flow goes through. */
   let timeline: TimelineService;
 
   const build = async (): Promise<StaleCookService> => {
     stats = { recalculate: jest.fn().mockResolvedValue(undefined) };
+    events = { broadcastSmokeUpdate: jest.fn() };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         StaleCookService,
         TimelineService,
         StateService,
         { provide: StatsService, useValue: stats },
+        { provide: EventsGateway, useValue: events },
+        {
+          provide: getModelToken('SmokeProfile'),
+          useValue: fakeModel(profiles),
+        },
         { provide: getModelToken('Smoke'), useValue: fakeModel(smokes) },
         { provide: getModelToken('Temp'), useValue: fakeModel(temps) },
         { provide: getModelToken('state'), useValue: fakeModel(states) },
         {
           provide: getModelToken(ApplicationSettings.name),
-          useValue: fakeModel(settings),
+          useValue: strictSettingsModel(settings),
         },
         { provide: getModelToken(PreSmoke.name), useValue: fakeModel([]) },
       ],
@@ -59,10 +125,20 @@ describe('StaleCookService', () => {
   const storedState = (): FakeDoc => states[0];
 
   beforeEach(async () => {
+    profiles = [
+      {
+        _id: 'profile-id',
+        chamberName: 'Pit',
+        probe1Name: 'Brisket',
+        probe2Name: 'Ribs',
+        probe3Name: 'Spare',
+      },
+    ];
     smokes = [
       {
         _id: 'smoke-id',
         tempsId: 'temps-id',
+        smokeProfileId: 'profile-id',
         status: SmokeStatus.InProgress,
         startedAt: new Date('2026-08-01T10:00:00.000Z'),
         finishedAt: null,
@@ -155,6 +231,149 @@ describe('StaleCookService', () => {
   });
 
   /**
+   * A stop nobody is told about is half a stop.
+   *
+   * The apps hold the smoking flag in memory and only ever learn it changed
+   * from the socket. A kiosk that was showing the abandoned cook still believes
+   * it is running, and Stop on that screen is a *toggle*: it reads the stored
+   * `false` and flips it back to `true`, restarting the very cook this service
+   * just ended. So the flip is announced on the same event a client's own flip
+   * rides, carrying the cook's names because that is what the frame is.
+   */
+  describe('telling the apps the cook has stopped', () => {
+    it('announces the flip so a stale client cannot toggle the cook back on', async () => {
+      await service.autoStopIfStale(NEXT_DAY);
+
+      expect(events.broadcastSmokeUpdate).toHaveBeenCalledWith({
+        smoking: false,
+        chamberName: 'Pit',
+        probe1Name: 'Brisket',
+        probe2Name: 'Ribs',
+        probe3Name: 'Spare',
+      });
+    });
+
+    // The names ride along on this frame and the apps apply them, so a cook
+    // whose profile was never written must be told the names it would be given
+    // on a fresh read rather than blanks that would wipe the labels on screen.
+    it('announces the default names for a cook whose profile was never written', async () => {
+      profiles.length = 0;
+
+      await service.autoStopIfStale(NEXT_DAY);
+
+      expect(events.broadcastSmokeUpdate).toHaveBeenCalledWith({
+        smoking: false,
+        chamberName: 'Chamber',
+        probe1Name: 'Probe1',
+        probe2Name: 'Probe2',
+        probe3Name: 'Probe3',
+      });
+    });
+
+    it('announces the default names for a session that never named a profile', async () => {
+      delete storedSmoke().smokeProfileId;
+
+      await service.autoStopIfStale(NEXT_DAY);
+
+      expect(events.broadcastSmokeUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ chamberName: 'Chamber' }),
+      );
+    });
+
+    it('says nothing when there was nothing to stop', async () => {
+      await service.autoStopIfStale(new Date('2026-08-01T17:00:00.000Z'));
+
+      expect(events.broadcastSmokeUpdate).not.toHaveBeenCalled();
+    });
+
+    // Whichever trigger flipped the flag is the one that announces it; the
+    // other flipped nothing and has nothing to say.
+    it('announces once when two triggers notice the same stale cook', async () => {
+      await Promise.all([
+        service.autoStopIfStale(NEXT_DAY),
+        service.autoStopIfStale(NEXT_DAY),
+      ]);
+
+      expect(events.broadcastSmokeUpdate).toHaveBeenCalledTimes(1);
+    });
+
+    // The half-stopped cook — stamped, flag left on — is switched off here, and
+    // that flip is exactly the one a stale client would otherwise toggle back.
+    it('announces the flip that finishes off a stamped cook still marked smoking', async () => {
+      storedSmoke().finishedAt = new Date('2026-08-01T15:00:00.000Z');
+
+      await service.autoStopIfStale(NEXT_DAY);
+
+      expect(events.broadcastSmokeUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ smoking: false }),
+      );
+    });
+
+    // A socket that cannot be reached is a client that will read the truth on
+    // its next load. The stop itself is already written and must stand.
+    it('stops the cook even when the announcement fails', async () => {
+      events.broadcastSmokeUpdate.mockImplementation(() => {
+        throw new Error('no socket server yet');
+      });
+
+      const stopped = await service.autoStopIfStale(NEXT_DAY);
+
+      expect(stopped).toMatchObject({ smokeId: 'smoke-id' });
+      expect(storedState().smoking).toBe(false);
+      expect(storedSmoke().finishedAt).toEqual(
+        new Date('2026-08-01T15:55:00.000Z'),
+      );
+    });
+  });
+
+  /**
+   * A cook is judged silent by two clocks, and both have to agree.
+   *
+   * The date on a reading is the *device's*: the gateway relays whatever the
+   * smoker put on it. A Pi that reboots without NTP comes back hours or days
+   * behind, and every reading it then sends looks older than the threshold
+   * while the cook is plainly alive. Stopping it would be the worst failure
+   * this service can have — the gateway drops readings once smoking is off, so
+   * the rest of a real cook would go unrecorded.
+   *
+   * What the backend knows for itself is when it accepted each row, which the
+   * row's id carries. The finish is still backdated to the device's date (that
+   * is the cook's own account of when it ended); the decision to stop needs the
+   * store to have been quiet too.
+   */
+  describe('a device whose clock is running behind', () => {
+    beforeEach(async () => {
+      // The readings claim to be a day old and were accepted moments ago.
+      temps = [
+        reading('2026-08-01T15:50:00.000Z', '210', '2026-08-02T15:55:00.000Z'),
+        reading('2026-08-01T15:55:00.000Z', '244', '2026-08-02T15:59:00.000Z'),
+      ];
+      service = await build();
+    });
+
+    it('leaves a cook whose readings are still arriving alone', async () => {
+      const stopped = await service.autoStopIfStale(NEXT_DAY);
+
+      expect(stopped).toBeNull();
+      expect(storedSmoke().finishedAt).toBeNull();
+      expect(storedState().smoking).toBe(true);
+    });
+
+    // Once the store has been silent as long as the device says it has, the
+    // cook really is over — and it ended when the device said it did.
+    it('stops the cook once the store has been silent too, backdated to the reading', async () => {
+      const stopped = await service.autoStopIfStale(
+        new Date('2026-08-03T16:00:00.000Z'),
+      );
+
+      expect(stopped).toMatchObject({ smokeId: 'smoke-id' });
+      expect(storedSmoke().finishedAt).toEqual(
+        new Date('2026-08-01T15:55:00.000Z'),
+      );
+    });
+  });
+
+  /**
    * The two triggers — a poll of the timeline and a reading arriving after the
    * gap — can notice the same zombie at the same moment. One stop happened, so
    * one of them is told so, one set of stamps is written, and the statistics
@@ -233,6 +452,21 @@ describe('StaleCookService', () => {
 
       expect(stopped).toMatchObject({ smokeId: 'smoke-id' });
       expect(stopped?.idleHours).toBeCloseTo(8);
+    });
+
+    /**
+     * The threshold is stored by a slice this one does not wait for, so what is
+     * held here is that a stored threshold is obeyed whether or not the schema
+     * has learned the path yet — the read goes to the stored document rather
+     * than to the document the schema currently describes.
+     */
+    it('obeys a stored threshold the settings schema does not declare yet', async () => {
+      settings[0].autoStop = { idleHours: 12 };
+
+      expect(await service.autoStopIfStale(EIGHT_HOURS_ON)).toBeNull();
+      expect(await service.autoStopIfStale(NEXT_DAY)).toMatchObject({
+        smokeId: 'smoke-id',
+      });
     });
 
     it('leaves the cook alone while the configured threshold has not passed', async () => {

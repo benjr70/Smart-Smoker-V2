@@ -335,6 +335,28 @@ describe('EventsGateway', () => {
     });
   });
 
+  describe('broadcastSmokeUpdate', () => {
+    /**
+     * Sent on the same event a client's own flip rides, so that a screen which
+     * was showing a cook the backend has since stopped learns of it — its Stop
+     * button toggles what it holds, and what it holds would otherwise restart
+     * the cook.
+     */
+    it('announces a backend-decided flip on the event every client listens on', () => {
+      const update = {
+        smoking: false,
+        chamberName: 'Pit',
+        probe1Name: 'Brisket',
+        probe2Name: 'Ribs',
+        probe3Name: 'Spare',
+      };
+
+      gateway.broadcastSmokeUpdate(update);
+
+      expect(mockServer.emit).toHaveBeenCalledWith('smokeUpdate', update);
+    });
+  });
+
   describe('handleClear', () => {
     it('should emit clear event and log it', () => {
       const testData = 'clear-data';

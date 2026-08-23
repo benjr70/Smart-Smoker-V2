@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { withSettingsDefaults } from '../appSettings/app-settings.defaults';
 import {
   ApplicationSettings,
@@ -95,9 +95,15 @@ export class TimelineService {
    * A cook stopped earlier keeps the moment it was stopped at: the guard inside
    * is what makes an End Smoke pressed a week after the readings stopped record
    * the cook that happened rather than the week that followed it.
+   *
+   * The peak is scanned unbounded — every row of the series, undated ones
+   * included — because this is the path that has always been read that way and
+   * the archive holds undated rows the statistics backfill still counts. A cook
+   * the user is ending as they watch it has no rows after itself to exclude;
+   * the cook nobody ended does, and that is what the bound exists for.
    */
   async stampFinish(smokeId: string): Promise<boolean> {
-    return this.stampFinishAt(smokeId, new Date());
+    return this.stampFinishAt(smokeId, new Date(), null);
   }
 
   /**
@@ -110,6 +116,13 @@ export class TimelineService {
    * ran until the app was next opened. The peak is scanned over the rows at or
    * before that moment for the same reason — a stray firing of the box after
    * the cook is not the cook's peak.
+   *
+   * `peakScanUntil` is that bound, and defaults to the finish. A caller may
+   * pass `null` to scan the whole series instead, which is what the manual
+   * finish does: the bound necessarily drops rows stored without a date (a row
+   * that cannot say when it was read cannot be placed inside the window), and
+   * dropping them on a path that never did would quietly lower the peak it
+   * stamps.
    *
    * The target is snapshotted here rather than read back later because the
    * settings it comes from go on being edited: a cook finished at 203°F must
@@ -128,14 +141,18 @@ export class TimelineService {
    * work that must happen once per finish (recompute the statistics, tell the
    * user) exactly once even when two of them race.
    */
-  async stampFinishAt(smokeId: string, finishedAt: Date): Promise<boolean> {
+  async stampFinishAt(
+    smokeId: string,
+    finishedAt: Date,
+    peakScanUntil: Date | null = finishedAt,
+  ): Promise<boolean> {
     const smoke = await this.smokeModel.findById(smokeId).exec();
     if (!smoke || smoke.finishedAt) {
       return false;
     }
     const stored = await this.settingsModel.findOne().exec();
     const targetTemp = primaryWatchedTarget(withSettingsDefaults(stored));
-    const peakChamber = await this.peakChamberOf(smoke, finishedAt);
+    const peakChamber = await this.peakChamberOf(smoke, peakScanUntil);
     const result = await this.smokeModel
       .updateOne(
         { _id: smokeId, finishedAt: null },
@@ -159,12 +176,27 @@ export class TimelineService {
   }
 
   /**
-   * The moment of a cook's newest dated reading, or `null` when it has kept
-   * none — what "the readings stopped at" means to the auto-stop, and the
-   * moment an abandoned cook's finish is backdated to.
+   * A cook's newest dated reading told by both clocks: when the device says it
+   * was taken, and when this backend accepted it.
+   *
+   * The two are separate facts and only one of them is trustworthy about
+   * *recency*. The date is the device's — the gateway relays whatever the
+   * smoker stamped — so a box whose clock is behind (a Pi rebooted without
+   * NTP) reports a live cook as ancient. The insertion moment is the backend's
+   * own, taken from the row's id, and no device clock can move it.
+   *
+   * `storedAt` is `null` where the id cannot say: rows written under a
+   * non-ObjectId id, which the fakes and older imports produce. A caller then
+   * has only the device's account, which is the account everything had before
+   * this existed.
    */
-  async lastReadingAt(smoke: StoredSmoke): Promise<Date | null> {
-    return this.edgeReading(smoke, -1);
+  async lastReading(smoke: StoredSmoke): Promise<LastReading | null> {
+    const row = await this.edgeReadingRow(smoke, -1);
+    const readAt = row ? momentOf(row) : null;
+    if (!row || !readAt) {
+      return null;
+    }
+    return { readAt, storedAt: insertionMomentOf(row) };
   }
 
   /**
@@ -616,14 +648,26 @@ export class TimelineService {
     smoke: StoredSmoke,
     direction: 1 | -1,
   ): Promise<Date | null> {
+    const edge = await this.edgeReadingRow(smoke, direction);
+    return edge ? momentOf(edge) : null;
+  }
+
+  /**
+   * The row itself at one end of a cook's dated readings — what
+   * {@link edgeReading} reads its moment off, kept separate for the one caller
+   * that also needs the row's id (see {@link lastReading}).
+   */
+  private async edgeReadingRow(
+    smoke: StoredSmoke,
+    direction: 1 | -1,
+  ): Promise<StoredReading | null> {
     if (!smoke.tempsId) {
       return null;
     }
-    const edge = await this.tempModel
+    return this.tempModel
       .findOne({ tempsId: smoke.tempsId, date: { $ne: null } })
       .sort({ date: direction })
       .exec();
-    return edge ? momentOf(edge) : null;
   }
 
   /**
@@ -683,6 +727,29 @@ export class TimelineService {
       .exec();
   }
 }
+
+/** A stored reading as {@link TimelineService.lastReading} reads one. */
+type StoredReading = TimelineReading & { _id?: unknown };
+
+/** A cook's newest reading, told by the device's clock and by the store's. */
+export interface LastReading {
+  /** When the device says the reading was taken. */
+  readAt: Date;
+  /** When this backend accepted it, or `null` where its id cannot say. */
+  storedAt: Date | null;
+}
+
+/**
+ * When the store accepted a row, from its id.
+ *
+ * An ObjectId opens with the seconds it was generated at, on the machine that
+ * generated it — here, the backend — which makes it the one moment on a reading
+ * that no device clock can be wrong about. An id of any other shape says
+ * nothing about when the store saw the row, and is read as nothing rather than
+ * guessed at.
+ */
+const insertionMomentOf = (row: StoredReading): Date | null =>
+  row._id instanceof Types.ObjectId ? row._id.getTimestamp() : null;
 
 /**
  * A persisted smoke, as much of one as the timeline reads. Structural rather
