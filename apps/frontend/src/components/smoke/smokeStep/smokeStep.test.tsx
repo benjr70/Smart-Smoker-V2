@@ -1087,6 +1087,10 @@ describe('SmokeStepView — starting a cook over an auto-stopped one', () => {
     await act(async () => {
       await flushPromises();
     });
+    // The recovery outlives one turn of the event loop: the session the
+    // pre-smoke save creates is not the current one until the backend has
+    // linked it, and the fire is not lit until it is.
+    await waitFor(() => expect(kit.api.countCalls('toggleSmoking')).toBe(1));
 
     // The existing finish flow ran — archive, then let the state go of it —
     // and a blank pre-smoke created the session that takes its place.
@@ -1104,9 +1108,8 @@ describe('SmokeStepView — starting a cook over an auto-stopped one', () => {
     // Nothing is sent with the finish: the time the cook really ended is the
     // backdated stamp the backend already wrote, and this flow does not move it.
     expect(done[0].body).toBeUndefined();
-    expect(backend.store.state).toEqual({ smokeId: '', smoking: false });
-    // And the cook the user asked for is lit on the session that can record it.
-    expect(kit.api.countCalls('toggleSmoking')).toBe(1);
+    // And the state points at the session that took the archived cook's place.
+    expect(backend.store.state).toEqual({ smokeId: 'smoke-next', smoking: false });
     await waitFor(() =>
       expect(screen.getByTestId('smoke-start-button')).toHaveTextContent('Stop Smoking')
     );
@@ -1264,5 +1267,108 @@ describe('SmokeStepView — starting a cook over an auto-stopped one', () => {
     await waitFor(() => expect(screen.queryByTestId('stale-cook-dialog')).not.toBeInTheDocument());
     expect(kit.api.countCalls('toggleSmoking')).toBe(0);
     expect(backend.requests.filter(request => request.method !== 'get')).toEqual([]);
+  });
+
+  /**
+   * The backend answers the pre-smoke save before the smoke it creates has been
+   * linked to the state, so for a beat there is no current cook at all — and a
+   * toggle sent into that beat acts on nothing: it flips no flag, says nothing,
+   * and leaves a pitmaster who pressed Start looking at a cold smoker.
+   */
+  test('lights the fire only on a session the backend has made current', async () => {
+    const kit = harness();
+    const backend = autoStoppedBackend();
+    // Which cook the state named at the moment the fire was lit, which is the
+    // whole question: a session, or the gap where one was about to be.
+    let currentWhenLit: string | undefined | null = null;
+    const lightTheFire = kit.api.toggleSmoking.bind(kit.api);
+    kit.api.toggleSmoking = () => {
+      currentWhenLit = backend.store.state?.smokeId;
+      return lightTheFire();
+    };
+    renderView(kit, backend);
+    await act(async () => {
+      await flushPromises();
+    });
+
+    fireEvent.click(screen.getByTestId('smoke-start-button'));
+    await act(async () => {
+      await flushPromises();
+    });
+    fireEvent.click(screen.getByTestId('stale-cook-confirm'));
+    await waitFor(() => expect(kit.api.countCalls('toggleSmoking')).toBe(1));
+
+    expect(currentWhenLit).toBe('smoke-next');
+  });
+
+  /**
+   * And when the session never becomes the current one, nothing is claimed to
+   * have happened: no fire is lit over a cook that may not exist, and the
+   * question is still there to be answered again.
+   */
+  test('lights nothing when the new session never becomes current', async () => {
+    const kit = harness();
+    const backend = autoStoppedBackend();
+    renderView(kit, backend);
+    await act(async () => {
+      await flushPromises();
+    });
+
+    fireEvent.click(screen.getByTestId('smoke-start-button'));
+    await act(async () => {
+      await flushPromises();
+    });
+    // The state cannot be read for as long as the recovery is willing to wait,
+    // so whether the session was created is a question with no answer.
+    backend.injectFault({ method: 'get', path: 'state', status: 503 });
+    fireEvent.click(screen.getByTestId('stale-cook-confirm'));
+
+    await waitFor(() => expect(screen.getByTestId('stale-cook-confirm')).not.toBeDisabled(), {
+      timeout: 3000,
+    });
+    expect(kit.api.countCalls('toggleSmoking')).toBe(0);
+    expect(screen.getByTestId('stale-cook-dialog')).toBeInTheDocument();
+  });
+
+  /**
+   * The step is not remounted by the recovery, and what it is holding is what it
+   * saves when it is left — so the archived cook's description has to be let go
+   * of deliberately, or the next cook silently inherits notes nobody typed for
+   * it.
+   */
+  test('describes the new cook from scratch, and saves it that way', async () => {
+    const kit = harness();
+    kit.api.seedProfile({
+      chamberName: 'Offset',
+      probe1Name: 'probe 1',
+      probe2Name: 'probe 2',
+      probe3Name: 'probe 3',
+      notes: 'Wrapped at 165, pulled at 203',
+      woodType: 'Hickory',
+    });
+    const backend = autoStoppedBackend();
+    const { unmount } = renderView(kit, backend);
+    await act(async () => {
+      await flushPromises();
+    });
+
+    fireEvent.click(screen.getByTestId('smoke-start-button'));
+    await act(async () => {
+      await flushPromises();
+    });
+    fireEvent.click(screen.getByTestId('stale-cook-confirm'));
+    await waitFor(() => expect(kit.api.countCalls('toggleSmoking')).toBe(1));
+
+    expect(screen.getByTestId('smoke-notes-input')).toHaveValue('');
+    expect(screen.getByTestId('smoke-wood-type-input')).toHaveValue('');
+
+    // Leaving the step is what writes the description down, and what it writes
+    // is the new cook's own — not a word of the cook that was archived.
+    unmount();
+    await act(async () => {
+      await flushPromises();
+    });
+    const saved = kit.api.calls.filter(call => call.method === 'saveProfile').pop();
+    expect(saved?.args[0]).toMatchObject({ notes: '', woodType: '' });
   });
 });

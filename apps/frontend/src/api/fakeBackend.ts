@@ -361,6 +361,9 @@ export interface FakeBackendSeed {
  */
 const EMPTY_BODY = null;
 
+/** The id the fake gives the session a pre-smoke save creates. */
+const NEXT_SMOKE_ID = 'smoke-next';
+
 /** The smoker's probe slots, in the order the backend serves their rows. */
 const PROBE_SLOTS = ['probe1', 'probe2', 'probe3'];
 
@@ -489,6 +492,18 @@ interface FakeStore {
     deliveryFails: boolean;
   };
   state: State | null;
+  /**
+   * The smoke a pre-smoke save created that the state has not been pointed at
+   * yet, or `null` when the state is up to date.
+   *
+   * The backend answers a pre-smoke save before the new smoke is linked to the
+   * state — `PreSmokeService.startSmokeWith` does not await the link — so a
+   * caller that reads the state on the strength of the save alone can find it
+   * still empty. The fake reproduces that beat exactly: the link lands on the
+   * read *after* the first one, so a caller that looks once and lights a cook
+   * gets the answer the deployed backend would have given it.
+   */
+  pendingSmokeId: string | null;
   smoke: {
     records: Record<string, Smoke>;
     all: Smoke[];
@@ -536,6 +551,7 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
       deliveryFails: seed.notifications?.deliveryFails ?? false,
     },
     state: seed.state === undefined ? { smokeId: '', smoking: false } : seed.state,
+    pendingSmokeId: null,
     smoke: {
       records: seed.smoke?.records ?? {},
       all: seed.smoke?.all ?? [],
@@ -604,6 +620,15 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
       }
       if (method === 'post' && id === undefined) {
         store.preSmoke.current = clone(body) as PreSmoke;
+        // Saving a pre-smoke while nothing is current is what *creates* the
+        // next session on the backend; there is no route that makes one any
+        // other way. The link to the state is deferred (see
+        // {@link FakeStore.pendingSmokeId}), which is the backend's own
+        // behaviour and the reason anything starting a session has to wait for
+        // it rather than assume it.
+        if (!store.state?.smokeId) {
+          store.pendingSmokeId = NEXT_SMOKE_ID;
+        }
         return clone(store.preSmoke.current);
       }
       if (method === 'get' && id !== undefined && id !== '') {
@@ -727,7 +752,15 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
 
     if (resource === 'state') {
       if (method === 'get' && id === undefined) {
-        return store.state === null ? EMPTY_BODY : clone(store.state);
+        const answer = store.state === null ? EMPTY_BODY : clone(store.state);
+        if (store.pendingSmokeId !== null) {
+          // The link a pre-smoke save set going lands *after* this read has
+          // been answered, so the first look at the state still shows no cook
+          // and the one after it shows the new session.
+          store.state = { smokeId: store.pendingSmokeId, smoking: false };
+          store.pendingSmokeId = null;
+        }
+        return answer;
       }
       if (method === 'put' && id === 'toggleSmoking') {
         // With no state (or no smokeId) the backend toggles nothing and returns
@@ -740,6 +773,7 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
       }
       if (method === 'put' && id === 'clearSmoke') {
         store.state = { smokeId: '', smoking: false };
+        store.pendingSmokeId = null;
         return clone(store.state);
       }
     }

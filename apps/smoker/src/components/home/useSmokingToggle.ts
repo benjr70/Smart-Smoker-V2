@@ -84,9 +84,15 @@ export const useSmokingToggle = (
       try {
         // The finish flow the phone's wizard runs, in its own order: archive the
         // cook — which keeps the backdated finish the auto-stop wrote — let the
-        // state go of it, then create the session that takes its place.
+        // state go of it, which also tells every screen watching, then create
+        // the session that takes its place.
         await state.current.sessionPort.finish();
         await state.current.sessionPort.clear();
+        // Resolves only once that session is the *current* one, which is what
+        // makes the flip below act on a cook rather than on the gap the backend
+        // leaves between creating a smoke and pointing the state at it. A flip
+        // sent into that gap changes nothing and reports nothing, and the panel
+        // would be left claiming a fire it never lit.
         await state.current.sessionPort.startNew();
         setPrompting(false);
         // The cook the operator asked for in the first place, on a session that

@@ -74,8 +74,14 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
   const cook = useRunningCook(session.smoking);
   // Lighting the smoker, guarded: a session whose cook the backend already
   // stopped is asked about rather than lit, so the next cook's readings never
-  // land in the last one's series.
-  const toggle = useSmokingToggle(session.smoking, session.toggleSmoking);
+  // land in the last one's series. Recovering from one starts the description
+  // over as well — this step is left mounted throughout, and what it is holding
+  // is what it saves on the way out, so a new cook would otherwise inherit the
+  // archived one's notes and wood.
+  const toggle = useSmokingToggle(session.smoking, session.toggleSmoking, () => {
+    session.setNotes('');
+    session.setWoodType('');
+  });
 
   /**
    * The four readings in the order the design lists them, each paired with the

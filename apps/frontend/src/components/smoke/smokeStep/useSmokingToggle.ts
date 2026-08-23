@@ -17,7 +17,7 @@
  * Stopping is never guarded: putting a cook out cannot pollute anything.
  */
 import { useCallback, useRef, useState } from 'react';
-import { PreSmoke, useApiClient, useApiSnackbar } from '../../../api';
+import { PreSmoke, StateResource, useApiClient, useApiSnackbar } from '../../../api';
 import { WeightUnits } from '../../common/interfaces/enums';
 
 /**
@@ -34,6 +34,43 @@ export const FRESH_PRE_SMOKE: PreSmoke = {
   notes: '',
 };
 
+/**
+ * How long the recovery will wait for the session it created to become the
+ * current one, and how often it looks.
+ *
+ * The pre-smoke save answers before the smoke it creates has been linked to the
+ * state — the backend does not await that write — so a cook lit on the strength
+ * of the save alone is lit over no session at all: the toggle finds no smoke id,
+ * changes nothing, and the smoker is left cold with nothing on screen saying so.
+ * Half a second is far longer than the link takes and far shorter than a
+ * pitmaster will stand at a phone wondering whether the fire is lit.
+ */
+const SESSION_ATTEMPTS = 10;
+const SESSION_POLL_MS = 50;
+
+/** A pause between two looks at the state. */
+const pause = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Wait until the state names a cook, which is what makes the new session the
+ * one a toggle would act on.
+ *
+ * Rejects when it never does: that is a recovery that did not happen, and the
+ * caller has to say so rather than light a fire over nothing. A state read that
+ * fails is treated as "not yet" rather than as an answer — the write may well
+ * have landed — so only the whole budget running out ends the wait.
+ */
+const awaitCurrentSession = async (state: Pick<StateResource, 'get'>): Promise<void> => {
+  for (let attempt = 0; attempt < SESSION_ATTEMPTS; attempt += 1) {
+    const current = await state.get().catch(() => null);
+    if (current?.smokeId) {
+      return;
+    }
+    await pause(SESSION_POLL_MS);
+  }
+  throw new Error('The new session did not become the current one');
+};
+
 export interface SmokingToggle {
   /** Whether the prompt about the auto-stopped cook is on screen. */
   prompting: boolean;
@@ -47,9 +84,16 @@ export interface SmokingToggle {
   dismiss: () => void;
 }
 
+/**
+ * @param startFreshDraft Empty the description the step is holding — the notes
+ * and the wood type. The step stays mounted right through the recovery, and it
+ * saves what it is holding when it is left, so a draft carried over from the
+ * archived cook would be written onto the new one without anybody typing it.
+ */
 export function useSmokingToggle(
   smoking: boolean,
-  toggleSmoking: () => Promise<void>
+  toggleSmoking: () => Promise<void>,
+  startFreshDraft: () => void
 ): SmokingToggle {
   const client = useApiClient();
   const notify = useApiSnackbar();
@@ -66,6 +110,8 @@ export function useSmokingToggle(
   toggleRef.current = toggleSmoking;
   const smokingRef = useRef(smoking);
   smokingRef.current = smoking;
+  const freshDraftRef = useRef(startFreshDraft);
+  freshDraftRef.current = startFreshDraft;
 
   const request = useCallback((): void => {
     if (smokingRef.current) {
@@ -98,13 +144,26 @@ export function useSmokingToggle(
         await clientRef.current.smoke.finish();
         await clientRef.current.state.clearSmoke();
         await clientRef.current.preSmoke.saveCurrent(FRESH_PRE_SMOKE);
+        // And then wait for it to *be* the session. The save answers before the
+        // smoke it created is linked to the state, and a toggle sent into that
+        // gap acts on no cook at all: it changes nothing, reports nothing, and
+        // leaves a pitmaster looking at a control that says Start Smoking after
+        // they pressed it.
+        await awaitCurrentSession(clientRef.current.state);
+        // The new cook is described from scratch. The step is not remounted by
+        // any of this, so what it is holding is still the archived cook's notes
+        // and wood — and it saves what it is holding when it is left. Emptied
+        // after the session exists rather than before, so the reload the clear
+        // broadcast sets off cannot put the old draft back afterwards.
+        freshDraftRef.current();
         setPrompting(false);
         // The cook the user asked for in the first place, on the session that
         // can honestly record it.
         await toggleRef.current();
       } catch {
-        // The prompt stays up: the previous cook has not been finished, so the
-        // choice it offers is still the one to make.
+        // The prompt stays up: either the previous cook has not been finished or
+        // the session that replaces it never arrived, so the choice the question
+        // offers is still the one to make.
         notifyRef.current('Could not finish the previous cook. Try again.');
       } finally {
         setWorking(false);

@@ -123,6 +123,18 @@ interface FakeStore {
   finished: string[];
   /** The last pre-smoke saved — what created the session now current. */
   preSmoke: unknown;
+  /**
+   * The smoke a pre-smoke save created that the state has not been pointed at
+   * yet, or `null` when the state is up to date.
+   *
+   * The backend answers a pre-smoke save before the smoke it creates has been
+   * linked to the state — `PreSmokeService.startSmokeWith` does not await that
+   * write — so a caller that reads the state on the strength of the save alone
+   * can find it still empty. The fake keeps the link one read behind for the
+   * same reason: a panel that lights a cook without waiting for it should fail
+   * here the way it fails in a garage.
+   */
+  pendingSmokeId: string | null;
   smokeProfile: {
     current: StoredSmokeProfile | undefined;
   };
@@ -148,6 +160,7 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
     state: seed.state === undefined ? { smokeId: '', smoking: false } : seed.state,
     finished: [],
     preSmoke: undefined,
+    pendingSmokeId: null,
     smokeProfile: {
       current: seed.smokeProfile?.current,
     },
@@ -168,7 +181,15 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
   const route = ({ method, path, body }: FakeRequest): unknown => {
     // Cloud API routes.
     if (path === 'state' && method === 'get') {
-      return store.state === null ? EMPTY_BODY : clone(store.state);
+      const answer = store.state === null ? EMPTY_BODY : clone(store.state);
+      if (store.pendingSmokeId !== null) {
+        // The link a pre-smoke save set going lands *after* this read has been
+        // answered, so the first look still shows no cook and the one after it
+        // shows the session that was created.
+        store.state = { smokeId: store.pendingSmokeId, smoking: false };
+        store.pendingSmokeId = null;
+      }
+      return answer;
     }
     if (path === 'state/toggleSmoking' && method === 'put') {
       // With no state (or no smokeId) the backend toggles nothing and returns
@@ -181,6 +202,7 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
     }
     if (path === 'state/clearSmoke' && method === 'put') {
       store.state = { smokeId: '', smoking: false };
+      store.pendingSmokeId = null;
       return clone(store.state);
     }
     if (path === 'smoke/finish' && method === 'post') {
@@ -195,7 +217,7 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
       // session on the backend, which is the whole reason this route is the one
       // the panel calls.
       if (!store.state?.smokeId) {
-        store.state = { smokeId: 'smoke-next', smoking: false };
+        store.pendingSmokeId = 'smoke-next';
       }
       return clone(store.preSmoke);
     }

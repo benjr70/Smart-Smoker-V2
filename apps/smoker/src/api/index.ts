@@ -48,4 +48,7 @@ export {
   createProductionApiClient,
   getDefaultApiClient,
 } from './client';
+export type { SmokeEventPort } from './events';
+export { noopEventPort } from './events';
+export { createSocketEventPort } from './socketEventAdapter';
 export { createSessionApi } from './sessionApiAdapter';

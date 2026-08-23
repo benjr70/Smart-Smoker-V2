@@ -9,6 +9,8 @@
  */
 import { ApiError, TransportPort, createHttpTransport } from 'api-transport/src';
 import { resolveDeviceUrl } from './deviceUrl';
+import { SmokeEventPort, noopEventPort } from './events';
+import { createSocketEventPort } from './socketEventAdapter';
 import {
   AppearancePreference,
   ProbeTargetSetting,
@@ -63,15 +65,36 @@ export interface SessionResource {
    * it to the moment somebody got round to pressing the button.
    */
   finish(): Promise<void>;
-  /** PUT `state/clearSmoke` — leave the state pointing at no cook. */
+  /**
+   * PUT `state/clearSmoke` — leave the state pointing at no cook, and tell every
+   * screen watching that it did.
+   *
+   * The write alone is half the job. A screen holds the cook's chart baseline
+   * for as long as nothing tells it otherwise, and the backend only ever says so
+   * when a client asks it to — it rebroadcasts a `clear` a client emits and
+   * announces nothing by itself. So the panel emits one, exactly as the web
+   * client does; without it the archived cook's series stays under the next
+   * cook's readings on this screen and on every phone connected, which is the
+   * pollution this recovery exists to end.
+   */
   clear(): Promise<void>;
   /**
-   * POST `presmoke` — begin the next session.
+   * POST `presmoke` — begin the next session, and wait for it to *be* the
+   * session.
    *
    * A pre-smoke saved while no cook is current is what creates one on the
    * backend; there is no route that makes a session any other way. The document
    * sent is the blank one the wizard's first step starts on, so what the phone
    * shows next is an empty form rather than something the panel invented.
+   *
+   * Resolves only once the state names the new smoke. The save is answered
+   * before the smoke it creates has been linked to the state — the backend does
+   * not await that write — so for a beat there is no current cook, and anything
+   * done to "the current cook" in that beat is done to nothing at all: the
+   * smoking toggle finds no smoke id, changes nothing, and answers with an empty
+   * body nobody can tell from a flag that was already off. Rejects when the
+   * session never becomes current, because that is a recovery that did not
+   * happen and the panel has to be able to say so.
    */
   startNew(): Promise<void>;
 }
@@ -87,6 +110,42 @@ const BLANK_PRE_SMOKE = {
   weight: { unit: 'LB' },
   steps: [''],
   notes: '',
+};
+
+/**
+ * How long a new session is given to become the current one, and how often the
+ * state is looked at while it does. Half a second is far longer than the link
+ * takes and far shorter than anybody will stand in a garage wondering whether
+ * the smoker is lit.
+ */
+const NEW_SESSION_ATTEMPTS = 10;
+const NEW_SESSION_POLL_MS = 50;
+
+/** A pause between two looks at the state. */
+const pause = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Wait until the state names a cook, which is what makes a freshly created
+ * session the one every other route acts on.
+ *
+ * A state read that fails is treated as "not yet" rather than as an answer — the
+ * link may well have landed — so only the whole budget running out ends the
+ * wait, and it ends it as a rejection.
+ */
+const awaitCurrentSmoke = async (transport: TransportPort): Promise<void> => {
+  for (let attempt = 0; attempt < NEW_SESSION_ATTEMPTS; attempt += 1) {
+    const current = await transport.get<State | null>('state').catch(() => null);
+    if (current?.smokeId) {
+      return;
+    }
+    await pause(NEW_SESSION_POLL_MS);
+  }
+  throw new ApiError({
+    status: undefined,
+    path: 'presmoke',
+    method: 'post',
+    message: 'The new session never became the current one',
+  });
 };
 
 export interface SmokeProfileResource {
@@ -294,7 +353,8 @@ const isEmptyProfile = (raw: SmokeProfile | null | undefined): boolean =>
 
 export const createApiClient = (
   cloudTransport: TransportPort,
-  deviceTransport: TransportPort
+  deviceTransport: TransportPort,
+  events: SmokeEventPort = noopEventPort
 ): ApiClient => {
   const state: StateResource = {
     getState: () => cloudTransport.get<State>('state'),
@@ -306,9 +366,14 @@ export const createApiClient = (
     },
     clear: async () => {
       await cloudTransport.put<unknown>('state/clearSmoke');
+      // Announced after the write has landed, so a screen that answers the
+      // signal by re-reading the session finds the cleared one rather than the
+      // cook being archived.
+      events.emitClear();
     },
     startNew: async () => {
       await cloudTransport.post<unknown>('presmoke', BLANK_PRE_SMOKE);
+      await awaitCurrentSmoke(cloudTransport);
     },
   };
   const timeline: TimelineResource = {
@@ -418,7 +483,13 @@ const deviceBaseUrl = (): string => resolveDeviceUrl(DEVICE_FALLBACK_URL);
 
 /** Builds the production client backed by the two HTTP (axios) transports. */
 export const createProductionApiClient = (): ApiClient =>
-  createApiClient(createHttpTransport(cloudBaseUrl()), createHttpTransport(deviceBaseUrl()));
+  createApiClient(
+    createHttpTransport(cloudBaseUrl()),
+    createHttpTransport(deviceBaseUrl()),
+    // The one side-effect adapter the client is paired with, so letting go of a
+    // cook broadcasts over the websocket as well as writing to the API.
+    createSocketEventPort()
+  );
 
 let defaultClient: ApiClient | undefined;
 
