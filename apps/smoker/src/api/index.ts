@@ -40,6 +40,7 @@ export type {
   TempsResource,
   DeviceResource,
   ProbeTargetsResource,
+  SessionResource,
 } from './client';
 export {
   DEFAULT_APPEARANCE_PREFERENCE,

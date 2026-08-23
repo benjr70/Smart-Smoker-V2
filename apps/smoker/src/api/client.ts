@@ -42,6 +42,53 @@ export interface StateResource {
   toggleSmoking(): Promise<State>;
 }
 
+/**
+ * Getting out from under a cook nobody finished.
+ *
+ * The three calls the phone's wizard makes when it archives a cook and moves
+ * on, offered to the touchscreen as well — because the panel is where the next
+ * cook is lit, and lighting one over a session the backend already stopped is
+ * exactly how a finished cook's series gets a second cook appended to it.
+ *
+ * They are separate calls rather than one, because that is what they are on the
+ * backend: an archive, a state that lets go of what it archived, and the
+ * pre-smoke save that creates what comes next.
+ */
+export interface SessionResource {
+  /**
+   * POST `smoke/finish` — archive the cook the state points at.
+   *
+   * Sends nothing. A cook the backend auto-stopped already carries the finish
+   * it really ended at, and the finish flow keeps that stamp rather than moving
+   * it to the moment somebody got round to pressing the button.
+   */
+  finish(): Promise<void>;
+  /** PUT `state/clearSmoke` — leave the state pointing at no cook. */
+  clear(): Promise<void>;
+  /**
+   * POST `presmoke` — begin the next session.
+   *
+   * A pre-smoke saved while no cook is current is what creates one on the
+   * backend; there is no route that makes a session any other way. The document
+   * sent is the blank one the wizard's first step starts on, so what the phone
+   * shows next is an empty form rather than something the panel invented.
+   */
+  startNew(): Promise<void>;
+}
+
+/**
+ * The blank pre-smoke a fresh session begins from — the same empty document the
+ * wizard's first step starts on, spelled out here because this is the only
+ * place the touchscreen ever writes one.
+ */
+const BLANK_PRE_SMOKE = {
+  name: '',
+  meatType: '',
+  weight: { unit: 'LB' },
+  steps: [''],
+  notes: '',
+};
+
 export interface SmokeProfileResource {
   /**
    * GET `smokeProfile/current` — the current smoke's profile, normalized so
@@ -107,11 +154,13 @@ export interface ProbeTargetsResource {
 }
 
 /**
- * The one fact of a cook's timing the touchscreen has any use for: when it
- * started, revived into a real `Date` (or `null` for a cook never started).
- * The backend's timeline document carries more — a finish stamp, derived
- * duration and peaks — none of which this panel displays, so none of it is
- * carried here.
+ * The one fact of a *stored* cook's timing the touchscreen has any use for:
+ * when it started, revived into a real `Date` (or `null` for a cook never
+ * started). The backend's timeline document carries more — a derived duration
+ * and the peaks — none of which this panel displays, so none of it is carried
+ * here. The finish stamp rides on the running cook alone (see {@link
+ * CurrentCookTimeline}), which is the only cook it tells the panel anything
+ * about.
  */
 export interface CookTimeline {
   startedAt: Date | null;
@@ -150,8 +199,19 @@ export interface CookCompletionEstimate {
   hoursRemaining: number | null;
 }
 
-/** The cook in progress: when it started, and when it will be done. */
+/**
+ * The cook in progress: when it started, whether it has already been finished,
+ * and when it will be done.
+ *
+ * The finish stamp is here and not on {@link CookTimeline} because it means
+ * something only of the *current* cook: a stamp on the cook the state still
+ * points at is one the backend stopped by itself when its readings dried up,
+ * and nobody has walked the End Smoke wizard on yet. That is the one thing the
+ * panel has to know before it lights the smoker again.
+ */
 export interface CurrentCookTimeline extends CookTimeline {
+  /** When the cook finished, or `null` while it is still going. */
+  finishedAt: Date | null;
   estimate: CookCompletionEstimate;
 }
 
@@ -180,6 +240,7 @@ export interface TimelineResource {
 
 export interface ApiClient {
   state: StateResource;
+  session: SessionResource;
   smokeProfile: SmokeProfileResource;
   temps: TempsResource;
   device: DeviceResource;
@@ -195,6 +256,7 @@ export interface ApiClient {
  */
 type WireCurrentTimeline = {
   startedAt?: string | Date | null;
+  finishedAt?: string | Date | null;
   estimate?: {
     state?: CompletionState | null;
     eta?: string | Date | null;
@@ -238,6 +300,17 @@ export const createApiClient = (
     getState: () => cloudTransport.get<State>('state'),
     toggleSmoking: () => cloudTransport.put<State>('state/toggleSmoking'),
   };
+  const session: SessionResource = {
+    finish: async () => {
+      await cloudTransport.post<unknown>('smoke/finish');
+    },
+    clear: async () => {
+      await cloudTransport.put<unknown>('state/clearSmoke');
+    },
+    startNew: async () => {
+      await cloudTransport.post<unknown>('presmoke', BLANK_PRE_SMOKE);
+    },
+  };
   const timeline: TimelineResource = {
     getById: async (smokeId: string) => {
       const stored = await cloudTransport.get<{
@@ -262,6 +335,7 @@ export const createApiClient = (
       }
       return {
         startedAt: asMoment(raw.startedAt),
+        finishedAt: asMoment(raw.finishedAt),
         // An absent estimate block — what a deployment older than the estimator
         // answers with — reads as an estimate of nothing rather than as an
         // absence the top bar would have to have an opinion about.
@@ -275,6 +349,7 @@ export const createApiClient = (
   };
   return {
     state,
+    session,
     timeline,
     smokeProfile: {
       getCurrent: async () => {

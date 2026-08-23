@@ -1028,3 +1028,241 @@ describe('SmokeStepView — the cook status bar', () => {
     expect(screen.getByTestId('smoke-status-label')).toHaveTextContent('Smoking');
   });
 });
+
+/**
+ * Lighting the smoker over a cook the backend already stopped by itself.
+ *
+ * A session whose cook carries a finish stamp is one nobody pressed End Smoke
+ * on: the backend stopped it when its readings dried up and left it current so
+ * the wizard can still be walked. Starting a new cook on top of it would append
+ * a second cook's readings to the first one's series, which is the very
+ * pollution the auto-stop exists to undo — so the step asks first.
+ */
+describe('SmokeStepView — starting a cook over an auto-stopped one', () => {
+  /** A cook the backend auto-stopped: started, finished, and still current. */
+  const autoStoppedBackend = () =>
+    createFakeBackend({
+      state: { smokeId: 'smoke-1', smoking: false },
+      timeline: {
+        current: {
+          ...NO_CURRENT_TIMELINE,
+          startedAt: '2026-08-20T12:00:00.000Z',
+          finishedAt: '2026-08-20T21:30:00.000Z',
+        },
+      },
+    });
+
+  test('asks before lighting the smoker, and lights nothing until it is answered', async () => {
+    const kit = harness();
+    renderView(kit, autoStoppedBackend());
+    await act(async () => {
+      await flushPromises();
+    });
+
+    fireEvent.click(screen.getByTestId('smoke-start-button'));
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(screen.getByTestId('stale-cook-dialog')).toBeInTheDocument();
+    // Nothing has been flipped: the session is exactly as it was, and the
+    // control still offers the cook the user asked for.
+    expect(kit.api.countCalls('toggleSmoking')).toBe(0);
+    expect(screen.getByTestId('smoke-start-button')).toHaveTextContent('Start Smoking');
+  });
+
+  test('one tap finishes the previous cook, starts a fresh session and lights it', async () => {
+    const kit = harness();
+    const backend = autoStoppedBackend();
+    renderView(kit, backend);
+    await act(async () => {
+      await flushPromises();
+    });
+
+    fireEvent.click(screen.getByTestId('smoke-start-button'));
+    await act(async () => {
+      await flushPromises();
+    });
+    fireEvent.click(screen.getByTestId('stale-cook-confirm'));
+    await act(async () => {
+      await flushPromises();
+    });
+
+    // The existing finish flow ran — archive, then let the state go of it —
+    // and a blank pre-smoke created the session that takes its place.
+    const done = backend.requests.filter(
+      request =>
+        request.path === 'smoke/finish' ||
+        request.path === 'state/clearSmoke' ||
+        request.path === 'presmoke'
+    );
+    expect(done.map(request => request.path)).toEqual([
+      'smoke/finish',
+      'state/clearSmoke',
+      'presmoke',
+    ]);
+    // Nothing is sent with the finish: the time the cook really ended is the
+    // backdated stamp the backend already wrote, and this flow does not move it.
+    expect(done[0].body).toBeUndefined();
+    expect(backend.store.state).toEqual({ smokeId: '', smoking: false });
+    // And the cook the user asked for is lit on the session that can record it.
+    expect(kit.api.countCalls('toggleSmoking')).toBe(1);
+    await waitFor(() =>
+      expect(screen.getByTestId('smoke-start-button')).toHaveTextContent('Stop Smoking')
+    );
+    // The question has been answered, so it goes (once the dialog's own closing
+    // transition has run).
+    await waitFor(() => expect(screen.queryByTestId('stale-cook-dialog')).not.toBeInTheDocument());
+  });
+  test('declining changes nothing at all — no cook, no session, no smoke', async () => {
+    const kit = harness();
+    const backend = autoStoppedBackend();
+    renderView(kit, backend);
+    await act(async () => {
+      await flushPromises();
+    });
+
+    fireEvent.click(screen.getByTestId('smoke-start-button'));
+    await act(async () => {
+      await flushPromises();
+    });
+    fireEvent.click(screen.getByTestId('stale-cook-cancel'));
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(kit.api.countCalls('toggleSmoking')).toBe(0);
+    expect(
+      backend.requests.filter(request => request.method !== 'get').map(request => request.path)
+    ).toEqual([]);
+    expect(backend.store.state).toEqual({ smokeId: 'smoke-1', smoking: false });
+    expect(screen.getByTestId('smoke-start-button')).toHaveTextContent('Start Smoking');
+    await waitFor(() => expect(screen.queryByTestId('stale-cook-dialog')).not.toBeInTheDocument());
+  });
+
+  test('a cook with no finish stamp is lit straight away, as it always was', async () => {
+    const kit = harness();
+    renderView(
+      kit,
+      createFakeBackend({
+        state: { smokeId: 'smoke-1', smoking: false },
+        timeline: { current: { ...NO_CURRENT_TIMELINE, startedAt: '2026-08-23T12:00:00.000Z' } },
+      })
+    );
+    await act(async () => {
+      await flushPromises();
+    });
+
+    fireEvent.click(screen.getByTestId('smoke-start-button'));
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(screen.queryByTestId('stale-cook-dialog')).not.toBeInTheDocument();
+    expect(kit.api.countCalls('toggleSmoking')).toBe(1);
+    await waitFor(() =>
+      expect(screen.getByTestId('smoke-start-button')).toHaveTextContent('Stop Smoking')
+    );
+  });
+  /**
+   * Putting a cook out cannot pollute anything, so it is never asked about —
+   * not even on the session that would be asked about on the way in.
+   */
+  test('never asks on the way out of a cook', async () => {
+    const kit = harness();
+    kit.api.seedSmoking(true);
+    renderView(kit, autoStoppedBackend());
+    await act(async () => {
+      await flushPromises();
+    });
+
+    fireEvent.click(screen.getByTestId('smoke-start-button'));
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(screen.queryByTestId('stale-cook-dialog')).not.toBeInTheDocument();
+    expect(kit.api.countCalls('toggleSmoking')).toBe(1);
+  });
+
+  /**
+   * A stamp that cannot be read is not evidence of one. A backend that is down
+   * — or too old to answer the route — leaves the control doing what it did
+   * before this guard existed rather than standing between a pitmaster and
+   * their fire.
+   */
+  test('lights the cook anyway when the stamp cannot be read', async () => {
+    const kit = harness();
+    const backend = autoStoppedBackend();
+    backend.injectFault({ method: 'get', path: 'timeline/current', status: 503 });
+    renderView(kit, backend);
+    await act(async () => {
+      await flushPromises();
+    });
+
+    fireEvent.click(screen.getByTestId('smoke-start-button'));
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(screen.queryByTestId('stale-cook-dialog')).not.toBeInTheDocument();
+    expect(kit.api.countCalls('toggleSmoking')).toBe(1);
+  });
+
+  /**
+   * The recovery is three writes, and the first of them can fail. Nothing is
+   * claimed to have happened when it does: the question stays on screen,
+   * because it is still the question to answer.
+   */
+  test('keeps asking when the previous cook could not be finished', async () => {
+    const kit = harness();
+    const backend = autoStoppedBackend();
+    renderView(kit, backend);
+    await act(async () => {
+      await flushPromises();
+    });
+
+    fireEvent.click(screen.getByTestId('smoke-start-button'));
+    await act(async () => {
+      await flushPromises();
+    });
+    backend.injectFault({ method: 'post', path: 'smoke/finish', status: 503 });
+    fireEvent.click(screen.getByTestId('stale-cook-confirm'));
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(screen.getByTestId('stale-cook-dialog')).toBeInTheDocument();
+    // The session is untouched: nothing was archived, so nothing is cleared and
+    // no cook is lit over it.
+    expect(backend.store.state).toEqual({ smokeId: 'smoke-1', smoking: false });
+    expect(kit.api.countCalls('toggleSmoking')).toBe(0);
+    // And the answer can simply be given again.
+    expect(screen.getByTestId('stale-cook-confirm')).not.toBeDisabled();
+  });
+  /**
+   * Dismissing the question by any route is the same answer as Keep session:
+   * the only thing that changes anything is choosing to.
+   */
+  test('escaping the question declines it', async () => {
+    const kit = harness();
+    const backend = autoStoppedBackend();
+    renderView(kit, backend);
+    await act(async () => {
+      await flushPromises();
+    });
+
+    fireEvent.click(screen.getByTestId('smoke-start-button'));
+    await act(async () => {
+      await flushPromises();
+    });
+    fireEvent.keyDown(screen.getByTestId('stale-cook-dialog'), { key: 'Escape', code: 'Escape' });
+    await act(async () => {
+      await flushPromises();
+    });
+
+    await waitFor(() => expect(screen.queryByTestId('stale-cook-dialog')).not.toBeInTheDocument());
+    expect(kit.api.countCalls('toggleSmoking')).toBe(0);
+    expect(backend.requests.filter(request => request.method !== 'get')).toEqual([]);
+  });
+});

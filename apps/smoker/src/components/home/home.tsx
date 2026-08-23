@@ -10,7 +10,9 @@ import './home.style.css';
 import { useChartPalette } from '../../theme/chartPalette';
 import { useDesign } from '../../theme/useDesign';
 import { CookCompletionEstimate } from '../../api';
+import { StaleCookDialog } from './StaleCookDialog';
 import { CurrentCookReadPort, useCompletionEstimate } from './useCompletionEstimate';
+import { SessionRecoveryPort, useSmokingToggle } from './useSmokingToggle';
 import { ProbeTargetsReadPort, useProbeTargets } from './useProbeTargets';
 import { useTemperatureSeries } from './useTemperatureSeries';
 import { Wifi } from './wifi/wifi';
@@ -188,6 +190,11 @@ export interface HomeProps {
    * done — is read from. Defaults to the backend this appliance runs against.
    */
   currentCook?: CurrentCookReadPort;
+  /**
+   * Where the cook nobody finished is finished, and the session that takes its
+   * place is created. Defaults to the backend this appliance runs against.
+   */
+  session?: SessionRecoveryPort;
 }
 
 /**
@@ -230,7 +237,11 @@ const etaReadout = (
       }
     : null;
 
-export function Home({ probeTargets, currentCook }: HomeProps = {}): JSX.Element {
+export function Home({
+  probeTargets,
+  currentCook,
+  session: recovery,
+}: HomeProps = {}): JSX.Element {
   const session = useSmokeSession();
   const design = useDesign();
   // The cook so far, recorded and thinned by the hook; the chart is handed it
@@ -249,6 +260,10 @@ export function Home({ probeTargets, currentCook }: HomeProps = {}): JSX.Element
   // while one is running — the same answer, off the same route, that the web
   // card is showing whoever is not standing at the smoker.
   const eta = etaReadout(useCompletionEstimate(session.smoking, currentCook));
+  // Lighting the smoker, guarded: a session whose cook the backend already
+  // stopped is asked about rather than lit, so the next cook's readings never
+  // land in the last one's series.
+  const toggle = useSmokingToggle(session.smoking, session.toggleSmoking, currentCook, recovery);
   // The only genuinely local state: which sub-screen is showing. Returning to
   // the home screen refreshes the chart baseline (the wifi screen may have run
   // for a while).
@@ -411,11 +426,17 @@ export function Home({ probeTargets, currentCook }: HomeProps = {}): JSX.Element
           size="small"
           data-testid="smoker-start-button"
           sx={session.smoking ? { borderColor: design.danger, color: design.danger } : {}}
-          onClick={() => void session.toggleSmoking()}
+          onClick={() => toggle.request()}
         >
           {session.smoking ? 'Stop Smoking' : 'Start Smoking'}
         </Button>
       </Box>
+      <StaleCookDialog
+        open={toggle.prompting}
+        working={toggle.working}
+        onConfirm={toggle.confirm}
+        onCancel={toggle.dismiss}
+      />
 
       {/* ————— Cards ————— */}
       <Box sx={{ display: 'flex', gap: '10px', flex: 1, minHeight: 0 }}>

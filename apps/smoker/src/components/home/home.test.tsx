@@ -133,7 +133,7 @@ const watching = (slot: string, target: number): ProbeTargetSetting => ({
 function fakeCurrentCook(estimate: CookCompletionEstimate | null = null) {
   return {
     getCurrent: async (): Promise<CurrentCookTimeline | null> =>
-      estimate === null ? null : { startedAt: new Date(), estimate },
+      estimate === null ? null : { startedAt: new Date(), finishedAt: null, estimate },
   };
 }
 
@@ -769,6 +769,7 @@ describe('the top bar', () => {
         renderHome(smoking(), fakeProbeTargets([]), {
           getCurrent: async (): Promise<CurrentCookTimeline | null> => ({
             startedAt: new Date(),
+            finishedAt: null,
             estimate: answers.shift() ?? estimateOf('ok', HALF_PAST_FOUR),
           }),
         });
@@ -815,14 +816,22 @@ describe('the top bar', () => {
           await Promise.resolve();
         });
         await act(async () => {
-          waiting[1]({ startedAt: new Date(), estimate: estimateOf('ok', HALF_PAST_FOUR) });
+          waiting[1]({
+            startedAt: new Date(),
+            finishedAt: null,
+            estimate: estimateOf('ok', HALF_PAST_FOUR),
+          });
           await Promise.resolve();
         });
         expect(screen.getByTestId('smoker-eta')).toHaveTextContent(asClockTime(HALF_PAST_FOUR));
 
         // The switch-on read wanders in behind it, still saying "warming".
         await act(async () => {
-          waiting[0]({ startedAt: new Date(), estimate: estimateOf('warming', null) });
+          waiting[0]({
+            startedAt: new Date(),
+            finishedAt: null,
+            estimate: estimateOf('warming', null),
+          });
           await Promise.resolve();
         });
 
@@ -1175,5 +1184,262 @@ describe('Home (smoker session host)', () => {
     expect(screen.getAllByText('Renamed Chamber')).toHaveLength(2);
     expect(screen.getAllByText('Renamed Probe 1')).toHaveLength(2);
     expect(screen.getByText('Stop Smoking')).toBeInTheDocument();
+  });
+});
+
+/**
+ * Lighting the smoker over a cook the backend already stopped by itself.
+ *
+ * The panel is where the next cook is lit, so it is where a cook nobody
+ * finished gets a second cook's readings appended to it. A session carrying a
+ * finish stamp is one the backend auto-stopped and nobody has walked the End
+ * Smoke wizard on — so the panel asks before it lights anything.
+ */
+describe('Home — starting a cook over an auto-stopped one', () => {
+  /** The current cook as the backend answers it, finished or still running. */
+  const cookFinishedAt = (finishedAt: Date | null) => ({
+    getCurrent: async (): Promise<CurrentCookTimeline | null> => ({
+      startedAt: new Date('2026-08-20T12:00:00.000Z'),
+      finishedAt,
+      estimate: { state: null, eta: null, hoursRemaining: null },
+    }),
+  });
+
+  /** A recording stand-in for the three calls the recovery is composed of. */
+  const fakeSession = () => {
+    const done: string[] = [];
+    return {
+      done,
+      finish: async (): Promise<void> => {
+        done.push('finish');
+      },
+      clear: async (): Promise<void> => {
+        done.push('clear');
+      },
+      startNew: async (): Promise<void> => {
+        done.push('startNew');
+      },
+    };
+  };
+
+  it('asks before lighting the smoker, and lights nothing until it is answered', async () => {
+    const kit = smokerKit();
+    render(
+      <SmokeSessionProvider config={kit.config}>
+        <Home
+          probeTargets={fakeProbeTargets([])}
+          currentCook={cookFinishedAt(new Date('2026-08-20T21:30:00.000Z'))}
+          session={fakeSession()}
+        />
+      </SmokeSessionProvider>
+    );
+    await act(async () => {
+      await flushPromises();
+    });
+
+    fireEvent.click(screen.getByText('Start Smoking'));
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(screen.getByTestId('stale-cook-dialog')).toBeInTheDocument();
+    expect(kit.api.countCalls('toggleSmoking')).toBe(0);
+    expect(screen.getByText('Start Smoking')).toBeInTheDocument();
+  });
+  it('one tap finishes the previous cook, starts a fresh session and lights it', async () => {
+    const kit = smokerKit();
+    const session = fakeSession();
+    render(
+      <SmokeSessionProvider config={kit.config}>
+        <Home
+          probeTargets={fakeProbeTargets([])}
+          currentCook={cookFinishedAt(new Date('2026-08-20T21:30:00.000Z'))}
+          session={session}
+        />
+      </SmokeSessionProvider>
+    );
+    await act(async () => {
+      await flushPromises();
+    });
+
+    fireEvent.click(screen.getByText('Start Smoking'));
+    await act(async () => {
+      await flushPromises();
+    });
+    fireEvent.click(screen.getByTestId('stale-cook-confirm'));
+    await act(async () => {
+      await flushPromises();
+    });
+
+    // Archive, let go, begin the next one — the phone's own finish flow, with
+    // nothing sent that could move the backdated stamp the cook was stopped at.
+    expect(session.done).toEqual(['finish', 'clear', 'startNew']);
+    expect(kit.api.countCalls('toggleSmoking')).toBe(1);
+    expect(screen.getByText('Stop Smoking')).toBeInTheDocument();
+  });
+
+  it('declining changes nothing at all — no cook finished, no session lit', async () => {
+    const kit = smokerKit();
+    const session = fakeSession();
+    render(
+      <SmokeSessionProvider config={kit.config}>
+        <Home
+          probeTargets={fakeProbeTargets([])}
+          currentCook={cookFinishedAt(new Date('2026-08-20T21:30:00.000Z'))}
+          session={session}
+        />
+      </SmokeSessionProvider>
+    );
+    await act(async () => {
+      await flushPromises();
+    });
+
+    fireEvent.click(screen.getByText('Start Smoking'));
+    await act(async () => {
+      await flushPromises();
+    });
+    fireEvent.click(screen.getByTestId('stale-cook-cancel'));
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(session.done).toEqual([]);
+    expect(kit.api.countCalls('toggleSmoking')).toBe(0);
+    expect(screen.getByText('Start Smoking')).toBeInTheDocument();
+    expect(screen.getByTestId('smoker-status-pill')).toHaveAttribute('data-smoking', 'false');
+  });
+
+  it('lights a cook with no finish stamp straight away, as it always did', async () => {
+    const kit = smokerKit();
+    const session = fakeSession();
+    render(
+      <SmokeSessionProvider config={kit.config}>
+        <Home
+          probeTargets={fakeProbeTargets([])}
+          currentCook={cookFinishedAt(null)}
+          session={session}
+        />
+      </SmokeSessionProvider>
+    );
+    await act(async () => {
+      await flushPromises();
+    });
+
+    fireEvent.click(screen.getByText('Start Smoking'));
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(screen.queryByTestId('stale-cook-dialog')).not.toBeInTheDocument();
+    expect(session.done).toEqual([]);
+    expect(kit.api.countCalls('toggleSmoking')).toBe(1);
+    expect(screen.getByText('Stop Smoking')).toBeInTheDocument();
+  });
+
+  /**
+   * Putting a cook out cannot pollute anything, so it is never asked about —
+   * not even on the session that would be asked about on the way in.
+   */
+  it('never asks on the way out of a cook', async () => {
+    const kit = smokerKit();
+    kit.api.seedSmoking(true);
+    render(
+      <SmokeSessionProvider config={kit.config}>
+        <Home
+          probeTargets={fakeProbeTargets([])}
+          currentCook={cookFinishedAt(new Date('2026-08-20T21:30:00.000Z'))}
+          session={fakeSession()}
+        />
+      </SmokeSessionProvider>
+    );
+    await act(async () => {
+      await flushPromises();
+    });
+
+    fireEvent.click(screen.getByText('Stop Smoking'));
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(screen.queryByTestId('stale-cook-dialog')).not.toBeInTheDocument();
+    expect(kit.api.countCalls('toggleSmoking')).toBe(1);
+    expect(screen.getByText('Start Smoking')).toBeInTheDocument();
+  });
+  /**
+   * A stamp the panel cannot read is not evidence of one. An unreachable cloud
+   * leaves the control doing what it did before this guard existed rather than
+   * standing between an operator and their fire — this is the one screen with
+   * nowhere to go when something says no.
+   */
+  it('lights the cook anyway when the stamp cannot be read', async () => {
+    const kit = smokerKit();
+    const session = fakeSession();
+    render(
+      <SmokeSessionProvider config={kit.config}>
+        <Home
+          probeTargets={fakeProbeTargets([])}
+          currentCook={{
+            getCurrent: async (): Promise<CurrentCookTimeline | null> => {
+              throw new Error('the panel cannot reach the cloud');
+            },
+          }}
+          session={session}
+        />
+      </SmokeSessionProvider>
+    );
+    await act(async () => {
+      await flushPromises();
+    });
+
+    fireEvent.click(screen.getByText('Start Smoking'));
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(screen.queryByTestId('stale-cook-dialog')).not.toBeInTheDocument();
+    expect(session.done).toEqual([]);
+    expect(kit.api.countCalls('toggleSmoking')).toBe(1);
+  });
+
+  /**
+   * The recovery is three writes, and any of them can fail against a cloud that
+   * is not there. Nothing is claimed to have happened when one does: the
+   * question stays up, because it is still the question to answer.
+   */
+  it('keeps asking when the previous cook could not be finished', async () => {
+    const kit = smokerKit();
+    const session = {
+      ...fakeSession(),
+      finish: async (): Promise<void> => {
+        throw new Error('the panel cannot reach the cloud');
+      },
+    };
+    render(
+      <SmokeSessionProvider config={kit.config}>
+        <Home
+          probeTargets={fakeProbeTargets([])}
+          currentCook={cookFinishedAt(new Date('2026-08-20T21:30:00.000Z'))}
+          session={session}
+        />
+      </SmokeSessionProvider>
+    );
+    await act(async () => {
+      await flushPromises();
+    });
+
+    fireEvent.click(screen.getByText('Start Smoking'));
+    await act(async () => {
+      await flushPromises();
+    });
+    fireEvent.click(screen.getByTestId('stale-cook-confirm'));
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(screen.getByTestId('stale-cook-dialog')).toBeInTheDocument();
+    expect(session.done).toEqual([]);
+    expect(kit.api.countCalls('toggleSmoking')).toBe(0);
+    // And the answer can simply be given again.
+    expect(screen.getByTestId('stale-cook-confirm')).not.toBeDisabled();
   });
 });

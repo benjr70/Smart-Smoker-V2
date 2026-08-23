@@ -119,6 +119,10 @@ const EMPTY_BODY = '';
 
 interface FakeStore {
   state: State | null;
+  /** The smoke id each `smoke/finish` archived, in order. */
+  finished: string[];
+  /** The last pre-smoke saved — what created the session now current. */
+  preSmoke: unknown;
   smokeProfile: {
     current: StoredSmokeProfile | undefined;
   };
@@ -142,6 +146,8 @@ export type FakeBackend = FakeBackendKernel<FakeStore>;
 export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
   const store: FakeStore = {
     state: seed.state === undefined ? { smokeId: '', smoking: false } : seed.state,
+    finished: [],
+    preSmoke: undefined,
     smokeProfile: {
       current: seed.smokeProfile?.current,
     },
@@ -172,6 +178,26 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
       }
       store.state = { ...store.state, smoking: !store.state.smoking };
       return clone(store.state);
+    }
+    if (path === 'state/clearSmoke' && method === 'put') {
+      store.state = { smokeId: '', smoking: false };
+      return clone(store.state);
+    }
+    if (path === 'smoke/finish' && method === 'post') {
+      // The route archives the cook the state points at; the stamps it carries
+      // are the backend's own and are not touched by the call.
+      store.finished.push(store.state?.smokeId ?? '');
+      return {};
+    }
+    if (path === 'presmoke' && method === 'post') {
+      store.preSmoke = clone(body);
+      // Saving a pre-smoke with nothing current is what creates the next
+      // session on the backend, which is the whole reason this route is the one
+      // the panel calls.
+      if (!store.state?.smokeId) {
+        store.state = { smokeId: 'smoke-next', smoking: false };
+      }
+      return clone(store.preSmoke);
     }
     if (path === 'smokeProfile/current' && method === 'get') {
       // An unsaved profile is represented as null on the wire, never undefined.

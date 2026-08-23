@@ -309,6 +309,35 @@ describe('smoker api client', () => {
     });
 
     /**
+     * A cook the backend stopped by itself carries a finish stamp while it is
+     * still the current session — that stamp is the one thing that tells a
+     * session waiting to be finished from one waiting to be cooked, so the
+     * panel is given it.
+     */
+    it('getCurrent revives the finish stamp of a cook that was auto-stopped', async () => {
+      const { client } = buildClient({
+        timeline: {
+          current: {
+            startedAt: '2026-08-20T12:00:00.000Z',
+            finishedAt: '2026-08-20T21:30:00.000Z',
+          },
+        },
+      });
+
+      const current = await client.timeline.getCurrent();
+
+      expect(current?.finishedAt).toEqual(new Date('2026-08-20T21:30:00.000Z'));
+    });
+
+    it('reads a cook still running as one with no finish stamp', async () => {
+      const { client } = buildClient({
+        timeline: { current: { startedAt: '2026-08-20T12:00:00.000Z', finishedAt: null } },
+      });
+
+      await expect(client.timeline.getCurrent()).resolves.toMatchObject({ finishedAt: null });
+    });
+
+    /**
      * A deployment older than the estimator has no estimate block to send. The
      * panel is handed an estimate of nothing rather than an absence every caller
      * would have to guard, and shows no ETA — which is what it shows for a cook
@@ -357,6 +386,57 @@ describe('smoker api client', () => {
       await expect(client.timeline.getById('s1')).resolves.toEqual({
         startedAt: new Date('2026-08-15T10:00:00.000Z'),
       });
+    });
+  });
+
+  /**
+   * What the panel needs to recover from a cook nobody finished: the very calls
+   * the wizard on the phone makes, in one place, so the touchscreen composes the
+   * same recovery rather than inventing one of its own.
+   */
+  describe('session resource (cloud base URL)', () => {
+    it('finish archives the cook the state points at via POST `smoke/finish`', async () => {
+      const { cloud, device, client } = buildClient({
+        state: { smokeId: 'smoke-1', smoking: false },
+      });
+
+      await client.session.finish();
+
+      // Nothing is sent: what the cook finished at is the stamp the backend
+      // already holds, and this call must not offer one of its own.
+      expect(cloud.requests).toEqual([{ method: 'post', path: 'smoke/finish', body: undefined }]);
+      expect(device.requests).toEqual([]);
+    });
+
+    it('clear leaves the state pointing at no cook via PUT `state/clearSmoke`', async () => {
+      const { cloud, client } = buildClient({ state: { smokeId: 'smoke-1', smoking: true } });
+
+      await client.session.clear();
+
+      expect(cloud.requests).toEqual([
+        { method: 'put', path: 'state/clearSmoke', body: undefined },
+      ]);
+      expect(cloud.store.state).toEqual({ smokeId: '', smoking: false });
+    });
+
+    /**
+     * Saving a pre-smoke with no cook current is what creates the next one on
+     * the backend — there is no other route that does — so the blank document
+     * the wizard's first step starts on is what the panel sends.
+     */
+    it('startNew creates the next session by saving a blank pre-smoke', async () => {
+      const { cloud, client } = buildClient({ state: { smokeId: '', smoking: false } });
+
+      await client.session.startNew();
+
+      expect(cloud.requests).toEqual([
+        {
+          method: 'post',
+          path: 'presmoke',
+          body: { name: '', meatType: '', weight: { unit: 'LB' }, steps: [''], notes: '' },
+        },
+      ]);
+      expect(cloud.store.state?.smokeId).toBeTruthy();
     });
   });
 
