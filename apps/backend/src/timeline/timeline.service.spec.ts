@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
+import { Types } from 'mongoose';
 import { SmokeStatus } from '../smoke/smoke.schema';
 import { ApplicationSettings } from '../appSettings/app-settings.schema';
 import { PreSmoke } from '../presmoke/presmoke.schema';
@@ -742,6 +743,30 @@ describe('TimelineService', () => {
       expect(smokes[0].finishedAt).toBeInstanceOf(Date);
     });
 
+    /**
+     * A reading may be stored without a moment — the archive holds plenty, and
+     * the derivation behind `GET /timeline/:id` counts them. The manual finish
+     * scans the whole series exactly as it always has, so pressing End Smoke on
+     * a cook whose hottest reading was stored undated stamps that peak rather
+     * than a lower one, and the stamp agrees with what the statistics backfill
+     * would have found.
+     */
+    it('counts undated readings in the peak the manual finish stamps', async () => {
+      temps.push({
+        tempsId: 'temps-id',
+        date: null,
+        ChamberTemp: '301',
+        MeatTemp: '150',
+        Meat2Temp: '0',
+        Meat3Temp: '0',
+      });
+      service = await build();
+
+      await service.stampFinish('smoke-id');
+
+      expect(smokes[0].peakChamber).toBe(301);
+    });
+
     it('records that a cook with no readings was asked for a peak', async () => {
       temps.length = 0;
 
@@ -750,6 +775,79 @@ describe('TimelineService', () => {
       // So the statistics rebuild knows the answer was nothing, rather than
       // going back to its series for the same nothing every time.
       expect(smokes[0].peakChamberScanned).toBe(true);
+    });
+  });
+
+  /**
+   * Two clocks put a moment on a reading, and they can disagree by days: the
+   * device stamps the date, the store stamps the id. Anything deciding a cook
+   * has gone quiet needs the second one, which no device can be wrong about.
+   */
+  describe('lastReading', () => {
+    it('reads the newest reading by the device clock and by the store’s', async () => {
+      const accepted = new Date('2026-08-01T16:00:00.000Z');
+      temps[2]._id = Types.ObjectId.createFromTime(accepted.getTime() / 1000);
+      service = await build();
+
+      const last = await service.lastReading(smokes[0]);
+
+      expect(last?.readAt).toEqual(new Date('2026-08-01T15:55:00.000Z'));
+      expect(last?.storedAt).toEqual(accepted);
+    });
+
+    // Nothing in the id to read a moment off — the caller falls back to the
+    // device's account, which is all anything had before ids were looked at.
+    it('says nothing about the store’s clock when the id cannot', async () => {
+      const last = await service.lastReading(smokes[0]);
+
+      expect(last?.readAt).toEqual(new Date('2026-08-01T15:55:00.000Z'));
+      expect(last?.storedAt).toBeNull();
+    });
+
+    it('reads no reading at all for a cook that recorded none', async () => {
+      temps.length = 0;
+      service = await build();
+
+      expect(await service.lastReading(smokes[0])).toBeNull();
+    });
+  });
+
+  describe('stampFinishAt', () => {
+    /** Where the real cook ended: its last reading before the box went quiet. */
+    const COOK_ENDED = new Date('2026-08-01T15:55:00.000Z');
+
+    it('records the cook as having finished at the moment it was given', async () => {
+      await service.stampFinishAt('smoke-id', COOK_ENDED);
+
+      expect(smokes[0].finishedAt).toEqual(COOK_ENDED);
+    });
+
+    /**
+     * A session nobody ended keeps collecting whatever the box records next —
+     * a hot grill firing weeks later lands in the old cook's series. That was
+     * not this cook's chamber, so the peak is scanned over the cook's own
+     * window and stops where the cook did.
+     */
+    it('scans the peak over the cook’s window and not the strays after it', async () => {
+      temps.push(reading('2026-08-20T18:00:00.000Z', '470', '70'));
+      service = await build();
+
+      await service.stampFinishAt('smoke-id', COOK_ENDED);
+
+      expect(smokes[0].peakChamber).toBe(268);
+    });
+
+    it('says whether this call is the one that stamped the finish', async () => {
+      expect(await service.stampFinishAt('smoke-id', COOK_ENDED)).toBe(true);
+
+      expect(await service.stampFinishAt('smoke-id', new Date())).toBe(false);
+      expect(smokes[0].finishedAt).toEqual(COOK_ENDED);
+    });
+
+    it('stamps nothing for a cook that does not exist', async () => {
+      expect(await service.stampFinishAt('no-such-smoke', COOK_ENDED)).toBe(
+        false,
+      );
     });
   });
 });

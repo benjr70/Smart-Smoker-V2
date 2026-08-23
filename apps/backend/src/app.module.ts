@@ -15,6 +15,8 @@ import { PreSmokeModule } from './presmoke/presmoke.module';
 import { SettingsModule } from './settings/settings.module';
 import { SmokeModule } from './smoke/smoke.module';
 import { SmokeProfileModule } from './smokeProfile/smokeProfile.module';
+import { StaleCookModule } from './staleCook/stale-cook.module';
+import { StaleCookMiddleware } from './staleCook/stale-cook.middleware';
 import { StateModule } from './State/state.module';
 import { TempModule } from './temps/temps.module';
 import { TimelineModule } from './timeline/timeline.module';
@@ -54,6 +56,7 @@ console.log(process.env.NODE_ENV);
     HistoryModule,
     StatsModule,
     TimelineModule,
+    StaleCookModule,
     NotificationsModule,
     HealthModule,
     ConfigModule.forRoot({
@@ -74,5 +77,11 @@ export class AppModule implements NestModule {
     consumer
       .apply(LoggerMiddleware)
       .forRoutes({ path: '*', method: RequestMethod.ALL });
+    // The lazy auto-stop trigger: a cook nobody ended is ended before the
+    // timeline that would still call it running is derived. Bound here rather
+    // than called from the timeline itself — see `StaleCookMiddleware`.
+    consumer
+      .apply(StaleCookMiddleware)
+      .forRoutes({ path: 'api/timeline/current', method: RequestMethod.GET });
   }
 }

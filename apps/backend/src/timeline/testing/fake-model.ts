@@ -37,6 +37,13 @@ const fieldMatches = (value: unknown, expected: unknown): boolean => {
               new Date(value as string).getTime() >=
                 new Date(operand as string).getTime()
             );
+          case '$lte':
+            return (
+              value !== null &&
+              value !== undefined &&
+              new Date(value as string).getTime() <=
+                new Date(operand as string).getTime()
+            );
           case '$in':
             return (operand as unknown[]).some((one) =>
               fieldMatches(value, one),
@@ -79,7 +86,7 @@ const query = (rows: FakeDoc[], one: boolean) => {
      * What the caller narrowed the query with, readable afterwards — so a test
      * can hold a polled read to being a bounded one.
      */
-    applied: {} as { sort?: FakeDoc; limit?: number },
+    applied: {} as { sort?: FakeDoc; limit?: number; lean?: boolean },
     sort(spec: FakeDoc) {
       sort = spec;
       chain.applied.sort = spec;
@@ -88,6 +95,17 @@ const query = (rows: FakeDoc[], one: boolean) => {
     limit(count: number) {
       limit = count;
       chain.applied.limit = count;
+      return chain;
+    },
+    /**
+     * Accepted and recorded, and otherwise nothing: what this fake stores is
+     * already plain objects, so the difference a lean read makes — the stored
+     * document as it is, rather than as the schema declares it — is only worth
+     * modelling where a test is about that difference, and such a test wraps
+     * this fake to say so.
+     */
+    lean() {
+      chain.applied.lean = true;
       return chain;
     },
     async exec() {

@@ -5,6 +5,7 @@ import { StateService } from './state.service';
 import { State } from './state.schema';
 import { StateDto } from './stateDto';
 import { TimelineService } from '../timeline/timeline.service';
+import { FakeDoc, fakeModel } from '../timeline/testing/fake-model';
 
 describe('StateService', () => {
   let service: StateService;
@@ -229,6 +230,52 @@ describe('StateService', () => {
       await service.toggleSmoking();
 
       expect(mockTimelineService.stampStart).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * Exercised against a store that actually applies the write, because what is
+   * worth holding here is what the document says afterwards — "switched off,
+   * and a second call does not switch it back on" is a fact about storage that
+   * an assertion on a mocked call cannot tell from a write that toggled.
+   */
+  describe('stopSmoking', () => {
+    let states: FakeDoc[];
+    let stopping: StateService;
+
+    beforeEach(async () => {
+      states = [{ _id: 'state-id', smokeId: 'smoke-id', smoking: true }];
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          StateService,
+          { provide: getModelToken('state'), useValue: fakeModel(states) },
+          { provide: TimelineService, useValue: mockTimelineService },
+        ],
+      }).compile();
+      stopping = module.get<StateService>(StateService);
+    });
+
+    it('switches smoking off for the cook it names', async () => {
+      expect(await stopping.stopSmoking('smoke-id')).toBe(true);
+
+      expect(states[0].smoking).toBe(false);
+    });
+
+    // Two auto-stop triggers racing: only one of them stopped anything, and the
+    // second must not report a stop — nor switch a flag back on.
+    it('reports nothing to stop when smoking is already off', async () => {
+      await stopping.stopSmoking('smoke-id');
+
+      expect(await stopping.stopSmoking('smoke-id')).toBe(false);
+      expect(states[0].smoking).toBe(false);
+    });
+
+    // A stop decided about yesterday's cook must not reach into the session the
+    // user has since started.
+    it('leaves a session that has moved on to another cook running', async () => {
+      expect(await stopping.stopSmoking('older-smoke-id')).toBe(false);
+
+      expect(states[0].smoking).toBe(true);
     });
   });
 

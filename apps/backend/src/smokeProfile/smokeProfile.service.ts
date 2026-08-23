@@ -7,7 +7,11 @@ import { CurrentSmokeService } from '../common/current-smoke.service';
 import { Smoke } from '../smoke/smoke.schema';
 import { markStatsStale } from '../stats/mark-stats-stale';
 import { StatsService } from '../stats/stats.service';
-import { SmokeProfile, SmokeProFileDocument } from './smokeProfile.schema';
+import {
+  DEFAULT_SMOKE_PROFILE,
+  SmokeProfile,
+  SmokeProFileDocument,
+} from './smokeProfile.schema';
 import { SmokeProFileDto } from './smokeProfileDto';
 
 @Injectable()
@@ -33,14 +37,7 @@ export class SmokeProfileService extends BaseService<SmokeProFileDocument> {
   }
 
   getCurrentSmokeProfile(): Promise<SmokeProfile> {
-    const defaultProfile = {
-      notes: '',
-      woodType: '',
-      chamberName: 'Chamber',
-      probe1Name: 'Probe1',
-      probe2Name: 'Probe2',
-      probe3Name: 'Probe3',
-    } as SmokeProfile;
+    const defaultProfile = { ...DEFAULT_SMOKE_PROFILE };
     return this.currentSmoke.readCurrent<SmokeProfile>(
       'smokeProfileId',
       (id) => this.getById(id),
