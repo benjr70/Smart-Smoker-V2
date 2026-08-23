@@ -173,6 +173,23 @@ export const AppearanceSettingsSchema =
   SchemaFactory.createForClass(AppearanceSettings);
 
 /**
+ * How long a cook still marked as smoking may go without a reading before it is
+ * taken to be over, in hours.
+ *
+ * Six: the abandoned cooks found in production had been silent for 17 hours at
+ * the shortest, and no real cook's internal gap (a lid open, a probe re-seated,
+ * a short outage) comes near it.
+ *
+ * It lives here, beside the field it defaults, so that Mongoose's default and
+ * the defaults layer's fallback are the same number by construction — the
+ * auto-stop decision and the legacy backfill both read this setting, and
+ * neither may carry a second opinion about what "unset" means. Re-exported from
+ * `app-settings.defaults` for callers that read defaults from there; it cannot
+ * be declared there, because that module imports this one.
+ */
+export const DEFAULT_AUTO_STOP_IDLE_HOURS = 6;
+
+/**
  * When a cook that nobody ended is taken to be over: the readings have stopped
  * for this many hours.
  *
@@ -185,13 +202,12 @@ export const AppearanceSettingsSchema =
 export class AutoStopSettings {
   /**
    * Hours of silence after which a cook still marked as smoking is stopped and
-   * its finish backdated to its last reading. Six by default: production's
-   * abandoned cooks sat idle for 17 hours at the shortest, and the longest
-   * gap inside a real cook (a lid open, a probe re-seated, a brief outage) is
-   * far under it.
+   * its finish backdated to its last reading. Defaulted from the one shipped
+   * threshold above, so a change to it reaches newly written documents rather
+   * than being contradicted here.
    */
   @ApiProperty()
-  @Prop({ default: 6 })
+  @Prop({ default: DEFAULT_AUTO_STOP_IDLE_HOURS })
   idleHours: number;
 }
 

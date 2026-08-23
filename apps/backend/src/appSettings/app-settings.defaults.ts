@@ -1,5 +1,6 @@
 import {
   ApplicationSettings,
+  DEFAULT_AUTO_STOP_IDLE_HOURS,
   ProbeTargetEntry,
   TargetPresets,
   TargetSource,
@@ -28,13 +29,12 @@ export const DEFAULT_TARGET_PRESETS: TargetPresets = {
  * How long a cook still marked as smoking may go without a reading before it is
  * taken to be over, in hours.
  *
- * Six: the abandoned cooks found in production had been silent for 17 hours at
- * the shortest, and no real cook's internal gap (a lid open, a probe re-seated,
- * a short outage) comes near it. Exported because the auto-stop decision and
- * the legacy backfill both read the setting this defaults, and neither may
- * carry a second opinion about what "unset" means.
+ * Declared beside the Mongoose field it defaults and re-exported here, so the
+ * schema's default and this module's fallback cannot drift apart: the auto-stop
+ * decision and the legacy backfill both read the setting, and neither may carry
+ * a second opinion about what "unset" means.
  */
-export const DEFAULT_AUTO_STOP_IDLE_HOURS = 6;
+export { DEFAULT_AUTO_STOP_IDLE_HOURS } from './app-settings.schema';
 
 /**
  * The settings an installation starts from.

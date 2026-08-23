@@ -52,20 +52,35 @@ describe('AutoStopCard', () => {
     expect(screen.getByLabelText('Hours idle')).toHaveValue(12);
   });
 
-  // Clearing the field to retype it is half of every edit, and the save happens
-  // on the way out where nobody would see it fail: an empty field posted as NaN
-  // — or as the zero the backend refuses — would lose the edit silently.
-  test('keeps the last threshold while the field is empty mid-edit', async () => {
+  // Clearing the field to retype it is half of every edit. The field must go
+  // empty and stay empty while it is being retyped — a field that snapped the
+  // old number back would turn "backspace the 6, type 24" into 624 — while the
+  // threshold that gets saved stays the last number the user actually had.
+  test('empties as it is cleared and keeps the last saved threshold meanwhile', async () => {
     const backend = createFakeBackend();
 
     const { unmount } = renderCard(backend);
     const hours = await screen.findByLabelText('Hours idle');
     fireEvent.change(hours, { target: { value: '12' } });
     fireEvent.change(hours, { target: { value: '' } });
-    expect(hours).toHaveValue(12);
+    expect(hours).toHaveValue(null);
 
     unmount();
     await waitFor(() => expect(backend.store.appSettings?.autoStop).toEqual({ idleHours: 12 }));
+  });
+
+  test('retyping a cleared field types the new number rather than appending to the old', async () => {
+    const backend = createFakeBackend();
+
+    const { unmount } = renderCard(backend);
+    const hours = await screen.findByLabelText('Hours idle');
+    fireEvent.change(hours, { target: { value: '' } });
+    fireEvent.change(hours, { target: { value: '2' } });
+    fireEvent.change(hours, { target: { value: '24' } });
+    expect(hours).toHaveValue(24);
+
+    unmount();
+    await waitFor(() => expect(backend.store.appSettings?.autoStop).toEqual({ idleHours: 24 }));
   });
 
   // The backend refuses anything under an hour, and the save is out of sight on
@@ -78,6 +93,32 @@ describe('AutoStopCard', () => {
     unmount();
 
     await waitFor(() => expect(backend.store.appSettings?.autoStop).toEqual({ idleHours: 1 }));
+  });
+
+  // A zero on the way to "0.5" or "05" must survive being typed; the field only
+  // says what it will really save once the user has left it.
+  test('shows a typed zero while it is being typed and settles on the floor at blur', async () => {
+    renderCard(createFakeBackend());
+
+    const hours = await screen.findByLabelText('Hours idle');
+    fireEvent.change(hours, { target: { value: '0' } });
+    expect(hours).toHaveValue(0);
+
+    fireEvent.blur(hours);
+    expect(hours).toHaveValue(1);
+  });
+
+  // Leaving the field empty is not an edit to nothing: on blur it shows the
+  // threshold that is actually stored, so the screen never claims the app has
+  // no threshold at all.
+  test('shows the stored threshold again when the field is left empty', async () => {
+    renderCard(createFakeBackend({ appSettings: { settings: { autoStop: { idleHours: 12 } } } }));
+
+    const hours = await screen.findByDisplayValue('12');
+    fireEvent.change(hours, { target: { value: '' } });
+    fireEvent.blur(hours);
+
+    expect(hours).toHaveValue(12);
   });
 
   test('says what the threshold does', async () => {
