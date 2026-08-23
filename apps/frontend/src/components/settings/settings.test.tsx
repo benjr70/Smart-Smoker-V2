@@ -46,7 +46,7 @@ describe('Settings page', () => {
 
     const cards = screen.getAllByRole('heading', { level: 2 }).map(heading => heading.textContent);
 
-    expect(cards).toEqual(['Appearance', 'Notifications', 'Default target temps']);
+    expect(cards).toEqual(['Appearance', 'Notifications', 'Default target temps', 'Auto-stop']);
   });
 
   it('shows the build version the bundle was stamped with', () => {
@@ -82,7 +82,7 @@ describe('Settings page', () => {
     renderSettings(markedTheme);
     await screen.findByText('Notifications');
 
-    expect(screen.getAllByTestId('styled-by-application-theme')).toHaveLength(4);
+    expect(screen.getAllByTestId('styled-by-application-theme')).toHaveLength(5);
   });
 
   it('paints the page with the design background and typeface', async () => {

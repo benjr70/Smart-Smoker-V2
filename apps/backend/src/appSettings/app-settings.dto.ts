@@ -7,6 +7,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Min,
   ValidateNested,
 } from 'class-validator';
 import { TargetSource } from './app-settings.schema';
@@ -125,6 +126,23 @@ export class AppearanceDto {
 }
 
 /**
+ * The auto-stop idle threshold as the settings screen sends it: how many hours
+ * of silence mean the cook is over.
+ *
+ * A minimum of one hour rather than none: a threshold of zero (or below) would
+ * make every cook stale the moment a reading was a second late, so the app
+ * would stop live cooks and backdate their finish. The floor is refused here
+ * rather than clamped, so a client that sends nonsense is told rather than
+ * silently given a different setting from the one on its screen.
+ */
+export class AutoStopDto {
+  @ApiProperty({ minimum: 1 })
+  @IsNumber()
+  @Min(1)
+  idleHours: number;
+}
+
+/**
  * The application settings document.
  *
  * Carries only what the user owns. The machine's own bookkeeping (armed flags,
@@ -167,4 +185,10 @@ export class ApplicationSettingsDto {
   @ValidateNested()
   @Type(() => AppearanceDto)
   appearance?: AppearanceDto;
+
+  @ApiProperty({ type: AutoStopDto, required: false })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => AutoStopDto)
+  autoStop?: AutoStopDto;
 }

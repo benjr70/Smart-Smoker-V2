@@ -29,6 +29,7 @@ describe('AppSettingsController', () => {
     smokeComplete: { enabled: true },
     targetPresets: { beef: 203, pork: 195, poultry: 165 },
     appearance: { mode: 'dark', resolvedMode: 'dark' },
+    autoStop: { idleHours: 12 },
   };
 
   /** The same document as the read serves it: every probe row named. */

@@ -157,6 +157,7 @@ export class AppSettingsService {
         'smokeComplete',
         'targetPresets',
         'appearance',
+        'autoStop',
       ] as const
     ).forEach((block) => {
       if (incoming[block]) {

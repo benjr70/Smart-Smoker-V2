@@ -364,6 +364,21 @@ const rows: ContractRow[] = [
     run: c => c.notifications.sendTest(),
     expected: { method: 'post', path: 'notifications/test', body: undefined },
   },
+  // auto-stop
+  {
+    name: 'autoStop.get → GET appSettings',
+    run: c => c.autoStop.get(),
+    expected: { method: 'get', path: 'appSettings', body: undefined },
+  },
+  {
+    name: 'autoStop.save → POST appSettings (auto-stop block alone)',
+    run: c => c.autoStop.save({ idleHours: 12 }),
+    expected: {
+      method: 'post',
+      path: 'appSettings',
+      body: { autoStop: { idleHours: 12 } },
+    },
+  },
   // state
   {
     name: 'state.get → GET state',

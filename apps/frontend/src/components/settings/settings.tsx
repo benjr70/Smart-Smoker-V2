@@ -2,6 +2,7 @@ import { Card, CardContent, ScopedCssBaseline, Stack, Typography } from '@mui/ma
 import React from 'react';
 import { BOTTOM_BAR_HEIGHT } from '../bottomBar/bottombar';
 import { AppearanceCard } from './appearance';
+import { AutoStopCard } from './autoStop';
 import { NotificationsCard } from './notifications';
 import { TargetPresetsCard } from './targetPresets';
 
@@ -48,6 +49,7 @@ export const Settings = (): JSX.Element => (
       <AppearanceCard />
       <NotificationsCard />
       <TargetPresetsCard />
+      <AutoStopCard />
       <VersionCard version={readVersion()} />
     </Stack>
   </ScopedCssBaseline>

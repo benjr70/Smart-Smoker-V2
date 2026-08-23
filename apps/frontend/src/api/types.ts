@@ -183,6 +183,19 @@ export interface AppearancePreference {
 }
 
 /**
+ * When a cook nobody ended is taken to be over: its readings have stopped for
+ * this many hours.
+ *
+ * A block rather than a bare number because the settings document is saved
+ * block by block by several independent cards — a card that had to carry a
+ * loose field would be carrying the whole document, and would undo whatever the
+ * card beside it had just saved.
+ */
+export interface AutoStopSettings {
+  idleHours: number;
+}
+
+/**
  * The application settings document: everything the installation configures,
  * whether or not it has anything to do with notifications.
  */
@@ -192,6 +205,7 @@ export interface ApplicationSettings {
   smokeComplete: SmokeCompleteAlertSettings;
   targetPresets: TargetPresets;
   appearance: AppearancePreference;
+  autoStop: AutoStopSettings;
 }
 
 /**

@@ -25,6 +25,18 @@ export const DEFAULT_TARGET_PRESETS: TargetPresets = {
 };
 
 /**
+ * How long a cook still marked as smoking may go without a reading before it is
+ * taken to be over, in hours.
+ *
+ * Six: the abandoned cooks found in production had been silent for 17 hours at
+ * the shortest, and no real cook's internal gap (a lid open, a probe re-seated,
+ * a short outage) comes near it. Exported because the auto-stop decision and
+ * the legacy backfill both read the setting this defaults, and neither may
+ * carry a second opinion about what "unset" means.
+ */
+export const DEFAULT_AUTO_STOP_IDLE_HOURS = 6;
+
+/**
  * The settings an installation starts from.
  *
  * The old freeform notification rule documents are deliberately not migrated (no
@@ -56,6 +68,7 @@ export const DEFAULT_APPLICATION_SETTINGS: ApplicationSettings = {
   // of it and never reads this half. Pinned to the clients' own default by
   // `appearance.spec.ts`.
   appearance: { mode: 'system', resolvedMode: 'dark' },
+  autoStop: { idleHours: DEFAULT_AUTO_STOP_IDLE_HOURS },
 };
 
 /**
@@ -113,6 +126,7 @@ export const withSettingsDefaults = (
   const smokeComplete = stored?.smokeComplete;
   const targetPresets = stored?.targetPresets;
   const appearance = stored?.appearance;
+  const autoStop = stored?.autoStop;
   const defaults = DEFAULT_APPLICATION_SETTINGS;
   return {
     chamber: {
@@ -136,6 +150,9 @@ export const withSettingsDefaults = (
       mode: appearance?.mode ?? defaults.appearance.mode,
       resolvedMode:
         appearance?.resolvedMode ?? defaults.appearance.resolvedMode,
+    },
+    autoStop: {
+      idleHours: autoStop?.idleHours ?? defaults.autoStop.idleHours,
     },
   };
 };

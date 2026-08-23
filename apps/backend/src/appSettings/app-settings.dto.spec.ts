@@ -191,6 +191,55 @@ describe('ApplicationSettingsDto validation', () => {
     );
   });
 
+  it('accepts an auto-stop idle threshold on its own, with no alert block', async () => {
+    const body = { autoStop: { idleHours: 12 } };
+
+    const result = await pipe.transform(body, metadata);
+
+    expect(result.autoStop).toEqual({ idleHours: 12 });
+    expect(result.chamber).toBeUndefined();
+  });
+
+  /**
+   * Zero hours would auto-stop a cook the moment a reading was a little late —
+   * every live cook, over and over. The rule is the setting's whole safety
+   * margin, so it is refused at the edge rather than clamped somewhere inside.
+   */
+  it('rejects an idle threshold of zero hours', async () => {
+    const body = { autoStop: { idleHours: 0 } };
+
+    await expect(pipe.transform(body, metadata)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
+  it('rejects a negative idle threshold', async () => {
+    const body = { autoStop: { idleHours: -3 } };
+
+    await expect(pipe.transform(body, metadata)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
+  // A number field left empty on the settings screen arrives as text or as NaN,
+  // and either one stored would make every idle comparison false — the cook
+  // would never be stopped and nothing would say why.
+  it('rejects an idle threshold that is not a number', async () => {
+    const body = { autoStop: { idleHours: 'six' } };
+
+    await expect(pipe.transform(body, metadata)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
+  it('rejects an auto-stop block with no threshold at all', async () => {
+    const body = { autoStop: {} };
+
+    await expect(pipe.transform(body, metadata)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
   it('rejects the deleted freeform rule list rather than storing it', async () => {
     const body = {
       settings: [

@@ -173,6 +173,32 @@ export const AppearanceSettingsSchema =
   SchemaFactory.createForClass(AppearanceSettings);
 
 /**
+ * When a cook that nobody ended is taken to be over: the readings have stopped
+ * for this many hours.
+ *
+ * A block of its own rather than a bare field on the document, because the
+ * document is saved block by block by several independent writers — a field
+ * outside a block could only be saved by a writer that carried the whole
+ * document, which is what block-wise saving exists to avoid.
+ */
+@Schema({ _id: false })
+export class AutoStopSettings {
+  /**
+   * Hours of silence after which a cook still marked as smoking is stopped and
+   * its finish backdated to its last reading. Six by default: production's
+   * abandoned cooks sat idle for 17 hours at the shortest, and the longest
+   * gap inside a real cook (a lid open, a probe re-seated, a brief outage) is
+   * far under it.
+   */
+  @ApiProperty()
+  @Prop({ default: 6 })
+  idleHours: number;
+}
+
+export const AutoStopSettingsSchema =
+  SchemaFactory.createForClass(AutoStopSettings);
+
+/**
  * The single application settings document.
  *
  * Holds nothing the machine writes: armed flags, excursion counters and
@@ -200,6 +226,10 @@ export class ApplicationSettings {
   @ApiProperty({ type: AppearanceSettings })
   @Prop({ type: AppearanceSettingsSchema, default: () => ({}) })
   appearance: AppearanceSettings;
+
+  @ApiProperty({ type: AutoStopSettings })
+  @Prop({ type: AutoStopSettingsSchema, default: () => ({}) })
+  autoStop: AutoStopSettings;
 }
 
 export const ApplicationSettingsSchema =
