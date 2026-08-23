@@ -17,6 +17,9 @@ const DEFAULT_PROBE_TARGET_BLOCK = DEFAULT_APPLICATION_SETTINGS.probeTarget;
 /** The Smoke Complete alert as a deployment that has configured nothing has it. */
 const SMOKE_COMPLETE_OFF = DEFAULT_APPLICATION_SETTINGS.smokeComplete;
 
+/** The idle threshold a deployment that has tuned nothing auto-stops on. */
+const AUTO_STOP_DEFAULT = DEFAULT_APPLICATION_SETTINGS.autoStop;
+
 /** A target the user typed in themselves, as a row records that. */
 const byHand = { targetSource: 'user' } as const;
 
@@ -173,6 +176,7 @@ describe('AppSettingsService', () => {
         smokeComplete: SMOKE_COMPLETE_OFF,
         targetPresets: DEFAULT_TARGET_PRESETS,
         appearance: { mode: 'system', resolvedMode: 'dark' },
+        autoStop: AUTO_STOP_DEFAULT,
       });
     });
   });
@@ -204,6 +208,7 @@ describe('AppSettingsService', () => {
         smokeComplete: SMOKE_COMPLETE_OFF,
         targetPresets: DEFAULT_TARGET_PRESETS,
         appearance: { mode: 'dark', resolvedMode: 'dark' },
+        autoStop: AUTO_STOP_DEFAULT,
       });
     });
   });
@@ -629,6 +634,7 @@ describe('AppSettingsService', () => {
         smokeComplete: SMOKE_COMPLETE_OFF,
         targetPresets: DEFAULT_TARGET_PRESETS,
         appearance: { mode: 'dark', resolvedMode: 'dark' },
+        autoStop: AUTO_STOP_DEFAULT,
       });
       expect(settings.all()).toHaveLength(1);
     });
@@ -647,6 +653,7 @@ describe('AppSettingsService', () => {
         smokeComplete: SMOKE_COMPLETE_OFF,
         targetPresets: DEFAULT_TARGET_PRESETS,
         appearance: { mode: 'system', resolvedMode: 'dark' },
+        autoStop: AUTO_STOP_DEFAULT,
       });
     });
 
@@ -662,6 +669,60 @@ describe('AppSettingsService', () => {
         appearance: { mode: 'light', resolvedMode: 'light' },
       });
       expect(settings.all()).toHaveLength(1);
+    });
+  });
+
+  /**
+   * How long a silent stream means "the cook is over" is the pitmaster's to
+   * tune — a low-and-slow overnighter and a burger session do not sit idle for
+   * the same length of time before they are abandoned.
+   */
+  describe('the auto-stop idle threshold', () => {
+    // A deployment that has never opened the settings page — or one whose
+    // document was written before this field existed — must still answer with a
+    // number, because the auto-stop decision compares against it. An absent
+    // threshold would read as "never idle" and leave the zombie cooks in place.
+    it('reads as six hours until somebody sets one', async () => {
+      expect((await service.getSettings()).autoStop).toEqual({ idleHours: 6 });
+    });
+
+    it('reads back the threshold that was saved', async () => {
+      await service.saveSettings({ autoStop: { idleHours: 12 } });
+
+      expect((await service.getSettings()).autoStop).toEqual({ idleHours: 12 });
+    });
+
+    // The threshold is saved by its own card on the settings page, beside the
+    // cards that save the alerts and the presets. A save that disturbed
+    // another's block would undo whatever the operator had just changed there.
+    it('leaves the other blocks as they were', async () => {
+      await service.saveSettings({
+        chamber: { enabled: true, low: 200, high: 250 },
+        appearance: { mode: 'dark', resolvedMode: 'dark' },
+      });
+
+      await service.saveSettings({ autoStop: { idleHours: 12 } });
+
+      expect(await service.getSettings()).toEqual({
+        chamber: { enabled: true, low: 200, high: 250 },
+        probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
+        smokeComplete: SMOKE_COMPLETE_OFF,
+        targetPresets: DEFAULT_TARGET_PRESETS,
+        appearance: { mode: 'dark', resolvedMode: 'dark' },
+        autoStop: { idleHours: 12 },
+      });
+    });
+
+    // Saving anything else must not quietly reset a tuned threshold back to the
+    // shipped six hours.
+    it('survives a save from another card', async () => {
+      await service.saveSettings({ autoStop: { idleHours: 12 } });
+
+      await service.saveSettings({
+        chamber: { enabled: true, low: 200, high: 250 },
+      });
+
+      expect((await service.getSettings()).autoStop).toEqual({ idleHours: 12 });
     });
   });
 
@@ -686,6 +747,7 @@ describe('AppSettingsService', () => {
         smokeComplete: SMOKE_COMPLETE_OFF,
         targetPresets: DEFAULT_TARGET_PRESETS,
         appearance: { mode: 'dark', resolvedMode: 'dark' },
+        autoStop: AUTO_STOP_DEFAULT,
       });
     });
 
@@ -704,6 +766,7 @@ describe('AppSettingsService', () => {
         smokeComplete: SMOKE_COMPLETE_OFF,
         targetPresets: DEFAULT_TARGET_PRESETS,
         appearance: { mode: 'light', resolvedMode: 'light' },
+        autoStop: AUTO_STOP_DEFAULT,
       });
     });
 
@@ -732,6 +795,7 @@ describe('AppSettingsService', () => {
         smokeComplete: SMOKE_COMPLETE_OFF,
         targetPresets: DEFAULT_TARGET_PRESETS,
         appearance: { mode: 'dark', resolvedMode: 'dark' },
+        autoStop: AUTO_STOP_DEFAULT,
       });
       expect(settings.all()).toHaveLength(1);
     });
@@ -759,6 +823,7 @@ describe('AppSettingsService', () => {
         smokeComplete: SMOKE_COMPLETE_OFF,
         targetPresets: DEFAULT_TARGET_PRESETS,
         appearance: { mode: 'dark', resolvedMode: 'dark' },
+        autoStop: AUTO_STOP_DEFAULT,
       });
     });
   });

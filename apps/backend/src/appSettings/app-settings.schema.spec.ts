@@ -81,6 +81,21 @@ describe('the settings document read back through Mongoose', () => {
     });
   });
 
+  // The auto-stop threshold arrived long after installations had settings
+  // documents, and every auto-stop decision reads it: a document written before
+  // the field existed must answer with the shipped six hours rather than with
+  // `undefined`, which would compare as "never idle" and leave the zombie cooks
+  // the threshold exists to end.
+  it('reads a document stored before the auto-stop threshold existed as six hours', () => {
+    const stored = withSettingsDefaults(
+      StoredSettings.hydrate({
+        chamber: { enabled: true, low: 225, high: 275 },
+      }) as unknown as ApplicationSettings,
+    );
+
+    expect(stored.autoStop).toEqual({ idleHours: 6 });
+  });
+
   // Provenance is inferred only for rows that predate it. Once a row has been
   // saved it says what it is, so a preset-seeded target that happens to equal
   // the shipped default is still the app's to replace on the next cook.

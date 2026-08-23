@@ -173,6 +173,48 @@ export const AppearanceSettingsSchema =
   SchemaFactory.createForClass(AppearanceSettings);
 
 /**
+ * How long a cook still marked as smoking may go without a reading before it is
+ * taken to be over, in hours.
+ *
+ * Six: the abandoned cooks found in production had been silent for 17 hours at
+ * the shortest, and no real cook's internal gap (a lid open, a probe re-seated,
+ * a short outage) comes near it.
+ *
+ * It lives here, beside the field it defaults, so that Mongoose's default and
+ * the defaults layer's fallback are the same number by construction — the
+ * auto-stop decision and the legacy backfill both read this setting, and
+ * neither may carry a second opinion about what "unset" means. Re-exported from
+ * `app-settings.defaults` for callers that read defaults from there; it cannot
+ * be declared there, because that module imports this one.
+ */
+export const DEFAULT_AUTO_STOP_IDLE_HOURS = 6;
+
+/**
+ * When a cook that nobody ended is taken to be over: the readings have stopped
+ * for this many hours.
+ *
+ * A block of its own rather than a bare field on the document, because the
+ * document is saved block by block by several independent writers — a field
+ * outside a block could only be saved by a writer that carried the whole
+ * document, which is what block-wise saving exists to avoid.
+ */
+@Schema({ _id: false })
+export class AutoStopSettings {
+  /**
+   * Hours of silence after which a cook still marked as smoking is stopped and
+   * its finish backdated to its last reading. Defaulted from the one shipped
+   * threshold above, so a change to it reaches newly written documents rather
+   * than being contradicted here.
+   */
+  @ApiProperty()
+  @Prop({ default: DEFAULT_AUTO_STOP_IDLE_HOURS })
+  idleHours: number;
+}
+
+export const AutoStopSettingsSchema =
+  SchemaFactory.createForClass(AutoStopSettings);
+
+/**
  * The single application settings document.
  *
  * Holds nothing the machine writes: armed flags, excursion counters and
@@ -200,6 +242,10 @@ export class ApplicationSettings {
   @ApiProperty({ type: AppearanceSettings })
   @Prop({ type: AppearanceSettingsSchema, default: () => ({}) })
   appearance: AppearanceSettings;
+
+  @ApiProperty({ type: AutoStopSettings })
+  @Prop({ type: AutoStopSettingsSchema, default: () => ({}) })
+  autoStop: AutoStopSettings;
 }
 
 export const ApplicationSettingsSchema =

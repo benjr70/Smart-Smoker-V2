@@ -9,6 +9,7 @@
  * re-exported here so call sites keep importing from one place.
  */
 export type {
+  AutoStopSettings,
   ChamberAlertSettings,
   CompletionEstimate,
   CompletionState,
@@ -45,6 +46,7 @@ export type { FakeBackend, FakeBackendSeed, StoredSmokeProfile } from './fakeBac
 export { createFakeBackend } from './fakeBackend';
 export type {
   ApiClient,
+  AutoStopResource,
   HistoryResource,
   NotificationsResource,
   PostSmokeResource,
@@ -58,6 +60,7 @@ export type {
   TimelineResource,
 } from './client';
 export {
+  DEFAULT_AUTO_STOP_SETTINGS,
   createApiClient,
   createProductionApiClient,
   defaultNotificationSettings,

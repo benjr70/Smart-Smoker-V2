@@ -14,6 +14,7 @@ import { createSocketEventPort } from './socketEventAdapter';
 import {
   AppearancePreference,
   ApplicationSettings,
+  AutoStopSettings,
   ChamberAlertSettings,
   CompletionEstimate,
   CurrentSmokeTimeline,
@@ -221,6 +222,33 @@ export interface AppearanceResource {
   save(preference: AppearancePreference): Promise<AppearancePreference>;
 }
 
+/**
+ * The idle threshold a deployment nobody has tuned auto-stops on: six hours.
+ *
+ * The API layer's copy of the backend's own default, so an installation whose
+ * settings document predates the field — and one that has never saved any —
+ * shows the number the backend is actually deciding by rather than a blank
+ * field.
+ */
+export const DEFAULT_AUTO_STOP_SETTINGS: AutoStopSettings = { idleHours: 6 };
+
+export interface AutoStopResource {
+  /**
+   * GET `appSettings` — how many idle hours mean a cook that nobody ended is
+   * over.
+   *
+   * Always a threshold: a document written before the field existed reads as
+   * the shipped six hours, which is what the backend decides by, rather than as
+   * an absence every caller would have to have its own opinion about.
+   */
+  get(): Promise<AutoStopSettings>;
+  /**
+   * POST `appSettings` — store the threshold, sending its block alone so the
+   * cards beside it on the settings screen keep whatever they last saved.
+   */
+  save(settings: AutoStopSettings): Promise<AutoStopSettings>;
+}
+
 export interface StateResource {
   /** GET `state` — the current smoke-session state. */
   get(): Promise<State>;
@@ -310,6 +338,7 @@ export interface ApiClient {
   ratings: RatingsResource;
   notifications: NotificationsResource;
   appearance: AppearanceResource;
+  autoStop: AutoStopResource;
   state: StateResource;
   smoke: SmokeResource;
   timeline: TimelineResource;
@@ -731,6 +760,23 @@ export const createApiClient = (
         appearance: { mode: preference.mode, resolvedMode: preference.resolvedMode },
       });
       return saved?.appearance ?? preference;
+    },
+  },
+  autoStop: {
+    get: async () => {
+      // The route answers with a complete document, so the only body without an
+      // auto-stop block comes from a deployment older than the block itself —
+      // which the backend still auto-stops on the shipped threshold.
+      const response = await transport.get<{
+        autoStop?: AutoStopSettings;
+      } | null>('appSettings');
+      return response?.autoStop ?? DEFAULT_AUTO_STOP_SETTINGS;
+    },
+    save: async (settings: AutoStopSettings) => {
+      const saved = await transport.post<{ autoStop?: AutoStopSettings }>('appSettings', {
+        autoStop: { idleHours: settings.idleHours },
+      });
+      return saved?.autoStop ?? settings;
     },
   },
   state: {

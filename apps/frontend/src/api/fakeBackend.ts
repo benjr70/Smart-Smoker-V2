@@ -419,6 +419,9 @@ const withSettingsDefaults = (
     // against a value the backend does not serve.
     resolvedMode: stored?.appearance?.resolvedMode ?? 'dark',
   },
+  // As the backend reads a document written before the threshold existed: the
+  // six hours every auto-stop decision falls back to, never an absence.
+  autoStop: { idleHours: stored?.autoStop?.idleHours ?? 6 },
 });
 
 /** The smoke profile field naming a probe slot, as the backend reads it. */
