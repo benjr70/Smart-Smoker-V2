@@ -9,57 +9,57 @@ import { tempSeriesFilter } from './temp-series.filter';
 import { Temp, TempDocument } from './temps.schema';
 
 /**
- * How far past a cook's stamped finish a reading may be dated and still be
+ * How far outside a cook's stamped window a reading may be dated and still be
  * taken as part of that cook.
  *
- * A reading's date is the smoker's clock; a manually stamped finish is the
- * server's, and the two do not agree — that disagreement is the thing
- * {@link StaleCookService} already defends against when it decides a cook is
- * silent. Without slack, a device running a few minutes fast loses the last
- * few minutes of every cook it records. The slack is far wider than any
- * plausible skew between two boxes on the same network and far narrower than
- * the shortest silence that can end a cook (an hour, the floor the settings
- * enforce), so it can admit the tail of a cook without admitting a stray.
+ * A reading's date is the smoker's clock; the stamps are the server's, and the
+ * two do not agree — that disagreement is the thing {@link StaleCookService}
+ * already defends against when it decides a cook is silent. Without slack, a
+ * device running a few minutes fast loses the last few minutes of every cook it
+ * records, and one running slow loses the first. The slack is far wider than
+ * any plausible skew between two boxes on the same network and far narrower
+ * than the shortest silence that can end a cook (an hour, the floor the
+ * settings enforce), so it can admit the ends of a cook without admitting a
+ * stray.
  */
 export const CLOCK_SKEW_TOLERANCE_MS = 15 * 60 * 1000;
 
 /**
  * The date bound of a cook, as a fragment of a temps filter: empty when the
- * cook has no finish stamp, so spreading it into a filter leaves that filter
- * alone.
+ * cook carries no stamps at all, so spreading it into a filter leaves that
+ * filter alone.
  *
- * Only the finish bounds the series, and only loosely:
+ * Each stamp bounds the side it knows about — a cook still running has only a
+ * start — and both sides are bounded loosely, by {@link
+ * CLOCK_SKEW_TOLERANCE_MS}.
  *
- * - There is no lower bound, because there is nothing below it. Readings are
- *   stored only while a cook's smoking flag is on, and that flag going on is
- *   what stamps the start — so no reading in a series predates the cook. A
- *   `startedAt` is not even reliably *at* the start: the stamp is conditional
- *   and a failed write is deferred to the next toggle, hours into a cook that
- *   has been recording all along, and bounding by it would throw that cook's
- *   first hours away.
- * - Rows stored without a date are kept. They cannot be placed inside or
- *   outside any window, and a range predicate answers "outside" for every one
- *   of them; the archive holds such rows (see the peak scan in the timeline
- *   module), and a legacy cook made of them would vanish from its own chart
- *   the moment anything stamped a finish on it.
+ * The lower bound is honest only because the start stamp is: a start is written
+ * no later than the earliest reading its cook had already taken (see
+ * `TimelineService.stampStart`), so a cook whose first stamp attempt failed and
+ * was deferred to a later switch-on is still bounded at its own beginning
+ * rather than hours into itself. Nothing a cook recorded falls below its own
+ * start.
+ *
+ * Rows stored without a date are kept. They cannot be placed inside or outside
+ * any window, and a range predicate answers "outside" for every one of them;
+ * the archive holds such rows (see the peak scan in the timeline module), and a
+ * legacy cook made of them would vanish from its own chart the moment anything
+ * stamped it.
  */
 const cookWindow = (
-  smoke: Pick<SmokeDocument, 'finishedAt'> | null,
-): FilterQuery<TempDocument> =>
-  smoke?.finishedAt
-    ? {
-        $or: [
-          {
-            date: {
-              $lte: new Date(
-                smoke.finishedAt.getTime() + CLOCK_SKEW_TOLERANCE_MS,
-              ),
-            },
-          },
-          { date: null },
-        ],
-      }
+  smoke: Pick<SmokeDocument, 'startedAt' | 'finishedAt'> | null,
+): FilterQuery<TempDocument> => {
+  const range: { $gte?: Date; $lte?: Date } = {};
+  if (smoke?.startedAt) {
+    range.$gte = new Date(smoke.startedAt.getTime() - CLOCK_SKEW_TOLERANCE_MS);
+  }
+  if (smoke?.finishedAt) {
+    range.$lte = new Date(smoke.finishedAt.getTime() + CLOCK_SKEW_TOLERANCE_MS);
+  }
+  return Object.keys(range).length
+    ? { $or: [{ date: range }, { date: null }] }
     : {};
+};
 
 @Injectable()
 export class TempsService extends BaseService<TempDocument> {
@@ -151,11 +151,10 @@ export class TempsService extends BaseService<TempDocument> {
    * than deleted: the strays stay in the collection, so nothing is lost if the
    * stamps themselves ever turn out to be wrong.
    *
-   * The cook's finish stamp is what bounds the series, generously and never
-   * to nothing; see {@link cookWindow} for what the bound is and is not, and
-   * why. A cook with no finish — every cook recorded before the stamps
-   * existed, and every cook still running — reads back whole, exactly as it
-   * always did.
+   * The cook's stamps are what bound the series, generously and never to
+   * nothing; see {@link cookWindow} for what the bounds are and why. A cook
+   * with no stamps at all — every cook recorded before they existed — reads
+   * back whole, exactly as it always did.
    */
   async getAllTempsById(id: string): Promise<Temp[]> {
     const smoke = await this.smokeModel.findOne({ tempsId: id }).exec();

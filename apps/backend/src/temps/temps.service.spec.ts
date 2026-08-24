@@ -434,14 +434,57 @@ describe('TempsService', () => {
     });
 
     /**
-     * The start stamp is not a bound. A cook is stamped as started when its
-     * smoking flag is first switched on, and a stamp whose write failed is
-     * deferred to the next toggle — hours into a cook that has been recording
-     * all along. Nothing can be recorded before a cook starts (readings are
-     * stored only while smoking is on), so there is nothing for a lower bound
-     * to exclude and everything for a late one to lose.
+     * The start bounds the series from below for the same reason the finish
+     * bounds it from above: a reading taken before the cook began is not part
+     * of it. The start is stamped no later than the cook's own first reading
+     * (see `TimelineService.stampStart`), so nothing the cook recorded can
+     * fall below its own start.
      */
-    it('keeps the whole series of a cook that has only started', async () => {
+    it('leaves out the readings taken before a stamped cook began', async () => {
+      smokeModel.findOne.mockImplementation(() =>
+        query({
+          tempsId: 'some-group',
+          startedAt: new Date('2026-08-20T11:00:00Z'),
+          finishedAt: new Date('2026-08-20T13:00:00Z'),
+        }),
+      );
+
+      const result = await service.getAllTempsById('some-group');
+
+      expect(result.map((temp) => temp.date)).toEqual([
+        new Date('2026-08-20T12:00:00Z'),
+      ]);
+    });
+
+    /**
+     * The start is the server's clock and the readings carry the smoker's, so
+     * the lower bound is as generous as the upper one: a reading dated a
+     * little before the press of Start Smoking is the head of the cook read by
+     * a watch that runs slow, not a stray from before it.
+     */
+    it('keeps readings dated just before the start by a slow device clock', async () => {
+      const startedAt = new Date('2026-08-20T09:05:00Z');
+      smokeModel.findOne.mockImplementation(() =>
+        query({
+          tempsId: 'some-group',
+          startedAt,
+          finishedAt: new Date('2026-08-20T13:00:00Z'),
+        }),
+      );
+
+      const result = await service.getAllTempsById('some-group');
+
+      expect(result.map((temp) => temp.date)).toEqual([
+        new Date('2026-08-20T09:00:00Z'),
+        new Date('2026-08-20T12:00:00Z'),
+      ]);
+    });
+
+    /**
+     * A cook that has started and not finished is the one running now; the
+     * bound it has is the one it can be given.
+     */
+    it('bounds a cook that has only started by its start alone', async () => {
       smokeModel.findOne.mockImplementation(() =>
         query({
           tempsId: 'some-group',
@@ -451,7 +494,10 @@ describe('TempsService', () => {
 
       const result = await service.getAllTempsById('some-group');
 
-      expect(result).toHaveLength(polluted.length);
+      expect(result.map((temp) => temp.date)).toEqual([
+        new Date('2026-08-20T12:00:00Z'),
+        new Date('2026-09-04T18:00:00Z'),
+      ]);
     });
 
     /**
