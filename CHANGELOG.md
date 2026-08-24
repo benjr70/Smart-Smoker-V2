@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.11.0](https://github.com/benjr70/Smart-Smoker-V2/compare/v1.10.0...v1.11.0) (2026-08-24)
+
+
+### Features
+
+* **backend:** auto-stop a stale cook when a post-gap reading arrives ([#549](https://github.com/benjr70/Smart-Smoker-V2/issues/549)) ([8a9a596](https://github.com/benjr70/Smart-Smoker-V2/commit/8a9a596d9c91e0be47eff42fe64670254162021c))
+* **backend:** auto-stop stale cook via lazy timeline poll ([#546](https://github.com/benjr70/Smart-Smoker-V2/issues/546)) ([3df5f76](https://github.com/benjr70/Smart-Smoker-V2/commit/3df5f766910a94b6354ec2cc3842012d74f4bce6))
+* **backend:** clip stored temp series to the cook's start/finish stamps ([#552](https://github.com/benjr70/Smart-Smoker-V2/issues/552)) ([e344f84](https://github.com/benjr70/Smart-Smoker-V2/commit/e344f84b20e3fd7381c86dfe394e91980b28957f))
+* **backend:** heal legacy cook windows in stats rebuild ([#551](https://github.com/benjr70/Smart-Smoker-V2/issues/551)) ([9251326](https://github.com/benjr70/Smart-Smoker-V2/commit/92513269807c4ac7af750ceead0f1e981d1def8e))
+* **backend:** push notification on cook auto-stop ([#550](https://github.com/benjr70/Smart-Smoker-V2/issues/550)) ([f97f2b6](https://github.com/benjr70/Smart-Smoker-V2/commit/f97f2b64377be990a9fff024b6c8514deb41026f))
+* **monorepo:** add configurable auto-stop idle threshold setting ([#545](https://github.com/benjr70/Smart-Smoker-V2/issues/545)) ([e9216e6](https://github.com/benjr70/Smart-Smoker-V2/commit/e9216e69655505a4cfb8c47daa84b478fc78d8af))
+* **monorepo:** prompt before smoking over an auto-stopped cook ([#547](https://github.com/benjr70/Smart-Smoker-V2/issues/547)) ([69740cd](https://github.com/benjr70/Smart-Smoker-V2/commit/69740cd69189f75de1e6f6c64d02a8f06e00ff3b))
+
 ## [1.10.0](https://github.com/benjr70/Smart-Smoker-V2/compare/v1.9.0...v1.10.0) (2026-08-22)
 
 
