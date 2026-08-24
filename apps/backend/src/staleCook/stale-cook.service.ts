@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import {
@@ -86,7 +86,13 @@ export class StaleCookService {
      * The socket every app is listening on. A stop the clients are not told
      * about is undone by the next press of a Stop button that still believes
      * the cook is running — see {@link announceStop}.
+     *
+     * Forward-referenced because the gateway is also a trigger: the reading
+     * path there calls {@link autoStopIfStale}, so the two depend on each other
+     * and Nest has to resolve one of them lazily. Wiring only; nothing about
+     * the announcement changed.
      */
+    @Inject(forwardRef(() => EventsGateway))
     private readonly events: EventsGateway,
     /**
      * The cook itself, read through its model rather than `SmokeService`:

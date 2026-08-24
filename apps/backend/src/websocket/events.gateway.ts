@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
 import {
   MessageBody,
   SubscribeMessage,
@@ -9,6 +9,7 @@ import { Server } from 'socket.io';
 import { State } from '../State/state.schema';
 import { StateService } from '../State/state.service';
 import { AppearancePreference } from '../appSettings/appearance';
+import { StaleCookService } from '../staleCook/stale-cook.service';
 import { TempDto } from '../temps/tempDto';
 import { TempsService } from '../temps/temps.service';
 
@@ -18,6 +19,20 @@ import { TempsService } from '../temps/temps.service';
  * stored graph has always had.
  */
 const MESSAGES_PER_STORED_READING = 11;
+
+/**
+ * The shortest gap that could possibly mean an abandoned cook.
+ *
+ * One hour is the smallest idle threshold the application settings will accept,
+ * so a reading arriving less than an hour after the one this gateway last
+ * stored cannot be crossing any configured threshold, whatever the operator set
+ * it to. That makes it safe to answer "not stale" from memory and leave the
+ * store alone — which is the point, since the alternative is a query per stored
+ * reading for the whole of every cook. Anything longer than this, and after a
+ * restart when nothing is remembered, goes and asks {@link StaleCookService},
+ * which reads the real threshold and the indexed newest reading.
+ */
+const MIN_IDLE_THRESHOLD_MS = 60 * 60 * 1000;
 
 /**
  * The event a changed appearance preference rides on.
@@ -58,9 +73,25 @@ export class EventsGateway {
   // gateway, and a module-level counter leaks between instances.
   private messagesSinceStore = 0;
 
+  /**
+   * Server clock of the last reading this instance stored, or `null` when it
+   * has stored none — which is what a freshly started backend holds, and what
+   * an auto-stop resets it to. Null means "ask the store", so a restart in the
+   * middle of the gap still notices the gap.
+   */
+  private lastStoredAt: Date | null = null;
+
   constructor(
     private tempsService: TempsService,
     private stateService: StateService,
+    /**
+     * Forward-referenced because the dependency runs both ways: the stale-cook
+     * service announces the stop it makes over this gateway, and this gateway
+     * asks it whether the arriving reading has crossed a gap. Nest resolves
+     * both ends lazily; the modules do the same to each other.
+     */
+    @Inject(forwardRef(() => StaleCookService))
+    private staleCook: StaleCookService,
   ) {}
 
   @WebSocketServer()
@@ -76,13 +107,20 @@ export class EventsGateway {
    * Relay one device reading to every client, and persist every eleventh one.
    *
    * `async` rather than floating `.then()`s on purpose: the relay is the
-   * hottest path in the application and it touches the database twice — once
-   * to read the state, once to store the reading — so an unattended rejection
-   * from either is a process-level crash. Awaiting hands the promise to Nest,
-   * and the try/catch around each call means neither a missing state document
-   * nor an unreachable database can stop temperatures flowing to the clients:
-   * the emit above has already happened either way, and losing one sampled
-   * reading is worth vastly less than the backend staying up.
+   * hottest path in the application and it reaches the database several times —
+   * to read the state, to check the cook has not been abandoned, and to store
+   * the reading — so an unattended rejection from any of them is a
+   * process-level crash. Awaiting hands the promise to Nest, and the try/catch
+   * around each call means neither a missing state document nor an unreachable
+   * database can stop temperatures flowing to the clients: the emit above has
+   * already happened either way, and losing one sampled reading is worth vastly
+   * less than the backend staying up.
+   *
+   * A reading that arrives after a long silence ends the cook instead of
+   * joining it. Firing the box up weeks later used to append to whatever
+   * session was still marked as smoking, and that session's duration is read
+   * from the ends of its series; the trigger drops the reading it arrived on so
+   * the stopped cook keeps the shape it really had.
    */
   @SubscribeMessage('events')
   async handleEvent(@MessageBody() data: string): Promise<void> {
@@ -113,6 +151,11 @@ export class EventsGateway {
       return;
     }
 
+    const now = new Date();
+    if (await this.stoppedStaleCook(now)) {
+      return;
+    }
+
     const tempObj = JSON.parse(data);
     const tempDto: TempDto = {
       MeatTemp: tempObj.probeTemp1,
@@ -124,14 +167,88 @@ export class EventsGateway {
     this.handleTempLogging(tempDto);
     try {
       await this.tempsService.saveNewTemp(tempDto);
+      this.lastStoredAt = now;
     } catch (err) {
       this.logDatabaseFailure('could not store reading', err);
     }
   }
 
   /**
+   * Decide whether this reading arrived into a cook that is over, ending it if
+   * so — `true` when the caller must not store the reading.
+   *
+   * Most sampled readings answer from memory: see {@link MIN_IDLE_THRESHOLD_MS}
+   * for why a recent store is proof enough that nothing is stale. The rest ask
+   * the one service that owns the decision, which reads the configured
+   * threshold and the newest stored reading for itself.
+   *
+   * Only a reported stop proves the cook is over; nothing reported does not
+   * prove it survived. The service deliberately reports nothing on two paths
+   * that end the cook all the same — one that already carried a finish stamp,
+   * and a stop that lost the conditional stamp to the timeline poll racing it —
+   * and a reading stored after either of those lands in a session whose finish
+   * has just been backdated, which is the pollution this trigger exists to
+   * prevent. So a quiet answer is settled against the smoking flag the stop
+   * itself switches off, rather than assumed to mean a live cook.
+   *
+   * Nothing is stored on a check that could not answer, either. The reading the
+   * caller would have saved becomes the cook's newest, and the newest reading
+   * is what both triggers measure the silence from: one stored on a failed
+   * check resets the gap to nothing and the abandoned cook is never noticed
+   * again by anything. That is a far worse trade than the sample it costs — the
+   * relay has already emitted the reading to every screen, the check only runs
+   * when the cook may well be dead anyway, and the next sampled reading asks
+   * again, since a failure leaves nothing remembered to skip the question with.
+   */
+  private async stoppedStaleCook(now: Date): Promise<boolean> {
+    if (
+      this.lastStoredAt &&
+      now.getTime() - this.lastStoredAt.getTime() < MIN_IDLE_THRESHOLD_MS
+    ) {
+      return false;
+    }
+    try {
+      const stopped = await this.staleCook.autoStopIfStale(now);
+      if (stopped) {
+        this.forgetLastStored();
+        Logger.log(
+          `Reading arrived ${stopped.idleHours.toFixed(
+            1,
+          )}h after the last one; smoke ${
+            stopped.smokeId
+          } was auto-stopped and the reading dropped`,
+          'Websocket',
+        );
+        return true;
+      }
+      if ((await this.stateService.GetState())?.smoking) {
+        return false;
+      }
+      // The cook was ended by a path with nothing to report. It is over as
+      // surely as a reported stop leaves it, and the reading is dropped for the
+      // same reason.
+      this.forgetLastStored();
+      return true;
+    } catch (err) {
+      this.logDatabaseFailure('could not check for an abandoned cook', err);
+      return true;
+    }
+  }
+
+  /**
+   * Forget what this instance last stored, so the next reading goes back to the
+   * store. Called wherever the cook the memory belonged to has ended: what
+   * follows is a different session, and only the indexed newest-reading lookup
+   * can place it.
+   */
+  private forgetLastStored(): void {
+    this.lastStoredAt = null;
+  }
+
+  /**
    * Report a database failure on the relay path without rethrowing. Shared by
-   * the state read and the temperature write so both report identically.
+   * the state read, the staleness check and the temperature write so all three
+   * report identically.
    */
   private logDatabaseFailure(what: string, err: unknown): void {
     Logger.error(

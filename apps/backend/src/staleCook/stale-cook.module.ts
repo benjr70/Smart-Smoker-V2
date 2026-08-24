@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import {
   ApplicationSettings,
@@ -45,7 +45,9 @@ import { StaleCookService } from './stale-cook.service';
     StatsModule,
     // A stop the apps are never told about is toggled straight back on by the
     // next Stop press on a screen that still thinks the cook is running.
-    EventsModule,
+    // Forward-referenced since the gateway became a trigger: the reading path
+    // there asks this module whether the cook it arrived into is over.
+    forwardRef(() => EventsModule),
   ],
   providers: [StaleCookService, StaleCookMiddleware],
   exports: [StaleCookService, StaleCookMiddleware],
