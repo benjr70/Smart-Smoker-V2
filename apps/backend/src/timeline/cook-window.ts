@@ -43,47 +43,15 @@ export const cookWindow = (
   if (moments.length === 0) {
     return null;
   }
+  // Walked by index rather than over `moments.slice(1)`: a series here is the
+  // whole archive of one cook — a hundred thousand rows and more — and copying
+  // it to skip its first element is a copy this can simply not make.
   let finishedAt = moments[0];
-  for (const moment of moments.slice(1)) {
-    if (moment.getTime() - finishedAt.getTime() > gapMs) {
+  for (let index = 1; index < moments.length; index += 1) {
+    if (moments[index].getTime() - finishedAt.getTime() > gapMs) {
       break;
     }
-    finishedAt = moment;
+    finishedAt = moments[index];
   }
   return { startedAt: moments[0], finishedAt };
-};
-
-/**
- * The hottest chamber reading inside a window, or `null` where the rows in it
- * hold nothing readable.
- *
- * Bounded, because that is the whole point of the window: the stray firing of
- * the box that follows an unended cook can easily be hotter than the cook was —
- * a grill run wide open reads 400°F where a brisket smoke sat at 225°F — and
- * the peak stamped on the cook must be a fact about the cook.
- *
- * Readings are stored as strings, and one that is not a number (blank, `n/a`)
- * is passed over rather than read as a zero, which is the same rule the grouped
- * peak aggregation applies with its `$convert`.
- */
-export const peakChamberIn = (
-  readings: TimelineReading[],
-  window: CookWindow,
-): number | null => {
-  const peaks = readings
-    .filter((row) => {
-      const moment = momentOf(row);
-      return (
-        moment !== null &&
-        moment >= window.startedAt &&
-        moment <= window.finishedAt
-      );
-    })
-    .map((row) =>
-      String(row.ChamberTemp ?? '').trim() === ''
-        ? Number.NaN
-        : Number(row.ChamberTemp),
-    )
-    .filter((value) => Number.isFinite(value));
-  return peaks.length === 0 ? null : Math.max(...peaks);
 };

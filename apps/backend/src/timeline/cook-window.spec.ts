@@ -1,4 +1,4 @@
-import { cookWindow, peakChamberIn } from './cook-window';
+import { cookWindow } from './cook-window';
 
 const HOUR = 60 * 60 * 1000;
 
@@ -38,31 +38,5 @@ describe('cookWindow', () => {
     const window = cookWindow([at(14 * 24), at(0), at(2)], 6 * HOUR);
 
     expect(window).toEqual({ startedAt: at(0).date, finishedAt: at(2).date });
-  });
-});
-
-describe('peakChamberIn', () => {
-  const window = { startedAt: at(0).date, finishedAt: at(10).date };
-
-  it('reads the hottest chamber inside the window and nothing outside it', () => {
-    const readings = [
-      { ...at(0), ChamberTemp: '225' },
-      { ...at(4), ChamberTemp: '260' },
-      // The grill run a fortnight later, hotter than the cook ever was.
-      { ...at(14 * 24), ChamberTemp: '450' },
-    ];
-
-    expect(peakChamberIn(readings, window)).toBe(260);
-  });
-
-  it('holds no peak where the window recorded nothing readable', () => {
-    const readings = [
-      { ...at(1), ChamberTemp: '' },
-      { ...at(2), ChamberTemp: 'n/a' },
-      { ...at(3), ChamberTemp: null },
-      { date: null, ChamberTemp: '300' },
-    ];
-
-    expect(peakChamberIn(readings, window)).toBeNull();
   });
 });

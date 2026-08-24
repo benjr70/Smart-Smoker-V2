@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ApplicationSettings } from '../appSettings/app-settings.schema';
@@ -46,6 +47,8 @@ describe('StatsService', () => {
   let ratings: FakeDoc[];
   let temps: FakeDoc[];
   let snapshots: FakeDoc[];
+  /** What the installation has stored, which the window backfill cuts by. */
+  let settings: FakeDoc[];
   let tempReads: { reads: number };
   /** What the rebuild wrote back onto the archive, and in how many trips. */
   let archiveWrites: { writes: number };
@@ -82,7 +85,7 @@ describe('StatsService', () => {
         { provide: getModelToken('state'), useValue: fakeModel([]) },
         {
           provide: getModelToken(ApplicationSettings.name),
-          useValue: fakeModel([]),
+          useValue: fakeModel(settings),
         },
         {
           provide: getModelToken(PreSmoke.name),
@@ -110,6 +113,7 @@ describe('StatsService', () => {
     ratings = [];
     temps = [];
     snapshots = [];
+    settings = [];
   });
 
   /** One finished cook of `meat`, weighing `pounds`, scored `score`. */
@@ -213,9 +217,8 @@ describe('StatsService', () => {
     });
   });
 
-  it('costs the same number of reads whether the archive holds one cook or ten', async () => {
-    // Every one of them unstamped, so each would otherwise be two more queries
-    // hunting for the ends of its series.
+  it('heals each cook with a bounded read of its own, and re-reads none of them after', async () => {
+    // Every one of them unstamped, so each is healed on this first rebuild.
     for (let index = 0; index < 10; index += 1) {
       smokes.push({
         _id: `legacy-${index}`,
@@ -235,16 +238,24 @@ describe('StatsService', () => {
         });
       }
     }
+    const service = await build();
 
-    const stats = await (await build()).getStats();
+    const stats = await service.recalculate();
 
     expect(stats.totalSessions).toBe(10);
     expect(stats.totalCookMs).toBe(100 * HOUR);
-    // One read however many cooks there are: the windows of every cook that
-    // carries no finish, which answers where each of them ran and how hot it
-    // got — and the stamps it writes are what the durations and the peaks are
-    // then read from, so nothing goes back to the readings after it.
-    expect(tempReads.reads).toBe(1);
+    // Two reads per cook healed and no more: its own rows walked for the
+    // silence that ended it, and its peak asked of the window that came out.
+    // Bounded per series deliberately — every unstamped cook of the archive
+    // asked for at once would hold `cooks × rows` in memory at a stroke.
+    expect(tempReads.reads).toBe(20);
+
+    tempReads.reads = 0;
+    await service.recalculate();
+
+    // And never again: the stamps the healing wrote are what the durations and
+    // the peaks are read from afterwards, however often the archive is rebuilt.
+    expect(tempReads.reads).toBe(0);
   });
 
   it('says nothing about an installation that has never finished a cook', async () => {
@@ -438,6 +449,53 @@ describe('StatsService', () => {
         smokeId: 'polluted',
         value: 225,
       });
+    });
+
+    it('marks a derived finish as derived, and says what the cut set aside', async () => {
+      pollutedCook('polluted');
+      const warn = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+
+      await (await build()).recalculate();
+
+      // A cut this pass makes is almost always pollution — but a cook whose
+      // readings genuinely stopped for hours (the backend down, the box off
+      // wifi overnight) is cut the same way. The mark is what tells a derived
+      // finish from one somebody recorded, and no reading is deleted, so a cut
+      // can be read back and reversed.
+      expect(smokes[0].cookWindowBackfilled).toBe(true);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining(
+          new Date(OPENED + (14 * 24 + 1) * HOUR).toISOString(),
+        ),
+      );
+      warn.mockRestore();
+    });
+
+    it('leaves a cook the user ended alone, marks and all', async () => {
+      completedCook('honest', 'Pork butt', 9);
+      smokes[0].finishedAt = new Date(smokes[0].startedAt.getTime() + 5 * HOUR);
+
+      await (await build()).recalculate();
+
+      expect(smokes[0].cookWindowBackfilled).toBeUndefined();
+    });
+
+    /**
+     * A stored threshold of nonsense — a hand edit, a restored backup, a direct
+     * write, none of which pass through the API's validation — would otherwise
+     * make every silence a gap and stamp each legacy cook as having run for no
+     * time at all, permanently.
+     */
+    it('cuts by the shipped default where the stored threshold is nonsense', async () => {
+      settings.push({ autoStop: { idleHours: 0 } });
+      pollutedCook('polluted');
+
+      const stats = await (await build()).recalculate();
+
+      expect(stats.totalCookMs).toBe(10 * HOUR);
+      expect(smokes[0].finishedAt).toEqual(new Date(OPENED + 10 * HOUR));
     });
 
     it('changes nothing on a second rebuild, and keeps every reading', async () => {

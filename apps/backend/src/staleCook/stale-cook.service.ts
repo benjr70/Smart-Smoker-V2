@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { idleThresholdMsOf } from '../appSettings/auto-stop-threshold';
 import {
   ApplicationSettings,
   ApplicationSettingsDocument,
@@ -15,16 +16,6 @@ import { StateService } from '../State/state.service';
 import { StatsService } from '../stats/stats.service';
 import { TimelineService } from '../timeline/timeline.service';
 import { EventsGateway } from '../websocket/events.gateway';
-
-/**
- * How long a cook still marked as smoking may go without a reading before it is
- * taken to be over, when the settings document does not say.
- *
- * The setting itself is the threshold's home (see {@link idleThresholdHours}); this
- * is what a document written before the field existed reads as, and what the
- * shipped default is.
- */
-const DEFAULT_AUTO_STOP_IDLE_HOURS = 6;
 
 const MS_PER_HOUR = 60 * 60 * 1000;
 
@@ -409,18 +400,10 @@ export class StaleCookService {
    */
   private async idleThresholdHours(): Promise<number> {
     const stored: unknown = await this.settingsModel.findOne().lean().exec();
-    const hours = (stored as StoredAutoStopSettings | null)?.autoStop
-      ?.idleHours;
-    return typeof hours === 'number' && isFinite(hours) && hours > 0
-      ? hours
-      : DEFAULT_AUTO_STOP_IDLE_HOURS;
+    // Read as milliseconds and told here in hours: the shared reader is the
+    // one place that decides what a stored threshold means, and this service
+    // speaks in hours because the stop announcement quotes the rule to the
+    // pitmaster in hours.
+    return idleThresholdMsOf(stored) / MS_PER_HOUR;
   }
-}
-
-/**
- * The settings document as this service reads it: structurally, so the read
- * survives a stored document written before the auto-stop block existed.
- */
-interface StoredAutoStopSettings {
-  autoStop?: { idleHours?: number } | null;
 }

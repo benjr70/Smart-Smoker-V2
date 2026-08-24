@@ -848,15 +848,19 @@ describe('TimelineService', () => {
         startedAt: new Date(OPENED),
         finishedAt: new Date(OPENED + 3 * HOUR),
         peakChamber: 240,
+        // The stray firing a week later: outside the window, but reported, so
+        // the caller can say what the cut set aside.
+        seriesEndsAt: new Date(OPENED + 7 * 24 * HOUR),
       });
       expect(windows.get('clean')).toEqual({
         startedAt: new Date(OPENED),
         finishedAt: new Date(OPENED + 3 * HOUR),
         peakChamber: 260,
+        seriesEndsAt: new Date(OPENED + 3 * HOUR),
       });
     });
 
-    it('asks the store for the three fields it reads, and for no sorting', async () => {
+    it('walks one series at a time, asking only for when each row was read', async () => {
       type Chain = {
         applied: { sort?: FakeDoc; lean?: boolean; select?: string };
       };
@@ -873,21 +877,45 @@ describe('TimelineService', () => {
 
       await service.cookWindowsOf(['polluted', 'clean'], 6 * HOUR);
 
-      expect(issued).toHaveLength(1);
-      expect(issued[0].filter).toEqual({
-        tempsId: { $in: ['polluted', 'clean'] },
-        date: { $ne: null },
-      });
-      // Sorting a match across many series by date alone cannot be served by
-      // the `{ tempsId: 1, date: -1 }` index, and Mongo aborts an in-memory
-      // sort at 32MB — which a fortnight-long series reaches. The window puts
-      // the moments in order itself.
+      // One read per series rather than one over all of them: what is held at
+      // any moment is a single cook's rows, whatever the archive holds.
+      expect(issued.map((read) => read.filter)).toEqual([
+        { tempsId: 'polluted', date: { $ne: null } },
+        { tempsId: 'clean', date: { $ne: null } },
+      ]);
+      // Sorting is left undone: the window puts the moments in order itself,
+      // which keeps a fortnight-long series off Mongo's 32MB in-memory sort.
       expect(issued[0].chain.applied.sort).toBeUndefined();
-      expect(issued[0].chain.applied.select).toBe('tempsId date ChamberTemp');
+      expect(issued[0].chain.applied.select).toBe('date');
       expect(issued[0].chain.applied.lean).toBe(true);
     });
 
-    it('answers for a whole archive in one read, and for nothing without one', async () => {
+    it('takes each peak from the bounded peak aggregation, not a second scanner', async () => {
+      const pipelines: FakeDoc[][] = [];
+      const model = models.temps as unknown as Record<string, unknown>;
+      const aggregate = (
+        model.aggregate as (pipeline: FakeDoc[]) => { exec(): unknown }
+      ).bind(models.temps);
+      model.aggregate = (pipeline: FakeDoc[]) => {
+        pipelines.push(pipeline);
+        return aggregate(pipeline);
+      };
+
+      await service.cookWindowsOf(['polluted'], 6 * HOUR);
+
+      // The one implementation of "the hottest chamber in a window" there is,
+      // bounded to the window this cut — so a backfilled peak and a peak
+      // stamped at finish can never read the same rows differently.
+      expect(pipelines).toHaveLength(1);
+      expect(pipelines[0][0]).toEqual({
+        $match: {
+          tempsId: { $in: ['polluted'] },
+          date: { $ne: null, $lte: new Date(OPENED + 3 * HOUR) },
+        },
+      });
+    });
+
+    it('answers for a series that never recorded, and touches no reading', async () => {
       const reads = models.temps.docs.length;
 
       expect(await service.cookWindowsOf([], 6 * HOUR)).toEqual(new Map());

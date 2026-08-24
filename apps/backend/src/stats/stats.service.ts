@@ -1,7 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { withSettingsDefaults } from '../appSettings/app-settings.defaults';
+import { idleThresholdMsOf } from '../appSettings/auto-stop-threshold';
 import {
   ApplicationSettings,
   ApplicationSettingsDocument,
@@ -52,6 +52,7 @@ interface WindowStamp {
         startedAt: Date;
         finishedAt: Date;
         peakChamberScanned: true;
+        cookWindowBackfilled: true;
         peakChamber?: number;
       };
       /**
@@ -64,8 +65,6 @@ interface WindowStamp {
     };
   };
 }
-
-const MS_PER_HOUR = 60 * 60 * 1000;
 
 /** Documents by id, for joining a parent to the children it points at. */
 const byId = <T extends { _id?: unknown }>(docs: T[]): Map<string, T> =>
@@ -88,6 +87,8 @@ const byId = <T extends { _id?: unknown }>(docs: T[]): Map<string, T> =>
  */
 @Injectable()
 export class StatsService {
+  private readonly logger = new Logger(StatsService.name);
+
   constructor(
     @InjectModel('Smoke') private readonly smokeModel: Model<SmokeDocument>,
     @InjectModel(PreSmoke.name)
@@ -330,8 +331,25 @@ export class StatsService {
         startedAt: smoke.startedAt ?? window.startedAt,
         finishedAt: window.finishedAt,
         peakChamber: window.peakChamber,
+        seriesEndsAt: window.seriesEndsAt,
       };
       stamped.set(String(smoke['_id']), scanned);
+      if (window.seriesEndsAt.getTime() > scanned.finishedAt.getTime()) {
+        // Said out loud rather than done quietly. A silence this long is
+        // normally the box being fired up again weeks after a session nobody
+        // ended — but it can also be a cook whose readings really did stop for
+        // hours (the backend down, the box off wifi), and that cook is cut here
+        // too. The log names what was set aside, the stamp carries the mark
+        // saying the finish was derived rather than observed, and no reading is
+        // deleted, so a cut can be read back and reversed.
+        this.logger.warn(
+          `Cook ${String(
+            smoke['_id'],
+          )} cut at ${scanned.finishedAt.toISOString()}; ` +
+            `its series runs on to ${window.seriesEndsAt.toISOString()}, which is ` +
+            'excluded as recorded after the cook ended.',
+        );
+      }
       stamps.push({
         updateOne: {
           filter: { _id: smoke['_id'] },
@@ -343,6 +361,12 @@ export class StatsService {
               // {@link stampMissingPeaks} records it: a cook left with neither
               // a peak nor the mark would be scanned again by every rebuild.
               peakChamberScanned: true,
+              // The mark that this cook's finish was derived from its readings
+              // rather than observed — what tells a repaired cook from one the
+              // user or the auto-stop ended, and so what makes the cut
+              // identifiable afterwards instead of indistinguishable from a
+              // genuine finish.
+              cookWindowBackfilled: true,
               ...(scanned.peakChamber === null
                 ? {}
                 : { peakChamber: scanned.peakChamber }),
@@ -368,13 +392,15 @@ export class StatsService {
    * the end of it — the auto-stop's threshold, which the backfill cuts by so
    * that a live stop and a repaired legacy cook mean the same thing by "over".
    *
-   * A stored document written before the setting existed reads as the shipped
-   * default rather than as nothing, which would compare as "never silent" and
-   * leave every polluted cook exactly as it is.
+   * Read through the same function the live auto-stop reads it through, and
+   * read lean for the same reason: what is stored is what both must obey, and a
+   * document written before the field existed — or carrying a nonsense value
+   * that never went through the API's validation — must not make one of them
+   * cut a series where the other would not.
    */
   private async idleThresholdMs(): Promise<number> {
-    const stored = await this.settingsModel.findOne().exec();
-    return withSettingsDefaults(stored).autoStop.idleHours * MS_PER_HOUR;
+    const stored: unknown = await this.settingsModel.findOne().lean().exec();
+    return idleThresholdMsOf(stored);
   }
 
   /** How many finished cooks the archive holds, counted rather than read. */
