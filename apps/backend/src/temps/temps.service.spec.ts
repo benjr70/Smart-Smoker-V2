@@ -37,9 +37,32 @@ const orderedQuery = (seed: Temp[]) => {
   return chain;
 };
 
+/**
+ * A `find` stub that really applies the date bounds of the filter it is handed,
+ * so "the strays are gone" is a fact about the query the service builds rather
+ * than about the rows the stub was seeded with.
+ */
+const filteringFind = (seed: Temp[]) =>
+  jest.fn().mockImplementation((filter: any) => {
+    const bounds = filter?.date ?? {};
+    return orderedQuery(
+      seed.filter((row) => {
+        const at = new Date(row.date).getTime();
+        if (bounds.$gte !== undefined && at < new Date(bounds.$gte).getTime()) {
+          return false;
+        }
+        if (bounds.$lte !== undefined && at > new Date(bounds.$lte).getTime()) {
+          return false;
+        }
+        return true;
+      }),
+    );
+  });
+
 describe('TempsService', () => {
   let service: TempsService;
   let model: any;
+  let smokeModel: any;
   let currentSmoke: {
     readCurrent: jest.Mock;
     upsertCurrent: jest.Mock;
@@ -72,6 +95,10 @@ describe('TempsService', () => {
     model.insertMany = jest.fn().mockResolvedValue(mockTempRows);
     model.deleteMany = jest.fn().mockResolvedValue({ deletedCount: 5 });
 
+    smokeModel = {
+      findOne: jest.fn().mockImplementation(() => query(null)),
+    };
+
     currentSmoke = {
       readCurrent: jest.fn(),
       upsertCurrent: jest.fn(),
@@ -81,6 +108,7 @@ describe('TempsService', () => {
       providers: [
         TempsService,
         { provide: getModelToken('Temp'), useValue: model },
+        { provide: getModelToken('Smoke'), useValue: smokeModel },
         { provide: CurrentSmokeService, useValue: currentSmoke },
       ],
     }).compile();
@@ -349,6 +377,94 @@ describe('TempsService', () => {
         new Date('2026-08-02T13:14:00Z'),
         new Date('2026-08-02T13:15:21Z'),
       ]);
+    });
+  });
+
+  describe('getAllTempsById clipped to the cook window', () => {
+    const polluted: Temp[] = [
+      { ...mockTempRows[0], date: new Date('2026-08-20T09:00:00Z') },
+      { ...mockTempRows[0], date: new Date('2026-08-20T12:00:00Z') },
+      // Weeks of silence, then the box is powered on again and the readings
+      // land in the cook nobody ended.
+      { ...mockTempRows[0], date: new Date('2026-09-04T18:00:00Z') },
+    ];
+
+    beforeEach(() => {
+      model.find = filteringFind(polluted);
+    });
+
+    it('leaves out the readings taken outside a stamped cook', async () => {
+      smokeModel.findOne.mockImplementation(() =>
+        query({
+          tempsId: 'some-group',
+          startedAt: new Date('2026-08-20T08:00:00Z'),
+          finishedAt: new Date('2026-08-20T13:00:00Z'),
+        }),
+      );
+
+      const result = await service.getAllTempsById('some-group');
+
+      expect(result.map((temp) => temp.date)).toEqual([
+        new Date('2026-08-20T09:00:00Z'),
+        new Date('2026-08-20T12:00:00Z'),
+      ]);
+    });
+
+    /**
+     * A cook that was started but never finished — the reading is still coming
+     * in — knows where it began and not where it ends, so it is bounded at the
+     * end it knows.
+     */
+    it('bounds a cook that has only started at its start', async () => {
+      smokeModel.findOne.mockImplementation(() =>
+        query({
+          tempsId: 'some-group',
+          startedAt: new Date('2026-08-20T10:00:00Z'),
+        }),
+      );
+
+      const result = await service.getAllTempsById('some-group');
+
+      expect(result.map((temp) => temp.date)).toEqual([
+        new Date('2026-08-20T12:00:00Z'),
+        new Date('2026-09-04T18:00:00Z'),
+      ]);
+    });
+
+    /**
+     * The strays are hidden, not destroyed: reading a cook back must never
+     * change what the collection holds, so a mis-stamped cook loses nothing.
+     */
+    it('never removes or rewrites the readings it clips away', async () => {
+      model.updateMany = jest.fn();
+      smokeModel.findOne.mockImplementation(() =>
+        query({
+          tempsId: 'some-group',
+          startedAt: new Date('2026-08-20T08:00:00Z'),
+          finishedAt: new Date('2026-08-20T13:00:00Z'),
+        }),
+      );
+
+      await service.getAllTempsById('some-group');
+
+      expect(model.deleteMany).not.toHaveBeenCalled();
+      expect(model.updateMany).not.toHaveBeenCalled();
+    });
+
+    /**
+     * Every cook recorded before the stamps existed has none, and there is no
+     * way to tell which of its readings belong to it — so it reads back whole,
+     * exactly as it always did.
+     */
+    it('answers with the whole series when the cook carries no stamps', async () => {
+      smokeModel.findOne.mockImplementation(() =>
+        query({ tempsId: 'some-group' }),
+      );
+
+      const result = await service.getAllTempsById('some-group');
+
+      expect(model.find).toHaveBeenCalledWith({ tempsId: 'some-group' });
+      expect(result).toHaveLength(polluted.length);
     });
   });
 
