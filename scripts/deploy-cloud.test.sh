@@ -496,6 +496,74 @@ ${calls}"
 }
 
 #-------------------------------------------------------------------------------
+# Test 10: a healthy deploy runs post-deploy cleanup (dangling volumes + unused
+#          images) AFTER the health-check, so stale anonymous volumes / old
+#          image tags cannot accumulate and fill the disk.
+#-------------------------------------------------------------------------------
+test_success_runs_cleanup_after_health_check() {
+    echo "TEST: healthy deploy runs cleanup after health-check"
+
+    local tmpdir call_log mock_dir
+    tmpdir="$(mktemp -d)"
+    call_log="${tmpdir}/ssh-calls.log"
+    touch "${call_log}"
+    mock_dir="$(make_mock_bin)"
+    trap "rm -rf '${tmpdir}' '${mock_dir}'" RETURN
+
+    export SSH_CALL_LOG="${call_log}"
+    DEPLOY_WAIT_SECONDS=0 PATH="${mock_dir}:${PATH}" \
+        bash "${DEPLOY_SCRIPT}" smokecloud /opt/app cloud.docker-compose.yml v9.9.9 serve >/dev/null 2>&1
+
+    local calls l_health l_vol l_img
+    calls="$(cat "${call_log}")"
+    l_health="$(line_of "deployment-health-check.sh" "${call_log}")"
+    l_vol="$(line_of "docker volume prune -f" "${call_log}")"
+    l_img="$(line_of "docker image prune -af" "${call_log}")"
+
+    if [ -z "${l_vol}" ] || [ -z "${l_img}" ]; then
+        fail "healthy deploy must prune dangling volumes and unused images" "calls:
+${calls}"
+        return
+    fi
+    if [ -z "${l_health}" ] || [ "${l_vol}" -lt "${l_health}" ]; then
+        fail "cleanup must run after the health-check" "health=${l_health} cleanup=${l_vol}
+${calls}"
+        return
+    fi
+
+    pass "healthy deploy runs cleanup after health-check"
+}
+
+#-------------------------------------------------------------------------------
+# Test 11: a failed health-check must NOT run cleanup — the rollback path may
+#          still need the previous images.
+#-------------------------------------------------------------------------------
+test_failure_skips_cleanup() {
+    echo "TEST: failed health-check skips cleanup"
+
+    local tmpdir call_log mock_dir
+    tmpdir="$(mktemp -d)"
+    call_log="${tmpdir}/ssh-calls.log"
+    touch "${call_log}"
+    mock_dir="$(make_mock_bin)"
+    trap "rm -rf '${tmpdir}' '${mock_dir}'" RETURN
+
+    export SSH_CALL_LOG="${call_log}"
+    export FAIL_ON_MATCH="deployment-health-check.sh"
+    DEPLOY_WAIT_SECONDS=0 PATH="${mock_dir}:${PATH}" \
+        bash "${DEPLOY_SCRIPT}" smokecloud /opt/app cloud.docker-compose.yml v9.9.9 serve >/dev/null 2>&1
+    unset FAIL_ON_MATCH
+
+    if grep -qF "prune" "${call_log}"; then
+        fail "cleanup must NOT run when health-check fails" "calls:
+$(cat "${call_log}")"
+        return
+    fi
+
+    pass "failed health-check skips cleanup"
+}
+
+#-------------------------------------------------------------------------------
 # Run suite
 #-------------------------------------------------------------------------------
 echo "=========================================="
@@ -511,6 +579,8 @@ test_invalid_expose_mode_rejected
 test_missing_args_rejected
 test_backup_failure_aborts_before_down
 test_pull_failure_aborts_before_down
+test_success_runs_cleanup_after_health_check
+test_failure_skips_cleanup
 
 echo ""
 echo "=========================================="

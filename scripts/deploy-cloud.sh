@@ -97,7 +97,7 @@ main() {
     #    Fail-fast: if the backup fails we must NOT tear down the running
     #    deployment — there would be no safe rollback point. Abort before
     #    `compose down`.
-    log "Step 1/7: pre-deploy backup"
+    log "Step 1/8: pre-deploy backup"
     if ! remote_in_dir "COMPOSE_FILE='${COMPOSE_FILE}' bash scripts/deployment-backup.sh"; then
         log "❌ Pre-deploy backup failed — aborting before any container change"
         return 1
@@ -107,22 +107,22 @@ main() {
     #    Fail-fast: a failed pull means the new images are not present; tearing
     #    the stack down now would leave the host without a working deployment.
     #    Abort before `compose down`.
-    log "Step 2/7: pull images (version ${VERSION})"
+    log "Step 2/8: pull images (version ${VERSION})"
     if ! remote_in_dir "export VERSION='${VERSION}' && docker compose -f '${COMPOSE_FILE}' pull"; then
         log "❌ Image pull failed — aborting before any container change"
         return 1
     fi
 
     # 3. Stop existing containers (preserve volumes).
-    log "Step 3/7: compose down"
+    log "Step 3/8: compose down"
     remote_in_dir "docker compose -f '${COMPOSE_FILE}' down || true"
 
     # 4. Start new containers.
-    log "Step 4/7: compose up --force-recreate"
+    log "Step 4/8: compose up --force-recreate"
     remote_in_dir "export VERSION='${VERSION}' && docker compose -f '${COMPOSE_FILE}' up -d --force-recreate"
 
     # 5. Wait for services to initialize.
-    log "Step 5/7: wait ${DEPLOY_WAIT_SECONDS}s for services to initialize"
+    log "Step 5/8: wait ${DEPLOY_WAIT_SECONDS}s for services to initialize"
     if [ "${DEPLOY_WAIT_SECONDS}" -gt 0 ]; then
         sleep "${DEPLOY_WAIT_SECONDS}"
     fi
@@ -133,7 +133,7 @@ main() {
     #    Frontend: port 80 → HTTPS 443. Backend: port 3001 → HTTPS 8443.
     #    Reset is always via `tailscale serve reset` — that clears both serve
     #    and funnel state; `tailscale funnel reset` is not a valid subcommand.
-    log "Step 6/7: configure tailscale ${EXPOSE_MODE}"
+    log "Step 6/8: configure tailscale ${EXPOSE_MODE}"
     remote "tailscale serve reset || true"
     remote "tailscale ${EXPOSE_MODE} --bg 80"
     remote "tailscale ${EXPOSE_MODE} --bg --https=8443 3001"
@@ -141,8 +141,20 @@ main() {
     # 7. Health-check (remote, against the deployed host). On failure, roll the
     #    deployment back to the previous (last-good) version, then report
     #    failure to the caller.
-    log "Step 7/7: health-check"
+    log "Step 7/8: health-check"
     if remote_in_dir "bash scripts/deployment-health-check.sh localhost '${HEALTH_RETRIES}'"; then
+        # 8. Post-success cleanup. Only after a healthy deploy — never on the
+        #    rollback path, where the old images may still be needed.
+        #    - `volume prune` removes only dangling ANONYMOUS volumes (the
+        #      per-recreate leftovers that filled the prod disk in v1.11.0);
+        #      named/in-use volumes and bind mounts (the mongo data dir) are
+        #      never touched.
+        #    - `image prune -a` removes images not used by a running container.
+        #      Rollback restores from the pre-deploy tar backup, so old version
+        #      tags are not needed on the host.
+        #    Best-effort: cleanup failure must not fail a healthy deploy.
+        log "Step 8/8: post-deploy cleanup (dangling volumes + unused images)"
+        remote "docker volume prune -f && docker image prune -af" || log "⚠️  cleanup failed (non-fatal)"
         log "✅ Cloud deploy complete"
         return 0
     fi
