@@ -7,8 +7,6 @@ services:
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     image: benjr70/smart-smoker-backend:${VERSION:-latest}
-    volumes:
-      - /node_modules
     environment:
       - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
       - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
