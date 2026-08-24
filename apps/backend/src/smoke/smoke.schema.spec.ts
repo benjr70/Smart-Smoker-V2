@@ -44,6 +44,17 @@ describe('SmokeSchema constraints', () => {
     expect(doc.toObject().peakChamber).toBeUndefined();
   });
 
+  /**
+   * Reading a stored temperature series asks which cook owns it, by its
+   * `tempsId`, on every chart draw — so that lookup has to be an index seek
+   * rather than a scan of every cook there has ever been.
+   */
+  it('indexes cooks by the temperature series they own', () => {
+    const indexed = SmokeSchema.indexes().map((index) => index[0]);
+
+    expect(indexed).toContainEqual({ tempsId: 1 });
+  });
+
   it('rejects a status outside the SmokeStatus enum', () => {
     const doc = new SmokeModel({ status: 99 });
 

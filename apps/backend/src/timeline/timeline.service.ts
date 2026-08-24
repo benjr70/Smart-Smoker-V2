@@ -98,19 +98,41 @@ export class TimelineService {
   ) {}
 
   /**
-   * Record that a cook has begun, if it has not already.
+   * Record that a cook has begun, if it has not already — no later than the
+   * readings it has already taken.
    *
    * The condition is part of the write rather than a read beforehand, so a
    * second toggle — or two clients toggling at once — cannot move a start that
    * has already happened. Smoking is stopped and restarted freely during a
    * cook; only the first time is the time it started.
+   *
+   * The moment is not simply now, because this stamp is written after the
+   * state change that triggers it: a write that fails leaves a cook recording
+   * without a start, and the next switch-on stamps it hours in (see
+   * `StateService.toggleSmoking`). A cook cannot have begun after readings it
+   * had already taken, so its earliest reading is the latest a start may be
+   * stamped at, and a cook that has recorded nothing yet — every ordinary
+   * first press — starts now. Readings are only ever stored while smoking is
+   * on and every session gets its own series, so a series' first reading
+   * belongs to this cook and to no other.
+   *
+   * The read before the write is not the guard; the conditional write still
+   * is. It only decides what would be written, and two toggles racing on a
+   * cook with no start yet compute the same answer from the same series.
    */
   async stampStart(smokeId: string): Promise<void> {
+    const smoke = await this.smokeModel.findById(smokeId).exec();
+    if (!smoke || smoke.startedAt) {
+      return;
+    }
+    const now = new Date();
+    const firstReading = await this.edgeReading(smoke, 1);
+    const startedAt =
+      firstReading && firstReading.getTime() < now.getTime()
+        ? firstReading
+        : now;
     await this.smokeModel
-      .updateOne(
-        { _id: smokeId, startedAt: null },
-        { $set: { startedAt: new Date() } },
-      )
+      .updateOne({ _id: smokeId, startedAt: null }, { $set: { startedAt } })
       .exec();
   }
 

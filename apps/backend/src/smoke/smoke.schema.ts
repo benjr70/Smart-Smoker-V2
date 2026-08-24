@@ -105,3 +105,12 @@ export class Smoke {
 }
 
 export const SmokeSchema = SchemaFactory.createForClass(Smoke);
+
+/**
+ * Every read of a stored temperature series asks which cook owns it, by the
+ * series' id, so the chart of a finished cook can be bounded to the cook (see
+ * `TempsService.getAllTempsById`). Without this index that question is a scan
+ * of the whole cook archive, and it is asked on every chart draw — so history
+ * would get slower with every cook ever recorded.
+ */
+SmokeSchema.index({ tempsId: 1 });

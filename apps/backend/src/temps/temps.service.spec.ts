@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { NotFoundException } from '@nestjs/common';
 import { Types } from 'mongoose';
-import { TempsService } from './temps.service';
+import { CLOCK_SKEW_TOLERANCE_MS, TempsService } from './temps.service';
 import { tempSeriesFilter } from './temp-series.filter';
 import { Temp } from './temps.schema';
 import { TempDto } from './tempDto';
@@ -37,9 +37,55 @@ const orderedQuery = (seed: Temp[]) => {
   return chain;
 };
 
+/**
+ * A `find` stub that really applies the filter it is handed the way the store
+ * would — date bounds, `$or` branches and the missing-field semantics of
+ * `{ date: null }` included — so "the strays are gone" and "the undated rows
+ * survived" are facts about the query the service builds rather than about the
+ * rows the stub was seeded with.
+ */
+const matches = (row: Temp, filter: any): boolean =>
+  Object.entries(filter ?? {}).every(([field, condition]: [string, any]) => {
+    if (field === '$or') {
+      return condition.some((branch: any) => matches(row, branch));
+    }
+    if (field !== 'date') {
+      return true;
+    }
+    if (condition === null) {
+      return row.date === null || row.date === undefined;
+    }
+    const at = new Date(row.date).getTime();
+    if (Number.isNaN(at)) {
+      // A row with no date is outside every range, as it is in the store.
+      return false;
+    }
+    if (
+      condition.$gte !== undefined &&
+      at < new Date(condition.$gte).getTime()
+    ) {
+      return false;
+    }
+    if (
+      condition.$lte !== undefined &&
+      at > new Date(condition.$lte).getTime()
+    ) {
+      return false;
+    }
+    return true;
+  });
+
+const filteringFind = (seed: Temp[]) =>
+  jest
+    .fn()
+    .mockImplementation((filter: any) =>
+      orderedQuery(seed.filter((row) => matches(row, filter))),
+    );
+
 describe('TempsService', () => {
   let service: TempsService;
   let model: any;
+  let smokeModel: any;
   let currentSmoke: {
     readCurrent: jest.Mock;
     upsertCurrent: jest.Mock;
@@ -72,6 +118,10 @@ describe('TempsService', () => {
     model.insertMany = jest.fn().mockResolvedValue(mockTempRows);
     model.deleteMany = jest.fn().mockResolvedValue({ deletedCount: 5 });
 
+    smokeModel = {
+      findOne: jest.fn().mockImplementation(() => query(null)),
+    };
+
     currentSmoke = {
       readCurrent: jest.fn(),
       upsertCurrent: jest.fn(),
@@ -81,6 +131,7 @@ describe('TempsService', () => {
       providers: [
         TempsService,
         { provide: getModelToken('Temp'), useValue: model },
+        { provide: getModelToken('Smoke'), useValue: smokeModel },
         { provide: CurrentSmokeService, useValue: currentSmoke },
       ],
     }).compile();
@@ -349,6 +400,211 @@ describe('TempsService', () => {
         new Date('2026-08-02T13:14:00Z'),
         new Date('2026-08-02T13:15:21Z'),
       ]);
+    });
+  });
+
+  describe('getAllTempsById clipped to the cook window', () => {
+    const polluted: Temp[] = [
+      { ...mockTempRows[0], date: new Date('2026-08-20T09:00:00Z') },
+      { ...mockTempRows[0], date: new Date('2026-08-20T12:00:00Z') },
+      // Weeks of silence, then the box is powered on again and the readings
+      // land in the cook nobody ended.
+      { ...mockTempRows[0], date: new Date('2026-09-04T18:00:00Z') },
+    ];
+
+    beforeEach(() => {
+      model.find = filteringFind(polluted);
+    });
+
+    it('leaves out the readings taken outside a stamped cook', async () => {
+      smokeModel.findOne.mockImplementation(() =>
+        query({
+          tempsId: 'some-group',
+          startedAt: new Date('2026-08-20T08:00:00Z'),
+          finishedAt: new Date('2026-08-20T13:00:00Z'),
+        }),
+      );
+
+      const result = await service.getAllTempsById('some-group');
+
+      expect(result.map((temp) => temp.date)).toEqual([
+        new Date('2026-08-20T09:00:00Z'),
+        new Date('2026-08-20T12:00:00Z'),
+      ]);
+    });
+
+    /**
+     * The start bounds the series from below for the same reason the finish
+     * bounds it from above: a reading taken before the cook began is not part
+     * of it. The start is stamped no later than the cook's own first reading
+     * (see `TimelineService.stampStart`), so nothing the cook recorded can
+     * fall below its own start.
+     */
+    it('leaves out the readings taken before a stamped cook began', async () => {
+      smokeModel.findOne.mockImplementation(() =>
+        query({
+          tempsId: 'some-group',
+          startedAt: new Date('2026-08-20T11:00:00Z'),
+          finishedAt: new Date('2026-08-20T13:00:00Z'),
+        }),
+      );
+
+      const result = await service.getAllTempsById('some-group');
+
+      expect(result.map((temp) => temp.date)).toEqual([
+        new Date('2026-08-20T12:00:00Z'),
+      ]);
+    });
+
+    /**
+     * The start is the server's clock and the readings carry the smoker's, so
+     * the lower bound is as generous as the upper one: a reading dated a
+     * little before the press of Start Smoking is the head of the cook read by
+     * a watch that runs slow, not a stray from before it.
+     */
+    it('keeps readings dated just before the start by a slow device clock', async () => {
+      const startedAt = new Date('2026-08-20T09:05:00Z');
+      smokeModel.findOne.mockImplementation(() =>
+        query({
+          tempsId: 'some-group',
+          startedAt,
+          finishedAt: new Date('2026-08-20T13:00:00Z'),
+        }),
+      );
+
+      const result = await service.getAllTempsById('some-group');
+
+      expect(result.map((temp) => temp.date)).toEqual([
+        new Date('2026-08-20T09:00:00Z'),
+        new Date('2026-08-20T12:00:00Z'),
+      ]);
+    });
+
+    /**
+     * A cook that has started and not finished is the one running now; the
+     * bound it has is the one it can be given.
+     */
+    it('bounds a cook that has only started by its start alone', async () => {
+      smokeModel.findOne.mockImplementation(() =>
+        query({
+          tempsId: 'some-group',
+          startedAt: new Date('2026-08-20T10:00:00Z'),
+        }),
+      );
+
+      const result = await service.getAllTempsById('some-group');
+
+      expect(result.map((temp) => temp.date)).toEqual([
+        new Date('2026-08-20T12:00:00Z'),
+        new Date('2026-09-04T18:00:00Z'),
+      ]);
+    });
+
+    /**
+     * The finish may be stamped by the server's clock (the End Smoke wizard)
+     * while the readings carry the smoker's, and the two are not the same
+     * clock. A reading a little past the finish is the tail of the cook read
+     * by a watch that runs fast, not a stray weeks later.
+     */
+    it('keeps readings dated just past the finish by a fast device clock', async () => {
+      const finishedAt = new Date('2026-08-20T12:00:00Z');
+      model.find = filteringFind([
+        ...polluted,
+        {
+          ...mockTempRows[0],
+          date: new Date(finishedAt.getTime() + CLOCK_SKEW_TOLERANCE_MS / 2),
+        },
+      ]);
+      smokeModel.findOne.mockImplementation(() =>
+        query({ tempsId: 'some-group', finishedAt }),
+      );
+
+      const result = await service.getAllTempsById('some-group');
+
+      expect(result.map((temp) => temp.date)).toEqual([
+        new Date('2026-08-20T09:00:00Z'),
+        finishedAt,
+        new Date(finishedAt.getTime() + CLOCK_SKEW_TOLERANCE_MS / 2),
+      ]);
+    });
+
+    /**
+     * A device whose clock is wrong by more than any tolerance would otherwise
+     * have every one of its readings fall outside the window, and the chart
+     * would draw nothing at all. A series that cannot be clipped sensibly is
+     * better shown whole than not shown.
+     */
+    it('answers with the whole series rather than nothing when every reading falls outside', async () => {
+      smokeModel.findOne.mockImplementation(() =>
+        query({
+          tempsId: 'some-group',
+          finishedAt: new Date('2020-01-01T00:00:00Z'),
+        }),
+      );
+
+      const result = await service.getAllTempsById('some-group');
+
+      expect(result).toHaveLength(polluted.length);
+    });
+
+    /**
+     * The archive holds readings stored without a date. They cannot be placed
+     * inside or outside the window, and a range predicate answers "outside" for
+     * every one of them — which would empty the chart of a legacy cook the
+     * moment something stamped a finish on it.
+     */
+    it('keeps the readings that were stored without a date', async () => {
+      const undated = { ...mockTempRows[0], date: undefined as any };
+      model.find = filteringFind([...polluted, undated]);
+      smokeModel.findOne.mockImplementation(() =>
+        query({
+          tempsId: 'some-group',
+          finishedAt: new Date('2026-08-20T13:00:00Z'),
+        }),
+      );
+
+      const result = await service.getAllTempsById('some-group');
+
+      expect(result).toContain(undated);
+      expect(result).not.toContainEqual(
+        expect.objectContaining({ date: new Date('2026-09-04T18:00:00Z') }),
+      );
+    });
+
+    /**
+     * The strays are hidden, not destroyed: reading a cook back must never
+     * change what the collection holds, so a mis-stamped cook loses nothing.
+     */
+    it('never removes or rewrites the readings it clips away', async () => {
+      model.updateMany = jest.fn();
+      smokeModel.findOne.mockImplementation(() =>
+        query({
+          tempsId: 'some-group',
+          startedAt: new Date('2026-08-20T08:00:00Z'),
+          finishedAt: new Date('2026-08-20T13:00:00Z'),
+        }),
+      );
+
+      await service.getAllTempsById('some-group');
+
+      expect(model.deleteMany).not.toHaveBeenCalled();
+      expect(model.updateMany).not.toHaveBeenCalled();
+    });
+
+    /**
+     * Every cook recorded before the stamps existed has none, and there is no
+     * way to tell which of its readings belong to it — so it reads back whole,
+     * exactly as it always did.
+     */
+    it('answers with the whole series when the cook carries no stamps', async () => {
+      smokeModel.findOne.mockImplementation(() =>
+        query({ tempsId: 'some-group' }),
+      );
+
+      const result = await service.getAllTempsById('some-group');
+
+      expect(model.find).toHaveBeenCalledWith({ tempsId: 'some-group' });
+      expect(result).toHaveLength(polluted.length);
     });
   });
 

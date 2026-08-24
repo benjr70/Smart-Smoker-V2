@@ -647,12 +647,46 @@ describe('TimelineService', () => {
 
   describe('stampStart', () => {
     it('records when the cook started', async () => {
+      temps.length = 0;
       const before = Date.now();
 
       await service.stampStart('smoke-id');
 
       const { startedAt } = await service.getTimeline('smoke-id');
       expect(startedAt).not.toBeNull();
+      expect(startedAt.getTime()).toBeGreaterThanOrEqual(before);
+      expect(startedAt.getTime()).toBeLessThanOrEqual(Date.now());
+    });
+
+    /**
+     * The stamp is written after the state that triggers it, so a failed write
+     * is deferred to the next switch-on — hours into a cook that has been
+     * recording all along. Taken at face value that start would sit in the
+     * middle of its own cook, and everything that trusts it (the chart bound,
+     * the duration) would call the cook's first hours something else. A cook
+     * cannot have begun after the readings it has already taken, so the
+     * earliest of them is the latest a start may be stamped at.
+     */
+    it('never stamps a start later than the readings the cook has already taken', async () => {
+      await service.stampStart('smoke-id');
+
+      expect((await service.getTimeline('smoke-id')).startedAt).toEqual(
+        new Date('2026-08-01T10:05:00.000Z'),
+      );
+    });
+
+    /**
+     * A device whose clock runs ahead dates its readings in the future; the
+     * cook still started when somebody pressed the button, not later.
+     */
+    it('stamps the moment of the press when the readings are dated ahead of it', async () => {
+      temps.length = 0;
+      temps.push(reading('2099-01-01T00:00:00.000Z', '210', '80'));
+      const before = Date.now();
+
+      await service.stampStart('smoke-id');
+
+      const { startedAt } = await service.getTimeline('smoke-id');
       expect(startedAt.getTime()).toBeGreaterThanOrEqual(before);
       expect(startedAt.getTime()).toBeLessThanOrEqual(Date.now());
     });
