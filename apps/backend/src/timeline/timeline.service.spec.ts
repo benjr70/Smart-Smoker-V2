@@ -812,6 +812,96 @@ describe('TimelineService', () => {
     });
   });
 
+  describe('cookWindowsOf', () => {
+    const HOUR = 60 * 60 * 1000;
+    const OPENED = Date.parse('2026-08-01T06:00:00.000Z');
+
+    /** A reading of one series, `hours` after the fixture's opening moment. */
+    const row = (series: string, hours: number, chamber: string): FakeDoc => ({
+      tempsId: series,
+      date: new Date(OPENED + hours * HOUR),
+      ChamberTemp: chamber,
+    });
+
+    beforeEach(async () => {
+      temps.length = 0;
+      // One cook that ran three hours and was then polluted by a firing of the
+      // box a week later, and one that simply ran three hours.
+      temps.push(
+        row('polluted', 0, '225'),
+        row('polluted', 1.5, '240'),
+        row('polluted', 3, '230'),
+        row('polluted', 7 * 24, '450'),
+        row('clean', 0, '200'),
+        row('clean', 3, '260'),
+      );
+      service = await build();
+    });
+
+    it('cuts each series at its own silence and scans its peak inside it', async () => {
+      const windows = await service.cookWindowsOf(
+        ['polluted', 'clean'],
+        6 * HOUR,
+      );
+
+      expect(windows.get('polluted')).toEqual({
+        startedAt: new Date(OPENED),
+        finishedAt: new Date(OPENED + 3 * HOUR),
+        peakChamber: 240,
+      });
+      expect(windows.get('clean')).toEqual({
+        startedAt: new Date(OPENED),
+        finishedAt: new Date(OPENED + 3 * HOUR),
+        peakChamber: 260,
+      });
+    });
+
+    it('asks the store for the three fields it reads, and for no sorting', async () => {
+      type Chain = {
+        applied: { sort?: FakeDoc; lean?: boolean; select?: string };
+      };
+      const issued: { filter: FakeDoc; chain: Chain }[] = [];
+      const model = models.temps as unknown as Record<string, unknown>;
+      const find = (model.find as (filter: FakeDoc) => Chain).bind(
+        models.temps,
+      );
+      model.find = (filter: FakeDoc) => {
+        const chain = find(filter);
+        issued.push({ filter, chain });
+        return chain;
+      };
+
+      await service.cookWindowsOf(['polluted', 'clean'], 6 * HOUR);
+
+      expect(issued).toHaveLength(1);
+      expect(issued[0].filter).toEqual({
+        tempsId: { $in: ['polluted', 'clean'] },
+        date: { $ne: null },
+      });
+      // Sorting a match across many series by date alone cannot be served by
+      // the `{ tempsId: 1, date: -1 }` index, and Mongo aborts an in-memory
+      // sort at 32MB — which a fortnight-long series reaches. The window puts
+      // the moments in order itself.
+      expect(issued[0].chain.applied.sort).toBeUndefined();
+      expect(issued[0].chain.applied.select).toBe('tempsId date ChamberTemp');
+      expect(issued[0].chain.applied.lean).toBe(true);
+    });
+
+    it('answers for a whole archive in one read, and for nothing without one', async () => {
+      const reads = models.temps.docs.length;
+
+      expect(await service.cookWindowsOf([], 6 * HOUR)).toEqual(new Map());
+      const windows = await service.cookWindowsOf(
+        ['polluted', 'clean', 'never-recorded'],
+        6 * HOUR,
+      );
+
+      expect(windows.has('never-recorded')).toBe(false);
+      // Nothing was written: the readings are read, never touched.
+      expect(models.temps.docs).toHaveLength(reads);
+    });
+  });
+
   describe('stampFinishAt', () => {
     /** Where the real cook ended: its last reading before the box went quiet. */
     const COOK_ENDED = new Date('2026-08-01T15:55:00.000Z');

@@ -16,6 +16,7 @@ import {
   needsHistoricalRate,
 } from './completion-estimate';
 import { CurrentCook, isSameMeat, sampleHistoricalRate } from './history-rate';
+import { CookWindow, cookWindow, peakChamberIn } from './cook-window';
 import {
   deriveTimeline,
   durationBetween,
@@ -41,6 +42,14 @@ import { primaryWatchedProbe, primaryWatchedTarget } from './watched-probe';
  * of half an hour of that, which is longer than any of it lasts.
  */
 const OPENING_ROWS = 200;
+
+/**
+ * The only fields a cook's window is cut from: which series a row belongs to,
+ * when it was read, and what the chamber said. A projection rather than the
+ * whole row because this is the one read that walks a series end to end, and a
+ * row carries three more probes nothing here looks at.
+ */
+const WINDOW_FIELDS = 'tempsId date ChamberTemp';
 
 /** The fields a series' peaks are asked for, and the shape they come back in. */
 const PEAK_FIELDS = TEMP_FIELDS;
@@ -275,6 +284,69 @@ export class TimelineService {
         .filter((row) => typeof row.peak === 'number' && isFinite(row.peak))
         .map((row) => [String(row._id), row.peak as number]),
     );
+  }
+
+  /**
+   * Where each of many series' cook actually ran, and how hot it got while it
+   * did — everything the legacy backfill has to know about a polluted cook,
+   * read in one pass over its rows.
+   *
+   * The window and the peak come from the same read deliberately. They cannot
+   * be asked for separately without asking twice: the bound the peak is scanned
+   * to *is* the window, which is not known until the rows have been walked, and
+   * a grouped peak query takes one bound for every series it is given while
+   * each of these cooks has a different one. One read per backfill, rather than
+   * one read plus a query per cook.
+   *
+   * The rows themselves are pulled across, which every other read here refuses
+   * to do — but this is the read that has to see the shape of the series rather
+   * than its ends, a gap is only visible between two adjacent rows, and it
+   * happens at most once per cook ever: the stamps it produces are what keep
+   * the next rebuild from asking again.
+   *
+   * What it does refuse is to make the store do that work. Nothing is sorted:
+   * the only index over these rows is `{ tempsId: 1, date: -1 }`, so ordering a
+   * match across many series by date alone cannot be served from it and Mongo
+   * would sort the whole result in memory — which, on the very archive this
+   * exists to repair (a series holding a fortnight of readings, every unstamped
+   * cook of it asked for at once, from inside a `GET /stats`), is exactly the
+   * shape of read that trips the 32MB sort limit and aborts. The ordering is not
+   * needed either: the window is cut from moments this puts in order itself, and
+   * the peak is taken by a predicate over the window rather than by position.
+   * Only three fields are asked for, read lean, so what does come back is the
+   * smallest thing that can answer the question.
+   *
+   * A series with no dated rows is absent from the answer rather than present
+   * with an empty window.
+   */
+  async cookWindowsOf(
+    tempsIds: string[],
+    gapMs: number,
+  ): Promise<Map<string, ScannedCookWindow>> {
+    if (tempsIds.length === 0) {
+      return new Map();
+    }
+    const rows = await this.tempModel
+      .find({ tempsId: { $in: tempsIds }, date: { $ne: null } })
+      .select(WINDOW_FIELDS)
+      .lean()
+      .exec();
+    const bySeries = new Map<string, TimelineReading[]>();
+    (rows as (TimelineReading & { tempsId?: unknown })[]).forEach((row) => {
+      const key = String(row.tempsId);
+      bySeries.set(key, [...(bySeries.get(key) ?? []), row]);
+    });
+    const windows = new Map<string, ScannedCookWindow>();
+    bySeries.forEach((series, key) => {
+      const window = cookWindow(series, gapMs);
+      if (window) {
+        windows.set(key, {
+          ...window,
+          peakChamber: peakChamberIn(series, window),
+        });
+      }
+    });
+    return windows;
   }
 
   /**
@@ -726,6 +798,16 @@ export class TimelineService {
       .sort({ date: 1 })
       .exec();
   }
+}
+
+/**
+ * A cook's window with the peak its chamber reached inside it — what
+ * {@link TimelineService.cookWindowsOf} answers, and what the statistics
+ * backfill stamps onto a cook recorded before either was written down.
+ */
+export interface ScannedCookWindow extends CookWindow {
+  /** The hottest chamber reading in the window, absent where it held none. */
+  peakChamber: number | null;
 }
 
 /** A stored reading as {@link TimelineService.lastReading} reads one. */
