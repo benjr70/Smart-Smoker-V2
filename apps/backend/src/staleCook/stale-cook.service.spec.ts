@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Types } from 'mongoose';
@@ -377,6 +378,58 @@ describe('StaleCookService', () => {
 
       expect(stopped).toMatchObject({ smokeId: 'smoke-id' });
       expect(storedState().smoking).toBe(false);
+    });
+
+    // A push endpoint that accepts the connection and then says nothing is the
+    // failure the try/catch cannot see: nothing rejects, it simply never
+    // answers. The read that noticed the zombie — a client polling the current
+    // timeline — would hang behind it until TCP gave up, so the announcement
+    // must not be on the caller's critical path at all.
+    it('stops the cook without waiting for a push that never answers', async () => {
+      push.notify.mockReturnValue(new Promise(() => undefined));
+
+      const stopped = await service.autoStopIfStale(NEXT_DAY);
+
+      expect(stopped).toMatchObject({ smokeId: 'smoke-id' });
+      expect(storedState().smoking).toBe(false);
+      expect(storedSmoke().finishedAt).toEqual(
+        new Date('2026-08-01T15:55:00.000Z'),
+      );
+      expect(push.notify).toHaveBeenCalledTimes(1);
+    }, 2000);
+
+    // Left to itself, a send to an endpoint that never answers would sit in
+    // memory until TCP gave up and, more to the point, would fail silently.
+    // The deadline turns "never answered" into the same reported failure as a
+    // refusal, and its rejection is handled where every other push failure is —
+    // an unhandled one would take the process down long after the request that
+    // triggered it was served.
+    it('gives up on a push that never answers and reports it', async () => {
+      jest.useFakeTimers({
+        doNotFake: ['performance', 'setImmediate'],
+      } as never);
+      const unhandled: unknown[] = [];
+      const record = (reason: unknown): number => unhandled.push(reason);
+      process.on('unhandledRejection', record);
+      const warn = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+      try {
+        push.notify.mockReturnValue(new Promise(() => undefined));
+
+        await service.autoStopIfStale(NEXT_DAY);
+        jest.advanceTimersByTime(60_000);
+        await new Promise(setImmediate);
+
+        expect(warn).toHaveBeenCalledWith(
+          expect.stringContaining('no push could be delivered'),
+        );
+        expect(unhandled).toEqual([]);
+      } finally {
+        process.off('unhandledRejection', record);
+        warn.mockRestore();
+        jest.useRealTimers();
+      }
     });
 
     it('says nothing when the readings are still arriving', async () => {
