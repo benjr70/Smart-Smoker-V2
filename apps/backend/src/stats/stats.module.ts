@@ -1,5 +1,9 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import {
+  ApplicationSettings,
+  ApplicationSettingsSchema,
+} from '../appSettings/app-settings.schema';
 import { PostSmokeSchema } from '../postSmoke/postSmoke.schema';
 import { PreSmoke, PreSmokeSchema } from '../presmoke/presmoke.schema';
 import { RatingsSchema } from '../ratings/ratings.schema';
@@ -28,6 +32,12 @@ import { StatsService } from './stats.service';
       { name: 'SmokeProfile', schema: SmokeProFileSchema },
       { name: 'PostSmoke', schema: PostSmokeSchema },
       { name: 'Ratings', schema: RatingsSchema },
+      // The threshold a silent series is cut at, which the legacy backfill
+      // shares with the live auto-stop.
+      {
+        name: ApplicationSettings.name,
+        schema: ApplicationSettingsSchema,
+      },
       // The statistics themselves, stored: the read serves this document and
       // recomputes the archive only when it says it has gone stale.
       { name: StatsSnapshot.name, schema: StatsSnapshotSchema },

@@ -812,6 +812,124 @@ describe('TimelineService', () => {
     });
   });
 
+  describe('cookWindowsOf', () => {
+    const HOUR = 60 * 60 * 1000;
+    const OPENED = Date.parse('2026-08-01T06:00:00.000Z');
+
+    /** A reading of one series, `hours` after the fixture's opening moment. */
+    const row = (series: string, hours: number, chamber: string): FakeDoc => ({
+      tempsId: series,
+      date: new Date(OPENED + hours * HOUR),
+      ChamberTemp: chamber,
+    });
+
+    beforeEach(async () => {
+      temps.length = 0;
+      // One cook that ran three hours and was then polluted by a firing of the
+      // box a week later, and one that simply ran three hours.
+      temps.push(
+        row('polluted', 0, '225'),
+        row('polluted', 1.5, '240'),
+        row('polluted', 3, '230'),
+        row('polluted', 7 * 24, '450'),
+        row('clean', 0, '200'),
+        row('clean', 3, '260'),
+      );
+      service = await build();
+    });
+
+    it('cuts each series at its own silence and scans its peak inside it', async () => {
+      const windows = await service.cookWindowsOf(
+        ['polluted', 'clean'],
+        6 * HOUR,
+      );
+
+      expect(windows.get('polluted')).toEqual({
+        startedAt: new Date(OPENED),
+        finishedAt: new Date(OPENED + 3 * HOUR),
+        peakChamber: 240,
+        // The stray firing a week later: outside the window, but reported, so
+        // the caller can say what the cut set aside.
+        seriesEndsAt: new Date(OPENED + 7 * 24 * HOUR),
+      });
+      expect(windows.get('clean')).toEqual({
+        startedAt: new Date(OPENED),
+        finishedAt: new Date(OPENED + 3 * HOUR),
+        peakChamber: 260,
+        seriesEndsAt: new Date(OPENED + 3 * HOUR),
+      });
+    });
+
+    it('walks one series at a time, asking only for when each row was read', async () => {
+      type Chain = {
+        applied: { sort?: FakeDoc; lean?: boolean; select?: string };
+      };
+      const issued: { filter: FakeDoc; chain: Chain }[] = [];
+      const model = models.temps as unknown as Record<string, unknown>;
+      const find = (model.find as (filter: FakeDoc) => Chain).bind(
+        models.temps,
+      );
+      model.find = (filter: FakeDoc) => {
+        const chain = find(filter);
+        issued.push({ filter, chain });
+        return chain;
+      };
+
+      await service.cookWindowsOf(['polluted', 'clean'], 6 * HOUR);
+
+      // One read per series rather than one over all of them: what is held at
+      // any moment is a single cook's rows, whatever the archive holds.
+      expect(issued.map((read) => read.filter)).toEqual([
+        { tempsId: 'polluted', date: { $ne: null } },
+        { tempsId: 'clean', date: { $ne: null } },
+      ]);
+      // Sorting is left undone: the window puts the moments in order itself,
+      // which keeps a fortnight-long series off Mongo's 32MB in-memory sort.
+      expect(issued[0].chain.applied.sort).toBeUndefined();
+      expect(issued[0].chain.applied.select).toBe('date');
+      expect(issued[0].chain.applied.lean).toBe(true);
+    });
+
+    it('takes each peak from the bounded peak aggregation, not a second scanner', async () => {
+      const pipelines: FakeDoc[][] = [];
+      const model = models.temps as unknown as Record<string, unknown>;
+      const aggregate = (
+        model.aggregate as (pipeline: FakeDoc[]) => { exec(): unknown }
+      ).bind(models.temps);
+      model.aggregate = (pipeline: FakeDoc[]) => {
+        pipelines.push(pipeline);
+        return aggregate(pipeline);
+      };
+
+      await service.cookWindowsOf(['polluted'], 6 * HOUR);
+
+      // The one implementation of "the hottest chamber in a window" there is,
+      // bounded to the window this cut — so a backfilled peak and a peak
+      // stamped at finish can never read the same rows differently.
+      expect(pipelines).toHaveLength(1);
+      expect(pipelines[0][0]).toEqual({
+        $match: {
+          tempsId: { $in: ['polluted'] },
+          date: { $ne: null, $lte: new Date(OPENED + 3 * HOUR) },
+        },
+      });
+    });
+
+    it('answers for a series that never recorded, and touches no reading', async () => {
+      const reads = models.temps.docs.length;
+
+      expect(await service.cookWindowsOf([], 6 * HOUR)).toEqual(new Map());
+      const windows = await service.cookWindowsOf(
+        ['polluted', 'clean', 'never-recorded'],
+        6 * HOUR,
+      );
+
+      expect(windows.has('never-recorded')).toBe(false);
+      // Nothing was written: the readings are read, never touched.
+      expect(models.temps.docs).toHaveLength(reads);
+    });
+  });
+
   describe('stampFinishAt', () => {
     /** Where the real cook ended: its last reading before the box went quiet. */
     const COOK_ENDED = new Date('2026-08-01T15:55:00.000Z');

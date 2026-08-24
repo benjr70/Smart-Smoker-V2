@@ -81,6 +81,21 @@ export class Smoke {
   @Prop()
   peakChamberScanned?: boolean;
 
+  /**
+   * Whether this cook's finish was derived from its readings by the legacy
+   * cook-window backfill, rather than observed when the cook was ended.
+   *
+   * The backfill cuts a series at the first silence longer than the auto-stop
+   * threshold, which is almost always the box being fired up again weeks after
+   * a session nobody ended — but a cook whose readings genuinely stopped for
+   * that long (the backend down, the box off wifi overnight) is cut the same
+   * way. This mark is what tells the two apart afterwards: no rows are ever
+   * deleted, so a cook carrying it can be re-derived from its readings, and one
+   * without it carries a finish somebody or something actually recorded.
+   */
+  @Prop()
+  cookWindowBackfilled?: boolean;
+
   @Prop({
     required: true,
     type: Number,

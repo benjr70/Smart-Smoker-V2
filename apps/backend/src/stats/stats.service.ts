@@ -1,12 +1,20 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { idleThresholdMsOf } from '../appSettings/auto-stop-threshold';
+import {
+  ApplicationSettings,
+  ApplicationSettingsDocument,
+} from '../appSettings/app-settings.schema';
 import { PostSmokeDocument } from '../postSmoke/postSmoke.schema';
 import { PreSmoke, PreSmokeDocument } from '../presmoke/presmoke.schema';
 import { RatingsDocument } from '../ratings/ratings.schema';
 import { SmokeDocument, SmokeStatus } from '../smoke/smoke.schema';
 import { SmokeProFileDocument } from '../smokeProfile/smokeProfile.schema';
-import { TimelineService } from '../timeline/timeline.service';
+import {
+  ScannedCookWindow,
+  TimelineService,
+} from '../timeline/timeline.service';
 import { CookRecord, aggregateStats } from './stats.aggregate';
 import { StatsDto } from './stats.dto';
 import { StatsSnapshot, StatsSnapshotDocument } from './stats.schema';
@@ -24,6 +32,36 @@ interface PeakStamp {
     filter: { _id: unknown };
     update: {
       $set: { peakChamberScanned: true; peakChamber?: number };
+    };
+  };
+}
+
+/**
+ * One cook's window as a bulk write carries it: the two stamps that say when it
+ * ran, and the peak re-scanned inside them.
+ *
+ * Spelled out for the same reason {@link PeakStamp} is — Mongoose's own bulk
+ * operation type is wide enough that resolving an inline literal against it is
+ * the most expensive thing in this file for the compiler.
+ */
+interface WindowStamp {
+  updateOne: {
+    filter: { _id: unknown };
+    update: {
+      $set: {
+        startedAt: Date;
+        finishedAt: Date;
+        peakChamberScanned: true;
+        cookWindowBackfilled: true;
+        peakChamber?: number;
+      };
+      /**
+       * How a peak that came from outside the cook's window is taken off it —
+       * see {@link StatsService.stampCookWindows}. A stamp that found one
+       * inside the window carries no `$unset` at all, because Mongo rejects an
+       * update that both sets and unsets the same path.
+       */
+      $unset?: { peakChamber: '' };
     };
   };
 }
@@ -49,6 +87,8 @@ const byId = <T extends { _id?: unknown }>(docs: T[]): Map<string, T> =>
  */
 @Injectable()
 export class StatsService {
+  private readonly logger = new Logger(StatsService.name);
+
   constructor(
     @InjectModel('Smoke') private readonly smokeModel: Model<SmokeDocument>,
     @InjectModel(PreSmoke.name)
@@ -61,6 +101,13 @@ export class StatsService {
     private readonly ratingsModel: Model<RatingsDocument>,
     @InjectModel(StatsSnapshot.name)
     private readonly snapshotModel: Model<StatsSnapshotDocument>,
+    /**
+     * Where the silence that ends a cook is configured. The backfill cuts a
+     * polluted series at the same threshold the live auto-stop uses, so the two
+     * cannot call different gaps "the cook is over".
+     */
+    @InjectModel(ApplicationSettings.name)
+    private readonly settingsModel: Model<ApplicationSettingsDocument>,
     private readonly timelineService: TimelineService,
   ) {}
 
@@ -212,6 +259,150 @@ export class StatsService {
     return stamped;
   }
 
+  /**
+   * Give every finished cook that was never stamped with a finish the window
+   * its readings say it ran in, and re-scan its peak inside that window.
+   *
+   * The damage this repairs is a session nobody ended: its smoking flag stayed
+   * on, so the next power-on of the box — days or weeks later, sometimes just to
+   * grill burgers — recorded into the same series, and a cook whose length is
+   * derived from the two ends of its series is then reported as having run for
+   * a fortnight. The readings themselves say where the cook stopped: they arrive
+   * every few seconds while one runs, so the first silence longer than the
+   * auto-stop threshold is the end of it (see the `cook-window` module).
+   *
+   * The peak is re-scanned even for a cook that already carries one, and this
+   * is the one place that overwrites a stamped peak: the peaks backfilled
+   * before this existed were scanned over the whole polluted series, so a grill
+   * firing at 400°F stands recorded as the peak of a 225°F brisket smoke. A
+   * peak scanned inside the cook's own window is the only one that is a fact
+   * about the cook.
+   *
+   * Where the window holds no readable chamber reading the stored peak is
+   * *removed* rather than left standing. Leaving it would keep the one number
+   * this pass exists to correct — a peak that can only have come from outside
+   * the window, since inside it there was nothing to read — and would keep it
+   * unchallengeable, because the same write records the cook as scanned. It
+   * would also make the repair disagree with itself: this rebuild reports the
+   * cook as having no peak while the next one reads the stray value back off
+   * the document. The cook holds no record instead, which is what a cook that
+   * recorded nothing readable has always held.
+   *
+   * Nothing is deleted. The stray rows stay exactly where they are and are
+   * excluded by the stamps, so a repair can always be revisited against the raw
+   * data.
+   *
+   * Idempotent by construction: what it writes is what excludes a cook from the
+   * next run of it, so a second rebuild over a stamped archive reads no
+   * readings and writes nothing.
+   *
+   * Returns what it stamped, keyed by cook, so the caller need not re-read the
+   * documents it already holds.
+   */
+  private async stampCookWindows(
+    smokes: SmokeDocument[],
+  ): Promise<Map<string, ScannedCookWindow>> {
+    // The finish is what the pollution corrupts and what the window is cut to,
+    // so a cook that carries one has been stopped honestly — by the user or by
+    // the auto-stop — and is left alone. A start it may still be missing is
+    // filled in below from the same window.
+    const unstamped = smokes.filter(
+      (smoke) => Boolean(smoke.tempsId) && !smoke.finishedAt,
+    );
+    if (unstamped.length === 0) {
+      return new Map();
+    }
+    const windows = await this.timelineService.cookWindowsOf(
+      [...new Set(unstamped.map((smoke) => String(smoke.tempsId)))],
+      await this.idleThresholdMs(),
+    );
+    const stamped = new Map<string, ScannedCookWindow>();
+    const stamps: WindowStamp[] = [];
+    unstamped.forEach((smoke) => {
+      const window = windows.get(String(smoke.tempsId));
+      if (!window) {
+        // A cook whose series holds no dated reading has no window to stamp,
+        // and is left as it was: there is nothing to say about when it ran.
+        return;
+      }
+      const scanned: ScannedCookWindow = {
+        // A start that was recorded stands: it is a fact about the cook, where
+        // the window's start is only its first surviving reading.
+        startedAt: smoke.startedAt ?? window.startedAt,
+        finishedAt: window.finishedAt,
+        peakChamber: window.peakChamber,
+        seriesEndsAt: window.seriesEndsAt,
+      };
+      stamped.set(String(smoke['_id']), scanned);
+      if (window.seriesEndsAt.getTime() > scanned.finishedAt.getTime()) {
+        // Said out loud rather than done quietly. A silence this long is
+        // normally the box being fired up again weeks after a session nobody
+        // ended — but it can also be a cook whose readings really did stop for
+        // hours (the backend down, the box off wifi), and that cook is cut here
+        // too. The log names what was set aside, the stamp carries the mark
+        // saying the finish was derived rather than observed, and no reading is
+        // deleted, so a cut can be read back and reversed.
+        this.logger.warn(
+          `Cook ${String(
+            smoke['_id'],
+          )} cut at ${scanned.finishedAt.toISOString()}; ` +
+            `its series runs on to ${window.seriesEndsAt.toISOString()}, which is ` +
+            'excluded as recorded after the cook ended.',
+        );
+      }
+      stamps.push({
+        updateOne: {
+          filter: { _id: smoke['_id'] },
+          update: {
+            $set: {
+              startedAt: scanned.startedAt,
+              finishedAt: scanned.finishedAt,
+              // Recorded as searched whatever the window held, for the reason
+              // {@link stampMissingPeaks} records it: a cook left with neither
+              // a peak nor the mark would be scanned again by every rebuild.
+              peakChamberScanned: true,
+              // The mark that this cook's finish was derived from its readings
+              // rather than observed — what tells a repaired cook from one the
+              // user or the auto-stop ended, and so what makes the cut
+              // identifiable afterwards instead of indistinguishable from a
+              // genuine finish.
+              cookWindowBackfilled: true,
+              ...(scanned.peakChamber === null
+                ? {}
+                : { peakChamber: scanned.peakChamber }),
+            },
+            ...(scanned.peakChamber === null
+              ? { $unset: { peakChamber: '' as const } }
+              : {}),
+          },
+        },
+      });
+    });
+    if (stamps.length === 0) {
+      return new Map();
+    }
+    await this.smokeModel.bulkWrite(
+      stamps as unknown as Parameters<Model<SmokeDocument>['bulkWrite']>[0],
+    );
+    return stamped;
+  }
+
+  /**
+   * How long a cook's readings may be silent before the silence is taken to be
+   * the end of it — the auto-stop's threshold, which the backfill cuts by so
+   * that a live stop and a repaired legacy cook mean the same thing by "over".
+   *
+   * Read through the same function the live auto-stop reads it through, and
+   * read lean for the same reason: what is stored is what both must obey, and a
+   * document written before the field existed — or carrying a nonsense value
+   * that never went through the API's validation — must not make one of them
+   * cut a series where the other would not.
+   */
+  private async idleThresholdMs(): Promise<number> {
+    const stored: unknown = await this.settingsModel.findOne().lean().exec();
+    return idleThresholdMsOf(stored);
+  }
+
   /** How many finished cooks the archive holds, counted rather than read. */
   private async completedCount(): Promise<number> {
     return this.smokeModel
@@ -248,10 +439,18 @@ export class StatsService {
       this.ratingsModel.find({ _id: { $in: ids('ratingId') } }).exec(),
     ]);
 
-    // Before anything is joined: a cook finished before peaks were stamped has
-    // one computed and written back, so this is the last time its readings are
-    // ever looked at.
-    const backfilled = await this.stampMissingPeaks(smokes);
+    // Before anything is joined, the archive heals itself. First the cooks
+    // nobody ended: their honest window is stamped on and their peak re-scanned
+    // inside it.
+    const windows = await this.stampCookWindows(smokes);
+    // Then the peaks of cooks finished before peaks were stamped, so this is
+    // the last time their readings are ever looked at. The cooks the window
+    // pass just stamped are held back from it: their peak has been scanned, in
+    // bounds, and this scan is the unbounded one whose answers that pass exists
+    // to correct.
+    const backfilled = await this.stampMissingPeaks(
+      smokes.filter((smoke) => !windows.has(String(smoke['_id']))),
+    );
     const preSmokeById = byId(preSmokes);
     const profileById = byId(profiles);
     const postSmokeById = byId(postSmokes);
@@ -259,7 +458,19 @@ export class StatsService {
     // Every cook's length in one grouped read of the temperatures rather than a
     // pair of queries per cook: asked one at a time, the cheapest read on the
     // screen would be the one that grew with the archive.
-    const durations = await this.timelineService.getDurationsMs(smokes);
+    // Asked of the cooks as the stamps just written leave them, rather than as
+    // they were read: a cook stamped a moment ago would otherwise have its
+    // length derived from the polluted series all over again.
+    const durations = await this.timelineService.getDurationsMs(
+      smokes.map((smoke) => ({
+        ...(windows.get(String(smoke['_id'])) ?? {
+          startedAt: smoke.startedAt,
+          finishedAt: smoke.finishedAt,
+        }),
+        tempsId: smoke.tempsId,
+        status: smoke.status,
+      })),
+    );
 
     return smokes.map((smoke, index) => {
       const preSmoke = preSmokeById.get(String(smoke.preSmokeId));
@@ -287,7 +498,11 @@ export class StatsService {
         // A stored value that is not a temperature is read as no value at all,
         // which is the same test the backfill decides by — anything looser
         // would shadow the peak that very backfill just computed.
-        peakChamber: Number.isFinite(smoke.peakChamber)
+        // A window re-scanned just now wins over anything stored: the stored
+        // value may be the peak of a stray firing that happened after the cook.
+        peakChamber: windows.has(String(smoke['_id']))
+          ? windows.get(String(smoke['_id']))?.peakChamber ?? null
+          : Number.isFinite(smoke.peakChamber)
           ? (smoke.peakChamber as number)
           : backfilled.get(String(smoke['_id'])) ?? null,
         ratings: rating

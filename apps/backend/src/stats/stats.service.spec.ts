@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ApplicationSettings } from '../appSettings/app-settings.schema';
@@ -46,6 +47,8 @@ describe('StatsService', () => {
   let ratings: FakeDoc[];
   let temps: FakeDoc[];
   let snapshots: FakeDoc[];
+  /** What the installation has stored, which the window backfill cuts by. */
+  let settings: FakeDoc[];
   let tempReads: { reads: number };
   /** What the rebuild wrote back onto the archive, and in how many trips. */
   let archiveWrites: { writes: number };
@@ -82,7 +85,7 @@ describe('StatsService', () => {
         { provide: getModelToken('state'), useValue: fakeModel([]) },
         {
           provide: getModelToken(ApplicationSettings.name),
-          useValue: fakeModel([]),
+          useValue: fakeModel(settings),
         },
         {
           provide: getModelToken(PreSmoke.name),
@@ -110,6 +113,7 @@ describe('StatsService', () => {
     ratings = [];
     temps = [];
     snapshots = [];
+    settings = [];
   });
 
   /** One finished cook of `meat`, weighing `pounds`, scored `score`. */
@@ -190,18 +194,18 @@ describe('StatsService', () => {
       meatType: 'Pork butt',
       weight: { weight: 8, unit: 'LB' },
     });
-    temps.push(
-      {
+    // Hourly, as a cook that never went silent long enough to have been over:
+    // a series with hours of nothing in it is a cook that stopped, and is cut
+    // there by the window backfill.
+    for (let hour = 7; hour <= 17; hour += 1) {
+      temps.push({
         tempsId: 'temps-legacy',
-        date: new Date('2025-11-02T07:00:00.000Z'),
-        ChamberTemp: '210',
-      },
-      {
-        tempsId: 'temps-legacy',
-        date: new Date('2025-11-02T17:00:00.000Z'),
-        ChamberTemp: '250',
-      },
-    );
+        date: new Date(
+          `2025-11-02T${String(hour).padStart(2, '0')}:00:00.000Z`,
+        ),
+        ChamberTemp: hour === 17 ? '250' : '210',
+      });
+    }
 
     const stats = await (await build()).getStats();
 
@@ -213,9 +217,8 @@ describe('StatsService', () => {
     });
   });
 
-  it('costs the same number of reads whether the archive holds one cook or ten', async () => {
-    // Every one of them unstamped, so each would otherwise be two more queries
-    // hunting for the ends of its series.
+  it('heals each cook with a bounded read of its own, and re-reads none of them after', async () => {
+    // Every one of them unstamped, so each is healed on this first rebuild.
     for (let index = 0; index < 10; index += 1) {
       smokes.push({
         _id: `legacy-${index}`,
@@ -225,27 +228,34 @@ describe('StatsService', () => {
         status: SmokeStatus.Complete,
       });
       preSmokes.push({ _id: `pre-${index}`, meatType: 'Pork butt' });
-      temps.push(
-        {
+      for (let hour = 7; hour <= 17; hour += 1) {
+        temps.push({
           tempsId: `temps-${index}`,
-          date: new Date('2025-11-02T07:00:00.000Z'),
+          date: new Date(
+            `2025-11-02T${String(hour).padStart(2, '0')}:00:00.000Z`,
+          ),
           ChamberTemp: '210',
-        },
-        {
-          tempsId: `temps-${index}`,
-          date: new Date('2025-11-02T17:00:00.000Z'),
-          ChamberTemp: '250',
-        },
-      );
+        });
+      }
     }
+    const service = await build();
 
-    const stats = await (await build()).getStats();
+    const stats = await service.recalculate();
 
     expect(stats.totalSessions).toBe(10);
     expect(stats.totalCookMs).toBe(100 * HOUR);
-    // Two grouped reads however many cooks there are: the ends of every series,
-    // and the peak of every cook that has none stamped yet.
-    expect(tempReads.reads).toBe(2);
+    // Two reads per cook healed and no more: its own rows walked for the
+    // silence that ended it, and its peak asked of the window that came out.
+    // Bounded per series deliberately — every unstamped cook of the archive
+    // asked for at once would hold `cooks × rows` in memory at a stroke.
+    expect(tempReads.reads).toBe(20);
+
+    tempReads.reads = 0;
+    await service.recalculate();
+
+    // And never again: the stamps the healing wrote are what the durations and
+    // the peaks are read from afterwards, however often the archive is rebuilt.
+    expect(tempReads.reads).toBe(0);
   });
 
   it('says nothing about an installation that has never finished a cook', async () => {
@@ -377,6 +387,214 @@ describe('StatsService', () => {
 
       expect(stats.totalSessions).toBe(1);
       expect(stats.records.hottestChamber).toBeNull();
+    });
+  });
+
+  describe('the cook window of a cook nobody ended', () => {
+    const OPENED = Date.parse('2026-04-20T06:00:00.000Z');
+
+    /** A reading of `chamber`, `hours` after the fixture's opening moment. */
+    const reading = (id: string, hours: number, chamber: string): FakeDoc => ({
+      tempsId: `temps-${id}`,
+      date: new Date(OPENED + hours * HOUR),
+      ChamberTemp: chamber,
+    });
+
+    /**
+     * A finished cook recorded before the stamps existed, whose series holds a
+     * real ten-hour cook and then a stray firing of the box a fortnight later —
+     * the shape the production archive's broken cooks are in.
+     */
+    const pollutedCook = (id: string, strayChamber = '400'): void => {
+      smokes.push({
+        _id: id,
+        preSmokeId: `pre-${id}`,
+        tempsId: `temps-${id}`,
+        date: new Date(OPENED),
+        status: SmokeStatus.Complete,
+      });
+      preSmokes.push({ _id: `pre-${id}`, name: id, meatType: 'Brisket' });
+      for (let hour = 0; hour <= 10; hour += 1) {
+        temps.push(reading(id, hour, '225'));
+      }
+      temps.push(
+        reading(id, 14 * 24, strayChamber),
+        reading(id, 14 * 24 + 1, strayChamber),
+      );
+    };
+
+    it('stamps a legacy cook with the window its readings ran in', async () => {
+      pollutedCook('polluted');
+
+      const stats = await (await build()).recalculate();
+
+      expect(smokes[0]).toMatchObject({
+        startedAt: new Date(OPENED),
+        finishedAt: new Date(OPENED + 10 * HOUR),
+      });
+      expect(stats.totalCookMs).toBe(10 * HOUR);
+    });
+
+    it('replaces a peak that was scanned over the stray firing after the cook', async () => {
+      pollutedCook('polluted');
+      // What an earlier rebuild left behind: the hottest reading anywhere in
+      // the series, which is the grill run, not the smoke.
+      smokes[0].peakChamber = 400;
+      smokes[0].peakChamberScanned = true;
+
+      const stats = await (await build()).recalculate();
+
+      expect(smokes[0].peakChamber).toBe(225);
+      expect(stats.records.hottestChamber).toMatchObject({
+        smokeId: 'polluted',
+        value: 225,
+      });
+    });
+
+    it('marks a derived finish as derived, and says what the cut set aside', async () => {
+      pollutedCook('polluted');
+      const warn = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+
+      await (await build()).recalculate();
+
+      // A cut this pass makes is almost always pollution — but a cook whose
+      // readings genuinely stopped for hours (the backend down, the box off
+      // wifi overnight) is cut the same way. The mark is what tells a derived
+      // finish from one somebody recorded, and no reading is deleted, so a cut
+      // can be read back and reversed.
+      expect(smokes[0].cookWindowBackfilled).toBe(true);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining(
+          new Date(OPENED + (14 * 24 + 1) * HOUR).toISOString(),
+        ),
+      );
+      warn.mockRestore();
+    });
+
+    it('leaves a cook the user ended alone, marks and all', async () => {
+      completedCook('honest', 'Pork butt', 9);
+      smokes[0].finishedAt = new Date(smokes[0].startedAt.getTime() + 5 * HOUR);
+
+      await (await build()).recalculate();
+
+      expect(smokes[0].cookWindowBackfilled).toBeUndefined();
+    });
+
+    /**
+     * A stored threshold of nonsense — a hand edit, a restored backup, a direct
+     * write, none of which pass through the API's validation — would otherwise
+     * make every silence a gap and stamp each legacy cook as having run for no
+     * time at all, permanently.
+     */
+    it('cuts by the shipped default where the stored threshold is nonsense', async () => {
+      settings.push({ autoStop: { idleHours: 0 } });
+      pollutedCook('polluted');
+
+      const stats = await (await build()).recalculate();
+
+      expect(stats.totalCookMs).toBe(10 * HOUR);
+      expect(smokes[0].finishedAt).toEqual(new Date(OPENED + 10 * HOUR));
+    });
+
+    it('changes nothing on a second rebuild, and keeps every reading', async () => {
+      pollutedCook('polluted');
+      const service = await build();
+      await service.recalculate();
+      const afterFirst = JSON.parse(JSON.stringify(smokes));
+      tempReads.reads = 0;
+
+      const stats = await service.recalculate();
+
+      expect(JSON.parse(JSON.stringify(smokes))).toEqual(afterFirst);
+      // A stamped cook is answered from its stamps: nothing goes back to the
+      // readings for it, which is what makes the repair a one-off per cook.
+      expect(tempReads.reads).toBe(0);
+      expect(temps).toHaveLength(13);
+      expect(stats.totalCookMs).toBe(10 * HOUR);
+    });
+
+    it('no longer calls a fortnight of pollution the longest cook on record', async () => {
+      pollutedCook('polluted');
+      // A cook that really did run longer than the repaired one.
+      completedCook('honest', 'Pork butt', 9);
+      smokes[1].finishedAt = new Date(
+        smokes[1].startedAt.getTime() + 12 * HOUR,
+      );
+
+      const stats = await (await build()).getStats();
+
+      expect(stats.records.longestCook).toMatchObject({
+        smokeId: 'honest',
+        value: 12 * HOUR,
+      });
+      expect(stats.totalCookMs).toBe(22 * HOUR);
+    });
+
+    it('takes off a peak the window cannot account for, and keeps it off', async () => {
+      // The cook itself recorded nothing readable — a chamber probe that was
+      // never plugged in — while the stray firing after it did, and an earlier
+      // unbounded scan stamped that as the cook's peak.
+      smokes.push({
+        _id: 'unreadable',
+        preSmokeId: 'pre-unreadable',
+        tempsId: 'temps-unreadable',
+        date: new Date(OPENED),
+        status: SmokeStatus.Complete,
+        peakChamber: 400,
+        peakChamberScanned: true,
+      });
+      preSmokes.push({ _id: 'pre-unreadable', meatType: 'Brisket' });
+      for (let hour = 0; hour <= 10; hour += 1) {
+        temps.push(reading('unreadable', hour, ''));
+      }
+      temps.push(reading('unreadable', 14 * 24, '400'));
+      const service = await build();
+
+      const first = await service.recalculate();
+      const stored = { ...smokes[0] };
+      const second = await service.recalculate();
+
+      expect(first.records.hottestChamber).toBeNull();
+      // The same on the next rebuild, and on the document in between: a value
+      // the window cannot account for is gone rather than merely unreported.
+      expect(second.records.hottestChamber).toBeNull();
+      expect(stored.peakChamber).toBeUndefined();
+      expect(smokes[0].peakChamber).toBeUndefined();
+      expect(smokes[0].peakChamberScanned).toBe(true);
+    });
+
+    it('leaves a cook whose readings carry no moments as it found it', async () => {
+      smokes.push({
+        _id: 'undated',
+        preSmokeId: 'pre-undated',
+        tempsId: 'temps-undated',
+        date: new Date(OPENED),
+        status: SmokeStatus.Complete,
+      });
+      preSmokes.push({ _id: 'pre-undated', meatType: 'Brisket' });
+      // Rows an old import wrote without a date: there is no window to cut out
+      // of them, and nothing about when the cook ran to record.
+      temps.push({ tempsId: 'temps-undated', ChamberTemp: '245' });
+
+      const stats = await (await build()).recalculate();
+
+      expect(smokes[0].startedAt).toBeUndefined();
+      expect(smokes[0].finishedAt).toBeUndefined();
+      // Its peak is still found, by the unbounded scan that has always read
+      // rows like these.
+      expect(stats.records.hottestChamber).toMatchObject({ value: 245 });
+    });
+
+    it('leaves the cook on the smoker alone', async () => {
+      pollutedCook('running');
+      smokes[0].status = SmokeStatus.InProgress;
+
+      await (await build()).recalculate();
+
+      expect(smokes[0].startedAt).toBeUndefined();
+      expect(smokes[0].finishedAt).toBeUndefined();
     });
   });
 

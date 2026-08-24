@@ -81,12 +81,18 @@ const ordered = (rows: FakeDoc[], sort: FakeDoc | null): FakeDoc[] => {
 const query = (rows: FakeDoc[], one: boolean) => {
   let sort: FakeDoc | null = null;
   let limit: number | null = null;
+  let projection: string[] | null = null;
   const chain = {
     /**
      * What the caller narrowed the query with, readable afterwards — so a test
      * can hold a polled read to being a bounded one.
      */
-    applied: {} as { sort?: FakeDoc; limit?: number; lean?: boolean },
+    applied: {} as {
+      sort?: FakeDoc;
+      limit?: number;
+      lean?: boolean;
+      select?: string;
+    },
     sort(spec: FakeDoc) {
       sort = spec;
       chain.applied.sort = spec;
@@ -108,6 +114,16 @@ const query = (rows: FakeDoc[], one: boolean) => {
       chain.applied.lean = true;
       return chain;
     },
+    /**
+     * A projection, applied: a caller that asked for three fields is handed
+     * three fields, so a read that quietly depended on a fourth fails here
+     * rather than in production.
+     */
+    select(fields: string) {
+      projection = fields.split(/\s+/).filter(Boolean);
+      chain.applied.select = fields;
+      return chain;
+    },
     async exec() {
       // Ordered before limited, as MongoDB does it: a limit applied to the
       // rows in storage order would answer a different ten cooks than the ten
@@ -118,7 +134,15 @@ const query = (rows: FakeDoc[], one: boolean) => {
       // back into the object the caller is already holding, and code that
       // reads a field it has just written to the store must read it back.
       const result = (limit === null ? sorted : sorted.slice(0, limit)).map(
-        (doc) => ({ ...doc }),
+        (doc) =>
+          projection === null
+            ? { ...doc }
+            : Object.fromEntries(
+                Object.entries(doc).filter(
+                  ([field]) =>
+                    field === '_id' || (projection as string[]).includes(field),
+                ),
+              ),
       );
       if (!one) {
         return result;
@@ -273,13 +297,23 @@ export const fakeModel = (docs: FakeDoc[]) => ({
    */
   async bulkWrite(
     operations: {
-      updateOne: { filter: FakeDoc; update: { $set?: FakeDoc } };
+      updateOne: {
+        filter: FakeDoc;
+        update: { $set?: FakeDoc; $unset?: FakeDoc };
+      };
     }[],
   ) {
     operations.forEach(({ updateOne }) => {
       const target = docs.find((doc) => matches(doc, updateOne.filter));
       if (target) {
         Object.assign(target, updateOne.update.$set ?? {});
+        // Taken off the document, as Mongo takes it off: a field that was
+        // unset is a field the document no longer has, not one holding
+        // `undefined` — which is what a stored value being *withdrawn* has to
+        // look like to whatever reads the document next.
+        Object.keys(updateOne.update.$unset ?? {}).forEach((field) => {
+          delete target[field];
+        });
       }
     });
     return { modifiedCount: operations.length };
