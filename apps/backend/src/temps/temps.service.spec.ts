@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { NotFoundException } from '@nestjs/common';
 import { Types } from 'mongoose';
-import { TempsService } from './temps.service';
+import { CLOCK_SKEW_TOLERANCE_MS, TempsService } from './temps.service';
 import { tempSeriesFilter } from './temp-series.filter';
 import { Temp } from './temps.schema';
 import { TempDto } from './tempDto';
@@ -38,26 +38,49 @@ const orderedQuery = (seed: Temp[]) => {
 };
 
 /**
- * A `find` stub that really applies the date bounds of the filter it is handed,
- * so "the strays are gone" is a fact about the query the service builds rather
- * than about the rows the stub was seeded with.
+ * A `find` stub that really applies the filter it is handed the way the store
+ * would — date bounds, `$or` branches and the missing-field semantics of
+ * `{ date: null }` included — so "the strays are gone" and "the undated rows
+ * survived" are facts about the query the service builds rather than about the
+ * rows the stub was seeded with.
  */
-const filteringFind = (seed: Temp[]) =>
-  jest.fn().mockImplementation((filter: any) => {
-    const bounds = filter?.date ?? {};
-    return orderedQuery(
-      seed.filter((row) => {
-        const at = new Date(row.date).getTime();
-        if (bounds.$gte !== undefined && at < new Date(bounds.$gte).getTime()) {
-          return false;
-        }
-        if (bounds.$lte !== undefined && at > new Date(bounds.$lte).getTime()) {
-          return false;
-        }
-        return true;
-      }),
-    );
+const matches = (row: Temp, filter: any): boolean =>
+  Object.entries(filter ?? {}).every(([field, condition]: [string, any]) => {
+    if (field === '$or') {
+      return condition.some((branch: any) => matches(row, branch));
+    }
+    if (field !== 'date') {
+      return true;
+    }
+    if (condition === null) {
+      return row.date === null || row.date === undefined;
+    }
+    const at = new Date(row.date).getTime();
+    if (Number.isNaN(at)) {
+      // A row with no date is outside every range, as it is in the store.
+      return false;
+    }
+    if (
+      condition.$gte !== undefined &&
+      at < new Date(condition.$gte).getTime()
+    ) {
+      return false;
+    }
+    if (
+      condition.$lte !== undefined &&
+      at > new Date(condition.$lte).getTime()
+    ) {
+      return false;
+    }
+    return true;
   });
+
+const filteringFind = (seed: Temp[]) =>
+  jest
+    .fn()
+    .mockImplementation((filter: any) =>
+      orderedQuery(seed.filter((row) => matches(row, filter))),
+    );
 
 describe('TempsService', () => {
   let service: TempsService;
@@ -411,11 +434,14 @@ describe('TempsService', () => {
     });
 
     /**
-     * A cook that was started but never finished — the reading is still coming
-     * in — knows where it began and not where it ends, so it is bounded at the
-     * end it knows.
+     * The start stamp is not a bound. A cook is stamped as started when its
+     * smoking flag is first switched on, and a stamp whose write failed is
+     * deferred to the next toggle — hours into a cook that has been recording
+     * all along. Nothing can be recorded before a cook starts (readings are
+     * stored only while smoking is on), so there is nothing for a lower bound
+     * to exclude and everything for a late one to lose.
      */
-    it('bounds a cook that has only started at its start', async () => {
+    it('keeps the whole series of a cook that has only started', async () => {
       smokeModel.findOne.mockImplementation(() =>
         query({
           tempsId: 'some-group',
@@ -425,10 +451,78 @@ describe('TempsService', () => {
 
       const result = await service.getAllTempsById('some-group');
 
-      expect(result.map((temp) => temp.date)).toEqual([
-        new Date('2026-08-20T12:00:00Z'),
-        new Date('2026-09-04T18:00:00Z'),
+      expect(result).toHaveLength(polluted.length);
+    });
+
+    /**
+     * The finish may be stamped by the server's clock (the End Smoke wizard)
+     * while the readings carry the smoker's, and the two are not the same
+     * clock. A reading a little past the finish is the tail of the cook read
+     * by a watch that runs fast, not a stray weeks later.
+     */
+    it('keeps readings dated just past the finish by a fast device clock', async () => {
+      const finishedAt = new Date('2026-08-20T12:00:00Z');
+      model.find = filteringFind([
+        ...polluted,
+        {
+          ...mockTempRows[0],
+          date: new Date(finishedAt.getTime() + CLOCK_SKEW_TOLERANCE_MS / 2),
+        },
       ]);
+      smokeModel.findOne.mockImplementation(() =>
+        query({ tempsId: 'some-group', finishedAt }),
+      );
+
+      const result = await service.getAllTempsById('some-group');
+
+      expect(result.map((temp) => temp.date)).toEqual([
+        new Date('2026-08-20T09:00:00Z'),
+        finishedAt,
+        new Date(finishedAt.getTime() + CLOCK_SKEW_TOLERANCE_MS / 2),
+      ]);
+    });
+
+    /**
+     * A device whose clock is wrong by more than any tolerance would otherwise
+     * have every one of its readings fall outside the window, and the chart
+     * would draw nothing at all. A series that cannot be clipped sensibly is
+     * better shown whole than not shown.
+     */
+    it('answers with the whole series rather than nothing when every reading falls outside', async () => {
+      smokeModel.findOne.mockImplementation(() =>
+        query({
+          tempsId: 'some-group',
+          finishedAt: new Date('2020-01-01T00:00:00Z'),
+        }),
+      );
+
+      const result = await service.getAllTempsById('some-group');
+
+      expect(result).toHaveLength(polluted.length);
+    });
+
+    /**
+     * The archive holds readings stored without a date. They cannot be placed
+     * inside or outside the window, and a range predicate answers "outside" for
+     * every one of them — which would empty the chart of a legacy cook the
+     * moment something stamped a finish on it.
+     */
+    it('keeps the readings that were stored without a date', async () => {
+      const undated = { ...mockTempRows[0], date: undefined as any };
+      model.find = filteringFind([...polluted, undated]);
+      smokeModel.findOne.mockImplementation(() =>
+        query({
+          tempsId: 'some-group',
+          finishedAt: new Date('2026-08-20T13:00:00Z'),
+        }),
+      );
+
+      const result = await service.getAllTempsById('some-group');
+
+      expect(result).toContain(undated);
+      expect(result).not.toContainEqual(
+        expect.objectContaining({ date: new Date('2026-09-04T18:00:00Z') }),
+      );
     });
 
     /**
