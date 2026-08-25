@@ -14,6 +14,7 @@ export type {
   CompletionEstimate,
   CompletionState,
   CurrentSmokeTimeline,
+  HeadsUpAlertSettings,
   MeatStat,
   NotificationSettings,
   PostSmoke,

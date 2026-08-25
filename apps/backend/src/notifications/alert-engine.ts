@@ -27,6 +27,15 @@ export interface ProbeTargetEntrySettings {
   enabled: boolean;
   /** The temperature, °F, at which this probe's meat is done. */
   target: number;
+  /**
+   * How many minutes before this probe reaches {@link target} the cook wants to
+   * be told, or `null`/absent for not at all.
+   *
+   * On the watch list rather than on a list of its own, because it is the same
+   * probe at the same temperature: a second list could only ever disagree with
+   * this one about which meat is being watched and what it is done at.
+   */
+  leadMinutes?: number | null;
 }
 
 /** The user-owned Probe Target Reached alert. */
@@ -47,11 +56,23 @@ export interface SmokeCompleteAlertSettings {
   enabled: boolean;
 }
 
+/**
+ * The user-owned heads-up alert: on or off, and nothing else.
+ *
+ * What it fires against — which probes, at what temperature, and how long
+ * before — is the watch list above, so this block carries no second description
+ * of it. It is the one switch that silences the lot.
+ */
+export interface HeadsUpAlertSettings {
+  enabled: boolean;
+}
+
 /** The user-owned notification settings the engine reads. */
 export interface AlertSettings {
   chamber: ChamberAlertSettings;
   probeTarget: ProbeTargetAlertSettings;
   smokeComplete: SmokeCompleteAlertSettings;
+  headsUp: HeadsUpAlertSettings;
 }
 
 /** The latest reading from the smoker. `null` means "nothing readable". */
@@ -102,6 +123,18 @@ export interface AlertRuntimeState {
    * session the same way, so the next cook can complete on its own account.
    */
   smokeCompleteFired: boolean;
+  /**
+   * How many consecutive ticks each slot has been projected inside its lead.
+   * The debounce that keeps one noisy projection from announcing a finish that
+   * is not coming.
+   */
+  headsUpCounters: Record<string, number>;
+  /**
+   * The slots whose heads-up has been spent this session — announced, or
+   * silently given up because the meat got there first. Scoped to the session
+   * by the caller, like the other fired-once markers.
+   */
+  headsUpFired: string[];
 }
 
 /** A notification the engine decided to send. */
@@ -117,6 +150,16 @@ export interface AlertEvaluation {
 
 export interface AlertEvaluationInput {
   reading: AlertReading;
+  /**
+   * How many minutes each watched probe is projected to be from its target,
+   * by slot.
+   *
+   * Populated by the caller only where the projection is live evidence — a
+   * cook still warming, stalled or off the heat contributes nothing, so an
+   * absent slot means "no opinion" rather than "no time left". The projection
+   * itself is made outside the engine, which keeps this a pure comparison.
+   */
+  etaMinutes?: Record<string, number | null | undefined>;
   settings: AlertSettings;
   state: AlertRuntimeState;
   names: AlertNames;
@@ -131,7 +174,19 @@ export const initialAlertRuntimeState = (): AlertRuntimeState => ({
   probeTargetsReached: [],
   smokeCompleteProbesDone: [],
   smokeCompleteFired: false,
+  headsUpCounters: {},
+  headsUpFired: [],
 });
+
+/**
+ * How many consecutive ticks a probe must be projected inside its lead before
+ * the cook is told: two, about a minute at the evaluation interval.
+ *
+ * A projection read off a live rate wobbles with every reading, and one tick
+ * that dips under the lead is as likely to be noise as news — a heads-up sends
+ * someone out to the smoker, so it is worth a minute's confirmation.
+ */
+export const HEADS_UP_CONFIRMING_TICKS = 2;
 
 /**
  * How long the chamber must stay out of range before it is worth telling the
@@ -347,6 +402,94 @@ const evaluateSmokeComplete = (
 };
 
 /**
+ * The heads-up rule: the cook is told the meat is nearly done, in time to do
+ * something about it.
+ *
+ * It compares minutes against minutes and nothing else — the projection behind
+ * `etaMinutes` is made by the caller, from the same estimator the Estimated
+ * Completion card reads, so the alert and the card can never disagree about
+ * when the meat will be done.
+ */
+const evaluateHeadsUp = (
+  input: AlertEvaluationInput,
+  state: AlertRuntimeState,
+): AlertEvaluation => {
+  if (!input.settings.headsUp.enabled) {
+    return { notifications: [], state };
+  }
+
+  // Built fresh rather than copied: the counters describe runs of ticks that
+  // are under way right now, and a slot that has stopped being watched (or has
+  // fired) has no run to remember. Copying would carry it for the rest of the
+  // cook.
+  const counters: Record<string, number> = {};
+  const fired = [...state.headsUpFired];
+  const notifications: AlertNotification[] = [];
+  const done = new Set([
+    ...probesAtTarget(input).map(({ slot }) => slot),
+    // Meat that has been seen at its target stays done, however the probe
+    // reads afterwards — the same memory the completion rule keeps, for the
+    // same reason.
+    ...state.probeTargetsReached,
+    ...state.smokeCompleteProbesDone,
+  ]);
+
+  watchedProbes(input).forEach((probe) => {
+    if (state.headsUpFired.includes(probe.slot)) {
+      return;
+    }
+    const lead = probe.leadMinutes;
+    if (lead === null || lead === undefined) {
+      // Nobody asked to be warned about this probe, so there is nothing to
+      // spend and nothing to count.
+      return;
+    }
+    if (done.has(probe.slot)) {
+      // The meat got there before the heads-up was confirmed. Spent in silence:
+      // "about a minute from 170°F" is not worth saying about meat that is
+      // already at 171°F, and the Probe Target Reached alert owns that moment.
+      fired.push(probe.slot);
+      return;
+    }
+    const minutes = input.etaMinutes?.[probe.slot];
+    const temp = input.reading.probeTemps[probe.slot];
+    if (
+      minutes === null ||
+      minutes === undefined ||
+      !Number.isFinite(minutes) ||
+      minutes > lead ||
+      temp === null ||
+      temp === undefined ||
+      !Number.isFinite(temp)
+    ) {
+      // No live projection, or a finish still further off than the lead: the
+      // run of confirming ticks is broken, and the next one under the lead
+      // starts a new run rather than completing this one.
+      return;
+    }
+    const ticks = (state.headsUpCounters[probe.slot] ?? 0) + 1;
+    if (ticks < HEADS_UP_CONFIRMING_TICKS) {
+      counters[probe.slot] = ticks;
+      return;
+    }
+    fired.push(probe.slot);
+    notifications.push({
+      title: ALERT_TITLE,
+      body: `${input.names.probes[probe.slot] ?? probe.slot} at ${formatTemp(
+        temp,
+      )} — about ${Math.round(minutes)} minutes from ${formatTemp(
+        probe.target,
+      )}.`,
+    });
+  });
+
+  return {
+    notifications,
+    state: { ...state, headsUpCounters: counters, headsUpFired: fired },
+  };
+};
+
+/**
  * Evaluate every alert against one reading. Each rule owns its own slice of the
  * runtime state, and the state each returns is threaded into the next, so the
  * caller persists a single answer.
@@ -357,12 +500,14 @@ export const evaluateAlerts = (
   const chamber = evaluateChamber(input);
   const probes = evaluateProbeTargets(input, chamber.state);
   const complete = evaluateSmokeComplete(input, probes.state);
+  const headsUp = evaluateHeadsUp(input, complete.state);
   return {
     notifications: [
       ...chamber.notifications,
       ...probes.notifications,
       ...complete.notifications,
+      ...headsUp.notifications,
     ],
-    state: complete.state,
+    state: headsUp.state,
   };
 };

@@ -50,10 +50,12 @@ export const defaultNotificationSettings = (): NotificationSettings => ({
       enabled: false,
       target: DEFAULT_PROBE_TARGET,
       targetSource: 'default',
+      leadMinutes: null,
       name: `Probe ${index + 1}`,
     })),
   },
   smokeComplete: { enabled: false },
+  headsUp: { enabled: false },
   targetPresets: DEFAULT_TARGET_PRESETS,
 });
 
@@ -560,10 +562,17 @@ const toNotificationSettingsPayload = (input: unknown): NotificationSettingsPayl
         enabled: probe.enabled,
         target: probe.target,
         targetSource: probe.targetSource,
+        // Null rather than omitted when there is no heads-up: the backend reads
+        // an absent field as "an older client that never heard of it", which
+        // cannot clear a lead the row already carries.
+        leadMinutes: probe.leadMinutes,
       })),
     },
     smokeComplete: {
       enabled: document?.smokeComplete?.enabled ?? defaults.smokeComplete.enabled,
+    },
+    headsUp: {
+      enabled: document?.headsUp?.enabled ?? defaults.headsUp.enabled,
     },
   };
 };
@@ -584,6 +593,7 @@ const probeEntriesWithDefaults = (
       enabled: entry?.enabled ?? false,
       target,
       targetSource: entry?.targetSource ?? inheritedProvenance(target),
+      leadMinutes: entry?.leadMinutes ?? null,
       name: entry?.name?.trim() || `Probe ${index + 1}`,
     };
   });
@@ -714,6 +724,7 @@ export const createApiClient = (
           probes: probeEntriesWithDefaults(response.probeTarget?.probes),
         },
         smokeComplete: { enabled: response.smokeComplete?.enabled ?? false },
+        headsUp: { enabled: response.headsUp?.enabled ?? false },
         targetPresets: presetsWithDefaults(response.targetPresets),
       };
     },

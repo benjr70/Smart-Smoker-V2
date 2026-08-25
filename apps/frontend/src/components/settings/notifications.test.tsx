@@ -18,22 +18,26 @@ const probeRows = (
     // Watched or not, these are targets nobody has typed in: the temperature is
     // whatever the app put there, which is what lets a session start seed it.
     targetSource: 'default' as const,
+    // No heads-up: nobody has asked to be warned before this probe is done.
+    leadMinutes: null,
     name: `Probe ${index + 1}`,
   }));
 
 /** The same rows as they go back over the wire: the names are not saved. */
 const savedProbeRows = (watched: Record<string, number> = {}) =>
-  probeRows(watched).map(({ slot, enabled, target, targetSource }) => ({
+  probeRows(watched).map(({ slot, enabled, target, targetSource, leadMinutes }) => ({
     slot,
     enabled,
     target,
     targetSource,
+    leadMinutes,
   }));
 
 const chamberAlertOn: NotificationSettings = {
   chamber: { enabled: true, low: 225, high: 275 },
   probeTarget: { enabled: false, probes: probeRows() },
   smokeComplete: { enabled: false },
+  headsUp: { enabled: false },
   targetPresets: { beef: 203, pork: 195, poultry: 165 },
 };
 
@@ -731,7 +735,7 @@ describe('NotificationsCard', () => {
         probes: [
           // The temperature was typed in, so it is the user's: a session start
           // seeds the other rows and leaves this one exactly here.
-          { slot: 'probe1', enabled: true, target: 198, targetSource: 'user' },
+          { slot: 'probe1', enabled: true, target: 198, targetSource: 'user', leadMinutes: null },
           ...savedProbeRows().slice(1),
         ],
       })
@@ -771,6 +775,7 @@ describe('NotificationsCard', () => {
         enabled: true,
         target: 203,
         targetSource: 'default',
+        leadMinutes: null,
       })
     );
   });
@@ -798,6 +803,7 @@ describe('NotificationsCard', () => {
         enabled: true,
         target: 195,
         targetSource: 'user',
+        leadMinutes: null,
       })
     );
 
@@ -893,5 +899,157 @@ describe('NotificationsCard', () => {
     renderCard(backend);
 
     expect(await screen.findByText('Could not load notification settings.')).toBeInTheDocument();
+  });
+
+  describe('the heads-up alert', () => {
+    const watchingBrisket = {
+      chamber: { enabled: false, low: 225, high: 275 },
+      probeTarget: { enabled: true, probes: probeRows({ probe1: 203 }) },
+    };
+
+    test('saves the heads-up switch and the warning a probe was given', async () => {
+      const backend = createFakeBackend({
+        appSettings: { settings: watchingBrisket },
+        smokeProfile: { current: { probe1Name: 'Brisket Flat' } },
+      });
+
+      const { unmount } = renderCard(backend);
+
+      // Wait for the stored settings to arrive before touching anything: a
+      // click on the first render would be overwritten by the load.
+      await screen.findByLabelText('Watch Brisket Flat');
+      fireEvent.click(screen.getByLabelText('Heads-Up'));
+      fireEvent.change(screen.getByLabelText('Brisket Flat heads-up minutes'), {
+        target: { value: '15' },
+      });
+
+      unmount();
+
+      await waitFor(() =>
+        expect(backend.store.appSettings?.probeTarget?.probes[0]).toMatchObject({
+          slot: 'probe1',
+          leadMinutes: 15,
+        })
+      );
+      expect(backend.store.appSettings?.headsUp).toEqual({ enabled: true });
+    });
+
+    // Clearing the field is the cook saying "not this probe", which is a
+    // decision worth saving — unlike the target beside it, which is always some
+    // temperature and keeps its number when the field is emptied.
+    test('clears a probe’s warning when its field is emptied', async () => {
+      const backend = createFakeBackend({
+        appSettings: {
+          settings: {
+            ...watchingBrisket,
+            probeTarget: {
+              enabled: true,
+              probes: probeRows({ probe1: 203 }).map(probe =>
+                probe.slot === 'probe1' ? { ...probe, leadMinutes: 15 } : probe
+              ),
+            },
+            headsUp: { enabled: true },
+          },
+        },
+        smokeProfile: { current: { probe1Name: 'Brisket Flat' } },
+      });
+
+      const { unmount } = renderCard(backend);
+
+      const lead = await screen.findByLabelText('Brisket Flat heads-up minutes');
+      expect(lead).toHaveValue(15);
+      fireEvent.change(lead, { target: { value: '' } });
+
+      unmount();
+
+      await waitFor(() =>
+        expect(backend.store.appSettings?.probeTarget?.probes[0]).toMatchObject({
+          leadMinutes: null,
+        })
+      );
+    });
+
+    /**
+     * The backend refuses a lead outside 1–120 minutes, and this page saves the
+     * whole document on the way out: a rejected save would take the target and
+     * watch-list edits made beside it down with it. So a number it would refuse
+     * never becomes a setting in the first place.
+     */
+    test.each(['0', '-5', '180'])(
+      'refuses %s minutes rather than saving a lead the backend would reject',
+      async typed => {
+        const backend = createFakeBackend({
+          appSettings: {
+            settings: {
+              ...watchingBrisket,
+              probeTarget: {
+                enabled: true,
+                probes: probeRows({ probe1: 203 }).map(probe =>
+                  probe.slot === 'probe1' ? { ...probe, leadMinutes: 15 } : probe
+                ),
+              },
+              headsUp: { enabled: true },
+            },
+          },
+          smokeProfile: { current: { probe1Name: 'Brisket Flat' } },
+        });
+
+        const { unmount } = renderCard(backend);
+
+        const lead = await screen.findByLabelText('Brisket Flat heads-up minutes');
+        fireEvent.change(lead, { target: { value: typed } });
+        expect(lead).toHaveValue(15);
+
+        unmount();
+
+        await waitFor(() =>
+          expect(backend.store.appSettings?.probeTarget?.probes[0]).toMatchObject({
+            leadMinutes: 15,
+          })
+        );
+      }
+    );
+
+    // A field for a setting nothing reads is a question the page cannot answer.
+    test('asks for no minutes while the alert is switched off, and says so', async () => {
+      const backend = createFakeBackend({
+        appSettings: { settings: watchingBrisket },
+        smokeProfile: { current: { probe1Name: 'Brisket Flat' } },
+      });
+
+      renderCard(backend);
+
+      await screen.findByLabelText('Watch Brisket Flat');
+      expect(screen.queryByLabelText('Brisket Flat heads-up minutes')).not.toBeInTheDocument();
+      expect(screen.getByTestId('settings-heads-up-summary')).toHaveTextContent(
+        'Off — you will not be told before a probe reaches its target.'
+      );
+    });
+
+    test('says which probes will warn, and how long before, once they are set', async () => {
+      const backend = createFakeBackend({
+        appSettings: {
+          settings: {
+            ...watchingBrisket,
+            probeTarget: {
+              enabled: true,
+              probes: probeRows({ probe1: 170 }).map(probe =>
+                probe.slot === 'probe1' ? { ...probe, leadMinutes: 20 } : probe
+              ),
+            },
+            headsUp: { enabled: true },
+          },
+        },
+        smokeProfile: { current: { probe1Name: 'Bottom Meat' } },
+      });
+
+      renderCard(backend);
+
+      await waitFor(() =>
+        expect(screen.getByTestId('settings-heads-up-summary')).toHaveTextContent(
+          'You will be told once about each of Bottom Meat 20 minutes before 170°F.'
+        )
+      );
+    });
   });
 });

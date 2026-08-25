@@ -2,6 +2,7 @@ import {
   AlertNames,
   AlertRuntimeState,
   ChamberAlertSettings,
+  HeadsUpAlertSettings,
   ProbeTargetAlertSettings,
   SmokeCompleteAlertSettings,
   evaluateAlerts,
@@ -66,20 +67,29 @@ const minutesAfterStart = (minutes: number): Date =>
  * returned last tick.
  */
 const runCook = (
-  readings: Array<[number, number | null, Record<string, number | null>?]>,
+  readings: Array<
+    [
+      number,
+      number | null,
+      Record<string, number | null>?,
+      Record<string, number>?,
+    ]
+  >,
   options: {
     chamber?: ChamberAlertSettings;
     probeTarget?: ProbeTargetAlertSettings;
     smokeComplete?: SmokeCompleteAlertSettings;
+    headsUp?: HeadsUpAlertSettings;
     state?: AlertRuntimeState;
     names?: AlertNames;
   } = {},
 ) => {
   let state = options.state ?? initialAlertRuntimeState();
   const bodies: string[] = [];
-  readings.forEach(([minutes, chamberTemp, probeTemps]) => {
+  readings.forEach(([minutes, chamberTemp, probeTemps, etaMinutes]) => {
     const evaluation = evaluateAlerts({
       reading: { chamberTemp, probeTemps: probeTemps ?? {} },
+      etaMinutes: etaMinutes ?? {},
       settings: {
         chamber: options.chamber ?? chamberRange(),
         probeTarget: options.probeTarget ?? watching({}, { enabled: false }),
@@ -87,6 +97,7 @@ const runCook = (
         // never configured it reads — so the chamber and probe cases below are
         // about the rule they name and nothing else.
         smokeComplete: options.smokeComplete ?? { enabled: false },
+        headsUp: options.headsUp ?? { enabled: false },
       },
       state,
       names: options.names ?? COOK_NAMES,
@@ -217,6 +228,7 @@ describe('alert engine — chamber temperature alert', () => {
       chamber: chamberRange(),
       probeTarget: watching({ probe1: 203 }),
       smokeComplete: { enabled: true },
+      headsUp: { enabled: true },
     };
     const state = initialAlertRuntimeState();
 
@@ -232,6 +244,7 @@ describe('alert engine — chamber temperature alert', () => {
       chamber: chamberRange(),
       probeTarget: watching({ probe1: 203 }),
       smokeComplete: { enabled: true },
+      headsUp: { enabled: true },
     });
     expect(state).toEqual(initialAlertRuntimeState());
     expect(evaluation.state.chamberArmed).toBe(true);
@@ -572,5 +585,212 @@ describe('alert engine — smoke complete alert', () => {
     });
 
     expect(bodies).toEqual([]);
+  });
+});
+
+/**
+ * The watch list with a heads-up lead on the probes named: each entry is the
+ * temperature that probe's meat is done at and how many minutes before that the
+ * cook wants to hear about it. Every other slot is present and unwatched, as it
+ * is in a real settings document.
+ */
+const watchingWithLead = (
+  watched: Record<string, { target: number; leadMinutes?: number | null }>,
+): ProbeTargetAlertSettings => ({
+  enabled: true,
+  probes: Object.keys(RESTING_TARGETS).map((slot) => ({
+    slot,
+    enabled: watched[slot] !== undefined,
+    target: watched[slot]?.target ?? RESTING_TARGETS[slot],
+    leadMinutes: watched[slot]?.leadMinutes ?? null,
+  })),
+});
+
+describe('alert engine — heads-up alert', () => {
+  const headsUpOn: HeadsUpAlertSettings = { enabled: true };
+  const watchingProbe1 = watchingWithLead({
+    probe1: { target: 170, leadMinutes: 15 },
+  });
+
+  it('tells the cook once, on the second consecutive tick the meat is projected inside the lead', () => {
+    const { bodies } = runCook(
+      [
+        [200, 240, { probe1: 150 }, { probe1: 40 }],
+        [230, 240, { probe1: 158 }, { probe1: 14 }],
+        [231, 240, { probe1: 159 }, { probe1: 12 }],
+        [232, 240, { probe1: 160 }, { probe1: 11 }],
+      ],
+      { probeTarget: watchingProbe1, headsUp: headsUpOn },
+    );
+
+    // The projection at the moment it fired, not the lead the cook configured:
+    // "about 15 minutes" would be the setting read back rather than news.
+    expect(bodies).toEqual([
+      'Brisket Flat at 159°F — about 12 minutes from 170°F.',
+    ]);
+  });
+
+  // A live projection wobbles: one tick under the lead, then back over it, is
+  // the rate settling rather than the meat arriving.
+  it('says nothing about a single tick under the lead, and counts the run again from scratch afterwards', () => {
+    const { bodies } = runCook(
+      [
+        [230, 240, { probe1: 158 }, { probe1: 12 }],
+        [231, 240, { probe1: 158 }, { probe1: 48 }],
+        [232, 240, { probe1: 159 }, { probe1: 14 }],
+        [233, 240, { probe1: 160 }, { probe1: 13 }],
+      ],
+      { probeTarget: watchingProbe1, headsUp: headsUpOn },
+    );
+
+    expect(bodies).toEqual([
+      'Brisket Flat at 160°F — about 13 minutes from 170°F.',
+    ]);
+  });
+
+  // The Probe Target Reached alert owns that moment. A heads-up arriving after
+  // it would tell the cook the meat is fifteen minutes away from a temperature
+  // it has already passed.
+  it('gives up a probe heads-up silently once the meat gets there first', () => {
+    const { bodies } = runCook(
+      [
+        [230, 240, { probe1: 165 }, { probe1: 10 }],
+        // Done before the run of confirming ticks completed.
+        [231, 240, { probe1: 171 }, { probe1: 1 }],
+        // A probe re-seated cooler afterwards is still meat that is done.
+        [232, 240, { probe1: 166 }, { probe1: 9 }],
+        [233, 240, { probe1: 167 }, { probe1: 8 }],
+      ],
+      {
+        // The per-probe alert is off, so what is being read here is the
+        // heads-up rule's own silence rather than another rule's noise.
+        probeTarget: { ...watchingProbe1, enabled: false },
+        headsUp: headsUpOn,
+      },
+    );
+
+    expect(bodies).toEqual([]);
+  });
+
+  // Once per probe per cook. Raising the lead is the cook asking for more
+  // warning next time, not asking to be told about this meat twice.
+  it('does not tell the cook again when the lead is raised after the heads-up fired', () => {
+    const fired = runCook(
+      [
+        [230, 240, { probe1: 158 }, { probe1: 14 }],
+        [231, 240, { probe1: 159 }, { probe1: 12 }],
+      ],
+      { probeTarget: watchingProbe1, headsUp: headsUpOn },
+    );
+
+    const { bodies } = runCook(
+      [
+        [232, 240, { probe1: 160 }, { probe1: 30 }],
+        [233, 240, { probe1: 161 }, { probe1: 28 }],
+      ],
+      {
+        probeTarget: watchingWithLead({
+          probe1: { target: 170, leadMinutes: 45 },
+        }),
+        headsUp: headsUpOn,
+        state: fired.state,
+      },
+    );
+
+    expect(fired.bodies).toHaveLength(1);
+    expect(bodies).toEqual([]);
+  });
+
+  it('is inert while switched off, however close the meat is projected to be', () => {
+    const off = runCook(
+      [
+        [230, 240, { probe1: 158 }, { probe1: 5 }],
+        [231, 240, { probe1: 159 }, { probe1: 4 }],
+        [232, 240, { probe1: 160 }, { probe1: 3 }],
+      ],
+      { probeTarget: watchingProbe1, headsUp: { enabled: false } },
+    );
+
+    expect(off.bodies).toEqual([]);
+    // And nothing was banked while it was off: switching it on mid-cook starts
+    // the confirming run from scratch rather than firing on its first tick.
+    const { bodies } = runCook([[233, 240, { probe1: 161 }, { probe1: 3 }]], {
+      probeTarget: watchingProbe1,
+      headsUp: headsUpOn,
+      state: off.state,
+    });
+
+    expect(bodies).toEqual([]);
+  });
+
+  it('says nothing about a probe with no lead set, or one nobody is watching', () => {
+    const { bodies } = runCook(
+      [
+        [230, 240, { probe1: 158, probe2: 190 }, { probe1: 5, probe2: 5 }],
+        [231, 240, { probe1: 159, probe2: 191 }, { probe1: 4, probe2: 4 }],
+      ],
+      {
+        probeTarget: watchingWithLead({ probe1: { target: 170 } }),
+        headsUp: headsUpOn,
+      },
+    );
+
+    expect(bodies).toEqual([]);
+  });
+
+  // Warming, stalled and paused cooks reach the engine as a slot with no
+  // projection at all — the caller only passes on what it has live evidence
+  // for — so the rule has to be silent on an absent one rather than read it as
+  // "no time left".
+  it('says nothing for a probe the caller has no live projection for', () => {
+    const { bodies } = runCook(
+      [
+        [230, 240, { probe1: 158 }, {}],
+        [231, 240, { probe1: 159 }, {}],
+        [232, 240, { probe1: 160 }, {}],
+      ],
+      { probeTarget: watchingProbe1, headsUp: headsUpOn },
+    );
+
+    expect(bodies).toEqual([]);
+  });
+
+  // The bookkeeping is persisted on every tick and read back on the next one,
+  // so it has to describe the cook as it is now: a probe nobody asked to be
+  // warned about has nothing to spend, and a slot that has stopped being
+  // watched has no run of ticks to remember.
+  it('keeps no bookkeeping for probes it could never warn about', () => {
+    const { state } = runCook(
+      [
+        // probe2 has no lead; probe1's run is under way.
+        [230, 240, { probe1: 158, probe2: 210 }, { probe1: 12, probe2: 1 }],
+      ],
+      {
+        probeTarget: watchingWithLead({
+          probe1: { target: 170, leadMinutes: 15 },
+          probe2: { target: 195 },
+        }),
+        headsUp: headsUpOn,
+      },
+    );
+
+    expect(state.headsUpFired).toEqual([]);
+    expect(state.headsUpCounters).toEqual({ probe1: 1 });
+  });
+
+  it('forgets the run of a probe that is no longer being watched', () => {
+    const started = runCook([[230, 240, { probe1: 158 }, { probe1: 12 }]], {
+      probeTarget: watchingProbe1,
+      headsUp: headsUpOn,
+    });
+
+    const { state } = runCook([[231, 240, { probe1: 159 }, { probe1: 11 }]], {
+      probeTarget: watchingWithLead({}),
+      headsUp: headsUpOn,
+      state: started.state,
+    });
+
+    expect(started.state.headsUpCounters).toEqual({ probe1: 1 });
+    expect(state.headsUpCounters).toEqual({});
   });
 });

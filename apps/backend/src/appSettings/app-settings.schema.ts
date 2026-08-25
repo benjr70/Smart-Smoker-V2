@@ -77,6 +77,22 @@ export class ProbeTargetEntry {
   @ApiProperty({ enum: ['default', 'preset', 'user'] })
   @Prop({ type: String })
   targetSource: TargetSource;
+
+  /**
+   * How many minutes before this probe reaches its target the cook wants to be
+   * warned; `null` (or absent) for not at all.
+   *
+   * On the watch list rather than in a list of its own, because it is about the
+   * same probe reaching the same target the row above already describes.
+   *
+   * Deliberately without a schema default, like the provenance beside it: a
+   * default applied while hydrating would put a number of minutes onto rows of
+   * an installation that never asked for a heads-up, and switching the alert on
+   * would then warn about every probe on the smoker.
+   */
+  @ApiProperty({ required: false, nullable: true })
+  @Prop({ type: Number })
+  leadMinutes?: number | null;
 }
 
 export const ProbeTargetEntrySchema =
@@ -118,6 +134,24 @@ export class SmokeCompleteAlertSettings {
 export const SmokeCompleteAlertSettingsSchema = SchemaFactory.createForClass(
   SmokeCompleteAlertSettings,
 );
+
+/**
+ * The heads-up alert: on or off, and nothing else.
+ *
+ * The one global switch for "tell me before the meat is done". How long before,
+ * and for which probes, is the per-probe `leadMinutes` above — this block only
+ * decides whether any of it is heard, which is what a cook reaches for when
+ * they want the smoker to stop talking to them.
+ */
+@Schema({ _id: false })
+export class HeadsUpAlertSettings {
+  @ApiProperty()
+  @Prop({ default: false })
+  enabled: boolean;
+}
+
+export const HeadsUpAlertSettingsSchema =
+  SchemaFactory.createForClass(HeadsUpAlertSettings);
 /**
  * The default target temperature, °F, per meat category.
  *
@@ -234,6 +268,10 @@ export class ApplicationSettings {
   @ApiProperty({ type: SmokeCompleteAlertSettings })
   @Prop({ type: SmokeCompleteAlertSettingsSchema, default: () => ({}) })
   smokeComplete: SmokeCompleteAlertSettings;
+
+  @ApiProperty({ type: HeadsUpAlertSettings })
+  @Prop({ type: HeadsUpAlertSettingsSchema, default: () => ({}) })
+  headsUp: HeadsUpAlertSettings;
 
   @ApiProperty({ type: TargetPresets })
   @Prop({ type: TargetPresetsSchema, default: () => ({}) })

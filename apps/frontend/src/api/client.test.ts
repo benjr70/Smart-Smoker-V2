@@ -534,7 +534,7 @@ describe('ratings client — legacy endpoint contract', () => {
 });
 
 /** A target nobody has typed in: the shipped default, which seeding may replace. */
-const untouched = { targetSource: 'default' } as const;
+const untouched = { targetSource: 'default', leadMinutes: null } as const;
 
 const savedSettings: NotificationSettings = {
   chamber: { enabled: true, low: 225, high: 275 },
@@ -547,6 +547,7 @@ const savedSettings: NotificationSettings = {
     ],
   },
   smokeComplete: { enabled: true },
+  headsUp: { enabled: false },
   targetPresets: { beef: 203, pork: 195, poultry: 165 },
 };
 
@@ -566,6 +567,7 @@ const savedSettingsBody = {
     ],
   },
   smokeComplete: { enabled: true },
+  headsUp: { enabled: false },
 };
 
 describe('notifications client — settings', () => {
@@ -645,6 +647,7 @@ describe('notifications client — settings', () => {
           ],
         },
         smokeComplete: { enabled: false },
+        headsUp: { enabled: false },
       },
     });
   });
@@ -678,6 +681,7 @@ describe('notifications client — settings', () => {
           ],
         },
         smokeComplete: { enabled: false },
+        headsUp: { enabled: false },
       },
     });
   });
@@ -707,6 +711,7 @@ describe('notifications client — settings', () => {
         ],
       },
       smokeComplete: { enabled: false },
+      headsUp: { enabled: false },
       targetPresets: { beef: 203, pork: 195, poultry: 165 },
     });
   });

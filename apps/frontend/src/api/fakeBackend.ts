@@ -61,7 +61,13 @@ export type StoredTempData = {
  */
 export type StoredApplicationSettings = Omit<ApplicationSettings, 'probeTarget'> & {
   probeTarget: Omit<ProbeTargetAlertSettings, 'probes'> & {
-    probes: (Omit<ProbeTargetEntry, 'name'> & { name?: string })[];
+    // The heads-up lead is optional here as well: a document stored before the
+    // setting existed carries no such field, and a seed that says nothing about
+    // it means the same thing.
+    probes: (Omit<ProbeTargetEntry, 'name' | 'leadMinutes'> & {
+      name?: string;
+      leadMinutes?: number | null;
+    })[];
   };
 };
 
@@ -405,10 +411,14 @@ const withSettingsDefaults = (
         // temperature that is not the shipped default was typed by hand, so it
         // is the user's and a session start never seeds over it.
         targetSource: entry?.targetSource ?? (target === DEFAULT_PROBE_TARGET ? 'default' : 'user'),
+        // As the backend reads a row stored before the heads-up existed: no
+        // warning at all, never some default number of minutes.
+        leadMinutes: entry?.leadMinutes ?? null,
       };
     }),
   },
   smokeComplete: { enabled: stored?.smokeComplete?.enabled ?? false },
+  headsUp: { enabled: stored?.headsUp?.enabled ?? false },
   targetPresets: {
     beef: stored?.targetPresets?.beef ?? DEFAULT_TARGET_PRESETS.beef,
     pork: stored?.targetPresets?.pork ?? DEFAULT_TARGET_PRESETS.pork,
@@ -459,6 +469,7 @@ const withResolvedProbeNames = (
       enabled: probe.enabled,
       target: probe.target,
       targetSource: probe.targetSource,
+      leadMinutes: probe.leadMinutes ?? null,
       name: profile[PROBE_NAME_FIELDS[probe.slot]]?.trim() || genericProbeName(probe.slot),
     })),
   },

@@ -59,6 +59,24 @@ export class AlertState {
    */
   @Prop({ default: false })
   smokeCompleteFired: boolean;
+
+  /**
+   * How many consecutive ticks each probe slot has been projected inside its
+   * heads-up lead. Persisted rather than held in memory because the run is what
+   * separates a projection that is settling from meat that is genuinely nearly
+   * done, and a restart mid-cook must not confirm one on its first tick.
+   */
+  @Prop({ type: Object, default: () => ({}) })
+  headsUpCounters: Record<string, number>;
+
+  /**
+   * The probe slots whose heads-up is spent this session — either announced, or
+   * given up in silence because the meat reached its target first. One per
+   * probe per cook, scoped by `smokeId` like the markers above, so the next cook
+   * is warned about its own meat.
+   */
+  @Prop({ type: [String], default: [] })
+  headsUpFired: string[];
 }
 
 export const AlertStateSchema = SchemaFactory.createForClass(AlertState);

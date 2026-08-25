@@ -87,11 +87,13 @@ const seededNotifications: NotificationSettings = {
         enabled: true,
         target: 203,
         targetSource: 'user',
+        leadMinutes: 15,
         name: 'Brisket Flat',
       },
     ],
   },
   smokeComplete: { enabled: true },
+  headsUp: { enabled: true },
   targetPresets: { beef: 203, pork: 195, poultry: 165 },
 };
 
@@ -207,12 +209,13 @@ const projectedNotificationsBody = {
   probeTarget: {
     enabled: true,
     probes: [
-      { slot: 'probe1', enabled: true, target: 203, targetSource: 'user' },
-      { slot: 'probe2', enabled: false, target: 203, targetSource: 'default' },
-      { slot: 'probe3', enabled: false, target: 203, targetSource: 'default' },
+      { slot: 'probe1', enabled: true, target: 203, targetSource: 'user', leadMinutes: 15 },
+      { slot: 'probe2', enabled: false, target: 203, targetSource: 'default', leadMinutes: null },
+      { slot: 'probe3', enabled: false, target: 203, targetSource: 'default', leadMinutes: null },
     ],
   },
   smokeComplete: { enabled: true },
+  headsUp: { enabled: true },
 };
 
 const rows: ContractRow[] = [

@@ -11,6 +11,7 @@ import { TempDocument } from '../temps/temps.schema';
 import { StateDocument } from '../State/state.schema';
 import { PreSmoke, PreSmokeDocument } from '../presmoke/presmoke.schema';
 import {
+  CompletionEstimate,
   estimateCompletion,
   LIVE_WINDOW_MINUTES,
   needsHistoricalRate,
@@ -437,6 +438,67 @@ export class TimelineService {
           : null,
       }),
     };
+  }
+
+  /**
+   * When each of the given probes will reach the target it was given, by slot.
+   *
+   * The same projection the Estimated Completion card is drawn from, made once
+   * per probe instead of once for the cook: the heads-up alert warns about a
+   * particular piece of meat, and reading it off the cook's primary probe would
+   * warn about the wrong one.
+   *
+   * Nothing is read of the store for an empty list. The caller asks only about
+   * the probes it could still fire about, and this runs on every evaluation
+   * tick for the length of every cook — a tick with nothing to warn about has
+   * to cost nothing.
+   */
+  async estimateForProbes(
+    probes: { slot: string; target: number }[],
+    now: Date = new Date(),
+  ): Promise<Record<string, CompletionEstimate>> {
+    if (probes.length === 0) {
+      return {};
+    }
+    const state = await this.stateModel.findOne().exec();
+    const smoke = state?.smokeId
+      ? await this.smokeModel.findById(state.smokeId).exec()
+      : null;
+    if (!smoke) {
+      return {};
+    }
+    const peaks = await this.peaksOf(smoke);
+    const startedAt = smoke.startedAt ?? (await this.edgeReading(smoke, 1));
+    // One read of the series for every probe: the rows carry all four
+    // temperatures, so a read per probe would be the same rows three times.
+    const rows = await this.estimateReadings(smoke, startedAt ?? null, now);
+    // And at most one read of the user's cooking history, however many probes
+    // turn out to want it — it is the same meat on the same smoker.
+    let historical: number | null | undefined;
+    const historicalOnce = async (): Promise<number | null> => {
+      if (historical === undefined) {
+        historical = await this.historicalRate(smoke);
+      }
+      return historical;
+    };
+
+    const estimates: Record<string, CompletionEstimate> = {};
+    for (const probe of probes) {
+      const input = {
+        readings: probeSeries(rows, probe.slot, startedAt ?? null),
+        target: probe.target,
+        smoking: state?.smoking === true,
+        now,
+        peakTemp: peaks[probeField(probe.slot)] ?? null,
+      };
+      estimates[probe.slot] = estimateCompletion({
+        ...input,
+        historicalRate: needsHistoricalRate(input)
+          ? await historicalOnce()
+          : null,
+      });
+    }
+    return estimates;
   }
 
   /**

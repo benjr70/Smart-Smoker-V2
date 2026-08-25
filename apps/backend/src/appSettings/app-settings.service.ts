@@ -155,6 +155,7 @@ export class AppSettingsService {
         'chamber',
         'probeTarget',
         'smokeComplete',
+        'headsUp',
         'targetPresets',
         'appearance',
         'autoStop',

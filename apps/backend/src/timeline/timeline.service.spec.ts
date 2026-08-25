@@ -1002,4 +1002,77 @@ describe('TimelineService', () => {
       );
     });
   });
+
+  /**
+   * The per-probe projection the heads-up alert is decided from: the same
+   * estimator the Estimated Completion card reads, run once per probe the cook
+   * is being warned about, so the alert and the card can never disagree.
+   */
+  describe('estimateForProbes', () => {
+    const NOW = new Date('2026-08-17T18:00:00.000Z');
+
+    /** A reading of the cook in progress, `minutesAgo` before the fixed now. */
+    const running = (
+      minutesAgo: number,
+      meat: string,
+      meat2: string,
+    ): FakeDoc => ({
+      tempsId: 'live-temps',
+      date: new Date(NOW.getTime() - minutesAgo * 60_000),
+      ChamberTemp: '250',
+      MeatTemp: meat,
+      Meat2Temp: meat2,
+      Meat3Temp: '0',
+    });
+
+    const startTwoMeats = (): void => {
+      smokes.push({
+        _id: 'live-smoke',
+        tempsId: 'live-temps',
+        status: SmokeStatus.InProgress,
+        startedAt: new Date(NOW.getTime() - 60 * 60_000),
+      });
+      states.push({ _id: 'state-id', smokeId: 'live-smoke', smoking: true });
+    };
+
+    it('projects each probe from its own readings, against its own target', async () => {
+      startTwoMeats();
+      temps.push(
+        running(60, '143', '120'),
+        running(30, '153', '130'),
+        running(0, '163', '140'),
+      );
+      service = await build();
+
+      const estimates = await service.estimateForProbes(
+        [
+          { slot: 'probe1', target: 203 },
+          { slot: 'probe2', target: 160 },
+        ],
+        NOW,
+      );
+
+      expect(estimates.probe1.state).toBe('ok');
+      // 40°F to go at 20°F/hr.
+      expect(estimates.probe1.hoursRemaining).toBeCloseTo(2, 5);
+      expect(estimates.probe2.state).toBe('ok');
+      // 20°F to go at the same 20°F/hr.
+      expect(estimates.probe2.hoursRemaining).toBeCloseTo(1, 5);
+    });
+
+    // The alert asks for a projection only for the probes it might still fire
+    // about. With none, the tick must cost nothing: this runs every thirty
+    // seconds for the length of every cook.
+    it('reads no series at all when there is no probe to project', async () => {
+      startTwoMeats();
+      temps.push(running(30, '153', '130'), running(0, '163', '140'));
+      service = await build();
+      const rows = jest.spyOn(models.temps, 'find');
+      const peaks = jest.spyOn(models.temps, 'aggregate');
+
+      expect(await service.estimateForProbes([], NOW)).toEqual({});
+      expect(rows).not.toHaveBeenCalled();
+      expect(peaks).not.toHaveBeenCalled();
+    });
+  });
 });

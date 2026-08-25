@@ -41,6 +41,55 @@ describe('ApplicationSettingsDto validation', () => {
     expect(result.probeTarget).toEqual(body.probeTarget);
   });
 
+  /**
+   * How long before a probe reaches its target the cook wants to hear about it.
+   * Optional and null-clearable: most rows have no heads-up, and turning one
+   * off is a save that says so rather than a field quietly left behind.
+   */
+  it('accepts a heads-up lead on a probe row, and null to clear it', async () => {
+    const body = {
+      probeTarget: {
+        enabled: true,
+        probes: [
+          { slot: 'probe1', enabled: true, target: 203, leadMinutes: 15 },
+          { slot: 'probe2', enabled: true, target: 195, leadMinutes: null },
+          { slot: 'probe3', enabled: false, target: 165 },
+        ],
+      },
+    };
+
+    const result = await pipe.transform(body, metadata);
+
+    expect(
+      result.probeTarget?.probes.map((probe) => probe.leadMinutes),
+    ).toEqual([15, null, undefined]);
+  });
+
+  it.each([0, -5, 121, 12.5])(
+    'rejects a heads-up lead of %p, which is no warning at all or not a number of minutes',
+    async (leadMinutes) => {
+      const body = {
+        probeTarget: {
+          enabled: true,
+          probes: [{ slot: 'probe1', enabled: true, target: 203, leadMinutes }],
+        },
+      };
+
+      await expect(pipe.transform(body, metadata)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+    },
+  );
+
+  it('accepts the heads-up alert switch the settings page saves', async () => {
+    const result = await pipe.transform(
+      { headsUp: { enabled: true } },
+      metadata,
+    );
+
+    expect(result.headsUp).toEqual({ enabled: true });
+  });
+
   // The names shown against each row are resolved from the active cook and
   // served on the read, so a document read then saved carries them back. They
   // are not the user's to set, and forbidNonWhitelisted would 400 the save.
