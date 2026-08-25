@@ -171,7 +171,10 @@ export const MAX_LEAD_MINUTES = 120;
  *
  * An empty field is the row saying "no heads-up on this probe", which is a
  * decision and is saved as one — unlike the target beside it, which always has
- * to be some temperature.
+ * to be some temperature. It is read off a text field rather than a number one
+ * for exactly that reason: a number input reports a half-typed entry — a lone
+ * minus sign, a stray 'e' — as an empty value, and a cook mistyping over a
+ * configured lead would have it deleted instead of rejected.
  *
  * Anything else that is not a whole number of minutes inside the bounds above
  * leaves the row exactly as it was, and never becomes a setting: this page
@@ -384,8 +387,11 @@ export function NotificationsCard(): JSX.Element {
                   probe={probe}
                   showEta={probe.slot === firstWatchedSlot}
                   // How long before a probe is done is only worth asking about
-                  // while the alert that reads it is switched on.
-                  showLead={headsUp.enabled}
+                  // while the alert that reads it is switched on — and only on
+                  // a row it could fire about: the engine warns about watched
+                  // probes alone, so a lead taken from an unwatched row would
+                  // store an alert that can never arrive.
+                  showLead={headsUp.enabled && probe.enabled}
                   onChange={change => updateProbe(probe.slot, change)}
                 />
               ))}
@@ -524,7 +530,12 @@ const ProbeRow = ({
     {showLead && (
       <TextField
         label={`${probe.name} heads-up minutes`}
-        type="number"
+        // Text, not number: this is the one field whose empty value is itself a
+        // setting, and a number input hands over an empty value for anything it
+        // cannot parse — so a mistyped character would read as "no heads-up on
+        // this probe" and delete a lead the cook configured. As text the
+        // keystroke arrives as typed and is simply refused.
+        type="text"
         size="small"
         variant="outlined"
         // Empty rather than a number when there is no heads-up: a zero in the
@@ -533,8 +544,11 @@ const ProbeRow = ({
         onChange={event => onChange(readLeadEdit(event.target.value, probe))}
         inputProps={{
           'data-testid': `settings-probe-lead-${probe.slot}`,
-          min: MIN_LEAD_MINUTES,
-          max: MAX_LEAD_MINUTES,
+          // The field takes minutes, so phones offer the digits keyboard even
+          // though the field itself is text.
+          inputMode: 'numeric',
+          'aria-valuemin': MIN_LEAD_MINUTES,
+          'aria-valuemax': MAX_LEAD_MINUTES,
         }}
         sx={{ width: 120 }}
       />

@@ -957,7 +957,7 @@ describe('NotificationsCard', () => {
       const { unmount } = renderCard(backend);
 
       const lead = await screen.findByLabelText('Brisket Flat heads-up minutes');
-      expect(lead).toHaveValue(15);
+      expect(lead).toHaveValue('15');
       fireEvent.change(lead, { target: { value: '' } });
 
       unmount();
@@ -968,6 +968,48 @@ describe('NotificationsCard', () => {
         })
       );
     });
+
+    /**
+     * A number field reports a half-typed entry — a lone minus sign, a stray
+     * 'e', two dots — as an empty value, which is indistinguishable from the
+     * field having been cleared. Read as a clear it would delete a configured
+     * lead the cook never touched, and this page saves on the way out, so the
+     * deletion would be permanent and silent.
+     */
+    test.each(['-', 'e', '..'])(
+      'keeps a configured lead when %s is typed rather than reading it as a clear',
+      async typed => {
+        const backend = createFakeBackend({
+          appSettings: {
+            settings: {
+              ...watchingBrisket,
+              probeTarget: {
+                enabled: true,
+                probes: probeRows({ probe1: 203 }).map(probe =>
+                  probe.slot === 'probe1' ? { ...probe, leadMinutes: 20 } : probe
+                ),
+              },
+              headsUp: { enabled: true },
+            },
+          },
+          smokeProfile: { current: { probe1Name: 'Brisket Flat' } },
+        });
+
+        const { unmount } = renderCard(backend);
+
+        const lead = await screen.findByLabelText('Brisket Flat heads-up minutes');
+        fireEvent.change(lead, { target: { value: typed } });
+        expect(lead).toHaveValue('20');
+
+        unmount();
+
+        await waitFor(() =>
+          expect(backend.store.appSettings?.probeTarget?.probes[0]).toMatchObject({
+            leadMinutes: 20,
+          })
+        );
+      }
+    );
 
     /**
      * The backend refuses a lead outside 1–120 minutes, and this page saves the
@@ -998,7 +1040,7 @@ describe('NotificationsCard', () => {
 
         const lead = await screen.findByLabelText('Brisket Flat heads-up minutes');
         fireEvent.change(lead, { target: { value: typed } });
-        expect(lead).toHaveValue(15);
+        expect(lead).toHaveValue('15');
 
         unmount();
 
@@ -1023,6 +1065,37 @@ describe('NotificationsCard', () => {
       expect(screen.queryByLabelText('Brisket Flat heads-up minutes')).not.toBeInTheDocument();
       expect(screen.getByTestId('settings-heads-up-summary')).toHaveTextContent(
         'Off — you will not be told before a probe reaches its target.'
+      );
+    });
+
+    /**
+     * The engine only ever warns about a probe on the watch list, and the
+     * summary below only counts those. A field on an unwatched row would take a
+     * lead, store it and read it back — an alert the cook believes is armed and
+     * that nothing will ever fire.
+     */
+    test('asks for minutes only on the rows being watched', async () => {
+      const backend = createFakeBackend({
+        appSettings: {
+          settings: {
+            ...watchingBrisket,
+            headsUp: { enabled: true },
+          },
+        },
+        smokeProfile: { current: { probe1Name: 'Brisket Flat', probe2Name: 'Pork Butt' } },
+      });
+
+      renderCard(backend);
+
+      expect(await screen.findByLabelText('Brisket Flat heads-up minutes')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Pork Butt heads-up minutes')).not.toBeInTheDocument();
+
+      // And unwatching a probe takes its field away with it, so the row cannot
+      // be given a lead that could never fire.
+      fireEvent.click(screen.getByLabelText('Watch Brisket Flat'));
+
+      await waitFor(() =>
+        expect(screen.queryByLabelText('Brisket Flat heads-up minutes')).not.toBeInTheDocument()
       );
     });
 

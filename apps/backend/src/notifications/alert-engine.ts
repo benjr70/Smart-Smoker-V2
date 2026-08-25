@@ -415,7 +415,15 @@ const evaluateHeadsUp = (
   state: AlertRuntimeState,
 ): AlertEvaluation => {
   if (!input.settings.headsUp.enabled) {
-    return { notifications: [], state };
+    // Inert, and inert all the way down: a run of confirming ticks that was
+    // under way when the cook silenced the alert is dropped rather than
+    // banked. The ticks either side of an off period are not consecutive, and
+    // keeping the count would let the first tick after it fires — the very
+    // noise the confirming run exists to filter out.
+    return {
+      notifications: [],
+      state: { ...state, headsUpCounters: {} },
+    };
   }
 
   // Built fresh rather than copied: the counters describe runs of ticks that

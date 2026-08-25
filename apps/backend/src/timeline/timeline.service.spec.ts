@@ -4,7 +4,7 @@ import { Types } from 'mongoose';
 import { SmokeStatus } from '../smoke/smoke.schema';
 import { ApplicationSettings } from '../appSettings/app-settings.schema';
 import { PreSmoke } from '../presmoke/presmoke.schema';
-import { TimelineService } from './timeline.service';
+import { HISTORY_RATE_MEMO_MS, TimelineService } from './timeline.service';
 import { FakeDoc, fakeModel } from './testing/fake-model';
 
 /** Let the wall clock move on, so a second stamp would be a different moment. */
@@ -32,14 +32,19 @@ describe('TimelineService', () => {
   let models: {
     temps: ReturnType<typeof fakeModel>;
     preSmokes: ReturnType<typeof fakeModel>;
+    smokes: ReturnType<typeof fakeModel>;
   };
 
   const build = async (): Promise<TimelineService> => {
-    models = { temps: fakeModel(temps), preSmokes: fakeModel(preSmokes) };
+    models = {
+      temps: fakeModel(temps),
+      preSmokes: fakeModel(preSmokes),
+      smokes: fakeModel(smokes),
+    };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TimelineService,
-        { provide: getModelToken('Smoke'), useValue: fakeModel(smokes) },
+        { provide: getModelToken('Smoke'), useValue: models.smokes },
         { provide: getModelToken('Temp'), useValue: models.temps },
         {
           provide: getModelToken(ApplicationSettings.name),
@@ -1058,6 +1063,105 @@ describe('TimelineService', () => {
       expect(estimates.probe2.state).toBe('ok');
       // 20°F to go at the same 20°F/hr.
       expect(estimates.probe2.hoursRemaining).toBeCloseTo(1, 5);
+    });
+
+    /**
+     * The heads-up alert asks for this twice a minute for the length of every
+     * cook, and for the first half hour of one the projection still wants the
+     * user's cooking history — which is a read of every completed smoke and of
+     * the pre-smoke behind each. What those past cooks climbed at does not
+     * change while this one runs, so it is read once and reused.
+     */
+    it('reads the cook history once rather than on every tick of the first half hour', async () => {
+      smokes.push({
+        _id: 'live-smoke',
+        tempsId: 'live-temps',
+        preSmokeId: 'pre-live',
+        status: SmokeStatus.InProgress,
+        startedAt: new Date(NOW.getTime() - 10 * 60_000),
+      });
+      states.push({ _id: 'state-id', smokeId: 'live-smoke', smoking: true });
+      preSmokes.push({ _id: 'pre-live', meatType: 'Brisket', weight: 12 });
+      // Ten minutes of readings: less than the live window, so the projection
+      // still leans on history and asks for it on every tick.
+      temps.push(running(10, '143', '120'), running(0, '153', '130'));
+      service = await build();
+      const history = jest.spyOn(models.smokes, 'find');
+
+      const first = await service.estimateForProbes(
+        [{ slot: 'probe1', target: 203 }],
+        NOW,
+      );
+      const second = await service.estimateForProbes(
+        [{ slot: 'probe1', target: 203 }],
+        new Date(NOW.getTime() + 30_000),
+      );
+
+      expect(history).toHaveBeenCalledTimes(1);
+      // And the reused answer is the same answer: the second tick projects
+      // exactly what the first did, rather than quietly dropping the history.
+      expect(second.probe1.ratePerHour).toBeCloseTo(
+        first.probe1.ratePerHour ?? 0,
+        5,
+      );
+    });
+
+    // Remembered, not frozen: a cook who corrects the meat type after starting
+    // has that read again shortly afterwards.
+    it('reads the history again once the remembered answer is a few minutes old', async () => {
+      smokes.push({
+        _id: 'live-smoke',
+        tempsId: 'live-temps',
+        preSmokeId: 'pre-live',
+        status: SmokeStatus.InProgress,
+        startedAt: new Date(NOW.getTime() - 10 * 60_000),
+      });
+      states.push({ _id: 'state-id', smokeId: 'live-smoke', smoking: true });
+      preSmokes.push({ _id: 'pre-live', meatType: 'Brisket', weight: 12 });
+      temps.push(running(10, '143', '120'), running(0, '153', '130'));
+      service = await build();
+      const history = jest.spyOn(models.smokes, 'find');
+
+      await service.estimateForProbes([{ slot: 'probe1', target: 203 }], NOW);
+      await service.estimateForProbes(
+        [{ slot: 'probe1', target: 203 }],
+        new Date(NOW.getTime() + HISTORY_RATE_MEMO_MS),
+      );
+
+      expect(history).toHaveBeenCalledTimes(2);
+    });
+
+    // A different cook is a different question — the meat, and so the history
+    // worth reading, is its own.
+    it('reads the history again for the next cook', async () => {
+      smokes.push({
+        _id: 'live-smoke',
+        tempsId: 'live-temps',
+        preSmokeId: 'pre-live',
+        status: SmokeStatus.InProgress,
+        startedAt: new Date(NOW.getTime() - 10 * 60_000),
+      });
+      states.push({ _id: 'state-id', smokeId: 'live-smoke', smoking: true });
+      preSmokes.push({ _id: 'pre-live', meatType: 'Brisket', weight: 12 });
+      temps.push(running(10, '143', '120'), running(0, '153', '130'));
+      service = await build();
+      const history = jest.spyOn(models.smokes, 'find');
+
+      await service.estimateForProbes([{ slot: 'probe1', target: 203 }], NOW);
+      smokes.push({
+        _id: 'next-smoke',
+        tempsId: 'live-temps',
+        preSmokeId: 'pre-live',
+        status: SmokeStatus.InProgress,
+        startedAt: new Date(NOW.getTime() - 10 * 60_000),
+      });
+      states[0].smokeId = 'next-smoke';
+      await service.estimateForProbes(
+        [{ slot: 'probe1', target: 203 }],
+        new Date(NOW.getTime() + 30_000),
+      );
+
+      expect(history).toHaveBeenCalledTimes(2);
     });
 
     // The alert asks for a projection only for the probes it might still fire

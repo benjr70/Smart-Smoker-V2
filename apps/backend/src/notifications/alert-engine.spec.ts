@@ -723,6 +723,33 @@ describe('alert engine — heads-up alert', () => {
     expect(bodies).toEqual([]);
   });
 
+  // Switching the alert off has to leave the run of confirming ticks behind
+  // with everything else: a run half-completed before the cook silenced the
+  // alert is not consecutive with a tick after they switched it back on, and
+  // banking it would announce a finish on that first tick.
+  it('drops a half-finished run of ticks when the cook switches the alert off', () => {
+    const started = runCook([[230, 240, { probe1: 158 }, { probe1: 12 }]], {
+      probeTarget: watchingProbe1,
+      headsUp: headsUpOn,
+    });
+
+    const off = runCook([[231, 240, { probe1: 159 }, { probe1: 11 }]], {
+      probeTarget: watchingProbe1,
+      headsUp: { enabled: false },
+      state: started.state,
+    });
+
+    const { bodies } = runCook([[232, 240, { probe1: 160 }, { probe1: 10 }]], {
+      probeTarget: watchingProbe1,
+      headsUp: headsUpOn,
+      state: off.state,
+    });
+
+    expect(started.state.headsUpCounters).toEqual({ probe1: 1 });
+    expect(off.state.headsUpCounters).toEqual({});
+    expect(bodies).toEqual([]);
+  });
+
   it('says nothing about a probe with no lead set, or one nobody is watching', () => {
     const { bodies } = runCook(
       [
