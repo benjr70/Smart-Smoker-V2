@@ -40,6 +40,15 @@ export interface EventMarker {
 export interface DrawnWindow {
   from: number;
   to: number;
+  /**
+   * How far outside that stretch an event may fall and still be drawn, at the
+   * edge it fell past. The window's ends are made of stored readings, and the
+   * pit is only written down every so often, so a stamp tapped in the opening
+   * seconds of a cook — or in the moments before it was stopped — is outside
+   * the window by an accident of sampling rather than by belonging elsewhere.
+   * Left out, it would sit in the cook log with nothing on the chart to match.
+   */
+  grace?: number;
 }
 
 /**
@@ -47,6 +56,13 @@ export interface DrawnWindow {
  * A bubble is 12 across, so anything under this is already overlapping ink.
  */
 export const MARKER_STAGGER_GAP = 14;
+
+/**
+ * How many rows of bubbles a crowded stretch may spread over before it starts
+ * again at the top. Three keeps the busiest minute of a cook legible while
+ * still leaving the plot below it mostly plot.
+ */
+export const MARKER_MAX_ROWS = 3;
 
 /** What a marker with nothing to say for itself shows. */
 const NO_LETTER = '•';
@@ -58,31 +74,56 @@ export const markerLetter = (label: string): string => {
 };
 
 /**
+ * Which row a bubble goes in, given where the last bubble in each row was put.
+ *
+ * The first row with room for it, so a run of taps walks down the rows instead
+ * of flipping between two of them — three taps in the same half-minute put the
+ * third back on top of the first if each one only looks at the one before it.
+ * When no row has room the least crowded one takes it: rows run out before a
+ * determined pitmaster does, and something has to be drawn.
+ */
+const rowFor = (place: number, lastInRow: readonly number[]): number => {
+  for (let row = 0; row < MARKER_MAX_ROWS; row += 1) {
+    const neighbour = lastInRow[row];
+    if (neighbour === undefined || place - neighbour >= MARKER_STAGGER_GAP) return row;
+  }
+
+  let roomiest = 0;
+  for (let row = 1; row < MARKER_MAX_ROWS; row += 1) {
+    if ((lastInRow[row] as number) < (lastInRow[roomiest] as number)) roomiest = row;
+  }
+  return roomiest;
+};
+
+/**
  * The markers for one cook log, in the order they happened.
  *
- * Events outside the drawn window are left out rather than pinned to an edge:
- * a marker drawn where its moment is not is a lie about the cook, and the
- * window is the caller's statement of what the plot currently covers.
+ * Events well outside the drawn window are left out rather than pinned to an
+ * edge: a marker drawn where its moment is not is a lie about the cook, and the
+ * window is the caller's statement of what the plot currently covers. Events
+ * just outside it are another matter — see {@link DrawnWindow.grace}.
  */
 export const placeMarkers = (
   events: readonly ChartEvent[],
   x: (moment: number) => number,
   window: DrawnWindow
 ): EventMarker[] => {
+  const grace = window.grace ?? 0;
   const drawn = events
     .map(event => ({ event, at: new Date(event.at).getTime() }))
-    .filter(({ at }) => Number.isFinite(at) && at >= window.from && at <= window.to)
+    .filter(({ at }) => Number.isFinite(at) && at >= window.from - grace && at <= window.to + grace)
     .sort((one, other) => one.at - other.at);
 
-  let previous: EventMarker | undefined;
+  // Where the last bubble in each row was put, which is what a new one has to
+  // clear to join that row.
+  const lastInRow: number[] = [];
   return drawn.map(({ event, at }) => {
-    const place = x(at);
-    // Crowded markers take turns on the second row rather than every crowded
-    // one moving down: a run of taps then reads as two legible rows instead of
-    // one row of ink and one blob under it.
-    const row =
-      previous !== undefined && place - previous.x < MARKER_STAGGER_GAP ? 1 - previous.row : 0;
-    const marker: EventMarker = {
+    // Drawn at its own moment, unless the grace let it in from just outside,
+    // in which case it is drawn at the edge it came in over.
+    const place = x(Math.min(window.to, Math.max(window.from, at)));
+    const row = rowFor(place, lastInRow);
+    lastInRow[row] = place;
+    return {
       id: event.id,
       label: event.label,
       letter: markerLetter(event.label),
@@ -91,8 +132,6 @@ export const placeMarkers = (
       row,
       at,
     };
-    previous = marker;
-    return marker;
   });
 };
 
@@ -135,3 +174,20 @@ export interface PlotSpan {
  */
 export const sampleWidth = (count: number, plot: PlotSpan): number =>
   (plot.right - plot.left) / Math.max(1, count - 1);
+
+/**
+ * The narrowest a touch may be judged by: a bubble is 12 across, and a mark the
+ * reader can plainly see has to be tappable.
+ */
+export const MIN_TOUCH_TOLERANCE = 12;
+
+/**
+ * How near a finger has to be to a marker to be resting on it.
+ *
+ * One reading of the cook, except on cooks whose readings are packed tighter
+ * than a fingertip: a twelve-hour brisket thinned onto a phone puts its
+ * readings about a pixel apart, and a tolerance of a pixel means the stamp is
+ * never named however carefully the marker is tapped.
+ */
+export const touchTolerance = (count: number, plot: PlotSpan): number =>
+  Math.max(MIN_TOUCH_TOLERANCE, sampleWidth(count, plot));

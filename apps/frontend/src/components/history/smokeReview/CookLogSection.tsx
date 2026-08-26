@@ -1,6 +1,6 @@
 import { Box, IconButton, Typography } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
-import React from 'react';
+import React, { useState } from 'react';
 import { CookEvent } from '../../../api/types';
 import { toneColor } from '../../common/stampTones';
 import { DetailSection } from '../../common/components/DetailSection';
@@ -32,6 +32,24 @@ const asClock = (at: Date): string =>
  * record it always was, not as a cook whose log was lost.
  */
 export function CookLogSection({ events, onRemove }: CookLogSectionProps): JSX.Element | null {
+  /**
+   * The entry whose removal is still in the air, so its cross can go quiet
+   * until it lands. A thumb on a phone double-taps, and the second removal of
+   * an entry the first one already took away comes back as a failure about a
+   * removal that succeeded.
+   */
+  const [removing, setRemoving] = useState<string | null>(null);
+
+  const remove = async (id: string): Promise<void> => {
+    setRemoving(id);
+    try {
+      await onRemove(id);
+    } finally {
+      // Cleared either way: the entry that stayed is the reader's to try again.
+      setRemoving(current => (current === id ? null : current));
+    }
+  };
+
   if (events.length === 0) return null;
 
   // Oldest first, without disturbing the list the caller holds.
@@ -80,7 +98,8 @@ export function CookLogSection({ events, onRemove }: CookLogSectionProps): JSX.E
             <IconButton
               size="small"
               aria-label={`Remove ${entry.label}`}
-              onClick={() => void onRemove(entry._id)}
+              disabled={removing === entry._id}
+              onClick={() => void remove(entry._id)}
             >
               <CloseIcon fontSize="inherit" />
             </IconButton>

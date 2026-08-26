@@ -29,7 +29,13 @@ import {
   timeOf,
   timeTicks,
 } from './chartGeometry';
-import { ChartEvent, EventMarker, nearestEvent, placeMarkers, sampleWidth } from './eventMarkers';
+import {
+  ChartEvent,
+  EventMarker,
+  nearestEvent,
+  placeMarkers,
+  touchTolerance,
+} from './eventMarkers';
 
 export type { ChartEvent, EventMarker } from './eventMarkers';
 
@@ -185,6 +191,12 @@ function TemperatureChart({
       markers: placeMarkers(events, moment => scales.x(moment), {
         from: scales.x.domain()[0].getTime(),
         to: scales.x.domain()[1].getTime(),
+        // The window's ends are stored readings, and the pit is only written
+        // down every so often: a stamp is allowed to fall one reading outside
+        // the drawn cook and still be drawn, at the edge it fell past.
+        grace:
+          (scales.x.domain()[1].getTime() - scales.x.domain()[0].getTime()) /
+          Math.max(1, cook.length - 1),
       }),
       snapshotLine:
         snapshot === undefined
@@ -223,8 +235,9 @@ function TemperatureChart({
   const touchedX = touched === undefined ? undefined : drawing.scales.x(timeOf(touched));
   /**
    * The mark the finger is resting on, if it is resting on one. Near enough
-   * means within one reading of the cook, so a finger on a twelve-hour brisket
-   * has to be as close to a mark as its readings are to each other.
+   * means within one reading of the cook, or within a bubble's width when the
+   * readings are packed tighter than that — a mark the reader can see has to be
+   * a mark the reader can tap.
    */
   const stamp: EventMarker | undefined =
     touchedX === undefined
@@ -232,7 +245,7 @@ function TemperatureChart({
       : nearestEvent(
           drawing.markers,
           touchedX,
-          sampleWidth(cook.length, { left: plot.left, right: plot.right })
+          touchTolerance(cook.length, { left: plot.left, right: plot.right })
         );
   /** The card grows by a row when it has a stamp to name as well as readings. */
   const cardSize = { width: CARD.width, height: CARD.height + (stamp ? CARD_ROW : 0) };

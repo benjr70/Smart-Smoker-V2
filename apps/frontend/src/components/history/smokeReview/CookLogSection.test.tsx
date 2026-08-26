@@ -4,7 +4,7 @@
  */
 import { Experimental_CssVarsProvider as CssVarsProvider } from '@mui/material';
 import '@testing-library/jest-dom';
-import { render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { CookEvent } from '../../../api/types';
@@ -69,6 +69,37 @@ describe('the cook log section', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Remove Added Wood' }));
 
     expect(onRemove).toHaveBeenCalledWith('event-1');
+  });
+
+  /**
+   * A cross that stays live while its own removal is still in the air invites a
+   * second tap, and the second removal of an entry that is already gone comes
+   * back as a failure — the reader is told the removal did not work about a
+   * removal that plainly did.
+   */
+  it('will not send the same removal twice while the first is still in the air', async () => {
+    let finish = (removed: boolean): void => void removed;
+    const onRemove = showLog(
+      [event('event-1', 12)],
+      jest.fn().mockReturnValue(
+        new Promise<boolean>(resolve => {
+          finish = resolve;
+        })
+      )
+    );
+    const cross = screen.getByRole('button', { name: 'Remove Added Wood' });
+
+    await userEvent.click(cross);
+    expect(cross).toBeDisabled();
+    // Fired rather than clicked: a disabled cross refuses a real tap, which is
+    // the whole of the guard, so the second one is put straight at it.
+    fireEvent.click(cross);
+
+    expect(onRemove).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      finish(true);
+    });
   });
 
   it('reads a pit that recorded nothing as a dash', () => {

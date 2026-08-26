@@ -642,6 +642,25 @@ describe('the marks left on the cook', () => {
     expect(rows[0]).not.toEqual(rows[1]);
   });
 
+  /**
+   * The pit is only written down every so often, so the first stored reading is
+   * a little after the cook actually started: a stamp tapped in those opening
+   * seconds is before everything the chart has, and dropping it would leave an
+   * entry in the cook log with nothing on the plot to match it.
+   */
+  it('draws a stamp from just before the first reading at the start of the plot', () => {
+    const { container } = render(
+      <TemperatureChart
+        data={cook}
+        names={names}
+        colors={colors}
+        events={[{ ...wrapped, id: 'lit', at: new Date(2026, 0, 1, 11, 59, 30) }]}
+      />
+    );
+
+    expect(container.querySelector('circle[data-event-marker="lit"]')).not.toBeNull();
+  });
+
   it('draws no markers at all for a cook nothing was logged on', () => {
     const { container } = render(<TemperatureChart data={cook} names={names} colors={colors} />);
 
@@ -673,6 +692,34 @@ describe('reading a mark back', () => {
     );
 
     touchAt(container, 193);
+
+    expect(
+      within(container.querySelector('[data-hover-card]') as unknown as HTMLElement).getByText(
+        'Wrapped'
+      )
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * A long cook thinned onto a phone puts its readings about a pixel apart. The
+   * bubble is still twelve across and still plainly tappable, so what counts as
+   * touching it cannot shrink with the readings.
+   */
+  it('names the stamp on a long cook whose readings are packed tight', () => {
+    const packed: ChartSample[] = Array.from({ length: 300 }, (_, step) => at(step * 2.4));
+    const { container } = render(
+      <TemperatureChart
+        data={packed}
+        names={names}
+        colors={colors}
+        events={[{ ...wrapped, at: new Date(2026, 0, 1, 12, 360) }]}
+      />
+    );
+
+    const bubble = container.querySelector(
+      'circle[data-event-marker="event-1"]'
+    ) as SVGCircleElement;
+    touchAt(container, Number(bubble.getAttribute('cx')) + 4);
 
     expect(
       within(container.querySelector('[data-hover-card]') as unknown as HTMLElement).getByText(
