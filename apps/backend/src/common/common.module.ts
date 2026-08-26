@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { StateModule } from '../State/state.module';
 import { SmokeModule } from '../smoke/smoke.module';
 import { CurrentSmokeService } from './current-smoke.service';
@@ -14,7 +14,11 @@ import { CurrentSmokeService } from './current-smoke.service';
  * acyclic (`SmokeService.getCurrentSmoke` stays its own degenerate walk).
  */
 @Module({
-  imports: [StateModule, SmokeModule],
+  // `StateModule` is forward-referenced: it reaches back here through the
+  // gateway (session → gateway → temps → here), so the two files are in a
+  // require loop and the eager reference resolves as `undefined`. See
+  // `TempModule` for the whole loop.
+  imports: [forwardRef(() => StateModule), SmokeModule],
   providers: [CurrentSmokeService],
   exports: [CurrentSmokeService],
 })
