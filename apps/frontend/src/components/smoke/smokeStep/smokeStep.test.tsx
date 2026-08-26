@@ -284,6 +284,118 @@ describe('the chart on the smoke screen', () => {
     expect(container.querySelector('text[data-event-letter="event-1"]')).toHaveTextContent('W');
   });
 
+  /**
+   * The catalogue is what a stamp is called now, and the marker is drawn from
+   * it rather than from the word the event was logged under: renaming Wrapped
+   * to Split moves the bubble's letter with the button's, and recolouring the
+   * stamp moves the bubble's colour. Asserted on the chart and not only on the
+   * list, because the two are drawn from different code and only one of them
+   * was ever wired.
+   */
+  test('draws a marker under the name and colour the stamp carries now', async () => {
+    const kit = harness();
+    kit.api.seedSmoking(true);
+    const backend = createFakeBackend({
+      state: { smokeId: 'smoke-1', smoking: true },
+      appSettings: {
+        settings: {
+          cookLog: {
+            stamps: DEFAULT_STAMPS.map(stamp =>
+              stamp.key === 'wrap' ? { ...stamp, label: 'Split', tone: 'p2' as const } : stamp
+            ),
+          },
+        },
+      },
+      cookEvents: {
+        current: [
+          {
+            _id: 'event-1',
+            smokeId: 'smoke-1',
+            stampKey: 'wrap',
+            label: 'Wrapped',
+            tone: 'p1',
+            at: '2026-07-18T12:00:30.000Z',
+            chamberTemp: 243,
+          } as never,
+        ],
+      },
+    });
+    const { container, socket } = renderView(kit, backend);
+
+    await act(async () => {
+      await flushPromises();
+    });
+    await act(async () => {
+      socket.injectEvents(eventsFrame('213', ['145', '92', '78']));
+    });
+    await act(async () => {
+      socket.injectEvents(eventsFrame('218', ['150', '95', '80'], 60));
+    });
+
+    await waitFor(() =>
+      expect(container.querySelector('text[data-event-letter="event-1"]')).toHaveTextContent('S')
+    );
+    expect(container.querySelector('circle[data-event-marker="event-1"]')).toHaveAttribute(
+      'fill',
+      probeColours.probe2
+    );
+    // And the list under the chart says the same word, so the two halves of the
+    // screen cannot disagree about what was tapped.
+    expect(within(screen.getByTestId('cook-event-row')).getByText('Split')).toBeInTheDocument();
+  });
+
+  /**
+   * A custom stamp that has since been deleted has nothing in the catalogue to
+   * resolve against, so the marker falls back to what the event was logged
+   * with — the alternative is a bubble with no letter and no colour standing
+   * over a cook nobody can read.
+   */
+  test('keeps a since-removed stamp’s own name and colour on its marker', async () => {
+    const kit = harness();
+    kit.api.seedSmoking(true);
+    const backend = createFakeBackend({
+      state: { smokeId: 'smoke-1', smoking: true },
+      // The catalogue as it stands now: the shipped six, and no sign of the
+      // custom stamp this cook was stamped with.
+      appSettings: {
+        settings: { cookLog: { stamps: DEFAULT_STAMPS.map(stamp => ({ ...stamp })) } },
+      },
+      cookEvents: {
+        current: [
+          {
+            _id: 'event-1',
+            smokeId: 'smoke-1',
+            stampKey: 'custom-01JFOILBOAT',
+            label: 'Foil Boat',
+            tone: 'p3',
+            at: '2026-07-18T12:00:30.000Z',
+            chamberTemp: 243,
+          } as never,
+        ],
+      },
+    });
+    const { container, socket } = renderView(kit, backend);
+
+    await act(async () => {
+      await flushPromises();
+    });
+    await act(async () => {
+      socket.injectEvents(eventsFrame('213', ['145', '92', '78']));
+    });
+    await act(async () => {
+      socket.injectEvents(eventsFrame('218', ['150', '95', '80'], 60));
+    });
+
+    await waitFor(() =>
+      expect(container.querySelector('text[data-event-letter="event-1"]')).toHaveTextContent('F')
+    );
+    expect(container.querySelector('circle[data-event-marker="event-1"]')).toHaveAttribute(
+      'fill',
+      probeColours.probe3
+    );
+    expect(within(screen.getByTestId('cook-event-row')).getByText('Foil Boat')).toBeInTheDocument();
+  });
+
   test('falls back to a default name for a probe nobody named', async () => {
     const kit = harness();
     kit.api.seedSmoking(true).seedProfile({
