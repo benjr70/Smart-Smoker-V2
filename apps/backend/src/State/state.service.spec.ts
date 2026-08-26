@@ -7,6 +7,7 @@ import { StateDto } from './stateDto';
 import { TimelineService } from '../timeline/timeline.service';
 import { SmokeStatus } from '../smoke/smoke.schema';
 import { FakeDoc, fakeModel } from '../timeline/testing/fake-model';
+import { COOK_LOG_ANNOUNCER } from '../websocket/cook-log-announcer';
 
 describe('StateService', () => {
   let service: StateService;
@@ -14,6 +15,7 @@ describe('StateService', () => {
   let mockTimelineService: { stampStart: jest.Mock };
   let mockCookEventModel: { deleteMany: jest.Mock };
   let mockSmokeModel: { findById: jest.Mock };
+  let mockEvents: { broadcastCookEvents: jest.Mock };
   /** What the session's cook is, as the smoke collection holds it. */
   let currentSmoke: { _id: string; status: SmokeStatus } | null;
 
@@ -53,6 +55,8 @@ describe('StateService', () => {
       }),
     };
 
+    mockEvents = { broadcastCookEvents: jest.fn() };
+
     currentSmoke = { _id: 'test-smoke-id', status: SmokeStatus.InProgress };
     mockSmokeModel = {
       findById: jest.fn().mockReturnValue({
@@ -78,6 +82,10 @@ describe('StateService', () => {
         {
           provide: getModelToken('Smoke'),
           useValue: mockSmokeModel,
+        },
+        {
+          provide: COOK_LOG_ANNOUNCER,
+          useValue: mockEvents,
         },
       ],
     }).compile();
@@ -281,6 +289,7 @@ describe('StateService', () => {
             useValue: mockCookEventModel,
           },
           { provide: getModelToken('Smoke'), useValue: mockSmokeModel },
+          { provide: COOK_LOG_ANNOUNCER, useValue: mockEvents },
         ],
       }).compile();
       stopping = module.get<StateService>(StateService);
@@ -377,6 +386,41 @@ describe('StateService', () => {
       await service.clearSmoke();
 
       expect(mockCookEventModel.deleteMany).not.toHaveBeenCalled();
+    });
+
+    /**
+     * The screens do not unmount when a session is cleared — the stale-cook
+     * recovery clears from under a mounted smoke step — so a clear that
+     * announced nothing would leave the previous cook's entries on screen, and
+     * a Remove tapped there would delete an event of an archived cook.
+     */
+    it('announces the now-empty cook log to every open screen', async () => {
+      await service.clearSmoke();
+
+      expect(mockEvents.broadcastCookEvents).toHaveBeenCalledWith([]);
+    });
+
+    /**
+     * The finished cook's log is kept, but the session no longer names it, so
+     * what every live screen is showing — the log of the cook in progress — is
+     * empty here too.
+     */
+    it('announces an empty log when a finished cook is put away', async () => {
+      currentSmoke = { _id: 'test-smoke-id', status: SmokeStatus.Complete };
+
+      await service.clearSmoke();
+
+      expect(mockEvents.broadcastCookEvents).toHaveBeenCalledWith([]);
+    });
+
+    // A socket that cannot be reached must not fail the clear itself.
+    it('still clears the session when the announcement throws', async () => {
+      jest.spyOn(Logger, 'error').mockImplementation();
+      mockEvents.broadcastCookEvents = jest.fn(() => {
+        throw new Error('no server');
+      });
+
+      await expect(service.clearSmoke()).resolves.toBeDefined();
     });
 
     it('still clears the session when the cook log could not be removed', async () => {

@@ -537,6 +537,13 @@ interface FakeStore {
     finish: Smoke | Record<string, never>;
   };
   cookEvents: StoredCookEvent[];
+  /**
+   * How many events this store has ever recorded — the id counter, kept apart
+   * from the list because the list shrinks. Numbering from the length hands a
+   * new event the id of one that was deleted, and two rows with one id is a
+   * single delete removing both and React keying them together.
+   */
+  cookEventsRecorded: number;
   history: SmokeHistory[];
   timeline: {
     records: Record<string, StoredSmokeTimeline>;
@@ -586,6 +593,7 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
       finish: seed.smoke?.finish ?? {},
     },
     cookEvents: seed.cookEvents?.current ?? [],
+    cookEventsRecorded: seed.cookEvents?.current?.length ?? 0,
     history: seed.history ?? [],
     timeline: {
       records: seed.timeline?.records ?? {},
@@ -881,8 +889,9 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
           throw new ApiError({ status: 409, path, method });
         }
         const latest = store.temps.current[store.temps.current.length - 1];
+        store.cookEventsRecorded += 1;
         const recorded: StoredCookEvent = {
-          _id: `cook-event-${store.cookEvents.length + 1}`,
+          _id: `cook-event-${store.cookEventsRecorded}`,
           smokeId: store.state.smokeId,
           stampKey: stamp.key,
           label: stamp.label,

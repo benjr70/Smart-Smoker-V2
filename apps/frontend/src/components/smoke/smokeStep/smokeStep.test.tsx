@@ -957,6 +957,52 @@ describe('SmokeStep composition root', () => {
     expect(screen.getByTestId('next-button')).toBeInTheDocument();
   });
 
+  /**
+   * The injection seam is the root's to honour: a step rendered with a cook-log
+   * channel must use that one. A root that dropped the prop would fall back to
+   * opening a second websocket of its own — in every test that renders the
+   * wizard, and behind every screen that means to hand one in.
+   */
+  test('hands the injected cook-log channel down to the view', async () => {
+    const listeners: ((events: unknown[]) => void)[] = [];
+    const subscription = {
+      subscribe: (listener: (events: unknown[]) => void) => {
+        listeners.push(listener);
+        return () => undefined;
+      },
+    };
+
+    render(
+      <ApiClientProvider client={createApiClient(createFakeBackend())}>
+        <DesignSurface>
+          <SmokeStep nextButton={nextButton} cookEventsSubscription={subscription} />
+        </DesignSurface>
+      </ApiClientProvider>
+    );
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(listeners).toHaveLength(1);
+
+    await act(async () => {
+      listeners[0]([
+        {
+          _id: 'event-root',
+          smokeId: 'smoke-1',
+          stampKey: 'wrap',
+          label: 'Wrapped',
+          tone: 'p1',
+          at: '2026-08-25T13:00:00.000Z',
+          chamberTemp: 250,
+        },
+      ]);
+      await flushPromises();
+    });
+
+    expect(within(screen.getByTestId('cook-event-row')).getByText('Wrapped')).toBeInTheDocument();
+  });
+
   test('defaults the socket URL to empty string when WS_URL is unset', async () => {
     render(
       <ApiClientProvider client={createApiClient(createFakeBackend())}>

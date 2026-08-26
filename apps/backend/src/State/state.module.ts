@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { StateController } from './state.controller';
 import { stateSchema } from './state.schema';
@@ -6,6 +6,7 @@ import { StateService } from './state.service';
 import { TimelineModule } from '../timeline/timeline.module';
 import { CookEventSchema } from '../cookEvents/cook-events.schema';
 import { SmokeSchema } from '../smoke/smoke.schema';
+import { EventsModule } from '../websocket/events.module';
 
 @Module({
   imports: [
@@ -21,6 +22,10 @@ import { SmokeSchema } from '../smoke/smoke.schema';
     ]),
     // The cook's start is stamped when smoking is switched on.
     TimelineModule,
+    // Clearing the session announces the now-empty cook log. Forward-referenced
+    // because the gateway reads this module's service; both ends declare the
+    // reference, which is what lets Nest build the pair.
+    forwardRef(() => EventsModule),
   ],
   controllers: [StateController],
   providers: [StateService],

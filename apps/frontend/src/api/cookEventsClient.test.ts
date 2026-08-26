@@ -86,6 +86,27 @@ describe('cook events client — endpoint contract', () => {
     expect(error).toBeInstanceOf(ApiError);
     expect(error.status).toBe(409);
   });
+
+  /**
+   * Ids are a store's promise that two rows are two things. Numbering from the
+   * length of a list that shrinks breaks it after the first delete: the next
+   * event takes the gone one's id, one delete then removes two rows, and React
+   * keys them as one.
+   */
+  test('never hands a new event the id of a deleted one', async () => {
+    const backend = createFakeBackend({ state: { smokeId: 'smoke-1', smoking: true } });
+    const client = createApiClient(backend);
+
+    const first = await client.cookEvents.record('wood');
+    await client.cookEvents.record('wrap');
+    await client.cookEvents.deleteById(first._id);
+    const third = await client.cookEvents.record('spritz');
+
+    const log = await client.cookEvents.listCurrent();
+    expect(third._id).not.toBe(first._id);
+    expect(log.map(event => event._id)).toEqual([...new Set(log.map(event => event._id))]);
+    expect(log).toHaveLength(2);
+  });
 });
 
 describe('the stamps the buttons are drawn from', () => {

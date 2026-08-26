@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { BaseService } from '../common/base.service';
@@ -7,6 +7,10 @@ import { StateDto } from './stateDto';
 import { TimelineService } from '../timeline/timeline.service';
 import { cookEventsOfSmoke } from '../cookEvents/cook-events.filter';
 import { Smoke, SmokeStatus } from '../smoke/smoke.schema';
+import {
+  COOK_LOG_ANNOUNCER,
+  CookLogAnnouncerPort,
+} from '../websocket/cook-log-announcer';
 
 /** What a state means before anything has been cooked: idle, no smoke. */
 const IDLE_STATE: StateDto = { smokeId: '', smoking: false };
@@ -37,6 +41,13 @@ export class StateService
      */
     @InjectModel('Smoke')
     private readonly smokeModel: Model<Pick<Smoke, 'status'>>,
+    /**
+     * How every open screen hears that the cook log it is showing is no longer
+     * anybody's. Taken as a port rather than as the gateway, because the two
+     * would otherwise import each other; see {@link COOK_LOG_ANNOUNCER}.
+     */
+    @Inject(COOK_LOG_ANNOUNCER)
+    private readonly events: CookLogAnnouncerPort,
   ) {
     super(model, 'state');
   }
@@ -158,6 +169,12 @@ export class StateService
    * a smoke nothing points at any more, but a session the user asked to clear
    * that stayed set up because a delete failed is the worse outcome by far —
    * the next cook would record into the last one.
+   *
+   * The clear is then announced, because the screens do not unmount when it
+   * happens — the stale-cook recovery clears from under a mounted smoke step.
+   * Without the announcement the card keeps showing the cleared cook's entries,
+   * and a Remove tapped there deletes an event of a cook that has been put
+   * away.
    */
   async clearSmoke() {
     await this.discardCookLog();
@@ -165,7 +182,31 @@ export class StateService
       smokeId: '',
       smoking: false,
     };
-    return await this.updateCurrent(stateDto);
+    const cleared = await this.updateCurrent(stateDto);
+    this.announceEmptyCookLog();
+    return cleared;
+  }
+
+  /**
+   * Tell every connected client that there is no cook log to show.
+   *
+   * Empty whichever way the clear went: the discarded session's events are
+   * gone, and a finished cook's are kept but belong to a cook the session no
+   * longer names — and what a live screen shows is the log of the cook in
+   * progress. Never throws: the session *is* cleared, and an unreachable
+   * socket must not turn that into an error the user retries.
+   */
+  private announceEmptyCookLog(): void {
+    try {
+      this.events.broadcastCookEvents([]);
+    } catch (err) {
+      Logger.error(
+        `could not announce the cleared cook log: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+        'State',
+      );
+    }
   }
 
   /**

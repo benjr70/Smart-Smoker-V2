@@ -321,7 +321,11 @@ export function SmokeStep(props: SmokeStepProps): JSX.Element {
 
   return (
     <SmokeSessionProvider config={configRef.current}>
-      <SmokeStepView nextButton={props.nextButton} onOpenSettings={props.onOpenSettings} />
+      <SmokeStepView
+        nextButton={props.nextButton}
+        onOpenSettings={props.onOpenSettings}
+        cookEventsSubscription={props.cookEventsSubscription}
+      />
     </SmokeSessionProvider>
   );
 }

@@ -58,6 +58,10 @@ export function useCookEvents(options: UseCookEventsOptions = {}): UseCookEvents
   notifyRef.current = notify;
   // Built once and held, so a re-render never reopens the socket.
   const subscriptionRef = useRef<CookEventsSubscriptionPort | null>(null);
+  // Whether anything newer than the mount read has already been applied — an
+  // announcement, a tap, or a removal. The read is the slower of the two
+  // channels, and a log from before the newer news must not land on top of it.
+  const supersededRef = useRef(false);
   if (subscriptionRef.current === null) {
     subscriptionRef.current = options.subscription ?? createSocketCookEventsSubscription();
   }
@@ -67,15 +71,17 @@ export function useCookEvents(options: UseCookEventsOptions = {}): UseCookEvents
     void client.cookEvents
       .listCurrent()
       .then(log => {
-        // The screen may have been left before the log arrived — and an
-        // announcement may have overtaken this read, which is why nothing is
-        // applied after the effect is torn down.
-        if (reading) setEvents(log);
+        // Nothing is applied after the screen has been left, and nothing is
+        // applied over news that arrived while this read was in flight: an
+        // announcement or a tap is by definition the later word on the log,
+        // and letting the read win would take the new entry off the screen
+        // until the next write.
+        if (reading && !supersededRef.current) setEvents(log);
       })
       .catch(() => {
         // An empty log rather than a broken screen: the cook itself is drawn
         // from the live session, and the next announcement fills this in.
-        if (reading) setEvents([]);
+        if (reading && !supersededRef.current) setEvents([]);
       });
     return () => {
       reading = false;
@@ -84,7 +90,10 @@ export function useCookEvents(options: UseCookEventsOptions = {}): UseCookEvents
 
   useEffect(() => {
     const port = subscriptionRef.current as CookEventsSubscriptionPort;
-    return port.subscribe(announced => setEvents(cookEventsFromWire(announced)));
+    return port.subscribe(announced => {
+      supersededRef.current = true;
+      setEvents(cookEventsFromWire(announced));
+    });
   }, []);
 
   const record = useCallback(
@@ -92,6 +101,7 @@ export function useCookEvents(options: UseCookEventsOptions = {}): UseCookEvents
       client.cookEvents
         .record(stampKey)
         .then(recorded => {
+          supersededRef.current = true;
           // Appended from the backend's answer. The announcement that follows
           // replaces the whole list anyway; this is what makes the entry
           // appear on the screen that tapped it even if the socket is down.
@@ -112,6 +122,7 @@ export function useCookEvents(options: UseCookEventsOptions = {}): UseCookEvents
       client.cookEvents
         .deleteById(id)
         .then(() => {
+          supersededRef.current = true;
           setEvents(log => log.filter(event => event._id !== id));
           return true;
         })

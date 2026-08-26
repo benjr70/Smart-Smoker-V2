@@ -10,6 +10,7 @@ import { StateService } from '../State/state.service';
 import { StatsService } from '../stats/stats.service';
 import { FakeDoc, fakeModel } from '../timeline/testing/fake-model';
 import { TimelineService } from '../timeline/timeline.service';
+import { COOK_LOG_ANNOUNCER } from '../websocket/cook-log-announcer';
 import { EventsGateway } from '../websocket/events.gateway';
 import { StaleCookService } from './stale-cook.service';
 
@@ -118,6 +119,11 @@ describe('StaleCookService', () => {
         // The real `StateService` is built here, and it removes a discarded
         // session's cook log; nothing in this module's behaviour touches one.
         { provide: getModelToken('CookEvent'), useValue: fakeModel([]) },
+        // ... and it announces the emptied log over the gateway port.
+        {
+          provide: COOK_LOG_ANNOUNCER,
+          useValue: { broadcastCookEvents: jest.fn() },
+        },
         {
           provide: getModelToken(ApplicationSettings.name),
           useValue: strictSettingsModel(settings),
