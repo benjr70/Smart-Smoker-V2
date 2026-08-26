@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Box, Card, IconButton, Typography } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import { CookEvent, CookStamp, DEFAULT_STAMPS } from '../../../api';
-import { toneColor } from './stampTones';
+import { toneColor } from '../../common/stampTones';
 
 /**
  * How long a tapped button says what happened to it before going back to being

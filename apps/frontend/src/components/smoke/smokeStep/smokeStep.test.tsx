@@ -220,6 +220,51 @@ describe('the chart on the smoke screen', () => {
     );
   });
 
+  /**
+   * The chart and the cook log are one screen: what the pitmaster stamped is
+   * drawn on the curve it explains, live, in the stamp's own tone.
+   */
+  test('marks what has been logged on the cook it happened to', async () => {
+    const kit = harness();
+    kit.api.seedSmoking(true);
+    const backend = createFakeBackend({
+      state: { smokeId: 'smoke-1', smoking: true },
+      cookEvents: {
+        current: [
+          {
+            _id: 'event-1',
+            smokeId: 'smoke-1',
+            stampKey: 'wrap',
+            label: 'Wrapped',
+            tone: 'p1',
+            at: '2026-07-18T12:00:30.000Z',
+            chamberTemp: 243,
+          } as never,
+        ],
+      },
+    });
+    const { container, socket } = renderView(kit, backend);
+
+    await act(async () => {
+      await flushPromises();
+    });
+    await act(async () => {
+      socket.injectEvents(eventsFrame('213', ['145', '92', '78']));
+    });
+    await act(async () => {
+      socket.injectEvents(eventsFrame('218', ['150', '95', '80'], 60));
+    });
+
+    await waitFor(() =>
+      expect(container.querySelector('circle[data-event-marker="event-1"]')).toBeInTheDocument()
+    );
+    expect(container.querySelector('circle[data-event-marker="event-1"]')).toHaveAttribute(
+      'fill',
+      probeColours.probe1
+    );
+    expect(container.querySelector('text[data-event-letter="event-1"]')).toHaveTextContent('W');
+  });
+
   test('falls back to a default name for a probe nobody named', async () => {
     const kit = harness();
     kit.api.seedSmoking(true).seedProfile({

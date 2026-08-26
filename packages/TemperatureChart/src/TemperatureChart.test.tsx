@@ -10,6 +10,7 @@ import React from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import TemperatureChart, { ChartPalette, ChartSeriesNames } from './TemperatureChart';
 import { ChartSample, formatClock } from './chartGeometry';
+import { ChartEvent } from './eventMarkers';
 
 const colors: ChartPalette = {
   panel: '#FFFFFF',
@@ -579,5 +580,114 @@ describe('the snapshotted target line', () => {
     );
 
     expect(snapshotLine(container)).toBeNull();
+  });
+});
+
+/**
+ * The cook log on the plot: what the pitmaster did, drawn where they did it.
+ * A dashed line down the cook at that moment, and a bubble at the top carrying
+ * the stamp's initial in the stamp's own colour.
+ */
+describe('the marks left on the cook', () => {
+  const wrapped: ChartEvent = {
+    id: 'event-1',
+    label: 'Wrapped',
+    at: new Date(2026, 0, 1, 12, 15),
+    color: '#C8811F',
+  };
+
+  it('draws a dashed line and a lettered bubble for every event it is given', () => {
+    const { container } = render(
+      <TemperatureChart data={cook} names={names} colors={colors} events={[wrapped]} />
+    );
+
+    const line = container.querySelector('line[data-event-line="event-1"]') as SVGLineElement;
+    const bubble = container.querySelector(
+      'circle[data-event-marker="event-1"]'
+    ) as SVGCircleElement;
+
+    expect(line).toHaveAttribute('stroke', wrapped.color);
+    expect(line.getAttribute('stroke-dasharray')).toBeTruthy();
+    expect(bubble).toHaveAttribute('fill', wrapped.color);
+    expect(container.querySelector('text[data-event-letter="event-1"]')).toHaveTextContent('W');
+  });
+
+  it('draws nothing for an event from outside the cook on the plot', () => {
+    const { container } = render(
+      <TemperatureChart
+        data={cook}
+        names={names}
+        colors={colors}
+        events={[{ ...wrapped, id: 'yesterday', at: new Date(2026, 0, 1, 9, 0) }]}
+      />
+    );
+
+    expect(container.querySelector('[data-event-marker="yesterday"]')).toBeNull();
+  });
+
+  it('lifts a crowded bubble clear of the one beside it', () => {
+    const { container } = render(
+      <TemperatureChart
+        data={cook}
+        names={names}
+        colors={colors}
+        events={[wrapped, { ...wrapped, id: 'event-2', at: new Date(2026, 0, 1, 12, 15, 20) }]}
+      />
+    );
+
+    const rows = Array.from(
+      container.querySelectorAll<SVGCircleElement>('circle[data-event-marker]')
+    ).map(bubble => bubble.getAttribute('cy'));
+
+    expect(rows[0]).not.toEqual(rows[1]);
+  });
+
+  it('draws no markers at all for a cook nothing was logged on', () => {
+    const { container } = render(<TemperatureChart data={cook} names={names} colors={colors} />);
+
+    expect(container.querySelectorAll('circle[data-event-marker]')).toHaveLength(0);
+  });
+});
+
+/** Touching the plot near a mark says which mark it was, not just its letter. */
+describe('reading a mark back', () => {
+  /** A cook recorded every minute, so one reading is a narrow strip of plot. */
+  const minutely: ChartSample[] = Array.from({ length: 31 }, (_, minute) => at(minute));
+  const wrapped: ChartEvent = {
+    id: 'event-1',
+    label: 'Wrapped',
+    at: new Date(2026, 0, 1, 12, 15),
+    color: '#C8811F',
+  };
+
+  const touchAt = (container: HTMLElement, x: number): void => {
+    fireEvent(
+      container.querySelector('svg') as SVGSVGElement,
+      new MouseEvent('pointermove', { bubbles: true, clientX: x })
+    );
+  };
+
+  it('names the stamp when the finger is on the mark', () => {
+    const { container } = render(
+      <TemperatureChart data={minutely} names={names} colors={colors} events={[wrapped]} />
+    );
+
+    touchAt(container, 193);
+
+    expect(
+      within(container.querySelector('[data-hover-card]') as unknown as HTMLElement).getByText(
+        'Wrapped'
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('says nothing about a stamp the finger is nowhere near', () => {
+    const { container } = render(
+      <TemperatureChart data={minutely} names={names} colors={colors} events={[wrapped]} />
+    );
+
+    touchAt(container, 45);
+
+    expect(container.querySelector('[data-hover-stamp]')).toBeNull();
   });
 });

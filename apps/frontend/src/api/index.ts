@@ -86,5 +86,7 @@ export type {
   UseCookEventsResult,
 } from './useCookEvents';
 export { useCookEvents } from './useCookEvents';
+export type { UseCookEventsForSmokeResult } from './useCookEventsForSmoke';
+export { useCookEventsForSmoke } from './useCookEventsForSmoke';
 export type { StatsStatus, UseStatsResult } from './useStats';
 export { useStats } from './useStats';

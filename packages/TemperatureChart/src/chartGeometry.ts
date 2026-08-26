@@ -451,9 +451,14 @@ export interface CardLayout {
   rowsY: number[];
 }
 
-/** The room left inside the card, and how far apart its rows sit. */
+/** The room left inside the card. */
 const CARD_PADDING = 9;
-const CARD_ROW = 14;
+/**
+ * How far apart the card's rows sit. Public, because what the card is tall
+ * enough for and what it writes have to agree: a caller that adds a row — the
+ * stamp named under the readings — grows the card by exactly one of these.
+ */
+export const CARD_ROW = 14;
 
 /** Where the moment and each reading are written inside the card. */
 export const cardLayout = (origin: Point, card: CardSize, rowCount: number): CardLayout => {

@@ -1,7 +1,8 @@
 import { Box, Grid } from '@mui/material';
 import React from 'react';
-import { useReview } from '../../../api';
+import { useCookEventsForSmoke, useReview } from '../../../api';
 import { RatingsCard } from '../smokeCards/ratingsCard';
+import { CookLogSection } from './CookLogSection';
 import { PostSmokeSection } from './PostSmokeSection';
 import { PreSmokeSection } from './PreSmokeSection';
 import { ReviewHeader } from './ReviewHeader';
@@ -25,6 +26,10 @@ export function SmokeReview(props: smokeReviewProps): JSX.Element {
   const { preSmoke, date, timeline, smokeProfile, temps, postSmoke, rating } = useReview(
     props.smokeId
   );
+  // What was done to this cook, read by the cook's own id. One log serves both
+  // the section that lists it and the chart that draws it, so crossing an entry
+  // out takes its marker off the curve at the same moment.
+  const cookLog = useCookEventsForSmoke(props.smokeId);
 
   return (
     <Grid item xs={11}>
@@ -37,8 +42,16 @@ export function SmokeReview(props: smokeReviewProps): JSX.Element {
       />
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
         <PreSmokeSection preSmoke={preSmoke} woodType={smokeProfile.woodType} />
-        <SmokeSection smokeProfile={smokeProfile} temps={temps} timeline={timeline} />
+        <SmokeSection
+          smokeProfile={smokeProfile}
+          temps={temps}
+          timeline={timeline}
+          events={cookLog.events}
+        />
         <PostSmokeSection postSmoke={postSmoke} />
+        {/* After the cook it describes, and after what was done once it came
+            off: a cook nobody stamped anything on shows no section at all. */}
+        <CookLogSection events={cookLog.events} onRemove={cookLog.remove} />
         <RatingsCard ratings={rating} />
       </Box>
     </Grid>

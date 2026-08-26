@@ -9,6 +9,7 @@ import { CookEventsSubscriptionPort, getDefaultApiClient, useCookEvents } from '
 import { createSessionApiPort } from '../../../api/sessionApiAdapter';
 import { useChartPalette } from '../../../theme';
 import { chartNamesOf } from '../../common/chartNames';
+import { useChartEvents } from '../../common/chartEvents';
 import { CompletionCard } from './CompletionCard';
 import { EventLog } from './EventLog';
 import { SmokeStatusBar } from './SmokeStatusBar';
@@ -84,6 +85,9 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
   // client changes it — so the same taps show here, on the touchscreen and in
   // any other browser that is open.
   const cookLog = useCookEvents({ subscription: props.cookEventsSubscription });
+  // The same log the card below lists, in the chart's own terms: a marker on
+  // the curve at the moment of each tap, in that stamp's tone.
+  const cookMarks = useChartEvents(cookLog.events);
   // Lighting the smoker, guarded: a session whose cook the backend already
   // stopped is asked about rather than lit, so the next cook's readings never
   // land in the last one's series. Recovering from one starts the description
@@ -198,6 +202,7 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
             })}
             colors={chartColors}
             targets={chartTargets}
+            events={cookMarks}
           />
         </Grid>
       </Card>
