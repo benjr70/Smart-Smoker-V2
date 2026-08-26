@@ -115,6 +115,9 @@ describe('StaleCookService', () => {
         { provide: getModelToken('Smoke'), useValue: fakeModel(smokes) },
         { provide: getModelToken('Temp'), useValue: fakeModel(temps) },
         { provide: getModelToken('state'), useValue: fakeModel(states) },
+        // The real `StateService` is built here, and it removes a discarded
+        // session's cook log; nothing in this module's behaviour touches one.
+        { provide: getModelToken('CookEvent'), useValue: fakeModel([]) },
         {
           provide: getModelToken(ApplicationSettings.name),
           useValue: strictSettingsModel(settings),

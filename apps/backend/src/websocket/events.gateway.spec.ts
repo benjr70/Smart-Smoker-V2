@@ -651,6 +651,27 @@ describe('EventsGateway', () => {
     });
   });
 
+  /**
+   * The cook log is one list per cook, shown on every open screen at once: a
+   * stamp tapped on the phone has to appear on the touchscreen without either
+   * of them re-reading. The whole list rides on the announcement rather than
+   * the one event that changed, so a client applies it by replacing what it
+   * holds and cannot drift.
+   */
+  describe('broadcastCookEvents', () => {
+    it('announces the whole cook log to every connected client', () => {
+      const log = [
+        { stampKey: 'wood', label: 'Added Wood' },
+        { stampKey: 'wrap', label: 'Wrapped' },
+      ];
+
+      gateway.broadcastCookEvents(log as never);
+
+      expect(mockServer.emit).toHaveBeenCalledWith('cookEventsUpdate', log);
+      expect(mockServer.emit).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('handleRefresh', () => {
     it('should emit refresh event and log it', () => {
       const logSpy = jest.spyOn(Logger, 'log').mockImplementation();

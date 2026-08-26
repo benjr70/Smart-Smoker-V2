@@ -5,6 +5,8 @@ import { BaseService } from '../common/base.service';
 import { State, StateDocument } from './state.schema';
 import { StateDto } from './stateDto';
 import { TimelineService } from '../timeline/timeline.service';
+import { cookEventsOfSmoke } from '../cookEvents/cook-events.filter';
+import { Smoke, SmokeStatus } from '../smoke/smoke.schema';
 
 /** What a state means before anything has been cooked: idle, no smoke. */
 const IDLE_STATE: StateDto = { smokeId: '', smoking: false };
@@ -17,6 +19,24 @@ export class StateService
   constructor(
     @InjectModel('state') model: Model<StateDocument>,
     private readonly timeline: TimelineService,
+    /**
+     * The discarded cook's log, reached through its model rather than through
+     * `CookEventsService`: that service reads this one to find the cook in
+     * progress, so injecting it here would close a DI cycle. Removing rows by
+     * the cook they belong to carries none of that service's policy — the
+     * filter it reads them with is shared instead.
+     */
+    @InjectModel('CookEvent')
+    private readonly cookEventModel: Model<unknown>,
+    /**
+     * The session's cook, read to decide whether clearing is putting a finished
+     * cook away or throwing an unfinished one out. Its model rather than
+     * `SmokeService`: that service depends on this one, so injecting it here
+     * would close a DI cycle — the same reason `StaleCookModule` reads the cook
+     * through its model.
+     */
+    @InjectModel('Smoke')
+    private readonly smokeModel: Model<Pick<Smoke, 'status'>>,
   ) {
     super(model, 'state');
   }
@@ -130,11 +150,60 @@ export class StateService
     return result.modifiedCount > 0;
   }
 
+  /**
+   * Discard the session: no cook, not smoking, and — when the cook was never
+   * finished — nothing left stamped against it.
+   *
+   * The log goes first and never fails the clear. Events left behind belong to
+   * a smoke nothing points at any more, but a session the user asked to clear
+   * that stayed set up because a delete failed is the worse outcome by far —
+   * the next cook would record into the last one.
+   */
   async clearSmoke() {
+    await this.discardCookLog();
     const stateDto: StateDto = {
       smokeId: '',
       smoking: false,
     };
     return await this.updateCurrent(stateDto);
+  }
+
+  /**
+   * The cook log of a session being thrown away — and only of one being thrown
+   * away.
+   *
+   * Clearing is not only how an abandoned session is discarded: it is also the
+   * last step of finishing a cook (the wizard finishes the smoke, then clears
+   * the session that still names it), so the state alone cannot say which of
+   * the two is happening. The cook's own status can. A completed cook is
+   * archived, its log is its history, and this must not touch it; an unfinished
+   * one is being thrown out, and a log left behind would belong to a session
+   * nothing points at any more.
+   *
+   * A cook the collection no longer holds is treated as unfinished: what is
+   * left of it is an orphaned log, and nothing is archived that could lose by
+   * its removal.
+   */
+  private async discardCookLog(): Promise<void> {
+    try {
+      const state = await this.GetState();
+      if (!state?.smokeId) {
+        return;
+      }
+      const smoke = await this.smokeModel.findById(state.smokeId).exec();
+      if (smoke?.status === SmokeStatus.Complete) {
+        return;
+      }
+      await this.cookEventModel
+        .deleteMany(cookEventsOfSmoke(state.smokeId))
+        .exec();
+    } catch (err) {
+      Logger.error(
+        `could not discard the cook log: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+        'State',
+      );
+    }
   }
 }

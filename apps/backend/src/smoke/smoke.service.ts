@@ -7,6 +7,7 @@ import { SmokeDto } from './smokeDto';
 import { StateService } from '../State/state.service';
 import { TimelineService } from '../timeline/timeline.service';
 import { tempSeriesFilter } from '../temps/temp-series.filter';
+import { cookEventsOfSmoke } from '../cookEvents/cook-events.filter';
 import { StatsService } from '../stats/stats.service';
 
 @Injectable()
@@ -42,6 +43,8 @@ export class SmokeService extends BaseService<SmokeDocument> {
     private readonly postSmokeModel: Model<unknown>,
     @InjectModel('Ratings')
     private readonly ratingsModel: Model<unknown>,
+    @InjectModel('CookEvent')
+    private readonly cookEventModel: Model<unknown>,
   ) {
     super(model, 'Smoke');
   }
@@ -72,6 +75,11 @@ export class SmokeService extends BaseService<SmokeDocument> {
       this.deleteTempSeries(smoke.tempsId),
       this.deleteChild(this.postSmokeModel, smoke.postSmokeId),
       this.deleteChild(this.ratingsModel, smoke.ratingId),
+      // The cook log is a set of rows keyed by the cook itself rather than a
+      // linked child id, so it goes by the same filter its own service reads
+      // it with — and by the model, since `CookEventsService` depends on this
+      // module's dependencies and importing it back would close a DI cycle.
+      this.deleteCookLog(id),
     ]);
     const deleted = await this.delete(id);
     // Only once nothing of the cook is left: statistics recomputed mid-cascade
@@ -106,6 +114,11 @@ export class SmokeService extends BaseService<SmokeDocument> {
       return;
     }
     await child.deleteOne({ _id: id }).exec();
+  }
+
+  /** Every event stamped against this cook. */
+  private async deleteCookLog(smokeId: string): Promise<void> {
+    await this.cookEventModel.deleteMany(cookEventsOfSmoke(smokeId)).exec();
   }
 
   /**

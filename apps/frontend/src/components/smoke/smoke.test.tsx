@@ -213,6 +213,24 @@ describe('the wizard step control', () => {
     expect(await screen.findByTestId('presmoke-name-input')).toBeInTheDocument();
   });
 
+  /**
+   * A stamp is something done to a cook that is running. The pre-smoke step is
+   * for a cook that has not started and the post-smoke step for one that is
+   * over, so neither offers the log — the card belongs to the smoke step alone,
+   * which is the only place it is rendered.
+   */
+  it('offers the cook log on no step but the smoke step', async () => {
+    const user = userEvent.setup();
+    renderWizard();
+
+    await screen.findByTestId('presmoke-name-input');
+    expect(screen.queryByTestId('cook-log-card')).not.toBeInTheDocument();
+
+    await user.click(segment('Post-Smoke'));
+    await screen.findByTestId('postsmoke-rest-time-input');
+    expect(screen.queryByTestId('cook-log-card')).not.toBeInTheDocument();
+  });
+
   it('marks the step being shown as the selected segment, and only that one', async () => {
     const user = userEvent.setup();
     renderWizard();

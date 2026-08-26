@@ -22,6 +22,7 @@ describe('SmokeService', () => {
   let mockTempModel: any;
   let mockPostSmokeModel: any;
   let mockRatingsModel: any;
+  let mockCookEventModel: any;
   // Every delete the deep delete issues, in the order it issued them, so the
   // "children before parent" ordering can be asserted as a fact rather than
   // inferred from five independent mocks.
@@ -94,6 +95,7 @@ describe('SmokeService', () => {
     mockTempModel = childModel('temp');
     mockPostSmokeModel = childModel('postSmoke');
     mockRatingsModel = childModel('ratings');
+    mockCookEventModel = childModel('cookEvents');
 
     mockStateService = {
       GetState: jest.fn().mockResolvedValue(mockState),
@@ -139,6 +141,7 @@ describe('SmokeService', () => {
         { provide: getModelToken('Temp'), useValue: mockTempModel },
         { provide: getModelToken('PostSmoke'), useValue: mockPostSmokeModel },
         { provide: getModelToken('Ratings'), useValue: mockRatingsModel },
+        { provide: getModelToken('CookEvent'), useValue: mockCookEventModel },
       ],
     }).compile();
 
@@ -320,6 +323,28 @@ describe('SmokeService', () => {
       });
     });
 
+    /**
+     * The cook log is part of the cook. A delete that left it behind would
+     * leave events pointing at a smoke that no longer exists — invisible, and
+     * counted by anything that ever aggregates them.
+     */
+    it('removes the cook log with everything else the cook recorded', async () => {
+      jest
+        .spyOn(service, 'getById')
+        .mockResolvedValue(mockSmokeDocument as unknown as SmokeDocument);
+
+      await service.deleteDeep('test-smoke-id');
+
+      expect(mockCookEventModel.deleteMany).toHaveBeenCalledWith({
+        smokeId: 'test-smoke-id',
+      });
+      // Before the smoke itself, like every other child: a failure part-way
+      // leaves a cook that still points at what survived.
+      expect(
+        deleteLog.indexOf('cookEvents:{"smokeId":"test-smoke-id"}'),
+      ).toBeLessThan(deleteLog.indexOf('smoke:test-smoke-id'));
+    });
+
     it('recomputes the statistics once nothing of the cook is left', async () => {
       jest
         .spyOn(service, 'getById')
@@ -354,15 +379,16 @@ describe('SmokeService', () => {
 
       const deletes = deleteLog.filter((entry) => !entry.startsWith('stats:'));
 
-      expect(deletes).toHaveLength(6);
+      expect(deletes).toHaveLength(7);
       expect(deletes[deletes.length - 1]).toBe('smoke:test-smoke-id');
-      expect(deletes.slice(0, 5).sort()).toEqual(
+      expect(deletes.slice(0, 6).sort()).toEqual(
         [
           'preSmoke:pre-smoke-id',
           'smokeProfile:profile-id',
           'temp:{"tempsId":"temps-id"}',
           'postSmoke:post-smoke-id',
           'ratings:rating-id',
+          'cookEvents:{"smokeId":"test-smoke-id"}',
         ].sort(),
       );
     });

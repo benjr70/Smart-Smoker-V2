@@ -8,6 +8,7 @@
  */
 import { ApiError, TransportPort, createHttpTransport } from 'api-transport/src';
 import { UNREPORTED } from 'temperaturechart/src/chartGeometry';
+import { WireCookEvent, cookEventsFromWire } from './cookEventFrames';
 import { PushNotConfiguredError } from './errors';
 import { SmokeEventPort, noopEventPort } from './events';
 import { createSocketEventPort } from './socketEventAdapter';
@@ -17,6 +18,7 @@ import {
   AutoStopSettings,
   ChamberAlertSettings,
   CompletionEstimate,
+  CookEvent,
   CurrentSmokeTimeline,
   NotificationSettings,
   ProbeTargetAlertSettings,
@@ -330,6 +332,25 @@ export interface StatsResource {
   get(): Promise<Stats>;
 }
 
+export interface CookEventsResource {
+  /**
+   * POST `cook-events` — log one tap against the cook in progress.
+   *
+   * The stamp key is the whole request: the moment and the four temperatures
+   * are the backend's to decide, from its own clock and the newest stored
+   * reading. Rejects with the typed {@link ApiError} — 409 when no cook is set
+   * up, 400 for a stamp the backend does not know — so a client can tell "not
+   * logged" from "nothing is cooking".
+   */
+  record(stampKey: string): Promise<CookEvent>;
+  /** GET `cook-events/current` — the in-progress cook's log, oldest first. */
+  listCurrent(): Promise<CookEvent[]>;
+  /** GET `cook-events/smoke/:smokeId` — a stored cook's log, oldest first. */
+  listForSmoke(smokeId: string): Promise<CookEvent[]>;
+  /** DELETE `cook-events/:id` — remove one mis-tapped event. */
+  deleteById(id: string): Promise<void>;
+}
+
 export interface ApiClient {
   temps: TempsResource;
   smokeProfile: SmokeProfileResource;
@@ -342,6 +363,7 @@ export interface ApiClient {
   state: StateResource;
   smoke: SmokeResource;
   timeline: TimelineResource;
+  cookEvents: CookEventsResource;
   history: HistoryResource;
   stats: StatsResource;
 }
@@ -845,6 +867,19 @@ export const createApiClient = (
           throw error;
         });
       return raw ? normalizeCurrentTimeline(raw) : null;
+    },
+  },
+  cookEvents: {
+    record: (stampKey: string) =>
+      transport
+        .post<WireCookEvent>('cook-events', { stampKey })
+        .then(event => cookEventsFromWire([event])[0]),
+    listCurrent: () =>
+      transport.get<WireCookEvent[]>('cook-events/current').then(cookEventsFromWire),
+    listForSmoke: (smokeId: string) =>
+      transport.get<WireCookEvent[]>(`cook-events/smoke/${smokeId}`).then(cookEventsFromWire),
+    deleteById: async (id: string) => {
+      await transport.delete<void>(`cook-events/${id}`);
     },
   },
   history: {

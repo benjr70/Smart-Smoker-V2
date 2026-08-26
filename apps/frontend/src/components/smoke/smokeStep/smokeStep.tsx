@@ -5,11 +5,12 @@ import { Autocomplete, Button, Card, Divider, TextField, Typography } from '@mui
 import TemperatureChart from 'temperaturechart/src/TemperatureChart';
 import { SmokeSessionProvider, useSmokeSession } from 'smoke-session/src/react';
 import { CloudSocketAdapter, createCloudSocketAdapter, SessionConfig } from 'smoke-session/src';
-import { getDefaultApiClient } from '../../../api';
+import { CookEventsSubscriptionPort, getDefaultApiClient, useCookEvents } from '../../../api';
 import { createSessionApiPort } from '../../../api/sessionApiAdapter';
 import { useChartPalette } from '../../../theme';
 import { chartNamesOf } from '../../common/chartNames';
 import { CompletionCard } from './CompletionCard';
+import { EventLog } from './EventLog';
 import { SmokeStatusBar } from './SmokeStatusBar';
 import { StaleCookDialog } from './StaleCookDialog';
 import { useSmokingToggle } from './useSmokingToggle';
@@ -37,6 +38,12 @@ type SmokeStepProps = {
    * navigates — that is the shell's business — so it passes the question up.
    */
   onOpenSettings?: () => void;
+  /**
+   * How this screen hears that the cook log changed. Injected for the same
+   * reason the session's socket is: a test renders the step without opening a
+   * websocket, and production passes nothing so the hook opens its own.
+   */
+  cookEventsSubscription?: CookEventsSubscriptionPort;
 };
 
 /**
@@ -72,6 +79,11 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
   // screen can change about the estimate; the other is the target, which the
   // card edits through this same hook.
   const cook = useRunningCook(session.smoking);
+  // What has been done to the cook, and the two things this screen does to that
+  // record. The log is the backend's — read on mount and replaced whenever any
+  // client changes it — so the same taps show here, on the touchscreen and in
+  // any other browser that is open.
+  const cookLog = useCookEvents({ subscription: props.cookEventsSubscription });
   // Lighting the smoker, guarded: a session whose cook the backend already
   // stopped is asked about rather than lit, so the next cook's readings never
   // land in the last one's series. Recovering from one starts the description
@@ -189,6 +201,17 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
           />
         </Grid>
       </Card>
+      {/* Under the chart, because the log is what explains the shape of it:
+          the marks a pitmaster leaves on a cook are read against the curve
+          they caused. Only ever on this step — a stamp is something done to a
+          cook that is running, so the pre-smoke and post-smoke steps offer
+          none. */}
+      <EventLog
+        events={cookLog.events}
+        smoking={session.smoking}
+        onRecord={cookLog.record}
+        onRemove={cookLog.remove}
+      />
       <Grid container justifyContent="space-around">
         {/* Two states, two appearances. Lighting a cook is what the screen is
             for, so it is offered filled in the accent; putting one out is

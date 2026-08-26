@@ -12,6 +12,7 @@ import { AppearancePreference } from '../appSettings/appearance';
 import { StaleCookService } from '../staleCook/stale-cook.service';
 import { TempDto } from '../temps/tempDto';
 import { TempsService } from '../temps/temps.service';
+import { CookEvent } from '../cookEvents/cook-events.schema';
 
 /**
  * One temperature row is persisted per this many websocket messages. The device
@@ -43,6 +44,12 @@ const MIN_IDLE_THRESHOLD_MS = 60 * 60 * 1000;
  * speak to it.
  */
 export const APPEARANCE_EVENT = 'appearance';
+
+/**
+ * The event a changed cook log rides on, restated by every client for the same
+ * reason {@link APPEARANCE_EVENT} is.
+ */
+export const COOK_EVENTS_EVENT = 'cookEventsUpdate';
 
 /**
  * The `smokeUpdate` frame: whether the cook is running, and what its four
@@ -312,6 +319,20 @@ export class EventsGateway {
       'Websocket',
     );
     this.server.emit(APPEARANCE_EVENT, preference);
+  }
+
+  /**
+   * Tell every connected client what the cook log now says.
+   *
+   * Server-initiated, like the appearance and the backend's own smoke updates:
+   * an event is logged by a POST, and no client is entitled to announce a log
+   * the backend has not stored. The whole current list travels rather than the
+   * one event that changed, so a receiving client replaces what it holds
+   * instead of merging — the phone and the touchscreen then cannot disagree
+   * about a delete, or about a tap either of them missed.
+   */
+  broadcastCookEvents(events: CookEvent[]): void {
+    this.server.emit(COOK_EVENTS_EVENT, events);
   }
 
   @SubscribeMessage('refresh')

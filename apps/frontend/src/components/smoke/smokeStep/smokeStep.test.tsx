@@ -139,12 +139,21 @@ function renderView(kit = harness(), backend: FakeBackend = createFakeBackend())
     <ApiClientProvider client={createApiClient(backend)}>
       <DesignSurface>
         <SmokeSessionProvider config={kit.config}>
-          <SmokeStepView nextButton={nextButton} />
+          <SmokeStepView nextButton={nextButton} cookEventsSubscription={inertCookEvents()} />
         </SmokeSessionProvider>
       </DesignSurface>
     </ApiClientProvider>
   );
   return { ...utils, ...kit };
+}
+
+/**
+ * An inert cook-log announcement channel: subscribes to nothing, exactly as
+ * {@link inertCloudPort} stands in for the session's own socket. The card is
+ * otherwise real — it reads and writes the log over the fake backend.
+ */
+function inertCookEvents() {
+  return { subscribe: () => () => undefined };
 }
 
 /** The four lines the chart draws, in the order it draws them. */
@@ -388,6 +397,9 @@ describe('the shape of the step', () => {
       'smoke-completion-card',
       'smoke-temps-card',
       'smoke-chart-card',
+      // The cook log reads after the chart: it explains the shape of the plot
+      // above it.
+      'cook-log-card',
       'smoke-details-card',
     ]);
   });
@@ -1370,5 +1382,56 @@ describe('SmokeStepView — starting a cook over an auto-stopped one', () => {
     });
     const saved = kit.api.calls.filter(call => call.method === 'saveProfile').pop();
     expect(saved?.args[0]).toMatchObject({ notes: '', woodType: '' });
+  });
+});
+
+/**
+ * The cook log lives on this step and only on this step: a stamp is something
+ * done to a cook that is running, so the card is not offered before one starts
+ * or after it is over (see the pre-smoke and post-smoke steps, which render no
+ * such card).
+ */
+describe('the cook log on the smoke screen', () => {
+  test('offers the stamps under the chart, and lists what has been logged', async () => {
+    const kit = harness();
+    kit.api.seedSmoking(true);
+    const backend = createFakeBackend({ state: { smokeId: 'smoke-1', smoking: true } });
+    renderView(kit, backend);
+
+    await act(async () => {
+      await flushPromises();
+    });
+
+    // Under the chart, where the design puts it — the plot is what the log
+    // explains. Testing Library answers in document order, which is the order
+    // being asserted here.
+    expect(
+      screen
+        .getAllByTestId(/^smoke-chart-card$|^cook-log-card$/)
+        .map(card => card.getAttribute('data-testid'))
+    ).toEqual(['smoke-chart-card', 'cook-log-card']);
+
+    fireEvent.click(screen.getByTestId('cook-stamp-wrap'));
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(
+      backend.requests.some(request => request.method === 'post' && request.path === 'cook-events')
+    ).toBe(true);
+    await screen.findByTestId('cook-event-row');
+    expect(within(screen.getByTestId('cook-event-row')).getByText('Wrapped')).toBeInTheDocument();
+  });
+
+  test('will not stamp a cook that is not running', async () => {
+    const kit = harness();
+    kit.api.seedSmoking(false);
+    renderView(kit, createFakeBackend({ state: { smokeId: 'smoke-1', smoking: false } }));
+
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(screen.getByTestId('cook-stamp-wood')).toBeDisabled();
   });
 });

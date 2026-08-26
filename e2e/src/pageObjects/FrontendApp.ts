@@ -893,6 +893,59 @@ export class FrontendApp {
     await expect(this.startButton).toHaveText(/start smoking/i);
   }
 
+  /**
+   * Light the smoker from the web step, and wait until the control says it is
+   * lit.
+   *
+   * The label is the assertion: it is rendered from the session's smoking flag,
+   * which only the backend's answer to the toggle can flip — so a control that
+   * now offers to stop is proof the cook is running rather than proof of a
+   * click.
+   */
+  async startSmoking(): Promise<void> {
+    await this.startButton.click();
+    await expect(this.startButton).toHaveText(/stop smoking/i);
+  }
+
+  /** Put the smoker out again, so a journey leaves no cook running behind it. */
+  async stopSmoking(): Promise<void> {
+    await this.startButton.click();
+    await expect(this.startButton).toHaveText(/start smoking/i);
+  }
+
+  /** The cook log card on the smoke step. */
+  private get cookLog(): Locator {
+    return this.page.getByTestId('cook-log-card');
+  }
+
+  /** Tap one stamp by its catalogue key (`wood`, `wrap`, ...). */
+  async tapCookStamp(stampKey: string): Promise<void> {
+    await this.cookLog.getByTestId(`cook-stamp-${stampKey}`).click();
+  }
+
+  /**
+   * Assert the log lists exactly one entry, under the label given.
+   *
+   * The count is part of it: a tap that was recorded twice — by a retry, or by
+   * an announcement merged instead of replacing — is as wrong as one that was
+   * not recorded at all.
+   */
+  async expectCookLogEntry(label: string): Promise<void> {
+    const rows = this.cookLog.getByTestId('cook-event-row');
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toContainText(label);
+  }
+
+  /** Remove the logged entry with this label, using the row's own delete. */
+  async removeCookLogEntry(label: string): Promise<void> {
+    await this.cookLog.getByRole('button', { name: `Remove ${label}` }).click();
+  }
+
+  /** Assert nothing is logged against the cook any more. */
+  async expectCookLogEmpty(): Promise<void> {
+    await expect(this.cookLog.getByTestId('cook-event-row')).toHaveCount(0);
+  }
+
   private get chart(): Locator {
     return this.page.getByTestId('smoke-chart');
   }
