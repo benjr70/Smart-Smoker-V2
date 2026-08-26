@@ -1,9 +1,12 @@
+import { Experimental_CssVarsProvider as CssVarsProvider } from '@mui/material';
 import '@testing-library/jest-dom';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { ApiClientProvider, SnackbarProvider, createApiClient } from '../../../api';
 import { createFakeBackend, FakeBackend } from '../../../api/fakeBackend';
 import { Smoke } from '../../../api/types';
+import { DesignSurface, appTheme } from '../../../theme';
 import { SmokeReview } from './smokeReview';
 
 // The header, sections and ratings card are mocked so each rendered piece is
@@ -32,12 +35,13 @@ jest.mock('./PreSmokeSection', () => ({
   ),
 }));
 jest.mock('./SmokeSection', () => ({
-  SmokeSection: ({ smokeProfile, temps, timeline }: any) => (
+  SmokeSection: ({ smokeProfile, temps, timeline, events }: any) => (
     <div
       data-testid="smoke-section"
       data-smokeprofile={JSON.stringify(smokeProfile)}
       data-temps={JSON.stringify(temps)}
       data-timeline={JSON.stringify(timeline)}
+      data-events={JSON.stringify(events ?? [])}
     />
   ),
 }));
@@ -66,11 +70,17 @@ const smokeAggregate = (id: string): Smoke => ({
 const renderReview = (backend: FakeBackend, smokeId: string) => {
   const client = createApiClient(backend);
   return render(
-    <ApiClientProvider client={client}>
-      <SnackbarProvider>
-        <SmokeReview smokeId={smokeId} />
-      </SnackbarProvider>
-    </ApiClientProvider>
+    // Under the app's own theme: the cook-log section this page renders for
+    // real paints with the design palette, as every card on this screen does.
+    <CssVarsProvider theme={appTheme} defaultMode="light">
+      <DesignSurface>
+        <ApiClientProvider client={client}>
+          <SnackbarProvider>
+            <SmokeReview smokeId={smokeId} />
+          </SnackbarProvider>
+        </ApiClientProvider>
+      </DesignSurface>
+    </CssVarsProvider>
   );
 };
 
@@ -183,6 +193,76 @@ describe('SmokeReview', () => {
     const smokeSection = screen.getByTestId('smoke-section');
     expect(JSON.parse(smokeSection.getAttribute('data-temps') ?? '[]')).toEqual([]);
     expect(JSON.parse(smokeSection.getAttribute('data-timeline') ?? '"unset"')).toBeNull();
+  });
+
+  /**
+   * The cook log of a finished smoke: read by the smoke's own id, listed as its
+   * own section, and handed to the chart so the curve is explained by the marks
+   * on it.
+   */
+  test("lists the cook's log and hands it to the chart", async () => {
+    const backend = createFakeBackend({
+      smoke: { records: { 'smoke-1': smokeAggregate('smoke-1') } },
+      preSmoke: { records: { 'pre-smoke-1': { name: 'Brisket', weight: {}, steps: [] } } },
+      cookEvents: {
+        current: [
+          {
+            _id: 'event-1',
+            smokeId: 'smoke-1',
+            stampKey: 'wood',
+            label: 'Added Wood',
+            tone: 'amber',
+            at: '2026-08-01T11:00:00.000Z',
+            chamberTemp: 243,
+          } as never,
+        ],
+      },
+    });
+
+    renderReview(backend, 'smoke-1');
+
+    expect(await screen.findByTestId('cook-log-entry')).toHaveTextContent('Added Wood');
+    await waitFor(() =>
+      expect(
+        JSON.parse(screen.getByTestId('smoke-section').getAttribute('data-events') ?? '[]')
+      ).toHaveLength(1)
+    );
+    expect(backend.requests.map(request => request.path)).toContain('cook-events/smoke/smoke-1');
+  });
+
+  test('takes a removed entry off the list and off the chart', async () => {
+    const backend = createFakeBackend({
+      smoke: { records: { 'smoke-1': smokeAggregate('smoke-1') } },
+      preSmoke: { records: { 'pre-smoke-1': { name: 'Brisket', weight: {}, steps: [] } } },
+      cookEvents: {
+        current: [
+          {
+            _id: 'event-1',
+            smokeId: 'smoke-1',
+            stampKey: 'wood',
+            label: 'Added Wood',
+            tone: 'amber',
+            at: '2026-08-01T11:00:00.000Z',
+            chamberTemp: 243,
+          } as never,
+        ],
+      },
+    });
+
+    renderReview(backend, 'smoke-1');
+    await screen.findByTestId('cook-log-entry');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Added Wood' }));
+
+    await waitFor(() => expect(screen.queryByTestId('cook-log-entry')).toBeNull());
+    expect(
+      JSON.parse(screen.getByTestId('smoke-section').getAttribute('data-events') ?? '[]')
+    ).toEqual([]);
+    // The page corrected itself from what it already knew: the log was read
+    // once, on the way in, and never again.
+    expect(
+      backend.requests.filter(request => request.path === 'cook-events/smoke/smoke-1')
+    ).toHaveLength(1);
   });
 
   test('raises the failure snackbar when the smoke parent cannot be read', async () => {

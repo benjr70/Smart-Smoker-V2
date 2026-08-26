@@ -8,7 +8,7 @@
  * apart from every line on the plot.
  */
 import { DesignPalette } from 'theme/src';
-import { StampTone } from '../../../api';
+import { StampTone } from '../../api';
 
 /**
  * The design carries no amber token of its own, so the accent stands in for it:

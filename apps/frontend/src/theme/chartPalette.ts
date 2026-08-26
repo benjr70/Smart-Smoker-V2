@@ -1,6 +1,6 @@
 import { useTheme } from '@mui/material/styles';
 import type { ChartPalette } from 'temperaturechart/src/TemperatureChart';
-import { carbonLight, resolveDesignPalette } from 'theme/src';
+import { DesignPalette, carbonLight, resolveDesignPalette } from 'theme/src';
 
 /**
  * The colours the temperature chart paints with, from the colour scheme in
@@ -15,10 +15,19 @@ import { carbonLight, resolveDesignPalette } from 'theme/src';
  *
  * A screen holding a chart has to draw wherever it is mounted, including under a
  * theme built by a bare `createTheme()`, which carries no design palette — the
- * same fallback the design surface itself makes.
+ * same fallback the design surface itself makes, made once here for everything
+ * that has to paint with raw colour.
+ *
+ * Made once for the life of the page rather than once per render: what is drawn
+ * from a palette is held against it, and a fallback rebuilt on every render is a
+ * different palette every render, which would undo every one of those holdings.
  */
-export const useChartPalette = (): ChartPalette => {
+const NO_DESIGN = resolveDesignPalette(carbonLight, 'light');
+
+export const useDesignPalette = (): DesignPalette => {
   const { design } = useTheme();
 
-  return (design ?? resolveDesignPalette(carbonLight, 'light')).chart;
+  return design ?? NO_DESIGN;
 };
+
+export const useChartPalette = (): ChartPalette => useDesignPalette().chart;

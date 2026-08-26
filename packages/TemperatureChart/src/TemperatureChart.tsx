@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
+  CARD_ROW,
   ChartAspect,
   ChartSample,
   ProbeTargets,
@@ -28,6 +29,15 @@ import {
   timeOf,
   timeTicks,
 } from './chartGeometry';
+import {
+  ChartEvent,
+  EventMarker,
+  nearestEvent,
+  placeMarkers,
+  touchTolerance,
+} from './eventMarkers';
+
+export type { ChartEvent, EventMarker } from './eventMarkers';
 
 /** What each line is called, as the reader named it when the smoke started. */
 export type ChartSeriesNames = Record<SeriesKey, string>;
@@ -74,6 +84,14 @@ export interface TemperatureChartProps {
    * the reader is not shown the same probe under two names.
    */
   legend?: boolean;
+  /**
+   * The cook log: what was done to this cook and when. Each one is drawn as a
+   * dashed line down the plot at its moment with a lettered bubble on top, and
+   * naming the stamp is what the card under a finger resting on one adds. A
+   * chart given none draws the cook alone, which is every caller that has not
+   * been told about the log.
+   */
+  events?: readonly ChartEvent[];
 }
 
 /** How heavily the lines are drawn, which is what makes them readable outdoors. */
@@ -88,6 +106,16 @@ const TARGET_DASH = '6 4';
 const TARGETABLE: Exclude<SeriesKey, 'chamber'>[] = ['probe1', 'probe2', 'probe3'];
 /** No targets, as one value, so that omitting them does not redraw the cook. */
 const NO_TARGETS: ProbeTargets = {};
+/** No cook log, as one value, for the same reason. */
+const NO_EVENTS: readonly ChartEvent[] = [];
+/** How big a marker's bubble is drawn. */
+const MARKER_RADIUS = 6;
+/** How far the second row of bubbles sits under the first. */
+const MARKER_ROW_STEP = 14;
+/** The dash a marker's line is ruled with, so it reads as an annotation. */
+const MARKER_DASH = '4 3';
+/** How big the letter inside a bubble is. */
+const MARKER_LETTER_SIZE = 8;
 /** The dot marking each line at the moment under the finger. */
 const HOVER_DOT = 3;
 /** The card that says what the readings were at that moment. */
@@ -112,6 +140,7 @@ function TemperatureChart({
   target,
   aspect = 'mobile',
   legend = true,
+  events = NO_EVENTS,
 }: TemperatureChartProps): JSX.Element {
   const box = plotBoxOf(aspect);
 
@@ -159,6 +188,16 @@ function TemperatureChart({
         const y = scales.y(temperature);
         return { series, temperature, y, label: targetLabelAnchor(box, y) };
       }),
+      markers: placeMarkers(events, moment => scales.x(moment), {
+        from: scales.x.domain()[0].getTime(),
+        to: scales.x.domain()[1].getTime(),
+        // The window's ends are stored readings, and the pit is only written
+        // down every so often: a stamp is allowed to fall one reading outside
+        // the drawn cook and still be drawn, at the edge it fell past.
+        grace:
+          (scales.x.domain()[1].getTime() - scales.x.domain()[0].getTime()) /
+          Math.max(1, cook.length - 1),
+      }),
       snapshotLine:
         snapshot === undefined
           ? undefined
@@ -168,7 +207,7 @@ function TemperatureChart({
               label: targetLabelAnchor(box, scales.y(snapshot)),
             },
     };
-  }, [cook, box, probe1Target, probe2Target, probe3Target, snapshot]);
+  }, [cook, box, probe1Target, probe2Target, probe3Target, snapshot, events]);
 
   const plot = plotEdges(box);
   const anchors = axisLabelAnchors(box);
@@ -194,8 +233,26 @@ function TemperatureChart({
 
   /** Where along the plot the touched reading sits, which the card hangs off. */
   const touchedX = touched === undefined ? undefined : drawing.scales.x(timeOf(touched));
-  const card = touchedX === undefined ? undefined : cardPlacement(touchedX, box, CARD);
-  const writing = card ? cardLayout(card, CARD, SERIES_KEYS.length) : undefined;
+  /**
+   * The mark the finger is resting on, if it is resting on one. Near enough
+   * means within one reading of the cook, or within a bubble's width when the
+   * readings are packed tighter than that — a mark the reader can see has to be
+   * a mark the reader can tap.
+   */
+  const stamp: EventMarker | undefined =
+    touchedX === undefined
+      ? undefined
+      : nearestEvent(
+          drawing.markers,
+          touchedX,
+          touchTolerance(cook.length, { left: plot.left, right: plot.right })
+        );
+  /** The card grows by a row when it has a stamp to name as well as readings. */
+  const cardSize = { width: CARD.width, height: CARD.height + (stamp ? CARD_ROW : 0) };
+  const card = touchedX === undefined ? undefined : cardPlacement(touchedX, box, cardSize);
+  const writing = card
+    ? cardLayout(card, cardSize, SERIES_KEYS.length + (stamp ? 1 : 0))
+    : undefined;
 
   return (
     <div>
@@ -294,6 +351,18 @@ function TemperatureChart({
             </text>
           </g>
         )}
+        {drawing.markers.map(marker => (
+          <line
+            key={`line-${marker.id}`}
+            data-event-line={marker.id}
+            x1={marker.x}
+            x2={marker.x}
+            y1={plot.top}
+            y2={plot.bottom}
+            stroke={marker.color}
+            strokeDasharray={MARKER_DASH}
+          />
+        ))}
         {drawing.paths.map(({ series, d }) => (
           <path
             key={series}
@@ -318,6 +387,34 @@ function TemperatureChart({
             />
           ) : null
         )}
+        {drawing.markers.map(marker => {
+          const y = plot.top + MARKER_RADIUS + marker.row * MARKER_ROW_STEP;
+          return (
+            <g key={`marker-${marker.id}`}>
+              <circle
+                data-event-marker={marker.id}
+                cx={marker.x}
+                cy={y}
+                r={MARKER_RADIUS}
+                fill={marker.color}
+              />
+              {/* The letter rides on the bubble in the panel's own colour, so
+                  it stays legible whichever tone the stamp was given. */}
+              <text
+                data-event-letter={marker.id}
+                x={marker.x}
+                y={y}
+                fill={colors.panel}
+                fontSize={MARKER_LETTER_SIZE}
+                fontWeight={700}
+                textAnchor="middle"
+                dominantBaseline="central"
+              >
+                {marker.letter}
+              </text>
+            </g>
+          );
+        })}
         {touched && card && writing ? (
           <g data-hover-card="">
             <line
@@ -345,8 +442,8 @@ function TemperatureChart({
             <rect
               x={card.x}
               y={card.y}
-              width={CARD.width}
-              height={CARD.height}
+              width={cardSize.width}
+              height={cardSize.height}
               rx={6}
               fill={colors.panel}
               stroke={colors.grid}
@@ -370,6 +467,17 @@ function TemperatureChart({
                 </text>
               );
             })}
+            {stamp ? (
+              <text
+                data-hover-stamp={stamp.id}
+                x={writing.labelX}
+                y={writing.rowsY[SERIES_KEYS.length]}
+                fontSize={LABEL_SIZE}
+                fill={stamp.color}
+              >
+                {stamp.label}
+              </text>
+            ) : null}
           </g>
         ) : null}
       </svg>

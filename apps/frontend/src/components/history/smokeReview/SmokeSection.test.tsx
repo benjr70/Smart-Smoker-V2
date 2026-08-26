@@ -11,7 +11,7 @@ import { Experimental_CssVarsProvider as CssVarsProvider } from '@mui/material';
 import '@testing-library/jest-dom';
 import { render, screen } from '@testing-library/react';
 import React from 'react';
-import { SmokeProfile, SmokeTimeline, TempData } from '../../../api/types';
+import { CookEvent, SmokeProfile, SmokeTimeline, TempData } from '../../../api/types';
 import { DesignSurface, appTheme } from '../../../theme';
 import { SmokeSection } from './SmokeSection';
 
@@ -138,5 +138,51 @@ describe('the smoke section', () => {
     showSection();
 
     expect(screen.getByTestId('note-block')).toHaveTextContent('Held 225 all afternoon.');
+  });
+});
+
+/**
+ * A past cook is explained by what was done to it, so the marks the pitmaster
+ * left are drawn on the history chart in the same tone the log lists them in.
+ */
+describe('the marks on a past cook', () => {
+  const logged: CookEvent = {
+    _id: 'event-1',
+    smokeId: 'smoke-7',
+    stampKey: 'wood',
+    label: 'Added Wood',
+    tone: 'amber',
+    at: new Date(2026, 3, 20, 12, 8),
+    chamberTemp: 243,
+    probe1Temp: 150,
+    probe2Temp: null,
+    probe3Temp: null,
+  };
+
+  const showWithLog = (events: CookEvent[]) =>
+    render(
+      <CssVarsProvider theme={appTheme} defaultMode="light">
+        <DesignSurface>
+          <SmokeSection
+            smokeProfile={profile()}
+            temps={[reading(0), reading(15)]}
+            timeline={timeline()}
+            events={events}
+          />
+        </DesignSurface>
+      </CssVarsProvider>
+    );
+
+  it('draws a marker on the chart for every event of the cook', () => {
+    const { container } = showWithLog([logged]);
+
+    expect(container.querySelector('circle[data-event-marker="event-1"]')).toBeInTheDocument();
+    expect(container.querySelector('text[data-event-letter="event-1"]')).toHaveTextContent('A');
+  });
+
+  it('draws none for a cook nothing was logged on', () => {
+    const { container } = showWithLog([]);
+
+    expect(container.querySelectorAll('circle[data-event-marker]')).toHaveLength(0);
   });
 });

@@ -1,10 +1,11 @@
 import { Box } from '@mui/material';
 import React, { useMemo } from 'react';
-import { SmokeProfile, SmokeTimeline } from '../../../api/types';
+import { CookEvent, SmokeProfile, SmokeTimeline } from '../../../api/types';
 import { TempData } from 'temperaturechart/src/tempChart';
 import TemperatureChart from 'temperaturechart/src/TemperatureChart';
 import { decimate, isReported } from 'temperaturechart/src/chartGeometry';
 import { useChartPalette } from '../../../theme';
+import { useChartEvents } from '../../common/chartEvents';
 import { chartNamesOf } from '../../common/chartNames';
 import { DetailSection } from '../../common/components/DetailSection';
 import { FieldGrid } from '../../common/components/FieldGrid';
@@ -16,6 +17,11 @@ export interface SmokeSectionProps {
   temps: TempData[];
   /** The derived timing, or null for a cook the backend could not be asked about. */
   timeline: SmokeTimeline | null;
+  /**
+   * What was done to the cook, drawn as marks along the chart. A cook logged
+   * before there was anything to log with has none, which draws the cook alone.
+   */
+  events?: CookEvent[];
 }
 
 /**
@@ -38,8 +44,19 @@ const LEGEND_SLOTS = ['chamber', 'probe1', 'probe2', 'probe3'] as const;
  * named in the same colours the chart draws their lines in, the temperature
  * log with the snapshotted target ruled across it, and the smoke notes.
  */
-export function SmokeSection({ smokeProfile, temps, timeline }: SmokeSectionProps): JSX.Element {
+/** No log, as one value, so that omitting it does not redraw the cook. */
+const NO_EVENTS: CookEvent[] = [];
+
+export function SmokeSection({
+  smokeProfile,
+  temps,
+  timeline,
+  events = NO_EVENTS,
+}: SmokeSectionProps): JSX.Element {
   const chartColors = useChartPalette();
+  // The log in the chart's own terms: a moment, a word and the colour this
+  // scheme draws that stamp's tone in.
+  const marks = useChartEvents(events);
   // A finished cook is every reading it ever took — twelve hours of them for a
   // brisket. It is thinned once, not on every render of the review.
   const cook = useMemo(() => decimate(temps), [temps]);
@@ -111,6 +128,7 @@ export function SmokeSection({ smokeProfile, temps, timeline }: SmokeSectionProp
         names={chartNamesOf(smokeProfile)}
         colors={chartColors}
         target={timeline?.targetTemp ?? undefined}
+        events={marks}
         aspect="compact"
         // The section's own legend above is the one legend this card gets: it
         // knows which probes were never named, which the chart's cannot.
