@@ -7,6 +7,7 @@
  */
 import { TempData } from 'temperaturechart/src/tempChart';
 import type { WeightUnits } from '../components/common/interfaces/enums';
+import type { StampTone } from './cookStamps';
 
 export type { TempData };
 
@@ -449,4 +450,31 @@ export interface Stats {
     tenderness: number | null;
     overallTaste: number | null;
   };
+}
+
+/**
+ * One tap of the cook log: what was done, when, and what the pit was at.
+ *
+ * The moment is the server's, so a phone and a touchscreen cannot disagree
+ * about the order things happened in; the four temperatures are the snapshot
+ * the backend took from the newest reading, and any of them may be `null` when
+ * the probe reported nothing (a cook stamped before its first reading, an
+ * unplugged probe).
+ *
+ * `label` and `tone` are the snapshot taken when the stamp was tapped. A
+ * client renders the catalogue's current label for a key it still knows and
+ * falls back to these, which is what keeps a removed custom stamp legible.
+ */
+export interface CookEvent {
+  _id: string;
+  smokeId: string;
+  stampKey: string;
+  label: string;
+  tone: StampTone;
+  /** Converted from the wire's ISO string in the client's read path. */
+  at: Date;
+  chamberTemp: number | null;
+  probe1Temp: number | null;
+  probe2Temp: number | null;
+  probe3Temp: number | null;
 }

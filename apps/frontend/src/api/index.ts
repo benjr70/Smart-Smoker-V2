@@ -8,11 +8,14 @@
  * the fake-backend kernel — live in the shared `api-transport` package and are
  * re-exported here so call sites keep importing from one place.
  */
+export type { CookStamp, StampTone } from './cookStamps';
+export { DEFAULT_STAMPS, STAMP_TONES } from './cookStamps';
 export type {
   AutoStopSettings,
   ChamberAlertSettings,
   CompletionEstimate,
   CompletionState,
+  CookEvent,
   CurrentSmokeTimeline,
   HeadsUpAlertSettings,
   MeatStat,
@@ -42,12 +45,13 @@ export { ApiError, createHttpTransport } from 'api-transport/src';
 export { PushNotConfiguredError } from './errors';
 export type { SmokeEventPort } from './events';
 export { noopEventPort } from './events';
-export { createSocketEventPort } from './socketEventAdapter';
+export { createSocketEventPort, createSocketCookEventsSubscription } from './socketEventAdapter';
 export type { FakeBackend, FakeBackendSeed, StoredSmokeProfile } from './fakeBackend';
 export { createFakeBackend } from './fakeBackend';
 export type {
   ApiClient,
   AutoStopResource,
+  CookEventsResource,
   HistoryResource,
   NotificationsResource,
   PostSmokeResource,
@@ -76,5 +80,11 @@ export type { UseHistoryResult } from './useHistory';
 export { useHistory } from './useHistory';
 export type { UseReviewResult } from './useReview';
 export { useReview } from './useReview';
+export type {
+  CookEventsSubscriptionPort,
+  UseCookEventsOptions,
+  UseCookEventsResult,
+} from './useCookEvents';
+export { useCookEvents } from './useCookEvents';
 export type { StatsStatus, UseStatsResult } from './useStats';
 export { useStats } from './useStats';

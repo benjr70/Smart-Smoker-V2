@@ -18,6 +18,7 @@ import { SmokeProfileModule } from './smokeProfile/smokeProfile.module';
 import { StaleCookModule } from './staleCook/stale-cook.module';
 import { StaleCookMiddleware } from './staleCook/stale-cook.middleware';
 import { StateModule } from './State/state.module';
+import { CookEventsModule } from './cookEvents/cook-events.module';
 import { TempModule } from './temps/temps.module';
 import { TimelineModule } from './timeline/timeline.module';
 import { EventsModule } from './websocket/events.module';
@@ -50,6 +51,7 @@ console.log(process.env.NODE_ENV);
     SmokeModule,
     EventsModule,
     TempModule,
+    CookEventsModule,
     SmokeProfileModule,
     PostSmokeModule,
     RatingsModel,

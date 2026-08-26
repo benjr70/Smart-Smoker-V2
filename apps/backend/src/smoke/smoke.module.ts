@@ -8,6 +8,7 @@ import { SmokeProFileSchema } from 'src/smokeProfile/smokeProfile.schema';
 import { TempSchema } from 'src/temps/temps.schema';
 import { PostSmokeSchema } from 'src/postSmoke/postSmoke.schema';
 import { RatingsSchema } from 'src/ratings/ratings.schema';
+import { CookEventSchema } from 'src/cookEvents/cook-events.schema';
 import { StateModule } from 'src/State/state.module';
 import { TimelineModule } from 'src/timeline/timeline.module';
 import { StatsModule } from 'src/stats/stats.module';
@@ -25,6 +26,7 @@ import { StatsModule } from 'src/stats/stats.module';
       { name: 'Temp', schema: TempSchema },
       { name: 'PostSmoke', schema: PostSmokeSchema },
       { name: 'Ratings', schema: RatingsSchema },
+      { name: 'CookEvent', schema: CookEventSchema },
     ]),
     StateModule,
     // The cook's finish, and the target it was taken to, are stamped here.

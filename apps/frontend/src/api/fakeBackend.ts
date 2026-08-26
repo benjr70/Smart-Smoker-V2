@@ -14,9 +14,11 @@ import {
   clone,
   createFakeBackendKernel,
 } from 'api-transport/src';
+import { DEFAULT_STAMPS } from './cookStamps';
 import {
   ApplicationSettings,
   CompletionEstimate,
+  CookEvent,
   PostSmoke,
   ProbeTargetAlertSettings,
   ProbeTargetEntry,
@@ -53,6 +55,20 @@ export type StoredSmokeProfile = Partial<SmokeProfile> & {
 export type StoredTempData = {
   [Reading in keyof Omit<TempData, 'date'>]: TempData[Reading] | string;
 } & { date: Date | string };
+
+/**
+ * A cook event as it actually sits stored and comes off the wire: the moment is
+ * an ISO string, because JSON has no date, and the four temperatures may be
+ * absent on an event stamped before the cook reported a reading.
+ */
+export type StoredCookEvent = Omit<CookEvent, 'at' | 'tone'> & {
+  at: string | Date;
+  tone: string;
+  chamberTemp?: number | null;
+  probe1Temp?: number | null;
+  probe2Temp?: number | null;
+  probe3Temp?: number | null;
+};
 
 /**
  * The application settings as they actually sit stored: probe rows keyed by
@@ -348,6 +364,11 @@ export interface FakeBackendSeed {
     all?: Smoke[];
     finish?: Smoke;
   };
+  /**
+   * The cook log of the session in the store. Absent models a cook nobody has
+   * stamped anything on.
+   */
+  cookEvents?: { current?: StoredCookEvent[] };
   history?: SmokeHistory[];
   timeline?: {
     records?: Record<string, StoredSmokeTimeline>;
@@ -366,6 +387,9 @@ export interface FakeBackendSeed {
  * fake — which stands in for the transport — hands back the mapped value.
  */
 const EMPTY_BODY = null;
+
+/** A stored event's moment, however the seed wrote it. */
+const moment = (event: StoredCookEvent): number => new Date(event.at).getTime();
 
 /** The id the fake gives the session a pre-smoke save creates. */
 const NEXT_SMOKE_ID = 'smoke-next';
@@ -523,6 +547,14 @@ interface FakeStore {
     all: Smoke[];
     finish: Smoke | Record<string, never>;
   };
+  cookEvents: StoredCookEvent[];
+  /**
+   * How many events this store has ever recorded — the id counter, kept apart
+   * from the list because the list shrinks. Numbering from the length hands a
+   * new event the id of one that was deleted, and two rows with one id is a
+   * single delete removing both and React keying them together.
+   */
+  cookEventsRecorded: number;
   history: SmokeHistory[];
   timeline: {
     records: Record<string, StoredSmokeTimeline>;
@@ -571,6 +603,8 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
       all: seed.smoke?.all ?? [],
       finish: seed.smoke?.finish ?? {},
     },
+    cookEvents: seed.cookEvents?.current ?? [],
+    cookEventsRecorded: seed.cookEvents?.current?.length ?? 0,
     history: seed.history ?? [],
     timeline: {
       records: seed.timeline?.records ?? {},
@@ -840,6 +874,53 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
         throw new ApiError({ status: 404, path, method });
       }
       return clone(record);
+    }
+
+    if (resource === 'cook-events') {
+      // The log of the session in the store: this fake holds one cook, so the
+      // current log and a by-id log are the same rows — which is what the
+      // backend answers too when the id is the cook in progress.
+      const log = () =>
+        clone([...store.cookEvents].sort((one, other) => moment(one) - moment(other)));
+      if (method === 'get' && id === 'current') {
+        return log();
+      }
+      if (method === 'get' && id === 'smoke') {
+        return log();
+      }
+      if (method === 'post' && id === undefined) {
+        const stampKey = (body as { stampKey?: string })?.stampKey;
+        const stamp = DEFAULT_STAMPS.find(candidate => candidate.key === stampKey);
+        // The backend's two refusals, mirrored: a stamp nobody knows is the
+        // caller's mistake, and a session with no cook set up is a conflict.
+        if (!stamp) {
+          throw new ApiError({ status: 400, path, method });
+        }
+        if (!store.state?.smokeId) {
+          throw new ApiError({ status: 409, path, method });
+        }
+        const latest = store.temps.current[store.temps.current.length - 1];
+        store.cookEventsRecorded += 1;
+        const recorded: StoredCookEvent = {
+          _id: `cook-event-${store.cookEventsRecorded}`,
+          smokeId: store.state.smokeId,
+          stampKey: stamp.key,
+          label: stamp.label,
+          tone: stamp.tone,
+          // The server's clock, as the backend stamps it.
+          at: new Date().toISOString(),
+          chamberTemp: latest === undefined ? null : Number(latest.ChamberTemp),
+          probe1Temp: latest === undefined ? null : Number(latest.MeatTemp),
+          probe2Temp: latest === undefined ? null : Number(latest.Meat2Temp),
+          probe3Temp: latest === undefined ? null : Number(latest.Meat3Temp),
+        };
+        store.cookEvents.push(recorded);
+        return clone(recorded);
+      }
+      if (method === 'delete' && id !== undefined) {
+        store.cookEvents = store.cookEvents.filter(event => event._id !== id);
+        return {};
+      }
     }
 
     if (resource === 'history' && method === 'get' && id === undefined) {

@@ -41,7 +41,11 @@ import { StaleCookService } from './stale-cook.service';
         collection: 'notificationsettings',
       },
     ]),
-    StateModule,
+    // Forward-referenced for the same reason the gateway edge below is: the
+    // session now imports the gateway, and the gateway imports this module, so
+    // the three files are in a require loop and an eager reference to whichever
+    // is still half-evaluated reads as `undefined`. See `TempModule`.
+    forwardRef(() => StateModule),
     TimelineModule,
     StatsModule,
     // A stop the apps are never told about is toggled straight back on by the
