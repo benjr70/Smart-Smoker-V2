@@ -15,6 +15,7 @@ import {
 import React from 'react';
 import {
   ChamberAlertSettings,
+  HeadsUpAlertSettings,
   NotificationSettings,
   ProbeTargetAlertSettings,
   ProbeTargetEntry,
@@ -98,6 +99,28 @@ export const describeSmokeComplete = (
     : `You will be told once, when all of ${names} have reached their targets.`;
 };
 
+/**
+ * What the heads-up alert will actually do, in a sentence — naming the probes
+ * that carry a lead and how long each is, so "which of these will actually warn
+ * me" needs no reading of three separate number fields.
+ */
+export const describeHeadsUp = (
+  headsUp: HeadsUpAlertSettings,
+  probeTarget: ProbeTargetAlertSettings
+): string => {
+  if (!headsUp.enabled) {
+    return 'Off — you will not be told before a probe reaches its target.';
+  }
+  const warned = probeTarget.probes.filter(probe => probe.enabled && probe.leadMinutes !== null);
+  if (warned.length === 0) {
+    return 'No probe has a warning set — give a watched probe some minutes to be told before it is done.';
+  }
+  const names = warned.map(
+    probe => `${probe.name} ${probe.leadMinutes} minutes before ${degrees(probe.target)}`
+  );
+  return `You will be told once about each of ${listOf(names)}.`;
+};
+
 /** `a`, `a and b`, `a, b and c` — as a person would say the list out loud. */
 const listOf = (items: string[]): string =>
   items.length <= 1
@@ -132,6 +155,41 @@ const readTargetEdit = (raw: string, probe: ProbeTargetEntry): Partial<ProbeTarg
   return raw.trim() === '' || Number.isNaN(parsed)
     ? { target: probe.target }
     : { target: parsed, targetSource: 'user' };
+};
+
+/**
+ * How much warning a probe may be given, in minutes: at least one, at most two
+ * hours. The same bounds the backend validates against — a lead of zero is the
+ * alert that fires when the meat is done, which already exists, and one longer
+ * than a projection is worth would fire in the first hour of a brisket.
+ */
+export const MIN_LEAD_MINUTES = 1;
+export const MAX_LEAD_MINUTES = 120;
+
+/**
+ * The change a keystroke in a probe's heads-up field makes.
+ *
+ * An empty field is the row saying "no heads-up on this probe", which is a
+ * decision and is saved as one — unlike the target beside it, which always has
+ * to be some temperature. It is read off a text field rather than a number one
+ * for exactly that reason: a number input reports a half-typed entry — a lone
+ * minus sign, a stray 'e' — as an empty value, and a cook mistyping over a
+ * configured lead would have it deleted instead of rejected.
+ *
+ * Anything else that is not a whole number of minutes inside the bounds above
+ * leaves the row exactly as it was, and never becomes a setting: this page
+ * saves the whole document when it is left, and a lead the backend refuses
+ * would fail that save silently — taking the target and watch-list edits made
+ * beside it down with it.
+ */
+const readLeadEdit = (raw: string, probe: ProbeTargetEntry): Partial<ProbeTargetEntry> => {
+  if (raw.trim() === '') {
+    return { leadMinutes: null };
+  }
+  const parsed = Number(raw);
+  const acceptable =
+    Number.isInteger(parsed) && parsed >= MIN_LEAD_MINUTES && parsed <= MAX_LEAD_MINUTES;
+  return { leadMinutes: acceptable ? parsed : probe.leadMinutes };
 };
 
 export function NotificationsCard(): JSX.Element {
@@ -171,6 +229,9 @@ export function NotificationsCard(): JSX.Element {
       smokeComplete: { ...current.smokeComplete, ...change },
     }));
 
+  const updateHeadsUp = (change: Partial<HeadsUpAlertSettings>) =>
+    setSettings(current => ({ ...current, headsUp: { ...current.headsUp, ...change } }));
+
   /**
    * Switching an alert on is the user gesture the permission prompt needs, so
    * the setting is recorded and the browser is enlisted in the same handler.
@@ -188,14 +249,15 @@ export function NotificationsCard(): JSX.Element {
     }
   };
 
-  const { chamber, probeTarget, smokeComplete } = settings;
+  const { chamber, probeTarget, smokeComplete, headsUp } = settings;
   // The mock tags the first watched probe with the cook's ETA. Which probe that
   // is follows from the watch list, so it is derived here rather than stored.
   const firstWatchedSlot = probeTarget.probes.find(probe => probe.enabled)?.slot;
   // Any alert switched on is something this browser is expected to deliver, so
   // any of them is reason enough to offer the way in below. Reading only the
   // chamber alert would strand a smoker whose alerts are all about the meat.
-  const anyAlertEnabled = chamber.enabled || probeTarget.enabled || smokeComplete.enabled;
+  const anyAlertEnabled =
+    chamber.enabled || probeTarget.enabled || smokeComplete.enabled || headsUp.enabled;
 
   return (
     // No spacing wrapper: the settings page stacks its cards and owns the gap
@@ -317,13 +379,19 @@ export function NotificationsCard(): JSX.Element {
           {/* The watch list is what both probe alerts are measured against, so
               it is shown for either of them: a Smoke Complete alert switched on
               by itself would otherwise have no way to be told what to wait for. */}
-          {(probeTarget.enabled || smokeComplete.enabled) && (
+          {(probeTarget.enabled || smokeComplete.enabled || headsUp.enabled) && (
             <Stack spacing={1} data-testid="settings-probe-rows">
               {probeTarget.probes.map(probe => (
                 <ProbeRow
                   key={probe.slot}
                   probe={probe}
                   showEta={probe.slot === firstWatchedSlot}
+                  // How long before a probe is done is only worth asking about
+                  // while the alert that reads it is switched on — and only on
+                  // a row it could fire about: the engine warns about watched
+                  // probes alone, so a lead taken from an unwatched row would
+                  // store an alert that can never arrive.
+                  showLead={headsUp.enabled && probe.enabled}
                   onChange={change => updateProbe(probe.slot, change)}
                 />
               ))}
@@ -364,6 +432,32 @@ export function NotificationsCard(): JSX.Element {
             {describeSmokeComplete(smokeComplete, probeTarget)}
           </Typography>
 
+          {/* The lead each probe is warned by is on its row above, beside the
+              target it is measured against, rather than repeated here. */}
+          <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
+            <Stack>
+              <Typography variant="body1" fontWeight={600}>
+                Heads-Up
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Tell me before the meat is done, so I can be there for it.
+              </Typography>
+            </Stack>
+            <Switch
+              checked={headsUp.enabled}
+              onChange={event => setAlertEnabled(event.target.checked, updateHeadsUp)}
+              inputProps={{ 'aria-label': 'Heads-Up' }}
+            />
+          </Stack>
+
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            data-testid="settings-heads-up-summary"
+          >
+            {describeHeadsUp(headsUp, probeTarget)}
+          </Typography>
+
           {/* Only worth offering once a notification could actually arrive: in
               any other permission state this control can only ever report the
               same failure the banner above already explains. Held back until
@@ -396,10 +490,12 @@ export function NotificationsCard(): JSX.Element {
 const ProbeRow = ({
   probe,
   showEta,
+  showLead,
   onChange,
 }: {
   probe: ProbeTargetEntry;
   showEta: boolean;
+  showLead: boolean;
   onChange: (change: Partial<ProbeTargetEntry>) => void;
 }): JSX.Element => (
   <Stack
@@ -431,5 +527,31 @@ const ProbeRow = ({
       inputProps={{ 'data-testid': `settings-probe-target-${probe.slot}` }}
       sx={{ width: 120 }}
     />
+    {showLead && (
+      <TextField
+        label={`${probe.name} heads-up minutes`}
+        // Text, not number: this is the one field whose empty value is itself a
+        // setting, and a number input hands over an empty value for anything it
+        // cannot parse — so a mistyped character would read as "no heads-up on
+        // this probe" and delete a lead the cook configured. As text the
+        // keystroke arrives as typed and is simply refused.
+        type="text"
+        size="small"
+        variant="outlined"
+        // Empty rather than a number when there is no heads-up: a zero in the
+        // box would read as a setting, and this row has none.
+        value={probe.leadMinutes ?? ''}
+        onChange={event => onChange(readLeadEdit(event.target.value, probe))}
+        inputProps={{
+          'data-testid': `settings-probe-lead-${probe.slot}`,
+          // The field takes minutes, so phones offer the digits keyboard even
+          // though the field itself is text.
+          inputMode: 'numeric',
+          'aria-valuemin': MIN_LEAD_MINUTES,
+          'aria-valuemax': MAX_LEAD_MINUTES,
+        }}
+        sx={{ width: 120 }}
+      />
+    )}
   </Stack>
 );

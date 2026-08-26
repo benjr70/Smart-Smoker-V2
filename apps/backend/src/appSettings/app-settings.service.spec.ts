@@ -17,14 +17,17 @@ const DEFAULT_PROBE_TARGET_BLOCK = DEFAULT_APPLICATION_SETTINGS.probeTarget;
 /** The Smoke Complete alert as a deployment that has configured nothing has it. */
 const SMOKE_COMPLETE_OFF = DEFAULT_APPLICATION_SETTINGS.smokeComplete;
 
+/** The heads-up alert as a deployment that has configured nothing has it. */
+const HEADS_UP_OFF = DEFAULT_APPLICATION_SETTINGS.headsUp;
+
 /** The idle threshold a deployment that has tuned nothing auto-stops on. */
 const AUTO_STOP_DEFAULT = DEFAULT_APPLICATION_SETTINGS.autoStop;
 
 /** A target the user typed in themselves, as a row records that. */
-const byHand = { targetSource: 'user' } as const;
+const byHand = { targetSource: 'user', leadMinutes: null } as const;
 
 /** A target nobody has set: the shipped default, which seeding may replace. */
-const untouched = { targetSource: 'default' } as const;
+const untouched = { targetSource: 'default', leadMinutes: null } as const;
 
 /**
  * The session and the cook the probe rows are named from. A stand-in: this
@@ -108,7 +111,7 @@ const createSettingsCollection = <T>(seed: T | null = null) => {
       }),
     ),
     /** Every document in the collection right now. */
-    all: () => documents.map((document) => ({ ...(document as object) }) as T),
+    all: () => documents.map((document) => ({ ...(document as object) } as T)),
   };
 };
 
@@ -174,6 +177,7 @@ describe('AppSettingsService', () => {
         chamber: { enabled: false, low: 225, high: 275 },
         probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
         smokeComplete: SMOKE_COMPLETE_OFF,
+        headsUp: HEADS_UP_OFF,
         targetPresets: DEFAULT_TARGET_PRESETS,
         appearance: { mode: 'system', resolvedMode: 'dark' },
         autoStop: AUTO_STOP_DEFAULT,
@@ -206,6 +210,7 @@ describe('AppSettingsService', () => {
         chamber: { enabled: true, low: 200, high: 300 },
         probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
         smokeComplete: SMOKE_COMPLETE_OFF,
+        headsUp: HEADS_UP_OFF,
         targetPresets: DEFAULT_TARGET_PRESETS,
         appearance: { mode: 'dark', resolvedMode: 'dark' },
         autoStop: AUTO_STOP_DEFAULT,
@@ -267,7 +272,7 @@ describe('AppSettingsService', () => {
             enabled: true,
             probes: [{ slot: 'probe1', enabled: true, target }],
           },
-        }) as unknown as ApplicationSettings;
+        } as unknown as ApplicationSettings);
 
       it('treats a target that is not the shipped default as the user’s own', async () => {
         const reading = await serviceReading(legacyDocument(145));
@@ -483,9 +488,27 @@ describe('AppSettingsService', () => {
     const watchingEveryProbe = {
       enabled: true,
       probes: [
-        { slot: 'probe1', enabled: true, target: 203, targetSource: 'default' },
-        { slot: 'probe2', enabled: true, target: 203, targetSource: 'default' },
-        { slot: 'probe3', enabled: true, target: 203, targetSource: 'default' },
+        {
+          slot: 'probe1',
+          enabled: true,
+          target: 203,
+          targetSource: 'default',
+          leadMinutes: null,
+        },
+        {
+          slot: 'probe2',
+          enabled: true,
+          target: 203,
+          targetSource: 'default',
+          leadMinutes: null,
+        },
+        {
+          slot: 'probe3',
+          enabled: true,
+          target: 203,
+          targetSource: 'default',
+          leadMinutes: null,
+        },
       ],
     } as ApplicationSettings['probeTarget'];
 
@@ -562,7 +585,13 @@ describe('AppSettingsService', () => {
       await service.seedProbeTargets('Whole chicken');
 
       expect((await service.getSettings()).probeTarget.probes).toEqual([
-        { slot: 'probe1', enabled: true, target: 165, targetSource: 'preset' },
+        {
+          slot: 'probe1',
+          enabled: true,
+          target: 165,
+          targetSource: 'preset',
+          leadMinutes: null,
+        },
         { slot: 'probe2', enabled: false, target: 203, ...untouched },
         { slot: 'probe3', enabled: false, target: 203, ...untouched },
       ]);
@@ -632,6 +661,7 @@ describe('AppSettingsService', () => {
         chamber: { enabled: true, low: 200, high: 250 },
         probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
         smokeComplete: SMOKE_COMPLETE_OFF,
+        headsUp: HEADS_UP_OFF,
         targetPresets: DEFAULT_TARGET_PRESETS,
         appearance: { mode: 'dark', resolvedMode: 'dark' },
         autoStop: AUTO_STOP_DEFAULT,
@@ -651,6 +681,7 @@ describe('AppSettingsService', () => {
         chamber: { enabled: false, low: 225, high: 275 },
         probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
         smokeComplete: SMOKE_COMPLETE_OFF,
+        headsUp: HEADS_UP_OFF,
         targetPresets: DEFAULT_TARGET_PRESETS,
         appearance: { mode: 'system', resolvedMode: 'dark' },
         autoStop: AUTO_STOP_DEFAULT,
@@ -707,6 +738,7 @@ describe('AppSettingsService', () => {
         chamber: { enabled: true, low: 200, high: 250 },
         probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
         smokeComplete: SMOKE_COMPLETE_OFF,
+        headsUp: HEADS_UP_OFF,
         targetPresets: DEFAULT_TARGET_PRESETS,
         appearance: { mode: 'dark', resolvedMode: 'dark' },
         autoStop: { idleHours: 12 },
@@ -745,6 +777,7 @@ describe('AppSettingsService', () => {
         chamber: { enabled: true, low: 200, high: 250 },
         probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
         smokeComplete: SMOKE_COMPLETE_OFF,
+        headsUp: HEADS_UP_OFF,
         targetPresets: DEFAULT_TARGET_PRESETS,
         appearance: { mode: 'dark', resolvedMode: 'dark' },
         autoStop: AUTO_STOP_DEFAULT,
@@ -764,6 +797,7 @@ describe('AppSettingsService', () => {
         chamber: { enabled: true, low: 200, high: 250 },
         probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
         smokeComplete: SMOKE_COMPLETE_OFF,
+        headsUp: HEADS_UP_OFF,
         targetPresets: DEFAULT_TARGET_PRESETS,
         appearance: { mode: 'light', resolvedMode: 'light' },
         autoStop: AUTO_STOP_DEFAULT,
@@ -793,6 +827,7 @@ describe('AppSettingsService', () => {
         chamber: { enabled: true, low: 200, high: 250 },
         probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
         smokeComplete: SMOKE_COMPLETE_OFF,
+        headsUp: HEADS_UP_OFF,
         targetPresets: DEFAULT_TARGET_PRESETS,
         appearance: { mode: 'dark', resolvedMode: 'dark' },
         autoStop: AUTO_STOP_DEFAULT,
@@ -821,6 +856,7 @@ describe('AppSettingsService', () => {
         chamber: { enabled: false, low: 225, high: 275 },
         probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
         smokeComplete: SMOKE_COMPLETE_OFF,
+        headsUp: HEADS_UP_OFF,
         targetPresets: DEFAULT_TARGET_PRESETS,
         appearance: { mode: 'dark', resolvedMode: 'dark' },
         autoStop: AUTO_STOP_DEFAULT,

@@ -101,6 +101,15 @@ export interface ProbeTargetEntry {
    * to guess from a number that looks exactly like the default.
    */
   targetSource: TargetSource;
+  /**
+   * How many minutes before this probe reaches its target the cook wants to be
+   * warned, or `null` for not at all.
+   *
+   * On the probe row rather than in a list of its own, because it is about the
+   * same probe reaching the same target this row already describes — the global
+   * switch below only decides whether any of it is heard.
+   */
+  leadMinutes: number | null;
   name: string;
 }
 
@@ -137,6 +146,18 @@ export interface SmokeCompleteAlertSettings {
 }
 
 /**
+ * The heads-up alert: told before the meat is done, in time to do something
+ * about it.
+ *
+ * Only a switch, because how long before is per probe and lives on the rows
+ * above — a second copy of it here could only disagree with the row the user is
+ * looking at.
+ */
+export interface HeadsUpAlertSettings {
+  enabled: boolean;
+}
+
+/**
  * The notification settings document. Canonical here so API call sites depend
  * only on the API types module.
  *
@@ -150,6 +171,7 @@ export interface NotificationSettings {
   chamber: ChamberAlertSettings;
   probeTarget: ProbeTargetAlertSettings;
   smokeComplete: SmokeCompleteAlertSettings;
+  headsUp: HeadsUpAlertSettings;
   /**
    * The Default target temps card's block. It rides on the same read as the
    * alerts because it is the same document, but it is saved on its own — see
@@ -203,6 +225,7 @@ export interface ApplicationSettings {
   chamber: ChamberAlertSettings;
   probeTarget: ProbeTargetAlertSettings;
   smokeComplete: SmokeCompleteAlertSettings;
+  headsUp: HeadsUpAlertSettings;
   targetPresets: TargetPresets;
   appearance: AppearancePreference;
   autoStop: AutoStopSettings;

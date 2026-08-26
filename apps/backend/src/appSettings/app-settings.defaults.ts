@@ -54,9 +54,13 @@ export const DEFAULT_APPLICATION_SETTINGS: ApplicationSettings = {
       enabled: false,
       target: DEFAULT_PROBE_TARGET,
       targetSource: 'default',
+      leadMinutes: null,
     })),
   },
   smokeComplete: { enabled: false },
+  // Off, like every other alert: an installation upgrading into this one has
+  // not asked to be warned before its meat is done.
+  headsUp: { enabled: false },
   targetPresets: DEFAULT_TARGET_PRESETS,
   // "Follow the device", recorded as dark. The resolved half is written by
   // browsers and read only by the touchscreen, which renders it verbatim rather
@@ -89,6 +93,9 @@ const withProbeEntryPerSlot = (
       enabled: entry?.enabled ?? false,
       target,
       targetSource: entry?.targetSource ?? inheritedProvenance(target),
+      // A row stored before the heads-up existed, and one the cook wants no
+      // warning about, mean the same thing and read the same way.
+      leadMinutes: entry?.leadMinutes ?? null,
     };
   });
 
@@ -124,6 +131,7 @@ export const withSettingsDefaults = (
   const chamber = stored?.chamber;
   const probeTarget = stored?.probeTarget;
   const smokeComplete = stored?.smokeComplete;
+  const headsUp = stored?.headsUp;
   const targetPresets = stored?.targetPresets;
   const appearance = stored?.appearance;
   const autoStop = stored?.autoStop;
@@ -140,6 +148,9 @@ export const withSettingsDefaults = (
     },
     smokeComplete: {
       enabled: smokeComplete?.enabled ?? defaults.smokeComplete.enabled,
+    },
+    headsUp: {
+      enabled: headsUp?.enabled ?? defaults.headsUp.enabled,
     },
     targetPresets: {
       beef: targetPresets?.beef ?? defaults.targetPresets.beef,

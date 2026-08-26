@@ -19,6 +19,7 @@ import { PushDispatcherService } from '../pushDispatcher/push-dispatcher.service
 import { SmokeProfileService } from '../smokeProfile/smokeProfile.service';
 import { Temp } from '../temps/temps.schema';
 import { TempsService } from '../temps/temps.service';
+import { TimelineService } from '../timeline/timeline.service';
 import {
   AlertRuntimeState,
   evaluateAlerts,
@@ -90,6 +91,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     private appSettingsService: AppSettingsService,
     private smokeProfileService: SmokeProfileService,
     private preSmokeService: PreSmokeService,
+    private timelineService: TimelineService,
   ) {}
 
   /** Start the evaluation interval this service owns. */
@@ -183,11 +185,14 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
       this.smokeProfileService.getCurrentSmokeProfile(),
     ]);
 
+    const reading = {
+      chamberTemp: readTemperature(latest.ChamberTemp),
+      probeTemps: readProbeTemps(latest),
+    };
+
     const evaluation = evaluateAlerts({
-      reading: {
-        chamberTemp: readTemperature(latest.ChamberTemp),
-        probeTemps: readProbeTemps(latest),
-      },
+      reading,
+      etaMinutes: await this.headsUpMinutes(settings, state, reading),
       settings,
       state,
       names: { chamber: CHAMBER_NAME, probes: resolveProbeNames(profile) },
@@ -198,6 +203,59 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     for (const notification of evaluation.notifications) {
       await this.pushDispatcher.notify(notification.title, notification.body);
     }
+  }
+
+  /**
+   * How many minutes each probe still awaiting a heads-up is projected to be
+   * from its target.
+   *
+   * Only slots that could still fire are projected: the alert has to be on, the
+   * probe watched with a lead, its heads-up unspent, and the meat not already
+   * at its target. This runs every thirty seconds for the length of every cook,
+   * and a projection nothing could be decided from is a read of the series for
+   * nothing — the same reasoning the historical rate is gated by.
+   *
+   * Only an `'ok'` projection is passed on. Warming, stalled and paused are the
+   * estimator saying it cannot tell yet, and a number carried out of one of
+   * those states would be read by the engine as live evidence that the meat is
+   * nearly there.
+   */
+  private async headsUpMinutes(
+    settings: ApplicationSettings,
+    state: AlertRuntimeState,
+    reading: { probeTemps: Record<string, number | null> },
+  ): Promise<Record<string, number>> {
+    if (!settings.headsUp.enabled) {
+      return {};
+    }
+    const pending = settings.probeTarget.probes.filter((probe) => {
+      const temp = reading.probeTemps[probe.slot];
+      return (
+        probe.enabled &&
+        probe.leadMinutes !== null &&
+        probe.leadMinutes !== undefined &&
+        !state.headsUpFired.includes(probe.slot) &&
+        !(typeof temp === 'number' && temp >= probe.target)
+      );
+    });
+    if (pending.length === 0) {
+      // Nothing could be decided from a projection, so none is asked for: the
+      // read is skipped here rather than left to answer an empty list, so the
+      // tick costs nothing at all.
+      return {};
+    }
+    const estimates = await this.timelineService.estimateForProbes(
+      pending.map((probe) => ({ slot: probe.slot, target: probe.target })),
+    );
+    return Object.entries(estimates).reduce<Record<string, number>>(
+      (minutes, [slot, estimate]) => {
+        if (estimate.state === 'ok' && estimate.hoursRemaining !== null) {
+          minutes[slot] = estimate.hoursRemaining * 60;
+        }
+        return minutes;
+      },
+      {},
+    );
   }
 
   /**
@@ -237,6 +295,8 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
         probeTargetsReached: stored.probeTargetsReached ?? [],
         smokeCompleteProbesDone: stored.smokeCompleteProbesDone ?? [],
         smokeCompleteFired: stored.smokeCompleteFired ?? false,
+        headsUpCounters: stored.headsUpCounters ?? {},
+        headsUpFired: stored.headsUpFired ?? [],
       },
       sessionStart: false,
     };

@@ -11,6 +11,7 @@ import { TempDocument } from '../temps/temps.schema';
 import { StateDocument } from '../State/state.schema';
 import { PreSmoke, PreSmokeDocument } from '../presmoke/presmoke.schema';
 import {
+  CompletionEstimate,
   estimateCompletion,
   LIVE_WINDOW_MINUTES,
   needsHistoricalRate,
@@ -42,6 +43,16 @@ import { primaryWatchedProbe, primaryWatchedTarget } from './watched-probe';
  * of half an hour of that, which is longer than any of it lasts.
  */
 const OPENING_ROWS = 200;
+
+/**
+ * How long a read of the user's cooking history is reused for on the
+ * per-probe projection, in milliseconds.
+ *
+ * Long enough that a cook's worth of thirty-second alert ticks is a handful of
+ * reads rather than hundreds, short enough that a meat type corrected after
+ * the cook started is honoured while it still matters.
+ */
+export const HISTORY_RATE_MEMO_MS = 5 * 60 * 1000;
 
 /**
  * The only field a cook's window is cut from: when the row was read. A
@@ -437,6 +448,102 @@ export class TimelineService {
           : null,
       }),
     };
+  }
+
+  /**
+   * When each of the given probes will reach the target it was given, by slot.
+   *
+   * The same projection the Estimated Completion card is drawn from, made once
+   * per probe instead of once for the cook: the heads-up alert warns about a
+   * particular piece of meat, and reading it off the cook's primary probe would
+   * warn about the wrong one.
+   *
+   * Nothing is read of the store for an empty list. The caller asks only about
+   * the probes it could still fire about, and this runs on every evaluation
+   * tick for the length of every cook — a tick with nothing to warn about has
+   * to cost nothing.
+   */
+  async estimateForProbes(
+    probes: { slot: string; target: number }[],
+    now: Date = new Date(),
+  ): Promise<Record<string, CompletionEstimate>> {
+    if (probes.length === 0) {
+      return {};
+    }
+    const state = await this.stateModel.findOne().exec();
+    const smoke = state?.smokeId
+      ? await this.smokeModel.findById(state.smokeId).exec()
+      : null;
+    if (!smoke) {
+      return {};
+    }
+    const peaks = await this.peaksOf(smoke);
+    const startedAt = smoke.startedAt ?? (await this.edgeReading(smoke, 1));
+    // One read of the series for every probe: the rows carry all four
+    // temperatures, so a read per probe would be the same rows three times.
+    const rows = await this.estimateReadings(smoke, startedAt ?? null, now);
+    // And at most one read of the user's cooking history, however many probes
+    // turn out to want it — it is the same meat on the same smoker — and at
+    // most one every few minutes, however many ticks want it.
+    const historicalOnce = (): Promise<number | null> =>
+      this.rememberedHistoricalRate(smoke, String(state?.smokeId ?? ''), now);
+
+    const estimates: Record<string, CompletionEstimate> = {};
+    for (const probe of probes) {
+      const input = {
+        readings: probeSeries(rows, probe.slot, startedAt ?? null),
+        target: probe.target,
+        smoking: state?.smoking === true,
+        now,
+        peakTemp: peaks[probeField(probe.slot)] ?? null,
+      };
+      estimates[probe.slot] = estimateCompletion({
+        ...input,
+        historicalRate: needsHistoricalRate(input)
+          ? await historicalOnce()
+          : null,
+      });
+    }
+    return estimates;
+  }
+
+  /**
+   * The user's cooking history for this cook, read at most once every
+   * {@link HISTORY_RATE_MEMO_MS}.
+   *
+   * The heads-up alert asks for a projection twice a minute for the length of
+   * every cook, and for the first half hour of one the blend still wants this
+   * number — which costs a read of every completed smoke plus the pre-smoke
+   * behind each of them. What the user's past cooks of this meat climbed at
+   * does not change while this cook runs, so answering every tick from the
+   * store would be the same scan sixty times an hour for the same answer.
+   *
+   * Remembered against the cook it was read for, and only for a few minutes:
+   * the next cook is different meat, and a meat type corrected mid-cook is
+   * picked up on the next read rather than held until the cook ends.
+   */
+  private historyRateMemo: {
+    smokeId: string;
+    readAt: number;
+    rate: number | null;
+  } | null = null;
+
+  private async rememberedHistoricalRate(
+    smoke: StoredSmoke,
+    smokeId: string,
+    now: Date,
+  ): Promise<number | null> {
+    const memo = this.historyRateMemo;
+    if (
+      memo !== null &&
+      memo.smokeId === smokeId &&
+      now.getTime() - memo.readAt < HISTORY_RATE_MEMO_MS
+    ) {
+      return memo.rate;
+    }
+    const rate = await this.historicalRate(smoke);
+    this.historyRateMemo = { smokeId, readAt: now.getTime(), rate };
+    return rate;
   }
 
   /**

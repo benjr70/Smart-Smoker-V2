@@ -9,6 +9,8 @@ import { PreSmokeService } from '../presmoke/presmoke.service';
 import { PushDispatcherService } from '../pushDispatcher/push-dispatcher.service';
 import { SmokeProfileService } from '../smokeProfile/smokeProfile.service';
 import { TempsService } from '../temps/temps.service';
+import { CompletionEstimate } from '../timeline/completion-estimate';
+import { TimelineService } from '../timeline/timeline.service';
 import { AlertState } from './alert-state.schema';
 import { NotificationSubscription } from './notificationSubscription.schema';
 import {
@@ -130,6 +132,7 @@ describe('NotificationsService', () => {
   let smokeProfile: { getCurrentSmokeProfile: jest.Mock };
   let preSmoke: { GetByCurrent: jest.Mock };
   let temps: { getLatestCurrentTemp: jest.Mock };
+  let timeline: { estimateForProbes: jest.Mock };
 
   const mockSubscription: NotificationSubscription = {
     endpoint: 'https://fcm.googleapis.com/fcm/send/test-endpoint',
@@ -166,6 +169,7 @@ describe('NotificationsService', () => {
       GetByCurrent: jest.fn().mockResolvedValue({ meatType: 'Packer brisket' }),
     };
     temps = { getLatestCurrentTemp: jest.fn().mockResolvedValue(undefined) };
+    timeline = { estimateForProbes: jest.fn().mockResolvedValue({}) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -181,6 +185,7 @@ describe('NotificationsService', () => {
         { provide: TempsService, useValue: temps },
         { provide: SmokeProfileService, useValue: smokeProfile },
         { provide: PreSmokeService, useValue: preSmoke },
+        { provide: TimelineService, useValue: timeline },
       ],
     }).compile();
 
@@ -308,6 +313,8 @@ describe('NotificationsService', () => {
         probeTargetsReached: ['probe1'],
         smokeCompleteProbesDone: ['probe1'],
         smokeCompleteFired: false,
+        headsUpCounters: {},
+        headsUpFired: [],
       });
       smokeSession.GetState.mockResolvedValue({
         smokeId: 'this-weekend',
@@ -393,6 +400,8 @@ describe('NotificationsService', () => {
         probeTargetsReached: ['probe1'],
         smokeCompleteProbesDone: ['probe1'],
         smokeCompleteFired: true,
+        headsUpCounters: {},
+        headsUpFired: [],
       });
       smokeSession.GetState.mockResolvedValue({
         smokeId: 'this-weekend',
@@ -419,6 +428,8 @@ describe('NotificationsService', () => {
       expect(alertState.stored()).toMatchObject({
         smokeId: 'this-weekend',
         smokeCompleteFired: true,
+        headsUpCounters: {},
+        headsUpFired: [],
       });
     });
 
@@ -625,6 +636,8 @@ describe('NotificationsService', () => {
         probeTargetsReached: ['probe1'],
         smokeCompleteProbesDone: ['probe1'],
         smokeCompleteFired: true,
+        headsUpCounters: {},
+        headsUpFired: [],
       });
       smokeSession.GetState.mockResolvedValue({
         smokeId: 'fresh-smoke',
@@ -645,6 +658,8 @@ describe('NotificationsService', () => {
         probeTargetsReached: [],
         smokeCompleteProbesDone: [],
         smokeCompleteFired: false,
+        headsUpCounters: {},
+        headsUpFired: [],
       });
     });
 
@@ -683,6 +698,129 @@ describe('NotificationsService', () => {
       } finally {
         jest.useRealTimers();
       }
+    });
+
+    describe('the heads-up alert', () => {
+      /** A projection the estimator would make of a cook going well. */
+      const projected = (
+        state: CompletionEstimate['state'],
+        hoursRemaining: number,
+      ): CompletionEstimate => ({
+        state,
+        eta: new Date(),
+        hoursRemaining,
+        ratePerHour: 20,
+        progressPercent: 50,
+        startTemp: 60,
+        targetTemp: 170,
+      });
+
+      /** A cook watching one probe, wanting warning before it is done. */
+      const watchingWithLead = (leadMinutes: number | null) => ({
+        chamber: { enabled: false, low: 225, high: 275 },
+        probeTarget: {
+          enabled: false,
+          probes: [
+            {
+              slot: 'probe1',
+              enabled: true,
+              target: 170,
+              targetSource: 'user' as const,
+              leadMinutes,
+            },
+          ],
+        },
+        headsUp: { enabled: true },
+      });
+
+      beforeEach(() => {
+        smokeProfile.getCurrentSmokeProfile.mockResolvedValue({
+          probe1Name: 'Bottom Meat',
+        });
+        temps.getLatestCurrentTemp.mockResolvedValue({
+          ChamberTemp: '240',
+          MeatTemp: '158',
+        });
+      });
+
+      it('tells the cook the meat is nearly done, with the projection made at that moment', async () => {
+        settings.seed(watchingWithLead(15));
+        timeline.estimateForProbes.mockResolvedValue({
+          probe1: projected('ok', 0.2),
+        });
+
+        await service.checkAlerts();
+        await service.checkAlerts();
+        await service.checkAlerts();
+
+        expect(pushDispatcher.notify).toHaveBeenCalledTimes(1);
+        expect(pushDispatcher.notify).toHaveBeenCalledWith(
+          'Smoker',
+          'Bottom Meat at 158°F — about 12 minutes from 170°F.',
+        );
+      });
+
+      // Warming, stalled and paused are not evidence that the meat is twelve
+      // minutes away — they are the estimator saying it cannot tell yet.
+      it.each(['warming', 'stalled', 'paused'] as const)(
+        'says nothing while the projection is %s, however few minutes it carries',
+        async (state) => {
+          settings.seed(watchingWithLead(15));
+          timeline.estimateForProbes.mockResolvedValue({
+            probe1: projected(state, 0.1),
+          });
+
+          await service.checkAlerts();
+          await service.checkAlerts();
+
+          expect(pushDispatcher.notify).not.toHaveBeenCalled();
+        },
+      );
+
+      it('projects only the probes it could still warn about, and asks nothing at all when there are none', async () => {
+        settings.seed(watchingWithLead(15));
+        timeline.estimateForProbes.mockResolvedValue({
+          probe1: projected('ok', 0.2),
+        });
+
+        // Fires on the second tick; by the third the probe is spent.
+        await service.checkAlerts();
+        await service.checkAlerts();
+        timeline.estimateForProbes.mockClear();
+        await service.checkAlerts();
+
+        expect(timeline.estimateForProbes).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        ['the alert is switched off', { headsUp: { enabled: false } }],
+        ['no probe has a lead set', {}],
+      ])('reads no series while %s', async (_case, override) => {
+        settings.seed({ ...watchingWithLead(null), ...override });
+
+        await service.checkAlerts();
+
+        expect(timeline.estimateForProbes).not.toHaveBeenCalled();
+      });
+
+      it('warns again on the next cook, though the last one was already warned about', async () => {
+        settings.seed(watchingWithLead(15));
+        timeline.estimateForProbes.mockResolvedValue({
+          probe1: projected('ok', 0.2),
+        });
+        await service.checkAlerts();
+        await service.checkAlerts();
+        expect(pushDispatcher.notify).toHaveBeenCalledTimes(1);
+
+        smokeSession.GetState.mockResolvedValue({
+          smokeId: 'next-weekend',
+          smoking: true,
+        });
+        await service.checkAlerts();
+        await service.checkAlerts();
+
+        expect(pushDispatcher.notify).toHaveBeenCalledTimes(2);
+      });
     });
   });
 

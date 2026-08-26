@@ -6,6 +6,7 @@ import { AppSettingsModule } from '../appSettings/app-settings.module';
 import { PreSmokeModule } from '../presmoke/presmoke.module';
 import { PushDispatcherModule } from '../pushDispatcher/push-dispatcher.module';
 import { TempModule } from '../temps/temps.module';
+import { TimelineModule } from '../timeline/timeline.module';
 import { AlertStateSchema } from './alert-state.schema';
 import { NotificationsController } from './notifications.controller';
 import { NotificationsService } from './notifications.service';
@@ -25,6 +26,11 @@ import { NotificationSubscriptionSchema } from './notificationSubscription.schem
     // into pre-smoke, which is the only place the application is told what is on
     // the smoker. No cycle here either: pre-smoke depends on state and smoke.
     PreSmokeModule,
+    // The heads-up alert warns before a probe reaches its target, which means
+    // projecting when it will. The projection is the timeline's, so the alert
+    // and the Estimated Completion card cannot disagree. No cycle: the timeline
+    // module imports no feature module at all.
+    TimelineModule,
     MongooseModule.forFeature([
       {
         name: 'NotificationSubscription',

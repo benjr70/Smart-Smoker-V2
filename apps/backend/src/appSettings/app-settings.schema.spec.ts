@@ -50,6 +50,7 @@ describe('the settings document read back through Mongoose', () => {
         enabled: true,
         target: 145,
         targetSource: 'user',
+        leadMinutes: null,
       });
     });
 
@@ -62,6 +63,7 @@ describe('the settings document read back through Mongoose', () => {
         enabled: true,
         target: 203,
         targetSource: 'default',
+        leadMinutes: null,
       });
     });
 
@@ -125,5 +127,77 @@ describe('the settings document read back through Mongoose', () => {
     expect(
       stored.probeTarget.probes.map((probe) => probe.targetSource),
     ).toEqual(['preset', 'user', 'default']);
+  });
+
+  /**
+   * The heads-up lead is a preference about how this cook likes to be told,
+   * not a fact about the meat on the smoker: it has to survive a stored
+   * document being read back, and a session start seeding the targets.
+   */
+  describe('a probe heads-up lead', () => {
+    const readingLeadOf = (
+      leadMinutes: number | null | undefined,
+    ): ApplicationSettings =>
+      withSettingsDefaults(
+        StoredSettings.hydrate({
+          probeTarget: {
+            enabled: true,
+            probes: [
+              {
+                slot: 'probe1',
+                enabled: true,
+                target: 203,
+                targetSource: 'default',
+                leadMinutes,
+              },
+            ],
+          },
+        }) as unknown as ApplicationSettings,
+      );
+
+    it('reads back the lead a saved row carries', () => {
+      expect(readingLeadOf(15).probeTarget.probes[0].leadMinutes).toBe(15);
+    });
+
+    // A document written before the setting existed — and a row the cook never
+    // asked for a heads-up on — mean the same thing, and both have to read as
+    // "no heads-up" rather than as some default number of minutes.
+    it('reads a row stored without one as no heads-up at all', () => {
+      expect(readingLeadOf(undefined).probeTarget.probes[0].leadMinutes).toBe(
+        null,
+      );
+    });
+
+    // Seeding is about the temperature the meat is done at, which the meat type
+    // settles. How much warning the cook wants is theirs, cook after cook.
+    it('survives the session start that seeds the targets', () => {
+      const stored = readingLeadOf(20);
+
+      const seeded = withSeededTargets(
+        stored.probeTarget.probes,
+        stored.targetPresets,
+        'Pork shoulder',
+      );
+
+      expect(seeded?.[0]).toEqual({
+        slot: 'probe1',
+        enabled: true,
+        target: 195,
+        targetSource: 'preset',
+        leadMinutes: 20,
+      });
+    });
+  });
+
+  // The alert ships switched off: an installation upgrading into it is not
+  // signed up for a notification nobody asked for.
+  it('reads a document stored before the heads-up alert existed as switched off', () => {
+    const stored = withSettingsDefaults(
+      StoredSettings.hydrate({
+        chamber: { enabled: true, low: 225, high: 275 },
+      }) as unknown as ApplicationSettings,
+    );
+
+    expect(stored.headsUp).toEqual({ enabled: false });
   });
 });

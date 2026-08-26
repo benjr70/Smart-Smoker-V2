@@ -4,9 +4,11 @@ import {
   IsArray,
   IsBoolean,
   IsIn,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -60,6 +62,26 @@ export class ProbeTargetEntryDto {
   @IsOptional()
   @IsIn(['default', 'preset', 'user'])
   targetSource?: TargetSource;
+
+  /**
+   * How many minutes before this probe reaches its target the cook wants to be
+   * warned, or `null` for not at all.
+   *
+   * Optional, and `null` is how the row is cleared rather than a field left
+   * out: a client that saves the whole row has to be able to say "no heads-up
+   * on this probe", which an absent field cannot distinguish from an older
+   * client that has never heard of the setting.
+   *
+   * Whole minutes, at least one and at most two hours: a lead of zero is the
+   * alert the Probe Target Reached alert already sends, and one longer than the
+   * projection is worth would fire in the first hour of a brisket.
+   */
+  @ApiProperty({ minimum: 1, maximum: 120, required: false, nullable: true })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(120)
+  leadMinutes?: number | null;
 }
 
 /**
@@ -101,6 +123,19 @@ export class ProbeTargetAlertDto {
  * it.
  */
 export class SmokeCompleteAlertDto {
+  @ApiProperty()
+  @IsBoolean()
+  enabled: boolean;
+}
+
+/**
+ * The heads-up alert as the settings page sends it: a switch and nothing else.
+ *
+ * How long before each probe's target the cook wants warning is on the probe
+ * row above, because it is per probe — a second copy of it here could only
+ * disagree with the row the user is looking at.
+ */
+export class HeadsUpAlertDto {
   @ApiProperty()
   @IsBoolean()
   enabled: boolean;
@@ -173,6 +208,12 @@ export class ApplicationSettingsDto {
   @ValidateNested()
   @Type(() => SmokeCompleteAlertDto)
   smokeComplete?: SmokeCompleteAlertDto;
+
+  @ApiProperty({ type: HeadsUpAlertDto, required: false })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => HeadsUpAlertDto)
+  headsUp?: HeadsUpAlertDto;
 
   @ApiProperty({ type: TargetPresetsDto, required: false })
   @IsOptional()

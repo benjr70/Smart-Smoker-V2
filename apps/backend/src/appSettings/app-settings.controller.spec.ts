@@ -27,6 +27,7 @@ describe('AppSettingsController', () => {
       ],
     },
     smokeComplete: { enabled: true },
+    headsUp: { enabled: false },
     targetPresets: { beef: 203, pork: 195, poultry: 165 },
     appearance: { mode: 'dark', resolvedMode: 'dark' },
     autoStop: { idleHours: 12 },
