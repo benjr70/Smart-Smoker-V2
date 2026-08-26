@@ -8,7 +8,12 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { BaseService } from '../common/base.service';
 import { StateService } from '../State/state.service';
-import { findStamp } from '../appSettings/stamp-catalogue';
+import { AppSettingsService } from '../appSettings/app-settings.service';
+import {
+  CookStamp,
+  defaultStamps,
+  findStamp,
+} from '../appSettings/stamp-catalogue';
 import { Temp } from '../temps/temps.schema';
 import { TempsService } from '../temps/temps.service';
 import { EventsGateway } from '../websocket/events.gateway';
@@ -48,6 +53,7 @@ export class CookEventsService extends BaseService<CookEventDocument> {
   constructor(
     @InjectModel('CookEvent') model: Model<CookEventDocument>,
     private readonly state: StateService,
+    private readonly settings: AppSettingsService,
     private readonly temps: TempsService,
     private readonly events: EventsGateway,
   ) {
@@ -63,8 +69,12 @@ export class CookEventsService extends BaseService<CookEventDocument> {
    * cooking".
    */
   async record(stampKey: string): Promise<CookEvent> {
-    const stamp = findStamp(stampKey);
-    if (!stamp) {
+    const stamp = findStamp(stampKey, await this.catalogue());
+    // A stamp nobody offers and one the user switched off are refused alike:
+    // both mean the tap could only have come from a client showing buttons the
+    // catalogue no longer has, and neither may put an unreachable stamp into
+    // the log.
+    if (!stamp || !stamp.enabled) {
       throw new BadRequestException(`Unknown stamp: ${stampKey}`);
     }
     const smokeId = await this.currentSmokeId();
@@ -85,6 +95,25 @@ export class CookEventsService extends BaseService<CookEventDocument> {
     } as Partial<CookEventDocument>);
     await this.announce(smokeId);
     return recorded;
+  }
+
+  /**
+   * The stamps on offer right now.
+   *
+   * Read per tap rather than held, because the catalogue is edited from a
+   * phone while the touchscreen is hot: a cached copy would go on accepting a
+   * stamp the user has just switched off, and would record the label it used
+   * to have. A settings read that cannot be made falls back to the shipped
+   * defaults — the six always exist, so a tap on one of them is still logged
+   * rather than lost to an unrelated failure.
+   */
+  private async catalogue(): Promise<CookStamp[]> {
+    try {
+      return (await this.settings.getSettings()).cookLog.stamps;
+    } catch (err) {
+      this.logFailure('could not read the stamp catalogue', err);
+      return defaultStamps();
+    }
   }
 
   /** The in-progress cook's log, oldest first — the order it happened in. */

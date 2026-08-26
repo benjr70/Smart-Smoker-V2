@@ -14,7 +14,7 @@ import {
   clone,
   createFakeBackendKernel,
 } from 'api-transport/src';
-import { DEFAULT_STAMPS } from './cookStamps';
+import { normalizeStamps } from './cookStamps';
 import {
   ApplicationSettings,
   CompletionEstimate,
@@ -456,6 +456,10 @@ const withSettingsDefaults = (
     // against a value the backend does not serve.
     resolvedMode: stored?.appearance?.resolvedMode ?? 'dark',
   },
+  // As the backend reads a document written before the block existed: the six
+  // shipped stamps, so a cook log has buttons on an installation that has
+  // configured none.
+  cookLog: { stamps: normalizeStamps(stored?.cookLog?.stamps) },
   // As the backend reads a document written before the threshold existed: the
   // six hours every auto-stop decision falls back to, never an absence.
   autoStop: { idleHours: stored?.autoStop?.idleHours ?? 6 },
@@ -890,10 +894,15 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
       }
       if (method === 'post' && id === undefined) {
         const stampKey = (body as { stampKey?: string })?.stampKey;
-        const stamp = DEFAULT_STAMPS.find(candidate => candidate.key === stampKey);
-        // The backend's two refusals, mirrored: a stamp nobody knows is the
-        // caller's mistake, and a session with no cook set up is a conflict.
-        if (!stamp) {
+        // Resolved against the stored catalogue, as the backend resolves it:
+        // the label and colour recorded are the ones the stamp carries now, so
+        // a rename saved a moment ago is what the next tap is logged under.
+        const catalogue = withSettingsDefaults(store.appSettings).cookLog.stamps;
+        const stamp = catalogue.find(candidate => candidate.key === stampKey);
+        // The backend's two refusals, mirrored: a stamp nobody offers — or one
+        // the user switched off — is the caller's mistake, and a session with
+        // no cook set up is a conflict.
+        if (!stamp || !stamp.enabled) {
           throw new ApiError({ status: 400, path, method });
         }
         if (!store.state?.smokeId) {

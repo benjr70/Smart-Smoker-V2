@@ -4,6 +4,7 @@ import { BOTTOM_BAR_HEIGHT } from '../bottomBar/bottombar';
 import { AppearanceCard } from './appearance';
 import { AutoStopCard } from './autoStop';
 import { NotificationsCard } from './notifications';
+import { StampEditorCard } from './stampEditor';
 import { TargetPresetsCard } from './targetPresets';
 
 declare const VERSION: string;
@@ -49,6 +50,7 @@ export const Settings = (): JSX.Element => (
       <AppearanceCard />
       <NotificationsCard />
       <TargetPresetsCard />
+      <StampEditorCard />
       <AutoStopCard />
       <VersionCard version={readVersion()} />
     </Stack>

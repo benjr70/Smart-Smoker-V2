@@ -1,7 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Box, Card, IconButton, Typography } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
-import { CookEvent, CookStamp, DEFAULT_STAMPS } from '../../../api';
+import {
+  CookEvent,
+  CookStamp,
+  DEFAULT_STAMPS,
+  enabledStamps,
+  resolveStampLabel,
+  resolveStampTone,
+} from '../../../api';
 import { toneColor } from '../../common/stampTones';
 
 /**
@@ -12,7 +19,11 @@ import { toneColor } from '../../common/stampTones';
 export const FLASH_MS = 900;
 
 export interface EventLogProps {
-  /** The stamps offered, in catalogue order. */
+  /**
+   * The catalogue, in the order the buttons are laid out. Whole rather than
+   * pre-filtered: the disabled stamps still name and colour the entries logged
+   * under them, so the card needs the list the user is actually editing.
+   */
   stamps?: readonly CookStamp[];
   /** The log so far, oldest first — as the API serves it. */
   events: CookEvent[];
@@ -77,8 +88,17 @@ export function EventLog({
     timer.current = setTimeout(() => setFlash(null), FLASH_MS);
   };
 
-  // Newest first, without disturbing the list the caller holds.
-  const newestFirst = [...events].sort((one, other) => other.at.getTime() - one.at.getTime());
+  // Newest first, without disturbing the list the caller holds, and named as
+  // the catalogue names each stamp now — a rename applies to everything ever
+  // logged under it, while an entry whose stamp has since been removed keeps
+  // the label and colour it was logged under.
+  const newestFirst = [...events]
+    .sort((one, other) => other.at.getTime() - one.at.getTime())
+    .map(entry => ({
+      ...entry,
+      label: resolveStampLabel(entry.stampKey, entry.label, stamps),
+      tone: resolveStampTone(entry.stampKey, entry.tone, stamps),
+    }));
 
   return (
     <Card data-testid="cook-log-card" sx={{ padding: '12px 14px 8px' }}>
@@ -102,7 +122,7 @@ export function EventLog({
           gap: '8px',
         }}
       >
-        {stamps.map(stamp => {
+        {enabledStamps(stamps).map(stamp => {
           const flashing = flash?.key === stamp.key ? flash : null;
           return (
             <Box

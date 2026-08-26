@@ -319,4 +319,66 @@ describe('ApplicationSettingsDto validation', () => {
       BadRequestException,
     );
   });
+
+  describe('the cook log stamp catalogue', () => {
+    const catalogue = [
+      {
+        key: 'wood',
+        label: 'Split',
+        tone: 'amber',
+        enabled: true,
+        custom: false,
+      },
+      {
+        key: 'custom-01ARZ3NDEKTSV4RRFFQ69G5FAV',
+        label: 'Foil Boat',
+        tone: 'p2',
+        enabled: false,
+        custom: true,
+      },
+    ];
+
+    it('accepts the whole list the stamp editor saves', async () => {
+      const result = await pipe.transform(
+        { cookLog: { stamps: catalogue } },
+        metadata,
+      );
+
+      expect(result.cookLog).toEqual({ stamps: catalogue });
+    });
+
+    it('refuses a stamp carrying a field the catalogue does not declare', async () => {
+      await expect(
+        pipe.transform(
+          {
+            cookLog: {
+              stamps: [{ ...catalogue[0], lastTappedAt: '2026-08-26' }],
+            },
+          },
+          metadata,
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('refuses a stamp with no label, no key or an unpaintable tone', async () => {
+      await expect(
+        pipe.transform(
+          { cookLog: { stamps: [{ ...catalogue[0], label: '' }] } },
+          metadata,
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(
+        pipe.transform(
+          { cookLog: { stamps: [{ ...catalogue[0], key: '' }] } },
+          metadata,
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(
+        pipe.transform(
+          { cookLog: { stamps: [{ ...catalogue[0], tone: 'purple' }] } },
+          metadata,
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+  });
 });

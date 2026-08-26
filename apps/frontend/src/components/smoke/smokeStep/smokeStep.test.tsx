@@ -7,7 +7,7 @@ import { SessionConfig } from 'smoke-session/src';
 import { encodeEvents } from 'smoke-session/src';
 import { FakeCloudSocket, FakeSessionApi, SteppingClock } from 'smoke-session/src/testing';
 import { plotBoxOf, plotEdges } from 'temperaturechart/src/chartGeometry';
-import { ApiClientProvider, createApiClient } from '../../../api';
+import { ApiClientProvider, DEFAULT_STAMPS, createApiClient } from '../../../api';
 import {
   createFakeBackend,
   FakeBackend,
@@ -139,7 +139,11 @@ function renderView(kit = harness(), backend: FakeBackend = createFakeBackend())
     <ApiClientProvider client={createApiClient(backend)}>
       <DesignSurface>
         <SmokeSessionProvider config={kit.config}>
-          <SmokeStepView nextButton={nextButton} cookEventsSubscription={inertCookEvents()} />
+          <SmokeStepView
+            nextButton={nextButton}
+            cookEventsSubscription={inertCookEvents()}
+            stampCatalogueSubscription={inertCookEvents()}
+          />
         </SmokeSessionProvider>
       </DesignSurface>
     </ApiClientProvider>
@@ -148,13 +152,28 @@ function renderView(kit = harness(), backend: FakeBackend = createFakeBackend())
 }
 
 /**
- * An inert cook-log announcement channel: subscribes to nothing, exactly as
+ * An inert announcement channel: subscribes to nothing, exactly as
  * {@link inertCloudPort} stands in for the session's own socket. The card is
  * otherwise real — it reads and writes the log over the fake backend.
+ *
+ * Stands in for the cook log's channel and the stamp catalogue's alike: both
+ * ports are "subscribe, and get an unsubscribe back", so one stand-in serves
+ * for the pair rather than two identical ones.
  */
 function inertCookEvents() {
   return { subscribe: () => () => undefined };
 }
+
+/*
+ * The temperature chart is an SVG whose internals — the four series paths, the
+ * dashed target lines, the hover card and the legend swatches — carry no role
+ * and no accessible name, so Testing Library has no query that reaches them;
+ * they are addressed by the `data-*` hooks the chart publishes for exactly this
+ * purpose. The plot itself is asked for by its role, as are all the ordinary
+ * controls on this screen. Disabled here rather than at each site because the
+ * helpers below are shared by most of the chart assertions in this file.
+ */
+/* eslint-disable testing-library/no-container, testing-library/no-node-access */
 
 /** The four lines the chart draws, in the order it draws them. */
 const seriesPaths = (container: HTMLElement): SVGPathElement[] =>
@@ -293,7 +312,7 @@ describe('the chart on the smoke screen', () => {
 
     // The same names label the readings under a finger on the plot.
     fireEvent(
-      container.querySelector('svg') as SVGSVGElement,
+      screen.getByRole('img', { name: 'Temperature chart' }),
       new MouseEvent('pointermove', { bubbles: true, clientX: 193 })
     );
     const card = container.querySelector('[data-hover-card]') as unknown as HTMLElement;
@@ -748,7 +767,7 @@ describe('the wood picker', () => {
 
 describe('the chart card', () => {
   test('heads the plot with what it is, and keeps its legend under it in the same card', async () => {
-    const { container } = renderView();
+    renderView();
 
     const card = await screen.findByTestId('smoke-chart-card');
     expect(within(card).getByText('TEMPERATURE HISTORY')).toBeInTheDocument();
@@ -762,7 +781,7 @@ describe('the chart card', () => {
     expect(plot.compareDocumentPosition(swatches[0])).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     // And there is exactly one plot on the screen: the card holds the chart,
     // it does not sit beside a second copy of it.
-    expect(container.querySelectorAll('svg[role="img"]')).toHaveLength(1);
+    expect(screen.getAllByRole('img', { name: 'Temperature chart' })).toHaveLength(1);
   });
 });
 
@@ -1512,6 +1531,74 @@ describe('the cook log on the smoke screen', () => {
     ).toBe(true);
     await screen.findByTestId('cook-event-row');
     expect(within(screen.getByTestId('cook-event-row')).getByText('Wrapped')).toBeInTheDocument();
+  });
+
+  test('offers the stamps the catalogue has now, and none it has switched off', async () => {
+    const kit = harness();
+    kit.api.seedSmoking(true);
+    const backend = createFakeBackend({
+      state: { smokeId: 'smoke-1', smoking: true },
+      appSettings: {
+        settings: {
+          cookLog: {
+            stamps: DEFAULT_STAMPS.map(stamp => {
+              if (stamp.key === 'wood') return { ...stamp, label: 'Split' };
+              return stamp.key === 'lid' ? { ...stamp, enabled: false } : stamp;
+            }),
+          },
+        },
+      },
+    });
+    renderView(kit, backend);
+
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(screen.getByTestId('cook-stamp-wood')).toHaveTextContent('Split');
+    expect(screen.queryByTestId('cook-stamp-lid')).not.toBeInTheDocument();
+  });
+
+  test('follows a stamp renamed elsewhere, without reloading the screen', async () => {
+    const kit = harness();
+    kit.api.seedSmoking(true);
+    const listeners: ((stamps: unknown) => void)[] = [];
+    const stampCatalogueSubscription = {
+      subscribe: (listener: (stamps: unknown) => void) => {
+        listeners.push(listener);
+        return () => undefined;
+      },
+    };
+    render(
+      <ApiClientProvider
+        client={createApiClient(
+          createFakeBackend({ state: { smokeId: 'smoke-1', smoking: true } })
+        )}
+      >
+        <DesignSurface>
+          <SmokeSessionProvider config={kit.config}>
+            <SmokeStepView
+              nextButton={nextButton}
+              cookEventsSubscription={inertCookEvents()}
+              stampCatalogueSubscription={stampCatalogueSubscription}
+            />
+          </SmokeSessionProvider>
+        </DesignSurface>
+      </ApiClientProvider>
+    );
+    await act(async () => {
+      await flushPromises();
+    });
+    expect(screen.getByTestId('cook-stamp-wood')).toHaveTextContent('Added Wood');
+
+    await act(async () => {
+      listeners[0](
+        DEFAULT_STAMPS.map(stamp => (stamp.key === 'wood' ? { ...stamp, label: 'Split' } : stamp))
+      );
+      await flushPromises();
+    });
+
+    expect(screen.getByTestId('cook-stamp-wood')).toHaveTextContent('Split');
   });
 
   test('will not stamp a cook that is not running', async () => {

@@ -5,15 +5,18 @@ import {
   IsBoolean,
   IsIn,
   IsInt,
+  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
+  Length,
   Max,
   Min,
   ValidateNested,
 } from 'class-validator';
 import { TargetSource } from './app-settings.schema';
 import { AppearanceMode, ColorScheme } from './appearance';
+import { MAX_STAMP_LABEL, STAMP_TONES, StampTone } from './stamp-catalogue';
 
 /**
  * The chamber Temperature Alert as the settings page sends it: on or off, and
@@ -178,6 +181,49 @@ export class AutoStopDto {
 }
 
 /**
+ * One stamp of the cook log, as the stamp editor sends it.
+ *
+ * Every field is required: the editor saves the whole list, so a stamp arriving
+ * without its colour or its enabled flag is a client bug rather than a partial
+ * edit, and storing it would leave a button nobody can account for. The rules
+ * that are about the *list* — unique keys, the six defaults present, at most
+ * twelve — are checked in the service, because they are facts about the
+ * catalogue rather than about any one entry.
+ */
+export class StampEntryDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  key: string;
+
+  @ApiProperty({ minLength: 1, maxLength: MAX_STAMP_LABEL })
+  @IsString()
+  @Length(1, MAX_STAMP_LABEL)
+  label: string;
+
+  @ApiProperty({ enum: STAMP_TONES })
+  @IsIn(STAMP_TONES as unknown as string[])
+  tone: StampTone;
+
+  @ApiProperty()
+  @IsBoolean()
+  enabled: boolean;
+
+  @ApiProperty()
+  @IsBoolean()
+  custom: boolean;
+}
+
+/** The cook log's stamps, as the settings page's editor saves them. */
+export class CookLogDto {
+  @ApiProperty({ type: [StampEntryDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => StampEntryDto)
+  stamps: StampEntryDto[];
+}
+
+/**
  * The application settings document.
  *
  * Carries only what the user owns. The machine's own bookkeeping (armed flags,
@@ -232,4 +278,10 @@ export class ApplicationSettingsDto {
   @ValidateNested()
   @Type(() => AutoStopDto)
   autoStop?: AutoStopDto;
+
+  @ApiProperty({ type: CookLogDto, required: false })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CookLogDto)
+  cookLog?: CookLogDto;
 }

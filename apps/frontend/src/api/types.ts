@@ -7,7 +7,7 @@
  */
 import { TempData } from 'temperaturechart/src/tempChart';
 import type { WeightUnits } from '../components/common/interfaces/enums';
-import type { StampTone } from './cookStamps';
+import type { CookStamp, StampTone } from './cookStamps';
 
 export type { TempData };
 
@@ -230,6 +230,12 @@ export interface ApplicationSettings {
   targetPresets: TargetPresets;
   appearance: AppearancePreference;
   autoStop: AutoStopSettings;
+  cookLog: CookLogSettings;
+}
+
+/** The cook log's own settings: the stamps a cook may be logged with. */
+export interface CookLogSettings {
+  stamps: CookStamp[];
 }
 
 /**

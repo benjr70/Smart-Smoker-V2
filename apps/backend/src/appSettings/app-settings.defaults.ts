@@ -6,6 +6,7 @@ import {
   TargetSource,
 } from './app-settings.schema';
 import { PROBE_SLOTS } from './probe-names';
+import { defaultStamps, normalizeStamps } from './stamp-catalogue';
 
 /**
  * The target a probe carries until the user — or the preset matched to what is
@@ -73,6 +74,10 @@ export const DEFAULT_APPLICATION_SETTINGS: ApplicationSettings = {
   // `appearance.spec.ts`.
   appearance: { mode: 'system', resolvedMode: 'dark' },
   autoStop: { idleHours: DEFAULT_AUTO_STOP_IDLE_HOURS },
+  // The six shipped stamps, so the cook log works with nothing configured —
+  // and so an installation upgrading into this slice reads the same buttons it
+  // already had, rather than an empty grid.
+  cookLog: { stamps: defaultStamps() },
 };
 
 /**
@@ -135,6 +140,7 @@ export const withSettingsDefaults = (
   const targetPresets = stored?.targetPresets;
   const appearance = stored?.appearance;
   const autoStop = stored?.autoStop;
+  const cookLog = stored?.cookLog;
   const defaults = DEFAULT_APPLICATION_SETTINGS;
   return {
     chamber: {
@@ -165,5 +171,9 @@ export const withSettingsDefaults = (
     autoStop: {
       idleHours: autoStop?.idleHours ?? defaults.autoStop.idleHours,
     },
+    // Normalized rather than defaulted field by field: what is stored is a
+    // list the user edits, so "unset" is only one of the ways it can arrive
+    // incomplete. See `normalizeStamps` for the rest.
+    cookLog: { stamps: normalizeStamps(cookLog?.stamps) },
   };
 };

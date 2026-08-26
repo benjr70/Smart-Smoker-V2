@@ -9,6 +9,7 @@
 import { ApiError, TransportPort, createHttpTransport } from 'api-transport/src';
 import { UNREPORTED } from 'temperaturechart/src/chartGeometry';
 import { WireCookEvent, cookEventsFromWire } from './cookEventFrames';
+import { CookStamp, normalizeStamps } from './cookStamps';
 import { PushNotConfiguredError } from './errors';
 import { SmokeEventPort, noopEventPort } from './events';
 import { createSocketEventPort } from './socketEventAdapter';
@@ -334,6 +335,26 @@ export interface StatsResource {
   get(): Promise<Stats>;
 }
 
+export interface CookStampsResource {
+  /**
+   * GET `appSettings` — the stamps the cook log offers, in catalogue order.
+   *
+   * Always a catalogue: an installation that has stored none reads the six
+   * defaults, so a caller has buttons to draw rather than an absence every
+   * screen would have to have its own opinion about.
+   */
+  get(): Promise<CookStamp[]>;
+  /**
+   * POST `appSettings` — store the whole list.
+   *
+   * The whole list rather than one edited stamp, because order is part of what
+   * is stored and a per-stamp write could not express a move. Only the cook-log
+   * block is sent, so editing stamps never writes back alert settings somebody
+   * is changing on another screen.
+   */
+  save(stamps: CookStamp[]): Promise<CookStamp[]>;
+}
+
 export interface CookEventsResource {
   /**
    * POST `cook-events` — log one tap against the cook in progress.
@@ -366,6 +387,7 @@ export interface ApiClient {
   smoke: SmokeResource;
   timeline: TimelineResource;
   cookEvents: CookEventsResource;
+  cookStamps: CookStampsResource;
   history: HistoryResource;
   stats: StatsResource;
 }
@@ -878,6 +900,32 @@ export const createApiClient = (
           throw error;
         });
       return raw ? normalizeCurrentTimeline(raw) : null;
+    },
+  },
+  cookStamps: {
+    get: async () => {
+      const response = await transport.get<{ cookLog?: { stamps?: CookStamp[] } } | null>(
+        'appSettings'
+      );
+      return normalizeStamps(response?.cookLog?.stamps);
+    },
+    save: async (stamps: CookStamp[]) => {
+      const saved = await transport.post<{ cookLog?: { stamps?: CookStamp[] } }>('appSettings', {
+        // Named field by field, like every other block this client posts: the
+        // backend validates strictly, and a stamp carrying a stray field (a
+        // `_id` a fetched document brought with it) is a 400 the settings
+        // page's autosave could only swallow.
+        cookLog: {
+          stamps: stamps.map(({ key, label, tone, enabled, custom }) => ({
+            key,
+            label,
+            tone,
+            enabled,
+            custom,
+          })),
+        },
+      });
+      return normalizeStamps(saved?.cookLog?.stamps ?? stamps);
     },
   },
   cookEvents: {

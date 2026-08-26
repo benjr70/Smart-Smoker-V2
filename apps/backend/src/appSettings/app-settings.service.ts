@@ -12,6 +12,7 @@ import {
 } from './app-settings.schema';
 import { isCoherentPreference } from './appearance';
 import { withSeededTargets } from './meat-presets';
+import { CookStamp, validateStamps } from './stamp-catalogue';
 import {
   ResolvedApplicationSettings,
   resolveProbeNames,
@@ -148,6 +149,24 @@ export class AppSettingsService {
       );
     }
 
+    // The stamps decide what every button on both surfaces says and what
+    // colour every marker is drawn in, and events are keyed to them forever.
+    // A list that broke one of the catalogue's rules is refused at the door
+    // rather than stored for each reader to make its own sense of — and the
+    // reason travels, because the page that sent it is a page somebody is
+    // looking at.
+    if (incoming.cookLog) {
+      // The list as the client sent it, not the normalized one: normalizing
+      // puts a dropped default back, so validating the result would accept a
+      // write that removed one and quietly store something else instead.
+      const reason = validateStamps(
+        (incoming.cookLog.stamps ?? []) as CookStamp[],
+      );
+      if (reason) {
+        throw new BadRequestException(reason);
+      }
+    }
+
     const set: Partial<ApplicationSettings> = {};
     const setOnInsert: Partial<ApplicationSettings> = {};
     (
@@ -159,6 +178,7 @@ export class AppSettingsService {
         'targetPresets',
         'appearance',
         'autoStop',
+        'cookLog',
       ] as const
     ).forEach((block) => {
       if (incoming[block]) {
@@ -193,6 +213,15 @@ export class AppSettingsService {
     // looking at.
     if (incoming.appearance) {
       this.events.broadcastAppearance(stored.appearance);
+    }
+
+    // The catalogue is installation-wide in exactly the way the appearance is:
+    // the phone edits it, and the touchscreen in the garage is showing the old
+    // buttons until something tells it. The whole list travels, so a receiving
+    // client replaces what it holds rather than merging a rename into a list
+    // that may have had a stamp removed from it.
+    if (incoming.cookLog) {
+      this.events.broadcastCookLogStamps(stored.cookLog.stamps);
     }
 
     return stored;
