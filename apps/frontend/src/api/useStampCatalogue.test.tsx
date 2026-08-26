@@ -117,7 +117,7 @@ describe('useStampCatalogue', () => {
       stamp.key === 'lid' ? { ...stamp, enabled: false } : stamp
     );
     await act(async () => {
-      await result.current.save(edited);
+      await result.current.edit(() => edited);
     });
 
     expect(result.current.stamps).toEqual(edited);
@@ -133,10 +133,42 @@ describe('useStampCatalogue', () => {
     backend.injectFault({ method: 'post', path: 'appSettings', status: 400 });
 
     await act(async () => {
-      await result.current.save([...DEFAULT_STAMPS, { ...newCustomStamp(), label: 'Rotated' }]);
+      await result.current.edit(() => [
+        ...DEFAULT_STAMPS,
+        { ...newCustomStamp(), label: 'Rotated' },
+      ]);
     });
 
     expect(result.current.stamps).toEqual([...DEFAULT_STAMPS]);
+  });
+
+  it('builds each edit on the one before it when two are made without waiting', async () => {
+    const backend = createFakeBackend();
+    const subscription = fakeSubscription();
+    const { result } = renderCatalogue(backend, subscription.port);
+    await waitFor(() => expect(result.current.stamps).toEqual([...DEFAULT_STAMPS]));
+    await settle();
+
+    // Both edits are issued from the same render, so the second is written by
+    // a caller that has never seen the first one's result — a screen where the
+    // user switched two stamps off in quick succession.
+    await act(async () => {
+      const first = result.current.edit(stamps =>
+        stamps.map(stamp => (stamp.key === 'lid' ? { ...stamp, enabled: false } : stamp))
+      );
+      const second = result.current.edit(stamps =>
+        stamps.map(stamp => (stamp.key === 'vent' ? { ...stamp, enabled: false } : stamp))
+      );
+      await Promise.all([first, second]);
+    });
+
+    const off = (stamps: CookStamp[], key: string) =>
+      stamps.find(stamp => stamp.key === key)?.enabled;
+    expect(off(result.current.stamps, 'lid')).toBe(false);
+    expect(off(result.current.stamps, 'vent')).toBe(false);
+    const storedNow = await createApiClient(backend).cookStamps.get();
+    expect(off(storedNow, 'lid')).toBe(false);
+    expect(off(storedNow, 'vent')).toBe(false);
   });
 
   it('stops listening when the screen is left', async () => {

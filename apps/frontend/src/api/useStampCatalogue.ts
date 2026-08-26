@@ -38,12 +38,21 @@ export interface UseStampCatalogueResult {
   /** The catalogue, in the order the buttons are laid out. */
   stamps: CookStamp[];
   /**
-   * Store the whole list. Resolves `true` when the backend took it, `false`
-   * when it refused or could not be reached — and on a refusal the catalogue
-   * goes back to what is actually stored, so the editor never shows an edit the
-   * backend does not have.
+   * Change the whole list and store it. Resolves `true` when the backend took
+   * it, `false` when it refused or could not be reached — and on a refusal the
+   * catalogue goes back to what is actually stored, so the editor never shows
+   * an edit the backend does not have.
+   *
+   * The edit is described rather than handed over: the caller says what to do
+   * to the catalogue and is given the catalogue to do it to, which is the list
+   * as of the moment the edit runs rather than the one that was on screen when
+   * the user clicked. A settings page renders once per save round trip, so two
+   * clicks in quick succession are both computed from the same render — a
+   * `save(nextList)` built that way silently undoes the earlier one. Edits are
+   * also run one at a time, so the writes reach the backend in the order the
+   * user made them and the last answer is the last edit's.
    */
-  save: (stamps: CookStamp[]) => Promise<boolean>;
+  edit: (change: (stamps: CookStamp[]) => CookStamp[]) => Promise<boolean>;
 }
 
 /** Whether an announced frame is a catalogue this client can draw buttons from. */
@@ -61,6 +70,18 @@ export function useStampCatalogue(options: UseStampCatalogueOptions = {}): UseSt
   const client = useApiClient();
   const notify = useApiSnackbar();
   const [stamps, setStamps] = useState<CookStamp[]>(() => normalizeStamps(undefined));
+  /**
+   * The catalogue as this client last knew it, readable without a re-render.
+   * State alone cannot answer an edit that was queued behind another: the
+   * render holding it has not happened yet.
+   */
+  const latestRef = useRef<CookStamp[]>(stamps);
+  /**
+   * The edits already under way. Each one waits for it, so no two saves of the
+   * whole list are ever in flight together and the backend is left holding the
+   * last edit the user made rather than whichever answer came back last.
+   */
+  const queueRef = useRef<Promise<unknown>>(Promise.resolve());
   const notifyRef = useRef(notify);
   notifyRef.current = notify;
   // Built once and held, so a re-render never reopens the socket.
@@ -73,23 +94,28 @@ export function useStampCatalogue(options: UseStampCatalogueOptions = {}): UseSt
     subscriptionRef.current = options.subscription ?? createSocketStampCatalogueSubscription();
   }
 
+  /** Hold a catalogue: what is rendered and what the next edit is built on. */
+  const hold = useCallback((catalogue: CookStamp[]): void => {
+    latestRef.current = catalogue;
+    setStamps(catalogue);
+  }, []);
+
   useEffect(() => {
     let reading = true;
     void client.cookStamps
       .get()
       .then(catalogue => {
-        if (reading && !supersededRef.current) setStamps(catalogue);
+        if (reading && !supersededRef.current) hold(catalogue);
       })
       .catch(() => {
         // The shipped six rather than a screen with no buttons: they are what
         // the backend falls back to as well, so a tap on one is still logged.
-        if (reading && !supersededRef.current)
-          setStamps(DEFAULT_STAMPS.map(stamp => ({ ...stamp })));
+        if (reading && !supersededRef.current) hold(DEFAULT_STAMPS.map(stamp => ({ ...stamp })));
       });
     return () => {
       reading = false;
     };
-  }, [client]);
+  }, [client, hold]);
 
   useEffect(() => {
     const port = subscriptionRef.current as StampCatalogueSubscriptionPort;
@@ -98,35 +124,53 @@ export function useStampCatalogue(options: UseStampCatalogueOptions = {}): UseSt
         return;
       }
       supersededRef.current = true;
-      setStamps(normalizeStamps(announced));
+      hold(normalizeStamps(announced));
     });
-  }, []);
+  }, [hold]);
 
-  const save = useCallback(
-    (edited: CookStamp[]): Promise<boolean> =>
-      client.cookStamps
-        .save(edited)
-        .then(saved => {
-          supersededRef.current = true;
-          setStamps(saved);
-          return true;
-        })
-        .catch(() =>
-          // Back to what is stored. An editor left showing a rejected edit is
-          // an editor lying about what every other screen is offering.
-          client.cookStamps
-            .get()
-            .then(stored => {
-              setStamps(stored);
-            })
-            .catch(() => undefined)
-            .then(() => {
-              notifyRef.current('Could not save the cook log stamps.');
-              return false;
-            })
-        ),
-    [client]
+  const edit = useCallback(
+    (change: (stamps: CookStamp[]) => CookStamp[]): Promise<boolean> => {
+      const queued = queueRef.current.then(() => {
+        // Built here rather than by the caller, and from the list as it stands
+        // now: an edit made while an earlier one was still saving would
+        // otherwise be computed from the catalogue as it was before it.
+        const next = change(latestRef.current.map(stamp => ({ ...stamp })));
+        supersededRef.current = true;
+        // Shown at once, so the switch the user just flipped stays flipped
+        // while the save is in the air — and so the edit after it is built on
+        // it. A refusal below puts the stored catalogue back.
+        hold(next);
+        return client.cookStamps
+          .save(next)
+          .then(saved => {
+            hold(saved);
+            return true;
+          })
+          .catch(() =>
+            // Back to what is stored. An editor left showing a rejected edit is
+            // an editor lying about what every other screen is offering.
+            client.cookStamps
+              .get()
+              .then(stored => {
+                hold(stored);
+              })
+              .catch(() => undefined)
+              .then(() => {
+                notifyRef.current('Could not save the cook log stamps.');
+                return false;
+              })
+          );
+      });
+      // The queue never rejects: one failed save must not strand every edit
+      // made after it.
+      queueRef.current = queued.then(
+        () => undefined,
+        () => undefined
+      );
+      return queued;
+    },
+    [client, hold]
   );
 
-  return { stamps, save };
+  return { stamps, edit };
 }

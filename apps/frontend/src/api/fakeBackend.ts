@@ -14,7 +14,15 @@ import {
   clone,
   createFakeBackendKernel,
 } from 'api-transport/src';
-import { normalizeStamps } from './cookStamps';
+import {
+  CookStamp,
+  DEFAULT_STAMPS,
+  MAX_STAMPS,
+  MAX_STAMP_LABEL,
+  STAMP_TONES,
+  StampTone,
+  normalizeStamps,
+} from './cookStamps';
 import {
   ApplicationSettings,
   CompletionEstimate,
@@ -465,6 +473,51 @@ const withSettingsDefaults = (
   autoStop: { idleHours: stored?.autoStop?.idleHours ?? 6 },
 });
 
+/** A user-added stamp's key, as the backend spells the rule: `custom-<ulid>`. */
+const CUSTOM_STAMP_KEY = /^custom-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$/i;
+
+/**
+ * Whether a catalogue a client asked to store may be stored, mirroring the
+ * backend's `validateStamps`.
+ *
+ * Mirrored rather than assumed, for the reason the cook-log refusals just below
+ * are: the catalogue decides what every button on both surfaces says and events
+ * are keyed to it forever, so the backend refuses a list that breaks one of its
+ * rules with a 400. A fake that stored whatever it was handed would let a
+ * client's tests pass on an edit production answers 400 to, and the settings
+ * page would find that out in the garage.
+ *
+ * The list is checked as it was *sent*, not as {@link normalizeStamps} would
+ * repair it: normalizing puts a dropped default back, so a write that removed
+ * one would look valid and quietly store something else.
+ */
+const refusesStamps = (stamps: readonly Partial<CookStamp>[] | undefined): boolean => {
+  if (!Array.isArray(stamps) || stamps.length > MAX_STAMPS) {
+    return true;
+  }
+  const seen = new Set<string>();
+  const isDefault = (key: string): boolean => DEFAULT_STAMPS.some(stamp => stamp.key === key);
+  for (const stamp of stamps) {
+    const key = stamp?.key;
+    if (typeof key !== 'string' || key.length === 0 || seen.has(key)) {
+      return true;
+    }
+    seen.add(key);
+    if (!isDefault(key) && !CUSTOM_STAMP_KEY.test(key)) {
+      return true;
+    }
+    const label = typeof stamp.label === 'string' ? stamp.label.trim() : '';
+    if (label.length < 1 || label.length > MAX_STAMP_LABEL) {
+      return true;
+    }
+    if (!STAMP_TONES.includes(stamp.tone as StampTone)) {
+      return true;
+    }
+  }
+  // A default may be switched off but never removed.
+  return DEFAULT_STAMPS.some(stamp => !seen.has(stamp.key));
+};
+
 /** The smoke profile field naming a probe slot, as the backend reads it. */
 const PROBE_NAME_FIELDS: Record<string, keyof SmokeProfile> = {
   probe1: 'probe1Name',
@@ -768,6 +821,12 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
       }
       if (method === 'post') {
         const incoming = clone(body) as Partial<StoredApplicationSettings>;
+        // Refused at the door, as the backend refuses it, and nothing at all is
+        // stored — not even the blocks that were fine — because the real route
+        // throws before it writes.
+        if (incoming.cookLog && refusesStamps(incoming.cookLog.stamps)) {
+          throw new ApiError({ status: 400, path, method });
+        }
         store.appSettings = withSettingsDefaults({
           ...store.appSettings,
           ...incoming,

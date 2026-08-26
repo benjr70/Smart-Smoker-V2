@@ -119,6 +119,37 @@ describe('StampEditorCard', () => {
     expect(stored(backend)).toHaveLength(6);
   });
 
+  it('keeps both edits when two stamps are switched off in quick succession', async () => {
+    const { backend } = await renderEditor();
+    await screen.findByText('Lid Open');
+
+    // No wait in between: the second click lands on the card as it was drawn
+    // before the first save, which is what a user flipping two switches does.
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Show Lid Open' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Show Vent' }));
+
+    await waitFor(() =>
+      expect(stored(backend)?.find(stamp => stamp.key === 'vent')).toMatchObject({ enabled: false })
+    );
+    expect(stored(backend)?.find(stamp => stamp.key === 'lid')).toMatchObject({ enabled: false });
+  });
+
+  it('keeps a rename when a colour is chosen straight after it', async () => {
+    const { backend } = await renderEditor();
+    await expand('Added Wood');
+
+    fireEvent.change(screen.getByLabelText('Label'), { target: { value: 'Split' } });
+    fireEvent.blur(screen.getByLabelText('Label'));
+    fireEvent.click(screen.getByRole('button', { name: 'Colour chamber' }));
+
+    await waitFor(() =>
+      expect(stored(backend)?.find(stamp => stamp.key === 'wood')).toMatchObject({
+        tone: 'chamber',
+      })
+    );
+    expect(stored(backend)?.find(stamp => stamp.key === 'wood')).toMatchObject({ label: 'Split' });
+  });
+
   it('saves a new colour chosen for a stamp', async () => {
     const { backend } = await renderEditor();
     await expand('Wrapped');

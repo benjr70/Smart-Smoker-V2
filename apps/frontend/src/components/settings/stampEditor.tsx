@@ -51,7 +51,7 @@ const markerLetter = (label: string): string => (label.trim()[0] ?? '?').toUpper
  * and the last few would race each other.
  */
 export function StampEditorCard({ subscription }: StampEditorCardProps = {}): JSX.Element {
-  const { stamps, save } = useStampCatalogue({ subscription });
+  const { stamps, edit } = useStampCatalogue({ subscription });
   /** The stamp whose row is open for editing, if any. One at a time. */
   const [editing, setEditing] = useState<string | null>(null);
   /**
@@ -61,19 +61,37 @@ export function StampEditorCard({ subscription }: StampEditorCardProps = {}): JS
    */
   const [draft, setDraft] = useState<string | null>(null);
 
-  const apply = (next: CookStamp[]): void => {
-    void save(next);
+  /**
+   * Every edit is written as a change to the catalogue rather than as a
+   * finished list. The card renders once per save round trip, so two edits
+   * made in quick succession — a switch and then another switch, a rename and
+   * then a colour — are both computed from the same render; a list built from
+   * that render and posted would carry the older of the two and quietly undo
+   * the newer. The hook applies each change to the catalogue as it stands when
+   * its turn comes, and runs them in order.
+   */
+  const apply = (change: (current: CookStamp[]) => CookStamp[]): void => {
+    void edit(change);
   };
 
   const replace = (key: string, change: Partial<CookStamp>): void =>
-    apply(stamps.map(stamp => (stamp.key === key ? { ...stamp, ...change } : stamp)));
+    apply(current => current.map(stamp => (stamp.key === key ? { ...stamp, ...change } : stamp)));
 
-  const move = (index: number, by: number): void => {
-    const next = [...stamps];
-    const [moved] = next.splice(index, 1);
-    next.splice(index + by, 0, moved);
-    apply(next);
-  };
+  /**
+   * Move a stamp one place, found by key rather than by the index it had when
+   * the arrow was drawn: an edit that landed in between may have moved it.
+   */
+  const move = (key: string, by: number): void =>
+    apply(current => {
+      const index = current.findIndex(stamp => stamp.key === key);
+      if (index === -1 || index + by < 0 || index + by >= current.length) {
+        return current;
+      }
+      const next = [...current];
+      const [moved] = next.splice(index, 1);
+      next.splice(index + by, 0, moved);
+      return next;
+    });
 
   const commitLabel = (stamp: CookStamp): void => {
     const label = (draft ?? '').trim().slice(0, MAX_STAMP_LABEL);
@@ -99,7 +117,7 @@ export function StampEditorCard({ subscription }: StampEditorCardProps = {}): JS
             {isDefaultCatalogue(stamps) ? null : (
               <Button
                 size="small"
-                onClick={() => apply(DEFAULT_STAMPS.map(stamp => ({ ...stamp })))}
+                onClick={() => apply(() => DEFAULT_STAMPS.map(stamp => ({ ...stamp })))}
               >
                 Reset
               </Button>
@@ -149,7 +167,7 @@ export function StampEditorCard({ subscription }: StampEditorCardProps = {}): JS
                     size="small"
                     aria-label={`Move ${stamp.label} up`}
                     disabled={index === 0}
-                    onClick={() => move(index, -1)}
+                    onClick={() => move(stamp.key, -1)}
                   >
                     <ArrowUpwardIcon fontSize="inherit" />
                   </IconButton>
@@ -157,7 +175,7 @@ export function StampEditorCard({ subscription }: StampEditorCardProps = {}): JS
                     size="small"
                     aria-label={`Move ${stamp.label} down`}
                     disabled={index === stamps.length - 1}
-                    onClick={() => move(index, 1)}
+                    onClick={() => move(stamp.key, 1)}
                   >
                     <ArrowDownwardIcon fontSize="inherit" />
                   </IconButton>
@@ -216,7 +234,9 @@ export function StampEditorCard({ subscription }: StampEditorCardProps = {}): JS
                           color="error"
                           onClick={() => {
                             setEditing(null);
-                            apply(stamps.filter(candidate => candidate.key !== stamp.key));
+                            apply(current =>
+                              current.filter(candidate => candidate.key !== stamp.key)
+                            );
                           }}
                         >
                           Remove
@@ -235,7 +255,14 @@ export function StampEditorCard({ subscription }: StampEditorCardProps = {}): JS
           {stamps.length < MAX_STAMPS ? (
             <Button
               size="small"
-              onClick={() => apply([...stamps, newCustomStamp()])}
+              onClick={() =>
+                // Checked again as the edit runs: the cap is the backend's,
+                // and another client may have filled the last slot since this
+                // button was drawn.
+                apply(current =>
+                  current.length < MAX_STAMPS ? [...current, newCustomStamp()] : current
+                )
+              }
               sx={{ alignSelf: 'flex-start' }}
             >
               + Add stamp
