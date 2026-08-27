@@ -144,6 +144,59 @@ describe('the stamp bar on the touchscreen', () => {
     });
 
     /**
+     * Greasy-thumb reality on a slow tailnet: nothing on the button changes
+     * while the post is in the air, so the pit master taps it again. Two posts
+     * would store two events and grow two markers 1.5s apart that this screen,
+     * by design, has no way to delete.
+     */
+    it('ignores a second tap of the same stamp while the first is still in the air', async () => {
+      const posted: string[] = [];
+      let settle: (stored: boolean) => void = () => undefined;
+      renderBar({
+        onRecord: key => {
+          posted.push(key);
+          return new Promise<boolean>(resolve => {
+            settle = resolve;
+          });
+        },
+      });
+
+      fireEvent.click(button('wood'));
+      // The button says something is happening to it rather than sitting there
+      // as it was — which is what invites the second tap in the first place.
+      await waitFor(() => expect(button('wood')).toHaveTextContent('…'));
+      fireEvent.click(button('wood'));
+      fireEvent.click(button('wood'));
+
+      expect(posted).toEqual(['wood']);
+
+      // And once the backend has answered, the button is a button again.
+      await act(async () => {
+        settle(true);
+      });
+      expect(button('wood')).toHaveTextContent('Logged');
+      fireEvent.click(button('wood'));
+      expect(posted).toEqual(['wood', 'wood']);
+    });
+
+    /** A different stamp is a different tap; one in flight never blocks it. */
+    it('still takes a tap of another stamp while one is in the air', async () => {
+      const posted: string[] = [];
+      renderBar({
+        onRecord: key => {
+          posted.push(key);
+          return new Promise<boolean>(() => undefined);
+        },
+      });
+
+      fireEvent.click(button('wood'));
+      await waitFor(() => expect(button('wood')).toHaveTextContent('…'));
+      fireEvent.click(button('wrap'));
+
+      expect(posted).toEqual(['wood', 'wrap']);
+    });
+
+    /**
      * A tap the backend refused must leave nothing behind: no entry, no time on
      * the button, and no doubt about it. There is no offline queue on the pit —
      * an event stamped from a clock nobody can vouch for is worse than one that

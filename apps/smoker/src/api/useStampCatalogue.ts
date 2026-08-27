@@ -19,7 +19,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getDefaultApiClient } from './client';
-import { CookStamp, normalizeStamps } from './cookStamps';
+import { CookStamp, isStampCatalogue, normalizeStamps } from './cookStamps';
 import { StampCatalogueSubscriptionPort } from './cookLogPorts';
 import { createSocketStampCatalogueSubscription } from './socketEventAdapter';
 
@@ -39,17 +39,6 @@ export interface UseStampCatalogueResult {
   /** The catalogue, in the order the buttons are laid out. */
   stamps: CookStamp[];
 }
-
-/** Whether an announced frame is a catalogue this panel can draw buttons from. */
-const isCatalogue = (payload: unknown): payload is CookStamp[] =>
-  Array.isArray(payload) &&
-  payload.every(
-    stamp =>
-      typeof stamp === 'object' &&
-      stamp !== null &&
-      typeof (stamp as CookStamp).key === 'string' &&
-      typeof (stamp as CookStamp).label === 'string'
-  );
 
 export function useStampCatalogue(options: UseStampCatalogueOptions = {}): UseStampCatalogueResult {
   const [stamps, setStamps] = useState<CookStamp[]>(() => normalizeStamps(undefined));
@@ -100,7 +89,7 @@ export function useStampCatalogue(options: UseStampCatalogueOptions = {}): UseSt
       announced => {
         // A frame that is not a catalogue leaves the buttons alone: there is
         // nobody in the garage to notice the row went blank.
-        if (!isCatalogue(announced)) {
+        if (!isStampCatalogue(announced)) {
           return;
         }
         superseded.current += 1;

@@ -33,6 +33,7 @@ export {
   DEFAULT_STAMPS,
   STAMP_TONES,
   enabledStamps,
+  isStampCatalogue,
   normalizeStamps,
   resolveStampLabel,
   resolveStampTone,

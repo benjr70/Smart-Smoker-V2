@@ -14,6 +14,7 @@
  */
 import { io } from 'socket.io-client';
 import { WireCookEvent } from './cookEventFrames';
+import { isStampCatalogue } from './cookStamps';
 import { CookEventsSubscriptionPort, StampCatalogueSubscriptionPort } from './cookLogPorts';
 import { SmokeEventPort } from './events';
 
@@ -86,10 +87,14 @@ export const createSocketCookEventsSubscription = (): CookEventsSubscriptionPort
 
 /**
  * The production {@link StampCatalogueSubscriptionPort}: the same websocket,
- * carrying the whole catalogue as its own event. The frame is handed on as it
- * arrived; the hook decides whether it is a catalogue, with the same check
- * whatever channel it came from — so a frame is only dropped here when the
- * gateway announced nothing at all.
+ * carrying the whole catalogue as its own event.
+ *
+ * Anything that is not a catalogue is dropped here rather than handed on, with
+ * the same check the hook applies to a catalogue read over HTTP — the contract
+ * this boundary documents is that what reaches a screen is a catalogue, and it
+ * is kept here rather than left to whoever listens next.
  */
 export const createSocketStampCatalogueSubscription = (): StampCatalogueSubscriptionPort =>
-  createAnnouncementSubscription<unknown>(COOK_LOG_STAMPS_EVENT, payload => payload ?? null);
+  createAnnouncementSubscription<unknown>(COOK_LOG_STAMPS_EVENT, payload =>
+    isStampCatalogue(payload) ? payload : undefined
+  );

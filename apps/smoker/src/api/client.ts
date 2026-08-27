@@ -496,10 +496,24 @@ export const createApiClient = (
       },
     },
     cookEvents: {
-      record: (stampKey: string) =>
-        cloudTransport
-          .post<WireCookEvent>('cook-events', { stampKey })
-          .then(event => cookEventsFromWire([event])[0]),
+      record: async (stampKey: string) => {
+        const stored = await cloudTransport.post<WireCookEvent>('cook-events', { stampKey });
+        // Normalization drops a row carrying no readable moment, which would
+        // leave this resolving `undefined` — a screen that read an `_id` off it
+        // would flash "Not logged" at a tap the backend DID store, and the pit
+        // master would tap again and double-log it. A stored event nobody can
+        // place in the cook is a failure, and it is raised as one.
+        const [recorded] = cookEventsFromWire([stored]);
+        if (!recorded) {
+          throw new ApiError({
+            status: undefined,
+            path: 'cook-events',
+            method: 'post',
+            message: 'The recorded event carried no readable moment',
+          });
+        }
+        return recorded;
+      },
       listCurrent: () =>
         cloudTransport.get<WireCookEvent[]>('cook-events/current').then(cookEventsFromWire),
     },

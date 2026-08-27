@@ -2,7 +2,7 @@ import { DEFAULT_APPEARANCE_PREFERENCE as SHARED_DEFAULT_APPEARANCE_PREFERENCE }
 import { DEFAULT_APPEARANCE_PREFERENCE, createApiClient } from './client';
 import { DEFAULT_STAMPS } from './cookStamps';
 import { createFakeBackend } from './fakeBackend';
-import { ApiError } from 'api-transport/src';
+import { ApiError, TransportPort } from 'api-transport/src';
 
 const buildClient = (
   cloudSeed?: Parameters<typeof createFakeBackend>[0],
@@ -590,6 +590,46 @@ describe('smoker api client', () => {
         { method: 'post', path: 'cook-events', body: { stampKey: 'wood' } },
       ]);
       expect(device.requests).toEqual([]);
+    });
+
+    /**
+     * A stored tap the panel cannot place in the cook is a failure, not an
+     * event: resolving nothing here would hand the hook an `undefined` it reads
+     * `_id` off — a red "Not logged" flash for a tap that WAS stored, and a pit
+     * master tapping again to double-log it.
+     */
+    it('rejects a stored tap whose moment cannot be read rather than resolving nothing', async () => {
+      const cloud = createFakeBackend({ cookEvents: [] });
+      const undated: TransportPort = {
+        get<T>(path: string): Promise<T> {
+          return cloud.get<T>(path);
+        },
+        put<T>(path: string, body?: unknown): Promise<T> {
+          return cloud.put<T>(path, body);
+        },
+        delete<T>(path: string): Promise<T> {
+          return cloud.delete<T>(path);
+        },
+        async post<T>(path: string, body?: unknown): Promise<T> {
+          if (path !== 'cook-events') {
+            return cloud.post<T>(path, body);
+          }
+          return {
+            _id: 'e1',
+            smokeId: 'smoke-1',
+            stampKey: 'wood',
+            label: 'Added Wood',
+            tone: 'amber',
+            at: 'not a moment',
+          } as unknown as T;
+        },
+      };
+      const client = createApiClient(undated, createFakeBackend());
+
+      const error = (await client.cookEvents.record('wood').catch(e => e)) as ApiError;
+
+      expect(error).toBeInstanceOf(ApiError);
+      expect(error.path).toBe('cook-events');
     });
 
     it('lets a refused tap through as the typed error, so a button can say so', async () => {

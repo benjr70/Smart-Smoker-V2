@@ -158,6 +158,22 @@ describe('the stamp catalogue subscription', () => {
     expect(heard).toEqual([[{ key: 'wood', label: 'Wood' }]]);
   });
 
+  /**
+   * The boundary is where a frame is judged: a screen handed something that is
+   * not a catalogue would draw a row of buttons out of it, and there is nobody
+   * in the garage to notice.
+   */
+  test('drops a frame that is not a catalogue rather than passing it on', () => {
+    const heard: unknown[] = [];
+
+    createSocketStampCatalogueSubscription().subscribe(stamps => heard.push(stamps));
+    handlerFor('cookLogStamps')(undefined);
+    handlerFor('cookLogStamps')({ stamps: [] });
+    handlerFor('cookLogStamps')([{ key: 'wood' }]);
+
+    expect(heard).toEqual([]);
+  });
+
   test('says so every time the channel comes up', () => {
     let connections = 0;
 

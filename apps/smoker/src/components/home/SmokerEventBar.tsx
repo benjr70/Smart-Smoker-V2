@@ -67,6 +67,16 @@ export interface SmokerEventBarProps {
 /** What a tapped button is saying right now. */
 type Flash = { key: string; logged: boolean } | null;
 
+/**
+ * What a button says while its post is in the air.
+ *
+ * The flash only starts once the backend has answered, and on a slow tailnet
+ * that is a second or two of a button that looks untouched — long enough for a
+ * thumb to come down on it again. This is the button saying it heard the first
+ * tap; the guard beside it is what makes the second one cost nothing.
+ */
+const PENDING_MARK = '…';
+
 /** The moment as a clock time in the reader's own zone. */
 const asClock = (at: Date): string =>
   at.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
@@ -96,26 +106,52 @@ export function SmokerEventBar({
 }: SmokerEventBarProps): JSX.Element {
   const design = useDesign();
   const [flash, setFlash] = useState<Flash>(null);
+  // The stamps whose posts are in the air. Held as state because the buttons
+  // are drawn from it, and as a ref beside it because a second tap arrives
+  // before React has re-rendered the first one's answer.
+  const [pending, setPending] = useState<readonly string[]>([]);
+  const inFlight = useRef<Set<string>>(new Set());
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Whether the row is still up; a post answering a screen that is gone changes nothing. */
+  const onScreen = useRef(true);
 
   // A flash outliving the screen it belongs to would set state on a row that is
   // gone; the timer is cleared with the row.
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    onScreen.current = true;
+    return () => {
+      onScreen.current = false;
       if (timer.current) {
         clearTimeout(timer.current);
       }
-    },
-    []
-  );
+    };
+  }, []);
 
   const tap = async (stamp: CookStamp): Promise<void> => {
-    const stored = await onRecord(stamp.key);
-    setFlash({ key: stamp.key, logged: stored });
-    if (timer.current) {
-      clearTimeout(timer.current);
+    // One post per stamp at a time. A stamp already in the air ignores the
+    // thumb that comes down on it again: two posts would store two events, and
+    // there is no delete on the pit to undo the extra one with.
+    if (inFlight.current.has(stamp.key)) {
+      return;
     }
-    timer.current = setTimeout(() => setFlash(null), FLASH_MS);
+    inFlight.current.add(stamp.key);
+    setPending(keys => [...keys, stamp.key]);
+    try {
+      const stored = await onRecord(stamp.key);
+      if (!onScreen.current) {
+        return;
+      }
+      setFlash({ key: stamp.key, logged: stored });
+      if (timer.current) {
+        clearTimeout(timer.current);
+      }
+      timer.current = setTimeout(() => setFlash(null), FLASH_MS);
+    } finally {
+      inFlight.current.delete(stamp.key);
+      if (onScreen.current) {
+        setPending(keys => keys.filter(key => key !== stamp.key));
+      }
+    }
   };
 
   const taps = lastTapped(events);
@@ -144,13 +180,14 @@ export function SmokerEventBar({
     >
       {enabledStamps(stamps).map(stamp => {
         const flashing = flash?.key === stamp.key ? flash : null;
+        const posting = pending.includes(stamp.key);
         const tapped = taps[stamp.key];
         return (
           <Box
             key={stamp.key}
             component="button"
             type="button"
-            disabled={!smoking}
+            disabled={!smoking || posting}
             data-testid={`smoker-stamp-${stamp.key}`}
             onClick={() => void tap(stamp)}
             sx={{
@@ -219,13 +256,15 @@ export function SmokerEventBar({
                   : design.textSecondary,
               }}
             >
-              {flashing
-                ? flashing.logged
-                  ? 'Logged'
-                  : 'Not logged'
-                : tapped
-                  ? asClock(tapped)
-                  : '—'}
+              {posting
+                ? PENDING_MARK
+                : flashing
+                  ? flashing.logged
+                    ? 'Logged'
+                    : 'Not logged'
+                  : tapped
+                    ? asClock(tapped)
+                    : '—'}
             </Box>
           </Box>
         );

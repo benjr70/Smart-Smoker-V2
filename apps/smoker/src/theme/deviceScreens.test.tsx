@@ -20,6 +20,7 @@ import {
   SteppingClock,
 } from 'smoke-session/src/testing';
 import { AppearancePreference, carbonDark, carbonLight } from 'theme/src';
+import { CookEvent, CookStamp, DEFAULT_STAMPS } from '../api';
 import { Home } from '../components/home/home';
 import {
   chartPanelFill,
@@ -81,11 +82,36 @@ const createChannel = () => {
   };
 };
 
+/**
+ * The cook log and the catalogue behind the stamp row, stood in for.
+ *
+ * Without these the screen's hooks fall back to the appliance's real client:
+ * every render in this file would fire an XHR at the device URL and open a
+ * socket.io connection nothing ever closes — one leaked handle per test, for
+ * assertions that are about colour.
+ */
+const fakeCookLog = () => ({
+  cookEvents: {
+    client: {
+      listCurrent: async (): Promise<CookEvent[]> => [],
+      record: async (): Promise<CookEvent> => {
+        throw new Error('nothing is cooking in a theme test');
+      },
+    },
+    subscription: { subscribe: () => () => undefined },
+  },
+  stampCatalogue: {
+    client: { get: async (): Promise<CookStamp[]> => [...DEFAULT_STAMPS] },
+    subscription: { subscribe: () => () => undefined },
+  },
+});
+
 const renderTouchscreen = async (appearance?: DeviceAppearanceSource): Promise<void> => {
+  const cookLog = fakeCookLog();
   render(
     <DeviceThemeProvider appearance={appearance}>
       <SmokeSessionProvider config={sessionConfig()}>
-        <Home />
+        <Home cookEvents={cookLog.cookEvents} stampCatalogue={cookLog.stampCatalogue} />
       </SmokeSessionProvider>
     </DeviceThemeProvider>
   );

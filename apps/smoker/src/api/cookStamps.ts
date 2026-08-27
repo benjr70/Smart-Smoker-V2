@@ -62,6 +62,24 @@ export const normalizeStamps = (served: readonly CookStamp[] | null | undefined)
     ? served.map(stamp => ({ ...stamp }))
     : DEFAULT_STAMPS.map(stamp => ({ ...stamp }));
 
+/**
+ * Whether an announced frame is a catalogue this panel can draw buttons from.
+ *
+ * The one check, wherever a catalogue arrives from: the socket boundary rejects
+ * a frame with it, and the hook holding the catalogue applies the same test to
+ * whatever channel handed it one. A row of buttons drawn out of something that
+ * is not a catalogue is a row nobody in the garage can put right.
+ */
+export const isStampCatalogue = (payload: unknown): payload is CookStamp[] =>
+  Array.isArray(payload) &&
+  payload.every(
+    stamp =>
+      typeof stamp === 'object' &&
+      stamp !== null &&
+      typeof (stamp as CookStamp).key === 'string' &&
+      typeof (stamp as CookStamp).label === 'string'
+  );
+
 /** The stamps a screen offers: the ones the user left switched on, in order. */
 export const enabledStamps = (catalogue: readonly CookStamp[]): CookStamp[] =>
   catalogue.filter(stamp => stamp.enabled);
