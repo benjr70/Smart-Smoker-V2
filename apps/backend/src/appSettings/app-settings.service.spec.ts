@@ -10,6 +10,7 @@ import {
 import { ApplicationSettings } from './app-settings.schema';
 import { AppSettingsService } from './app-settings.service';
 import { AppearancePreference } from './appearance';
+import { CookStamp, defaultStamps } from './stamp-catalogue';
 
 /** The probe rows a deployment that has configured nothing reads back as. */
 const DEFAULT_PROBE_TARGET_BLOCK = DEFAULT_APPLICATION_SETTINGS.probeTarget;
@@ -19,6 +20,9 @@ const SMOKE_COMPLETE_OFF = DEFAULT_APPLICATION_SETTINGS.smokeComplete;
 
 /** The heads-up alert as a deployment that has configured nothing has it. */
 const HEADS_UP_OFF = DEFAULT_APPLICATION_SETTINGS.headsUp;
+
+/** The stamps a deployment that has edited none of them offers. */
+const COOK_LOG_DEFAULT = DEFAULT_APPLICATION_SETTINGS.cookLog;
 
 /** The idle threshold a deployment that has tuned nothing auto-stops on. */
 const AUTO_STOP_DEFAULT = DEFAULT_APPLICATION_SETTINGS.autoStop;
@@ -111,7 +115,7 @@ const createSettingsCollection = <T>(seed: T | null = null) => {
       }),
     ),
     /** Every document in the collection right now. */
-    all: () => documents.map((document) => ({ ...(document as object) } as T)),
+    all: () => documents.map((document) => ({ ...(document as object) }) as T),
   };
 };
 
@@ -122,12 +126,18 @@ const createSettingsCollection = <T>(seed: T | null = null) => {
  */
 const createClients = () => {
   const announced: AppearancePreference[] = [];
+  const announcedStamps: CookStamp[][] = [];
   return {
     broadcastAppearance: (preference: AppearancePreference) => {
       announced.push(preference);
     },
+    broadcastCookLogStamps: (stamps: CookStamp[]) => {
+      announcedStamps.push(stamps);
+    },
     /** Every appearance announced to connected clients, in order. */
     announced,
+    /** Every catalogue announced to connected clients, in order. */
+    announcedStamps,
   };
 };
 
@@ -181,6 +191,7 @@ describe('AppSettingsService', () => {
         targetPresets: DEFAULT_TARGET_PRESETS,
         appearance: { mode: 'system', resolvedMode: 'dark' },
         autoStop: AUTO_STOP_DEFAULT,
+        cookLog: COOK_LOG_DEFAULT,
       });
     });
   });
@@ -214,6 +225,7 @@ describe('AppSettingsService', () => {
         targetPresets: DEFAULT_TARGET_PRESETS,
         appearance: { mode: 'dark', resolvedMode: 'dark' },
         autoStop: AUTO_STOP_DEFAULT,
+        cookLog: COOK_LOG_DEFAULT,
       });
     });
   });
@@ -272,7 +284,7 @@ describe('AppSettingsService', () => {
             enabled: true,
             probes: [{ slot: 'probe1', enabled: true, target }],
           },
-        } as unknown as ApplicationSettings);
+        }) as unknown as ApplicationSettings;
 
       it('treats a target that is not the shipped default as the user’s own', async () => {
         const reading = await serviceReading(legacyDocument(145));
@@ -665,6 +677,7 @@ describe('AppSettingsService', () => {
         targetPresets: DEFAULT_TARGET_PRESETS,
         appearance: { mode: 'dark', resolvedMode: 'dark' },
         autoStop: AUTO_STOP_DEFAULT,
+        cookLog: COOK_LOG_DEFAULT,
       });
       expect(settings.all()).toHaveLength(1);
     });
@@ -685,6 +698,7 @@ describe('AppSettingsService', () => {
         targetPresets: DEFAULT_TARGET_PRESETS,
         appearance: { mode: 'system', resolvedMode: 'dark' },
         autoStop: AUTO_STOP_DEFAULT,
+        cookLog: COOK_LOG_DEFAULT,
       });
     });
 
@@ -742,6 +756,7 @@ describe('AppSettingsService', () => {
         targetPresets: DEFAULT_TARGET_PRESETS,
         appearance: { mode: 'dark', resolvedMode: 'dark' },
         autoStop: { idleHours: 12 },
+        cookLog: COOK_LOG_DEFAULT,
       });
     });
 
@@ -781,6 +796,7 @@ describe('AppSettingsService', () => {
         targetPresets: DEFAULT_TARGET_PRESETS,
         appearance: { mode: 'dark', resolvedMode: 'dark' },
         autoStop: AUTO_STOP_DEFAULT,
+        cookLog: COOK_LOG_DEFAULT,
       });
     });
 
@@ -801,6 +817,7 @@ describe('AppSettingsService', () => {
         targetPresets: DEFAULT_TARGET_PRESETS,
         appearance: { mode: 'light', resolvedMode: 'light' },
         autoStop: AUTO_STOP_DEFAULT,
+        cookLog: COOK_LOG_DEFAULT,
       });
     });
 
@@ -831,6 +848,7 @@ describe('AppSettingsService', () => {
         targetPresets: DEFAULT_TARGET_PRESETS,
         appearance: { mode: 'dark', resolvedMode: 'dark' },
         autoStop: AUTO_STOP_DEFAULT,
+        cookLog: COOK_LOG_DEFAULT,
       });
       expect(settings.all()).toHaveLength(1);
     });
@@ -860,6 +878,7 @@ describe('AppSettingsService', () => {
         targetPresets: DEFAULT_TARGET_PRESETS,
         appearance: { mode: 'dark', resolvedMode: 'dark' },
         autoStop: AUTO_STOP_DEFAULT,
+        cookLog: COOK_LOG_DEFAULT,
       });
     });
   });
@@ -939,6 +958,51 @@ describe('AppSettingsService', () => {
       expect(await service.getSettings()).toMatchObject({
         appearance: { mode: 'dark', resolvedMode: 'dark' },
       });
+    });
+  });
+  describe('the cook log stamp catalogue', () => {
+    it('reads the six defaults on an installation whose document has no block', async () => {
+      expect((await service.getSettings()).cookLog.stamps).toEqual(
+        defaultStamps(),
+      );
+    });
+
+    it('stores an edited catalogue and announces it to every open screen', async () => {
+      const edited = defaultStamps().map((stamp) =>
+        stamp.key === 'wood' ? { ...stamp, label: 'Split', tone: 'p2' } : stamp,
+      ) as CookStamp[];
+
+      const saved = await service.saveSettings({ cookLog: { stamps: edited } });
+
+      expect(saved.cookLog.stamps[0]).toEqual({
+        key: 'wood',
+        label: 'Split',
+        tone: 'p2',
+        enabled: true,
+        custom: false,
+      });
+      expect((await service.getSettings()).cookLog.stamps).toEqual(edited);
+      expect(clients.announcedStamps).toEqual([edited]);
+    });
+
+    it('refuses a catalogue no client should have sent, and stores nothing', async () => {
+      const dropped = defaultStamps().filter((stamp) => stamp.key !== 'vent');
+
+      await expect(
+        service.saveSettings({ cookLog: { stamps: dropped } }),
+      ).rejects.toThrow(/vent/);
+      expect((await service.getSettings()).cookLog.stamps).toEqual(
+        defaultStamps(),
+      );
+      expect(clients.announcedStamps).toEqual([]);
+    });
+
+    it('says nothing about the catalogue when a write did not touch it', async () => {
+      await service.saveSettings({
+        chamber: { enabled: true, low: 1, high: 2 },
+      });
+
+      expect(clients.announcedStamps).toEqual([]);
     });
   });
 });

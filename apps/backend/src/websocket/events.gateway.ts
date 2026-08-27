@@ -9,6 +9,7 @@ import { Server } from 'socket.io';
 import { State } from '../State/state.schema';
 import { StateService } from '../State/state.service';
 import { AppearancePreference } from '../appSettings/appearance';
+import { CookStamp } from '../appSettings/stamp-catalogue';
 import { StaleCookService } from '../staleCook/stale-cook.service';
 import { TempDto } from '../temps/tempDto';
 import { TempsService } from '../temps/temps.service';
@@ -50,6 +51,12 @@ export const APPEARANCE_EVENT = 'appearance';
  * reason {@link APPEARANCE_EVENT} is.
  */
 export const COOK_EVENTS_EVENT = 'cookEventsUpdate';
+
+/**
+ * The event a changed stamp catalogue rides on, restated by every client for
+ * the same reason {@link APPEARANCE_EVENT} is.
+ */
+export const COOK_LOG_STAMPS_EVENT = 'cookLogStamps';
 
 /**
  * The `smokeUpdate` frame: whether the cook is running, and what its four
@@ -333,6 +340,19 @@ export class EventsGateway {
    */
   broadcastCookEvents(events: CookEvent[]): void {
     this.server.emit(COOK_EVENTS_EVENT, events);
+  }
+
+  /**
+   * Tell every connected client what stamps the cook log now offers.
+   *
+   * Server-initiated like the appearance: the catalogue changes because the
+   * settings page wrote it, and the touchscreen in the garage would otherwise
+   * go on offering the old buttons until somebody restarted it. The whole list
+   * travels so a receiving client replaces what it holds — a rename merged
+   * into a list that has since lost a stamp would resurrect the stamp.
+   */
+  broadcastCookLogStamps(stamps: CookStamp[]): void {
+    this.server.emit(COOK_LOG_STAMPS_EVENT, stamps);
   }
 
   @SubscribeMessage('refresh')

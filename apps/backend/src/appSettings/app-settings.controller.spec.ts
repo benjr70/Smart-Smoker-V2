@@ -3,6 +3,7 @@ import { AppSettingsController } from './app-settings.controller';
 import { ApplicationSettings } from './app-settings.schema';
 import { AppSettingsService } from './app-settings.service';
 import { ApplicationSettingsDto } from './app-settings.dto';
+import { defaultStamps } from './stamp-catalogue';
 
 /**
  * The application settings route. It is application-scoped rather than
@@ -31,6 +32,7 @@ describe('AppSettingsController', () => {
     targetPresets: { beef: 203, pork: 195, poultry: 165 },
     appearance: { mode: 'dark', resolvedMode: 'dark' },
     autoStop: { idleHours: 12 },
+    cookLog: { stamps: defaultStamps() },
   };
 
   /** The same document as the read serves it: every probe row named. */

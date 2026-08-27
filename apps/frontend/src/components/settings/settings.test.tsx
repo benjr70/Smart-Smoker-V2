@@ -1,12 +1,18 @@
 import { Experimental_CssVarsProvider as CssVarsProvider } from '@mui/material';
 import { experimental_extendTheme as extendTheme } from '@mui/material/styles';
 import '@testing-library/jest-dom';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import React from 'react';
 import { ApiClientProvider, SnackbarProvider, createApiClient } from '../../api';
 import { createFakeBackend } from '../../api/fakeBackend';
 import { DesignSurface, appTheme } from '../../theme';
 import { Settings } from './settings';
+
+// The websocket the stamp catalogue is announced on: the one thing on this
+// page that reaches outside the browser.
+jest.mock('socket.io-client', () => ({
+  io: () => ({ on: () => undefined, off: () => undefined, close: () => undefined }),
+}));
 
 /**
  * Settings is rendered whole — real Material-UI, the real notifications card,
@@ -14,9 +20,9 @@ import { Settings } from './settings';
  * backend behind the injected API client — so these assertions describe the page
  * an operator sees rather than the components it happens to be built from.
  */
-const renderSettings = (theme: ReturnType<typeof extendTheme> = appTheme) => {
+const renderSettings = async (theme: ReturnType<typeof extendTheme> = appTheme) => {
   const client = createApiClient(createFakeBackend());
-  return render(
+  const view = render(
     <CssVarsProvider theme={theme}>
       <DesignSurface>
         <ApiClientProvider client={client}>
@@ -27,11 +33,18 @@ const renderSettings = (theme: ReturnType<typeof extendTheme> = appTheme) => {
       </DesignSurface>
     </CssVarsProvider>
   );
+  // The cards read what is stored as they mount; letting those reads land here
+  // keeps every test below asserting on the settled page rather than on its
+  // first paint.
+  await act(async () => {
+    await Promise.resolve();
+  });
+  return view;
 };
 
 describe('Settings page', () => {
   it('shows the page heading, the notifications card and the version card', async () => {
-    renderSettings();
+    await renderSettings();
 
     expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument();
     expect(await screen.findByText('Notifications')).toBeInTheDocument();
@@ -41,18 +54,24 @@ describe('Settings page', () => {
   // The mock's order: the alerts, then the temperatures those alerts start
   // from, then the build.
   it('shows the default target temps card between the notifications and the version', async () => {
-    renderSettings();
+    await renderSettings();
     await screen.findByText('Notifications');
 
     const cards = screen.getAllByRole('heading', { level: 2 }).map(heading => heading.textContent);
 
-    expect(cards).toEqual(['Appearance', 'Notifications', 'Default target temps', 'Auto-stop']);
+    expect(cards).toEqual([
+      'Appearance',
+      'Notifications',
+      'Default target temps',
+      'Cook log stamps',
+      'Auto-stop',
+    ]);
   });
 
-  it('shows the build version the bundle was stamped with', () => {
+  it('shows the build version the bundle was stamped with', async () => {
     (globalThis as Record<string, unknown>).VERSION = '2.4.1';
     try {
-      renderSettings();
+      await renderSettings();
 
       expect(screen.getByTestId('settings-version-value')).toHaveTextContent('2.4.1');
     } finally {
@@ -60,8 +79,8 @@ describe('Settings page', () => {
     }
   });
 
-  it('falls back to "unknown" when the build version was never stamped in', () => {
-    renderSettings();
+  it('falls back to "unknown" when the build version was never stamped in', async () => {
+    await renderSettings();
 
     expect(screen.getByTestId('settings-version-value')).toHaveTextContent('unknown');
   });
@@ -79,14 +98,14 @@ describe('Settings page', () => {
       },
     });
 
-    renderSettings(markedTheme);
+    await renderSettings(markedTheme);
     await screen.findByText('Notifications');
 
-    expect(screen.getAllByTestId('styled-by-application-theme')).toHaveLength(5);
+    expect(screen.getAllByTestId('styled-by-application-theme')).toHaveLength(6);
   });
 
   it('paints the page with the design background and typeface', async () => {
-    renderSettings();
+    await renderSettings();
     await screen.findByText('Notifications');
 
     const page = screen.getByTestId('settings-page');
@@ -100,7 +119,7 @@ describe('Settings page', () => {
    * leaving that card flush against the one above and widening its own gap.
    */
   it('gives every card the same gap, taken from the page stack', async () => {
-    renderSettings();
+    await renderSettings();
     await screen.findByText('Notifications');
 
     expect(screen.getByTestId('settings-notifications-card')).toHaveStyle({ marginTop: '16px' });
@@ -108,7 +127,7 @@ describe('Settings page', () => {
   });
 
   it("renders its cards as the mock's flat, hairline-bordered white surface", async () => {
-    renderSettings();
+    await renderSettings();
     await screen.findByText('Notifications');
 
     expect(screen.getByTestId('settings-version-card')).toHaveStyle({

@@ -12,6 +12,7 @@ import { io } from 'socket.io-client';
 import { WireCookEvent } from './cookEventFrames';
 import { SmokeEventPort } from './events';
 import { CookEventsSubscriptionPort } from './useCookEvents';
+import { StampCatalogueSubscriptionPort } from './useStampCatalogue';
 
 export const createSocketEventPort = (): SmokeEventPort => ({
   emitClear: () => {
@@ -54,6 +55,37 @@ export const createSocketCookEventsSubscription = (): CookEventsSubscriptionPort
 
     return () => {
       socket.off(COOK_EVENTS_EVENT, handler);
+      socket.close();
+    };
+  },
+});
+
+/**
+ * The event the backend announces a changed stamp catalogue on. Restated here
+ * for the same reason every other event this app exchanges with that gateway
+ * is.
+ */
+const COOK_LOG_STAMPS_EVENT = 'cookLogStamps';
+
+/**
+ * The production {@link StampCatalogueSubscriptionPort}: the websocket the app
+ * already speaks, carrying the whole catalogue as its own event.
+ *
+ * Opened on subscription rather than on construction, so assembling a screen
+ * costs no socket, and it is this port's own — the catalogue is listened for as
+ * long as whatever mounted it is on screen, while the smoke step's connection
+ * is closed when that screen is left.
+ */
+export const createSocketStampCatalogueSubscription = (): StampCatalogueSubscriptionPort => ({
+  subscribe: listener => {
+    const socket = io(process.env.WS_URL ?? '');
+    // Handed on as it arrived; the hook decides whether it is a catalogue,
+    // with the same check whatever channel it came from.
+    const handler = (payload: unknown): void => listener(payload);
+    socket.on(COOK_LOG_STAMPS_EVENT, handler);
+
+    return () => {
+      socket.off(COOK_LOG_STAMPS_EVENT, handler);
       socket.close();
     };
   },

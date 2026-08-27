@@ -2,7 +2,7 @@ import '@testing-library/jest-dom';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
-import { CookEvent } from '../../../api';
+import { CookEvent, DEFAULT_STAMPS, newCustomStamp } from '../../../api';
 import { DesignSurface } from '../../../theme';
 import { EventLog } from './EventLog';
 
@@ -131,5 +131,46 @@ describe('the cook log card', () => {
 
     expect(screen.getByText(/nothing logged yet/i)).toBeInTheDocument();
     expect(screen.queryByTestId('cook-event-row')).not.toBeInTheDocument();
+  });
+
+  describe('the catalogue the buttons and rows are drawn from', () => {
+    it('offers only the stamps the user left switched on, in catalogue order', () => {
+      const catalogue = [
+        { ...DEFAULT_STAMPS[1] },
+        { ...DEFAULT_STAMPS[0], enabled: false },
+        { ...newCustomStamp(), label: 'Foil Boat' },
+      ];
+
+      renderLog({ stamps: catalogue });
+
+      expect(screen.getAllByRole('button').map(button => button.textContent)).toEqual([
+        'Wrapped',
+        'Foil Boat',
+      ]);
+    });
+
+    it('names a logged entry by what its stamp is called now', () => {
+      const renamed = DEFAULT_STAMPS.map(stamp =>
+        stamp.key === 'wood' ? { ...stamp, label: 'Split', tone: 'p2' as const } : stamp
+      );
+
+      renderLog({ stamps: renamed, events: [event()] });
+
+      const row = screen.getByTestId('cook-event-row');
+      expect(within(row).getByText('Split')).toBeInTheDocument();
+      expect(within(row).queryByText('Added Wood')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Remove Split' })).toBeInTheDocument();
+    });
+
+    it('keeps the label an entry was logged under when its stamp has been removed', () => {
+      renderLog({
+        stamps: [...DEFAULT_STAMPS],
+        events: [event({ stampKey: 'custom-gone', label: 'Foil Boat', tone: 'sub' })],
+      });
+
+      expect(
+        within(screen.getByTestId('cook-event-row')).getByText('Foil Boat')
+      ).toBeInTheDocument();
+    });
   });
 });

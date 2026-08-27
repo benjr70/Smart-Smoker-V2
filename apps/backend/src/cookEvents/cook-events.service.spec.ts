@@ -2,6 +2,8 @@ import { BadRequestException, ConflictException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { StateService } from '../State/state.service';
+import { AppSettingsService } from '../appSettings/app-settings.service';
+import { CookStamp, defaultStamps } from '../appSettings/stamp-catalogue';
 import { TempsService } from '../temps/temps.service';
 import { EventsGateway } from '../websocket/events.gateway';
 import { CookEventsService } from './cook-events.service';
@@ -12,6 +14,7 @@ describe('CookEventsService', () => {
   let stored: FakeDoc[];
   let state: { smokeId: string; smoking: boolean } | undefined;
   let latestReading: FakeDoc | undefined;
+  let catalogue: CookStamp[];
   let broadcast: jest.Mock;
 
   const build = async (): Promise<CookEventsService> => {
@@ -29,6 +32,12 @@ describe('CookEventsService', () => {
           useValue: { getLatestCurrentTemp: async () => latestReading },
         },
         {
+          provide: AppSettingsService,
+          useValue: {
+            getSettings: async () => ({ cookLog: { stamps: catalogue } }),
+          },
+        },
+        {
           provide: EventsGateway,
           useValue: { broadcastCookEvents: broadcast },
         },
@@ -40,6 +49,7 @@ describe('CookEventsService', () => {
   beforeEach(async () => {
     stored = [];
     state = { smokeId: 'smoke-1', smoking: true };
+    catalogue = defaultStamps();
     latestReading = {
       ChamberTemp: '243',
       MeatTemp: '162',
@@ -161,5 +171,44 @@ describe('CookEventsService', () => {
 
     await expect(service.record('wood')).resolves.toBeDefined();
     expect(await service.listCurrent()).toHaveLength(1);
+  });
+
+  it('records the stamp as the catalogue now has it, not as it shipped', async () => {
+    catalogue = defaultStamps().map((stamp) =>
+      stamp.key === 'wood' ? { ...stamp, label: 'Split', tone: 'p2' } : stamp,
+    );
+
+    const recorded = await service.record('wood');
+
+    expect(recorded.label).toBe('Split');
+    expect(recorded.tone).toBe('p2');
+  });
+
+  it('records a stamp the user added', async () => {
+    catalogue = [
+      ...defaultStamps(),
+      {
+        key: 'custom-01ARZ3NDEKTSV4RRFFQ69G5FAV',
+        label: 'Foil Boat',
+        tone: 'amber',
+        enabled: true,
+        custom: true,
+      },
+    ];
+
+    const recorded = await service.record('custom-01ARZ3NDEKTSV4RRFFQ69G5FAV');
+
+    expect(recorded.label).toBe('Foil Boat');
+  });
+
+  it('refuses to record a stamp the user has switched off', async () => {
+    catalogue = defaultStamps().map((stamp) =>
+      stamp.key === 'lid' ? { ...stamp, enabled: false } : stamp,
+    );
+
+    await expect(service.record('lid')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(stored).toHaveLength(0);
   });
 });

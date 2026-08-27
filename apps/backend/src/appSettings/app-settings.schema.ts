@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { ApiProperty } from '@nestjs/swagger';
 import { AppearanceMode, ColorScheme } from './appearance';
+import { STAMP_TONES, StampTone, defaultStamps } from './stamp-catalogue';
 
 export type ApplicationSettingsDocument = ApplicationSettings & Document;
 
@@ -249,6 +250,65 @@ export const AutoStopSettingsSchema =
   SchemaFactory.createForClass(AutoStopSettings);
 
 /**
+ * One stamp of the cook log, as the settings document stores it.
+ *
+ * The shape is the `stamp-catalogue` module's {@link CookStamp}, restated as a
+ * Mongoose sub-schema because that module is pure and knows nothing about
+ * persistence — the contract lives there, and this is only how it is written
+ * down. Sub-documents rather than a free-form array so a stored entry cannot
+ * arrive at a client missing the fields every button is drawn from.
+ */
+@Schema({ _id: false })
+export class StampEntry {
+  /** The stamp's stable identity. Events are keyed by it, never by label. */
+  @ApiProperty()
+  @Prop({ required: true })
+  key: string;
+
+  @ApiProperty()
+  @Prop({ required: true })
+  label: string;
+
+  /**
+   * `type: String` spelled out because the field's TypeScript type is a union
+   * of the six tone names: the metadata a union emits is `Object`, which
+   * Mongoose refuses to infer a schema type from.
+   */
+  @ApiProperty({ enum: STAMP_TONES })
+  @Prop({ type: String, required: true })
+  tone: StampTone;
+
+  /** A disabled stamp is not offered, and keeps every event ever logged on it. */
+  @ApiProperty()
+  @Prop({ default: true })
+  enabled: boolean;
+
+  /** Whether the user added it: a default may be disabled but never removed. */
+  @ApiProperty()
+  @Prop({ default: false })
+  custom: boolean;
+}
+
+export const StampEntrySchema = SchemaFactory.createForClass(StampEntry);
+
+/**
+ * The cook log's own settings: the stamps a cook may be logged with.
+ *
+ * A block rather than a bare array on the document, like every other block
+ * here, because the document has several independent writers and only a whole
+ * block can be saved without disturbing what another one holds.
+ */
+@Schema({ _id: false })
+export class CookLogSettings {
+  @ApiProperty({ type: [StampEntry] })
+  @Prop({ type: [StampEntrySchema], default: () => defaultStamps() })
+  stamps: StampEntry[];
+}
+
+export const CookLogSettingsSchema =
+  SchemaFactory.createForClass(CookLogSettings);
+
+/**
  * The single application settings document.
  *
  * Holds nothing the machine writes: armed flags, excursion counters and
@@ -284,6 +344,10 @@ export class ApplicationSettings {
   @ApiProperty({ type: AutoStopSettings })
   @Prop({ type: AutoStopSettingsSchema, default: () => ({}) })
   autoStop: AutoStopSettings;
+
+  @ApiProperty({ type: CookLogSettings })
+  @Prop({ type: CookLogSettingsSchema, default: () => ({}) })
+  cookLog: CookLogSettings;
 }
 
 export const ApplicationSettingsSchema =

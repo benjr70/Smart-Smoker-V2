@@ -9,7 +9,18 @@
  * re-exported here so call sites keep importing from one place.
  */
 export type { CookStamp, StampTone } from './cookStamps';
-export { DEFAULT_STAMPS, STAMP_TONES } from './cookStamps';
+export {
+  DEFAULT_STAMPS,
+  MAX_STAMPS,
+  MAX_STAMP_LABEL,
+  STAMP_TONES,
+  enabledStamps,
+  isDefaultCatalogue,
+  newCustomStamp,
+  normalizeStamps,
+  resolveStampLabel,
+  resolveStampTone,
+} from './cookStamps';
 export type {
   AutoStopSettings,
   ChamberAlertSettings,
@@ -45,13 +56,18 @@ export { ApiError, createHttpTransport } from 'api-transport/src';
 export { PushNotConfiguredError } from './errors';
 export type { SmokeEventPort } from './events';
 export { noopEventPort } from './events';
-export { createSocketEventPort, createSocketCookEventsSubscription } from './socketEventAdapter';
+export {
+  createSocketEventPort,
+  createSocketCookEventsSubscription,
+  createSocketStampCatalogueSubscription,
+} from './socketEventAdapter';
 export type { FakeBackend, FakeBackendSeed, StoredSmokeProfile } from './fakeBackend';
 export { createFakeBackend } from './fakeBackend';
 export type {
   ApiClient,
   AutoStopResource,
   CookEventsResource,
+  CookStampsResource,
   HistoryResource,
   NotificationsResource,
   PostSmokeResource,
@@ -88,5 +104,11 @@ export type {
 export { useCookEvents } from './useCookEvents';
 export type { UseCookEventsForSmokeResult } from './useCookEventsForSmoke';
 export { useCookEventsForSmoke } from './useCookEventsForSmoke';
+export type {
+  StampCatalogueSubscriptionPort,
+  UseStampCatalogueOptions,
+  UseStampCatalogueResult,
+} from './useStampCatalogue';
+export { useStampCatalogue } from './useStampCatalogue';
 export type { StatsStatus, UseStatsResult } from './useStats';
 export { useStats } from './useStats';

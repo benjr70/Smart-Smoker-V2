@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { StateModule } from '../State/state.module';
+import { AppSettingsModule } from '../appSettings/app-settings.module';
 import { TempModule } from '../temps/temps.module';
 import { EventsModule } from '../websocket/events.module';
 import { CookEventsController } from './cook-events.controller';
@@ -22,6 +23,10 @@ import { CookEventsService } from './cook-events.service';
   imports: [
     MongooseModule.forFeature([{ name: 'CookEvent', schema: CookEventSchema }]),
     StateModule,
+    // The stamps a tap may carry, and what each one is called right now. One
+    // way only: the settings document knows nothing about the log written
+    // against it.
+    AppSettingsModule,
     TempModule,
     EventsModule,
   ],

@@ -1,4 +1,8 @@
-import { createSocketCookEventsSubscription, createSocketEventPort } from './socketEventAdapter';
+import {
+  createSocketCookEventsSubscription,
+  createSocketEventPort,
+  createSocketStampCatalogueSubscription,
+} from './socketEventAdapter';
 
 const mockSocket = { emit: jest.fn(), on: jest.fn(), off: jest.fn(), close: jest.fn() };
 
@@ -94,6 +98,40 @@ describe('the cook log announcement channel', () => {
     stop();
 
     expect(mockSocket.off).toHaveBeenCalledWith('cookEventsUpdate', expect.any(Function));
+    expect(mockSocket.close).toHaveBeenCalled();
+  });
+});
+
+describe('the stamp catalogue announcement channel', () => {
+  /** The listener the port registered for the backend's announcements. */
+  const handler = (): ((payload: unknown) => void) =>
+    mockSocket.on.mock.calls.find(call => call[0] === 'cookLogStamps')?.[1];
+
+  test('opens no socket until something subscribes', () => {
+    createSocketStampCatalogueSubscription();
+
+    expect(io).not.toHaveBeenCalled();
+  });
+
+  test('hands on the catalogue the backend announced', () => {
+    process.env.WS_URL = 'ws://localhost:3002';
+    const heard: unknown[] = [];
+
+    createSocketStampCatalogueSubscription().subscribe(stamps => heard.push(stamps));
+    handler()([{ key: 'wood', label: 'Split', tone: 'amber', enabled: true, custom: false }]);
+
+    expect(io).toHaveBeenCalledWith('ws://localhost:3002');
+    expect(heard).toEqual([
+      [{ key: 'wood', label: 'Split', tone: 'amber', enabled: true, custom: false }],
+    ]);
+  });
+
+  test('closes the connection when the screen stops listening', () => {
+    const stop = createSocketStampCatalogueSubscription().subscribe(() => undefined);
+
+    stop();
+
+    expect(mockSocket.off).toHaveBeenCalledWith('cookLogStamps', expect.any(Function));
     expect(mockSocket.close).toHaveBeenCalled();
   });
 });

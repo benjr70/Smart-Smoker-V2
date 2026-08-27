@@ -5,6 +5,7 @@ import { TempsService } from '../temps/temps.service';
 import { StaleCookService } from '../staleCook/stale-cook.service';
 import { TempDto } from '../temps/tempDto';
 import { Logger } from '@nestjs/common';
+import { defaultStamps } from '../appSettings/stamp-catalogue';
 
 /** One device frame, as the relay receives it. */
 const reading = (date: Date = new Date()) =>
@@ -668,6 +669,23 @@ describe('EventsGateway', () => {
       gateway.broadcastCookEvents(log as never);
 
       expect(mockServer.emit).toHaveBeenCalledWith('cookEventsUpdate', log);
+      expect(mockServer.emit).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  /**
+   * The stamps are edited on a phone and used on a touchscreen in the garage.
+   * The whole catalogue rides on the announcement so a client replaces what it
+   * holds — merging a rename into a list that has since lost a stamp would put
+   * the stamp back.
+   */
+  describe('broadcastCookLogStamps', () => {
+    it('announces the whole stamp catalogue to every connected client', () => {
+      const catalogue = defaultStamps();
+
+      gateway.broadcastCookLogStamps(catalogue);
+
+      expect(mockServer.emit).toHaveBeenCalledWith('cookLogStamps', catalogue);
       expect(mockServer.emit).toHaveBeenCalledTimes(1);
     });
   });

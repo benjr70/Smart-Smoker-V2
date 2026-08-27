@@ -1,11 +1,19 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import Grid from '@mui/material/Grid';
 import './smokeStep.style.css';
 import { Autocomplete, Button, Card, Divider, TextField, Typography } from '@mui/material';
 import TemperatureChart from 'temperaturechart/src/TemperatureChart';
 import { SmokeSessionProvider, useSmokeSession } from 'smoke-session/src/react';
 import { CloudSocketAdapter, createCloudSocketAdapter, SessionConfig } from 'smoke-session/src';
-import { CookEventsSubscriptionPort, getDefaultApiClient, useCookEvents } from '../../../api';
+import {
+  CookEventsSubscriptionPort,
+  StampCatalogueSubscriptionPort,
+  getDefaultApiClient,
+  resolveStampLabel,
+  resolveStampTone,
+  useCookEvents,
+  useStampCatalogue,
+} from '../../../api';
 import { createSessionApiPort } from '../../../api/sessionApiAdapter';
 import { useChartPalette } from '../../../theme';
 import { chartNamesOf } from '../../common/chartNames';
@@ -45,6 +53,12 @@ type SmokeStepProps = {
    * websocket, and production passes nothing so the hook opens its own.
    */
   cookEventsSubscription?: CookEventsSubscriptionPort;
+  /**
+   * How this screen hears that the stamp catalogue changed — the settings page
+   * on a phone renaming a button the touchscreen is showing. Injected for the
+   * same reason the cook log's channel is.
+   */
+  stampCatalogueSubscription?: StampCatalogueSubscriptionPort;
 };
 
 /**
@@ -85,9 +99,28 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
   // client changes it — so the same taps show here, on the touchscreen and in
   // any other browser that is open.
   const cookLog = useCookEvents({ subscription: props.cookEventsSubscription });
+  // The stamps on offer, as the installation has them now: read on mount and
+  // replaced whenever the catalogue is saved anywhere, so a rename made on the
+  // settings page reaches the buttons — and the entries already logged under
+  // them — without this screen being reloaded.
+  const catalogue = useStampCatalogue({ subscription: props.stampCatalogueSubscription });
   // The same log the card below lists, in the chart's own terms: a marker on
-  // the curve at the moment of each tap, in that stamp's tone.
-  const cookMarks = useChartEvents(cookLog.events);
+  // the curve at the moment of each tap, in that stamp's tone. Named and
+  // coloured by the catalogue as it stands now rather than by the snapshot each
+  // event was logged with, so a rename moves the marker's letter with the
+  // button's word; an event whose stamp has since been removed keeps what it
+  // was logged under, which is all that is left to draw it from.
+  const cookMarks = useChartEvents(
+    useMemo(
+      () =>
+        cookLog.events.map(event => ({
+          ...event,
+          label: resolveStampLabel(event.stampKey, event.label, catalogue.stamps),
+          tone: resolveStampTone(event.stampKey, event.tone, catalogue.stamps),
+        })),
+      [cookLog.events, catalogue.stamps]
+    )
+  );
   // Lighting the smoker, guarded: a session whose cook the backend already
   // stopped is asked about rather than lit, so the next cook's readings never
   // land in the last one's series. Recovering from one starts the description
@@ -212,6 +245,7 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
           cook that is running, so the pre-smoke and post-smoke steps offer
           none. */}
       <EventLog
+        stamps={catalogue.stamps}
         events={cookLog.events}
         smoking={session.smoking}
         onRecord={cookLog.record}
@@ -330,6 +364,7 @@ export function SmokeStep(props: SmokeStepProps): JSX.Element {
         nextButton={props.nextButton}
         onOpenSettings={props.onOpenSettings}
         cookEventsSubscription={props.cookEventsSubscription}
+        stampCatalogueSubscription={props.stampCatalogueSubscription}
       />
     </SmokeSessionProvider>
   );
