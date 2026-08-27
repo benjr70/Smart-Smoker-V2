@@ -278,8 +278,8 @@ describe('the chart on the home screen', () => {
     const PANEL = { width: 800, height: 480 };
     /** The top bar and the page's own padding and gaps above the cards. */
     const TOP_BAR = 92;
-    /** The chart card's share of the row (the reading column takes 42%). */
-    const CARD_SHARE = 0.58;
+    /** The chart card's share of the row (the reading column takes 38%). */
+    const CARD_SHARE = 0.62;
     /** The card's title row, the legend under the plot, and the card padding. */
     const CARD_CHROME = 72;
     /** The stamp bar under the cards, and the gap above it. */

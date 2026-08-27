@@ -492,7 +492,7 @@ export function Home({
       <Box sx={{ display: 'flex', gap: '10px', flex: 1, minHeight: 0 }}>
         {/* Left column: the chamber said once and large, then the meats. */}
         <Box
-          sx={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '42%', minWidth: 0 }}
+          sx={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '38%', minWidth: 0 }}
         >
           <Card data-testid="smoker-chamber-card" sx={{ padding: '12px 14px' }}>
             <Typography
