@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.12.0](https://github.com/benjr70/Smart-Smoker-V2/compare/v1.11.0...v1.12.0) (2026-08-27)
+
+
+### Features
+
+* **backend:** heads-up push before probe reaches its target ([#556](https://github.com/benjr70/Smart-Smoker-V2/issues/556)) ([d1ee9e1](https://github.com/benjr70/Smart-Smoker-V2/commit/d1ee9e1e0ea1cb81d643ede9b897c1590848cb81))
+* **monorepo:** cook log slice 1 — cook-events backend, socket and web EventLog card ([#562](https://github.com/benjr70/Smart-Smoker-V2/issues/562)) ([8b15607](https://github.com/benjr70/Smart-Smoker-V2/commit/8b15607fdb4feb6c5a01f5eb722582e4fc371ea2))
+* **monorepo:** cook log slice 2 — event markers on the chart and a history cook log ([#563](https://github.com/benjr70/Smart-Smoker-V2/issues/563)) ([05935d3](https://github.com/benjr70/Smart-Smoker-V2/commit/05935d3ad3ee187f401b44d4674d956e690a558e))
+* **monorepo:** cook log slice 2 — event markers on the chart and a history cook log ([#563](https://github.com/benjr70/Smart-Smoker-V2/issues/563)) ([16b7e18](https://github.com/benjr70/Smart-Smoker-V2/commit/16b7e1834b1593860e401ea10e0bdbe9f4a13d50))
+* **monorepo:** cook log slice 3 — editable stamp catalogue, web StampEditor and socket sync ([#564](https://github.com/benjr70/Smart-Smoker-V2/issues/564)) ([7e7878e](https://github.com/benjr70/Smart-Smoker-V2/commit/7e7878e863656a4d68d607a2acc964004e19227f))
+* **smoker:** touchscreen stamp bar, chart markers and catalogue sync ([#565](https://github.com/benjr70/Smart-Smoker-V2/issues/565)) ([e759443](https://github.com/benjr70/Smart-Smoker-V2/commit/e759443e59fc907eda2aed9acb4a001b6ab368d2))
+
+
+### Bug Fixes
+
+* **deploy:** stop prod disk filling with stale anon volumes and image tags ([#553](https://github.com/benjr70/Smart-Smoker-V2/issues/553)) ([5314c75](https://github.com/benjr70/Smart-Smoker-V2/commit/5314c754e673d73064220f4896e2b36409efbd32))
+
 ## [1.11.0](https://github.com/benjr70/Smart-Smoker-V2/compare/v1.10.0...v1.11.0) (2026-08-24)
 
 

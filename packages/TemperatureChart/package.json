@@ -1,6 +1,6 @@
 {
   "name": "temperaturechart",
-  "version": "1.11.0",
+  "version": "1.12.0",
   "description": "Temperature chart package for smart smoker",
   "main": "dist/TemperatureChart.js",
   "types": "dist/TemperatureChart.d.ts",
