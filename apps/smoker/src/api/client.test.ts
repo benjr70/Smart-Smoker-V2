@@ -1,5 +1,6 @@
 import { DEFAULT_APPEARANCE_PREFERENCE as SHARED_DEFAULT_APPEARANCE_PREFERENCE } from 'theme/src';
 import { DEFAULT_APPEARANCE_PREFERENCE, createApiClient } from './client';
+import { DEFAULT_STAMPS } from './cookStamps';
 import { createFakeBackend } from './fakeBackend';
 import { ApiError } from 'api-transport/src';
 
@@ -510,6 +511,136 @@ describe('smoker api client', () => {
       cloud.injectFault({ method: 'get', path: 'state', status: 503 });
 
       await expect(client.session.startNew()).rejects.toBeInstanceOf(ApiError);
+    });
+  });
+
+  /**
+   * The cook log, as the panel is allowed to know it: what has been stamped on
+   * the cook in progress, and one tap of a button. There is no delete here
+   * because there is none on the pit — a mis-tap is undone on a phone, where
+   * there is a keyboard and a list, not by a gloved thumb beside a hot smoker.
+   */
+  describe('cook events resource (cloud base URL)', () => {
+    it('lists the running cook’s log, oldest first, with every moment a date', async () => {
+      const { cloud, device, client } = buildClient({
+        cookEvents: [
+          {
+            _id: 'e2',
+            smokeId: 'smoke-1',
+            stampKey: 'wrap',
+            label: 'Wrapped',
+            tone: 'p1',
+            at: '2026-08-27T13:00:00.000Z',
+            chamberTemp: 250,
+          },
+          {
+            _id: 'e1',
+            smokeId: 'smoke-1',
+            stampKey: 'wood',
+            label: 'Added Wood',
+            tone: 'amber',
+            at: '2026-08-27T12:00:00.000Z',
+          },
+        ],
+      });
+
+      const log = await client.cookEvents.listCurrent();
+
+      expect(log.map(event => event._id)).toEqual(['e1', 'e2']);
+      expect(log[0].at).toEqual(new Date('2026-08-27T12:00:00.000Z'));
+      // A pit that reported nothing reads as nothing, never as a zero somebody
+      // could mistake for a cold chamber.
+      expect(log[0].chamberTemp).toBeNull();
+      expect(cloud.requests).toEqual([
+        { method: 'get', path: 'cook-events/current', body: undefined },
+      ]);
+      expect(device.requests).toEqual([]);
+    });
+
+    /**
+     * A row nobody can place in the cook is worse than one that is missing: it
+     * would be plotted at the epoch, dragging the chart's whole window back to
+     * 1970 on the one screen with no reload button.
+     */
+    it('drops a row whose moment cannot be read rather than plotting it at the epoch', async () => {
+      const { client } = buildClient({
+        cookEvents: [
+          {
+            _id: 'e1',
+            smokeId: 'smoke-1',
+            stampKey: 'wood',
+            label: 'Added Wood',
+            tone: 'amber',
+            at: 'not a moment',
+          },
+        ],
+      });
+
+      await expect(client.cookEvents.listCurrent()).resolves.toEqual([]);
+    });
+
+    it('records a tap as the stamp key alone and hands back what the backend stored', async () => {
+      const { cloud, device, client } = buildClient({ cookEvents: [] });
+
+      const recorded = await client.cookEvents.record('wood');
+
+      expect(recorded.stampKey).toBe('wood');
+      expect(recorded.at).toBeInstanceOf(Date);
+      expect(cloud.requests).toEqual([
+        { method: 'post', path: 'cook-events', body: { stampKey: 'wood' } },
+      ]);
+      expect(device.requests).toEqual([]);
+    });
+
+    it('lets a refused tap through as the typed error, so a button can say so', async () => {
+      const { cloud, client } = buildClient({ cookEvents: [] });
+      cloud.injectFault({ method: 'post', path: 'cook-events', status: 409 });
+
+      const error = (await client.cookEvents.record('wood').catch(e => e)) as ApiError;
+
+      expect(error).toBeInstanceOf(ApiError);
+      expect(error.status).toBe(409);
+    });
+  });
+
+  /**
+   * The stamps the buttons are drawn from, read and never written: the
+   * catalogue is edited on a phone, and the panel's business with it is to
+   * offer what it says.
+   */
+  describe('cook stamps resource (cloud base URL)', () => {
+    it('reads the stored catalogue, in the order it is laid out in', async () => {
+      const { cloud, device, client } = buildClient({
+        appSettings: {
+          cookLog: {
+            stamps: [
+              { key: 'wrap', label: 'Foiled', tone: 'p1', enabled: true, custom: false },
+              { key: 'wood', label: 'Added Wood', tone: 'amber', enabled: false, custom: false },
+            ],
+          },
+        },
+      });
+
+      const catalogue = await client.cookStamps.get();
+
+      expect(catalogue.map(stamp => stamp.label)).toEqual(['Foiled', 'Added Wood']);
+      expect(catalogue[1].enabled).toBe(false);
+      expect(cloud.requests).toEqual([{ method: 'get', path: 'appSettings', body: undefined }]);
+      expect(device.requests).toEqual([]);
+    });
+
+    /**
+     * An installation nobody has configured — and a deployment older than the
+     * block — reads as the shipped six, because a panel with no buttons is a
+     * panel that logs nothing, and those six are what the backend itself falls
+     * back to when a tap arrives.
+     */
+    it('reads an installation that has stored no catalogue as the shipped stamps', async () => {
+      const { client } = buildClient({ appSettings: {} });
+
+      const catalogue = await client.cookStamps.get();
+
+      expect(catalogue.map(stamp => stamp.key)).toEqual(DEFAULT_STAMPS.map(stamp => stamp.key));
     });
   });
 

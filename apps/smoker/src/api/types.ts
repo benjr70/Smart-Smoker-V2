@@ -9,6 +9,7 @@
  */
 import type { TempData } from 'temperaturechart/src/tempChart';
 import type { BatchTempDto, SmokeProfile, SmokingState } from 'smoke-session';
+import type { StampTone } from './cookStamps';
 
 export type { TempData, BatchTempDto, SmokeProfile, SmokingState };
 
@@ -68,4 +69,28 @@ export interface ProbeTargetSetting {
   slot: string;
   enabled: boolean;
   target: number;
+}
+
+/**
+ * One tap of a stamp against a cook: what was logged, when, and what the pit
+ * read at that moment.
+ *
+ * The moment arrives as an ISO string and is revived in the client's read path,
+ * so nothing above it ever parses a date. The four temperatures are the
+ * backend's, taken from the newest stored reading, and any the pit did not
+ * report is `null` rather than a zero somebody could mistake for a cold
+ * chamber.
+ */
+export interface CookEvent {
+  _id: string;
+  smokeId: string;
+  stampKey: string;
+  label: string;
+  tone: StampTone;
+  /** Converted from the wire's ISO string in the client's read path. */
+  at: Date;
+  chamberTemp: number | null;
+  probe1Temp: number | null;
+  probe2Temp: number | null;
+  probe3Temp: number | null;
 }

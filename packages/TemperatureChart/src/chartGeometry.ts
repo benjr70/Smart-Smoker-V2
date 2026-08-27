@@ -342,9 +342,10 @@ export type ChartAspect = 'mobile' | 'touchscreen' | 'compact';
  * what makes the kiosk's writing legible from arm's length.
  *
  * The touchscreen's is cut for the chart card on the kiosk's 800×480 panel:
- * the top bar takes the top of the panel and the reading column takes the left
- * ~38% of what is under it, so the card hands the chart a block roughly 62% of
- * the panel wide and most of it tall. The box is that block's proportion —
+ * the top bar takes the top of the panel, the cook log's stamp row takes the
+ * bottom of it, and the reading column takes the left ~42% of what is between
+ * them, so the card hands the chart a block roughly 58% of the panel wide and
+ * most of it tall. The box is that block's proportion —
  * still wider for its height than a phone's portrait column, but far from the
  * full-width strip it once was: a shape cut for the whole panel's width would
  * come out a third of the card's height and letterbox over a blank band of

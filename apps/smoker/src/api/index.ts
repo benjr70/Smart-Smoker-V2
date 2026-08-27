@@ -16,6 +16,7 @@ export type {
   AppearancePreference,
   BatchTempDto,
   ColorScheme,
+  CookEvent,
   ProbeTargetSetting,
   SmokeProfile,
   SmokingState,
@@ -27,9 +28,35 @@ export type { FaultInjection, HttpMethod, RecordedRequest, TransportPort } from 
 export { ApiError, createHttpTransport } from 'api-transport/src';
 export type { FakeBackend, FakeBackendSeed, StoredSmokeProfile } from './fakeBackend';
 export { createFakeBackend } from './fakeBackend';
+export type { CookStamp, StampTone } from './cookStamps';
+export {
+  DEFAULT_STAMPS,
+  STAMP_TONES,
+  enabledStamps,
+  normalizeStamps,
+  resolveStampLabel,
+  resolveStampTone,
+} from './cookStamps';
+export type { WireCookEvent } from './cookEventFrames';
+export { cookEventsFromWire } from './cookEventFrames';
+export type { CookEventsSubscriptionPort, StampCatalogueSubscriptionPort } from './cookLogPorts';
+export type {
+  CookEventsReadPort,
+  UseCookEventsOptions,
+  UseCookEventsResult,
+} from './useCookEvents';
+export { useCookEvents } from './useCookEvents';
+export type {
+  StampCatalogueReadPort,
+  UseStampCatalogueOptions,
+  UseStampCatalogueResult,
+} from './useStampCatalogue';
+export { useStampCatalogue } from './useStampCatalogue';
 export type {
   ApiClient,
   AppearanceResource,
+  CookEventsResource,
+  CookStampsResource,
   CompletionState,
   CookCompletionEstimate,
   CookTimeline,
@@ -50,5 +77,9 @@ export {
 } from './client';
 export type { SmokeEventPort } from './events';
 export { noopEventPort } from './events';
-export { createSocketEventPort } from './socketEventAdapter';
+export {
+  createSocketCookEventsSubscription,
+  createSocketEventPort,
+  createSocketStampCatalogueSubscription,
+} from './socketEventAdapter';
 export { createSessionApi } from './sessionApiAdapter';
