@@ -19,6 +19,8 @@ import {
   clone,
   createFakeBackendKernel,
 } from 'api-transport/src';
+import { WireCookEvent } from './cookEventFrames';
+import { CookStamp } from './cookStamps';
 import { AppearancePreference, ProbeTargetSetting, State, TempData } from './types';
 
 /**
@@ -83,7 +85,18 @@ export interface FakeBackendSeed {
      * nobody has configured any targets on.
      */
     probeTarget?: StoredProbeTargets;
+    /**
+     * The cook-log stamps as they are stored. Absent models an installation
+     * nobody has edited the catalogue on — and a deployment older than the
+     * block — which the client reads as the shipped six.
+     */
+    cookLog?: { stamps?: CookStamp[] };
   };
+  /**
+   * The cook in progress's log, as the wire carries it: moments are ISO
+   * strings, and a temperature the pit never reported is simply absent.
+   */
+  cookEvents?: WireCookEvent[];
   /**
    * Each smoke's timing document, keyed by smoke id, with the stamps as the
    * ISO strings JSON carries them in. An id with no entry models a backend
@@ -149,8 +162,11 @@ interface FakeStore {
   appSettings: {
     appearance?: AppearancePreference;
     probeTarget?: StoredProbeTargets;
+    cookLog?: { stamps?: CookStamp[] };
   };
   timeline: Record<string, StoredTimeline>;
+  /** The cook log, in the order it was recorded. */
+  cookEvents: WireCookEvent[];
 }
 
 export type FakeBackend = FakeBackendKernel<FakeStore>;
@@ -175,8 +191,10 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
     appSettings: {
       appearance: seed.appSettings?.appearance,
       probeTarget: seed.appSettings?.probeTarget,
+      cookLog: seed.appSettings?.cookLog,
     },
     timeline: seed.timeline ?? {},
+    cookEvents: seed.cookEvents ?? [],
   };
   const route = ({ method, path, body }: FakeRequest): unknown => {
     // Cloud API routes.
@@ -246,8 +264,30 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
       return stored === undefined ? NO_ROUTE : clone(stored);
     }
 
-    // The settings document, of which the device reads the appearance and the
-    // configured targets — and only ever reads them.
+    // The cook log of the cook in progress. The panel may read it and add to
+    // it; there is no delete route here because the touchscreen has no delete.
+    if (path === 'cook-events/current' && method === 'get') {
+      return clone(store.cookEvents);
+    }
+    if (path === 'cook-events' && method === 'post') {
+      const { stampKey } = (body ?? {}) as { stampKey?: string };
+      // The backend stamps the moment and the readings, which is exactly why
+      // the panel posts the key alone and renders what comes back.
+      const recorded: WireCookEvent = {
+        _id: `event-${store.cookEvents.length + 1}`,
+        smokeId: store.state?.smokeId ?? '',
+        stampKey: stampKey ?? '',
+        label: stampKey ?? '',
+        tone: 'amber',
+        at: new Date().toISOString(),
+        chamberTemp: 225,
+      };
+      store.cookEvents.push(recorded);
+      return clone(recorded);
+    }
+
+    // The settings document, of which the device reads the appearance, the
+    // configured targets and the stamp catalogue — and only ever reads them.
     if (path === 'appSettings' && method === 'get') {
       return clone(store.appSettings);
     }

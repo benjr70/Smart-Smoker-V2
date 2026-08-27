@@ -483,7 +483,7 @@ describe('the shape the chart is drawn in', () => {
       <TemperatureChart data={cook} names={names} colors={colors} aspect="compact" />
     );
 
-    expect(kiosk.querySelector('svg')?.getAttribute('viewBox')).toBe('0 0 440 240');
+    expect(kiosk.querySelector('svg')?.getAttribute('viewBox')).toBe('0 0 440 224');
     expect(history.querySelector('svg')?.getAttribute('viewBox')).toBe('0 0 340 160');
   });
 

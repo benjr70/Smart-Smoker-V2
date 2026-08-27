@@ -20,7 +20,15 @@ import {
   SteppingClock,
 } from 'smoke-session/src/testing';
 import { AppearancePreference, carbonDark, carbonLight } from 'theme/src';
+import { CookEvent, CookStamp, DEFAULT_STAMPS } from '../api';
 import { Home } from '../components/home/home';
+import {
+  chartPanelFill,
+  chartPlot,
+  gridStroke,
+  seriesStrokes,
+  tempLabelFill,
+} from '../testing/chartInk';
 import { getConnection } from '../services/deviceService';
 import { DeviceAppearanceSource, DeviceThemeProvider } from './DeviceThemeProvider';
 
@@ -74,11 +82,36 @@ const createChannel = () => {
   };
 };
 
+/**
+ * The cook log and the catalogue behind the stamp row, stood in for.
+ *
+ * Without these the screen's hooks fall back to the appliance's real client:
+ * every render in this file would fire an XHR at the device URL and open a
+ * socket.io connection nothing ever closes — one leaked handle per test, for
+ * assertions that are about colour.
+ */
+const fakeCookLog = () => ({
+  cookEvents: {
+    client: {
+      listCurrent: async (): Promise<CookEvent[]> => [],
+      record: async (): Promise<CookEvent> => {
+        throw new Error('nothing is cooking in a theme test');
+      },
+    },
+    subscription: { subscribe: () => () => undefined },
+  },
+  stampCatalogue: {
+    client: { get: async (): Promise<CookStamp[]> => [...DEFAULT_STAMPS] },
+    subscription: { subscribe: () => () => undefined },
+  },
+});
+
 const renderTouchscreen = async (appearance?: DeviceAppearanceSource): Promise<void> => {
+  const cookLog = fakeCookLog();
   render(
     <DeviceThemeProvider appearance={appearance}>
       <SmokeSessionProvider config={sessionConfig()}>
-        <Home />
+        <Home cookEvents={cookLog.cookEvents} stampCatalogue={cookLog.stampCatalogue} />
       </SmokeSessionProvider>
     </DeviceThemeProvider>
   );
@@ -118,7 +151,15 @@ describe('the rebuilt home screen under the shared theme', () => {
   it('still offers exactly the two controls: wifi, and start/stop', async () => {
     await renderTouchscreen();
 
-    expect(screen.getAllByRole('button')).toHaveLength(2);
+    // The stamp row under the chart is the cook log, not a control of the
+    // screen: it logs what is happening in the smoker rather than changing
+    // anything about the panel, and it is counted with the log it belongs to.
+    const controls = screen
+      .getAllByRole('button')
+      .filter(button => !(button.getAttribute('data-testid') ?? '').startsWith('smoker-stamp-'));
+
+    expect(controls).toHaveLength(2);
+    expect(screen.getByTestId('smoker-stamp-bar')).toBeInTheDocument();
   });
 
   it('is set in the design typeface, not Roboto', async () => {
@@ -163,21 +204,10 @@ describe('the rebuilt home screen under the shared theme', () => {
  * the touchscreen actually comes out.
  */
 describe('the chart under the shared theme', () => {
-  /** The panel the plot is drawn on: the first thing the chart paints. */
-  const chartPanel = (): string | null =>
-    document.querySelector('svg[aria-label="Temperature chart"] rect')?.getAttribute('fill') ??
-    null;
-
-  /** The four lines the chart draws, in the order it draws them. */
-  const seriesStrokes = (): (string | null)[] =>
-    Array.from(document.querySelectorAll('path[data-series]')).map(line =>
-      line.getAttribute('stroke')
-    );
-
   it('is drawn on the panel of the scheme the device renders', async () => {
     await renderTouchscreen();
 
-    expect(chartPanel()).toBe(carbonDark.chart.panel);
+    expect(chartPanelFill()).toBe(carbonDark.chart.panel);
   });
 
   it('draws each reading’s line in that scheme’s colour for its probe', async () => {
@@ -194,14 +224,8 @@ describe('the chart under the shared theme', () => {
   it('rules its frame and writes its labels in that scheme’s colours', async () => {
     await renderTouchscreen();
 
-    expect(document.querySelector('line[data-grid]')).toHaveAttribute(
-      'stroke',
-      carbonDark.chart.grid
-    );
-    expect(document.querySelector('text[data-temp-label]')).toHaveAttribute(
-      'fill',
-      carbonDark.chart.label
-    );
+    expect(gridStroke()).toBe(carbonDark.chart.grid);
+    expect(tempLabelFill()).toBe(carbonDark.chart.label);
   });
 
   /**
@@ -219,28 +243,22 @@ describe('the chart under the shared theme', () => {
     const backend = createPendingBackend();
     await renderTouchscreen({ client: backend });
 
-    expect(chartPanel()).toBe(carbonDark.chart.panel);
+    expect(chartPanelFill()).toBe(carbonDark.chart.panel);
 
     await act(async () => {
       backend.answer({ mode: 'light', resolvedMode: 'light' });
       await flushPromises();
     });
 
-    expect(chartPanel()).toBe(carbonLight.chart.panel);
+    expect(chartPanelFill()).toBe(carbonLight.chart.panel);
     expect(seriesStrokes()).toEqual([
       carbonLight.chart.chamber,
       carbonLight.chart.probe1,
       carbonLight.chart.probe2,
       carbonLight.chart.probe3,
     ]);
-    expect(document.querySelector('line[data-grid]')).toHaveAttribute(
-      'stroke',
-      carbonLight.chart.grid
-    );
-    expect(document.querySelector('text[data-temp-label]')).toHaveAttribute(
-      'fill',
-      carbonLight.chart.label
-    );
+    expect(gridStroke()).toBe(carbonLight.chart.grid);
+    expect(tempLabelFill()).toBe(carbonLight.chart.label);
   });
 
   /**
@@ -257,17 +275,19 @@ describe('the chart under the shared theme', () => {
       backend.answer({ mode: 'dark', resolvedMode: 'dark' });
       await flushPromises();
     });
-    const plot = document.querySelector('svg[aria-label="Temperature chart"]');
-    expect(chartPanel()).toBe(carbonDark.chart.panel);
+    const plot = chartPlot();
+    expect(chartPanelFill()).toBe(carbonDark.chart.panel);
 
     await act(async () => {
       channel.announce({ mode: 'light', resolvedMode: 'light' });
       await flushPromises();
     });
 
-    expect(chartPanel()).toBe(carbonLight.chart.panel);
+    expect(chartPanelFill()).toBe(carbonLight.chart.panel);
     expect(seriesStrokes()[0]).toBe(carbonLight.chart.chamber);
-    expect(document.querySelector('svg[aria-label="Temperature chart"]')).toBe(plot);
+    // The same element, not a new one: rebuilding it would throw away the cook
+    // it has drawn and the reading under the operator's finger.
+    expect(chartPlot()).toBe(plot);
   });
 });
 

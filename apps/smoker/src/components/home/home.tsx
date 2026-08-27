@@ -1,7 +1,7 @@
 import WifiIcon from '@mui/icons-material/Wifi';
 import WifiOffIcon from '@mui/icons-material/WifiOff';
 import { Box, Button, Card, Divider, Typography } from '@mui/material';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import TemperatureChart, { ChartSeriesNames } from 'temperaturechart/src/TemperatureChart';
 import { ChartSample } from 'temperaturechart/src/chartGeometry';
 import { useElapsed, useSmokeSession } from 'smoke-session/src/react';
@@ -9,7 +9,17 @@ import { DEFAULT_PROBE_NAMES } from 'smoke-session/src/session/domain';
 import './home.style.css';
 import { useChartPalette } from '../../theme/chartPalette';
 import { useDesign } from '../../theme/useDesign';
-import { CookCompletionEstimate } from '../../api';
+import {
+  CookCompletionEstimate,
+  UseCookEventsOptions,
+  UseStampCatalogueOptions,
+  resolveStampLabel,
+  resolveStampTone,
+  useCookEvents,
+  useStampCatalogue,
+} from '../../api';
+import { toneColor } from '../../theme/stampTones';
+import { SmokerEventBar } from './SmokerEventBar';
 import { StaleCookDialog } from './StaleCookDialog';
 import { CurrentCookReadPort, useCompletionEstimate } from './useCompletionEstimate';
 import { SessionRecoveryPort, useSmokingToggle } from './useSmokingToggle';
@@ -176,7 +186,8 @@ function ProbeRow({ probe, name, value }: ProbeRowProps): JSX.Element {
  *
  * The screen is the mock's 800×480 layout: a top bar (brand, state pill,
  * elapsed clock, wifi and start/stop), a left column with the chamber hero card
- * and the colour-coded probe list, and the titled chart card taking the rest.
+ * and the colour-coded probe list, the titled chart card taking the rest of that
+ * row, and the cook log's stamp row across the bottom of the panel.
  */
 export interface HomeProps {
   /**
@@ -195,6 +206,16 @@ export interface HomeProps {
    * place is created. Defaults to the backend this appliance runs against.
    */
   session?: SessionRecoveryPort;
+  /**
+   * Where this cook's log is read, added to, and heard about. Defaults to the
+   * backend this appliance runs against and its websocket.
+   */
+  cookEvents?: UseCookEventsOptions;
+  /**
+   * Where the stamps behind the buttons are read and heard about. Defaults to
+   * the same backend and the same websocket.
+   */
+  stampCatalogue?: UseStampCatalogueOptions;
 }
 
 /**
@@ -241,6 +262,8 @@ export function Home({
   probeTargets,
   currentCook,
   session: recovery,
+  cookEvents,
+  stampCatalogue,
 }: HomeProps = {}): JSX.Element {
   const session = useSmokeSession();
   const design = useDesign();
@@ -260,6 +283,33 @@ export function Home({
   // while one is running — the same answer, off the same route, that the web
   // card is showing whoever is not standing at the smoker.
   const eta = etaReadout(useCompletionEstimate(session.smoking, currentCook));
+  // What has been stamped on this cook, and the one thing this screen does to
+  // that record. The log is the backend's — read when the panel comes up and
+  // replaced whenever any client changes it — so the same taps show here, on a
+  // phone, and in any browser that is open.
+  const cookLog = useCookEvents(cookEvents);
+  // The stamps on offer, as the installation has them now: read on mount and
+  // replaced whenever the catalogue is saved anywhere, so a rename made in the
+  // kitchen reaches the buttons in the garage without this panel restarting.
+  const catalogue = useStampCatalogue(stampCatalogue);
+  // The same log the row below is drawn from, in the chart's own terms: a mark
+  // on the curve at the moment of each tap, in that stamp's tone. Named and
+  // coloured by the catalogue as it stands now rather than by the snapshot each
+  // event was logged with, so a rename moves the marker's letter with the
+  // button's word; an event whose stamp has since been removed keeps what it
+  // was logged under, which is all that is left to draw it from. Held between
+  // renders, because the chart derives its whole drawing from the list it is
+  // handed and this screen re-renders on every reading.
+  const cookMarks = useMemo(
+    () =>
+      cookLog.events.map(event => ({
+        id: event._id,
+        label: resolveStampLabel(event.stampKey, event.label, catalogue.stamps),
+        at: event.at,
+        color: toneColor(resolveStampTone(event.stampKey, event.tone, catalogue.stamps), design),
+      })),
+    [cookLog.events, catalogue.stamps, design]
+  );
   // Lighting the smoker, guarded: a session whose cook the backend already
   // stopped is asked about rather than lit, so the next cook's readings never
   // land in the last one's series.
@@ -509,10 +559,22 @@ export function Home({
             names={chartNamesOf(session)}
             colors={chartColors}
             targets={chartTargets}
+            events={cookMarks}
             aspect="touchscreen"
           />
         </Card>
       </Box>
+
+      {/* ————— The cook log ————— */}
+      {/* Under the cards rather than in one: it is the panel's only control
+          apart from the two in the top bar, and it belongs across the width of
+          the screen where a thumb can reach every part of it. */}
+      <SmokerEventBar
+        stamps={catalogue.stamps}
+        events={cookLog.events}
+        smoking={session.smoking}
+        onRecord={cookLog.record}
+      />
     </Box>
   );
 }

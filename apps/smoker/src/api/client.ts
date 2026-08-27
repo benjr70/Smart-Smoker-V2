@@ -8,11 +8,14 @@
  * It throws typed errors; it never resolves `undefined`.
  */
 import { ApiError, TransportPort, createHttpTransport } from 'api-transport/src';
+import { WireCookEvent, cookEventsFromWire } from './cookEventFrames';
+import { CookStamp, normalizeStamps } from './cookStamps';
 import { resolveDeviceUrl } from './deviceUrl';
 import { SmokeEventPort, noopEventPort } from './events';
 import { createSocketEventPort } from './socketEventAdapter';
 import {
   AppearancePreference,
+  CookEvent,
   ProbeTargetSetting,
   SmokeProfile,
   State,
@@ -297,6 +300,48 @@ export interface TimelineResource {
   getCurrent(): Promise<CurrentCookTimeline | null>;
 }
 
+/**
+ * The cook log of the cook in progress, as the panel is allowed to touch it.
+ *
+ * A read and a tap, and nothing else. There is no delete here because there is
+ * none on the pit: a mis-tap is undone on a phone, where there is a list and a
+ * keyboard, not by a gloved thumb reaching past a hot smoker for a small ×.
+ */
+export interface CookEventsResource {
+  /**
+   * POST `cook-events` — log one tap against the cook in progress.
+   *
+   * The stamp key is the whole request: the moment and the four temperatures
+   * are the backend's to decide, from its own clock and the newest stored
+   * reading. Rejects with the typed {@link ApiError} — 409 when no cook is set
+   * up, 400 for a stamp the backend does not know — so the button that was
+   * pressed can say "not logged" rather than claim an entry nothing stored.
+   */
+  record(stampKey: string): Promise<CookEvent>;
+  /** GET `cook-events/current` — the in-progress cook's log, oldest first. */
+  listCurrent(): Promise<CookEvent[]>;
+}
+
+/**
+ * The stamps the buttons are drawn from, as the installation configured them.
+ *
+ * A read and nothing else, like the appearance and the targets beside it: the
+ * catalogue is edited on a phone, and the panel's whole business with it is to
+ * offer what it says. There is no write here to disable, because there is none
+ * at all.
+ */
+export interface CookStampsResource {
+  /**
+   * GET `appSettings` — the stamps the cook log offers, in catalogue order.
+   *
+   * Always a catalogue: an installation that has stored none — and a deployment
+   * older than the block — reads as the shipped six, so the panel has buttons
+   * to draw rather than an absence it would have to have an opinion about, and
+   * those six are what the backend itself falls back to when a tap arrives.
+   */
+  get(): Promise<CookStamp[]>;
+}
+
 export interface ApiClient {
   state: StateResource;
   session: SessionResource;
@@ -306,6 +351,8 @@ export interface ApiClient {
   appearance: AppearanceResource;
   probeTargets: ProbeTargetsResource;
   timeline: TimelineResource;
+  cookEvents: CookEventsResource;
+  cookStamps: CookStampsResource;
 }
 
 /**
@@ -446,6 +493,40 @@ export const createApiClient = (
           appearance?: AppearancePreference;
         } | null>('appSettings');
         return response?.appearance ?? DEFAULT_APPEARANCE_PREFERENCE;
+      },
+    },
+    cookEvents: {
+      record: async (stampKey: string) => {
+        const stored = await cloudTransport.post<WireCookEvent>('cook-events', { stampKey });
+        // Normalization drops a row carrying no readable moment, which would
+        // leave this resolving `undefined` — a screen that read an `_id` off it
+        // would flash "Not logged" at a tap the backend DID store, and the pit
+        // master would tap again and double-log it. A stored event nobody can
+        // place in the cook is a failure, and it is raised as one.
+        const [recorded] = cookEventsFromWire([stored]);
+        if (!recorded) {
+          throw new ApiError({
+            status: undefined,
+            path: 'cook-events',
+            method: 'post',
+            message: 'The recorded event carried no readable moment',
+          });
+        }
+        return recorded;
+      },
+      listCurrent: () =>
+        cloudTransport.get<WireCookEvent[]>('cook-events/current').then(cookEventsFromWire),
+    },
+    cookStamps: {
+      get: async () => {
+        // The third block read out of the one settings document, on its own
+        // read for the same reason the other two are: the catalogue is asked
+        // for when the screen comes up and whenever the socket says it changed,
+        // which are not the moments the appearance or the targets are read.
+        const response = await cloudTransport.get<{
+          cookLog?: { stamps?: CookStamp[] };
+        } | null>('appSettings');
+        return normalizeStamps(response?.cookLog?.stamps);
       },
     },
     probeTargets: {

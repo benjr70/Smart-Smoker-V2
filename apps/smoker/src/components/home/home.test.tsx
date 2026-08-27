@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { Home } from './home';
 import { ESTIMATE_REFRESH_MS } from './useCompletionEstimate';
@@ -17,9 +17,13 @@ import { carbonDark } from 'theme/src';
 import {
   CompletionState,
   CookCompletionEstimate,
+  CookEvent,
   CurrentCookTimeline,
   ProbeTargetSetting,
 } from '../../api';
+import { CookStamp, DEFAULT_STAMPS } from '../../api';
+import { markerLetters } from '../../testing/chartInk';
+import { STAMP_BAR_HEIGHT } from './SmokerEventBar';
 
 // The package's flushPromises leans on node's setImmediate, absent in the CRA
 // jsdom test env; a setTimeout(0) drain settles the store's fire-and-forget
@@ -152,14 +156,68 @@ const estimateOf = (
   hoursRemaining,
 });
 
+/**
+ * A stand-in for the cook log and the catalogue behind the stamp bar: the
+ * backend's answers, held here so a test can say what has been logged, what
+ * stamps are offered, and whether the next tap is stored or refused — without a
+ * socket or a cloud.
+ */
+function fakeCookLog(events: CookEvent[] = [], stamps: CookStamp[] = [...DEFAULT_STAMPS]) {
+  const log = [...events];
+  const kit = {
+    /** Every stamp key the panel has posted, in the order it posted them. */
+    posted: [] as string[],
+    /** Whether the backend is storing taps. */
+    accepting: true,
+    options: {
+      cookEvents: {
+        client: {
+          listCurrent: async (): Promise<CookEvent[]> => [...log],
+          record: async (stampKey: string): Promise<CookEvent> => {
+            kit.posted.push(stampKey);
+            if (!kit.accepting) {
+              throw new Error('nothing is cooking');
+            }
+            const stored = stampedAt(`e${kit.posted.length}`, stampKey, new Date());
+            log.push(stored);
+            return stored;
+          },
+        },
+      },
+      stampCatalogue: { client: { get: async (): Promise<CookStamp[]> => stamps } },
+    },
+  };
+  return kit;
+}
+
+/** One tap of a stamp, as the backend hands it back. */
+const stampedAt = (id: string, stampKey: string, at: Date): CookEvent => ({
+  _id: id,
+  smokeId: 'smoke-1',
+  stampKey,
+  label: stampKey,
+  tone: 'amber',
+  at,
+  chamberTemp: 225,
+  probe1Temp: null,
+  probe2Temp: null,
+  probe3Temp: null,
+});
+
 function renderHome(
   kit: SmokerKit,
   probeTargets = fakeProbeTargets([]),
-  currentCook = fakeCurrentCook()
+  currentCook = fakeCurrentCook(),
+  cookLog = fakeCookLog()
 ) {
   return render(
     <SmokeSessionProvider config={kit.config}>
-      <Home probeTargets={probeTargets} currentCook={currentCook} />
+      <Home
+        probeTargets={probeTargets}
+        currentCook={currentCook}
+        cookEvents={cookLog.options.cookEvents}
+        stampCatalogue={cookLog.options.stampCatalogue}
+      />
     </SmokeSessionProvider>
   );
 }
@@ -224,8 +282,10 @@ describe('the chart on the home screen', () => {
     const CARD_SHARE = 0.62;
     /** The card's title row, the legend under the plot, and the card padding. */
     const CARD_CHROME = 72;
+    /** The stamp bar under the cards, and the gap above it. */
+    const STAMP_BAR = STAMP_BAR_HEIGHT + 8;
     /** The room left down the panel for the plot itself. */
-    const ROOM = PANEL.height - TOP_BAR - CARD_CHROME;
+    const ROOM = PANEL.height - TOP_BAR - CARD_CHROME - STAMP_BAR;
 
     /** How tall the plot comes out, drawn at the width its card gives it. */
     const drawnHeight = (plot: SVGSVGElement): number => {
@@ -235,7 +295,7 @@ describe('the chart on the home screen', () => {
       return (PANEL.width * CARD_SHARE * height) / width;
     };
 
-    it('fills the width of its card and still leaves its legend on the screen', async () => {
+    it('fills the width of its card and leaves its legend and the stamp bar on the screen', async () => {
       const kit = smokerKit();
       renderHome(kit);
       await act(async () => {
@@ -1441,5 +1501,96 @@ describe('Home — starting a cook over an auto-stopped one', () => {
     expect(kit.api.countCalls('toggleSmoking')).toBe(0);
     // And the answer can simply be given again.
     expect(screen.getByTestId('stale-cook-confirm')).not.toBeDisabled();
+  });
+});
+
+/**
+ * The cook log on the pit: a row of stamps under the chart, and a mark on the
+ * chart for every one that has been tapped.
+ *
+ * This is the whole of the touchscreen's share of the log — there is no list
+ * and no delete here — so what a test asks of it is what a pitmaster asks: can
+ * I log what I just did, did it go in, and can I see on the chart where it
+ * happened.
+ */
+describe('the stamp bar under the chart', () => {
+  /** A cook with three readings a minute apart on the session's own clock. */
+  const cookThreeReadings = async (kit: SmokerKit): Promise<void> => {
+    for (const chamber of ['225', '230', '228']) {
+      kit.clock.step(60_000);
+      await act(async () => {
+        kit.deviceFeed.injectReading(reading(chamber, '185', '190', '0'));
+        await flushPromises();
+      });
+    }
+  };
+
+  it('offers the stamps the installation has switched on, in catalogue order', async () => {
+    const kit = smokerKit();
+    kit.api.seedSmoking(true);
+    const cookLog = fakeCookLog(
+      [],
+      [
+        { key: 'wood', label: 'Split Added', tone: 'amber', enabled: true, custom: false },
+        { key: 'wrap', label: 'Wrapped', tone: 'p1', enabled: false, custom: false },
+        { key: 'mop', label: 'Mopped', tone: 'p2', enabled: true, custom: true },
+      ]
+    );
+    renderHome(kit, fakeProbeTargets([]), fakeCurrentCook(), cookLog);
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(screen.getByTestId('smoker-stamp-wood')).toHaveTextContent('Split Added');
+    expect(screen.getByTestId('smoker-stamp-mop')).toHaveTextContent('Mopped');
+    expect(screen.queryByTestId('smoker-stamp-wrap')).toBeNull();
+  });
+
+  it('logs a tap against the running cook and prints when it went in', async () => {
+    const kit = smokerKit();
+    kit.api.seedSmoking(true);
+    const cookLog = fakeCookLog();
+    renderHome(kit, fakeProbeTargets([]), fakeCurrentCook(), cookLog);
+    await act(async () => {
+      await flushPromises();
+    });
+
+    fireEvent.click(screen.getByTestId('smoker-stamp-wood'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('smoker-stamp-wood')).toHaveTextContent('Logged')
+    );
+    expect(cookLog.posted).toEqual(['wood']);
+  });
+
+  /**
+   * The marks are the point of logging on the pit: a stamp is only worth
+   * tapping if the curve afterwards can be read against it.
+   */
+  it('marks the chart where each of this cook’s events was logged', async () => {
+    const kit = smokerKit();
+    kit.api.seedSmoking(true);
+    // The moment the second reading was taken, on the session's own clock.
+    const cookLog = fakeCookLog([stampedAt('e1', 'wood', new Date('2026-07-14T12:02:00.000Z'))]);
+    renderHome(kit, fakeProbeTargets([]), fakeCurrentCook(), cookLog);
+    await act(async () => {
+      await flushPromises();
+    });
+    await cookThreeReadings(kit);
+
+    // One bubble, carrying the initial of what the catalogue calls that stamp:
+    // 'wood' is "Added Wood" on an installation nobody has renamed it on.
+    expect(markerLetters()).toEqual(['A']);
+  });
+
+  it('leaves the row plainly out of use while nothing is cooking', async () => {
+    const kit = smokerKit();
+    renderHome(kit);
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(screen.getByTestId('smoker-stamp-bar')).toHaveStyle({ opacity: '0.4' });
+    expect(screen.getByTestId('smoker-stamp-wood')).toBeDisabled();
   });
 });
