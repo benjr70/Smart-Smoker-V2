@@ -47,9 +47,10 @@ on:
       - '**docker-compose*.yml'
       - '**docker-compose*.yaml'
       # Test 9 of that suite scans the *whole* tracked tree for the VAPID
-      # private key that leaked in `.env.dev` — the copies it was written to
-      # catch lived in `scripts/`, which none of the entries above match. These
-      # cover the tracked text that sits outside `apps/**` / `packages/**`;
+      # private key that leaked in the deleted backend dev dotenv — the copies
+      # it was written to catch lived in `scripts/`, which none of the entries
+      # above match. These cover the tracked text that sits outside
+      # `apps/**` / `packages/**`;
       # GitHub push protection is the backstop for anywhere else.
       - 'scripts/**'
       - 'docs/**'
