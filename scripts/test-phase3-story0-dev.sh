@@ -130,7 +130,7 @@ FILES_TO_CHECK=(
     "scripts/deployment-backup.sh"
     "scripts/rollback.sh"
     "apps/backend/src/health/health.controller.ts"
-    "apps/backend/.env.dev"
+    "apps/backend/.env.example"
 )
 
 for file in "${FILES_TO_CHECK[@]}"; do

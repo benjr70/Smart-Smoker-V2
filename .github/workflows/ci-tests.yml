@@ -32,6 +32,11 @@ on:
       # `apps/**` / `packages/**` entries above (`package.json` alone matches
       # only the root file).
       - '**/package.json'
+      # For the `backend-env-contract` job below: the backend env template
+      # and the suite that guards it. `apps/**` above already covers the
+      # backend source the suite derives its expectations from.
+      - 'apps/backend/.env.example'
+      - 'scripts/backend-env-example.test.sh'
   push:
     branches: [master]
 
@@ -88,6 +93,19 @@ jobs:
 
       - name: Run repo shape suite
         run: bash scripts/repo-shape.test.sh
+
+  # Guards the backend environment contract (#568): the leaked backend dev
+  # dotenv stays deleted, `apps/backend/.env.example` stays committed and
+  # value-free, and every `process.env.*` the backend reads stays documented in
+  # it. Pure bash + git, so no workspace install is needed.
+  backend-env-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run backend env template suite
+        run: bash scripts/backend-env-example.test.sh
 
   # Run tests for all applications
   test-apps:
