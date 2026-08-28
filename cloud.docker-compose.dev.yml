@@ -16,6 +16,9 @@ services:
     environment:
       - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
       - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
+      # Contact the push services reach the operator on. Unset falls back to a
+      # neutral placeholder in the backend; set it per deployment.
+      - VAPID_CONTACT=${VAPID_CONTACT}
       - NODE_ENV=production
       - MONGO_APP_PASSWORD=${MONGO_APP_PASSWORD}
       - DB_URL=mongodb://smartsmoker:${ENCODED_MONGO_APP_PASSWORD}@mongo:27017/smartsmoker?authSource=admin

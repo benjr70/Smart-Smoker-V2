@@ -178,6 +178,7 @@ jobs:
           printf '%s\n' \
             "VAPID_PUBLIC_KEY=${{ secrets.VAPID_PUBLIC_KEY }}" \
             "VAPID_PRIVATE_KEY=${{ secrets.VAPID_PRIVATE_KEY }}" \
+            "VAPID_CONTACT=${{ vars.VAPID_CONTACT }}" \
             "MONGO_ROOT_USER=admin" \
             "MONGO_ROOT_PASSWORD=${{ secrets.MONGO_ROOT_PASSWORD }}" \
             "MONGO_APP_PASSWORD=${{ secrets.MONGO_APP_PASSWORD }}" \

@@ -27,6 +27,57 @@ const readVapidKeys = (): { publicKey: string; privateKey: string } | null => {
 };
 
 /**
+ * The contact a push service uses to reach whoever operates this deployment
+ * about a misbehaving sender. Deployment-specific, so it is read from the
+ * environment (`VAPID_CONTACT`); the fallback is a neutral placeholder rather
+ * than any individual's address, so a self-hosted install never advertises the
+ * upstream maintainer.
+ */
+const FALLBACK_VAPID_CONTACT = 'mailto:smart-smoker@example.com';
+
+const readVapidContact = (): string =>
+  process.env.VAPID_CONTACT || FALLBACK_VAPID_CONTACT;
+
+/**
+ * Hand the VAPID pair to web-push and report whether the deployment ended up
+ * able to sign a push.
+ *
+ * web-push validates the subject and the keys itself and *throws* on anything
+ * it does not like (an operator writing `VAPID_CONTACT=ops@example.org` without
+ * the `mailto:` scheme, a truncated key). This runs during Nest's DI, so an
+ * unguarded throw takes the whole backend down in a boot crash-loop. Push is an
+ * optional feature here — the unset-key path already degrades quietly — so bad
+ * operator input degrades the same way: a malformed contact falls back to the
+ * neutral one (the keys are still usable, so push keeps working), and details
+ * web-push rejects outright leave push switched off with the reason logged.
+ */
+const initialiseWebPush = (): boolean => {
+  const vapid = readVapidKeys();
+  if (!vapid) {
+    return false;
+  }
+  const contact = readVapidContact();
+  const candidates =
+    contact === FALLBACK_VAPID_CONTACT
+      ? [contact]
+      : [contact, FALLBACK_VAPID_CONTACT];
+  for (const candidate of candidates) {
+    try {
+      webpush.setVapidDetails(candidate, vapid.publicKey, vapid.privateKey);
+      return true;
+    } catch (error) {
+      Logger.error(
+        `web-push rejected the VAPID details for contact "${candidate}": ${
+          (error as Error)?.message ?? error
+        }`,
+        'PushDispatcherService',
+      );
+    }
+  }
+  return false;
+};
+
+/**
  * The one place in the backend that talks to the web-push library.
  *
  * Owns the send fan-out over the stored subscriptions and the prune of
@@ -36,18 +87,19 @@ const readVapidKeys = (): { publicKey: string; privateKey: string } | null => {
  */
 @Injectable()
 export class PushDispatcherService {
+  /**
+   * Whether web-push accepted this deployment's VAPID details at boot. Gates
+   * {@link PushDispatcherService.getPublicKey} so a deployment whose details
+   * web-push rejected reports "no key" instead of handing browsers a key the
+   * server can never sign with.
+   */
+  private readonly vapidInitialised: boolean;
+
   constructor(
     @InjectModel(NotificationSubscription.name)
     private subscriptionModel: Model<NotificationSubscriptionDocument>,
   ) {
-    const vapid = readVapidKeys();
-    if (vapid) {
-      webpush.setVapidDetails(
-        'mailto:benrolf70@gmail.com',
-        vapid.publicKey,
-        vapid.privateKey,
-      );
-    }
+    this.vapidInitialised = initialiseWebPush();
   }
 
   /**
@@ -63,6 +115,9 @@ export class PushDispatcherService {
    * server-log-only failure.
    */
   getPublicKey(): string | null {
+    if (!this.vapidInitialised) {
+      return null;
+    }
     return readVapidKeys()?.publicKey ?? null;
   }
 

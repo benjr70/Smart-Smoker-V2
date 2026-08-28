@@ -12,7 +12,6 @@ with `/skill-name`.
 | Subagent definitions (Level 7) | `.claude/agents/`       | Teammate roles for Agent Teams (impl/rev/ver/research)  |
 | Hooks (Level 6 + 7)            | `.claude/hooks/`        | TaskCompleted + TeammateIdle quality gates              |
 | Settings + permissions         | `.claude/settings.json` | Env flags, allow/deny rules, hook registration          |
-| Ralph loop (Level 6)           | `scripts/ralph/`        | Single-agent autonomous issue implementation            |
 | Smoke harness                  | `scripts/smoke/run.ts`  | Playwright probes — verifier invokes after diff approve |
 
 Agent Teams (Level 7) has **no bootstrap script** — `/team-dispatch`
@@ -122,9 +121,9 @@ independently-implementable GitHub issues using vertical slices.
 
 **What it does:** Fetches the PRD, breaks it into thin tracer-bullet slices that
 cut through all layers end-to-end (schema, API, UI, tests). Each slice is either
-HITL (human-in-the-loop) or AFK (autonomous). AFK slices get the `ralph` label
-for pickup by the Ralph autonomous loop. Creates GitHub issues with acceptance
-criteria, interface changes, behaviors to test, and dependency ordering.
+HITL (human-in-the-loop) or AFK (autonomous). AFK slices get the `team` label
+for pickup by Agent Teams. Creates GitHub issues with acceptance criteria,
+interface changes, behaviors to test, and dependency ordering.
 
 **Source:** Custom (project-specific)
 
@@ -263,11 +262,9 @@ efficiency is requested.
 
 ## Full Pipeline
 
-These skills compose into a complete feature development pipeline. Two
-implementation paths diverge at the issue-pickup step: **Ralph** (Level 6,
-single-agent loop, `ralph` label) or **Agent Teams** (Level 7, parallel
-multi-agent dispatch, `team` label). Pick one per PRD — do not mix labels on the
-same issue.
+These skills compose into a complete feature development pipeline.
+Implementation is carried out by **Agent Teams** (Level 7, parallel multi-agent
+dispatch, `team` label) once the PRD has been sliced into issues.
 
 ```
 /grill-me          Stress-test the idea
@@ -275,33 +272,18 @@ same issue.
 /write-a-prd       Formalize as a GitHub issue PRD
     |
 /prd-to-issues     Break into vertical-slice issues
-                   (AFK slices labeled `ralph` OR `team`)
+                   (AFK slices labeled `team`)
     |
 git checkout -b feat/<name>
     |
-    +─── Path A: Level 6 (Ralph)
-    |        |
-    |    ralph-afk.sh        Single-agent autonomous loop using /tdd
-    |        |
-    |    /review-pr          Review completed work (manual)
-    |        |
-    |    ralph-pr.sh         Open PR
+/team-dispatch <prd>          Self-bootstraps labels + pre-flight, then spawns
+    |                          impl/rev/ver/research. Parallel impl with
+    |                          built-in peer review + smoke-trailer commits.
     |
-    +─── Path B: Level 7 (Agent Teams)
-             |
-         /team-dispatch <prd>          Self-bootstraps labels + pre-flight,
-             |                          then spawns impl/rev/ver/research.
-             |                          Parallel impl with built-in peer review
-             |                          + smoke-trailer commits.
-             |
-         gh pr create                  Open PR (Teams writes commits already)
+gh pr create                  Open PR (Teams writes commits already)
 ```
 
-Selection guide:
-
-- **Ralph** — small slice, one agent's context fits the whole change, no
-  cross-cutting review needed. Faster bootstrap, simpler mental model.
-- **Agent Teams** — multiple slices that benefit from parallel execution,
-  high-blast-radius changes (backend services, device-service, infra,
-  docker-compose) where plan-mode review matters, or PRDs where independent
-  reviewer signal is worth the extra concurrency cost.
+Agent Teams suits multiple slices that benefit from parallel execution,
+high-blast-radius changes (backend services, device-service, infra,
+docker-compose) where plan-mode review matters, and PRDs where independent
+reviewer signal is worth the extra concurrency cost.

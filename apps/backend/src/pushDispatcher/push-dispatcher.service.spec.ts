@@ -193,6 +193,66 @@ describe('PushDispatcherService', () => {
     });
   });
 
+  // The VAPID contact is the address a push service uses to reach the
+  // operator about a misbehaving sender. It is deployment-specific, so it has
+  // to come from the environment rather than being baked into the source.
+  describe('VAPID contact', () => {
+    it('initialises web-push with the contact configured in the environment', async () => {
+      process.env.VAPID_CONTACT = 'mailto:ops@example.org';
+
+      await buildService(createSubscriptionStore([]));
+
+      expect(webpush.setVapidDetails as jest.Mock).toHaveBeenCalledWith(
+        'mailto:ops@example.org',
+        'test-public-key',
+        'test-private-key',
+      );
+    });
+
+    // web-push validates the subject itself and throws on anything that is
+    // not a mailto:/https: URL. That happens inside the constructor, so an
+    // operator typo used to take Nest's DI down with it and crash-loop the
+    // whole backend rather than degrading the way an unset key pair does.
+    it('starts with the fallback contact when web-push rejects the configured one', async () => {
+      process.env.VAPID_CONTACT = 'ops@example.org';
+      (webpush.setVapidDetails as jest.Mock).mockImplementation(
+        (contact: string) => {
+          if (!contact.startsWith('mailto:')) {
+            throw new Error('Vapid subject is not a url or mailto url');
+          }
+        },
+      );
+
+      const service = await buildService(createSubscriptionStore([]));
+
+      expect(
+        (webpush.setVapidDetails as jest.Mock).mock.calls.map(
+          ([contact]) => contact,
+        ),
+      ).toEqual(['ops@example.org', 'mailto:smart-smoker@example.com']);
+      expect(service.getPublicKey()).toBe('test-public-key');
+    });
+
+    it('still boots, reporting no usable key, when web-push rejects the VAPID details outright', async () => {
+      (webpush.setVapidDetails as jest.Mock).mockImplementation(() => {
+        throw new Error('Vapid public key should be 65 bytes long');
+      });
+
+      const service = await buildService(createSubscriptionStore([]));
+
+      expect(service.getPublicKey()).toBeNull();
+    });
+
+    it('falls back to a non-personal contact when the environment sets none', async () => {
+      delete process.env.VAPID_CONTACT;
+
+      await buildService(createSubscriptionStore([]));
+
+      const [contact] = (webpush.setVapidDetails as jest.Mock).mock.calls[0];
+      expect(contact).toBe('mailto:smart-smoker@example.com');
+    });
+  });
+
   describe('getPublicKey', () => {
     it('returns the key configured in the environment', async () => {
       process.env.VAPID_PUBLIC_KEY = 'configured-public-key';

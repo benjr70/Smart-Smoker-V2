@@ -11,6 +11,7 @@ You will need to create a .env.local for this app. The values you need for this 
 * DB_URL=mongodb://127.0.0.1:27017/SmokerDB
 * VAPID_PUBLIC_KEY=<your_generated_key>
 * VAPID_PRIVATE_KEY=<your_generated_key>
+* VAPID_CONTACT=mailto:<your_contact_address> (optional; a neutral placeholder is used when unset)
 
 
 once that is set up just run <br>

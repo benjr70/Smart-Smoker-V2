@@ -1,8 +1,8 @@
 # AGENTS.md
 
-> Index for AI agents (Claude Code, Ralph autonomous loop, future tools) working
-> on this repo. Keep this file short — it is a **table of contents**, not
-> documentation. Update when you add a new agent-facing surface.
+> Index for AI agents (Claude Code, agent teams, future tools) working on this
+> repo. Keep this file short — it is a **table of contents**, not documentation.
+> Update when you add a new agent-facing surface.
 
 ---
 
@@ -10,9 +10,8 @@
 
 | File                                                   | Purpose                                                                                                                                                         |
 | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`CLAUDE.md`](CLAUDE.md)                               | Core project guide: monorepo layout, build commands, testing rules, conventions, default ports, Ralph pipeline                                                  |
+| [`CLAUDE.md`](CLAUDE.md)                               | Core project guide: monorepo layout, build commands, testing rules, conventions, default ports                                                                  |
 | [`.claude/skills/SKILLS.md`](.claude/skills/SKILLS.md) | Catalog of every custom + plugin skill (`/tdd`, `/review-pr`, `/grill-me`, `/caveman`, etc.)                                                                    |
-| [`scripts/ralph/USAGE.md`](scripts/ralph/USAGE.md)     | How to run the Ralph autonomous implementation loop                                                                                                             |
 | [`.mcp.json`](.mcp.json)                               | MCP servers available (context7, playwright, terraform, docker, mongodb, github, plus the verify-pr harness's playwright-chrome / playwright-electron wrappers) |
 | [`.claude/settings.json`](.claude/settings.json)       | Project-scoped permissions, hooks, Claude Code config                                                                                                           |
 
@@ -45,39 +44,23 @@ All commands documented in [`CLAUDE.md`](CLAUDE.md). TL;DR:
 The repo uses automated feedback (Level 6 agentic engineering) so agents can
 self-correct without human review:
 
-| Pillar                | Surface                                                  | Doc                               |
-| --------------------- | -------------------------------------------------------- | --------------------------------- |
-| Pre-commit            | `.husky/pre-commit` + `lint-staged` in `package.json`    | `docs/harness/backpressure.md`    |
-| PR typecheck          | `.github/workflows/typecheck.yml`                        | `docs/harness/backpressure.md`    |
-| PR E2E                | extended `.github/workflows/test.yml`                    | `docs/harness/backpressure.md`    |
-| Runtime health        | `GET /health` + `GET /ready` on backend + device-service | `docs/harness/self-validation.md` |
-| Structured logs       | `nestjs-pino` in backend + device-service                | `docs/harness/self-validation.md` |
-| Post-deploy smoke     | `scripts/smoke/run.ts` (Playwright)                      | `docs/harness/self-validation.md` |
-| Terraform plan on PR  | `.github/workflows/terraform-plan.yml`                   | `docs/harness/infra.md`           |
-| Terraform drift       | `.github/workflows/terraform-drift.yml` (nightly)        | `docs/harness/infra.md`           |
-| Ansible dry-run       | extended `.github/workflows/ansible-lint.yml`            | `docs/harness/infra.md`           |
-| Docker build PR gate  | `.github/workflows/docker-build-pr.yml`                  | `docs/harness/infra.md`           |
-| Compose healthchecks  | `*.docker-compose.yml`                                   | `docs/harness/infra.md`           |
-| Docs freshness        | `.github/workflows/docs-freshness.yml`                   | `docs/harness/backpressure.md`    |
-| Ralph self-validation | `scripts/ralph/ralph-prompt.md`                          | `scripts/ralph/USAGE.md`          |
+| Pillar               | Surface                                                  | Doc                               |
+| -------------------- | -------------------------------------------------------- | --------------------------------- |
+| Pre-commit           | `.husky/pre-commit` + `lint-staged` in `package.json`    | `docs/harness/backpressure.md`    |
+| PR typecheck         | `.github/workflows/typecheck.yml`                        | `docs/harness/backpressure.md`    |
+| PR E2E               | extended `.github/workflows/test.yml`                    | `docs/harness/backpressure.md`    |
+| Runtime health       | `GET /health` + `GET /ready` on backend + device-service | `docs/harness/self-validation.md` |
+| Structured logs      | `nestjs-pino` in backend + device-service                | `docs/harness/self-validation.md` |
+| Post-deploy smoke    | `scripts/smoke/run.ts` (Playwright)                      | `docs/harness/self-validation.md` |
+| Terraform plan on PR | `.github/workflows/terraform-plan.yml`                   | `docs/harness/infra.md`           |
+| Terraform drift      | `.github/workflows/terraform-drift.yml` (nightly)        | `docs/harness/infra.md`           |
+| Ansible dry-run      | extended `.github/workflows/ansible-lint.yml`            | `docs/harness/infra.md`           |
+| Docker build PR gate | `.github/workflows/docker-build-pr.yml`                  | `docs/harness/infra.md`           |
+| Compose healthchecks | `*.docker-compose.yml`                                   | `docs/harness/infra.md`           |
+| Docs freshness       | `.github/workflows/docs-freshness.yml`                   | `docs/harness/backpressure.md`    |
 
 Gates ship in **advisory mode** (warnings, non-blocking) and flip to blocking
 after a ~2-week bake window.
-
-## Ralph autonomous loop
-
-See [`scripts/ralph/USAGE.md`](scripts/ralph/USAGE.md) for full workflow. Entry
-points:
-
-```bash
-./scripts/ralph/ralph-setup.sh                       # one-time labels + prereqs
-./scripts/ralph/ralph-once.sh <issue>                # single-issue HITL
-./scripts/ralph/ralph-afk.sh <max-iters> [--sandbox] # autonomous
-./scripts/ralph/ralph-pr.sh <prd-issue> [base]       # open PR after Ralph
-```
-
-Ralph picks up issues labeled `ralph`. It runs TDD, enforces coverage, and (post
-PRD #183) reports a `smoke: PASS|FAIL` line in each commit body.
 
 ## Agent Teams (Level 7)
 
