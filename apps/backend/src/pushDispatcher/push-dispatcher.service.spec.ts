@@ -193,6 +193,32 @@ describe('PushDispatcherService', () => {
     });
   });
 
+  // The VAPID contact is the address a push service uses to reach the
+  // operator about a misbehaving sender. It is deployment-specific, so it has
+  // to come from the environment rather than being baked into the source.
+  describe('VAPID contact', () => {
+    it('initialises web-push with the contact configured in the environment', async () => {
+      process.env.VAPID_CONTACT = 'mailto:ops@example.org';
+
+      await buildService(createSubscriptionStore([]));
+
+      expect(webpush.setVapidDetails as jest.Mock).toHaveBeenCalledWith(
+        'mailto:ops@example.org',
+        'test-public-key',
+        'test-private-key',
+      );
+    });
+
+    it('falls back to a non-personal contact when the environment sets none', async () => {
+      delete process.env.VAPID_CONTACT;
+
+      await buildService(createSubscriptionStore([]));
+
+      const [contact] = (webpush.setVapidDetails as jest.Mock).mock.calls[0];
+      expect(contact).toBe('mailto:smart-smoker@example.com');
+    });
+  });
+
   describe('getPublicKey', () => {
     it('returns the key configured in the environment', async () => {
       process.env.VAPID_PUBLIC_KEY = 'configured-public-key';

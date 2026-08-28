@@ -15,6 +15,17 @@ on:
       - '.eslintrc*'
       - '**/.eslintrc*'
       - 'scripts/eslint-tsconfig-root.test.sh'
+      # For the `repo-shape` job below: the open-source metadata it guards
+      # (licence, contributor docs, VAPID_CONTACT plumbing) plus the suite.
+      - 'LICENSE'
+      - 'CONTRIBUTING.md'
+      - 'SECURITY.md'
+      - 'CODE_OF_CONDUCT.md'
+      - 'CLAUDE.md'
+      - 'AGENTS.md'
+      - 'infra/README.md'
+      - 'cloud.docker-compose*.yml'
+      - 'scripts/repo-shape.test.sh'
   push:
     branches: [master]
 
@@ -58,6 +69,19 @@ jobs:
 
       - name: Run eslint config suite
         run: bash scripts/eslint-tsconfig-root.test.sh
+
+  # Guards the repo's open-source shape: MIT licence on every workspace
+  # manifest, the contributor documents GitHub looks for, agent guides free of
+  # the retired Ralph pipeline, and VAPID_CONTACT wired through every cloud
+  # deployment path. Pure text assertions, so no install is needed.
+  repo-shape:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run repo shape suite
+        run: bash scripts/repo-shape.test.sh
 
   # Run tests for all applications
   test-apps:

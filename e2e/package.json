@@ -2,6 +2,7 @@
   "name": "e2e",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "End-to-end Playwright user-journey suite for Smart Smoker V2",
   "scripts": {
     "test": "playwright test",

@@ -15,7 +15,7 @@
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,md}\""
   },
   "author": "Ben Rolf",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
     "socket.io-client": "^4.5.1"
   },

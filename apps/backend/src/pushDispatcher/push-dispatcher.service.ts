@@ -27,6 +27,18 @@ const readVapidKeys = (): { publicKey: string; privateKey: string } | null => {
 };
 
 /**
+ * The contact a push service uses to reach whoever operates this deployment
+ * about a misbehaving sender. Deployment-specific, so it is read from the
+ * environment (`VAPID_CONTACT`); the fallback is a neutral placeholder rather
+ * than any individual's address, so a self-hosted install never advertises the
+ * upstream maintainer.
+ */
+const FALLBACK_VAPID_CONTACT = 'mailto:smart-smoker@example.com';
+
+const readVapidContact = (): string =>
+  process.env.VAPID_CONTACT || FALLBACK_VAPID_CONTACT;
+
+/**
  * The one place in the backend that talks to the web-push library.
  *
  * Owns the send fan-out over the stored subscriptions and the prune of
@@ -43,7 +55,7 @@ export class PushDispatcherService {
     const vapid = readVapidKeys();
     if (vapid) {
       webpush.setVapidDetails(
-        'mailto:benrolf70@gmail.com',
+        readVapidContact(),
         vapid.publicKey,
         vapid.privateKey,
       );

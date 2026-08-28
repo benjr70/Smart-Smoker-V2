@@ -2,6 +2,7 @@
   "name": "smoker",
   "version": "1.12.0",
   "private": true,
+  "license": "MIT",
   "description": "Smart Smoker",
   "author": "Ben Rolf",
   "dependencies": {

@@ -134,33 +134,3 @@ cd packages/TemperatureChart && npm test
 | Frontend          | 3000 |
 | Device Service    | 3003 |
 | Smoker (Electron) | 8080 |
-
-## Ralph Loop (Autonomous Issue Implementation)
-
-Autonomous development pipeline that takes features from idea to PR. See
-[scripts/ralph/USAGE.md](scripts/ralph/USAGE.md) for the full workflow guide.
-
-```bash
-# One-time setup (creates GitHub labels, checks prerequisites)
-./scripts/ralph/ralph-setup.sh
-
-# Human-in-the-loop (single issue, you approve each edit)
-./scripts/ralph/ralph-once.sh [issue-number]
-
-# Fully autonomous (implements up to N issues)
-./scripts/ralph/ralph-afk.sh <max-iterations> [--sandbox]
-
-# Open a PR after Ralph completes
-./scripts/ralph/ralph-pr.sh <prd-issue-number> [base-branch]
-```
-
-### Full Pipeline
-
-1. `/grill-me` — stress-test a feature idea
-2. `/write-a-prd` — formalize as a GitHub issue PRD
-3. `/prd-to-issues` — break PRD into vertical-slice issues (AFK slices get
-   `ralph` label)
-4. `git checkout -b feat/<name>` — create feature branch
-5. `./scripts/ralph/ralph-afk.sh 10` — autonomously implement all issues using
-   TDD
-6. `./scripts/ralph/ralph-pr.sh <prd-number>` — open a PR

@@ -25,6 +25,7 @@ pins a specific version; dev-cloud runs `:nightly`; the physical smoker follows
   intend to run) — check before dispatching anything
 - For local commands: Docker and Docker Compose on the target host, plus the
   deploy directory's `.env` (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`,
+  `VAPID_CONTACT`,
   `MONGO_ROOT_PASSWORD`, `MONGO_APP_PASSWORD`, `ENCODED_MONGO_APP_PASSWORD`) —
   see [Option D](#option-d-local-shell-on-the-cloud-host)
 - For workflow dispatch: permission to run Actions on `master`
@@ -127,6 +128,7 @@ only breaks authentication):
 cat > .env <<'EOF'
 VAPID_PUBLIC_KEY=<vapid_public_key>
 VAPID_PRIVATE_KEY=<vapid_private_key>
+VAPID_CONTACT=mailto:<operator_contact_address>
 MONGO_ROOT_USER=admin
 MONGO_ROOT_PASSWORD=<mongo_root_password>
 MONGO_APP_PASSWORD=<mongo_app_password>
