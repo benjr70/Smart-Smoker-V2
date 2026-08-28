@@ -34,6 +34,12 @@
 #      committable, and no tracked dotenv assigns a literal secret value. The
 #      original leak slipped in under a filename nobody had listed; guarding
 #      that one name would just relocate the next one.
+#   7. The specific VAPID private key that leaked in `.env.dev` appears in no
+#      tracked file at all — not just no dotenv. The first cut of this suite
+#      scanned dotenvs only, and so was blind to the copies of the same literal
+#      sitting in `scripts/test-phase3-story0-*.sh` (and to the fixture in this
+#      very file). The needle is stored base64-encoded below so the guard does
+#      not itself re-commit the secret it exists to keep out.
 #
 # CI: run by the `backend-env-contract` job in .github/workflows/ci-tests.yml.
 
@@ -400,11 +406,13 @@ secret_assignments() {
 }
 
 # Fixture first: the real tracked dotenvs are all clean today, so without this
-# the check below would pass with a regex that matches nothing. The fixture is
-# the deleted .env.dev, verbatim in shape.
+# the check below would pass with a regex that matches nothing. The fixture
+# reproduces the *shape* of the deleted .env.dev — a bare 43-char VAPID key next
+# to an interpolated password — with an obviously synthetic value. The real key
+# must never appear here; see Test 9, which enforces exactly that.
 cat > "${FIXTURE_DIR}/leaky.env" <<'FIXTURE'
 DB_URL=mongodb://smartsmoker:${MONGO_APP_PASSWORD}@mongo:27017/db?authSource=admin
-VAPID_PRIVATE_KEY=056QmHxzfE9zNL93Ewtdxa_p3CYQVnojTD738X36gGY
+VAPID_PRIVATE_KEY=EXAMPLE_FAKE_VAPID_PRIVATE_KEY_FOR_TESTS_00
 FIXTURE
 cat > "${FIXTURE_DIR}/safe.env" <<'FIXTURE'
 # blank template plus a deploy-time interpolation
@@ -448,6 +456,84 @@ else
             "offenders:${LEAKED}"
     fi
 fi
+
+echo "Test 9: the compromised VAPID private key is nowhere in the tracked tree"
+
+# Test 8 only looks at dotenv files. The key that leaked in `.env.dev` had also
+# been pasted into ordinary shell scripts, where a dotenv-shaped scan can never
+# see it — so scan every tracked text file for the literal itself.
+#
+# The needle is kept base64-encoded, not verbatim: a guard that embeds the
+# compromised string re-publishes it on every clone and trips GitHub secret
+# scanning / push protection (which this slice turns on). Encoding it keeps the
+# scrub self-enforcing without that cost.
+COMPROMISED_KEY_B64='MDU2UW1IeHpmRTl6Tkw5M0V3dGR4YV9wM0NZUVZub2pURDczOFgzNmdHWQ=='
+COMPROMISED_KEY="$(printf '%s' "${COMPROMISED_KEY_B64}" | base64 -d 2>/dev/null || true)"
+
+# Without this, a decode that silently produced an empty string would turn the
+# scan below into `grep -F ""`, which matches every line of every file — i.e. a
+# loud false failure — or, with a broken flag combination, into a hollow pass.
+if printf '%s' "${COMPROMISED_KEY}" | grep -qE '^[A-Za-z0-9_-]{43}$'; then
+    pass "the compromised-key needle decodes to a 43-char VAPID private key"
+else
+    fail "the compromised-key needle decodes to a 43-char VAPID private key" \
+        "base64 decode produced $(printf '%s' "${COMPROMISED_KEY}" | wc -c) bytes — the scan below would be meaningless"
+    COMPROMISED_KEY=""
+fi
+
+# Prints "file:line" for every occurrence of the needle in the named files.
+needle_hits() {
+    [ -n "${COMPROMISED_KEY}" ] || return 0
+    grep -I -n -F -e "${COMPROMISED_KEY}" "$@" 2>/dev/null || true
+}
+
+# Fixture control: prove the scanner actually finds the literal (in a shell
+# export, the shape the real offenders used) and leaves an innocent file alone.
+{
+    printf 'export VAPID_PUBLIC_KEY=BDb95f2I\n'
+    printf 'export VAPID_PRIVATE_KEY=%s\n' "${COMPROMISED_KEY}"
+} > "${FIXTURE_DIR}/leaky.sh"
+cat > "${FIXTURE_DIR}/clean.sh" <<'FIXTURE'
+export VAPID_PUBLIC_KEY="${VAPID_PUBLIC_KEY:?set me}"
+export VAPID_PRIVATE_KEY="${VAPID_PRIVATE_KEY:?set me}"
+FIXTURE
+
+if [ -n "$(needle_hits "${FIXTURE_DIR}/leaky.sh")" ]; then
+    pass "compromised-key scanner catches the literal in a shell script"
+else
+    fail "compromised-key scanner catches the literal in a shell script" \
+        "the exact shape of the scripts/test-phase3-story0-*.sh leak went unnoticed"
+fi
+
+if [ -z "$(needle_hits "${FIXTURE_DIR}/clean.sh")" ]; then
+    pass "compromised-key scanner leaves a key-free script alone"
+else
+    fail "compromised-key scanner leaves a key-free script alone" \
+        "flagged: $(needle_hits "${FIXTURE_DIR}/clean.sh")"
+fi
+
+TRACKED_COUNT="$(git -C "${REPO_ROOT}" ls-files | grep -c . || true)"
+if [ "${TRACKED_COUNT}" -lt 100 ]; then
+    fail "tracked files were found to scan" \
+        "only ${TRACKED_COUNT} tracked files — the tree-wide scan is hollow"
+else
+    pass "tracked files were found to scan (${TRACKED_COUNT})"
+
+    KEY_HITS="$(
+        cd "${REPO_ROOT}" &&
+            git ls-files -z |
+            xargs -0 -r grep -I -l -F -e "${COMPROMISED_KEY:-__no_needle__}" 2>/dev/null ||
+            true
+    )"
+
+    if [ -z "${KEY_HITS}" ]; then
+        pass "no tracked file contains the compromised VAPID private key"
+    else
+        fail "no tracked file contains the compromised VAPID private key" \
+            "offenders: $(printf '%s' "${KEY_HITS}" | tr '\n' ' ')"
+    fi
+fi
+
 
 echo ""
 echo "Ran ${TESTS_RUN} checks, ${TESTS_FAILED} failed"

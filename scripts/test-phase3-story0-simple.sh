@@ -36,9 +36,12 @@ echo -e "${YELLOW}STEP 2: Create .env file${NC}"
 # URL-encode the passwords for MongoDB connection string
 ENCODED_APP_PASSWORD=$(printf %s "$MONGO_APP_PASSWORD" | jq -sRr @uri)
 
-# Use existing VAPID keys from the project
-VAPID_PUBLIC_KEY="BDb95f2IXgHf2pwHegV4DGNvyKoHSzp0tPOqhpB7WOgjAt8GmGuGK9RyE7-Ltzprdlp3ftq1xR94ff7j3EXYsEs"
-VAPID_PRIVATE_KEY="056QmHxzfE9zNL93Ewtdxa_p3CYQVnojTD738X36gGY"
+# VAPID keys come from the caller's environment, never from this file: the pair
+# that used to be hardcoded here leaked (issue #568) and has been rotated.
+# Generate a throwaway pair with `npx web-push generate-vapid-keys` and export
+# both before running, or source the deploy secrets.
+VAPID_PUBLIC_KEY="${VAPID_PUBLIC_KEY:?export VAPID_PUBLIC_KEY before running (npx web-push generate-vapid-keys)}"
+VAPID_PRIVATE_KEY="${VAPID_PRIVATE_KEY:?export VAPID_PRIVATE_KEY before running (npx web-push generate-vapid-keys)}"
 
 cat > .env << EOF
 MONGO_ROOT_USER=admin

@@ -175,8 +175,14 @@ log "  ENCODED_MONGO_APP_PASSWORD: ${ENCODED_MONGO_APP_PASSWORD:0:10}... (encode
 
 export ENCODED_MONGO_APP_PASSWORD
 
-export VAPID_PUBLIC_KEY=BDb95f2IXgHf2pwHegV4DGNvyKoHSzp0tPOqhpB7WOgjAt8GmGuGK9RyE7-Ltzprdlp3ftq1xR94ff7j3EXYsEs
-export VAPID_PRIVATE_KEY=056QmHxzfE9zNL93Ewtdxa_p3CYQVnojTD738X36gGY
+# VAPID keys come from the caller's environment, never from this file: the pair
+# that used to be hardcoded here leaked (issue #568) and has been rotated.
+# Generate a throwaway pair with `npx web-push generate-vapid-keys` and export
+# both before running, or source the deploy secrets.
+: "${VAPID_PUBLIC_KEY:?export VAPID_PUBLIC_KEY before running (npx web-push generate-vapid-keys)}"
+: "${VAPID_PRIVATE_KEY:?export VAPID_PRIVATE_KEY before running (npx web-push generate-vapid-keys)}"
+export VAPID_PUBLIC_KEY
+export VAPID_PRIVATE_KEY
 
 success "Credentials generated, encoded, and exported"
 
