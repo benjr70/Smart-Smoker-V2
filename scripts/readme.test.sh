@@ -59,6 +59,60 @@ else
 fi
 
 echo
+echo "TEST: the images and their alt text agree about being placeholders"
+# The repo ships generated placeholder cards until the maintainer swaps in real
+# captures, so the README must not sell a placeholder as a photo. The manifest
+# is the single source of truth and is checked in both directions.
+MANIFEST="${REPO_ROOT}/docs/images/readme/PLACEHOLDERS.txt"
+if [ ! -f "${MANIFEST}" ]; then
+    fail "the placeholder manifest exists" \
+        "missing file: docs/images/readme/PLACEHOLDERS.txt"
+else
+    pass "the placeholder manifest exists"
+    placeholders="$(grep -vE '^[[:space:]]*(#|$)' "${MANIFEST}")"
+
+    alt_text_for() {
+        grep -oE "!\\[[^]]*\\]\\($1\\)" "${README}" | head -1 |
+            sed -E 's/^!\[([^]]*)\].*/\1/'
+    }
+
+    while IFS= read -r ref; do
+        [ -n "${ref}" ] || continue
+        case "${ref}" in
+            *.png | *.jpg | *.jpeg | *.gif | *.webp) ;;
+            *) continue ;;
+        esac
+        base="$(basename "${ref}")"
+        alt="$(alt_text_for "${ref}")"
+        if echo "${placeholders}" | grep -qx "${base}"; then
+            if echo "${alt}" | grep -qi 'placeholder'; then
+                pass "placeholder ${base} is labelled as one in its alt text"
+            else
+                fail "placeholder ${base} is labelled as one in its alt text" \
+                    "alt text '${alt}' presents a placeholder card as a real capture"
+            fi
+        else
+            if echo "${alt}" | grep -qi 'placeholder'; then
+                fail "real capture ${base} is not labelled a placeholder" \
+                    "alt text '${alt}' says placeholder but ${base} is not in the manifest"
+            else
+                pass "real capture ${base} is not labelled a placeholder"
+            fi
+        fi
+    done <<< "${refs}"
+
+    while IFS= read -r base; do
+        [ -n "${base}" ] || continue
+        if grep -q "docs/images/readme/${base}" "${README}"; then
+            pass "manifest entry ${base} is still referenced by the README"
+        else
+            fail "manifest entry ${base} is still referenced by the README" \
+                "the manifest lists ${base}, but the README does not use it"
+        fi
+    done <<< "${placeholders}"
+fi
+
+echo
 echo "TEST: the front page renders and links the way GitHub needs"
 if grep -q '^```mermaid$' "${README}"; then
     pass "architecture diagram sits in a mermaid fence GitHub renders"
@@ -198,7 +252,9 @@ else
         fail "README dates the share" "no 'as of YYYY-MM-DD' next to the claim"
     fi
 
-    pct="$(python3 -c "print(round(${claimed_agent} / ${claimed_total} * 100))")"
+    # Integer round-half-up in the shell: the suite is documented as hermetic,
+    # so it must not reach for python3 (or any other interpreter) to divide.
+    pct=$(((claimed_agent * 1000 / claimed_total + 5) / 10))
     if echo "${readme_flat}" | grep -qE "\(${pct}%\)"; then
         pass "the quoted percentage matches the quoted counts"
     else
@@ -206,9 +262,11 @@ else
             "${claimed_agent}/${claimed_total} rounds to ${pct}%, which the README does not state"
     fi
 
-    # Only re-derivable against a full clone; CI checks out shallow, and the
-    # counts legitimately grow as master moves on, so the recount asserts the
-    # claim was never inflated rather than that it is still exact.
+    # Only re-derivable against a full clone (CI fetches depth 0 for this job).
+    # `master` moves under the README in both directions -- a stale checkout has
+    # fewer commits than the claim, a fresh one has more -- so the recount is a
+    # plausibility check, not an equality: the claim may not be inflated beyond
+    # a drift window, and its ratio has to match the ratio history actually has.
     if [ "$(git -C "${REPO_ROOT}" rev-parse --is-shallow-repository 2>/dev/null)" = "false" ]; then
         base="origin/master"
         git -C "${REPO_ROOT}" rev-parse --verify --quiet "${base}" >/dev/null || base="HEAD"
@@ -217,12 +275,25 @@ else
             --extended-regexp -i \
             --grep='Co-Authored-By: Claude' \
             --grep='Generated with \[Claude Code\]' | wc -l)"
-        if [ "${claimed_total}" -le "${actual_total}" ] &&
-           [ "${claimed_agent}" -le "${actual_agent}" ]; then
-            pass "the quoted counts are backed by ${base} (${actual_agent}/${actual_total} today)"
-        else
+        # Commits master may have moved either way since the README was written.
+        DRIFT=50
+        # Percentage points the claimed share may differ from the real one.
+        SHARE_SLACK=5
+        actual_pct=0
+        if [ "${actual_total}" -gt 0 ]; then
+            actual_pct=$(((actual_agent * 1000 / actual_total + 5) / 10))
+        fi
+        share_gap=$((pct - actual_pct))
+        [ "${share_gap}" -lt 0 ] && share_gap=$((-share_gap))
+        if [ "${claimed_total}" -gt "$((actual_total + DRIFT))" ] ||
+           [ "${claimed_agent}" -gt "$((actual_agent + DRIFT))" ]; then
             fail "the quoted counts are backed by ${base}" \
-                "README claims ${claimed_agent}/${claimed_total}; ${base} has ${actual_agent}/${actual_total}"
+                "README claims ${claimed_agent}/${claimed_total}; ${base} has only ${actual_agent}/${actual_total}"
+        elif [ "${share_gap}" -gt "${SHARE_SLACK}" ]; then
+            fail "the quoted counts are backed by ${base}" \
+                "README claims a ${pct}% agent share; ${base} shows ${actual_pct}% (${actual_agent}/${actual_total})"
+        else
+            pass "the quoted counts are backed by ${base} (${actual_agent}/${actual_total} today)"
         fi
     else
         echo "  SKIP: recount against git history (shallow clone)"

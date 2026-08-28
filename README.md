@@ -6,7 +6,11 @@
 [![Docs](https://github.com/benjr70/Smart-Smoker-V2/actions/workflows/docs.yml/badge.svg)](https://github.com/benjr70/Smart-Smoker-V2/actions/workflows/docs.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-![The smoker kiosk running a cook on the pit](docs/images/readme/smoker-kiosk.png)
+![Placeholder — the smoker kiosk running a cook on the pit](docs/images/readme/smoker-kiosk.png)
+
+_Heads up: the three images on this page are labelled placeholder cards, not
+real captures. The ones still awaiting a photo are listed in
+[`docs/images/readme/PLACEHOLDERS.txt`](docs/images/readme/PLACEHOLDERS.txt)._
 
 Smart Smoker V2 turns a backyard smoker into a connected appliance. A
 microcontroller reads four thermocouple probes — the chamber and up to three
@@ -40,7 +44,7 @@ brisket starts from evidence instead of memory.
 - **Deployed for real** — multi-arch Docker images (amd64 + arm/v7), Terraform
   and Ansible for the Proxmox host, and an automated release train.
 
-![The web app following a cook in progress](docs/images/readme/web-app.png)
+![Placeholder — the web app following a cook in progress](docs/images/readme/web-app.png)
 
 ## Architecture
 
@@ -67,7 +71,7 @@ app reaches the board — and temperatures travel back up the same path, from th
 probes through the microcontroller's serial link to the device service, into the
 backend, and out over WebSockets to both frontends at once.
 
-![The smoker, probes and Raspberry Pi enclosure](docs/images/readme/hardware.png)
+![Placeholder — the smoker, probes and Raspberry Pi enclosure](docs/images/readme/hardware.png)
 
 ## How it's built
 
