@@ -21,9 +21,21 @@ For a local run the values you need are:
 * VAPID_PRIVATE_KEY=<your_generated_key>
 * VAPID_CONTACT=mailto:<your_contact_address> (optional; a neutral placeholder is used when unset)
 
-Never commit a filled-in env file. Deployed environments get these values from
-GitHub repository secrets, which the dev and prod deploy workflows export into
-the container environment.
+Never commit a filled-in env file — `.gitignore` ignores the whole `.env*`
+class (with `.env.example` re-included) so an accidental `git add` cannot repeat
+the mistake below. Deployed environments get these values from GitHub repository
+secrets, which the dev and prod deploy workflows export into the container
+environment.
+
+!!! warning "The historical VAPID key pair is compromised"
+
+    The backend's old committed dev dotenv carried a real `VAPID_PRIVATE_KEY`.
+    The file is deleted, but git history is public and is deliberately not being
+    rewritten, so that key is recoverable by anyone. A maintainer must generate
+    a fresh pair (`npx web-push generate-vapid-keys`), replace the
+    `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` repository secrets, redeploy, and
+    re-subscribe each device — rotating the public key invalidates every
+    existing browser push subscription.
 
 
 once that is set up just run <br>

@@ -37,6 +37,15 @@ on:
       # backend source the suite derives its expectations from.
       - 'apps/backend/.env.example'
       - 'scripts/backend-env-example.test.sh'
+      # The dotenv ignore rule the suite asserts on (Test 7) and every compose
+      # file it scans for `env_file:` directives (Test 6), wherever they live —
+      # a PR that only edits a root or `e2e/` compose file matches none of the
+      # entries above, and that is precisely the change the env_file guard
+      # exists to catch. Kept a superset of the suite's own
+      # `git ls-files '*docker-compose*'` discovery so the two cannot drift.
+      - '.gitignore'
+      - '**docker-compose*.yml'
+      - '**docker-compose*.yaml'
   push:
     branches: [master]
 

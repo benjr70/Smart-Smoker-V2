@@ -27,8 +27,13 @@
 #      is documentation, not a credential store. This is the regression guard
 #      for the original leak.
 #   5. No tracked file (outside CHANGELOG history and this suite) still points
-#      at `.env.dev`, and no compose file uses it (or the example) as an
-#      `env_file`.
+#      at `.env.dev`, and no compose file mounts a backend dotenv as an
+#      `env_file` — in either the inline or the multi-line YAML list spelling.
+#   6. `.gitignore` ignores the whole `.env*` class rather than three specific
+#      names, while keeping `.env.example` (and every already-tracked dotenv)
+#      committable, and no tracked dotenv assigns a literal secret value. The
+#      original leak slipped in under a filename nobody had listed; guarding
+#      that one name would just relocate the next one.
 #
 # CI: run by the `backend-env-contract` job in .github/workflows/ci-tests.yml.
 
@@ -199,11 +204,17 @@ fi
 echo "Test 5: nothing in the repo still points at .env.dev"
 
 # Search tracked files only (a stray local artifact is not the repo's problem).
-# CHANGELOG.md records history and this suite names the file on purpose.
+# Four files name it on purpose rather than pointing at it: CHANGELOG.md records
+# history, this suite is the guard, .gitignore explains why the ignore rule was
+# broadened to the whole class, and .env.example carries the key-rotation
+# warning. What the check is really after is a file that still expects to *use*
+# apps/backend/.env.dev.
 STALE_REFS="$(git -C "${REPO_ROOT}" grep -l -F -- '.env.dev' -- \
     ':!CHANGELOG.md' \
     ':!**/CHANGELOG.md' \
     ':!scripts/backend-env-example.test.sh' \
+    ':!.gitignore' \
+    ':!apps/backend/.env.example' \
     2>/dev/null || true)"
 # `.env.development*` lines in .gitignore/docs are a different file entirely.
 STALE_REFS="$(
@@ -224,6 +235,94 @@ fi
 
 echo "Test 6: no compose file mounts a backend dotenv as env_file"
 
+# Detects an `env_file:` directive that pulls in a backend dotenv, in either
+# compose spelling: the inline scalar/flow form (`env_file: ./x/.env.dev`,
+# `env_file: [.env.dev]`) and the standard multi-line YAML list form
+# (`env_file:` followed by indented `- ` entries). Prints every offending line;
+# prints nothing when the file is clean.
+compose_backend_env_file_refs() {
+    awk '
+        function is_backend_dotenv(s) {
+            return (s ~ /\.env\.(dev|example)/ || s ~ /apps\/backend\/\.env/)
+        }
+        /^[[:space:]]*env_file:/ {
+            rest = $0
+            sub(/^[[:space:]]*env_file:/, "", rest)
+            if (rest ~ /[^[:space:]]/) {
+                # Inline scalar or flow-sequence form, complete on this line.
+                if (is_backend_dotenv(rest)) { print FILENAME ":" FNR ":" $0 }
+                inblock = 0
+            } else {
+                # Block form: the entries follow on subsequent lines.
+                inblock = 1
+            }
+            next
+        }
+        inblock && /^[[:space:]]*(#.*)?$/ { next }
+        inblock && /^[[:space:]]*-/ {
+            if (is_backend_dotenv($0)) { print FILENAME ":" FNR ":" $0 }
+            next
+        }
+        inblock { inblock = 0 }
+    ' "$1"
+}
+
+# The detector is the whole check, and no compose file uses `env_file` today —
+# so exercise it against fixtures first. Without this, Test 6 would pass just as
+# happily with a detector that never matches anything.
+FIXTURE_DIR="$(mktemp -d)"
+trap 'rm -rf "${FIXTURE_DIR}"' EXIT
+
+cat > "${FIXTURE_DIR}/inline.yml" <<'FIXTURE'
+services:
+  backend:
+    image: backend
+    env_file: ./apps/backend/.env.dev
+FIXTURE
+
+cat > "${FIXTURE_DIR}/list.yml" <<'FIXTURE'
+services:
+  backend:
+    image: backend
+    env_file:
+      # the leaked dev dotenv, smuggled in as a YAML list entry
+      - ./apps/backend/.env.example
+    ports:
+      - '3001:3001'
+FIXTURE
+
+cat > "${FIXTURE_DIR}/clean.yml" <<'FIXTURE'
+services:
+  backend:
+    image: backend
+    environment:
+      - DB_URL=${DB_URL}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
+    env_file:
+      - ./secrets/runtime.env
+FIXTURE
+
+if [ -n "$(compose_backend_env_file_refs "${FIXTURE_DIR}/inline.yml")" ]; then
+    pass "env_file detector catches the inline form"
+else
+    fail "env_file detector catches the inline form" \
+        "a compose file with 'env_file: ./apps/backend/.env.dev' was not flagged"
+fi
+
+if [ -n "$(compose_backend_env_file_refs "${FIXTURE_DIR}/list.yml")" ]; then
+    pass "env_file detector catches the multi-line YAML list form"
+else
+    fail "env_file detector catches the multi-line YAML list form" \
+        "a compose file listing a backend dotenv under 'env_file:' was not flagged"
+fi
+
+if [ -z "$(compose_backend_env_file_refs "${FIXTURE_DIR}/clean.yml")" ]; then
+    pass "env_file detector leaves a clean compose file alone"
+else
+    fail "env_file detector leaves a clean compose file alone" \
+        "flagged: $(compose_backend_env_file_refs "${FIXTURE_DIR}/clean.yml")"
+fi
+
 COMPOSE_FILES="$(git -C "${REPO_ROOT}" ls-files '*docker-compose*.yml' '*docker-compose*.yaml')"
 if [ -z "${COMPOSE_FILES}" ]; then
     fail "compose files were found to scan" "none matched — the check is hollow"
@@ -232,16 +331,121 @@ else
 
     BAD_ENV_FILE=""
     for f in ${COMPOSE_FILES}; do
-        if grep -nE 'env_file' "${REPO_ROOT}/${f}" | grep -qE '\.env\.(dev|example)'; then
+        if [ -n "$(compose_backend_env_file_refs "${REPO_ROOT}/${f}")" ]; then
             BAD_ENV_FILE="${BAD_ENV_FILE} ${f}"
         fi
     done
 
     if [ -z "${BAD_ENV_FILE}" ]; then
-        pass "no compose file uses .env.dev/.env.example as an env_file"
+        pass "no compose file uses a backend dotenv as an env_file"
     else
-        fail "no compose file uses .env.dev/.env.example as an env_file" \
+        fail "no compose file uses a backend dotenv as an env_file" \
             "offenders:${BAD_ENV_FILE}"
+    fi
+fi
+
+echo "Test 7: .gitignore ignores the dotenv class, not one filename"
+
+# The original leak landed as `.env.dev`, a name .gitignore did not cover. A
+# guard on that one name just moves the next leak to `.env.staging`, so assert
+# the ignore rule covers the class and still lets the committed template — and
+# every file already tracked — through.
+ignored() {
+    git -C "${REPO_ROOT}" check-ignore -q "$1"
+}
+
+for candidate in \
+    apps/backend/.env.dev \
+    apps/backend/.env.staging \
+    apps/newapp/.env.prod \
+    packages/theme/.env \
+    .env.dev; do
+    if ignored "${candidate}"; then
+        pass "${candidate} is git-ignored"
+    else
+        fail "${candidate} is git-ignored" \
+            "a developer could commit real secrets under this name without warning"
+    fi
+done
+
+if ignored apps/backend/.env.example; then
+    fail "apps/backend/.env.example is NOT git-ignored" \
+        "the template must stay committable despite the .env class ignore"
+else
+    pass "apps/backend/.env.example is NOT git-ignored"
+fi
+
+# A negation that is too narrow would start ignoring files that are already in
+# the index — they would keep working locally but silently drop out of any
+# `git add` flow, which is exactly the kind of trap worth catching here.
+NEWLY_IGNORED="$(git -C "${REPO_ROOT}" ls-files |
+    git -C "${REPO_ROOT}" check-ignore --stdin 2>/dev/null || true)"
+if [ -z "${NEWLY_IGNORED}" ]; then
+    pass "no tracked file is git-ignored"
+else
+    fail "no tracked file is git-ignored" \
+        "tracked but ignored: $(printf '%s' "${NEWLY_IGNORED}" | tr '\n' ' ')"
+fi
+
+echo "Test 8: no tracked dotenv carries a literal secret value"
+
+# .gitignore cannot protect the dotenv files that are legitimately tracked
+# (build-time configs). This is the content-level half of the same guard: those
+# files may carry plain configuration, but never a literal credential. A value
+# is safe when it is empty or a pure ${VAR} interpolation resolved at deploy.
+SECRET_KEY_RE='(PRIVATE_KEY|PUBLIC_KEY|PASSWORD|PASSWD|SECRET|TOKEN|API_KEY|CREDENTIAL)'
+secret_assignments() {
+    grep -nE "^[[:space:]]*[A-Za-z_][A-Za-z_0-9]*${SECRET_KEY_RE}[A-Za-z_0-9]*=.+" "$1" 2>/dev/null |
+        grep -vE '=[[:space:]]*\$\{[A-Za-z_][A-Za-z_0-9]*\}[[:space:]]*$' || true
+}
+
+# Fixture first: the real tracked dotenvs are all clean today, so without this
+# the check below would pass with a regex that matches nothing. The fixture is
+# the deleted .env.dev, verbatim in shape.
+cat > "${FIXTURE_DIR}/leaky.env" <<'FIXTURE'
+DB_URL=mongodb://smartsmoker:${MONGO_APP_PASSWORD}@mongo:27017/db?authSource=admin
+VAPID_PRIVATE_KEY=056QmHxzfE9zNL93Ewtdxa_p3CYQVnojTD738X36gGY
+FIXTURE
+cat > "${FIXTURE_DIR}/safe.env" <<'FIXTURE'
+# blank template plus a deploy-time interpolation
+VAPID_PRIVATE_KEY=
+MONGO_PASSWORD=${MONGO_APP_PASSWORD}
+REACT_APP_CLOUD_URL=/api/
+FIXTURE
+
+if [ -n "$(secret_assignments "${FIXTURE_DIR}/leaky.env")" ]; then
+    pass "secret-value detector catches a literal key assignment"
+else
+    fail "secret-value detector catches a literal key assignment" \
+        "the shape of the original .env.dev leak went unnoticed"
+fi
+
+if [ -z "$(secret_assignments "${FIXTURE_DIR}/safe.env")" ]; then
+    pass "secret-value detector allows blanks and \${VAR} interpolations"
+else
+    fail "secret-value detector allows blanks and \${VAR} interpolations" \
+        "flagged: $(secret_assignments "${FIXTURE_DIR}/safe.env")"
+fi
+
+TRACKED_DOTENVS="$(git -C "${REPO_ROOT}" ls-files | grep -E '(^|/)\.env($|\.)' || true)"
+if [ -z "${TRACKED_DOTENVS}" ]; then
+    fail "tracked dotenv files were found to scan" \
+        "none matched — .env.example itself should be tracked, so the scan is broken"
+else
+    pass "tracked dotenv files were found to scan"
+
+    LEAKED=""
+    for f in ${TRACKED_DOTENVS}; do
+        if [ -n "$(secret_assignments "${REPO_ROOT}/${f}")" ]; then
+            LEAKED="${LEAKED} ${f}"
+        fi
+    done
+
+    if [ -z "${LEAKED}" ]; then
+        pass "no tracked dotenv assigns a literal secret value"
+    else
+        fail "no tracked dotenv assigns a literal secret value" \
+            "offenders:${LEAKED}"
     fi
 fi
 

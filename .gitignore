@@ -68,10 +68,19 @@ typings/
 # Yarn Integrity file
 .yarn-integrity
 
-# dotenv environment variables file
-.env
-.env.test
-.env.local
+# dotenv environment variables files.
+#
+# Ignore the whole class, not a handful of names: `apps/backend/.env.dev` once
+# reached master with a real VAPID private key precisely because that name was
+# not on the list (#568). The committed, value-free template is re-included, as
+# are the build-time dotenvs that were already tracked when this rule landed —
+# a broader negation would let a fresh `.env.prod` full of secrets in behind
+# them. Guarded by scripts/backend-env-example.test.sh.
+.env*
+!.env.example
+!/apps/backend/.env.prod
+!/apps/frontend/.env.prod
+!/apps/smoker/.env.prod
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache
