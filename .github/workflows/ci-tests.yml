@@ -26,6 +26,12 @@ on:
       - 'infra/README.md'
       - 'cloud.docker-compose*.yml'
       - 'scripts/repo-shape.test.sh'
+      - '.claude/skills/SKILLS.md'
+      # Every workspace manifest, not just the root one: the licence assertion
+      # covers `e2e/` and `packages/*` too, and those live outside the
+      # `apps/**` / `packages/**` entries above (`package.json` alone matches
+      # only the root file).
+      - '**/package.json'
   push:
     branches: [master]
 

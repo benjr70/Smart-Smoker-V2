@@ -123,6 +123,11 @@ echo
 echo "TEST: agent guides no longer describe the retired Ralph pipeline"
 assert_not_matches "CLAUDE.md" "ralph" "CLAUDE.md mentions no Ralph"
 assert_not_matches "AGENTS.md" "ralph" "AGENTS.md mentions no Ralph"
+# AGENTS.md's first table sends readers straight to the skills catalogue, so a
+# guide that is clean itself but links to a page still presenting Ralph as the
+# live workflow leaves the pipeline documented after all.
+assert_not_matches ".claude/skills/SKILLS.md" "ralph" \
+    "the skills catalogue AGENTS.md links to mentions no Ralph"
 
 echo
 echo "TEST: VAPID_CONTACT is plumbed through every cloud deployment path"
@@ -137,7 +142,10 @@ assert_matches ".github/workflows/dev-deploy.yml" "VAPID_CONTACT" \
 
 echo
 echo "TEST: the maintainer's address is not baked into backend source"
-if git -C "${REPO_ROOT}" grep -qI "benrolf70@gmail.com" -- 'apps/backend/src/**/*.ts'; then
+# Directory pathspecs, not globs: git's `**/*.ts` form skips files sitting
+# directly in the directory (main.ts, app.module.ts, cors-origins.ts), which is
+# exactly where a bootstrap-time contact address would be reintroduced.
+if git -C "${REPO_ROOT}" grep -qI "benrolf70@gmail.com" -- 'apps/backend/src'; then
     fail "backend source contains no personal contact address" \
         "found benrolf70@gmail.com under apps/backend/src"
 else
