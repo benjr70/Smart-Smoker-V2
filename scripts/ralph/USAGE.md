@@ -34,27 +34,27 @@ Describe your feature idea. Claude will interview you relentlessly, walking down
 every branch of the decision tree until you've thought through all the edge
 cases. This is where half-baked ideas become solid plans.
 
-### Step 2: Write the PRD
+### Step 2: Write the Spec
 
 Once you have a clear vision from the grilling session, run:
 
 ```
-/write-a-prd
+/to-spec
 ```
 
-Claude will explore the codebase, interview you about specifics, and create a
-formal PRD as a GitHub issue. The PRD includes problem statement, user stories,
-implementation decisions, and testing decisions.
+Claude will explore the codebase and synthesize the conversation into a Spec as
+a GitHub issue: problem statement, user stories, implementation decisions,
+module design, and testing decisions.
 
-### Step 3: Break Into Issues
+### Step 3: Cut Into Slices
 
-With your PRD issue created, run:
+With your Spec issue created, run:
 
 ```
-/prd-to-issues
+/to-tickets
 ```
 
-Give it the PRD issue number. Claude breaks the PRD into thin vertical slices —
+Give it the Spec issue number. Claude cuts the Spec into thin vertical slices —
 each one cuts through all layers (schema, API, UI, tests) end-to-end. Issues are
 created in dependency order with:
 

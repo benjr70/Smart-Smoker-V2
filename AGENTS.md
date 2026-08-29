@@ -15,6 +15,27 @@
 | [`.mcp.json`](.mcp.json)                               | MCP servers available (context7, playwright, terraform, docker, mongodb, github, plus the verify-pr harness's playwright-chrome / playwright-electron wrappers) |
 | [`.claude/settings.json`](.claude/settings.json)       | Project-scoped permissions, hooks, Claude Code config                                                                                                           |
 | [`docs/agents/`](docs/agents/)                         | Issue-tracker, triage-label and domain-doc config read by the mattpocock engineering skills (`/wayfinder`, `/to-spec`, `/to-tickets`, `/triage`)                |
+| [`CONTEXT.md`](CONTEXT.md)                             | Domain glossary — the vocabulary every issue, test name and interface uses. Read with the relevant [`docs/adr/`](docs/adr/) entries before writing code         |
+
+## Planning flow
+
+Three repo-local forks of the mattpocock skills in
+[`.claude/skills/`](.claude/skills/) override their user-level copies and carry
+this repo's conventions (`AFK` / `HITL` / `spec` labels, Project #1 + Priority,
+native GitHub dependencies and sub-issues):
+
+```
+/wayfinder   Map of Decision tickets (only when the effort is too big for one session)
+    |
+/to-spec     Spec issue (label `spec`, includes Module design)
+    |
+/to-tickets  Slices (AFK -> label `AFK` + Project #1 + Priority; HITL -> label `HITL`)
+    |
+Daemon       /afk-pickup -> /afk-dispatch implements the AFK Slices
+```
+
+The old `/write-a-prd` and `/prd-to-issues` skills are gone; "PRD" is now
+**Spec** and "issue breakdown" is now **Slices** (see `CONTEXT.md`).
 
 ## Monorepo layout at a glance
 

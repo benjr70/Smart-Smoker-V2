@@ -35,7 +35,7 @@ Run `gh issue view <number> --comments`.
 
 ## Wayfinding operations
 
-Used by `/wayfinder`. The **map** is a single issue with **child** issues as tickets.
+Used by the repo-local `/wayfinder`, `/to-spec` and `/to-tickets` forks in `.claude/skills/`. The **map** is a single issue with **child** issues as tickets; a **Spec** is a child of the map, and **Slices** are children of the Spec.
 
 - **Map**: a single issue labelled `wayfinder:map`, holding the Notes / Decisions-so-far / Fog body. `gh issue create --label wayfinder:map`.
 - **Child ticket**: an issue linked to the map as a GitHub sub-issue (`gh api` on the sub-issues endpoint). Where sub-issues aren't enabled, add the child to a task list in the map body and put `Part of #<map>` at the top of the child body. Labels: `wayfinder:<type>` (`research`/`prototype`/`grilling`/`task`). Once claimed, the ticket is assigned to the driving dev.
@@ -43,8 +43,11 @@ Used by `/wayfinder`. The **map** is a single issue with **child** issues as tic
 - **Frontier query**: list the map's open children (`gh issue list --state open`, scoped to the map's sub-issues / task list), drop any with an open blocker (`issue_dependencies_summary.blocked_by > 0`, or an open issue in the `Blocked by` line) or an assignee; first in map order wins.
 - **Claim**: `gh issue edit <n> --add-assignee @me`, the session's first write.
 - **Resolve**: `gh issue comment <n> --body "<answer>"`, then `gh issue close <n>`, then append a context pointer (gist + link) to the map's Decisions-so-far.
+- **Sub-issue**: `gh api -X POST repos/benjr70/Smart-Smoker-V2/issues/<parent>/sub_issues -F sub_issue_id=<child-db-id>` — `/to-spec` adds the Spec under its map, `/to-tickets` adds every Slice under the Spec. Like dependencies, the payload takes the numeric **database id**.
+- **Labels**: `/wayfinder` tickets carry `wayfinder:<type>` plus `AFK` (research, human-free task) or `HITL` (grilling, prototype). A Spec carries `spec` and never `AFK`. Slices carry `AFK` or `HITL`. `/to-tickets` §5 bootstraps `AFK`, `HITL`, `spec` and the `AFK:*` family idempotently with `gh label create --force`.
+- **Project and Priority**: every `AFK` ticket or Slice is added to Project #1 (`gh project item-add 1 --owner benjr70 --url <issue-url>`) and given a `Priority` single-select value — wayfinder tickets default `P1`, Slices default `P2`, quizzed once per batch. `HITL` issues are never projected: project membership is the Daemon's pick signal.
 
 ## Smart Smoker additions
 
 - Tickets meant for the autonomous daemon carry the `AFK` label **and** must be added to GitHub Project #1 (`Smart Smoker V2`) with a `Priority` (P0/P1/P2; default P2, wayfinder research P1). Project membership is the pick signal; `/afk-pickup` skips un-projected issues.
-- Blocking is native issue dependencies only — no `Blocked by #N` body text is parsed.
+- Blocking is native issue dependencies only — no `Blocked by #N` body text is parsed. Slice bodies still carry a `## Blocked by` section, but it is an informational name mirror (`- [title](url)`) for human readers.

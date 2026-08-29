@@ -99,33 +99,57 @@ answered by exploring the codebase, it explores instead of asking.
 
 ---
 
-### `/write-a-prd` -- Write a PRD
+### `/wayfinder` -- Chart a Big Effort as a Map
 
-**When to use:** You want to formalize a feature idea into a structured Product
-Requirements Document and submit it as a GitHub issue.
+**When to use:** An effort is too big for one session and wrapped in fog. Chart
+it as a **Map** issue whose children are **Decision tickets**, then work them
+one at a time until the way to the destination is clear.
 
-**What it does:** Guides you through a multi-step process: describe the problem,
-explore the codebase for current state, intensive interview to resolve all
-decisions, sketch major modules, then generate a PRD (problem statement,
-solution, user stories, implementation decisions, testing decisions) and submit
-it as a GitHub issue.
+**What it does:** Names the destination, grills breadth-first for the open
+decisions, creates the Map (`wayfinder:map`) and its child tickets with native
+blocking edges. Research and human-free task tickets get `AFK` + Project #1 +
+Priority (default P1) so the Daemon can resolve them; grilling and prototype
+tickets get `HITL`. Chart-time research fires as `/afk-resolve` subagents that
+persist findings under `docs/research/`.
 
-**Source:** Custom (project-specific)
+**Source:** Fork of [mattpocock/skills](https://github.com/mattpocock/skills) —
+repo-local copy overrides the user-level skill.
 
 ---
 
-### `/prd-to-issues` -- Break PRD into Issues
+### `/to-spec` -- Write a Spec
 
-**When to use:** You have a PRD (as a GitHub issue) and want to break it into
-independently-implementable GitHub issues using vertical slices.
+**When to use:** A Map has reached its destination, or a grilling session has
+settled the decisions, and you want the result written down as the issue Slices
+are cut from and reviewed against.
 
-**What it does:** Fetches the PRD, breaks it into thin tracer-bullet slices that
-cut through all layers end-to-end (schema, API, UI, tests). Each slice is either
-HITL (human-in-the-loop) or AFK (autonomous). AFK slices get the `AFK` label for
-AFK pickup. Creates GitHub issues with acceptance criteria, interface changes,
-behaviors to test, and dependency ordering.
+**What it does:** Synthesizes the conversation (no interview) into a Spec issue:
+problem statement, user stories, implementation decisions, **module design**
+(deep modules and which get tests), testing decisions, out of scope. Labelled
+`spec`, never `AFK`. Born from a Map, it carries `Part of #<map>` and is added
+as a sub-issue of the Map.
 
-**Source:** Custom (project-specific)
+**Source:** Fork of [mattpocock/skills](https://github.com/mattpocock/skills) —
+repo-local copy overrides the user-level skill.
+
+---
+
+### `/to-tickets` -- Cut a Spec into Slices
+
+**When to use:** You have a Spec issue and want it broken into
+independently-implementable **Slices**.
+
+**What it does:** Breaks the Spec into thin tracer-bullet slices cutting through
+all layers end-to-end. Bootstraps the `AFK` / `HITL` / `spec` / `AFK:*` labels,
+creates one issue per Slice (Parent → What to build → Acceptance criteria → User
+stories → Interface changes → Behaviors to test → Testing priority → Blocked
+by), wires **native** GitHub `blocked_by` dependencies and sub-issue links to
+the Spec, then labels AFK Slices `AFK` and adds them to Project #1 with a
+Priority quizzed once per batch (default P2). HITL Slices get `HITL` and stay
+off the project. `--dry-run` prints the plan without mutating anything.
+
+**Source:** Fork of [mattpocock/skills](https://github.com/mattpocock/skills) —
+repo-local copy overrides the user-level skill.
 
 ---
 
@@ -264,19 +288,22 @@ efficiency is requested.
 
 These skills compose into a complete feature development pipeline.
 Implementation is carried out by **AFK dispatch** (Level 7, parallel multi-agent
-dispatch, `AFK` label) once the PRD has been sliced into issues.
+dispatch, `AFK` label) once the Spec has been cut into Slices.
 
 ```
 /grill-me          Stress-test the idea
     |
-/write-a-prd       Formalize as a GitHub issue PRD
+/wayfinder         Chart a too-big effort as a Map of Decision tickets
+    |                (skip for efforts that fit one session)
     |
-/prd-to-issues     Break into vertical-slice issues
-                   (AFK slices labeled `AFK`)
+/to-spec           Write the Spec as a GitHub issue (label `spec`)
+    |
+/to-tickets        Cut into vertical-slice issues (Slices)
+                   (AFK Slices labeled `AFK` + Project #1 + Priority)
     |
 git checkout -b feat/<name>
     |
-/afk-dispatch <prd>          Self-bootstraps labels + pre-flight, then spawns
+/afk-dispatch <spec>         Self-bootstraps labels + pre-flight, then spawns
     |                          impl/rev/ver/research. Parallel impl with
     |                          built-in peer review + smoke-trailer commits.
     |
@@ -285,5 +312,5 @@ gh pr create                  Open PR (AFK writes commits already)
 
 AFK dispatch suits multiple slices that benefit from parallel execution,
 high-blast-radius changes (backend services, device-service, infra,
-docker-compose) where plan-mode review matters, and PRDs where independent
+docker-compose) where plan-mode review matters, and Specs where independent
 reviewer signal is worth the extra concurrency cost.

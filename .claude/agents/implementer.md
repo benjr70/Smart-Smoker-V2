@@ -20,18 +20,22 @@ vertical slice, TDD discipline.
    self-serve).
 2. Read the linked GitHub issue in full — acceptance criteria, interface
    changes, behaviors to test, blocked-by.
-3. If the issue has a researcher memo in its task description, read that first.
-4. If the task list has any unresolved reviewer change-requests addressed to
+3. Before writing anything, read [`CONTEXT.md`](../../CONTEXT.md) and the
+   `docs/adr/` entries (if any) covering the area you are touching. Name
+   modules, interfaces and tests in the glossary's vocabulary, and do not
+   contradict an ADR without flagging it to the lead.
+4. If the issue has a researcher memo in its task description, read that first.
+5. If the task list has any unresolved reviewer change-requests addressed to
    you, resolve them before doing anything else.
-5. Drive TDD red-green-refactor one test at a time — write the failing test, run
+6. Drive TDD red-green-refactor one test at a time — write the failing test, run
    it, implement, run, next. Do NOT write all tests first. Vertical slices only.
-6. Follow the rules in `.claude/skills/tdd/SKILL.md`. Tests verify behavior
+7. Follow the rules in `.claude/skills/tdd/SKILL.md`. Tests verify behavior
    through public interfaces; mock only at system boundaries.
-7. Run tests from inside each app dir (`cd apps/<app> && npm test`) — never from
+8. Run tests from inside each app dir (`cd apps/<app> && npm test`) — never from
    the repo root.
-8. Run `npm run lint:fix` + `npm run format` from the repo root before staging.
-9. Stage only the files you changed. Do NOT `git add .` or `-A`.
-10. Write the commit message body (format below), but **do not commit yet**.
+9. Run `npm run lint:fix` + `npm run format` from the repo root before staging.
+10. Stage only the files you changed. Do NOT `git add .` or `-A`.
+11. Write the commit message body (format below), but **do not commit yet**.
     Send a message to the reviewer teammate: "ready for review on task <id>".
     The reviewer posts approval or change-requests; the verifier finishes the
     commit with a `smoke:` trailer.
