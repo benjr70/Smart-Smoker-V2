@@ -8,6 +8,10 @@ description:
 
 # Test-Driven Development
 
+When exploring the codebase, read `CONTEXT.md` so test names and interface
+vocabulary match the project's domain language, and respect the `docs/adr/`
+entries covering the area you are touching.
+
 ## Philosophy
 
 **Core principle**: Tests should verify behavior through public interfaces, not
@@ -27,6 +31,24 @@ function and tests fail, those tests were testing implementation, not behavior.
 
 See [tests.md](tests.md) for examples and [mocking.md](mocking.md) for mocking
 guidelines.
+
+## Seams: where tests go
+
+A **seam** is the public boundary you test at: the interface where you observe
+behavior without reaching inside. Tests live at seams, never against internals.
+
+**Decide the seams before you write tests.** Write down the seams under test
+first. In an interactive session, confirm them with the user before writing the
+first test. Running autonomously (the AFK/daemon path, no user in the session),
+do not stall for a confirmation that cannot come: record the chosen seams in the
+PR body and proceed — the reviewer checks them.
+
+When the shape of that interface is itself in question (how deep the module is,
+where the seam belongs, what the interface should expose), call the Skill tool
+with "codebase-design" for the vocabulary. It is the shared source of the
+module, interface, depth, seam, adapter, leverage and locality terms — a
+reference to consult, not a session to run. Deep-module specifics for this repo
+stay in [deep-modules.md](deep-modules.md).
 
 ## Anti-Pattern: Horizontal Slices
 

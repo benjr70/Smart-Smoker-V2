@@ -8,7 +8,7 @@ The first thing the lead does on every `/afk-dispatch` invocation is pre-flight 
 
 1. Verifies `claude --version ≥ 2.1.32` (Agent Teams landed in 2.1.32).
 2. Verifies `gh` is authenticated and `jq` is installed (the `TeammateIdle` hook needs `jq`).
-3. Creates the GitHub labels `AFK` (blue), `AFK:in-progress` (yellow), `AFK:done` (green) via `gh label create --force` — creates if absent, updates if present, never errors.
+3. Creates any missing GitHub labels — `AFK` (blue), `AFK:in-progress` (yellow), `AFK:done` (green) and the rest of the `AFK:*` family — with an explicit colour, leaving existing labels' metadata untouched.
 4. Confirms `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is set in `.claude/settings.json`.
 5. Sweeps stale `AFK:in-progress` labels off any open issue with no active task in the shared list.
 

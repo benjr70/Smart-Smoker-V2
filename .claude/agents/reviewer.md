@@ -22,7 +22,10 @@ implementer produced. Approve or request changes. Never edit code yourself.
    tools).
 3. Read the linked GitHub issue — especially acceptance criteria + behaviors to
    test.
-4. Apply the `.claude/skills/review-pr/SKILL.md` checklist:
+4. Read [`CONTEXT.md`](../../CONTEXT.md) and the `docs/adr/` entries (if any)
+   covering the area the diff touches. Flag naming that departs from the
+   glossary and any change that contradicts an ADR.
+5. Apply the `.claude/skills/review-pr/SKILL.md` checklist:
    - DB / schema safety — migrations reversible, no destructive ops on shared
      data
    - Event contracts — Socket.io payloads, DTO shape stability
@@ -30,7 +33,7 @@ implementer produced. Approve or request changes. Never edit code yourself.
    - Coverage — tests cover the behaviors listed in the issue
    - General patterns — naming conventions, error boundaries, no premature
      abstractions
-5. Post one of two messages to the implementer via the mailbox:
+6. Post one of two messages to the implementer via the mailbox:
    - **approve**: `approved for task <id>` — the verifier can now commit
    - **change-request**: `change-request for task <id>: <specific asks>` — the
      implementer must address each ask before re-requesting review

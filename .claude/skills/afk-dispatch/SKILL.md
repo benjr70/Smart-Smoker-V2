@@ -64,20 +64,33 @@ set in the project-scoped settings.
 **GitHub labels (create-if-missing):**
 
 ```bash
-gh label create "AFK"             --description "Issue eligible for Level 7 agent team implementation" --color "1D76DB" --force
-gh label create "AFK:in-progress" --description "Currently being implemented by an agent team"          --color "FBCA04" --force
-gh label create "AFK:done"        --description "Completed by an agent team"                            --color "0E8A16" --force
-gh label create "AFK:failed"      --description "Agent team attempt failed; needs human triage"         --color "B60205" --force
-gh label create "AFK:checks-failed" --description "Agent-team PR: CI or manual verification could not be brought to pass autonomously (fix loop exhausted)" --color "D93F0B" --force
-gh label create "AFK:revise"        --description "Human hand-back: agent must address this PR's unresolved review comments" --color "0052CC" --force
-gh label create "AFK:revise-failed" --description "Agent-team PR: review comments could not be auto-resolved (revise loop exhausted)" --color "B60205" --force
-gh label create "AFK:rebase-failed" --description "Agent-team PR: automatic rebase onto master failed; human rebase required" --color "B60205" --force
+# ensure_label <name> <color> <description> — creates only when absent, so the
+# curated colour/description of an existing label is never overwritten
+ensure_label() {
+  if gh label list --limit 200 --json name --jq '.[].name' | grep -qxF "$1"; then
+    return 0
+  fi
+  gh label create "$1" --color "$2" --description "$3"
+}
+
+ensure_label "AFK"               "1D76DB" "Agent-grabbable: daemon may pick up"
+ensure_label "AFK:in-progress"   "FBCA04" "Currently being implemented by an agent team"
+ensure_label "AFK:done"          "0E8A16" "Completed by an agent team"
+ensure_label "AFK:failed"        "B60205" "Agent team attempt failed; needs human triage"
+ensure_label "AFK:checks-failed" "D93F0B" "PR opened by agent team but CI checks failed after auto-fix loop exhausted"
+ensure_label "AFK:revise"        "0052CC" "Human hand-back: agent must address this PR's unresolved review comments"
+ensure_label "AFK:revise-failed" "B60205" "Agent-team PR: review comments could not be auto-resolved (revise loop exhausted)"
+ensure_label "AFK:rebase-failed" "B60205" "Agent-team PR: automatic rebase onto master failed; human rebase required"
+ensure_label "AFK:paused"        "FBCA04" "Run cut off by usage exhaustion; awaiting resume next window"
 ```
 
-`--force` is idempotent: creates the label if absent, updates the metadata if
-present, never errors. Skip if
-`gh label list --json name | jq -r '.[].name' | grep -qx AFK` already shows all
-three.
+`ensure_label` is idempotent and non-destructive: it creates a missing label
+with an explicit colour and leaves an existing one exactly as curated. Do
+**not** use `gh label create --force` here — it rewrites colour and description
+on every run, so this block and the `/to-tickets` §5 bootstrap would flip-flop
+the same labels' metadata back and forth. Both blocks spell these nine `AFK`
+labels identically; [`to-tickets`](../to-tickets/SKILL.md) §5 covers the same
+nine plus `HITL` and `spec`.
 
 **Stale `AFK:in-progress`** — sweep before claiming new work, **only in PRD
 mode**:
