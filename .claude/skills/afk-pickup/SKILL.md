@@ -196,9 +196,12 @@ Issues that carry the `AFK` label but are **not in the project** are skipped
 silently — project membership is the explicit triage signal. Add them to the
 project (and set Priority) before the picker will consider them.
 
-The GraphQL query, the Priority/age sort, and the `Blocked by\s+#(\d+)` blocker
-check (same regex `afk-dispatch` §1 uses) all already ran inside §0's triage
-call. On verdict **`pick`**, the winner is in the verdict:
+An issue is eligible only when every GitHub **native** `blockedBy` dependency is
+closed (body text like `Blocked by #123` is prose and is ignored) and it is
+either unassigned or assigned to the daemon's own login — a ticket a human has
+claimed is never picked. The GraphQL query, the Priority/age sort, and those
+blocker/assignee checks all already ran inside §0's triage call. On verdict
+**`pick`**, the winner is in the verdict:
 
 ```bash
 N=$(printf '%s' "$TRIAGE" | jq -r '.pick.issue')
