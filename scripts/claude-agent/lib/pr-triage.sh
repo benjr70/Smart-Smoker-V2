@@ -7,7 +7,7 @@
 # no-pick:
 #
 #     { "pr": <number>, "branch": "feat/issue-<M>", "issue": <M>,
-#       "reason": "revise|conflict|incomplete" }
+#       "reason": "revise|conflict|docs-merge|incomplete" }
 #     { "pr": null }
 #
 # "Ours" filter — a PR is only ever considered when ALL hold:
@@ -24,6 +24,12 @@
 #   - its mergeable state is CONFLICTING (master moved under it) → reason
 #     "conflict". MERGEABLE and UNKNOWN both skip: UNKNOWN means GitHub is still
 #     computing mergeability async — the next fire re-checks rather than guessing;
+#   - it is otherwise clean but every file it changes lives under
+#     docs/research/ → reason "docs-merge": a research PR carries no code risk
+#     and never earns review/verify rounds, so it is squash-merged by
+#     lib/docs-only-gate.sh instead of being reconciled. The file list comes
+#     from pr_triage_enrich too; an absent docsOnly reads as false, so a broken
+#     sensor can never auto-merge anything;
 #   - it is otherwise clean but its bot tail never finished — the one-time
 #     review marker (<!-- pr-review-done -->) and/or any manual-verification
 #     round comment is missing (a prior fire died mid-§6a) → reason
@@ -35,9 +41,12 @@
 #   they are parked for a human; re-picking them would loop on a known-stuck PR.
 #
 # Pick order: `AFK:revise` beats plain CONFLICTING (a human is actively waiting
-# on their own review), which beats "incomplete" (nothing blocks a merge yet —
-# the tail just needs finishing); within the same reason rank, oldest createdAt
-# wins.
+# on their own review), which beats "docs-merge" (a docs PR cannot be merged
+# while it conflicts anyway), which beats "incomplete" (nothing blocks a merge
+# yet — the tail just needs finishing). "docs-merge" is tested BEFORE the
+# incomplete markers precisely because a docs PR never gets those rounds and
+# would otherwise be reconciled forever. Within the same reason rank, oldest
+# createdAt wins.
 #
 # The function is pure: it reads only stdin + env. The caller owns the gh call:
 #
@@ -94,8 +103,9 @@ pr_triage_scan() {
     done
 }
 
-# pr_triage_enrich: merge the "bot tail finished?" comment signals into the
-# PR-list payload so pr_triage_pick can triage reason "incomplete".
+# pr_triage_enrich: merge the "bot tail finished?" comment signals and the
+# "docs-only?" file signal into the PR-list payload so pr_triage_pick can
+# triage reasons "incomplete" and "docs-merge".
 #
 # Reads the `gh pr list --json ...` array on stdin and, for every PR that is
 # ours-shaped and otherwise attention-free (open, non-draft, feat/issue-<N>,
@@ -105,18 +115,24 @@ pr_triage_scan() {
 #                (posted by /pr-review via lib/review-poster.sh)
 #   verifyDone — any comment matches "Manual verification — .*round"
 #                (posted by /verify-pr, one per round; post-reconcile counts)
+# and its changed-file list (`gh pr view --json files`):
+#   docsOnly   — the PR changes at least one file and every one of them is
+#                under docs/research/ (see lib/docs-only-gate.sh, which re-runs
+#                the same rule against the real diff before merging)
 # Everything else passes through untouched.
 #
 # Fails SAFE toward "complete": on any gh/jq error the fields stay absent and
-# pr_triage_pick's `// true` defaults read the PR as complete — a broken
-# sensor must never start a pick/wake loop. Known accepted gap: a fire that
+# pr_triage_pick's `// true` defaults read the PR as complete, and an absent
+# docsOnly is not true so nothing is auto-merged — a broken sensor must never
+# start a pick/wake loop, nor land a merge. Known accepted gap: a fire that
 # crashed after posting round 1 leaves a FAIL-latest PR looking bot-complete
 # (status quo before this class existed).
 #
 # Env: GH_BIN, PR_TRIAGE_AUTHOR (same semantics as pr_triage_pick).
 # Exit: always 0; stdout is the (possibly enriched) payload.
 pr_triage_enrich() {
-    local gh="${GH_BIN:-gh}" payload nums num comments review_done verify_done merged
+    local gh="${GH_BIN:-gh}" payload nums num comments review_done verify_done
+    local files docs_only fields merged
 
     payload="$(cat)"
 
@@ -140,11 +156,30 @@ pr_triage_enrich() {
         | .number' 2>/dev/null || echo '')"
 
     for num in ${nums}; do
-        comments="$("${gh}" pr view "${num}" --json comments 2>/dev/null)" || continue
-        review_done="$(printf '%s' "${comments}" | jq             'any(.comments[]?; .body | contains("<!-- pr-review-done"))' 2>/dev/null)" || continue
-        verify_done="$(printf '%s' "${comments}" | jq             'any(.comments[]?; .body | test("Manual verification — .*round"))' 2>/dev/null)" || continue
-        [ -n "${review_done}" ] && [ -n "${verify_done}" ] || continue
-        merged="$(printf '%s' "${payload}" | jq -c             --argjson n "${num}" --argjson r "${review_done}" --argjson v "${verify_done}"             'map(if .number == $n then . + {reviewDone: $r, verifyDone: $v} else . end)'             2>/dev/null)" || continue
+        fields='{}'
+
+        # Bot-tail signals (reason "incomplete").
+        comments="$("${gh}" pr view "${num}" --json comments 2>/dev/null)" && {
+            review_done="$(printf '%s' "${comments}" | jq                 'any(.comments[]?; .body | contains("<!-- pr-review-done"))' 2>/dev/null)"
+            verify_done="$(printf '%s' "${comments}" | jq                 'any(.comments[]?; .body | test("Manual verification — .*round"))' 2>/dev/null)"
+            if [ -n "${review_done}" ] && [ -n "${verify_done}" ]; then
+                fields="$(printf '%s' "${fields}" | jq -c                     --argjson r "${review_done}" --argjson v "${verify_done}"                     '. + {reviewDone: $r, verifyDone: $v}' 2>/dev/null || printf '%s' "${fields}")"
+            fi
+        }
+
+        # Docs-only signal (reason "docs-merge"): every changed file under
+        # docs/research/ and at least one. Absent on any gh/jq error → the pick
+        # reads it as false, so a broken sensor never auto-merges anything.
+        files="$("${gh}" pr view "${num}" --json files 2>/dev/null)" && {
+            docs_only="$(printf '%s' "${files}" | jq                 '((.files | length) > 0)
+                 and all(.files[]; .path | startswith("docs/research/"))' 2>/dev/null)"
+            if [ "${docs_only}" = "true" ] || [ "${docs_only}" = "false" ]; then
+                fields="$(printf '%s' "${fields}" | jq -c --argjson d "${docs_only}"                     '. + {docsOnly: $d}' 2>/dev/null || printf '%s' "${fields}")"
+            fi
+        }
+
+        [ "${fields}" = "{}" ] && continue
+        merged="$(printf '%s' "${payload}" | jq -c             --argjson n "${num}" --argjson f "${fields}"             'map(if .number == $n then . + $f else . end)' 2>/dev/null)" || continue
         [ -n "${merged}" ] && payload="${merged}"
     done
 
@@ -176,12 +211,14 @@ pr_triage_pick() {
           | . + { reason:
                     (if ($lbls | index("AFK:revise")) then "revise"
                      elif (.mergeable // "UNKNOWN") == "CONFLICTING" then "conflict"
+                     elif (.docsOnly == true) then "docs-merge"
                      elif (((.reviewDone != false) and (.verifyDone != false)) | not) then "incomplete"
                      else null end) }
           | select(.reason != null) ]
         | sort_by([(if .reason == "revise" then 0
                     elif .reason == "conflict" then 1
-                    else 2 end), .createdAt])
+                    elif .reason == "docs-merge" then 2
+                    else 3 end), .createdAt])
         | first
         | if . == null then {pr: null}
           else { pr: .number,

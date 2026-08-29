@@ -152,10 +152,18 @@ A PR **needs attention** when it is *ours* (open, not draft, head
   finished: the one-time review marker (`<!-- pr-review-done -->`) and/or any
   `Manual verification — … round` comment is missing because a prior fire
   died mid-tail. Detected by `pr_triage_enrich` (one `gh pr view --json
-  comments` per otherwise-clean agent PR; fails safe toward "complete").
+  comments` per otherwise-clean agent PR; fails safe toward "complete"), or
+- it is **docs-only** — every file it changes lives under `docs/research/`
+  (a research PR). It carries no code risk and never earns review/verify
+  rounds, so it is not reconciled at all: `lib/docs-only-gate.sh` re-checks
+  the rule against the real diff (three-dot, `--no-renames`) and, when CI is
+  green, squash-merges it with an admin token pinned to the head sha
+  (`--match-head-commit`). If the gate refuses — a non-docs path, red or
+  pending checks, a sha that moved — the PR falls back to the normal
+  `incomplete` reconcile path.
 
-`AFK:revise` outranks plain conflicts, which outrank `incomplete`; oldest
-first within rank. Parked PRs (`AFK:revise-failed` / `AFK:rebase-failed`)
+`AFK:revise` outranks plain conflicts, which outrank `docs-merge`, which
+outranks `incomplete`; oldest first within rank. Parked PRs (`AFK:revise-failed` / `AFK:rebase-failed`)
 and drafts are skipped.
 
 This gives the pipeline its ordering invariant: **outstanding agent PRs are

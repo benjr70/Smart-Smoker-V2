@@ -23,7 +23,7 @@
 #     "useMcpForProject": <bool>,       # gh token missing `project` scope
 #     "inflight": <int>,                # open AFK:in-progress count
 #     "reconcile": { "pr": N, "branch": "feat/issue-M", "issue": M,
-#                    "reason": "revise|conflict|incomplete",
+#                    "reason": "revise|conflict|docs-merge|incomplete",
 #                    "hadDone": <bool> } | null,
 #     "paused":    { "issue": N, "pauseCount": <int>,
 #                    "action": "resume|fail" } | null,
