@@ -75,8 +75,10 @@ REVIEWED_SHA=$(git rev-parse HEAD)
    `^## *Acceptance [Cc]riteria` and the next `^## ` heading (or end of body);
    the same extraction afk-pickup §6a uses. Absent → note "(none found)".
 3. **Parent Spec** — the first `#<digits>` reference inside the issue body's
-   `## Parent` section (the `/prd-to-issues` convention). If found,
-   `gh issue view <SPEC_N> --repo "$REPO" --json title,body`. No section →
+   `## Parent` section (the `/prd-to-issues` convention). Issues created before
+   the rename use the legacy heading `## Parent PRD`; accept either (match
+   `^## *Parent( PRD)?\b`, preferring `## Parent`). If found,
+   `gh issue view <SPEC_N> --repo "$REPO" --json title,body`. Neither section →
    proceed AC-only and say so in the spec-axis prompt.
 4. **Diff** — `git diff origin/master...HEAD`, capped at 2000 lines; if longer,
    truncate with a `... [truncated]` marker (pr-watch §3 convention).

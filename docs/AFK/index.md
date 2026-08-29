@@ -44,18 +44,48 @@ as a human or an authenticated Claude session, so the daemon never double-picks.
 The old label names below are the only historical `team`-prefixed strings kept in
 the repo.
 
-1. Confirm nothing is in flight: `gh issue list --label team:in-progress` (historical name) must return empty, and so must the same listing for the historical paused label.
-2. `git pull` in the daemon checkout so it has the renamed skills and scripts.
-3. Kill the daemon MainPID (`Restart=always` brings it back on the new code):
-   `sudo systemctl show -p MainPID --value agent-daemon`, then `sudo kill <pid>`.
-4. Rename the nine labels in place — every issue keeps its label:
+1. Confirm nothing is in flight — both listings (historical label names) must
+   return empty:
 
    ```bash
-   for old in team team:done team:failed team:revise team:paused team:in-progress team:rebase-failed team:revise-failed team:checks-failed; do  # historical names
-     gh label edit "$old" --name "AFK${old#team}"
-   done
+   gh issue list --label team:in-progress
+   gh issue list --label team:paused
    ```
 
+   If either is non-empty, wait for the fire to finish (or resume and finish the
+   paused issue) before continuing — a rename mid-flight strands that branch.
+2. `git pull` in the daemon checkout so it has the renamed skills and scripts.
+3. Rename the nine labels in place — every issue keeps its label. Do this
+   **before** restarting the daemon: the old code queries the old label names, so
+   a fire landing in this window finds an empty queue and no-ops, and
+   afk-dispatch §0 cannot recreate an `AFK:*` label underneath the rename.
+
+   Some new names already exist (`AFK` is in use today), so `gh label edit` would
+   fail with a 422 name collision. Migrate those issues instead of renaming, and
+   abort on any unexpected failure:
+
+   ```bash
+   set -euo pipefail
+   existing=$(gh label list --limit 200 --json name -q '.[].name')
+   for old in team team:done team:failed team:revise team:paused team:in-progress \
+              team:rebase-failed team:revise-failed team:checks-failed; do  # historical names
+     new="AFK${old#team}"
+     if grep -qxF "$new" <<<"$existing"; then
+       # target already exists — move every issue across, then drop the old label
+       for n in $(gh issue list --label "$old" --state all --limit 500 --json number -q '.[].number'); do
+         gh issue edit "$n" --add-label "$new" --remove-label "$old"
+       done
+       gh label delete "$old" --yes
+     else
+       gh label edit "$old" --name "$new"
+     fi
+   done
+   gh label list --limit 200 --json name -q '.[].name' | grep -E '^team(:|$)' && \
+     { echo "rollout: old team labels still present"; exit 1; } || true
+   ```
+
+4. Kill the daemon MainPID (`Restart=always` brings it back on the new code):
+   `sudo systemctl show -p MainPID --value agent-daemon`, then `sudo kill <pid>`.
 5. Verify the next fire: the log lands at `~/claude-agent/logs/afk-pickup-<TS>.log`
    and opens with `afk-pickup: triage verdict=…`.
 6. The historical `team-pickup-*.log` files stay on disk under their old names —

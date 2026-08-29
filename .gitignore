@@ -146,6 +146,5 @@ scripts/smoke/smoke-artifacts/
 # MkDocs build output
 site/
 
-# Python bytecode
-__pycache__/
-*.pyc
+# Dashboard Python bytecode (a stale committed .pyc carried pre-rename strings)
+scripts/claude-agent/dashboard/__pycache__/
