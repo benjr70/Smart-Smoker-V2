@@ -36,13 +36,44 @@
 #   reconcile  a PR needs attention (pr-triage.sh verdict) → skill §1.2
 #   resume     paused issue below the resume cap → skill §4 resume path
 #   resume-cap paused issue AT the cap → skill applies AFK:failed + comment
-#   pick       eligible issue found (blockers closed) → skill §4 fresh branch
+#   pick       eligible issue found (blockers closed, unclaimed) → skill §4
 #   pick-mcp   token lacks `project` scope → skill runs §2 via GitHub MCP
 #   idle       nothing to do → skill exits silent
 #
 # Exit codes: 0 verdict emitted (any verdict incl. idle); 2 abort; 3 no-gh.
 # The JSON is emitted on stdout in ALL cases — branch on .verdict, not just
 # the exit code.
+#
+# §2 pick query shape (one `gh api graphql` call — eligibility is decided
+# entirely inside the jq filter, so no per-candidate follow-up calls):
+#
+#   repository.issues(first: 100, labels: ["AFK"], states: OPEN) { nodes {
+#     number title createdAt
+#     labels(first: 30) { nodes { name } }
+#     blockedBy(first: 50) { nodes { number state } pageInfo { hasNextPage } }
+#     assignees(first: 10) { nodes { login } }
+#     projectItems(first: 10) { nodes { project { number }
+#       fieldValueByName(name: "Priority") { ... on
+#         ProjectV2ItemFieldSingleSelectValue { name } } } } } }
+#
+# Eligibility rules applied to those nodes:
+#   blockers   GitHub's NATIVE issue dependencies only — every `blockedBy` node
+#              must be CLOSED. Body text such as "Blocked by #123" is prose and
+#              has no effect on the pick. The 50-node page is a cap, not a
+#              promise: if `pageInfo.hasNextPage` is true the unseen blockers
+#              could be open, so the candidate fails SAFE (treated as blocked).
+#   assignee   never race a human: the issue must carry NO assignee other than
+#              the daemon's own login (`gh api user`) — so unassigned, or
+#              assigned to the daemon alone, is eligible; a human assignee is
+#              disqualifying even when the daemon is a co-assignee. If that
+#              login is unknown (empty), only unassigned issues are eligible.
+#   partials   GraphQL can return `data` with null fields alongside `errors`
+#              (per-node permission/rate failures). Every list is defaulted to
+#              `[]` so one partial node can never abort the whole filter and
+#              silently degrade the verdict to `idle`.
+#   project    must be an item of PICKUP_PROJECT_NUMBER; `Priority` field sorts
+#              P0 > P1 > P2 (missing/null = P2), then oldest `createdAt`.
+#   labels     none of AFK:in-progress / AFK:done / AFK:failed / AFK:paused.
 #
 # Env:
 #   GH_BIN                  gh CLI (default: gh) — injectable for tests
@@ -162,9 +193,10 @@ query {
       nodes {
         number
         title
-        body
         createdAt
         labels(first: 30) { nodes { name } }
+        blockedBy(first: 50) { nodes { number state } pageInfo { hasNextPage } }
+        assignees(first: 10) { nodes { login } }
         projectItems(first: 10) {
           nodes {
             project { number }
@@ -177,50 +209,43 @@ query {
     }
   }
 }' 2>/dev/null \
-        | jq -r --argjson pn "${project_num}" '
+        | jq -r --argjson pn "${project_num}" --arg login "${login}" '
             def prio_rank:
               if   . == "P0" then 0
               elif . == "P1" then 1
               elif . == "P2" then 2
               else 2 end;
-            [.data.repository.issues.nodes[]
+            [(.data.repository.issues.nodes // [])[]
               | . as $i
-              | ($i.labels.nodes | map(.name)) as $lbls
+              | (($i.labels.nodes // []) | map(.name)) as $lbls
               | select(($lbls | index("AFK:in-progress") | not)
                     and ($lbls | index("AFK:done") | not)
                     and ($lbls | index("AFK:failed") | not)
                     and ($lbls | index("AFK:paused") | not))
-              | ($i.projectItems.nodes | map(select(.project.number == $pn)) | first) as $pi
+              | select([($i.blockedBy.nodes // [])[] | select(.state != "CLOSED")] | length == 0)
+              | select(($i.blockedBy.pageInfo.hasNextPage // false) | not)
+              | (($i.assignees.nodes // []) | map(.login)) as $asgn
+              | select((($asgn - [$login]) | length) == 0)
+              | (($i.projectItems.nodes // []) | map(select(.project.number == $pn)) | first) as $pi
               | select($pi != null)
               | ($pi.fieldValueByName.name // "P2") as $prio
-              | {number, title, body, createdAt, priority: $prio,
+              | {number, title, createdAt, priority: $prio,
                  prio_rank: ($prio | prio_rank)}]
             | sort_by([.prio_rank, .createdAt])
             | .[] | @base64' 2>/dev/null)" || rows=''
 
-    local row cand_json cand_n cand_title cand_prio body blockers blocker state blocked
+    # Eligibility (blockers, assignee) is decided inside the jq filter above, so
+    # the first surviving row IS the pick — no follow-up gh calls.
+    local row cand_json cand_n cand_title cand_prio
     for row in ${rows}; do
         cand_json="$(printf '%s' "${row}" | base64 -d 2>/dev/null)" || continue
         cand_n="$(printf '%s' "${cand_json}" | jq -r '.number')"
-        body="$(printf '%s' "${cand_json}" | jq -r '.body // ""')"
-        # Same regex afk-dispatch §1 uses.
-        blockers="$(printf '%s' "${body}" | grep -oE 'Blocked by[[:space:]]+#[0-9]+' | grep -oE '[0-9]+' || true)"
-        blocked=false
-        for blocker in ${blockers}; do
-            state="$("${gh}" issue view "${blocker}" --json state --jq .state 2>/dev/null || echo 'OPEN')"
-            if [ "${state}" = "OPEN" ]; then
-                blocked=true
-                break
-            fi
-        done
-        if [ "${blocked}" = "false" ]; then
-            cand_title="$(printf '%s' "${cand_json}" | jq -r '.title')"
-            cand_prio="$(printf '%s' "${cand_json}" | jq -r '.priority')"
-            _pt_emit pick "${login}" "${use_mcp}" 0 null "${paused}" \
-                "$(jq -cn --argjson n "${cand_n}" --arg t "${cand_title}" --arg p "${cand_prio}" \
-                    '{issue: $n, title: $t, priority: $p}')"
-            return 0
-        fi
+        cand_title="$(printf '%s' "${cand_json}" | jq -r '.title')"
+        cand_prio="$(printf '%s' "${cand_json}" | jq -r '.priority')"
+        _pt_emit pick "${login}" "${use_mcp}" 0 null "${paused}" \
+            "$(jq -cn --argjson n "${cand_n}" --arg t "${cand_title}" --arg p "${cand_prio}" \
+                '{issue: $n, title: $t, priority: $p}')"
+        return 0
     done
 
     _pt_emit idle "${login}" "${use_mcp}" 0 null "${paused}" null
