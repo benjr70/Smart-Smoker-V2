@@ -184,7 +184,7 @@ ORDER_PATTERNS=(
     '^!\[[^]]*\]\(docs/images/readme/smoker-kiosk\.png\)'
     '^## Features'
     '^```mermaid$'
-    '^!\[[^]]*\]\(docs/images/readme/hardware\.png\)'
+    '^!\[[^]]*\]\(docs/images/readme/hardware\.(png|jpe?g)\)'
     "^## How it's built"
     '^## Docs'
     '^## License'

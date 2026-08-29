@@ -8,10 +8,8 @@
 
 ![The smoker kiosk following a brisket cook — live probe readings, completion estimate, temperature history with cook-log markers](docs/images/readme/smoker-kiosk.png)
 
-_The two app screenshots on this page are real captures of the running software.
-The hardware photo is still a placeholder card; the images awaiting a real photo
-are listed in
-[`docs/images/readme/PLACEHOLDERS.txt`](docs/images/readme/PLACEHOLDERS.txt)._
+_Every image on this page is a real capture: the two app screenshots come from
+the running software, and the hardware shot is the pit itself._
 
 Smart Smoker V2 turns a backyard smoker into a connected appliance. A
 microcontroller reads four thermocouple probes — the chamber and up to three
@@ -72,7 +70,7 @@ app reaches the board — and temperatures travel back up the same path, from th
 probes through the microcontroller's serial link to the device service, into the
 backend, and out over WebSockets to both frontends at once.
 
-![Placeholder — the smoker, probes and Raspberry Pi enclosure](docs/images/readme/hardware.jpg)
+![The pit itself — a barrel smoker on a welded steel cart, with the Raspberry Pi touchscreen kiosk mounted on the side shelf running the smoker app, the propane burner below it and the blower assembly at the far end](docs/images/readme/hardware.jpg)
 
 ## How it's built
 
