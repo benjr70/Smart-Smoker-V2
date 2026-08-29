@@ -75,6 +75,14 @@
   .help { color: var(--dim); font-size: 11px; margin: -4px 0 8px; }
   a.pr { display: block; text-decoration: none; color: inherit; }
   a.pr .title { color: var(--blue); }
+  .map { padding: 8px 0; border-top: 1px solid var(--line); }
+  .map:first-of-type { border-top: 0; }
+  .map .dest { color: var(--dim); font-size: 12px; margin: 2px 0 4px; }
+  a.front { display: block; text-decoration: none; color: inherit; font-size: 13px; padding: 2px 0; }
+  a.front .title { color: var(--blue); }
+  .chip.blue { background: #1a2a3d; color: var(--blue); }
+  .chip.purple { background: #2d1f3d; color: #c9a6ff; }
+  .badge.kind { font-size: 11px; padding: 1px 8px; }
 </style>
 </head>
 <body>
@@ -103,6 +111,13 @@
 <div class="card">
   <h2>Open PRs</h2>
   <div id="prs">loading…</div>
+</div>
+
+<div class="card">
+  <h2>Maps</h2>
+  <div class="help">Open wayfinder maps — where each one is headed and the
+  tickets ready to be worked next (AFK = daemon, HITL = you).</div>
+  <div id="maps">loading…</div>
 </div>
 
 <div class="card">
@@ -152,6 +167,18 @@ const STATE_LABELS = {
   unknown: ["Unknown", "", ""],
 };
 
+// Fire kinds, as written by the pickup skill's block lines.
+const KIND_LABELS = {
+  slice: ["slice", "blue"],
+  research: ["research", "purple"],
+  task: ["task", "purple"],
+  reconcile: ["reconcile", "amber"],
+};
+const kindBadge = k => {
+  const e = KIND_LABELS[k];
+  return e ? `<span class="badge kind ${e[1]}">${e[0]}</span>` : "";
+};
+
 function render() {
   if (!data) return;
 
@@ -175,6 +202,14 @@ function render() {
       <div class="bar"><span style="width:${g.remainPct}%;background:${col}"></span></div>
       <div class="sub">${g.shouldFire ? "agents may work · pause below " + g.threshold + "%"
                                        : "agents paused — under " + g.threshold + "%"}</div>
+    </div>`;
+  }
+  const w = data.wayfinder;
+  if (w) {
+    tiles += `<div class="tile">
+      <div class="label">Wayfinder</div>
+      <div class="num" style="font-size:20px">${w.maps} maps · ${w.frontier} frontier · ${w.afk} AFK</div>
+      <div class="sub">${w.queueSlices == null ? "" : `queue: ${w.queueSlices} slices · ${w.queueWayfinder} wayfinder`}</div>
     </div>`;
   }
   document.getElementById("tiles").innerHTML =
@@ -215,7 +250,7 @@ function render() {
     const sum = data.fireSummary || {};
     const haveSum = sum.forFire === cur.id && sum.title;
     document.getElementById("fire").innerHTML =
-      `<span class="badge green pulse">running</span>
+      `<span class="badge green pulse">running</span> ${kindBadge(cur.kind)}
        <span class="kv"> ${esc(cur.id)} · <b>${ago(cur.startedAt)}</b> elapsed</span>` +
       (haveSum
         ? `<div style="font-weight:600;margin-top:6px">${esc(sum.title)}</div>
@@ -234,12 +269,31 @@ function render() {
   document.getElementById("prs").innerHTML = (prs.length ? prs.map(p => {
     let chips = p.labels.map(l =>
       `<span class="chip ${l === "AFK:revise" ? "amber" : l.startsWith("AFK:") ? "red" : ""}">${esc(l)}</span>`).join("");
+    if (p.docsOnly) chips += `<span class="chip blue">docs-only</span>`;
     if (p.mergeable === "CONFLICTING") chips += `<span class="chip red">conflict</span>`;
     if (p.isDraft) chips += `<span class="chip">draft</span>`;
     return `<a class="pr" href="${esc(p.url || "#")}" target="_blank" rel="noopener">
       <b>#${p.number}</b> <span class="title">${esc(p.title)}</span><br>${chips}</a>`;
   }).join("") : `<div class="kv">none</div>`) +
     ((data.openPrs || {}).error ? `<div class="err">${esc(data.openPrs.error)}</div>` : "");
+
+  // maps + frontier
+  const maps = (data.maps || {}).items || [];
+  document.getElementById("maps").innerHTML = (maps.length ? maps.map(m => {
+    const front = (m.frontier || []).map(t => {
+      const badge = t.badge === "AFK" ? `<span class="chip blue">AFK</span>`
+        : t.badge === "HITL" ? `<span class="chip amber">HITL</span>` : "";
+      const type = t.type ? `<span class="chip">${esc(t.type)}</span>` : "";
+      return `<a class="front" href="${esc(t.url || "#")}" target="_blank" rel="noopener">
+        #${t.number} <span class="title">${esc(t.title)}</span> ${type}${badge}</a>`;
+    }).join("") || `<div class="kv">frontier clear — nothing ready</div>`;
+    return `<div class="map">
+      <a class="pr" href="${esc(m.url || "#")}" target="_blank" rel="noopener">
+        <b>#${m.number}</b> <span class="title">${esc(m.title)}</span></a>
+      ${m.destination ? `<div class="dest">${esc(m.destination)}</div>` : ""}
+      ${front}</div>`;
+  }).join("") : `<div class="kv">no open maps</div>`) +
+    ((data.maps || {}).error ? `<div class="err">${esc(data.maps.error)}</div>` : "");
 
   // fire history
   const fires = (data.fires || {}).items || [];
@@ -251,7 +305,7 @@ function render() {
     const steps = Object.entries(f.steps || {}).map(([k, v]) =>
       `<div><b>${esc(k)}:</b> ${esc(v)}</div>`).join("");
     return `<details class="fire"><summary>
-        <span class="t">${esc(t)}</span><span class="s">${esc(f.summary)}</span>${badge}
+        <span class="t">${esc(t)}</span><span class="s">${esc(f.summary)}</span>${kindBadge(f.kind)}${badge}
       </summary>${steps ? `<div class="steps">${steps}</div>` : ""}</details>`;
   }).join("") : `<div class="kv">no fires yet</div>`) +
     ((data.fires || {}).error ? `<div class="err">${esc(data.fires.error)}</div>` : "");

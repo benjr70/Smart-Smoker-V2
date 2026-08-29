@@ -3,17 +3,19 @@
 #
 # Run: bash scripts/claude-agent/run-tests.sh [ROOT_DIR]
 #
-# Discovers every *.test.sh under ROOT_DIR (default: this script's directory)
-# and runs each one in its own bash process. Every suite is run even if an
+# Discovers every *.test.sh and *.test.py under ROOT_DIR (default: this
+# script's directory) and runs each one in its own process (bash / python3 —
+# the dashboard's suite is a stdlib unittest file). Every suite is run even if an
 # earlier one fails; the aggregate exit code is non-zero if ANY suite failed,
 # so a mid-list failure is never masked by later-passing suites (AC3). This is
-# the single entry point CI calls, so newly added *.test.sh files are picked up
-# automatically with no workflow edit.
+# the single entry point CI calls, so newly added *.test.sh / *.test.py files
+# are picked up automatically with no workflow edit.
 
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="${1:-${SCRIPT_DIR}}"
+PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 if [ ! -d "${ROOT_DIR}" ]; then
     echo "FATAL: root directory not found: ${ROOT_DIR}" >&2
@@ -26,10 +28,10 @@ fi
 suites=()
 while IFS= read -r suite; do
     suites+=("${suite}")
-done < <(find "${ROOT_DIR}" -type f -name '*.test.sh' | sort)
+done < <(find "${ROOT_DIR}" -type f \( -name '*.test.sh' -o -name '*.test.py' \) | sort)
 
 if [ "${#suites[@]}" -eq 0 ]; then
-    echo "No *.test.sh suites found under ${ROOT_DIR}"
+    echo "No *.test.sh / *.test.py suites found under ${ROOT_DIR}"
     exit 0
 fi
 
@@ -41,7 +43,12 @@ for suite in "${suites[@]}"; do
     total=$((total + 1))
     echo ""
     echo ">>> RUN ${suite}"
-    if bash "${suite}"; then
+    # Interpreter by extension — a python suite must not be fed to bash.
+    runner=(bash)
+    case "${suite}" in
+        *.test.py) runner=("${PYTHON_BIN}") ;;
+    esac
+    if "${runner[@]}" "${suite}"; then
         echo "<<< PASS ${suite}"
     else
         rc=$?

@@ -14,7 +14,12 @@
 #                           "reconcile": <pr# | null>,  # pr_triage_pick verdict
 #                           "paused":    <issue# | null>,
 #                           "pickSig":   "<csv of candidate issue numbers>",
-#                           "prSig":     "<csv of open PR numbers>" | null }
+#                           "prSig":     "<csv of open PR numbers>" | null,
+#                           "slices":    <n eligible implementation slices>,
+#                           "wayfinder": <n eligible wayfinder:* tickets>,
+#                           "openMaps":  <n open wayfinder:map issues> }
+#                         The last three are read-only signals for the agent
+#                         dashboard's Wayfinder tile; wp_decide ignores them.
 #                         prSig is derived from the same `pr list` fetch that
 #                         feeds reconcile triage — no extra API call. A failed
 #                         or malformed fetch emits prSig=null (set UNKNOWN),
@@ -101,14 +106,38 @@ wp_scan() {
         --json number --jq '(sort_by(.number) | first | .number) // "null"' \
         2>/dev/null || echo 'null')"
 
-    pick_sig="$("${gh}" issue list --label AFK --state open --json number,labels \
-        --jq '[ .[] | [.labels[].name] as $l
-              | select(($l | index("AFK:done") | not)
-                   and ($l | index("AFK:failed") | not)
-                   and ($l | index("AFK:in-progress") | not)
-                   and ($l | index("AFK:paused") | not))
-              | .number ] | sort | map(tostring) | join(",")' \
-        2>/dev/null || echo '')"
+    # One raw fetch of the AFK queue feeds BOTH the pick signature and the
+    # kind split (slices vs wayfinder tickets) — the dashboard's Wayfinder tile
+    # costs no extra API call. A failed/malformed fetch reads as an empty queue.
+    local queue eligible slices wayfinder open_maps
+    queue="$("${gh}" issue list --label AFK --state open --json number,labels \
+        2>/dev/null)" || queue=''
+    if [ -z "${queue}" ] || ! printf '%s' "${queue}" | jq -e 'type == "array"' >/dev/null 2>&1; then
+        queue='[]'
+    fi
+    eligible="$(printf '%s' "${queue}" | jq -c '
+        [ .[] | . as $i | [$i.labels[].name] as $l
+          | select(($l | index("AFK:done") | not)
+               and ($l | index("AFK:failed") | not)
+               and ($l | index("AFK:in-progress") | not)
+               and ($l | index("AFK:paused") | not))
+          | {number: $i.number, labels: $l} ]' 2>/dev/null || echo '[]')"
+    pick_sig="$(printf '%s' "${eligible}" \
+        | jq -r '[.[].number] | sort | map(tostring) | join(",")' 2>/dev/null || echo '')"
+    # Wayfinder tickets carry a `wayfinder:<type>` label and are routed to
+    # /afk-resolve; everything else in the queue is an implementation slice.
+    wayfinder="$(printf '%s' "${eligible}" \
+        | jq '[.[] | select(.labels | any(startswith("wayfinder:")))] | length' \
+        2>/dev/null || echo 0)"
+    slices="$(printf '%s' "${eligible}" \
+        | jq '[.[] | select(.labels | any(startswith("wayfinder:")) | not)] | length' \
+        2>/dev/null || echo 0)"
+
+    open_maps="$("${gh}" issue list --label wayfinder:map --state open \
+        --json number --jq 'length' 2>/dev/null || echo 0)"
+    case "${open_maps}" in
+        ''|*[!0-9]*) open_maps=0 ;;
+    esac
 
     jq -cn \
         --argjson locked "${locked}" \
@@ -116,7 +145,11 @@ wp_scan() {
         --argjson paused "${paused}" \
         --arg pickSig "${pick_sig}" \
         --argjson prSig "${pr_sig_arg}" \
-        '{locked: $locked, reconcile: $reconcile, paused: $paused, pickSig: $pickSig, prSig: $prSig}'
+        --argjson slices "${slices:-0}" \
+        --argjson wayfinder "${wayfinder:-0}" \
+        --argjson openMaps "${open_maps}" \
+        '{locked: $locked, reconcile: $reconcile, paused: $paused, pickSig: $pickSig,
+          prSig: $prSig, slices: $slices, wayfinder: $wayfinder, openMaps: $openMaps}'
 }
 
 # wp_decide: read a scan JSON on stdin; wake (print reason, exit 0) or keep

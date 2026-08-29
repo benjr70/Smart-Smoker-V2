@@ -4,7 +4,8 @@
 Serves two routes on 0.0.0.0:8090:
   GET /            the single-page dashboard (index.html, same directory)
   GET /api/status  aggregated JSON: usage tiles + gate, daemon state, current
-                   fire, pipeline snapshot, open PRs, last 10 fires
+                   fire, pipeline snapshot, open PRs, last 10 fires, open
+                   wayfinder maps + their frontier, Wayfinder tile counts
 
 Binding all interfaces is deliberate: this box's ufw denies LAN inbound and
 allows tailscale0, so any bound port is tailnet-only with no firewall change
@@ -20,13 +21,22 @@ Data sources (no state files exist; everything is journal + logs + gh):
     matching state line wins. Fire logs stream nothing until the fire ends
     (claude --print buffers), so live state never reads the in-flight log body.
   - Pipeline snapshot: wp_scan from lib/work-probe.sh (pure gh, always exits 0).
-  - Fire history: ~/claude-agent/logs/afk-pickup-<TS>.log, name-sorted.
+  - Fire history: ~/claude-agent/logs/afk-pickup-<TS>.log (pre-rename fires
+    kept the team-pickup- prefix; both are read), ordered by embedded
+    timestamp. Each fire carries a `kind` derived from its block lines:
+    slice / research / task / reconcile.
+  - Maps: one `gh api graphql` call for open `wayfinder:map` issues and their
+    sub-issues, cached 5 minutes — the frontier moves on human time.
 
 Every collector degrades independently: on failure the section keeps its last
 good value flagged stale:true with the error string — /api/status never 500s.
 
+Pure functions (parse_fire_log / fire_kind / shape_maps / shape_wayfinder /
+is_docs_only) are kept separate from the IO collectors so dashboard-server.test.py
+covers them with no network.
+
 Env overrides (all optional): DASHBOARD_PORT, USAGE_CREDS_FILE, USAGE_API_URL,
-DASHBOARD_LOG_DIR, DASHBOARD_REPO.
+DASHBOARD_LOG_DIR, DASHBOARD_REPO, DASHBOARD_GH_REPO.
 """
 
 import glob
@@ -51,6 +61,7 @@ CREDS = os.environ.get(
 USAGE_URL = os.environ.get(
     "USAGE_API_URL", "https://api.anthropic.com/api/oauth/usage"
 )
+GH_REPO = os.environ.get("DASHBOARD_GH_REPO", "benjr70/Smart-Smoker-V2")
 GATE_MIN_PCT = 25  # BUDGET_GATE_MIN_PCT default in lib/usage-sensor.sh
 # systemd's default PATH has neither gh-adjacent tools nor nvm node; mirror the
 # agent-daemon.service PATH so wp_scan's gh/jq resolve under the unit.
@@ -294,11 +305,36 @@ def fetch_daemon():
 _TS_RE = re.compile(r"(?:team|afk)-pickup-(\d{8}T\d{6}Z)\.log$")
 _EXIT_RE = re.compile(r"^=== agent-run exit (\d+) ===$", re.M)
 _BLOCK_LINE_RE = re.compile(
-    r"^(picked|dispatch|pr|pr-watch|review|verify|shots|reconcile):\s{1,}(.+)$", re.M
+    r"^(picked|dispatch|pr|pr-watch|review|verify|shots|reconcile"
+    r"|resolve|docs-merge):\s{1,}(.+)$",
+    re.M,
 )
+# `resolve: #<n> <research|task> <slug>` — the word after the issue number is
+# the wayfinder ticket type written by /afk-resolve.
+_RESOLVE_TYPE_RE = re.compile(r"^#\d+\s+(\w+)")
 _HARD_FAIL_RE = re.compile(r"^agent-run: FAILED — exit (\d+)$", re.M)
 _PAUSED_RE = re.compile(r"^agent-run: paused #(\d+)", re.M)
 _RESET_RE = re.compile(r"^AGENT_RUN_RESET_AT=(\S+)$", re.M)
+
+
+def fire_kind(steps):
+    """What the fire WAS, from its block lines: slice/research/task/reconcile.
+
+    `resolve:` wins over `docs-merge:` because /afk-resolve merges its own
+    docs-only PR — such a fire is still the research (or task) it resolved.
+    A bare `docs-merge:` (the pr-triage reason for an orphaned docs-only PR)
+    and the existing `reconcile:` line are both PR reconciliation. Fires with
+    no work block (no-work / crashed) have no kind at all.
+    """
+    resolve = steps.get("resolve")
+    if resolve:
+        m = _RESOLVE_TYPE_RE.match(resolve.strip())
+        return "task" if m and m.group(1).lower() == "task" else "research"
+    if steps.get("docs-merge") or steps.get("reconcile"):
+        return "reconcile"
+    if steps.get("picked") or steps.get("dispatch"):
+        return "slice"
+    return None
 
 
 def parse_fire_log(path):
@@ -323,6 +359,10 @@ def parse_fire_log(path):
 
     if steps.get("picked"):
         summary = steps["picked"]
+    elif steps.get("resolve"):
+        summary = "resolve " + steps["resolve"]
+    elif steps.get("docs-merge"):
+        summary = "docs-merge " + steps["docs-merge"]
     elif paused:
         summary = f"paused #{paused.group(1)} (usage exhausted)"
     elif no_work:
@@ -340,6 +380,7 @@ def parse_fire_log(path):
         "exit": int(exit_m.group(1)) if exit_m else None,
         "inFlight": exit_m is None,
         "summary": summary,
+        "kind": fire_kind(steps),
         "steps": steps,
         "noWork": no_work,
         "resetAt": reset.group(1) if reset else None,
@@ -379,6 +420,13 @@ def fetch_pipeline():
     return {"scan": json.loads(out.strip())}
 
 
+def is_docs_only(title):
+    """A docs-only research PR — /afk-resolve's own output, which the daemon
+    admin-merges without human review. Read from the title prefix: no extra
+    API call (the file list would cost one `gh pr view` per PR)."""
+    return (title or "").startswith("docs(research):")
+
+
 def fetch_prs():
     out = run(
         ["gh", "pr", "list", "--state", "open", "--json",
@@ -394,10 +442,139 @@ def fetch_prs():
             "labels": [l["name"] for l in p.get("labels", [])],
             "mergeable": p.get("mergeable"),
             "isDraft": p.get("isDraft", False),
+            "docsOnly": is_docs_only(p.get("title")),
         }
         for p in json.loads(out)
     ]
     return {"items": items}
+
+
+# --- wayfinder maps ---------------------------------------------------------
+
+# A map's Destination is written by /wayfinder as a `## Destination` heading
+# (text on the following line) or, in older maps, an inline `**Destination**:`.
+_DEST_RE = re.compile(r"^[#*\s]*Destination\**\s*:?\s*(.*)$", re.I)
+_WAYFINDER_TYPE_RE = re.compile(r"^wayfinder:(.+)$")
+
+MAPS_QUERY = """
+query($owner: String!, $name: String!) {
+  repository(owner: $owner, name: $name) {
+    issues(first: 20, labels: ["wayfinder:map"], states: OPEN,
+           orderBy: {field: CREATED_AT, direction: DESC}) {
+      nodes {
+        number title url body
+        subIssues(first: 50) {
+          nodes {
+            number title url state
+            assignees(first: 5) { nodes { login } }
+            labels(first: 30) { nodes { name } }
+            blockedBy(first: 20) { nodes { number state } }
+          }
+        }
+      }
+    }
+  }
+}
+"""
+
+
+def _destination(body):
+    """First Destination line of a map body, else ''.
+
+    Handles both `## Destination` (value on the next non-empty line) and an
+    inline `**Destination**: …`. Markdown emphasis is stripped so the phone
+    reads a plain sentence.
+    """
+    lines = (body or "").splitlines()
+    for i, line in enumerate(lines):
+        m = _DEST_RE.match(line.strip())
+        if not m:
+            continue
+        value = m.group(1).strip()
+        if not value:  # heading form — the sentence is on a following line
+            for nxt in lines[i + 1:]:
+                if nxt.strip():
+                    value = nxt.strip()
+                    break
+        return value.replace("**", "").strip()
+    return ""
+
+
+def shape_maps(payload):
+    """Pure: GraphQL payload -> open maps, each with its frontier tickets.
+
+    Frontier = sub-issues that are open, unassigned (a human claim keeps the
+    daemon and this card out of it) and not blocked by an open issue — i.e.
+    exactly what could be worked next.
+    """
+    nodes = (
+        ((payload or {}).get("data") or {}).get("repository") or {}
+    ).get("issues") or {}
+    items = []
+    for mp in nodes.get("nodes") or []:
+        frontier = []
+        for child in ((mp.get("subIssues") or {}).get("nodes") or []):
+            if child.get("state") != "OPEN":
+                continue
+            if (child.get("assignees") or {}).get("nodes"):
+                continue
+            blockers = (child.get("blockedBy") or {}).get("nodes") or []
+            if any(b.get("state") == "OPEN" for b in blockers):
+                continue
+            labels = [
+                l.get("name") for l in ((child.get("labels") or {}).get("nodes") or [])
+            ]
+            kind = None
+            for name in labels:
+                m = _WAYFINDER_TYPE_RE.match(name or "")
+                if m:
+                    kind = m.group(1)
+                    break
+            frontier.append(
+                {
+                    "number": child.get("number"),
+                    "title": child.get("title"),
+                    "url": child.get("url"),
+                    "type": kind,
+                    "badge": "AFK" if "AFK" in labels else
+                             "HITL" if "HITL" in labels else None,
+                }
+            )
+        items.append(
+            {
+                "number": mp.get("number"),
+                "title": mp.get("title"),
+                "url": mp.get("url"),
+                "destination": _destination(mp.get("body")),
+                "frontier": frontier,
+            }
+        )
+    return {"items": items}
+
+
+def fetch_maps():
+    owner, _, name = GH_REPO.partition("/")
+    out = run(
+        ["gh", "api", "graphql",
+         "-f", f"query={MAPS_QUERY}",
+         "-F", f"owner={owner}", "-F", f"name={name}"],
+        timeout=30,
+    )
+    return shape_maps(json.loads(out))
+
+
+def shape_wayfinder(scan, maps):
+    """Pure: the one-line Wayfinder tile — "N maps · M frontier · K AFK"."""
+    items = (maps or {}).get("items") or []
+    frontier = [t for m in items for t in m.get("frontier") or []]
+    open_maps = (scan or {}).get("openMaps")
+    return {
+        "maps": open_maps if isinstance(open_maps, int) else len(items),
+        "frontier": len(frontier),
+        "afk": len([t for t in frontier if t.get("badge") == "AFK"]),
+        "queueSlices": (scan or {}).get("slices"),
+        "queueWayfinder": (scan or {}).get("wayfinder"),
+    }
 
 
 def _recent_transcript_events(since, max_events=40):
@@ -536,13 +713,20 @@ def fetch_fire_summary():
 
 
 def build_status():
+    # Maps are one GraphQL call: 5-minute cache (the frontier moves on human
+    # time, not fire time). The Wayfinder tile joins it to the queue split the
+    # work probe already computes, so it costs nothing extra.
+    maps = cached("maps", 300, fetch_maps)
+    pipeline = cached("pipeline", 60, fetch_pipeline)
     return {
         "generatedAt": now_iso(),
         "usage": cached("usage", 60, fetch_usage),
         "daemon": cached("daemon", 10, fetch_daemon),
         "fires": cached("fires", 10, fetch_fires),
-        "pipeline": cached("pipeline", 60, fetch_pipeline),
+        "pipeline": pipeline,
         "openPrs": cached("prs", 60, fetch_prs),
+        "maps": maps,
+        "wayfinder": shape_wayfinder((pipeline or {}).get("scan"), maps),
         "fireSummary": cached("fireSummary", 90, fetch_fire_summary),
     }
 

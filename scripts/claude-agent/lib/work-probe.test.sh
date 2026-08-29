@@ -45,6 +45,7 @@ case "\${args}" in
     *"api user"*)                cat "${dir}/login.out" ;;
     *"--label AFK:in-progress"*) cat "${dir}/locked.out" ;;
     *"--label AFK:paused"*)     cat "${dir}/paused.out" ;;
+    *"--label wayfinder:map"*)   cat "${dir}/maps.out" ;;
     *"issue list --label AFK "*) cat "${dir}/picks.out" ;;
     *"pr list"*)                 cat "${dir}/prs.out" ;;
     *"pr view"*)                 cat "${dir}/prview.out" ;;
@@ -55,7 +56,8 @@ EOF
     echo "agent-bot" > "${dir}/login.out"
     echo "0"         > "${dir}/locked.out"
     echo "null"      > "${dir}/paused.out"
-    echo ""          > "${dir}/picks.out"
+    echo "[]"        > "${dir}/picks.out"   # raw `issue list --json number,labels`
+    echo "0"         > "${dir}/maps.out"
     echo "[]"        > "${dir}/prs.out"
     # Default: bot-complete comments (both markers) so pre-incomplete tests
     # keep their "nothing happening" baseline.
@@ -81,12 +83,12 @@ test_scan_full_shape() {
   "mergeable":"CONFLICTING","labels":[],"createdAt":"2026-07-09T00:00:00Z",
   "author":{"login":"agent-bot"}}]
 EOF
-    echo "290" > "${dir}/picks.out"
+    echo '[{"number":290,"labels":[{"name":"AFK"}]}]' > "${dir}/picks.out"
 
     local scan
     scan="$(GH_BIN="${dir}/gh-stub" wp_scan)"
 
-    local want='{"locked":false,"reconcile":305,"paused":null,"pickSig":"290","prSig":"305"}'
+    local want='{"locked":false,"reconcile":305,"paused":null,"pickSig":"290","prSig":"305","slices":1,"wayfinder":0,"openMaps":0}'
     if [ "${scan}" != "${want}" ]; then
         fail "scan shape mismatch" "got:  ${scan}
 want: ${want}"
@@ -525,6 +527,81 @@ EOF
 }
 
 #-------------------------------------------------------------------------------
+# Test 21: the eligible queue is split by ticket kind — a `wayfinder:*` ticket
+# is planning work routed to /afk-resolve, an unlabelled one is an
+# implementation slice. Ineligible tickets (a state label) count for neither.
+#-------------------------------------------------------------------------------
+test_scan_splits_slices_and_wayfinder() {
+    echo "TEST: wp_scan splits the eligible queue into slices and wayfinder"
+
+    local dir; dir="$(make_env)"
+    trap "rm -rf '${dir}'" RETURN
+    cat > "${dir}/picks.out" <<'EOF'
+[{"number":589,"labels":[{"name":"AFK"}]},
+ {"number":590,"labels":[{"name":"AFK"},{"name":"wayfinder:research"}]},
+ {"number":591,"labels":[{"name":"AFK"},{"name":"wayfinder:task"}]},
+ {"number":592,"labels":[{"name":"AFK"},{"name":"AFK:done"}]}]
+EOF
+
+    local scan
+    scan="$(GH_BIN="${dir}/gh-stub" wp_scan)"
+
+    local got want
+    got="$(printf '%s' "${scan}" | jq -c '{pickSig, slices, wayfinder}')"
+    want='{"pickSig":"589,590,591","slices":1,"wayfinder":2}'
+    if [ "${got}" != "${want}" ]; then
+        fail "queue split mismatch" "got:  ${got}
+want: ${want}"
+        return
+    fi
+
+    pass "wp_scan splits the eligible queue into slices and wayfinder"
+}
+
+#-------------------------------------------------------------------------------
+# Test 22: open maps are counted for the dashboard's Wayfinder tile.
+#-------------------------------------------------------------------------------
+test_scan_counts_open_maps() {
+    echo "TEST: wp_scan counts open wayfinder:map issues"
+
+    local dir; dir="$(make_env)"
+    trap "rm -rf '${dir}'" RETURN
+    echo "2" > "${dir}/maps.out"
+
+    local got
+    got="$(GH_BIN="${dir}/gh-stub" wp_scan | jq -r '.openMaps')"
+    if [ "${got}" != "2" ]; then
+        fail "openMaps must count open maps" "got=${got}"
+        return
+    fi
+
+    pass "wp_scan counts open wayfinder:map issues"
+}
+
+#-------------------------------------------------------------------------------
+# Test 23: the queue and map queries fail SAFE — a gh error must scan as an
+# empty queue with zero counts, never crash the probe or emit invalid JSON.
+#-------------------------------------------------------------------------------
+test_scan_queue_error_reads_empty() {
+    echo "TEST: wp_scan queue/map query errors fail safe as empty"
+
+    local dir; dir="$(make_env)"
+    trap "rm -rf '${dir}'" RETURN
+    rm "${dir}/picks.out" "${dir}/maps.out"   # stub's cat fails → gh non-zero
+
+    local got want
+    got="$(GH_BIN="${dir}/gh-stub" wp_scan | jq -c '{pickSig, slices, wayfinder, openMaps}')"
+    want='{"pickSig":"","slices":0,"wayfinder":0,"openMaps":0}'
+    if [ "${got}" != "${want}" ]; then
+        fail "queue/map errors must scan as empty" "got:  ${got}
+want: ${want}"
+        return
+    fi
+
+    pass "wp_scan queue/map query errors fail safe as empty"
+}
+
+#-------------------------------------------------------------------------------
 # Run suite
 #-------------------------------------------------------------------------------
 echo "=========================================="
@@ -551,6 +628,9 @@ test_decide_pr_empty_baseline_no_wake
 test_decide_locked_suppresses_shrink
 test_scan_incomplete_pr_sets_reconcile
 test_scan_bot_complete_pr_no_reconcile
+test_scan_splits_slices_and_wayfinder
+test_scan_counts_open_maps
+test_scan_queue_error_reads_empty
 
 echo ""
 echo "=========================================="
