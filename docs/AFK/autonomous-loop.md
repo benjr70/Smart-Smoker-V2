@@ -152,19 +152,27 @@ A PR **needs attention** when it is *ours* (open, not draft, head
   finished: the one-time review marker (`<!-- pr-review-done -->`) and/or any
   `Manual verification — … round` comment is missing because a prior fire
   died mid-tail. Detected by `pr_triage_enrich` (one `gh pr view --json
-  comments` per otherwise-clean agent PR; fails safe toward "complete"), or
+  comments,files` per otherwise-clean agent PR — the same call carries the
+  docs-only signal below; fails safe toward "complete"), or
 - it is **docs-only** — every file it changes lives under `docs/research/`
   (a research PR). It carries no code risk and never earns review/verify
   rounds, so it is not reconciled at all: `lib/docs-only-gate.sh` re-checks
-  the rule against the real diff (three-dot, `--no-renames`) and, when CI is
-  green, squash-merges it with an admin token pinned to the head sha
-  (`--match-head-commit`). If the gate refuses — a non-docs path, red or
-  pending checks, a sha that moved — the PR falls back to the normal
-  `incomplete` reconcile path.
+  the rule against the real diff (three-dot, `--no-renames`), refuses unless
+  CI is actually green (an empty check list is *not* green — nothing ran),
+  and hands §1.2 the exact admin squash-merge command pinned to the head sha
+  (`--match-head-commit`). The gate only decides; §1.2 runs the merge, so the
+  one call site that can land a commit on master stays in the skill. If the
+  gate refuses — a non-docs path, red/pending/absent checks, a sha that moved
+  — the PR falls back to the normal `incomplete` reconcile path.
+
+*Ours* covers both harness branch shapes: `feat/issue-<N>` (slice PRs) and
+`research/<ticket-slug>` (`/afk-resolve` research PRs — the docs-only ones).
+The ticket number comes from the branch, else the PR title's `(#N)`, else it
+is null and the reconcile runs without an issue lock.
 
 `AFK:revise` outranks plain conflicts, which outrank `docs-merge`, which
-outranks `incomplete`; oldest first within rank. Parked PRs (`AFK:revise-failed` / `AFK:rebase-failed`)
-and drafts are skipped.
+outranks `incomplete`; oldest first within rank. Parked PRs
+(`AFK:revise-failed` / `AFK:rebase-failed`) and drafts are skipped.
 
 This gives the pipeline its ordering invariant: **outstanding agent PRs are
 finished before any new `AFK` issue is picked** — while any PR still needs
@@ -249,6 +257,7 @@ on every PR.
 | `lib/exhaustion-classifier.sh` | OK / EXHAUSTED / FAILED + reset scrape |
 | `lib/pause-resume.sh` | resume vs fail (cap) for paused issues |
 | `lib/pr-triage.sh` | which PR needs reconciling (ours-filter, rank, order) |
+| `lib/docs-only-gate.sh` | docs-only verdict + the pinned admin squash-merge command |
 | `lib/work-probe.sh` | mid-sleep "did work appear?" scan + wake decision |
 | `lib/thread-reconciler.sh` | unresolved-thread enum, in-thread reply, resolve |
 | `lib/review-poster.sh` | render/post marked inline review comments, agent-thread filter, done-marker |

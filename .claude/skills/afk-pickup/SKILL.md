@@ -97,8 +97,15 @@ ours-shaped PR is still bot-incomplete this section fires and exits before
 bot-complete (CI green, one-time review done, a verification round posted). A
 bot-complete PR merely awaiting a human merge triggers nothing — work-ahead
 stays. Detection is a cheap `gh` read + the **PR Triage** deep module — zero
-Claude usage when nothing needs attention; the incomplete signals cost one extra
-`gh pr view --json comments` per otherwise-clean agent PR.
+Claude usage when nothing needs attention; both extra signals cost a single
+`gh pr view --json comments,files` per otherwise-clean agent PR.
+
+"Ours-shaped" covers both branch shapes the harness creates: `feat/issue-<N>`
+(slice PRs) and `research/<ticket-slug>` (`/afk-resolve` research PRs — exactly
+the docs-only PRs `docs-merge` exists for). The ticket number is derived from
+the branch, else from the PR title's `(#N)`; `.reconcile.issue` can therefore be
+`null`, and when it is, skip the issue lock and the ticket comment below (there
+is no ticket) — the PR is still worked.
 
 `pr_triage_scan` owns the `gh pr list` call and rides out GitHub's async
 mergeability: a fresh master push leaves every open PR `UNKNOWN` for a few
@@ -137,7 +144,10 @@ picked:   reconcile PR #<RECON_PR> (issue #<RECON_N>)
 `/pr-review` and `/verify-pr` entirely: green CI plus the gate's own re-check of
 the real diff are the whole bar. Run the **docs-only gate** (deep module
 `scripts/claude-agent/lib/docs-only-gate.sh` — it owns the docs-only rule and
-the merge recipe; never hand-roll either).
+the merge recipe; never hand-roll either). The gate only ever **decides**: it
+prints a verdict plus the exact merge command, and **this section runs that
+command** — the one call site that can land a commit on master stays here,
+reviewable.
 
 The gate diffs locally, so the head commit must actually be in this clone —
 which it usually is not: the fire's checkout fetches `origin/master` only, and
@@ -151,37 +161,50 @@ git fetch origin master --quiet
 git fetch origin "refs/pull/$RECON_PR/head" --quiet   # or "$RECON_BRANCH"
 GATE=$(scripts/claude-agent/lib/docs-only-gate.sh \
     --base origin/master --head "$HEAD_SHA" --pr "$RECON_PR" \
-    --repo benjr70/Smart-Smoker-V2 --merge 2>&1 >/tmp/docs-gate.json)
+    --repo benjr70/Smart-Smoker-V2 --check-state 2>&1 >/tmp/docs-gate.json)
 GATE_RC=$?
 GATE_JSON=$(cat /tmp/docs-gate.json)   # stdout is the verdict; $GATE is stderr
 ```
 
-On `GATE_RC` 0 the PR is merged (squash, admin, pinned to `$HEAD_SHA`): comment
-on the ticket, restore the lock, report, exit 0 — no agent is spawned, so the
-fire costs nothing beyond these calls.
+The gate exits **0 (approved)** or **1 (refused)** — nothing else; `.reason`
+(absent on 0) says why it refused. On `GATE_RC` 0, run the gate's own
+`.mergeCmd` verbatim (it carries `--squash --admin --repo` and
+`--match-head-commit "$HEAD_SHA"`, so a branch that moved under us fails the
+merge instead of landing unreviewed code). Never retype it:
 
 ```bash
-gh issue comment "$RECON_N" \
-    --body "docs-merge: PR #$RECON_PR squash-merged $HEAD_SHA at $(date -u +%FT%TZ)"
+if [ "$GATE_RC" -eq 0 ]; then
+    MERGE_CMD=$(printf '%s' "$GATE_JSON" | jq -r '.mergeCmd')
+    if eval "$MERGE_CMD"; then
+        gh issue comment "$RECON_N" \
+            --body "docs-merge: PR #$RECON_PR squash-merged $HEAD_SHA at $(date -u +%FT%TZ)"
+        # report, restore the lock, exit 0 — no agent is spawned, so the fire
+        # costs nothing beyond these calls.
+    fi
+fi
 ```
 
-**Every non-zero `GATE_RC` must show up in the §7 report** — a gate that could
-not run is a harness bug and must never vanish into a silent reconcile. Derive
-the `docs-merge:` line from the exit code:
+**Every refusal must show up in the §7 report** — a gate that could not run is a
+harness bug and must never vanish into a silent reconcile. Derive the
+`docs-merge:` line from `.reason`:
 
-| `GATE_RC` | meaning                | `docs-merge:` line                                                        | then                        |
-| --------- | ---------------------- | ------------------------------------------------------------------------- | --------------------------- |
-| 0         | merged                 | `PR #<P> squash-merged <sha> at <ISO ts>`                                 | comment, restore lock, exit |
-| 1         | not docs-only          | `REFUSED — not-docs-only: <comma-joined .changed from $GATE_JSON>`        | fall through                |
-| 3         | docs-only but unmerged | `REFUSED — <.reason from $GATE_JSON>` (`checks-not-green`/`merge-failed`) | fall through                |
-| 2         | the gate could not run | `ERROR — gate could not run: <.reason from $GATE_JSON, else $GATE>`       | fall through                |
+| outcome                                                     | `docs-merge:` line                                                 | then                        |
+| ----------------------------------------------------------- | ------------------------------------------------------------------ | --------------------------- |
+| `GATE_RC` 0, merge command succeeded                        | `PR #<P> squash-merged <sha> at <ISO ts>`                          | comment, restore lock, exit |
+| `GATE_RC` 0, merge command failed                           | `REFUSED — merge-failed: <last line of the command's stderr>`      | fall through                |
+| `not-docs-only`                                             | `REFUSED — not-docs-only: <comma-joined .changed from $GATE_JSON>` | fall through                |
+| `checks-not-green` / `checks-missing` / `checks-unreadable` | `REFUSED — <.reason>`                                              | fall through                |
+| `head-missing` / `git-failed` / `usage`                     | `ERROR — gate could not run: <.reason, else $GATE>`                | fall through                |
 
-Exit 1 and 3 are genuine refusals about the PR itself; exit 2 (bad args, git
-unusable, `head-missing` — the fetch above did not land) says nothing about the
-PR at all. All three fall through to the `/pr-reconcile` path below with
+The first four rows are genuine refusals about the PR itself (`checks-missing`
+means _no_ check ran — an admin merge bypasses branch protection, so an empty
+check list vouches for nothing). The last row says nothing about the PR at all:
+bad args, git unusable, or `head-missing` (the fetch above did not land). Every
+refusal falls through to the `/pr-reconcile` path below with
 `RECON_REASON=incomplete` so the PR still gets finished the normal way — a
-red-CI docs PR gets its fix loop instead of sitting merged-never — but only 1
-and 3 are expected in steady state; a recurring `ERROR —` line is a bug to file.
+red-CI docs PR gets its fix loop instead of sitting merged-never — but only the
+refusal rows are expected in steady state; a recurring `ERROR —` line is a bug
+to file.
 
 Then spawn the **`/pr-reconcile`** skill via the `Agent` tool —
 `subagent_type: general-purpose`, `model: opus`, `run_in_background: false`

@@ -10,11 +10,19 @@
 #       "reason": "revise|conflict|docs-merge|incomplete" }
 #     { "pr": null }
 #
+# `issue` is null when no ticket number can be derived from the head branch or
+# the PR title (possible on a hand-named research branch) — the caller must
+# handle that: no issue lock, no ticket comment, the PR is still worked.
+#
 # "Ours" filter — a PR is only ever considered when ALL hold:
 #   - state OPEN and not a draft (drafts are the escalation parking state —
 #     AFK:checks-failed / exhausted fix loops — and must never be auto-picked);
-#   - head branch matches feat/issue-<M> (the only branch shape afk-pickup
-#     creates; defends against reconciling a human's hand-made PR);
+#   - head branch matches one of the two shapes the harness creates —
+#     `feat/issue-<M>` (afk-pickup slices) or `research/<ticket-slug>`
+#     (/afk-resolve research PRs, which are exactly the docs-only PRs reason
+#     "docs-merge" exists for). Defends against reconciling a human's hand-made
+#     PR. The shape lives in one place, PR_TRIAGE_OURS_RE, because three jq
+#     programs below must agree on it;
 #   - author login equals PR_TRIAGE_AUTHOR when that env is non-empty (defends
 #     against a fork/mirror PR that happens to reuse the branch naming).
 #
@@ -51,7 +59,7 @@
 # The function is pure: it reads only stdin + env. The caller owns the gh call:
 #
 #   gh pr list --state open \
-#     --json number,headRefName,isDraft,mergeable,labels,createdAt,author
+#     --json number,headRefName,title,isDraft,mergeable,labels,createdAt,author
 #
 # Env:
 #   PR_TRIAGE_AUTHOR   agent's GitHub login; empty (default) disables the check
@@ -60,6 +68,28 @@
 #   0 — a PR was picked (verdict has a number)
 #   1 — nothing needs attention (verdict {"pr":null}); also for empty/malformed
 #       input — a broken sensor must fall through to the normal pick, not crash.
+
+# shellcheck source=scripts/claude-agent/lib/docs-research-paths.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/docs-research-paths.sh"
+
+# The one definition of an "ours"-shaped head branch (see the header). Both
+# afk-pickup's slice branches and /afk-resolve's research branches must match,
+# and nothing a human hand-names should.
+: "${PR_TRIAGE_OURS_RE:=^(feat/issue-[0-9]+|research/[A-Za-z0-9._-]+)$}"
+
+# jq prelude shared by the three programs below: the ours-shaped test and the
+# tolerant ticket-number extraction. A research branch may or may not carry the
+# ticket number; `capture` raises on no-match, so every branch is guarded with
+# `?` and the whole chain falls back to null rather than collapsing the pick.
+# shellcheck disable=SC2016  # jq program text: $ours/$title are jq vars.
+PR_TRIAGE_JQ_DEFS='
+    def ours: .headRefName // "" | test($ours);
+    def issue_of:
+      ((.headRefName // "" | capture("^feat/issue-(?<n>[0-9]+)$") | .n | tonumber)?
+       // (.headRefName // "" | capture("^research/(?<n>[0-9]+)") | .n | tonumber)?
+       // ((.title // "") | capture("#(?<n>[0-9]+)") | .n | tonumber)?
+       // null);
+'
 
 # pr_triage_scan: own the gh call AND ride out GitHub's async mergeability.
 #
@@ -85,13 +115,14 @@ pr_triage_scan() {
 
     for ((i = 0; i <= tries; i++)); do
         prs="$("${gh}" pr list --state open \
-            --json number,headRefName,isDraft,mergeable,labels,createdAt,author \
+            --json number,headRefName,title,isDraft,mergeable,labels,createdAt,author \
             2>/dev/null || echo '[]')"
 
-        unknown="$(printf '%s' "${prs}" | jq '
+        unknown="$(printf '%s' "${prs}" | jq --arg ours "${PR_TRIAGE_OURS_RE}" \
+            "${PR_TRIAGE_JQ_DEFS}"'
             [ .[]
               | select((.isDraft // false) | not)
-              | select(.headRefName | test("^feat/issue-[0-9]+$"))
+              | select(ours)
               | select((.mergeable // "UNKNOWN") == "UNKNOWN") ]
             | length' 2>/dev/null || echo '0')"
 
@@ -108,14 +139,15 @@ pr_triage_scan() {
 # triage reasons "incomplete" and "docs-merge".
 #
 # Reads the `gh pr list --json ...` array on stdin and, for every PR that is
-# ours-shaped and otherwise attention-free (open, non-draft, feat/issue-<N>,
+# ours-shaped and otherwise attention-free (open, non-draft, ours branch shape,
 # author match, no AFK:revise, not parked, not CONFLICTING), fetches its
-# conversation comments once (`gh pr view --json comments`) and merges:
+# conversation comments AND its changed-file list in ONE
+# `gh pr view --json comments,files` round trip (two calls per PR would double
+# this sensor's API cost and its rate-limit exposure) and merges:
 #   reviewDone — any comment contains the <!-- pr-review-done --> marker
 #                (posted by /pr-review via lib/review-poster.sh)
 #   verifyDone — any comment matches "Manual verification — .*round"
 #                (posted by /verify-pr, one per round; post-reconcile counts)
-# and its changed-file list (`gh pr view --json files`):
 #   docsOnly   — the PR changes at least one file and every one of them is
 #                under docs/research/ (see lib/docs-only-gate.sh, which re-runs
 #                the same rule against the real diff before merging)
@@ -131,8 +163,8 @@ pr_triage_scan() {
 # Env: GH_BIN, PR_TRIAGE_AUTHOR (same semantics as pr_triage_pick).
 # Exit: always 0; stdout is the (possibly enriched) payload.
 pr_triage_enrich() {
-    local gh="${GH_BIN:-gh}" payload nums num comments review_done verify_done
-    local files docs_only fields merged
+    local gh="${GH_BIN:-gh}" payload nums num view review_done verify_done
+    local docs_only fields merged
 
     payload="$(cat)"
 
@@ -141,12 +173,13 @@ pr_triage_enrich() {
         return 0
     fi
 
-    nums="$(printf '%s' "${payload}" | jq -r --arg author "${PR_TRIAGE_AUTHOR:-}" '
+    nums="$(printf '%s' "${payload}" | jq -r --arg author "${PR_TRIAGE_AUTHOR:-}" \
+        --arg ours "${PR_TRIAGE_OURS_RE}" "${PR_TRIAGE_JQ_DEFS}"'
         def labels_of: [.labels[]?.name // empty];
         .[]
         | select((.state // "OPEN") == "OPEN")
         | select((.isDraft // false) | not)
-        | select(.headRefName | test("^feat/issue-[0-9]+$"))
+        | select(ours)
         | select(($author == "") or ((.author.login // "") == $author))
         | (labels_of) as $lbls
         | select(($lbls | index("AFK:revise") | not)
@@ -158,25 +191,31 @@ pr_triage_enrich() {
     for num in ${nums}; do
         fields='{}'
 
-        # Bot-tail signals (reason "incomplete").
-        comments="$("${gh}" pr view "${num}" --json comments 2>/dev/null)" && {
-            review_done="$(printf '%s' "${comments}" | jq                 'any(.comments[]?; .body | contains("<!-- pr-review-done"))' 2>/dev/null)"
-            verify_done="$(printf '%s' "${comments}" | jq                 'any(.comments[]?; .body | test("Manual verification — .*round"))' 2>/dev/null)"
-            if [ -n "${review_done}" ] && [ -n "${verify_done}" ]; then
-                fields="$(printf '%s' "${fields}" | jq -c                     --argjson r "${review_done}" --argjson v "${verify_done}"                     '. + {reviewDone: $r, verifyDone: $v}' 2>/dev/null || printf '%s' "${fields}")"
-            fi
-        }
+        # ONE round trip for both signals: bot-tail comments (reason
+        # "incomplete") and the changed-file list (reason "docs-merge").
+        view="$("${gh}" pr view "${num}" --json comments,files 2>/dev/null)" || continue
 
-        # Docs-only signal (reason "docs-merge"): every changed file under
-        # docs/research/ and at least one. Absent on any gh/jq error → the pick
-        # reads it as false, so a broken sensor never auto-merges anything.
-        files="$("${gh}" pr view "${num}" --json files 2>/dev/null)" && {
-            docs_only="$(printf '%s' "${files}" | jq                 '((.files | length) > 0)
-                 and all(.files[]; .path | startswith("docs/research/"))' 2>/dev/null)"
-            if [ "${docs_only}" = "true" ] || [ "${docs_only}" = "false" ]; then
-                fields="$(printf '%s' "${fields}" | jq -c --argjson d "${docs_only}"                     '. + {docsOnly: $d}' 2>/dev/null || printf '%s' "${fields}")"
-            fi
-        }
+        review_done="$(printf '%s' "${view}" | jq \
+            'any(.comments[]?; .body | contains("<!-- pr-review-done"))' 2>/dev/null)"
+        verify_done="$(printf '%s' "${view}" | jq \
+            'any(.comments[]?; .body | test("Manual verification — .*round"))' 2>/dev/null)"
+        if [ -n "${review_done}" ] && [ -n "${verify_done}" ]; then
+            fields="$(printf '%s' "${fields}" | jq -c \
+                --argjson r "${review_done}" --argjson v "${verify_done}" \
+                '. + {reviewDone: $r, verifyDone: $v}' 2>/dev/null || printf '%s' "${fields}")"
+        fi
+
+        # Docs-only signal (reason "docs-merge"): every changed file under the
+        # shared research prefix, and at least one. Absent on any gh/jq error →
+        # the pick reads it as false, so a broken sensor never auto-merges.
+        docs_only="$(printf '%s' "${view}" | jq --arg p "${DOCS_RESEARCH_PREFIX}" \
+            'if (.files | type) == "array"
+             then ((.files | length) > 0) and all(.files[]; .path | startswith($p))
+             else empty end' 2>/dev/null)"
+        if [ "${docs_only}" = "true" ] || [ "${docs_only}" = "false" ]; then
+            fields="$(printf '%s' "${fields}" | jq -c --argjson d "${docs_only}" \
+                '. + {docsOnly: $d}' 2>/dev/null || printf '%s' "${fields}")"
+        fi
 
         [ "${fields}" = "{}" ] && continue
         merged="$(printf '%s' "${payload}" | jq -c             --argjson n "${num}" --argjson f "${fields}"             'map(if .number == $n then . + $f else . end)' 2>/dev/null)" || continue
@@ -198,12 +237,13 @@ pr_triage_pick() {
         return 1
     fi
 
-    verdict="$(printf '%s' "${payload}" | jq -c --arg author "${PR_TRIAGE_AUTHOR:-}" '
+    verdict="$(printf '%s' "${payload}" | jq -c --arg author "${PR_TRIAGE_AUTHOR:-}" \
+        --arg ours "${PR_TRIAGE_OURS_RE}" "${PR_TRIAGE_JQ_DEFS}"'
         def labels_of: [.labels[]?.name // empty];
         [ .[]
           | select((.state // "OPEN") == "OPEN")
           | select((.isDraft // false) | not)
-          | select(.headRefName | test("^feat/issue-[0-9]+$"))
+          | select(ours)
           | select(($author == "") or ((.author.login // "") == $author))
           | (labels_of) as $lbls
           | select(($lbls | index("AFK:revise-failed") | not)
@@ -223,7 +263,7 @@ pr_triage_pick() {
         | if . == null then {pr: null}
           else { pr: .number,
                  branch: .headRefName,
-                 issue: (.headRefName | capture("^feat/issue-(?<n>[0-9]+)$").n | tonumber),
+                 issue: issue_of,
                  reason: .reason }
           end' 2>/dev/null)"
 

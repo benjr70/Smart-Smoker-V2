@@ -4,10 +4,11 @@
 # Run: bash scripts/claude-agent/lib/docs-only-gate.test.sh
 #
 # Strategy: the gate is a runnable CLI whose only outside contact is `git diff`
-# and `gh` — both injected as stub binaries (GIT_BIN / GH_BIN) written into a
-# temp dir, so no test ever touches the network or real repo state. Assertions
-# cover the stdout JSON verdict + the exit code + (for --merge) the exact
-# command handed to gh — the contract afk-pickup §1.2 consumes.
+# and `gh pr checks` — both injected as stub binaries (GIT_BIN / GH_BIN) written
+# into a temp dir, so no test ever touches the network or real repo state.
+# Assertions cover the stdout JSON verdict (docsOnly / changed / mergeCmd /
+# reason) and the two-value exit code — the contract afk-pickup §1.2 consumes.
+# The gate never merges: every test also asserts gh is never asked to.
 
 set -uo pipefail
 
@@ -40,7 +41,7 @@ fi
 
 # make_env: temp dir with a git stub that echoes the canned diff in diff.out
 # (and records its argv in git-calls) and a gh stub that serves checks.json for
-# `pr checks`, records `pr merge` in gh-calls, and fails on anything else.
+# `pr checks`, records every call in gh-calls, and fails on anything else.
 make_env() {
     local dir; dir="$(mktemp -d)"
     cat > "${dir}/git-stub" <<EOF
@@ -56,7 +57,6 @@ EOF
 echo "\$*" >> "${dir}/gh-calls"
 case "\$*" in
     *"pr checks"*) cat "${dir}/checks.json" 2>/dev/null || exit 1 ;;
-    *"pr merge"*)  exit "\$(cat "${dir}/merge-rc" 2>/dev/null || echo 0)" ;;
     *) exit 1 ;;
 esac
 EOF
@@ -76,7 +76,7 @@ run_gate() { # run_gate <dir> <args...>
 #-------------------------------------------------------------------------------
 # Test 1: a diff touching only docs/research/** is docs-only — exit 0, the
 # verdict carries the changed paths and the admin squash command pinned to the
-# head sha.
+# head sha, --repo included so the caller can run it from any cwd.
 #-------------------------------------------------------------------------------
 test_docs_only_verdict() {
     echo "TEST: docs-only diff yields docsOnly true + pinned merge command"
@@ -101,9 +101,13 @@ test_docs_only_verdict() {
         fail "verdict must carry docsOnly true, sha and changed paths" "out=${out}"
         return
     fi
+    if [ "$(printf '%s' "${out}" | jq -r '.reason // "none"')" != "none" ]; then
+        fail "an approved verdict must carry no reason" "out=${out}"
+        return
+    fi
     if [ "$(printf '%s' "${out}" | jq -r '.mergeCmd')" \
-        != "gh pr merge 590 --squash --admin --match-head-commit abc123" ]; then
-        fail "mergeCmd must be the admin squash pinned to the head sha" "out=${out}"
+        != "gh pr merge 590 --repo benjr70/Smart-Smoker-V2 --squash --admin --match-head-commit abc123" ]; then
+        fail "mergeCmd must be the admin squash pinned to sha, carrying --repo" "out=${out}"
         return
     fi
     if ! grep -q -- "--no-renames origin/master...abc123" "${dir}/git-calls"; then
@@ -112,7 +116,7 @@ test_docs_only_verdict() {
         return
     fi
     if [ -s "${dir}/gh-calls" ]; then
-        fail "without --merge the gate must not call gh" "calls: $(cat "${dir}/gh-calls")"
+        fail "without --check-state the gate must not call gh" "calls: $(cat "${dir}/gh-calls")"
         return
     fi
 
@@ -121,7 +125,7 @@ test_docs_only_verdict() {
 
 #-------------------------------------------------------------------------------
 # Test 2: any path outside docs/research/ poisons the whole PR — docsOnly false,
-# exit 1, no merge command ever runs.
+# exit 1, reason not-docs-only.
 #-------------------------------------------------------------------------------
 test_non_docs_path_refused() {
     echo "TEST: a path outside docs/research is refused"
@@ -131,7 +135,7 @@ test_non_docs_path_refused() {
     printf 'docs/research/577.md\napps/backend/src/app.service.ts\n' > "${dir}/diff.out"
 
     local out rc
-    out="$(run_gate "${dir}" --base origin/master --head abc123 --pr 590 --merge)"
+    out="$(run_gate "${dir}" --base origin/master --head abc123 --pr 590 --check-state 2>/dev/null)"
     rc=$?
 
     if [ "${rc}" -ne 1 ]; then
@@ -139,13 +143,12 @@ test_non_docs_path_refused() {
         return
     fi
     if [ "$(printf '%s' "${out}" | jq -r '.docsOnly')" != "false" ] \
-        || [ "$(printf '%s' "${out}" | jq -r '.merged')" != "false" ] \
         || [ "$(printf '%s' "${out}" | jq -r '.reason')" != "not-docs-only" ]; then
-        fail "verdict must be docsOnly false / merged false / reason not-docs-only" "out=${out}"
+        fail "verdict must be docsOnly false with reason not-docs-only" "out=${out}"
         return
     fi
-    if grep -q "pr merge" "${dir}/gh-calls"; then
-        fail "a refused PR must never be merged" "calls: $(cat "${dir}/gh-calls")"
+    if [ -s "${dir}/gh-calls" ]; then
+        fail "a refused PR must not even cost a check read" "calls: $(cat "${dir}/gh-calls")"
         return
     fi
 
@@ -166,7 +169,7 @@ test_rename_into_docs_research_refused() {
     printf 'docs/research/moved-spec.md\nscripts/ralph/old-spec.md\n' > "${dir}/diff.out"
 
     local out rc
-    out="$(run_gate "${dir}" --base origin/master --head abc123 --pr 590)"
+    out="$(run_gate "${dir}" --base origin/master --head abc123 --pr 590 2>/dev/null)"
     rc=$?
 
     if [ "${rc}" -ne 1 ] || [ "$(printf '%s' "${out}" | jq -r '.docsOnly')" != "false" ]; then
@@ -189,7 +192,7 @@ test_empty_diff_refused() {
     : > "${dir}/diff.out"
 
     local out rc
-    out="$(run_gate "${dir}" --base origin/master --head abc123 --pr 590)"
+    out="$(run_gate "${dir}" --base origin/master --head abc123 --pr 590 2>/dev/null)"
     rc=$?
 
     if [ "${rc}" -ne 1 ] || [ "$(printf '%s' "${out}" | jq -r '.docsOnly')" != "false" ] \
@@ -202,11 +205,12 @@ test_empty_diff_refused() {
 }
 
 #-------------------------------------------------------------------------------
-# Test 5: --merge on a docs-only PR with all checks green runs exactly the
-# pinned admin squash-merge and reports merged true.
+# Test 5: --check-state on a docs-only PR with all checks green approves the
+# merge (exit 0, no reason) and hands the caller the merge command — the gate
+# itself never runs it.
 #-------------------------------------------------------------------------------
-test_merge_when_checks_green() {
-    echo "TEST: --merge squash-merges when checks are green"
+test_approved_when_checks_green() {
+    echo "TEST: --check-state approves when checks are green"
 
     local dir; dir="$(make_env)"
     trap "rm -rf '${dir}'" RETURN
@@ -214,28 +218,33 @@ test_merge_when_checks_green() {
 
     local out rc
     out="$(run_gate "${dir}" --base origin/master --head abc123 --pr 590 \
-        --repo benjr70/Smart-Smoker-V2 --merge)"
+        --repo benjr70/Smart-Smoker-V2 --check-state)"
     rc=$?
 
-    if [ "${rc}" -ne 0 ] || [ "$(printf '%s' "${out}" | jq -r '.merged')" != "true" ]; then
-        fail "a green docs-only PR must merge (exit 0, merged true)" "rc=${rc} out=${out}"
+    if [ "${rc}" -ne 0 ] || [ "$(printf '%s' "${out}" | jq -r '.reason // "none"')" != "none" ]; then
+        fail "a green docs-only PR must be approved (exit 0, no reason)" "rc=${rc} out=${out}"
         return
     fi
-    if ! grep -q "^pr merge 590 --repo benjr70/Smart-Smoker-V2 --squash --admin --match-head-commit abc123$" \
+    if ! grep -q "^pr checks 590 --repo benjr70/Smart-Smoker-V2 --json name,bucket$" \
         "${dir}/gh-calls"; then
-        fail "merge must be the pinned admin squash" "calls: $(cat "${dir}/gh-calls")"
+        fail "check state must be read for the given repo" "calls: $(cat "${dir}/gh-calls")"
+        return
+    fi
+    if grep -q "pr merge" "${dir}/gh-calls"; then
+        fail "the gate must never merge — the caller runs mergeCmd" \
+            "calls: $(cat "${dir}/gh-calls")"
         return
     fi
 
-    pass "--merge squash-merges when checks are green"
+    pass "--check-state approves when checks are green"
 }
 
 #-------------------------------------------------------------------------------
-# Test 6: a failing check refuses the merge — exit 3, merged false with reason
-# checks-not-green, and gh is never asked to merge.
+# Test 6: a failing check refuses — exit 1 with reason checks-not-green, and the
+# verdict still says docsOnly true (the refusal is about CI, not the paths).
 #-------------------------------------------------------------------------------
-test_merge_refused_when_checks_red() {
-    echo "TEST: --merge refuses when a check is not green"
+test_refused_when_checks_red() {
+    echo "TEST: --check-state refuses when a check is not green"
 
     local dir; dir="$(make_env)"
     trap "rm -rf '${dir}'" RETURN
@@ -244,33 +253,28 @@ test_merge_refused_when_checks_red() {
         > "${dir}/checks.json"
 
     local out rc
-    out="$(run_gate "${dir}" --base origin/master --head abc123 --pr 590 --merge)"
+    out="$(run_gate "${dir}" --base origin/master --head abc123 --pr 590 --check-state 2>/dev/null)"
     rc=$?
 
-    if [ "${rc}" -ne 3 ]; then
-        fail "a red check must refuse the merge with exit 3" "rc=${rc} out=${out}"
+    if [ "${rc}" -ne 1 ]; then
+        fail "a red check must refuse with exit 1" "rc=${rc} out=${out}"
         return
     fi
     if [ "$(printf '%s' "${out}" | jq -r '.docsOnly')" != "true" ] \
-        || [ "$(printf '%s' "${out}" | jq -r '.merged')" != "false" ] \
         || [ "$(printf '%s' "${out}" | jq -r '.reason')" != "checks-not-green" ]; then
-        fail "verdict must stay docsOnly true but merged false / checks-not-green" "out=${out}"
-        return
-    fi
-    if grep -q "pr merge" "${dir}/gh-calls"; then
-        fail "a red PR must never be merged" "calls: $(cat "${dir}/gh-calls")"
+        fail "verdict must stay docsOnly true with reason checks-not-green" "out=${out}"
         return
     fi
 
-    pass "--merge refuses when a check is not green"
+    pass "--check-state refuses when a check is not green"
 }
 
 #-------------------------------------------------------------------------------
 # Test 7: a still-pending check is not green either — the daemon re-runs the
-# gate next fire rather than merging mid-CI.
+# gate next fire rather than approving mid-CI.
 #-------------------------------------------------------------------------------
-test_merge_refused_when_checks_pending() {
-    echo "TEST: --merge refuses while checks are pending"
+test_refused_when_checks_pending() {
+    echo "TEST: --check-state refuses while checks are pending"
 
     local dir; dir="$(make_env)"
     trap "rm -rf '${dir}'" RETURN
@@ -278,26 +282,22 @@ test_merge_refused_when_checks_pending() {
     printf '[{"name":"test","bucket":"pending"}]\n' > "${dir}/checks.json"
 
     local out rc
-    out="$(run_gate "${dir}" --base origin/master --head abc123 --pr 590 --merge)"
+    out="$(run_gate "${dir}" --base origin/master --head abc123 --pr 590 --check-state 2>/dev/null)"
     rc=$?
 
-    if [ "${rc}" -ne 3 ] || [ "$(printf '%s' "${out}" | jq -r '.reason')" != "checks-not-green" ]; then
+    if [ "${rc}" -ne 1 ] || [ "$(printf '%s' "${out}" | jq -r '.reason')" != "checks-not-green" ]; then
         fail "pending checks must refuse the merge" "rc=${rc} out=${out}"
         return
     fi
-    if grep -q "pr merge" "${dir}/gh-calls"; then
-        fail "a pending PR must never be merged" "calls: $(cat "${dir}/gh-calls")"
-        return
-    fi
 
-    pass "--merge refuses while checks are pending"
+    pass "--check-state refuses while checks are pending"
 }
 
 #-------------------------------------------------------------------------------
-# Test 8: unreadable check state fails SAFE — no check list, no merge.
+# Test 8: unreadable check state fails SAFE — no check list, no approval.
 #-------------------------------------------------------------------------------
-test_merge_refused_when_checks_unreadable() {
-    echo "TEST: --merge refuses when check state is unreadable"
+test_refused_when_checks_unreadable() {
+    echo "TEST: --check-state refuses when check state is unreadable"
 
     local dir; dir="$(make_env)"
     trap "rm -rf '${dir}'" RETURN
@@ -305,80 +305,116 @@ test_merge_refused_when_checks_unreadable() {
     rm -f "${dir}/checks.json"
 
     local out rc
-    out="$(run_gate "${dir}" --base origin/master --head abc123 --pr 590 --merge)"
+    out="$(run_gate "${dir}" --base origin/master --head abc123 --pr 590 --check-state 2>/dev/null)"
     rc=$?
 
-    if [ "${rc}" -ne 3 ] || [ "$(printf '%s' "${out}" | jq -r '.reason')" != "checks-not-green" ]; then
+    if [ "${rc}" -ne 1 ] || [ "$(printf '%s' "${out}" | jq -r '.reason')" != "checks-unreadable" ]; then
         fail "unreadable checks must refuse the merge" "rc=${rc} out=${out}"
         return
     fi
 
-    pass "--merge refuses when check state is unreadable"
+    pass "--check-state refuses when check state is unreadable"
 }
 
 #-------------------------------------------------------------------------------
-# Test 9: the merge command itself failing (e.g. --match-head-commit rejects a
-# sha that moved under us) reports merged false with reason merge-failed.
+# Test 8b: an EMPTY check array is not green — it means nothing ran (the gate
+# fired seconds after the push, or a required workflow never queued). An admin
+# merge also bypasses branch protection's required-check list, so approving here
+# would land a docs PR with zero CI signal.
 #-------------------------------------------------------------------------------
-test_merge_command_failure_reported() {
-    echo "TEST: a failing merge command is reported, not swallowed"
+test_refused_when_checks_empty() {
+    echo "TEST: --check-state refuses when no checks ran at all"
 
     local dir; dir="$(make_env)"
     trap "rm -rf '${dir}'" RETURN
     printf 'docs/research/577-merge-recipe.md\n' > "${dir}/diff.out"
-    echo 1 > "${dir}/merge-rc"
+    printf '[]\n' > "${dir}/checks.json"
 
     local out rc
-    out="$(run_gate "${dir}" --base origin/master --head abc123 --pr 590 --merge)"
+    out="$(run_gate "${dir}" --base origin/master --head abc123 --pr 590 --check-state 2>/dev/null)"
     rc=$?
 
-    if [ "${rc}" -ne 3 ] || [ "$(printf '%s' "${out}" | jq -r '.merged')" != "false" ] \
-        || [ "$(printf '%s' "${out}" | jq -r '.reason')" != "merge-failed" ]; then
-        fail "a failed merge must exit 3 with reason merge-failed" "rc=${rc} out=${out}"
+    if [ "${rc}" -ne 1 ] || [ "$(printf '%s' "${out}" | jq -r '.reason')" != "checks-missing" ]; then
+        fail "an empty check list must refuse with reason checks-missing" "rc=${rc} out=${out}"
+        return
+    fi
+    if [ "$(printf '%s' "${out}" | jq -r '.docsOnly')" != "true" ]; then
+        fail "verdict must stay docsOnly true — the refusal is about CI" "out=${out}"
         return
     fi
 
-    pass "a failing merge command is reported, not swallowed"
+    pass "--check-state refuses when no checks ran at all"
 }
 
 #-------------------------------------------------------------------------------
-# Test 10: missing required args are a usage error (exit 2), distinct from a
-# "not docs-only" refusal so the caller never reads a typo as a verdict.
+# Test 9: the gate is a pure decision — no flag, no check state and no verdict
+# makes it mutate anything. It only ever reads.
+#-------------------------------------------------------------------------------
+test_gate_never_mutates() {
+    echo "TEST: the gate never merges, whatever the verdict"
+
+    local dir; dir="$(make_env)"
+    trap "rm -rf '${dir}'" RETURN
+    printf 'docs/research/577-merge-recipe.md\n' > "${dir}/diff.out"
+
+    local out
+    run_gate "${dir}" --base origin/master --head abc123 --pr 590 >/dev/null 2>&1
+    run_gate "${dir}" --base origin/master --head abc123 --pr 590 --check-state >/dev/null 2>&1
+    out="$(run_gate "${dir}" --base origin/master --head abc123 --pr 590)"
+
+    if grep -qE "pr merge|push|api .* -X" "${dir}/gh-calls" \
+        || grep -qE "(^|[[:space:]])(push|commit|merge)([[:space:]]|$)" "${dir}/git-calls"; then
+        fail "the gate must never mutate" \
+            "gh: $(cat "${dir}/gh-calls") git: $(cat "${dir}/git-calls")"
+        return
+    fi
+    if [ "$(printf '%s' "${out}" | jq -r '.mergeCmd')" \
+        != "gh pr merge 590 --squash --admin --match-head-commit abc123" ]; then
+        fail "mergeCmd without --repo must carry no --repo flag" "out=${out}"
+        return
+    fi
+
+    pass "the gate never merges, whatever the verdict"
+}
+
+#-------------------------------------------------------------------------------
+# Test 10: missing/unknown args are a gate ERROR — exit 1 like every refusal,
+# but the JSON reason is "usage", which afk-pickup §1.2 must report as a harness
+# bug rather than as a verdict about the PR.
 #-------------------------------------------------------------------------------
 test_missing_args_usage_error() {
-    echo "TEST: missing args are a usage error"
+    echo "TEST: missing args report reason usage"
 
     local dir; dir="$(make_env)"
     trap "rm -rf '${dir}'" RETURN
 
-    local rc
-    run_gate "${dir}" --base origin/master --head abc123 >/dev/null 2>&1
+    local out rc
+    out="$(run_gate "${dir}" --base origin/master --head abc123 2>/dev/null)"
     rc=$?
-    if [ "${rc}" -ne 2 ]; then
-        fail "a missing --pr must exit 2" "rc=${rc}"
+    if [ "${rc}" -ne 1 ] || [ "$(printf '%s' "${out}" | jq -r '.reason')" != "usage" ]; then
+        fail "a missing --pr must exit 1 with reason usage" "rc=${rc} out=${out}"
         return
     fi
 
-    run_gate "${dir}" --bogus x >/dev/null 2>&1
+    out="$(run_gate "${dir}" --bogus x 2>/dev/null)"
     rc=$?
-    if [ "${rc}" -ne 2 ]; then
-        fail "an unknown arg must exit 2" "rc=${rc}"
+    if [ "${rc}" -ne 1 ] || [ "$(printf '%s' "${out}" | jq -r '.reason')" != "usage" ]; then
+        fail "an unknown arg must exit 1 with reason usage" "rc=${rc} out=${out}"
         return
     fi
 
-    pass "missing args are a usage error"
+    pass "missing args report reason usage"
 }
 
 #-------------------------------------------------------------------------------
 # Test 11: the head object is not in the local clone (agent-run fetches only
 # origin/master; the PR branch may be pruned or pushed from another checkout).
 # A three-dot diff against a missing sha would fail — or worse, diff nothing —
-# so the gate says so explicitly: exit 2 (gate could not run), reason
-# head-missing, and no merge is attempted. The caller must NOT read this as a
-# "not docs-only" refusal.
+# so the gate says so explicitly: reason head-missing, no diff attempted. The
+# caller must NOT read this as a "not docs-only" refusal.
 #-------------------------------------------------------------------------------
 test_missing_head_object_is_gate_error() {
-    echo "TEST: a missing head object is a gate error, not a refusal"
+    echo "TEST: a missing head object reports reason head-missing"
 
     local dir; dir="$(make_env)"
     trap "rm -rf '${dir}'" RETURN
@@ -386,11 +422,11 @@ test_missing_head_object_is_gate_error() {
     : > "${dir}/head-missing"
 
     local out rc
-    out="$(run_gate "${dir}" --base origin/master --head abc123 --pr 590 --merge 2>/dev/null)"
+    out="$(run_gate "${dir}" --base origin/master --head abc123 --pr 590 --check-state 2>/dev/null)"
     rc=$?
 
-    if [ "${rc}" -ne 2 ]; then
-        fail "a missing head object must exit 2" "rc=${rc} out=${out}"
+    if [ "${rc}" -ne 1 ]; then
+        fail "a missing head object must exit 1" "rc=${rc} out=${out}"
         return
     fi
     if [ "$(printf '%s' "${out}" | jq -r '.docsOnly')" != "false" ] \
@@ -403,13 +439,13 @@ test_missing_head_object_is_gate_error() {
             "calls: $(cat "${dir}/git-calls")"
         return
     fi
-    if grep -q -- "diff" "${dir}/git-calls" || grep -q "pr merge" "${dir}/gh-calls"; then
-        fail "an absent head must stop the gate before diff/merge" \
+    if grep -q -- "diff" "${dir}/git-calls" || [ -s "${dir}/gh-calls" ]; then
+        fail "an absent head must stop the gate before diff/check read" \
             "git: $(cat "${dir}/git-calls") gh: $(cat "${dir}/gh-calls")"
         return
     fi
 
-    pass "a missing head object is a gate error, not a refusal"
+    pass "a missing head object reports reason head-missing"
 }
 
 #-------------------------------------------------------------------------------
@@ -423,11 +459,12 @@ test_docs_only_verdict
 test_non_docs_path_refused
 test_rename_into_docs_research_refused
 test_empty_diff_refused
-test_merge_when_checks_green
-test_merge_refused_when_checks_red
-test_merge_refused_when_checks_pending
-test_merge_refused_when_checks_unreadable
-test_merge_command_failure_reported
+test_approved_when_checks_green
+test_refused_when_checks_red
+test_refused_when_checks_pending
+test_refused_when_checks_unreadable
+test_refused_when_checks_empty
+test_gate_never_mutates
 test_missing_args_usage_error
 test_missing_head_object_is_gate_error
 

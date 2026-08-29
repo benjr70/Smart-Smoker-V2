@@ -114,10 +114,15 @@ pickup_triage() {
     local pick_json reconcile=null
     pick_json="$(PR_TRIAGE_AUTHOR="${login}" pr_triage_scan)" || pick_json=''
     if [ -n "${pick_json}" ] && [ "$(printf '%s' "${pick_json}" | jq -r '.pr' 2>/dev/null)" != "null" ]; then
-        local recon_n had_done
+        local recon_n had_done='false'
+        # The ticket number can be null (a research branch that carries none) —
+        # then there is no issue to read a label off, and the caller skips the
+        # issue lock entirely.
         recon_n="$(printf '%s' "${pick_json}" | jq -r '.issue')"
-        had_done="$("${gh}" issue view "${recon_n}" --json labels \
-            --jq '[.labels[].name] | index("AFK:done") != null' 2>/dev/null || echo 'false')"
+        if [ -n "${recon_n}" ] && [ "${recon_n}" != "null" ]; then
+            had_done="$("${gh}" issue view "${recon_n}" --json labels \
+                --jq '[.labels[].name] | index("AFK:done") != null' 2>/dev/null || echo 'false')"
+        fi
         reconcile="$(printf '%s' "${pick_json}" | jq -c --argjson hd "${had_done}" '. + {hadDone: $hd}')"
         _pt_emit reconcile "${login}" "${use_mcp}" 0 "${reconcile}" null null
         return 0

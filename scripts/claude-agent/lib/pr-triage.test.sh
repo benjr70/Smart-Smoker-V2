@@ -40,10 +40,12 @@ fi
 # shellcheck source=/dev/null
 . "${LIB}"
 
-# pr_json <number> <branch> <mergeable> <createdAt> <labels-csv> [author] [isDraft] [state]
+# pr_json <number> <branch> <mergeable> <createdAt> <labels-csv> [author] \
+#         [isDraft] [state] [title]
 pr_json() {
     local number="$1" branch="$2" mergeable="$3" created="$4" labels_csv="${5:-}"
     local author="${6:-agent-bot}" is_draft="${7:-false}" state="${8:-OPEN}"
+    local title="${9:-}"
     local labels="[]"
     if [ -n "${labels_csv}" ]; then
         labels="$(printf '%s' "${labels_csv}" | jq -R 'split(",") | map({name: .})')"
@@ -57,9 +59,11 @@ pr_json() {
         --arg author "${author}" \
         --argjson isDraft "${is_draft}" \
         --arg state "${state}" \
+        --arg title "${title}" \
         '{number: $number, headRefName: $branch, mergeable: $mergeable,
           createdAt: $created, labels: $labels, author: {login: $author},
-          isDraft: $isDraft, state: $state}'
+          isDraft: $isDraft, state: $state}
+         + (if $title == "" then {} else {title: $title} end)'
 }
 
 #-------------------------------------------------------------------------------
@@ -440,9 +444,9 @@ EOF
         | GH_BIN="${dir}/gh-stub" PR_TRIAGE_AUTHOR="agent-bot" pr_triage_enrich)"
 
     if grep -qv "^pr view 400 " "${dir}/calls" \
-        || ! grep -q "^pr view 400 --json comments$" "${dir}/calls" \
-        || ! grep -q "^pr view 400 --json files$" "${dir}/calls"; then
-        fail "only the clean candidate may be probed, for comments and files" \
+        || ! grep -q "^pr view 400 --json comments,files$" "${dir}/calls" \
+        || [ "$(wc -l < "${dir}/calls")" -ne 1 ]; then
+        fail "the clean candidate must be probed exactly once, for both signals" \
             "calls: $(cat "${dir}/calls")"
         return
     fi
@@ -632,12 +636,8 @@ test_enrich_flags_docs_only() {
     cat > "${dir}/gh-stub" <<EOF
 #!/usr/bin/env bash
 case "\$*" in
-    *"--json files"*)
-        case "\$*" in
-            *" 590 "*) printf '%s\\n' '{"files":[{"path":"docs/research/577.md"}]}' ;;
-            *)         printf '%s\\n' '{"files":[{"path":"docs/research/577.md"},{"path":"apps/backend/src/x.ts"}]}' ;;
-        esac ;;
-    *"--json comments"*) printf '%s\\n' '{"comments":[]}' ;;
+    *" 590 "*) printf '%s\\n' '{"comments":[],"files":[{"path":"docs/research/577.md"}]}' ;;
+    *"pr view"*) printf '%s\\n' '{"comments":[],"files":[{"path":"docs/research/577.md"},{"path":"apps/backend/src/x.ts"}]}' ;;
     *) exit 1 ;;
 esac
 EOF
@@ -659,9 +659,10 @@ EOF
 }
 
 #-------------------------------------------------------------------------------
-# Test 20: enrich fails SAFE on the file probe — a gh error leaves docsOnly
-# absent, which the pick reads as "not docs-only" (never auto-merge on a broken
-# sensor); the comment signals still land.
+# Test 20: enrich fails SAFE on the file signal — a payload with no `files` key
+# (truncated/errored view) leaves docsOnly absent, which the pick reads as "not
+# docs-only" (never auto-merge on a broken sensor); the comment signals still
+# land.
 #-------------------------------------------------------------------------------
 test_enrich_docs_only_fails_safe() {
     echo "TEST: enrich docsOnly probe fails safe"
@@ -672,8 +673,7 @@ test_enrich_docs_only_fails_safe() {
     cat > "${dir}/gh-stub" <<EOF
 #!/usr/bin/env bash
 case "\$*" in
-    *"--json files"*)    exit 1 ;;
-    *"--json comments"*) printf '%s\\n' '{"comments":[]}' ;;
+    *"pr view"*) printf '%s\\n' '{"comments":[]}' ;;
     *) exit 1 ;;
 esac
 EOF
@@ -697,6 +697,128 @@ EOF
     fi
 
     pass "enrich docsOnly probe fails safe"
+}
+
+
+#-------------------------------------------------------------------------------
+# Test 21: a research PR lives on `research/<ticket-slug>` (the branch shape
+# /afk-resolve creates), not `feat/issue-<N>`. It must be ours-shaped, or the
+# docs-only PRs that reason "docs-merge" exists for could never be picked at
+# all. The ticket number comes from the slug's leading digits.
+#-------------------------------------------------------------------------------
+test_research_branch_is_ours() {
+    echo "TEST: research/<slug> PR is ours-shaped and picks docs-merge"
+
+    local out rc
+    out="$(jq -s '.' \
+        <(pr_json 594 "research/577-docs-only-merge" "MERGEABLE" "2026-08-28T10:00:00Z" "" \
+            | jq '. + {reviewDone: false, verifyDone: false, docsOnly: true}') \
+        | PR_TRIAGE_AUTHOR="agent-bot" pr_triage_pick)"
+    rc=$?
+
+    if [ "${rc}" -ne 0 ] \
+        || [ "$(printf '%s' "${out}" | jq -r '.pr')" != "594" ] \
+        || [ "$(printf '%s' "${out}" | jq -r '.branch')" != "research/577-docs-only-merge" ] \
+        || [ "$(printf '%s' "${out}" | jq -r '.issue')" != "577" ] \
+        || [ "$(printf '%s' "${out}" | jq -r '.reason')" != "docs-merge" ]; then
+        fail "a research-branch docs PR must pick docs-merge with its ticket" \
+            "rc=${rc} out=${out}"
+        return
+    fi
+
+    pass "research/<slug> PR is ours-shaped and picks docs-merge"
+}
+
+#-------------------------------------------------------------------------------
+# Test 22: ticket extraction is TOLERANT. A research branch need not carry the
+# number; the title's `(#N)` is the fallback, and when neither has one the
+# verdict still names the PR with issue null — an un-numbered branch must never
+# collapse the whole pick to {"pr":null} (a jq `capture` error would).
+#-------------------------------------------------------------------------------
+test_issue_extraction_is_tolerant() {
+    echo "TEST: issue number falls back to the title, then to null"
+
+    local out rc
+    out="$(jq -s '.' \
+        <(pr_json 595 "research/docs-only-merge" "CONFLICTING" "2026-08-28T10:00:00Z" "" \
+            "agent-bot" "false" "OPEN" "docs(research): docs-only merge recipe (#577)") \
+        | pr_triage_pick)"
+    rc=$?
+    if [ "${rc}" -ne 0 ] || [ "$(printf '%s' "${out}" | jq -r '.issue')" != "577" ]; then
+        fail "an un-numbered branch must take the ticket from the title" \
+            "rc=${rc} out=${out}"
+        return
+    fi
+
+    out="$(jq -s '.' \
+        <(pr_json 596 "research/docs-only-merge" "CONFLICTING" "2026-08-28T10:00:00Z" "") \
+        | pr_triage_pick)"
+    rc=$?
+    if [ "${rc}" -ne 0 ] || [ "$(printf '%s' "${out}" | jq -r '.pr')" != "596" ] \
+        || [ "$(printf '%s' "${out}" | jq -r '.issue')" != "null" ]; then
+        fail "no derivable ticket must still pick the PR, with issue null" \
+            "rc=${rc} out=${out}"
+        return
+    fi
+
+    pass "issue number falls back to the title, then to null"
+}
+
+#-------------------------------------------------------------------------------
+# Test 23: the widened filter still excludes hand-made branches — `research` is
+# a prefix, not a licence to reconcile anything (`researchers/x`, `docs/foo`).
+#-------------------------------------------------------------------------------
+test_widened_filter_still_excludes_human_branches() {
+    echo "TEST: widened ours-filter still excludes hand-made branches"
+
+    local out rc
+    out="$(jq -s '.' \
+        <(pr_json 597 "researchers/pet-branch" "CONFLICTING" "2026-08-28T10:00:00Z" "") \
+        <(pr_json 598 "docs/hand-written" "CONFLICTING" "2026-08-28T10:00:00Z" "") \
+        <(pr_json 599 "research/with/slash" "CONFLICTING" "2026-08-28T10:00:00Z" "") \
+        | pr_triage_pick)"
+    rc=$?
+
+    if [ "${rc}" -eq 0 ] || [ "$(printf '%s' "${out}" | jq -r '.pr')" != "null" ]; then
+        fail "non-harness branch shapes must stay unpicked" "rc=${rc} out=${out}"
+        return
+    fi
+
+    pass "widened ours-filter still excludes hand-made branches"
+}
+
+#-------------------------------------------------------------------------------
+# Test 24: pr_triage_enrich probes research-branch PRs too — the sensor and the
+# pick must agree on the branch shape, or docsOnly would never be attached to
+# the very PRs the docs-merge path exists for.
+#-------------------------------------------------------------------------------
+test_enrich_probes_research_branches() {
+    echo "TEST: enrich probes research-branch PRs"
+
+    local dir; dir="$(mktemp -d)"
+    trap "rm -rf '${dir}'" RETURN
+
+    cat > "${dir}/gh-stub" <<EOF
+#!/usr/bin/env bash
+echo "\$*" >> "${dir}/calls"
+printf '%s\n' '{"comments":[],"files":[{"path":"docs/research/577.md"}]}'
+EOF
+    chmod +x "${dir}/gh-stub"
+    : > "${dir}/calls"
+
+    local out
+    out="$(jq -s '.' \
+        <(pr_json 594 "research/577-docs-only-merge" "MERGEABLE" "2026-08-28T10:00:00Z" "") \
+        | GH_BIN="${dir}/gh-stub" PR_TRIAGE_AUTHOR="agent-bot" pr_triage_enrich)"
+
+    if ! grep -q "^pr view 594 --json comments,files$" "${dir}/calls" \
+        || [ "$(printf '%s' "${out}" | jq -r '.[0].docsOnly')" != "true" ]; then
+        fail "a research-branch PR must be probed and flagged docsOnly" \
+            "calls: $(cat "${dir}/calls") out=${out}"
+        return
+    fi
+
+    pass "enrich probes research-branch PRs"
 }
 
 #-------------------------------------------------------------------------------
@@ -726,6 +848,10 @@ test_docs_only_pr_picked_as_docs_merge
 test_docs_merge_precedence
 test_enrich_flags_docs_only
 test_enrich_docs_only_fails_safe
+test_research_branch_is_ours
+test_issue_extraction_is_tolerant
+test_widened_filter_still_excludes_human_branches
+test_enrich_probes_research_branches
 
 echo ""
 echo "=========================================="
