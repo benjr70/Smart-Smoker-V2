@@ -134,3 +134,20 @@ cd packages/TemperatureChart && npm test
 | Frontend          | 3000 |
 | Device Service    | 3003 |
 | Smoker (Electron) | 8080 |
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on `benjr70/Smart-Smoker-V2` via `gh`; agent-grabbable tickets
+also live in GitHub Project #1 with a Priority. See
+`docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Canonical roles map to `needs-triage`, `needs-info`, `AFK` (ready-for-agent),
+`HITL` (ready-for-human), `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` at root + `docs/adr/`. See `docs/agents/domain.md`.

@@ -14,6 +14,7 @@
 | [`.claude/skills/SKILLS.md`](.claude/skills/SKILLS.md) | Catalog of every custom + plugin skill (`/tdd`, `/review-pr`, `/grill-me`, `/caveman`, etc.)                                                                    |
 | [`.mcp.json`](.mcp.json)                               | MCP servers available (context7, playwright, terraform, docker, mongodb, github, plus the verify-pr harness's playwright-chrome / playwright-electron wrappers) |
 | [`.claude/settings.json`](.claude/settings.json)       | Project-scoped permissions, hooks, Claude Code config                                                                                                           |
+| [`docs/agents/`](docs/agents/)                         | Issue-tracker, triage-label and domain-doc config read by the mattpocock engineering skills (`/wayfinder`, `/to-spec`, `/to-tickets`, `/triage`)                |
 
 ## Monorepo layout at a glance
 
