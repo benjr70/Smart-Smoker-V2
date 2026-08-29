@@ -72,7 +72,7 @@ app reaches the board — and temperatures travel back up the same path, from th
 probes through the microcontroller's serial link to the device service, into the
 backend, and out over WebSockets to both frontends at once.
 
-![Placeholder — the smoker, probes and Raspberry Pi enclosure](docs/images/readme/hardware.png)
+![Placeholder — the smoker, probes and Raspberry Pi enclosure](docs/images/readme/hardware.jpg)
 
 ## How it's built
 
