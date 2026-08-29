@@ -10,7 +10,7 @@
 # Two functions:
 #
 #   wp_scan             one `gh` sweep of the repo's work signals; emits
-#                         { "locked":    <bool>,        # team:in-progress held
+#                         { "locked":    <bool>,        # AFK:in-progress held
 #                           "reconcile": <pr# | null>,  # pr_triage_pick verdict
 #                           "paused":    <issue# | null>,
 #                           "pickSig":   "<csv of candidate issue numbers>",
@@ -24,18 +24,18 @@
 #                       pure: reads a scan JSON on stdin, prints a one-line
 #                       wake reason and exits 0, or exits 1 (keep sleeping).
 #
-# Wake rules (mirrors team-pickup's priority order):
+# Wake rules (mirrors afk-pickup's priority order):
 #   - lock held → never wake: every fire would skip. The lock read fails SAFE —
 #     a gh error reads as "locked" so a flake can never start a wake-fire-skip
 #     loop against a genuinely held lock.
-#   - reconcile candidate → wake unconditionally. Deterministic: team-pickup
+#   - reconcile candidate → wake unconditionally. Deterministic: afk-pickup
 #     §1.2 runs the very same pr_triage_pick over the same inputs, so it WILL
-#     act on it. Candidates cover all three attention classes (team:revise,
+#     act on it. Candidates cover all three attention classes (AFK:revise,
 #     CONFLICTING, bot-incomplete tail); the incomplete signals cost one extra
 #     `gh pr view --json comments` per otherwise-clean agent PR per scan and
 #     fail SAFE toward "complete" (see pr-triage.sh pr_triage_enrich).
-#   - team:paused issue → wake unconditionally. §1.5 always acts (resume, or
-#     cap → team:failed — either way the signal clears itself).
+#   - AFK:paused issue → wake unconditionally. §1.5 always acts (resume, or
+#     cap → AFK:failed — either way the signal clears itself).
 #   - open-PR set shrink → wake unconditionally when a PR present in the
 #     baseline is absent from the current scan (merged OR closed — no
 #     distinction needed; a wake that finds nothing re-baselines next fire).
@@ -44,10 +44,10 @@
 #     issue-side signal — but it unblocks the queue. Set GROWTH never wakes
 #     here (new PRs ride the reconcile signal when actionable). Fails SAFE: a
 #     null (unreadable) current prSig is never read as a shrink.
-#   - pick-class candidates (open `team` issues with no state label) → wake
+#   - pick-class candidates (open `AFK` issues with no state label) → wake
 #     ONLY when the signature differs from the baseline captured when the fire
 #     reported no work. The probe cannot cheaply check Project #1 membership
-#     or `Blocked by` closure, so an issue team-pickup already declined must
+#     or `Blocked by` closure, so an issue afk-pickup already declined must
 #     not re-wake the daemon every chunk; a genuinely new issue changes the
 #     signature and wakes once.
 #
@@ -69,7 +69,7 @@ wp_scan() {
 
     author="${WP_AUTHOR:-$("${gh}" api user -q .login 2>/dev/null || echo '')}"
 
-    locked_raw="$("${gh}" issue list --label team:in-progress --state open \
+    locked_raw="$("${gh}" issue list --label AFK:in-progress --state open \
         --json number --jq 'length' 2>/dev/null || echo 'ERR')"
     if [ "${locked_raw}" = "0" ]; then
         locked=false
@@ -97,16 +97,16 @@ wp_scan() {
         | PR_TRIAGE_AUTHOR="${author}" pr_triage_pick)" || true
     reconcile="$(printf '%s' "${pick_json}" | jq -r '.pr // "null"' 2>/dev/null || echo 'null')"
 
-    paused="$("${gh}" issue list --label team:paused --state open \
+    paused="$("${gh}" issue list --label AFK:paused --state open \
         --json number --jq '(sort_by(.number) | first | .number) // "null"' \
         2>/dev/null || echo 'null')"
 
-    pick_sig="$("${gh}" issue list --label team --state open --json number,labels \
+    pick_sig="$("${gh}" issue list --label AFK --state open --json number,labels \
         --jq '[ .[] | [.labels[].name] as $l
-              | select(($l | index("team:done") | not)
-                   and ($l | index("team:failed") | not)
-                   and ($l | index("team:in-progress") | not)
-                   and ($l | index("team:paused") | not))
+              | select(($l | index("AFK:done") | not)
+                   and ($l | index("AFK:failed") | not)
+                   and ($l | index("AFK:in-progress") | not)
+                   and ($l | index("AFK:paused") | not))
               | .number ] | sort | map(tostring) | join(",")' \
         2>/dev/null || echo '')"
 

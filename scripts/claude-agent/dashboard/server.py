@@ -20,7 +20,7 @@ Data sources (no state files exist; everything is journal + logs + gh):
     matching state line wins. Fire logs stream nothing until the fire ends
     (claude --print buffers), so live state never reads the in-flight log body.
   - Pipeline snapshot: wp_scan from lib/work-probe.sh (pure gh, always exits 0).
-  - Fire history: ~/claude-agent/logs/team-pickup-<TS>.log, name-sorted.
+  - Fire history: ~/claude-agent/logs/afk-pickup-<TS>.log, name-sorted.
 
 Every collector degrades independently: on failure the section keeps its last
 good value flagged stale:true with the error string — /api/status never 500s.
@@ -289,7 +289,9 @@ def fetch_daemon():
     }
 
 
-_TS_RE = re.compile(r"team-pickup-(\d{8}T\d{6}Z)\.log$")
+# Dual prefix — historical: logs written before the team->AFK rename kept the
+# team-pickup- prefix and are never renamed on disk.
+_TS_RE = re.compile(r"(?:team|afk)-pickup-(\d{8}T\d{6}Z)\.log$")
 _EXIT_RE = re.compile(r"^=== agent-run exit (\d+) ===$", re.M)
 _BLOCK_LINE_RE = re.compile(
     r"^(picked|dispatch|pr|pr-watch|review|verify|shots|reconcile):\s{1,}(.+)$", re.M
@@ -345,7 +347,16 @@ def parse_fire_log(path):
 
 
 def fetch_fires():
-    paths = sorted(glob.glob(os.path.join(LOG_DIR, "team-pickup-*.log")))
+    # historical: pre-rename fires wrote team-pickup-<TS>.log; both names are
+    # ordered by their embedded timestamp, never by filename ("afk" < "team").
+    paths = sorted(
+        (
+            p
+            for p in glob.glob(os.path.join(LOG_DIR, "*-pickup-*.log"))
+            if _TS_RE.search(p)
+        ),
+        key=lambda p: _TS_RE.search(p).group(1),
+    )
     fires = [parse_fire_log(p) for p in reversed(paths[-12:])]
     current = None
     if fires and fires[0]["inFlight"]:
@@ -474,7 +485,7 @@ def fetch_fire_summary():
     try:
         items = json.loads(
             run(
-                ["gh", "issue", "list", "--label", "team:in-progress",
+                ["gh", "issue", "list", "--label", "AFK:in-progress",
                  "--state", "open", "--json", "number,title"],
                 timeout=15,
             )
@@ -499,7 +510,7 @@ def fetch_fire_summary():
     )
     prompt = (
         "You are labeling a status card for an autonomous coding-agent run "
-        "(a '/team-pickup' fire: it picks a GitHub issue or reconciles a PR, "
+        "(a '/afk-pickup' fire: it picks a GitHub issue or reconciles a PR, "
         "spawns implementer/reviewer/verifier subagents, runs CI and manual "
         "verification). Based on the activity below, reply with ONLY a JSON "
         'object {"title": "...", "description": "..."} — title under 60 chars '

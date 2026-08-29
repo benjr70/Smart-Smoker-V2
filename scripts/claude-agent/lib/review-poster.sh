@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # review-poster.sh — the Review Poster: render, post, and track the automated
-# one-time code review's footprint on a PR (skill: pr-review, team-pickup
+# one-time code review's footprint on a PR (skill: pr-review, afk-pickup
 # §6a.1b).
 #
 # Sourceable library owning the two machine markers that distinguish the
@@ -26,7 +26,7 @@
 #
 #   rp_done_marker_present <owner/repo> <pr>
 #       → exit 0 iff any top-level PR comment carries RP_DONE_MARKER. The
-#         once-per-PR idempotency gate (checked by team-pickup §6a.1b and
+#         once-per-PR idempotency gate (checked by afk-pickup §6a.1b and
 #         re-checked by the skill's pre-flight).
 #
 #   rp_post_done_marker <owner/repo> <pr> <n_findings> <m_fixed> <reviewed_sha> <fix_sha>
@@ -53,7 +53,7 @@ rp_render_finding() {
         "" \
         "**Failure scenario:** ${scenario}" \
         "" \
-        "_Automated one-time review (team-pickup §6a.1b). A fix round follows; reply to dispute._"
+        "_Automated one-time review (afk-pickup §6a.1b). A fix round follows; reply to dispute._"
 }
 
 # rp_post_inline <owner/repo> <pr> <commit_sha> <path> <line> <body>

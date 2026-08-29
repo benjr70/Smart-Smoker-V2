@@ -1,7 +1,7 @@
 # AI Tooling Reference
 
 Full index of AI-facing surfaces wired into this repo: skills, subagent
-definitions, hooks, autonomous loops, and the Agent Teams orchestration layer.
+definitions, hooks, autonomous loops, and the AFK orchestration layer (Level 7).
 Skills extend what Claude can do via domain-specific instructions, checklists,
 and workflows. Claude loads them automatically when relevant, or invoke directly
 with `/skill-name`.
@@ -14,8 +14,8 @@ with `/skill-name`.
 | Settings + permissions         | `.claude/settings.json` | Env flags, allow/deny rules, hook registration          |
 | Smoke harness                  | `scripts/smoke/run.ts`  | Playwright probes — verifier invokes after diff approve |
 
-Agent Teams (Level 7) has **no bootstrap script** — `/team-dispatch`
-self-bootstraps labels + pre-flight on every run.
+AFK (Level 7) has **no bootstrap script** — `/afk-dispatch` self-bootstraps
+labels + pre-flight on every run.
 
 ---
 
@@ -121,9 +121,9 @@ independently-implementable GitHub issues using vertical slices.
 
 **What it does:** Fetches the PRD, breaks it into thin tracer-bullet slices that
 cut through all layers end-to-end (schema, API, UI, tests). Each slice is either
-HITL (human-in-the-loop) or AFK (autonomous). AFK slices get the `team` label
-for pickup by Agent Teams. Creates GitHub issues with acceptance criteria,
-interface changes, behaviors to test, and dependency ordering.
+HITL (human-in-the-loop) or AFK (autonomous). AFK slices get the `AFK` label for
+AFK pickup. Creates GitHub issues with acceptance criteria, interface changes,
+behaviors to test, and dependency ordering.
 
 **Source:** Custom (project-specific)
 
@@ -171,25 +171,25 @@ Aggregates findings into a structured review with risk level
 
 ## Orchestration Skills
 
-### `/team-dispatch` -- Agent Teams Orchestration (Level 7)
+### `/afk-dispatch` -- AFK Orchestration (Level 7)
 
-**When to use:** You have a PRD with open issues labeled `team` and want
+**When to use:** You have a PRD with open issues labeled `AFK` and want
 autonomous parallel implementation via the Claude Code Agent Teams feature
 (implementer/reviewer/verifier/researcher coordinating through a shared task
-list). Invoke with `/team-dispatch <prd-issue-number>` (add `--dry-run` to
+list). Invoke with `/afk-dispatch <prd-issue-number>` (add `--dry-run` to
 preview the roster + task list without spawning).
 
 **What it does:** Primes the running Claude session as the team lead. Reads the
-PRD, enumerates `team`-labeled issues via `gh`, populates a shared task list
-with `blocked_by` edges from issue bodies, spawns the four teammate roles, and
+PRD, enumerates `AFK`-labeled issues via `gh`, populates a shared task list with
+`blocked_by` edges from issue bodies, spawns the four teammate roles, and
 coordinates the per-issue flow: researcher memo → implementer claims + codes +
 stages → reviewer approves → verifier smokes + commits with `smoke:` trailer →
-labels advance `team` → `team:in-progress` → `team:done` → issue closed. Handles
+labels advance `AFK` → `AFK:in-progress` → `AFK:done` → issue closed. Handles
 `BLOCKED` and `smoke FAIL` states; cleans up on empty queue.
 
 **Source:** Custom (project-specific). Full playbook at
-[`.claude/skills/team-dispatch/SKILL.md`](team-dispatch/SKILL.md). Companion
-docs at [`docs/Teams/`](../../docs/Teams/index.md).
+[`.claude/skills/afk-dispatch/SKILL.md`](afk-dispatch/SKILL.md). Companion docs
+at [`docs/AFK/`](../../docs/AFK/index.md).
 
 ---
 
@@ -197,7 +197,7 @@ docs at [`docs/Teams/`](../../docs/Teams/index.md).
 
 ## Subagent Definitions (Level 7)
 
-Teammate roles spawned by the `/team-dispatch` lead. Each lives as a markdown
+Teammate roles spawned by the `/afk-dispatch` lead. Each lives as a markdown
 file in `.claude/agents/` with frontmatter (`name`, `description`, `tools`,
 `model`) and a body appended to the teammate's system prompt. Claude Code
 resolves definitions by `name` when the lead spawns a teammate. **Researcher
@@ -263,8 +263,8 @@ efficiency is requested.
 ## Full Pipeline
 
 These skills compose into a complete feature development pipeline.
-Implementation is carried out by **Agent Teams** (Level 7, parallel multi-agent
-dispatch, `team` label) once the PRD has been sliced into issues.
+Implementation is carried out by **AFK dispatch** (Level 7, parallel multi-agent
+dispatch, `AFK` label) once the PRD has been sliced into issues.
 
 ```
 /grill-me          Stress-test the idea
@@ -272,18 +272,18 @@ dispatch, `team` label) once the PRD has been sliced into issues.
 /write-a-prd       Formalize as a GitHub issue PRD
     |
 /prd-to-issues     Break into vertical-slice issues
-                   (AFK slices labeled `team`)
+                   (AFK slices labeled `AFK`)
     |
 git checkout -b feat/<name>
     |
-/team-dispatch <prd>          Self-bootstraps labels + pre-flight, then spawns
+/afk-dispatch <prd>          Self-bootstraps labels + pre-flight, then spawns
     |                          impl/rev/ver/research. Parallel impl with
     |                          built-in peer review + smoke-trailer commits.
     |
-gh pr create                  Open PR (Teams writes commits already)
+gh pr create                  Open PR (AFK writes commits already)
 ```
 
-Agent Teams suits multiple slices that benefit from parallel execution,
+AFK dispatch suits multiple slices that benefit from parallel execution,
 high-blast-radius changes (backend services, device-service, infra,
 docker-compose) where plan-mode review matters, and PRDs where independent
 reviewer signal is worth the extra concurrency cost.

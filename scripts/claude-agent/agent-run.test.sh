@@ -3,9 +3,9 @@
 #
 # Run: bash scripts/claude-agent/agent-run.test.sh
 #
-# Strategy: agent-run fires `/team-pickup` via the Claude CLI, then runs the
+# Strategy: agent-run fires `/afk-pickup` via the Claude CLI, then runs the
 # Exhaustion Classifier over the captured output and, on EXHAUSTED, pauses the
-# in-flight issue (freeze partial work, flip team:in-progress → team:paused,
+# in-flight issue (freeze partial work, flip AFK:in-progress → AFK:paused,
 # comment) instead of failing. We drive it entirely with stubs injected via env
 # so nothing real runs:
 #   CLAUDE_BIN — prints a captured-output fixture and exits with a chosen code
@@ -100,8 +100,8 @@ run_agent() {
 #-------------------------------------------------------------------------------
 # Test 1 (CRITICAL): a mid-run usage exhaustion pauses the in-flight issue rather
 # than failing — the branch is frozen with a wip commit, the issue flips
-# team:in-progress → team:paused, a timestamped pause comment is posted, the
-# scraped resetAt is emitted, team:failed is NEVER applied, and agent-run exits 0
+# AFK:in-progress → AFK:paused, a timestamped pause comment is posted, the
+# scraped resetAt is emitted, AFK:failed is NEVER applied, and agent-run exits 0
 # (AC 1, 2, 3, 4, 5).
 #-------------------------------------------------------------------------------
 test_exhaustion_pauses_not_fails() {
@@ -125,18 +125,18 @@ Claude AI usage limit reached|${reset_epoch}" 1)"
     gh="$(cat "${dir}/gh.log")"
     git_calls="$(cat "${dir}/git.log")"
 
-    if ! printf '%s' "${gh}" | grep -q 'issue edit 291.*--remove-label team:in-progress'; then
-        fail "must remove team:in-progress from the in-flight issue" "gh:
+    if ! printf '%s' "${gh}" | grep -q 'issue edit 291.*--remove-label AFK:in-progress'; then
+        fail "must remove AFK:in-progress from the in-flight issue" "gh:
 ${gh}"
         return
     fi
-    if ! printf '%s' "${gh}" | grep -q 'issue edit 291.*--add-label team:paused'; then
-        fail "must add team:paused to the in-flight issue" "gh:
+    if ! printf '%s' "${gh}" | grep -q 'issue edit 291.*--add-label AFK:paused'; then
+        fail "must add AFK:paused to the in-flight issue" "gh:
 ${gh}"
         return
     fi
-    if printf '%s' "${gh}" | grep -q 'team:failed'; then
-        fail "an out-of-gas event must NEVER apply team:failed" "gh:
+    if printf '%s' "${gh}" | grep -q 'AFK:failed'; then
+        fail "an out-of-gas event must NEVER apply AFK:failed" "gh:
 ${gh}"
         return
     fi
@@ -160,7 +160,7 @@ ${out}"
 }
 
 #-------------------------------------------------------------------------------
-# Test 2 (CRITICAL): a genuine failure is surfaced, not paused — no team:paused
+# Test 2 (CRITICAL): a genuine failure is surfaced, not paused — no AFK:paused
 # transition, and agent-run exits non-zero so the failure escalates (AC 3).
 #-------------------------------------------------------------------------------
 test_genuine_failure_does_not_pause() {
@@ -180,7 +180,7 @@ Error: process exited with code 1" 1)"
     fi
 
     gh="$(cat "${dir}/gh.log")"
-    if printf '%s' "${gh}" | grep -q 'team:paused'; then
+    if printf '%s' "${gh}" | grep -q 'AFK:paused'; then
         fail "a genuine failure must NOT pause the issue" "gh:
 ${gh}"
         return
@@ -209,7 +209,7 @@ pr-watch verdict: success" 0)"
     fi
 
     gh="$(cat "${dir}/gh.log")"
-    if printf '%s' "${gh}" | grep -qE 'team:(paused|failed)'; then
+    if printf '%s' "${gh}" | grep -qE 'AFK:(paused|failed)'; then
         fail "a clean success must not change labels" "gh:
 ${gh}"
         return
@@ -255,7 +255,7 @@ test_no_eligible_issue_emits_no_work_marker() {
     echo "TEST: empty pick emits the no-work marker"
 
     local dir rc out
-    dir="$(make_env "team-pickup: no eligible issue" 0)"
+    dir="$(make_env "afk-pickup: no eligible issue" 0)"
     trap "rm -rf '${dir}'" RETURN
 
     out="$(run_agent "${dir}" 2>/dev/null)"
@@ -277,14 +277,14 @@ ${out}"
 #-------------------------------------------------------------------------------
 # Test 6 (REGRESSION): the real skip report line — `picked:   skip — N in flight`
 # observed live 2026-07-09 — must emit AGENT_RUN_NO_WORK=1. The old grep only
-# matched `team-pickup: skip`, so a lock-skip looked like a clean run and the
+# matched `afk-pickup: skip`, so a lock-skip looked like a clean run and the
 # daemon hot-looped one fire every ~90s.
 #-------------------------------------------------------------------------------
 test_real_skip_output_emits_no_work_marker() {
     echo "TEST: real skip report line emits the no-work marker"
 
     local dir rc out
-    dir="$(make_env "=== /team-pickup 2026-07-09T00:00:00Z ===
+    dir="$(make_env "=== /afk-pickup 2026-07-09T00:00:00Z ===
 picked:   skip — 1 in flight" 0)"
     trap "rm -rf '${dir}'" RETURN
 
@@ -306,7 +306,7 @@ ${out}"
 
 #-------------------------------------------------------------------------------
 # Test 7: a genuine failure that had already picked an issue (its log carries the
-# `picked:   #N` line) clears the lock it created — team:in-progress → team:failed
+# `picked:   #N` line) clears the lock it created — AFK:in-progress → AFK:failed
 # with a triage comment — so the next fire is not blocked forever (the #280
 # stuck-lock scenario).
 #-------------------------------------------------------------------------------
@@ -314,7 +314,7 @@ test_failed_run_clears_its_own_lock() {
     echo "TEST: failed run clears the lock it created"
 
     local dir rc gh
-    dir="$(make_env "=== /team-pickup 2026-07-09T00:00:00Z ===
+    dir="$(make_env "=== /afk-pickup 2026-07-09T00:00:00Z ===
 picked:   #280 Tracer: full data-integrity stack
 implementing…
 Error: process exited with code 1" 1)"
@@ -329,13 +329,13 @@ Error: process exited with code 1" 1)"
     fi
 
     gh="$(cat "${dir}/gh.log")"
-    if ! printf '%s' "${gh}" | grep -q 'issue edit 280.*--remove-label team:in-progress'; then
-        fail "must remove the leaked team:in-progress lock from the picked issue" "gh:
+    if ! printf '%s' "${gh}" | grep -q 'issue edit 280.*--remove-label AFK:in-progress'; then
+        fail "must remove the leaked AFK:in-progress lock from the picked issue" "gh:
 ${gh}"
         return
     fi
-    if ! printf '%s' "${gh}" | grep -q 'issue edit 280.*--add-label team:failed'; then
-        fail "must mark the picked issue team:failed for triage" "gh:
+    if ! printf '%s' "${gh}" | grep -q 'issue edit 280.*--add-label AFK:failed'; then
+        fail "must mark the picked issue AFK:failed for triage" "gh:
 ${gh}"
         return
     fi
@@ -356,7 +356,7 @@ test_failed_run_without_pick_touches_no_lock() {
     echo "TEST: failed run with no pick leaves foreign locks untouched"
 
     local dir gh
-    dir="$(make_env "=== /team-pickup 2026-07-09T00:00:00Z ===
+    dir="$(make_env "=== /afk-pickup 2026-07-09T00:00:00Z ===
 FAIL apps/backend/src/temps/temps.service.spec.ts
 Error: process exited with code 1" 1)"
     trap "rm -rf '${dir}'" RETURN
@@ -364,7 +364,7 @@ Error: process exited with code 1" 1)"
     run_agent "${dir}" >/dev/null 2>&1
 
     gh="$(cat "${dir}/gh.log")"
-    if printf '%s' "${gh}" | grep -qE 'issue edit .*team:(failed|in-progress)'; then
+    if printf '%s' "${gh}" | grep -qE 'issue edit .*AFK:(failed|in-progress)'; then
         fail "a failure with no pick must not edit any issue's labels" "gh:
 ${gh}"
         return
@@ -375,15 +375,15 @@ ${gh}"
 
 #-------------------------------------------------------------------------------
 # Test 8b: a failed RECONCILE fire (log carries `picked:   reconcile PR #P
-# (issue #N)`) restores the borrowed lock — team:in-progress removed and
-# team:done RE-ADDED, never team:failed (the issue's work was already done) —
+# (issue #N)`) restores the borrowed lock — AFK:in-progress removed and
+# AFK:done RE-ADDED, never AFK:failed (the issue's work was already done) —
 # and leaves the breadcrumb on the PR, not the issue.
 #-------------------------------------------------------------------------------
 test_failed_reconcile_restores_done_lock() {
-    echo "TEST: failed reconcile fire restores team:done, never team:failed"
+    echo "TEST: failed reconcile fire restores AFK:done, never AFK:failed"
 
     local dir rc gh
-    dir="$(make_env "=== /team-pickup 2026-07-10T00:00:00Z ===
+    dir="$(make_env "=== /afk-pickup 2026-07-10T00:00:00Z ===
 picked:   reconcile PR #310 (issue #281)
 reconciling…
 Error: process exited with code 1" 1)"
@@ -398,17 +398,17 @@ Error: process exited with code 1" 1)"
     fi
 
     gh="$(cat "${dir}/gh.log")"
-    if ! printf '%s' "${gh}" | grep -q 'issue edit 281.*--remove-label team:in-progress'; then
-        fail "must clear the borrowed team:in-progress lock" "gh:
+    if ! printf '%s' "${gh}" | grep -q 'issue edit 281.*--remove-label AFK:in-progress'; then
+        fail "must clear the borrowed AFK:in-progress lock" "gh:
 ${gh}"
         return
     fi
-    if ! printf '%s' "${gh}" | grep -q 'issue edit 281.*--add-label team:done'; then
-        fail "must restore team:done on the reconcile issue" "gh:
+    if ! printf '%s' "${gh}" | grep -q 'issue edit 281.*--add-label AFK:done'; then
+        fail "must restore AFK:done on the reconcile issue" "gh:
 ${gh}"
         return
     fi
-    if printf '%s' "${gh}" | grep -q 'team:failed'; then
+    if printf '%s' "${gh}" | grep -q 'AFK:failed'; then
         fail "a crashed reconcile must NEVER fail a finished issue" "gh:
 ${gh}"
         return
@@ -419,7 +419,7 @@ ${gh}"
         return
     fi
 
-    pass "failed reconcile fire restores team:done, never team:failed"
+    pass "failed reconcile fire restores AFK:done, never AFK:failed"
 }
 
 #-------------------------------------------------------------------------------

@@ -43,9 +43,9 @@ make_env() {
 args="\$*"
 case "\${args}" in
     *"api user"*)                cat "${dir}/login.out" ;;
-    *"--label team:in-progress"*) cat "${dir}/locked.out" ;;
-    *"--label team:paused"*)     cat "${dir}/paused.out" ;;
-    *"issue list --label team "*) cat "${dir}/picks.out" ;;
+    *"--label AFK:in-progress"*) cat "${dir}/locked.out" ;;
+    *"--label AFK:paused"*)     cat "${dir}/paused.out" ;;
+    *"issue list --label AFK "*) cat "${dir}/picks.out" ;;
     *"pr list"*)                 cat "${dir}/prs.out" ;;
     *"pr view"*)                 cat "${dir}/prview.out" ;;
     *)                           exit 1 ;;
@@ -205,7 +205,7 @@ test_decide_paused_wakes() {
 
 #-------------------------------------------------------------------------------
 # Test 7: pick-class suppression — candidates equal to the baseline keep
-# sleeping (team-pickup already declined them); a changed signature wakes.
+# sleeping (afk-pickup already declined them); a changed signature wakes.
 #-------------------------------------------------------------------------------
 test_decide_pick_baseline_suppression() {
     echo "TEST: wp_decide pick baseline suppression"

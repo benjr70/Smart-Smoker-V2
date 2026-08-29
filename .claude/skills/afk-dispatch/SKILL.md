@@ -1,13 +1,13 @@
 ---
-name: team-dispatch
+name: afk-dispatch
 description:
   Orchestrate a Claude Code agent team (implementer, reviewer, verifier,
-  researcher) to implement every open issue labeled `team` for a given PRD. Use
+  researcher) to implement every open issue labeled `AFK` for a given PRD. Use
   when the user wants Level 7 autonomous implementation via Agent Teams (not
   Ralph). Invoke with the PRD issue number.
 ---
 
-# Team Dispatch — Level 7 Agent Team Orchestration
+# AFK Dispatch — Level 7 Agent Team Orchestration
 
 You are becoming the **team lead** for a Claude Code agent team. This skill is
 the playbook you execute: pre-flight, read the PRD, spawn the roster, populate
@@ -20,19 +20,19 @@ verification — so a fresh clone can dispatch a team without touching bash firs
 ## Invocation
 
 ```
-/team-dispatch <prd-issue-number> [--dry-run]
-/team-dispatch --issue <issue-number> [--resume] [--dry-run]
+/afk-dispatch <prd-issue-number> [--dry-run]
+/afk-dispatch --issue <issue-number> [--resume] [--dry-run]
 ```
 
 - `<prd-issue-number>` — the parent PRD GitHub issue (e.g. 183). Discovers every
-  open child issue labeled `team` and processes them as a batch.
+  open child issue labeled `AFK` and processes them as a batch.
 - `--issue <N>` — single-issue mode. Skip PRD discovery; populate the task list
-  with exactly one task (issue #N). Used by `/team-pickup` for cron-driven
+  with exactly one task (issue #N). Used by `/afk-pickup` for cron-driven
   autonomous pickup.
 - `--resume` — resume mode (single-issue only). The issue was paused mid-run in
   a prior window; its `feat/issue-<N>` branch already carries partial work. Take
   the resume entry path in §1a.1 instead of starting from scratch. Passed by
-  `/team-pickup` §5 when it resumed a `team:paused` issue.
+  `/afk-pickup` §5 when it resumed an `AFK:paused` issue.
 - `--dry-run` — print the planned roster + task list and exit, do NOT spawn
   teammates.
 
@@ -64,36 +64,36 @@ set in the project-scoped settings.
 **GitHub labels (create-if-missing):**
 
 ```bash
-gh label create "team"             --description "Issue eligible for Level 7 agent team implementation" --color "1D76DB" --force
-gh label create "team:in-progress" --description "Currently being implemented by an agent team"          --color "FBCA04" --force
-gh label create "team:done"        --description "Completed by an agent team"                            --color "0E8A16" --force
-gh label create "team:failed"      --description "Agent team attempt failed; needs human triage"         --color "B60205" --force
-gh label create "team:checks-failed" --description "Agent-team PR: CI or manual verification could not be brought to pass autonomously (fix loop exhausted)" --color "D93F0B" --force
-gh label create "team:revise"        --description "Human hand-back: agent must address this PR's unresolved review comments" --color "0052CC" --force
-gh label create "team:revise-failed" --description "Agent-team PR: review comments could not be auto-resolved (revise loop exhausted)" --color "B60205" --force
-gh label create "team:rebase-failed" --description "Agent-team PR: automatic rebase onto master failed; human rebase required" --color "B60205" --force
+gh label create "AFK"             --description "Issue eligible for Level 7 agent team implementation" --color "1D76DB" --force
+gh label create "AFK:in-progress" --description "Currently being implemented by an agent team"          --color "FBCA04" --force
+gh label create "AFK:done"        --description "Completed by an agent team"                            --color "0E8A16" --force
+gh label create "AFK:failed"      --description "Agent team attempt failed; needs human triage"         --color "B60205" --force
+gh label create "AFK:checks-failed" --description "Agent-team PR: CI or manual verification could not be brought to pass autonomously (fix loop exhausted)" --color "D93F0B" --force
+gh label create "AFK:revise"        --description "Human hand-back: agent must address this PR's unresolved review comments" --color "0052CC" --force
+gh label create "AFK:revise-failed" --description "Agent-team PR: review comments could not be auto-resolved (revise loop exhausted)" --color "B60205" --force
+gh label create "AFK:rebase-failed" --description "Agent-team PR: automatic rebase onto master failed; human rebase required" --color "B60205" --force
 ```
 
 `--force` is idempotent: creates the label if absent, updates the metadata if
 present, never errors. Skip if
-`gh label list --json name | jq -r '.[].name' | grep -qx team` already shows all
+`gh label list --json name | jq -r '.[].name' | grep -qx AFK` already shows all
 three.
 
-**Stale `team:in-progress`** — sweep before claiming new work, **only in PRD
+**Stale `AFK:in-progress`** — sweep before claiming new work, **only in PRD
 mode**:
 
 ```bash
-gh issue list --label team:in-progress --state open --json number | jq -r '.[].number' | \
-  while read N; do gh issue edit "$N" --remove-label team:in-progress; done
+gh issue list --label AFK:in-progress --state open --json number | jq -r '.[].number' | \
+  while read N; do gh issue edit "$N" --remove-label AFK:in-progress; done
 ```
 
 (The shared task list will re-apply the label when an implementer claims an
 issue.)
 
-In `--issue <N>` mode, **skip this sweep**. The `/team-pickup` wrapper applies
-`team:in-progress` as its distributed lock _before_ invoking this skill;
-sweeping would clobber that lock and break concurrency control. The wrapper's
-failure path handles its own crash recovery.
+In `--issue <N>` mode, **skip this sweep**. The `/afk-pickup` wrapper applies
+`AFK:in-progress` as its distributed lock _before_ invoking this skill; sweeping
+would clobber that lock and break concurrency control. The wrapper's failure
+path handles its own crash recovery.
 
 ### 1a. Mode dispatch
 
@@ -112,7 +112,7 @@ Otherwise (PRD mode), continue with step 1 below.
 
 ### 1a.1. Resume entry path (`--resume` only)
 
-The issue was paused mid-run; `/team-pickup` §4 already checked out the existing
+The issue was paused mid-run; `/afk-pickup` §4 already checked out the existing
 `feat/issue-<N>` branch **without** resetting it, so its partial work is
 present: green tests from the prior window and, at HEAD, a
 `wip: freeze partial work on #<N> (usage exhausted)` commit made by `agent-run`
@@ -156,13 +156,13 @@ Then continue to step 2.
 
 ```bash
 gh issue view <prd-issue-number> --json title,body,labels
-gh issue list --label team --state open --json number,title,body,labels --limit 50
+gh issue list --label AFK --state open --json number,title,body,labels --limit 50
 ```
 
 Filter the issue list to those that are:
 
-- **not** labeled `team:in-progress` (already claimed)
-- **not** labeled `team:done` (already completed)
+- **not** labeled `AFK:in-progress` (already claimed)
+- **not** labeled `AFK:done` (already completed)
 - whose `body` does not reference an unresolved blocker in a "Blocked by"
   section
 
@@ -174,7 +174,7 @@ references). The task list populated in step 3 will mirror this order.
 If the user passed `--dry-run`:
 
 ```
-=== /team-dispatch <prd>: dry run ===
+=== /afk-dispatch <prd>: dry run ===
 
 Roster:
   - implementer (opus, Edit/Write/Bash/Read/Grep/Glob)
@@ -227,8 +227,8 @@ self-claim unblocked tasks. Expected flow per issue:
    codebase, writes the memo into the implementation task's description, marks
    its task completed. The research task unblocks the implementation task.
 2. **Implementer** claims the implementation task:
-   - Adds `team:in-progress` label to the GitHub issue:
-     `gh issue edit <N> --add-label team:in-progress`
+   - Adds `AFK:in-progress` label to the GitHub issue:
+     `gh issue edit <N> --add-label AFK:in-progress`
    - Reads the memo + issue, drives TDD, stages files
    - Writes the commit subject + `Closes #N` line (but does not commit)
    - Messages `rev`: "ready for review on task <id>"
@@ -242,7 +242,7 @@ self-claim unblocked tasks. Expected flow per issue:
    runs `scripts/smoke/run.ts`, appends the `smoke:` trailer to the commit
    message, commits.
 5. **Implementer** closes the loop:
-   - `gh issue edit <N> --remove-label team:in-progress --add-label team:done`
+   - `gh issue edit <N> --remove-label AFK:in-progress --add-label AFK:done`
    - `gh issue close <N>`
    - Marks the implementation task completed (the `TaskCompleted` hook verifies
      the `smoke:` trailer is present in HEAD; if missing, the task stays
@@ -276,20 +276,20 @@ plan mode until you approve.
   in-progress. Tell the implementer to investigate and re-signal when ready. Cap
   at **10 smoke-retry rounds per task** (shared counter with reviewer rounds —
   one round = one reviewer cycle OR one smoke cycle, whichever came last). On
-  exhaustion, mark the task failed: add `team:failed` to the issue, remove
-  `team:in-progress`, comment with the last failure reason, and continue to the
+  exhaustion, mark the task failed: add `AFK:failed` to the issue, remove
+  `AFK:in-progress`, comment with the last failure reason, and continue to the
   next task. Do not skip mid-loop; the cap only triggers after 10 rounds.
 
 ### 8. Completion + cleanup
 
 When the task list is empty (all implementation tasks marked completed) AND
-`gh issue list --label team --state open --json number | jq length` returns `0`:
+`gh issue list --label AFK --state open --json number | jq length` returns `0`:
 
 1. Tell each teammate to shut down: "Ask the <name> teammate to shut down."
 2. After all teammates have exited, run: "Clean up the team."
 3. Report to the user:
    ```
-   === /team-dispatch <prd>: complete ===
+   === /afk-dispatch <prd>: complete ===
    Issues closed: <list>
    Commits: <N>
    ```
@@ -313,9 +313,9 @@ One block per completed task. Compact.
 
 - **Teammate stops unexpectedly**: spawn a replacement of the same role; the
   shared task list preserves state.
-- **Orphaned `team:in-progress` label**: at dispatch start, check for open
-  issues with `team:in-progress` but no active task. Remove the stale label
-  before claiming new work: `gh issue edit <N> --remove-label team:in-progress`.
+- **Orphaned `AFK:in-progress` label**: at dispatch start, check for open issues
+  with `AFK:in-progress` but no active task. Remove the stale label before
+  claiming new work: `gh issue edit <N> --remove-label AFK:in-progress`.
 - **Lead shutting down before work is done** (known CCT limitation): if you
   realize you're about to quit while tasks remain, spawn a replacement teammate
   for any missing role and resume; never call "clean up the team" unless the
@@ -331,7 +331,7 @@ One block per completed task. Compact.
 ## Boundaries
 
 - Do NOT touch `scripts/ralph/`. Ralph is a separate Level 6 loop with its own
-  labels (`ralph`, `ralph:in-progress`, `ralph:done`). A `team`-labeled issue
+  labels (`ralph`, `ralph:in-progress`, `ralph:done`). A `AFK`-labeled issue
   must not also carry `ralph`.
 - Do NOT invoke `ralph-pr.sh` or `ralph-afk.sh` from inside the team run. PR
   opening is a separate human-gated step after all tasks complete.

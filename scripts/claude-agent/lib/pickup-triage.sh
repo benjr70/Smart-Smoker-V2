@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# pickup-triage.sh — one-call triage for /team-pickup §0–§2.
+# pickup-triage.sh — one-call triage for /afk-pickup §0–§2.
 #
 # Why this exists: each Bash call the pickup agent makes is one API turn, and
 # every turn re-reads the session's full cached context (~1–2M cache-read
@@ -21,7 +21,7 @@
 #   { "verdict": "abort|no-gh|in-flight|reconcile|resume|resume-cap|pick|pick-mcp|idle",
 #     "agentLogin": "<login|''>",
 #     "useMcpForProject": <bool>,       # gh token missing `project` scope
-#     "inflight": <int>,                # open team:in-progress count
+#     "inflight": <int>,                # open AFK:in-progress count
 #     "reconcile": { "pr": N, "branch": "feat/issue-M", "issue": M,
 #                    "reason": "revise|conflict|incomplete",
 #                    "hadDone": <bool> } | null,
@@ -32,10 +32,10 @@
 # Verdict semantics (priority order — first match wins, same as the skill):
 #   abort      CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS flag missing → skill exits 1
 #   no-gh      gh unauthenticated → skill falls back to its GitHub MCP path
-#   in-flight  team:in-progress lock held → skill exits silent
+#   in-flight  AFK:in-progress lock held → skill exits silent
 #   reconcile  a PR needs attention (pr-triage.sh verdict) → skill §1.2
 #   resume     paused issue below the resume cap → skill §4 resume path
-#   resume-cap paused issue AT the cap → skill applies team:failed + comment
+#   resume-cap paused issue AT the cap → skill applies AFK:failed + comment
 #   pick       eligible issue found (blockers closed) → skill §4 fresh branch
 #   pick-mcp   token lacks `project` scope → skill runs §2 via GitHub MCP
 #   idle       nothing to do → skill exits silent
@@ -99,7 +99,7 @@ pickup_triage() {
 
     # §1 — concurrency lock. A gh error here fails SAFE toward locked (same
     # rule as work-probe.sh): never let a flake start a second in-flight run.
-    inflight="$("${gh}" issue list --label team:in-progress --state open \
+    inflight="$("${gh}" issue list --label AFK:in-progress --state open \
         --json number --jq 'length' 2>/dev/null || echo '')"
     if ! printf '%s' "${inflight}" | grep -qE '^[0-9]+$'; then
         inflight=1
@@ -117,7 +117,7 @@ pickup_triage() {
         local recon_n had_done
         recon_n="$(printf '%s' "${pick_json}" | jq -r '.issue')"
         had_done="$("${gh}" issue view "${recon_n}" --json labels \
-            --jq '[.labels[].name] | index("team:done") != null' 2>/dev/null || echo 'false')"
+            --jq '[.labels[].name] | index("AFK:done") != null' 2>/dev/null || echo 'false')"
         reconcile="$(printf '%s' "${pick_json}" | jq -c --argjson hd "${had_done}" '. + {hadDone: $hd}')"
         _pt_emit reconcile "${login}" "${use_mcp}" 0 "${reconcile}" null null
         return 0
@@ -126,7 +126,7 @@ pickup_triage() {
     # §1.5 — paused work resumes before any new pick. Cap decision belongs to
     # pause-resume.sh; we only gather its inputs.
     local paused_n pause_count action_json action paused=null
-    paused_n="$("${gh}" issue list --label team:paused --state open \
+    paused_n="$("${gh}" issue list --label AFK:paused --state open \
         --json number --jq '.[0].number // empty' 2>/dev/null || echo '')"
     if [ -n "${paused_n}" ]; then
         pause_count="$("${gh}" issue view "${paused_n}" --json comments \
@@ -158,7 +158,7 @@ pickup_triage() {
     rows="$("${gh}" api graphql -f query='
 query {
   repository(owner: "'"${owner}"'", name: "'"${name}"'") {
-    issues(first: 100, labels: ["team"], states: OPEN) {
+    issues(first: 100, labels: ["AFK"], states: OPEN) {
       nodes {
         number
         title
@@ -186,10 +186,10 @@ query {
             [.data.repository.issues.nodes[]
               | . as $i
               | ($i.labels.nodes | map(.name)) as $lbls
-              | select(($lbls | index("team:in-progress") | not)
-                    and ($lbls | index("team:done") | not)
-                    and ($lbls | index("team:failed") | not)
-                    and ($lbls | index("team:paused") | not))
+              | select(($lbls | index("AFK:in-progress") | not)
+                    and ($lbls | index("AFK:done") | not)
+                    and ($lbls | index("AFK:failed") | not)
+                    and ($lbls | index("AFK:paused") | not))
               | ($i.projectItems.nodes | map(select(.project.number == $pn)) | first) as $pi
               | select($pi != null)
               | ($pi.fieldValueByName.name // "P2") as $prio
@@ -203,7 +203,7 @@ query {
         cand_json="$(printf '%s' "${row}" | base64 -d 2>/dev/null)" || continue
         cand_n="$(printf '%s' "${cand_json}" | jq -r '.number')"
         body="$(printf '%s' "${cand_json}" | jq -r '.body // ""')"
-        # Same regex team-dispatch §1 uses.
+        # Same regex afk-dispatch §1 uses.
         blockers="$(printf '%s' "${body}" | grep -oE 'Blocked by[[:space:]]+#[0-9]+' | grep -oE '[0-9]+' || true)"
         blocked=false
         for blocker in ${blockers}; do

@@ -4,7 +4,7 @@
 #
 # Why this exists: `/verify-pr` carried `disable-model-invocation: true` in its
 # frontmatter, which the Claude Code harness enforces *before* a single line of
-# the skill runs. Both automated call sites — team-pickup §6a.2 and pr-reconcile
+# the skill runs. Both automated call sites — afk-pickup §6a.2 and pr-reconcile
 # §3 — delegate the round to a subagent, and the subagent is still a model, so
 # every automated verification round was refused. The pipeline's last quality
 # gate was missing repo-wide and nobody noticed, because a refused round reported
@@ -15,7 +15,7 @@
 #   check-verify-invocable.sh [VERIFY_SKILL] [PICKUP_SKILL] [RECONCILE_SKILL]
 #   check-verify-invocable.sh --list
 #
-# Defaults: .claude/skills/{verify-pr,team-pickup,pr-reconcile}/SKILL.md
+# Defaults: .claude/skills/{verify-pr,afk-pickup,pr-reconcile}/SKILL.md
 # resolved relative to this script (works from any cwd).
 #
 # `--list` prints the enforced rule table as
@@ -25,7 +25,7 @@
 # Targets select which text a rule is matched against:
 #   verify-frontmatter  the YAML frontmatter block of the verify-pr skill
 #   verify              the whole verify-pr skill
-#   pickup              the whole team-pickup skill
+#   pickup              the whole afk-pickup skill
 #   reconcile           the whole pr-reconcile skill
 #
 # Modes: `require` (pattern MUST match) and `forbid` (pattern must NOT match).
@@ -45,7 +45,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 DEFAULT_VERIFY_SKILL="${REPO_ROOT}/.claude/skills/verify-pr/SKILL.md"
-DEFAULT_PICKUP_SKILL="${REPO_ROOT}/.claude/skills/team-pickup/SKILL.md"
+DEFAULT_PICKUP_SKILL="${REPO_ROOT}/.claude/skills/afk-pickup/SKILL.md"
 DEFAULT_RECONCILE_SKILL="${REPO_ROOT}/.claude/skills/pr-reconcile/SKILL.md"
 
 # The load-bearing rules, one `rule-id<TAB>target<TAB>mode<TAB>pattern` per line.
@@ -54,7 +54,7 @@ DEFAULT_RECONCILE_SKILL="${REPO_ROOT}/.claude/skills/pr-reconcile/SKILL.md"
 # fails when the *rule* goes away rather than when a word is reused.
 #
 # The `round-non-skippable` patterns are phrases UNIQUE to the missing-round park
-# block. A generic `team:checks-failed` / `gh pr comment` / `gh pr ready --undo`
+# block. A generic `AFK:checks-failed` / `gh pr comment` / `gh pr ready --undo`
 # would be satisfied by the older, unrelated escalation paths that already live
 # in both skills (pr-watch exhaustion, revise-failed), so deleting the park block
 # would leave the check green. The park comment's own wording, and the sentence
@@ -68,7 +68,7 @@ rule_table() {
         "no-human-only	verify	forbid	ask the user to run /verify-pr (themselves|yourself)" \
         "any-caller	verify	require	an agent calling the .{0,4}Skill.{0,4} tool" \
         "any-caller	verify	require	subagent spawned via the .{0,4}Agent.{0,4} tool" \
-        "any-caller	verify	require	team-pickup.{0,10}6a\.2" \
+        "any-caller	verify	require	afk-pickup.{0,10}6a\.2" \
         "any-caller	verify	require	pr-reconcile.{0,8}3" \
         "any-caller	verify	require	do not refuse, defer, or downgrade a round because the caller is a model" \
         "round-non-skippable	pickup	require	the round is .{0,4}not.{0,4} skippable" \

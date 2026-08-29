@@ -3,17 +3,17 @@ name: pr-watch
 description:
   Watch a freshly opened PR's CI checks, auto-fix failures by spawning the
   implementer in a bounded loop, and either land green or mark the PR draft on
-  exhaustion. Invoked (blocking) by `/team-pickup` §6a.1 immediately after PR
+  exhaustion. Invoked (blocking) by `/afk-pickup` §6a.1 immediately after PR
   creation. Takes the PR number + branch + repo + issue number as arguments.
 ---
 
 # PR Watch — Autonomous CI Babysitter + Fix Loop
 
-You are the **CI watcher** spawned by `/team-pickup` after a PR opens. One fire
-= one PR. You poll checks, dispatch fixes when checks fail, and return a single
+You are the **CI watcher** spawned by `/afk-pickup` after a PR opens. One fire =
+one PR. You poll checks, dispatch fixes when checks fail, and return a single
 terminal verdict line that the caller pastes into its output block.
 
-team-pickup may invoke you **more than once on the same PR** — once per manual
+afk-pickup may invoke you **more than once on the same PR** — once per manual
 verification round (§6a.3), after each `fix(manual)` push re-runs CI. Your
 10-round fix cap is **per invocation**; each call starts a fresh budget and just
 watches the PR's current head to green.
@@ -23,7 +23,7 @@ This skill assumes:
 - The PR is already open on `feat/issue-<N>` against `master`.
 - The implementer agent definition exists in `.claude/agents/implementer.md` and
   is callable via the `Agent` tool with `subagent_type: implementer`.
-- The repo's `team:checks-failed` label is created by `/team-dispatch` §0.
+- The repo's `AFK:checks-failed` label is created by `/afk-dispatch` §0.
 
 ## Invocation
 
@@ -31,8 +31,8 @@ This skill assumes:
 /pr-watch --pr <PR_NUM> --branch <BRANCH> --repo <OWNER/REPO> --issue <ISSUE_N>
 ```
 
-All four arguments required. No defaults — the caller (team-pickup) supplies
-them verbatim from the PR-create step.
+All four arguments required. No defaults — the caller (afk-pickup) supplies them
+verbatim from the PR-create step.
 
 ## Process
 
@@ -62,7 +62,7 @@ Each round:
 3. If red → **gather failure context** (§3), **spawn implementer** (§4),
    **commit + push** (§5), increment `ROUND`, loop.
 4. If `ROUND == MAX_ROUNDS` and still red → **draft-on-exhaust** (§6) and return
-   `pr-watch: DRAFT — exhausted 10 rounds, marked draft, team:checks-failed`.
+   `pr-watch: DRAFT — exhausted 10 rounds, marked draft, AFK:checks-failed`.
 
 ### 2. Wait for CI to settle (zero turns while it runs)
 
@@ -172,23 +172,22 @@ After 10 rounds without green:
 
 ```bash
 gh pr ready "$PR_NUM" --repo "$REPO" --undo                # convert to draft
-gh pr edit  "$PR_NUM" --repo "$REPO" --add-label team:checks-failed
+gh pr edit  "$PR_NUM" --repo "$REPO" --add-label AFK:checks-failed
 gh issue comment "$ISSUE_N" --repo "$REPO" --body \
-  "pr-watch exhausted 10 fix rounds on PR #$PR_NUM. Marked draft + labeled team:checks-failed. Human triage required."
+  "pr-watch exhausted 10 fix rounds on PR #$PR_NUM. Marked draft + labeled AFK:checks-failed. Human triage required."
 ```
 
-Return:
-`pr-watch: DRAFT — exhausted 10 rounds, marked draft, team:checks-failed`
+Return: `pr-watch: DRAFT — exhausted 10 rounds, marked draft, AFK:checks-failed`
 
 ## Terminal verdict
 
 Exactly one of these is the final line printed before exit:
 
 - `pr-watch: PASS — all checks green at attempt <K>`
-- `pr-watch: DRAFT — exhausted 10 rounds, marked draft, team:checks-failed`
+- `pr-watch: DRAFT — exhausted 10 rounds, marked draft, AFK:checks-failed`
 - `pr-watch: ERROR — <reason>`
 
-The team-pickup caller parses this line verbatim into its §7 output block.
+The afk-pickup caller parses this line verbatim into its §7 output block.
 
 ## Failure modes
 
@@ -211,9 +210,9 @@ The team-pickup caller parses this line verbatim into its §7 output block.
   no exception.)
 - Never merges the PR. Green CI is the verdict; merge is human-gated.
 - Never operates on a PR not on `feat/issue-<N>` (defense against the caller
-  passing a hand-crafted PR — only team-pickup output is supported).
+  passing a hand-crafted PR — only afk-pickup output is supported).
 - Never spawns reviewer/verifier. The fix-loop is implementer-only; the
-  pre-commit review happens during team-dispatch and the one-time post-PR review
-  is `/pr-review` (team-pickup §6a.1b) — pr-watch itself never reviews.
+  pre-commit review happens during afk-dispatch and the one-time post-PR review
+  is `/pr-review` (afk-pickup §6a.1b) — pr-watch itself never reviews.
 - Never extends the 10-round cap. Exhaustion is the signal to escalate to a
   human, not to retry harder.

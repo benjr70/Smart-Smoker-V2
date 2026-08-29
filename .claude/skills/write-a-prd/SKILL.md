@@ -97,10 +97,10 @@ This skill labels the PRD issue itself `prd` and does not create implementation
 tickets. When the PRD is later broken down by the `prd-to-issues` skill, each
 implementation slice is tagged by type:
 
-- `team` — AFK slice, eligible for autonomous Level 7 agent-team implementation.
+- `AFK` — AFK slice, eligible for autonomous Level 7 agent-team implementation.
 - `HITL` — slice that requires a human in the loop (e.g. architectural decision,
   infra cutover, design review); excluded from autonomous pickup.
 
 Keep this split in mind while interviewing and sketching modules: prefer slices
-that can be fully automated (`team`) and call out the few that genuinely need a
+that can be fully automated (`AFK`) and call out the few that genuinely need a
 human (`HITL`).

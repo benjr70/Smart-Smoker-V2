@@ -1,30 +1,30 @@
 # Dispatch
 
-The team runs inside a normal Claude Code session — the running `claude` process becomes the team lead. There is no external launcher and no setup script. Everything flows through the [`team-dispatch`](https://github.com/benjr70/Smart-Smoker-V2/blob/master/.claude/skills/team-dispatch/SKILL.md) skill, which self-bootstraps on every dispatch (Step 0 of the playbook).
+The team runs inside a normal Claude Code session — the running `claude` process becomes the team lead. There is no external launcher and no setup script. Everything flows through the [`afk-dispatch`](https://github.com/benjr70/Smart-Smoker-V2/blob/master/.claude/skills/afk-dispatch/SKILL.md) skill, which self-bootstraps on every dispatch (Step 0 of the playbook).
 
 ## Self-bootstrap (Step 0 of the skill)
 
-The first thing the lead does on every `/team-dispatch` invocation is pre-flight + label bootstrap. All checks are cheap; all mutations are idempotent. Specifically:
+The first thing the lead does on every `/afk-dispatch` invocation is pre-flight + label bootstrap. All checks are cheap; all mutations are idempotent. Specifically:
 
 1. Verifies `claude --version ≥ 2.1.32` (Agent Teams landed in 2.1.32).
 2. Verifies `gh` is authenticated and `jq` is installed (the `TeammateIdle` hook needs `jq`).
-3. Creates the GitHub labels `team` (blue), `team:in-progress` (yellow), `team:done` (green) via `gh label create --force` — creates if absent, updates if present, never errors.
+3. Creates the GitHub labels `AFK` (blue), `AFK:in-progress` (yellow), `AFK:done` (green) via `gh label create --force` — creates if absent, updates if present, never errors.
 4. Confirms `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is set in `.claude/settings.json`.
-5. Sweeps stale `team:in-progress` labels off any open issue with no active task in the shared list.
+5. Sweeps stale `AFK:in-progress` labels off any open issue with no active task in the shared list.
 
 If any of 1–4 fails, the lead stops and tells you exactly what to install or set. There is intentionally no separate bootstrap script — keeping pre-flight inline with the dispatch playbook means a fresh clone can dispatch a team without first running bash.
 
 ## Invocation
 
 ```
-/team-dispatch <prd-issue-number>              # full run
-/team-dispatch <prd-issue-number> --dry-run    # print roster + task list, don't spawn
+/afk-dispatch <prd-issue-number>              # full run
+/afk-dispatch <prd-issue-number> --dry-run    # print roster + task list, don't spawn
 ```
 
 `--dry-run` output:
 
 ```
-=== /team-dispatch 183: dry run ===
+=== /afk-dispatch 183: dry run ===
 
 Roster:
   - implementer (opus, Edit/Write/Bash/Read/Grep/Glob)
@@ -41,9 +41,9 @@ Tasks (4 total, in dependency order):
 
 ## Playbook (what the lead does)
 
-Full version: [`.claude/skills/team-dispatch/SKILL.md`](https://github.com/benjr70/Smart-Smoker-V2/blob/master/.claude/skills/team-dispatch/SKILL.md). Short version:
+Full version: [`.claude/skills/afk-dispatch/SKILL.md`](https://github.com/benjr70/Smart-Smoker-V2/blob/master/.claude/skills/afk-dispatch/SKILL.md). Short version:
 
-1. Read PRD (`gh issue view <prd>`) and open `team`-labeled issues (`gh issue list --label team --state open`).
+1. Read PRD (`gh issue view <prd>`) and open `AFK`-labeled issues (`gh issue list --label AFK --state open`).
 2. Spawn implementer, reviewer, verifier as persistent teammates. Spawn researcher on-demand per issue with non-trivial "Interface Changes".
 3. Populate the shared task list — one task per issue, `blocked_by` mirrors each issue's "Blocked by" section. Research tasks block their paired implementation tasks.
 4. Coordinate the flow per issue: researcher memo → implementer claims + codes + stages → reviewer approves → verifier smokes + commits → implementer advances labels + closes issue.
@@ -53,13 +53,13 @@ Full version: [`.claude/skills/team-dispatch/SKILL.md`](https://github.com/benjr
 ## Label flow
 
 ```
-team                → implementer claims, adds team:in-progress
-team:in-progress    → reviewer approves + verifier commits
-                    → implementer removes team:in-progress, adds team:done
-team:done           → issue closed
+AFK                 → implementer claims, adds AFK:in-progress
+AFK:in-progress     → reviewer approves + verifier commits
+                    → implementer removes AFK:in-progress, adds AFK:done
+AFK:done            → issue closed
 ```
 
-Same pattern as Ralph, different label prefix. Do not mix — an issue must not carry both `team` and `ralph`.
+Same pattern as Ralph, different label prefix. Do not mix — an issue must not carry both `AFK` and `ralph`.
 
 ## Hooks
 
@@ -82,15 +82,15 @@ Graceful fallback: if `jq` is missing or the task files can't be read, exits `0`
 ## Troubleshooting
 
 - **Teammate stops unexpectedly** — spawn a replacement of the same role. The shared task list preserves state, and the new teammate picks up where the previous one left off.
-- **Orphaned `team:in-progress` label** — at dispatch start, the lead checks for open issues labeled `team:in-progress` with no active task in the task list. Stale labels are removed before claiming new work.
+- **Orphaned `AFK:in-progress` label** — at dispatch start, the lead checks for open issues labeled `AFK:in-progress` with no active task in the task list. Stale labels are removed before claiming new work.
 - **Lead shuts down before work is done** (known CCT limitation) — if you realize you're about to quit while tasks remain, spawn a replacement teammate for any missing role and resume. Never run "clean up the team" unless the task list is empty.
 - **`TaskCompleted` hook blocks a task** — the verifier committed without a `smoke:` trailer. Amend the HEAD commit with the correct trailer (`git commit --amend`) and re-mark the task completed.
 - **tmux not installed** — split-pane mode needs tmux or iTerm2. Fall back to in-process mode: `claude --teammate-mode in-process`. All coordination still works; you just cycle teammates with Shift+Down instead of clicking panes.
-- **Agent Teams disabled** — check `.claude/settings.json` contains `"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"` in the `env` block. Without it, the lead cannot spawn teammates — `/team-dispatch` will fail fast.
+- **Agent Teams disabled** — check `.claude/settings.json` contains `"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"` in the `env` block. Without it, the lead cannot spawn teammates — `/afk-dispatch` will fail fast.
 
 ## Related
 
 - [Roles](roles.md) — the four subagent definitions
-- [`.claude/skills/team-dispatch/SKILL.md`](https://github.com/benjr70/Smart-Smoker-V2/blob/master/.claude/skills/team-dispatch/SKILL.md) — the full playbook
+- [`.claude/skills/afk-dispatch/SKILL.md`](https://github.com/benjr70/Smart-Smoker-V2/blob/master/.claude/skills/afk-dispatch/SKILL.md) — the full playbook
 - [`docs/Harness/self-validation.md`](../Harness/self-validation.md) — the `smoke:` trailer contract the verifier produces
 - [Agent Teams (official docs)](https://code.claude.com/docs/en/agent-teams) — underlying platform feature

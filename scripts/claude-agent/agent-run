@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# agent-run — VM wrapper that fires `/team-pickup` autonomously, no human prompts.
+# agent-run — VM wrapper that fires `/afk-pickup` autonomously, no human prompts.
 #
 # One fire = one issue picked, implemented, PR opened, CI watched to verdict.
 # Designed to run on the claude-agent-1 Proxmox VM (see docs/CI-CD/claude-agent-vm.md).
@@ -9,18 +9,18 @@
 # After the fire, the Exhaustion Classifier inspects the captured output + exit
 # code. If the run was cut off by Claude usage exhaustion, agent-run PAUSES the
 # in-flight issue instead of failing: it freezes partial work with a `wip:`
-# commit, flips the issue `team:in-progress -> team:paused` (leaving the branch
+# commit, flips the issue `AFK:in-progress -> AFK:paused` (leaving the branch
 # intact), records the pause as a timestamped comment, emits any scraped reset
 # instant for the daemon, and exits 0 — an out-of-gas event is never a failure.
 #
 # Usage:
 #   agent-run                     # fire once, exit per the classification below
-#   agent-run --dry-run           # forward --dry-run to /team-pickup
+#   agent-run --dry-run           # forward --dry-run to /afk-pickup
 #
 # Exit codes:
-#   0   — /team-pickup completed cleanly, OR the run was paused (EXHAUSTED):
-#         partial work is frozen and the issue is left in team:paused for resume.
-#   non-0 — /team-pickup genuinely failed (§6b path); cron mailer should escalate.
+#   0   — /afk-pickup completed cleanly, OR the run was paused (EXHAUSTED):
+#         partial work is frozen and the issue is left in AFK:paused for resume.
+#   non-0 — /afk-pickup genuinely failed (§6b path); cron mailer should escalate.
 #
 # Injectable for tests (default to the real binaries):
 #   CLAUDE_BIN  claude CLI          GH_BIN  gh CLI          GIT_BIN  git
@@ -38,7 +38,7 @@ CLAUDE_BIN="${CLAUDE_BIN:-claude}"
 GH_BIN="${GH_BIN:-gh}"
 GIT_BIN="${GIT_BIN:-git}"
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
-LOG_FILE="$LOG_DIR/team-pickup-$TS.log"
+LOG_FILE="$LOG_DIR/afk-pickup-$TS.log"
 
 mkdir -p "$LOG_DIR"
 
@@ -54,7 +54,7 @@ fi
 
 cd "$REPO_DIR"
 
-# Refresh master so /team-pickup §4 branches from up-to-date origin/master.
+# Refresh master so /afk-pickup §4 branches from up-to-date origin/master.
 "$GIT_BIN" fetch --quiet origin master || {
   echo "agent-run: WARN — git fetch failed, continuing with cached refs" | tee -a "$LOG_FILE"
 }
@@ -81,10 +81,10 @@ fi
 echo "=== agent-run $TS ===" | tee -a "$LOG_FILE"
 echo "repo:   $REPO_DIR"      | tee -a "$LOG_FILE"
 echo "log:    $LOG_FILE"      | tee -a "$LOG_FILE"
-echo "prompt: /team-pickup$DRY_RUN_FLAG" | tee -a "$LOG_FILE"
+echo "prompt: /afk-pickup$DRY_RUN_FLAG" | tee -a "$LOG_FILE"
 echo                          | tee -a "$LOG_FILE"
 
-# `/team-pickup` spawns background subagents (implementer/reviewer/verifier) that
+# `/afk-pickup` spawns background subagents (implementer/reviewer/verifier) that
 # routinely run well past `claude --print`'s default 600s background-task ceiling.
 # Left at the default, print terminates the team mid-dispatch and returns exit 0
 # with no PR and the issue still locked. 0 = wait indefinitely. Honor a host
@@ -106,7 +106,7 @@ set +e
   --permission-mode bypassPermissions \
   --print \
   "${MODEL_ARGS[@]}" \
-  "/team-pickup$DRY_RUN_FLAG" \
+  "/afk-pickup$DRY_RUN_FLAG" \
   2>&1 | tee -a "$LOG_FILE"
 EXIT_CODE=${PIPESTATUS[0]}
 set -e
@@ -120,15 +120,15 @@ STATUS="$(printf '%s' "$VERDICT" | jq -r '.status')"
 RESET_AT="$(printf '%s' "$VERDICT" | jq -r '.resetAt')"
 
 # pause_inflight — freeze partial work and move the in-flight issue to
-# team:paused. Every step is best-effort (|| true): a pause must never itself
-# fail the run and re-wedge the pipeline. team:failed is never applied here.
+# AFK:paused. Every step is best-effort (|| true): a pause must never itself
+# fail the run and re-wedge the pipeline. AFK:failed is never applied here.
 pause_inflight() {
   local reset_at="$1" issue ts note
 
-  issue="$("$GH_BIN" issue list --label team:in-progress --state open \
+  issue="$("$GH_BIN" issue list --label AFK:in-progress --state open \
     --json number --jq '.[0].number' 2>/dev/null || true)"
   if [ -z "$issue" ] || [ "$issue" = "null" ]; then
-    echo "agent-run: EXHAUSTED but no team:in-progress issue to pause" | tee -a "$LOG_FILE"
+    echo "agent-run: EXHAUSTED but no AFK:in-progress issue to pause" | tee -a "$LOG_FILE"
     return 0
   fi
 
@@ -140,7 +140,7 @@ pause_inflight() {
 
   # Flip the lock to paused, keeping the branch intact for resume next window.
   "$GH_BIN" issue edit "$issue" \
-    --remove-label team:in-progress --add-label team:paused || true
+    --remove-label AFK:in-progress --add-label AFK:paused || true
 
   ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   note="Run paused at ${ts} — Claude usage exhausted mid-run. Branch kept for resume."
@@ -149,20 +149,20 @@ pause_inflight() {
   fi
   "$GH_BIN" issue comment "$issue" --body "$note" || true
 
-  echo "agent-run: paused #${issue} (team:in-progress -> team:paused)" | tee -a "$LOG_FILE"
+  echo "agent-run: paused #${issue} (AFK:in-progress -> AFK:paused)" | tee -a "$LOG_FILE"
 }
 
 # fail_inflight — on a genuine failure, clear the lock THIS run created so the
 # next fire is not blocked forever. Scoped to the issue this run picked (scraped
 # from the `picked:   #N` line in this run's own log): if claude crashed before
-# team-pickup's §6b could clean up, the team:in-progress lock leaks and every
+# afk-pickup's §6b could clean up, the AFK:in-progress lock leaks and every
 # future fire skips (observed 2026-07-08: #280 stuck for a day). Never touches a
 # lock this run did not create. Idempotent with §6b (best-effort, || true).
 #
 # A reconcile fire (`picked:   reconcile PR #P (issue #N)`) is special: the
-# issue's work was already DONE — the fire only borrowed team:in-progress as
+# issue's work was already DONE — the fire only borrowed AFK:in-progress as
 # the single-flight lock while nursing the PR. On a crash the lock is restored
-# to team:done, never team:failed (failing a finished issue would lie), and the
+# to AFK:done, never AFK:failed (failing a finished issue would lie), and the
 # breadcrumb lands on the PR where the human is looking.
 fail_inflight() {
   local issue ts pr
@@ -170,11 +170,11 @@ fail_inflight() {
   if [ -n "$pr" ]; then
     issue="$(printf '%s' "$pr" | grep -oE 'issue #[0-9]+' | grep -oE '[0-9]+' || true)"
     "$GH_BIN" issue edit "$issue" \
-      --remove-label team:in-progress --add-label team:done || true
+      --remove-label AFK:in-progress --add-label AFK:done || true
     ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     "$GH_BIN" pr comment "$(printf '%s' "$pr" | grep -oE 'PR #[0-9]+' | grep -oE '[0-9]+')" \
-      --body "Reconcile fire crashed at ${ts} — lock restored (team:in-progress → team:done on issue #${issue}). PR left as-is for the next fire or human triage." || true
-    echo "agent-run: failed reconcile — restored #${issue} (team:in-progress -> team:done)" | tee -a "$LOG_FILE"
+      --body "Reconcile fire crashed at ${ts} — lock restored (AFK:in-progress → AFK:done on issue #${issue}). PR left as-is for the next fire or human triage." || true
+    echo "agent-run: failed reconcile — restored #${issue} (AFK:in-progress -> AFK:done)" | tee -a "$LOG_FILE"
     return 0
   fi
 
@@ -185,13 +185,13 @@ fail_inflight() {
   fi
 
   "$GH_BIN" issue edit "$issue" \
-    --remove-label team:in-progress --add-label team:failed || true
+    --remove-label AFK:in-progress --add-label AFK:failed || true
 
   ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   "$GH_BIN" issue comment "$issue" \
-    --body "Run failed at ${ts} — team-pickup fire exited non-zero. Lock cleared (team:in-progress → team:failed) for human triage." || true
+    --body "Run failed at ${ts} — afk-pickup fire exited non-zero. Lock cleared (AFK:in-progress → AFK:failed) for human triage." || true
 
-  echo "agent-run: failed #${issue} (team:in-progress -> team:failed)" | tee -a "$LOG_FILE"
+  echo "agent-run: failed #${issue} (AFK:in-progress -> AFK:failed)" | tee -a "$LOG_FILE"
 }
 
 case "$STATUS" in
@@ -211,11 +211,11 @@ case "$STATUS" in
     # Clean run that picked nothing (empty queue or a stale in-flight skip):
     # tell the daemon so it sleeps out the window instead of re-firing into an
     # empty pick loop. Match both the stable machine lines the skill emits
-    # (`team-pickup: skip` / `team-pickup: no eligible issue`) and the human
+    # (`afk-pickup: skip` / `afk-pickup: no eligible issue`) and the human
     # report line (`picked:   skip — N in flight`) observed live 2026-07-09 —
     # missing the latter made the daemon treat a skip as a clean run and
     # hot-loop into the lock.
-    if grep -qE 'team-pickup: (no eligible issue|skip)|^[[:space:]]*picked:[[:space:]]+(skip|no eligible)' "$LOG_FILE"; then
+    if grep -qE 'afk-pickup: (no eligible issue|skip)|^[[:space:]]*picked:[[:space:]]+(skip|no eligible)' "$LOG_FILE"; then
       echo "AGENT_RUN_NO_WORK=1" | tee -a "$LOG_FILE"
     fi
     exit "$EXIT_CODE"

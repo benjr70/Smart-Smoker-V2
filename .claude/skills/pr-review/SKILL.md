@@ -3,18 +3,18 @@ name: pr-review
 description:
   Run the one-time autonomous code review of a freshly green agent PR — a
   correctness pass (built-in /code-review at medium effort) plus a spec pass
-  (diff vs. the issue's Acceptance Criteria and parent PRD), findings posted as
-  marked inline review comments, then the `team:revise` label applied so the
-  next daemon fire's `/pr-reconcile` loop fixes the threads, plus a done-marker
-  comment. Invoked (blocking) by `/team-pickup` §6a.1b after pr-watch PASS.
-  Takes the PR number + branch + issue number as arguments.
+  (diff vs. the issue's Acceptance Criteria and parent Spec), findings posted as
+  marked inline review comments, then the `AFK:revise` label applied so the next
+  daemon fire's `/pr-reconcile` loop fixes the threads, plus a done-marker
+  comment. Invoked (blocking) by `/afk-pickup` §6a.1b after pr-watch PASS. Takes
+  the PR number + branch + issue number as arguments.
 ---
 
 # PR Review — Autonomous Two-Axis Reviewer, Fixes via the Reconcile Loop
 
-You are the **post-PR reviewer** spawned by `/team-pickup` after CI first goes
+You are the **post-PR reviewer** spawned by `/afk-pickup` after CI first goes
 green. One fire = one PR = **once in that PR's life**. You review the whole diff
-on two axes, post findings as marked inline review threads, apply `team:revise`
+on two axes, post findings as marked inline review threads, apply `AFK:revise`
 so the daemon's next fire routes the PR into `/pr-reconcile`'s proven
 fix-reply-resolve loop, and return a single terminal verdict line that the
 caller pastes into its output block.
@@ -31,7 +31,7 @@ This skill assumes:
 - `scripts/claude-agent/lib/thread-reconciler.sh` and
   `scripts/claude-agent/lib/review-poster.sh` exist — sourceable deep modules.
   Never hand-roll their GraphQL/REST calls or marker strings.
-- The `team:revise` label exists (created by `/team-dispatch` §0).
+- The `AFK:revise` label exists (created by `/afk-dispatch` §0).
 - The caller checks the done-marker before spawning; §0 re-checks anyway
   (defense in depth).
 
@@ -42,9 +42,9 @@ This skill assumes:
 ```
 
 All three arguments required. Repo is fixed to `benjr70/Smart-Smoker-V2` (export
-`REPO="benjr70/Smart-Smoker-V2"` for the snippets below). The caller
-(team-pickup §6a.1b) supplies the arguments verbatim from its PR-create step;
-`BRANCH` must be `feat/issue-<ISSUE_N>`.
+`REPO="benjr70/Smart-Smoker-V2"` for the snippets below). The caller (afk-pickup
+§6a.1b) supplies the arguments verbatim from its PR-create step; `BRANCH` must
+be `feat/issue-<ISSUE_N>`.
 
 ## Process
 
@@ -73,10 +73,10 @@ REVIEWED_SHA=$(git rev-parse HEAD)
 1. **Issue** — `gh issue view "$ISSUE_N" --repo "$REPO" --json title,body`.
 2. **Acceptance Criteria block** — everything between a heading matching
    `^## *Acceptance [Cc]riteria` and the next `^## ` heading (or end of body);
-   the same extraction team-pickup §6a uses. Absent → note "(none found)".
-3. **Parent PRD** — the first `#<digits>` reference inside the issue body's
-   `## Parent PRD` section (the `/prd-to-issues` convention). If found,
-   `gh issue view <PRD_N> --repo "$REPO" --json title,body`. No section →
+   the same extraction afk-pickup §6a uses. Absent → note "(none found)".
+3. **Parent Spec** — the first `#<digits>` reference inside the issue body's
+   `## Parent` section (the `/prd-to-issues` convention). If found,
+   `gh issue view <SPEC_N> --repo "$REPO" --json title,body`. No section →
    proceed AC-only and say so in the spec-axis prompt.
 4. **Diff** — `git diff origin/master...HEAD`, capped at 2000 lines; if longer,
    truncate with a `... [truncated]` marker (pr-watch §3 convention).
@@ -125,11 +125,11 @@ no `gh` calls). Prompt:
 >
 > ## Acceptance Criteria (extracted)
 >
-> \<AC block, or "(none found — judge against the issue body and PRD)">
+> \<AC block, or "(none found — judge against the issue body and Spec)">
 >
-> ## Parent PRD issue #\<P>: \<title>
+> ## Parent Spec issue #\<P>: \<title>
 >
-> \<PRD body, or "(no Parent PRD section in the issue — judge against the issue
+> \<Spec body, or "(no Parent section in the issue — judge against the issue
 > alone)">
 >
 > ## The diff under review (origin/master...HEAD, capped 2000 lines)
@@ -138,12 +138,12 @@ no `gh` calls). Prompt:
 >
 > Check three things, and ONLY these three:
 >
-> 1. MISSING REQUIREMENT — an Acceptance Criterion (or an explicit PRD
+> 1. MISSING REQUIREMENT — an Acceptance Criterion (or an explicit Spec
 >    requirement this issue's slice owns) with no corresponding implementation
 >    in the diff. Anchor the finding to the changed file + diff line where the
 >    implementation should live (the closest hunk in the most relevant file).
 > 2. SCOPE CREEP — a substantive change not traceable to the issue, its AC, or
->    the PRD (drive-by refactors, new endpoints/config/deps nobody asked for).
+>    the Spec (drive-by refactors, new endpoints/config/deps nobody asked for).
 >    Anchor to the offending added line.
 > 3. SPEC MISMATCH — code that implements a requirement wrongly (wrong
 >    threshold, wrong event name, inverted condition, wrong default — anything
@@ -197,22 +197,22 @@ first added line of that file's first hunk; if that also fails, fold the finding
 into the §5 done-marker comment under a `Could not anchor:` list — it is
 reported but produces no thread.
 
-### 4. Hand the fixes to the reconcile loop (`team:revise`)
+### 4. Hand the fixes to the reconcile loop (`AFK:revise`)
 
 The skill does NOT fix its own findings. Posting them created unresolved review
 threads; the proven fixer for unresolved threads is `/pr-reconcile` §2 (the same
 machinery that handles a human hand-back). Route the PR into it:
 
 ```bash
-gh pr edit "$PR_NUM" --repo "$REPO" --add-label team:revise
+gh pr edit "$PR_NUM" --repo "$REPO" --add-label AFK:revise
 ```
 
 The daemon's next fire (its work probe wakes early on a reconcile candidate)
-picks the PR via team-pickup §1.2 → `/pr-reconcile`, whose comment loop spawns
+picks the PR via afk-pickup §1.2 → `/pr-reconcile`, whose comment loop spawns
 the implementer, commits `fix(review):` rounds, replies in-thread
 `fixed in <sha>: …`, resolves each addressed thread, drops the label, and
 re-runs the full CI + manual verification tail. Disputes and exhaustion follow
-pr-reconcile's existing escalation (`team:revise-failed`, parked for a human).
+pr-reconcile's existing escalation (`AFK:revise-failed`, parked for a human).
 
 ### 5. Done-marker + terminal verdict
 
@@ -228,14 +228,14 @@ label so a crash between the two leaves the review retryable, not half-done.)
 Print exactly one terminal line:
 
 - `pr-review: PASS — 0 findings`
-- `pr-review: DONE — <N> findings posted, team:revise applied`
+- `pr-review: DONE — <N> findings posted, AFK:revise applied`
 - `pr-review: SKIPPED — already reviewed (done-marker present)`
 - `pr-review: ERROR — <reason>`
 
-The team-pickup caller parses this line verbatim into its output block and
-routes on it: `team:revise applied` means the fixes (and the re-verification
-they stale) belong to the NEXT fire's reconcile — the current fire skips manual
-verification and exits.
+The afk-pickup caller parses this line verbatim into its output block and routes
+on it: `AFK:revise applied` means the fixes (and the re-verification they stale)
+belong to the NEXT fire's reconcile — the current fire skips manual verification
+and exits.
 
 ## Failure modes
 
@@ -253,14 +253,14 @@ verification and exits.
 ## Boundaries
 
 - Never pushes, commits, or edits code — the skill's entire write surface is
-  inline review comments, one `team:revise` label add, and one done-marker
+  inline review comments, one `AFK:revise` label add, and one done-marker
   comment. All fixing belongs to `/pr-reconcile`.
 - Never merges the PR. Merge is human-gated.
 - Never replies to or resolves ANY thread (not even its own) — thread
   reply/resolution is `/pr-reconcile` §2's job.
-- Never applies any label other than `team:revise`, never removes a label, never
+- Never applies any label other than `AFK:revise`, never removes a label, never
   drafts the PR.
 - Posts exactly one done-marker comment ever per PR — it is the once-per-PR
   idempotency gate for every future §6a.1b entry.
-- Never operates on a PR not on `feat/issue-<N>` (only team-pickup output is
+- Never operates on a PR not on `feat/issue-<N>` (only afk-pickup output is
   supported).

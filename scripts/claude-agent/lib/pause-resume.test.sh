@@ -4,7 +4,7 @@
 # Run: bash scripts/claude-agent/lib/pause-resume.test.sh
 #
 # Strategy: pause_resume_action is a pure function of the current label/count
-# state — is there a `team:paused` issue, and how many times has it paused. It
+# state — is there an `AFK:paused` issue, and how many times has it paused. It
 # never touches gh, git, or the network; the caller reads the label state and
 # the issue's pause count and hands them in. The function decides the single
 # thing the pacing loop needs: resume the paused issue, pick a new one, or give
@@ -45,7 +45,7 @@ fi
 . "${LIB}"
 
 #-------------------------------------------------------------------------------
-# Test 1: one team:paused issue below the cap → resume it (behavior 1; AC 1).
+# Test 1: one AFK:paused issue below the cap → resume it (behavior 1; AC 1).
 #         The action names the paused issue so the picker resumes THAT branch.
 #-------------------------------------------------------------------------------
 test_paused_issue_resumes() {
@@ -76,7 +76,7 @@ test_paused_issue_resumes() {
 }
 
 #-------------------------------------------------------------------------------
-# Test 2: no team:paused issue → pick a new issue (behavior 2; AC 1). With no
+# Test 2: no AFK:paused issue → pick a new issue (behavior 2; AC 1). With no
 #         in-flight work to finish, the picker proceeds to its normal fresh pick.
 #-------------------------------------------------------------------------------
 test_no_paused_picks_new() {

@@ -28,8 +28,8 @@ Implement issue #{{ISSUE_NUMBER}}: {{ISSUE_TITLE}}
 
 - Read the acceptance criteria, interface changes, and behaviors to test
   carefully.
-- If there is a "Parent PRD" reference, fetch it with `gh issue view <number>`
-  to understand the broader context.
+- If there is a "Parent" (or legacy "Parent PRD") reference, fetch it with
+  `gh issue view <number>` to understand the broader context.
 - If there is a "Blocked by" section, verify those issues are closed with
   `gh issue view <number> --json state --jq '.state'`. If any blocker is still
   open, output `<ralph>BLOCKED #<number></ralph>` and stop immediately.

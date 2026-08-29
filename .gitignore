@@ -145,3 +145,7 @@ scripts/smoke/smoke-artifacts/
 
 # MkDocs build output
 site/
+
+# Python bytecode
+__pycache__/
+*.pyc

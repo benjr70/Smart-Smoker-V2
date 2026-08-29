@@ -8,8 +8,8 @@ hardware Claude controls.
 
 This guide sets up the environment only. Scheduling/triggering of
 autonomous fires is handled by the budget-paced `agent-daemon` systemd
-service — see [Autonomous Loop](../Teams/autonomous-loop.md) for the
-daemon, `/team-pickup`, PR CI babysitting (`/pr-watch`), manual
+service — see [Autonomous Loop](../AFK/autonomous-loop.md) for the
+daemon, `/afk-pickup`, PR CI babysitting (`/pr-watch`), manual
 verification, and the PR reconcile flow (`/pr-reconcile`).
 
 ---
@@ -279,7 +279,7 @@ gh auth status
 ```
 
 Verify the `project` scope is present in the output. Without it,
-`team-pickup` falls back to the GitHub MCP path — also fine.
+`afk-pickup` falls back to the GitHub MCP path — also fine.
 
 ---
 
@@ -566,7 +566,7 @@ If all of the above succeed, the VM is ready.
 - **Backups / snapshots** — Proxmox-native concern; configure under your
   existing backup policy.
 - **Multi-fire concurrency** — single VM, single fire at a time per
-  `team:in-progress` distributed lock. Scaling out is a future-VM topic.
+  `AFK:in-progress` distributed lock. Scaling out is a future-VM topic.
 
 ---
 

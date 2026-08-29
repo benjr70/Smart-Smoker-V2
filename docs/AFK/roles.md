@@ -66,7 +66,7 @@ Read-only codebase explorer. Writes a short memo into the implementation task's 
 
 ## How the lead chooses which to spawn
 
-From [`.claude/skills/team-dispatch/SKILL.md`](https://github.com/benjr70/Smart-Smoker-V2/blob/master/.claude/skills/team-dispatch/SKILL.md):
+From [`.claude/skills/afk-dispatch/SKILL.md`](https://github.com/benjr70/Smart-Smoker-V2/blob/master/.claude/skills/afk-dispatch/SKILL.md):
 
 - **Implementer, reviewer, verifier** — always spawned up front as persistent teammates. They outlive individual tasks and claim new work as it becomes available.
 - **Researcher** — spawned per issue with a non-trivial "Interface Changes" section (three or more modules, or any infra touch). The researcher's task `blocks` the implementer's task, so the implementer waits for the memo before claiming work.

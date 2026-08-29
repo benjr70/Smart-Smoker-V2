@@ -10,7 +10,7 @@
 #
 # The same job also guards the harness's *invocability* (issue #467): the
 # verify-pr skill must stay callable by an agent (no `disable-model-invocation`,
-# no human-only caller wording), and team-pickup §6a.2 / pr-reconcile §3 must
+# no human-only caller wording), and afk-pickup §6a.2 / pr-reconcile §3 must
 # keep routing a round that did not run to a park instead of a silent PASS.
 
 name: Harness Runbook Check
@@ -20,7 +20,7 @@ on:
     branches: [master]
     paths:
       - '.claude/skills/verify-pr/SKILL.md'
-      - '.claude/skills/team-pickup/SKILL.md'
+      - '.claude/skills/afk-pickup/SKILL.md'
       - '.claude/skills/pr-reconcile/SKILL.md'
       - '.claude/agents/manual-verifier.md'
       - 'scripts/verify-pr/check-harness-runbook.sh'
@@ -32,7 +32,7 @@ on:
     branches: [master]
     paths:
       - '.claude/skills/verify-pr/SKILL.md'
-      - '.claude/skills/team-pickup/SKILL.md'
+      - '.claude/skills/afk-pickup/SKILL.md'
       - '.claude/skills/pr-reconcile/SKILL.md'
       - '.claude/agents/manual-verifier.md'
       - 'scripts/verify-pr/check-harness-runbook.sh'

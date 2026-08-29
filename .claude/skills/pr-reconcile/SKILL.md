@@ -3,17 +3,17 @@ name: pr-reconcile
 description:
   Bring one open agent-team PR back to a mergeable, review-clean state — rebase
   it over master when it conflicts, fix the review comments a human handed back
-  via the `team:revise` label (replying in-thread with what changed and
-  resolving each thread), then re-run the full CI + manual verification tail.
-  Invoked (blocking) by `/team-pickup` §1.2 when its PR triage picks a PR
-  needing attention. Takes the PR number + branch + issue number + reason.
+  via the `AFK:revise` label (replying in-thread with what changed and resolving
+  each thread), then re-run the full CI + manual verification tail. Invoked
+  (blocking) by `/afk-pickup` §1.2 when its PR triage picks a PR needing
+  attention. Takes the PR number + branch + issue number + reason.
 ---
 
 # PR Reconcile — Autonomous PR Feedback + Conflict Fixer
 
-You are the **reconciler** spawned by `/team-pickup` when an already-open agent
+You are the **reconciler** spawned by `/afk-pickup` when an already-open agent
 PR needs attention: master moved under it (merge conflict), a human reviewed it
-and handed it back with the `team:revise` label, and/or its bot tail never
+and handed it back with the `AFK:revise` label, and/or its bot tail never
 finished (`incomplete` — a prior fire died mid-§6a). One fire = one PR brought
 back to green — rebased, comments addressed with in-thread replies, CI
 re-watched, manual verification re-run — or escalated with a parked label.
@@ -23,11 +23,11 @@ body, the PR diff, and the review threads. No session is ever resumed.
 
 This skill assumes:
 
-- The PR was opened by team-pickup on `feat/issue-<N>` against `master`.
+- The PR was opened by afk-pickup on `feat/issue-<N>` against `master`.
 - `scripts/claude-agent/lib/rebase-driver.sh`, `lib/thread-reconciler.sh` exist
   (sourceable deep modules — do not hand-roll their git/GraphQL).
-- The caller (team-pickup §1.2) already flipped the backing issue
-  `team:done → team:in-progress` as the single-flight lock and will restore it;
+- The caller (afk-pickup §1.2) already flipped the backing issue
+  `AFK:done → AFK:in-progress` as the single-flight lock and will restore it;
   this skill never touches that lock itself.
 
 ## Invocation
@@ -36,9 +36,9 @@ This skill assumes:
 /pr-reconcile --pr <PR_NUM> --branch <BRANCH> --issue <ISSUE_N> --reason <revise|conflict|both|incomplete>
 ```
 
-All four arguments required, supplied verbatim from team-pickup's triage verdict
+All four arguments required, supplied verbatim from afk-pickup's triage verdict
 (`reason` is the triage pick reason; when the PR both conflicts and carries
-`team:revise`, the caller passes `both`). Reason `incomplete` means the PR
+`AFK:revise`, the caller passes `both`). Reason `incomplete` means the PR
 carries no attention label and no conflict, but its bot tail never finished: the
 one-time review marker (`<!-- pr-review-done -->`) and/or any manual
 verification round comment is missing — a prior fire died mid-§6a. §1 and §2 are
@@ -56,7 +56,7 @@ gh pr view "$PR_NUM" --json state,isDraft,headRefName,mergeable,labels \
 ```
 
 Record from that view: `MERGEABLE` (the current mergeable state — re-read it
-here, triage's snapshot may be stale) and whether `team:revise` is present.
+here, triage's snapshot may be stale) and whether `AFK:revise` is present.
 `mergeable == UNKNOWN` at this point: poll `gh pr view --json mergeable` every
 20s up to 3 minutes for GitHub to finish computing; still UNKNOWN → treat as not
 conflicting (the comment phase can still run).
@@ -117,7 +117,7 @@ VERDICT=$(rebase_onto "$BRANCH")          # {"status":"CLEAN"|"CONFLICT","files"
 
   ```bash
   rebase_abort                             # leave the branch exactly as the PR shows
-  gh pr edit "$PR_NUM" --add-label team:rebase-failed
+  gh pr edit "$PR_NUM" --add-label AFK:rebase-failed
   gh pr comment "$PR_NUM" --body "pr-reconcile: automatic rebase onto master failed at $(date -Iseconds) — <reason: conflicts unresolvable | lease rejected (branch moved) | rebase error>. Human rebase required."
   ```
 
@@ -126,10 +126,10 @@ VERDICT=$(rebase_onto "$BRANCH")          # {"status":"CLEAN"|"CONFLICT","files"
 
 If the PR is not CONFLICTING, skip this phase entirely.
 
-### 2. Comment phase (only when `team:revise` is present)
+### 2. Comment phase (only when `AFK:revise` is present)
 
 The PR was explicitly handed back — by a human review, or by `/pr-review`
-(team-pickup §6a.1b), which posts its findings as inline threads marked
+(afk-pickup §6a.1b), which posts its findings as inline threads marked
 `<!-- pr-review-bot -->` / 🤖 and applies this same label. Both kinds of thread
 are worked identically: the reconciler only cares that a thread is unresolved,
 not who authored it. Work every unresolved review thread; **cap: 3 implementer
@@ -186,8 +186,8 @@ Round loop (`R` starts at 1, cap `REVISE_ROUNDS_MAX=3`):
    ```bash
    # One reply per still-open thread, then park the PR for a human:
    tr_reply ... "pr-reconcile: could not auto-resolve after $REVISE_ROUNDS_MAX attempts — human triage."
-   gh pr edit "$PR_NUM" --add-label team:revise-failed --remove-label team:revise
-   gh pr comment "$PR_NUM" --body "pr-reconcile: <k> review thread(s) could not be auto-resolved after $REVISE_ROUNDS_MAX round(s) at $(date -Iseconds). Labeled team:revise-failed for human triage."
+   gh pr edit "$PR_NUM" --add-label AFK:revise-failed --remove-label AFK:revise
+   gh pr comment "$PR_NUM" --body "pr-reconcile: <k> review thread(s) could not be auto-resolved after $REVISE_ROUNDS_MAX round(s) at $(date -Iseconds). Labeled AFK:revise-failed for human triage."
    ```
 
    Report `pr-reconcile: REVISE-FAILED — <k> thread(s) unresolved` and stop
@@ -196,35 +196,35 @@ Round loop (`R` starts at 1, cap `REVISE_ROUNDS_MAX=3`):
 **§2-exit** (all threads addressed):
 
 ```bash
-gh pr edit "$PR_NUM" --remove-label team:revise
+gh pr edit "$PR_NUM" --remove-label AFK:revise
 ```
 
 The label drop is what stops the daemon re-picking this PR next fire; the human
-re-applies `team:revise` (and re-opens threads) if a fix missed.
+re-applies `AFK:revise` (and re-opens threads) if a fix missed.
 
 ### 3. Verification tail (when §1/§2 pushed anything — or `--reason incomplete`)
 
 Any push (rebase or comment fix) re-ran CI and staled ALL previous evidence —
-per the locked design, **all verification re-runs**. Execute team-pickup's
+per the locked design, **all verification re-runs**. Execute afk-pickup's
 success tail against this PR, with one modification:
 
 - **§6a.1 pr-watch** (blocking, fresh 10-round budget) — spawn exactly as
-  team-pickup §6a.1 specifies, with this PR's number/branch/issue.
-- **§6a.1b pr-review** — marker-gated exactly as team-pickup specifies: a
+  afk-pickup §6a.1 specifies, with this PR's number/branch/issue.
+- **§6a.1b pr-review** — marker-gated exactly as afk-pickup specifies: a
   reconciled PR was normally reviewed when it first landed, so the
   `<!-- pr-review-done -->` marker makes this a SKIP. If the marker is absent
   (the PR predates `/pr-review`, or a prior attempt ended `pr-review: ERROR`),
-  the one-time review runs here; on findings it applies `team:revise` and the
+  the one-time review runs here; on findings it applies `AFK:revise` and the
   tail ends — the next fire reconciles.
 - **§6a.2 manual verification** (blocking) — delegate to `/verify-pr` exactly as
-  team-pickup §6a.2 specifies (a blocking `/verify-pr` round per PR, consuming
+  afk-pickup §6a.2 specifies (a blocking `/verify-pr` round per PR, consuming
   its terminal `manual-verify:` line and splitting spec-demanding deferrals into
   the fix loop). Because the rebase/fixes may have changed anything, existing
   ticks are stale: instruct the round to **re-verify every item, including ones
   already ticked `- [x]`**, and head its evidence comment
   `### Manual verification — post-reconcile round <M>/3`.
 - **§6a.3 manual fix loop** — identical semantics, `MANUAL_ROUNDS_MAX=3`,
-  exhaustion → draft + `team:checks-failed` + issue comment.
+  exhaustion → draft + `AFK:checks-failed` + issue comment.
 
 The same blocking rules apply verbatim: never emit output while pr-watch or the
 `/verify-pr` round is in flight; `pr-watch: (in flight)` is never a legal value.
@@ -237,17 +237,17 @@ runs: the **only** outcome that lets this fire report `result: PASS` is a real
 `manual-verify:` verdict line. An explicitly recorded
 `manual-verify: infra-error …` non-verdict (the stack never booted — zero items
 acted on) is recorded verbatim as the `verify:` line and reported like a
-pr-watch ERROR, exactly as team-pickup §6a.2 requires — never as PASS. If the
+pr-watch ERROR, exactly as afk-pickup §6a.2 requires — never as PASS. If the
 round produced neither — no `manual-verify:` line came back, the spawn failed,
 or the harness refused — that is a **missing round**, and it must never be
 reported as `result: PASS` or as an ordinary skip. Park it on the **PR**,
-exactly as team-pickup §6a.2 specifies:
+exactly as afk-pickup §6a.2 specifies:
 
 ```bash
 gh pr comment "$PR_NUM" --body "Manual verification round did not run: <reason>.
 Parking for a human — no verification evidence exists for this PR."
 gh pr ready "$PR_NUM" --undo
-gh pr edit  "$PR_NUM" --add-label team:checks-failed
+gh pr edit  "$PR_NUM" --add-label AFK:checks-failed
 ```
 
 The draft flip is the load-bearing half. PR Triage
@@ -262,20 +262,20 @@ but triage cannot see issue labels at all.)
 Then emit `verify: MISSING — <reason>` as the block's `verify:` line and
 `result: ERROR — manual verification round did not run` as the verdict.
 
-If neither §1 nor §2 pushed a commit (e.g. `team:revise` with zero actionable
+If neither §1 nor §2 pushed a commit (e.g. `AFK:revise` with zero actionable
 threads) **and `--reason` is not `incomplete`**, skip the tail — nothing
 changed, existing evidence stands.
 
 When `--reason incomplete`, ALWAYS run the tail even with no push: the tail
 itself is the missing work (pr-watch to green, the marker-gated one-time review,
 a verification round). On a no-push `incomplete` run existing ticks are NOT
-stale — the `/verify-pr` round uses team-pickup §6a.2's standard semantics
+stale — the `/verify-pr` round uses afk-pickup §6a.2's standard semantics
 (unchecked items only), headed `### Manual verification — round <M>/3` with `M`
 = 1 + the count of existing round comments (respecting `MANUAL_ROUNDS_MAX=3`; at
 cap with FAILs it exhausts into draft as usual). Convergence: if the review
-marker is absent, §3's pr-review may apply `team:revise` and end the tail — the
+marker is absent, §3's pr-review may apply `AFK:revise` and end the tail — the
 next fire re-picks the PR as `revise`; either way the PR exits the `incomplete`
-class every fire (marker/round posted, `team:revise` applied, or parked), so the
+class every fire (marker/round posted, `AFK:revise` applied, or parked), so the
 pick can never loop.
 
 ## Output format
@@ -298,10 +298,10 @@ The final `result:` line doubles as the terminal verdict the caller parses:
 - `pr-reconcile: PASS — rebased and/or <k> comment(s) addressed, checks green, manual verify clean`
 - `pr-reconcile: REBASE-FAILED — <reason>`
 - `pr-reconcile: REVISE-FAILED — <k> thread(s) unresolved`
-- `pr-reconcile: DRAFT — verification tail exhausted, marked draft, team:checks-failed`
+- `pr-reconcile: DRAFT — verification tail exhausted, marked draft, AFK:checks-failed`
 - `pr-reconcile: ERROR — <reason>`
 
-The hard validity rule from team-pickup §7 applies: when §3 ran, the block MUST
+The hard validity rule from afk-pickup §7 applies: when §3 ran, the block MUST
 carry the verbatim `pr-watch:` terminal line (and `verify:` on PASS) before the
 result is emitted. **When §3 ran**, `result: PASS` requires a `verify:` line
 holding a real `manual-verify:` verdict — `verify: MISSING — <reason>`, a
@@ -316,30 +316,30 @@ park a healthy PR.
 ## Failure modes
 
 - **Lease push rejected** — someone (human) pushed to the PR branch between our
-  fetch and push. Never force through it: abort, `team:rebase-failed`, park.
+  fetch and push. Never force through it: abort, `AFK:rebase-failed`, park.
   Their work is untouched — that is the point of the lease.
 - **Implementer disputes a review comment** — the loop never argues with a
   human's review by force; the thread stays open, and if disputes are all that
-  remain, the PR parks as `team:revise-failed` with in-thread explanations.
-- **`team:revise` applied but no unresolved threads** — drop the label; there is
+  remain, the PR parks as `AFK:revise-failed` with in-thread explanations.
+- **`AFK:revise` applied but no unresolved threads** — drop the label; there is
   nothing machine-actionable. The human should leave inline review comments (not
   just a top-level comment) to hand work back.
 - **PR turns draft / closes mid-reconcile** — stop at the next step boundary,
   report `pr-reconcile: ERROR — pr no longer open`, touch nothing further.
-- **Verification tail exhausts** — same escalation as team-pickup: draft +
-  `team:checks-failed`; report DRAFT. The reconcile's own labels are NOT applied
+- **Verification tail exhausts** — same escalation as afk-pickup: draft +
+  `AFK:checks-failed`; report DRAFT. The reconcile's own labels are NOT applied
   (the tail failing is a checks problem, not a revise/rebase problem).
 - **Verification round never ran** — the harness refused, the spawn failed, or
   the agent returned no `manual-verify:` line. Do NOT treat it as a skip and do
-  NOT pass: draft (`gh pr ready --undo`) + `team:checks-failed` on the **PR**,
-  an explanatory comment on the PR, and `verify: MISSING — <reason>` with
+  NOT pass: draft (`gh pr ready --undo`) + `AFK:checks-failed` on the **PR**, an
+  explanatory comment on the PR, and `verify: MISSING — <reason>` with
   `result: ERROR`. The draft is what stops PR Triage re-picking it. Before
   parking, sanity-check that `.claude/skills/verify-pr/SKILL.md` has not
   regained `disable-model-invocation` — that flag is the known cause and
   `bash scripts/verify-pr/check-verify-invocable.sh` names it in one line.
 - **Crash mid-fire** — the caller's
   `picked:   reconcile PR #<PR_NUM> (issue #<N>)` log line lets agent-run's
-  crash cleanup restore the issue lock (`team:in-progress` cleared, `team:done`
+  crash cleanup restore the issue lock (`AFK:in-progress` cleared, `AFK:done`
   restored).
 
 ## Boundaries
@@ -353,5 +353,5 @@ park a healthy PR.
   comments. Replies are additive.
 - Never resolves a thread it did not just address with a pushed commit.
 - Never operates on a PR whose head is not `feat/issue-<N>` (§0 enforces).
-- Never touches the `team:in-progress`/`team:done` lock — the caller owns it.
+- Never touches the `AFK:in-progress`/`AFK:done` lock — the caller owns it.
 - One PR per fire; the daemon's budget gate paces successive fires.
