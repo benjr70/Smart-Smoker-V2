@@ -37,9 +37,11 @@ guidelines.
 A **seam** is the public boundary you test at: the interface where you observe
 behavior without reaching inside. Tests live at seams, never against internals.
 
-**Test only at pre-agreed seams.** Before writing any test, write down the seams
-under test and confirm them with the user. No test is written at an unconfirmed
-seam.
+**Decide the seams before you write tests.** Write down the seams under test
+first. In an interactive session, confirm them with the user before writing the
+first test. Running autonomously (the AFK/daemon path, no user in the session),
+do not stall for a confirmation that cannot come: record the chosen seams in the
+PR body and proceed — the reviewer checks them.
 
 When the shape of that interface is itself in question (how deep the module is,
 where the seam belongs, what the interface should expose), call the Skill tool

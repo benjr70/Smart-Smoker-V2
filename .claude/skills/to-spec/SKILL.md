@@ -10,8 +10,16 @@ disable-model-invocation: true
 # To Spec
 
 Take the current conversation context and codebase understanding and produce a
-**Spec**: the issue Slices are cut from and reviewed against. Do NOT interview
-the user; synthesize what you already know.
+**Spec**: the issue Slices are cut from and reviewed against. Do NOT run a
+discovery interview — the decisions were made in the conversation that got you
+here, so synthesize what you already know. The only round-trips are the two
+short confirmations in steps 2 and 3 (seams, modules), and they exist to catch a
+mis-synthesis, not to gather new requirements.
+
+**Running autonomously** (no human in the session — the AFK/daemon path): skip
+both confirmations, write the seams and modules into the Spec as stated
+assumptions, and say in `## Further Notes` that they are unconfirmed. Never
+stall waiting for a user who is not there.
 
 This is the Smart Smoker fork of the mattpocock skill: same flow, plus a
 `## Module design` section and this repo's labelling.
@@ -28,17 +36,33 @@ Vocabulary (Spec, Slice, Map, AFK, HITL): [`CONTEXT.md`](../../../CONTEXT.md).
 
 2. Sketch the **seams** at which the feature will be tested. Prefer existing
    seams to new ones, and the highest seam possible. The fewer seams across the
-   codebase, the better — the ideal number is one. Check with the user that
-   these seams match their expectations.
+   codebase, the better — the ideal number is one. Interactive session: check
+   with the user that these seams match their expectations.
 
 3. Sketch the **modules** to build or modify, looking for deep modules (a lot of
-   functionality behind a simple, testable interface that rarely changes). Check
-   with the user that the modules match their expectations, and **which of them
-   they want tests written for**. This becomes `## Module design`.
+   functionality behind a simple, testable interface that rarely changes).
+   Interactive session: check with the user that the modules match their
+   expectations, and **which of them they want tests written for**. This becomes
+   `## Module design`.
 
-4. Write the Spec using the template below and publish it:
-   `gh issue create --label spec`. A Spec is **never** labelled `AFK` — it is
-   not implementable work — and is never added to Project #1.
+4. Write the Spec using the template below and publish it. `gh issue create`
+   fails if the label does not exist yet (fresh clone or fork of this harness),
+   and the `AFK` / `HITL` / `spec` bootstrap in
+   [`to-tickets`](../to-tickets/SKILL.md) §5 runs later in the pipeline, so
+   create `spec` if it is missing first — create-if-missing with an explicit
+   `--color`, never `gh label create --force`, which rewrites the colour and
+   description of an existing label:
+
+   ```bash
+   gh label list --limit 200 --json name --jq '.[].name' | grep -qxF "spec" ||
+     gh label create "spec" --color "0052CC" \
+       --description "Spec issue produced by /to-spec; parent of slices"
+
+   gh issue create --label spec ...
+   ```
+
+   A Spec is **never** labelled `AFK` — it is not implementable work — and is
+   never added to Project #1.
 
    If the Spec is born from a wayfinder Map, make `Part of #<map>` the **first
    line of the body**, then add it as a sub-issue of the Map:

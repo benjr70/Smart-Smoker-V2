@@ -17,6 +17,17 @@ with `/skill-name`.
 AFK (Level 7) has **no bootstrap script** — `/afk-dispatch` self-bootstraps
 labels + pre-flight on every run.
 
+**Upstream provenance and `skills-lock.json`.** The lock file tracks only the
+skills still synced verbatim from
+[mattpocock/skills](https://github.com/mattpocock/skills) (`grill-me`,
+`improve-codebase-architecture`, `tdd`). `to-spec`, `to-tickets` and `wayfinder`
+are **repo-owned forks**: they diverge deliberately (harness labels, Project #1,
+native dependencies) and must never be re-synced, so they carry no lock entry.
+`tdd` is likewise locally extended (CONTEXT.md/ADR pointer, `codebase-design`
+reference, repo `deep-modules.md`), so treat any hash drift reported against it
+as expected and re-apply the local extensions after any upstream refresh — do
+not let a sync clobber them.
+
 ---
 
 ## Development Skills

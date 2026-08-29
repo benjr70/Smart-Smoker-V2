@@ -171,16 +171,53 @@ when it must not be. Ask the Priority **once per batch** with AskUserQuestion
 (`P0` / `P1` / `P2`, default `P1`) and apply that one answer to every AFK ticket
 in the batch.
 
+`gh project item-edit` needs four ids, and they come from three different
+commands: `gh project field-list` yields only the field and option ids, never
+the project id and never the item id (that one comes back from `item-add`).
+
 ```bash
 gh issue create --label wayfinder:research --label AFK ...
-gh project item-add 1 --owner benjr70 --url <issue-url>
+
+# once per batch
+pid=$(gh project view 1 --owner benjr70 --format json --jq '.id')
+fid=$(gh project field-list 1 --owner benjr70 --format json \
+  --jq '.fields[] | select(.name == "Priority") | .id')
+oid=$(gh project field-list 1 --owner benjr70 --format json \
+  --jq '.fields[] | select(.name == "Priority") | .options[] | select(.name == "P1") | .id')
+
+# per AFK ticket
+item_id=$(gh project item-add 1 --owner benjr70 --url <issue-url> --format json --jq '.id')
+gh project item-edit --project-id "$pid" --id "$item_id" \
+  --field-id "$fid" --single-select-option-id "$oid"
 ```
 
-Then set the `Priority` single-select field on the item
-(`gh project field-list 1 --owner benjr70 --format json` for the ids, then
-`gh project item-edit`). Create missing labels idempotently with
-`gh label create <name> --force`; the `AFK`, `HITL` and `AFK:*` bootstrap block
-lives in [`.claude/skills/to-tickets/SKILL.md`](../to-tickets/SKILL.md) §5.
+Substitute the answered Priority for `P1` in the `oid` lookup. An item with no
+Priority is read as `P2`, so check `item-edit`'s exit status rather than
+assuming it landed.
+
+Create missing `wayfinder:*` labels the same way the
+[`to-tickets` bootstrap](../to-tickets/SKILL.md) §5 does — **create-if-missing
+with an explicit `--color`, never `gh label create --force`**, which rewrites
+the colour (a random one when `--color` is omitted) and description of a label
+that already exists:
+
+```bash
+ensure_label() {  # <name> <color> <description>; creates only when absent
+  if gh label list --limit 200 --json name --jq '.[].name' | grep -qxF "$1"; then
+    return 0
+  fi
+  gh label create "$1" --color "$2" --description "$3"
+}
+
+ensure_label "wayfinder:map"       "0E8A16" "Wayfinder map issue"
+ensure_label "wayfinder:grilling"  "FBCA04" "Wayfinder grilling ticket (HITL)"
+ensure_label "wayfinder:prototype" "D4C5F9" "Wayfinder prototype ticket (HITL)"
+ensure_label "wayfinder:research"  "C5DEF5" "Wayfinder research ticket (AFK)"
+ensure_label "wayfinder:task"      "BFD4F2" "Wayfinder task ticket"
+```
+
+The `AFK`, `HITL` and `AFK:*` bootstrap block lives in
+[`.claude/skills/to-tickets/SKILL.md`](../to-tickets/SKILL.md) §5.
 
 ## Fog of war
 

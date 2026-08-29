@@ -97,21 +97,37 @@ every AFK Slice in the batch.
 
 ### 5. Bootstrap labels (idempotent)
 
-Run before creating any issue. `--force` creates if absent, updates metadata if
-present, never errors.
+Run before creating any issue. **Create-if-missing only** — never
+`gh label create --force`: `--force` rewrites the colour and description of a
+label that already exists, so a `--force` block silently overwrites curated
+metadata on every run (and flip-flops it against any other block that spells a
+description differently). Check first, create only what is absent, always with
+an explicit `--color`.
+
+Eleven labels: `AFK`, `HITL`, `spec`, and the eight `AFK:*` run-state labels the
+daemon applies (`scripts/claude-agent/lib/`) — the `AFK` family is nine labels
+counting bare `AFK` itself.
 
 ```bash
-gh label create "AFK"               --description "Issue eligible for autonomous agent implementation" --color "1D76DB" --force
-gh label create "HITL"              --description "Requires human in the loop; not eligible for autonomous pickup" --color "5319E7" --force
-gh label create "spec"              --description "Spec issue: Slices are cut from it and reviewed against it" --color "C2E0C6" --force
-gh label create "AFK:in-progress"   --description "Currently being implemented by an agent team"          --color "FBCA04" --force
-gh label create "AFK:done"          --description "Completed by an agent team"                            --color "0E8A16" --force
-gh label create "AFK:failed"        --description "Agent team attempt failed; needs human triage"         --color "B60205" --force
-gh label create "AFK:checks-failed" --description "Agent-team PR: CI or manual verification could not be brought to pass autonomously (fix loop exhausted)" --color "D93F0B" --force
-gh label create "AFK:revise"        --description "Human hand-back: agent must address this PR's unresolved review comments" --color "0052CC" --force
-gh label create "AFK:revise-failed" --description "Agent-team PR: review comments could not be auto-resolved (revise loop exhausted)" --color "B60205" --force
-gh label create "AFK:rebase-failed" --description "Agent-team PR: automatic rebase onto master failed; human rebase required" --color "B60205" --force
-gh label create "AFK:paused"        --description "Agent-team run paused mid-issue; resumable on a later fire" --color "FEF2C0" --force
+# ensure_label <name> <color> <description> — creates only when absent
+ensure_label() {
+  if gh label list --limit 200 --json name --jq '.[].name' | grep -qxF "$1"; then
+    return 0
+  fi
+  gh label create "$1" --color "$2" --description "$3"
+}
+
+ensure_label "AFK"               "1D76DB" "Agent-grabbable: daemon may pick up"
+ensure_label "HITL"              "5319E7" "Human in the loop required"
+ensure_label "spec"              "0052CC" "Spec issue produced by /to-spec; parent of slices"
+ensure_label "AFK:in-progress"   "FBCA04" "Currently being implemented by an agent team"
+ensure_label "AFK:done"          "0E8A16" "Completed by an agent team"
+ensure_label "AFK:failed"        "B60205" "Agent team attempt failed; needs human triage"
+ensure_label "AFK:checks-failed" "D93F0B" "PR opened by agent team but CI checks failed after auto-fix loop exhausted"
+ensure_label "AFK:revise"        "0052CC" "Human hand-back: agent must address this PR's unresolved review comments"
+ensure_label "AFK:revise-failed" "B60205" "Agent-team PR: review comments could not be auto-resolved (revise loop exhausted)"
+ensure_label "AFK:rebase-failed" "B60205" "Agent-team PR: automatic rebase onto master failed; human rebase required"
+ensure_label "AFK:paused"        "FBCA04" "Run cut off by usage exhaustion; awaiting resume next window"
 ```
 
 ### 6. First pass — create the issues
@@ -218,18 +234,35 @@ blindly.
 An AFK Slice that is not on Project #1 is silently invisible to `/afk-pickup`.
 Add each AFK Slice and set the Priority answered in the §4 quiz:
 
+The four ids `gh project item-edit` needs come from three different commands —
+`gh project field-list` returns only the field and option ids, never the project
+id and never the item id:
+
 ```bash
-gh project item-add 1 --owner benjr70 --url <issue-url>
+# project id (once per batch)
+pid=$(gh project view 1 --owner benjr70 --format json --jq '.id')
+
+# Priority field id + the option id for the Priority answered in the §4 quiz
+fid=$(gh project field-list 1 --owner benjr70 --format json \
+  --jq '.fields[] | select(.name == "Priority") | .id')
+oid=$(gh project field-list 1 --owner benjr70 --format json \
+  --jq '.fields[] | select(.name == "Priority") | .options[] | select(.name == "P2") | .id')
+
+# per AFK Slice: the item id comes back from item-add itself
+item_id=$(gh project item-add 1 --owner benjr70 --url <issue-url> --format json --jq '.id')
+
+gh project item-edit --project-id "$pid" --id "$item_id" \
+  --field-id "$fid" --single-select-option-id "$oid"
 ```
 
-Then set the `Priority` single-select field on the new item. The picker reads it
-as
+Substitute the answered Priority for `P2` in the `oid` lookup. An item with no
+Priority is read as `P2`, so a failed `item-edit` silently downgrades a P0/P1
+Slice: check the exit status and report a failure instead of moving on. The
+picker reads the field as
 `projectItems.nodes[] | select(.project.number == 1) | fieldValueByName("Priority")`,
 a `ProjectV2ItemFieldSingleSelectValue` whose `name` is `P0` / `P1` / `P2`
 (missing or null is treated as `P2`) — see the GraphQL in
-`scripts/claude-agent/lib/pickup-triage.sh` §2. Set it with
-`gh project item-edit --project-id <pid> --id <item-id> --field-id <fid> --single-select-option-id <oid>`,
-resolving the ids with `gh project field-list 1 --owner benjr70 --format json`.
+`scripts/claude-agent/lib/pickup-triage.sh` §2.
 
 **HITL Slices are never added to the project** — project membership is the
 daemon's pick signal, and a projected HITL Slice would be picked up.
