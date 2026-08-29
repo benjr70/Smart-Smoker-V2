@@ -45,17 +45,17 @@ echo "afk-pickup: triage verdict=$VERDICT"
 The script is **read-only** — it never touches labels, comments, branches, or
 PRs. All mutations stay in the sections below. Branch on `$VERDICT`:
 
-| verdict      | meaning                               | go to                                                                                             |
-| ------------ | ------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `abort`      | agent-teams env flag missing          | print the missing-flag line, `exit 1`                                                             |
-| `no-gh`      | gh unauthenticated                    | §0.5 MCP fallback (run §1.2/§1.5/§2 semantics via MCP tools)                                      |
-| `in-flight`  | `AFK:in-progress` lock held           | `echo "afk-pickup: skip — $(jq -r '.inflight' <<<"$TRIAGE") issue(s) in flight"; exit 0`          |
-| `reconcile`  | a PR needs attention                  | §1.2 (fields in `.reconcile`)                                                                     |
-| `resume`     | paused issue below the resume cap     | §1.5 resume path (fields in `.paused`)                                                            |
-| `resume-cap` | paused issue AT the cap               | §1.5 fail path (fields in `.paused`)                                                              |
-| `pick`       | eligible issue found, blockers closed | §3/§4 with `N=$(jq -r '.pick.issue' <<<"$TRIAGE")`, title in `.pick.title`                        |
-| `pick-mcp`   | gh token lacks `project` scope        | run §2's pick via the GitHub MCP GraphQL tool (same query/filters as the script — see its header) |
-| `idle`       | nothing to do                         | `echo "afk-pickup: no eligible issue"; exit 0`                                                    |
+| verdict      | meaning                                | go to                                                                                             |
+| ------------ | -------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `abort`      | agent-teams env flag missing           | print the missing-flag line, `exit 1`                                                             |
+| `no-gh`      | gh unauthenticated                     | §0.5 MCP fallback (run §1.2/§1.5/§2 semantics via MCP tools)                                      |
+| `in-flight`  | `AFK:in-progress` lock held            | `echo "afk-pickup: skip — $(jq -r '.inflight' <<<"$TRIAGE") issue(s) in flight"; exit 0`          |
+| `reconcile`  | a PR needs attention (or is docs-only) | §1.2 (fields in `.reconcile`; `.reconcile.reason` `docs-merge` takes the gate-and-merge branch)   |
+| `resume`     | paused issue below the resume cap      | §1.5 resume path (fields in `.paused`)                                                            |
+| `resume-cap` | paused issue AT the cap                | §1.5 fail path (fields in `.paused`)                                                              |
+| `pick`       | eligible issue found, blockers closed  | §3/§4 with `N=$(jq -r '.pick.issue' <<<"$TRIAGE")`, title in `.pick.title`                        |
+| `pick-mcp`   | gh token lacks `project` scope         | run §2's pick via the GitHub MCP GraphQL tool (same query/filters as the script — see its header) |
+| `idle`       | nothing to do                          | `echo "afk-pickup: no eligible issue"; exit 0`                                                    |
 
 > **Routine env note.** When fired by a remote/cron routine, the routine's `gh`
 > token may not have the `project` scope. Refreshing the local token does not
@@ -88,14 +88,24 @@ reviewed it and explicitly handed it back — or §6a.1b's `/pr-review` posted �
 findings and applied the label itself); or it is **bot-incomplete** — no
 conflict, no label, but its bot tail never finished: the one-time review marker
 (`<!-- pr-review-done -->`) and/or any `Manual verification — … round` comment
-is missing because a prior fire died mid-§6a → reason `incomplete`. While any
+is missing because a prior fire died mid-§6a → reason `incomplete`; or every
+file it changes is under `docs/research/` — a research PR, which carries no code
+risk and never earns review/verify rounds → reason `docs-merge` (checked before
+the tail markers, or a docs PR would be reconciled forever). While any
 ours-shaped PR is still bot-incomplete this section fires and exits before
 §1.5/§2 — no new issue is picked until every outstanding agent PR is
 bot-complete (CI green, one-time review done, a verification round posted). A
 bot-complete PR merely awaiting a human merge triggers nothing — work-ahead
 stays. Detection is a cheap `gh` read + the **PR Triage** deep module — zero
-Claude usage when nothing needs attention; the incomplete signals cost one extra
-`gh pr view --json comments` per otherwise-clean agent PR.
+Claude usage when nothing needs attention; both extra signals cost a single
+`gh pr view --json comments,files` per otherwise-clean agent PR.
+
+"Ours-shaped" covers both branch shapes the harness creates: `feat/issue-<N>`
+(slice PRs) and `research/<ticket-slug>` (`/afk-resolve` research PRs — exactly
+the docs-only PRs `docs-merge` exists for). The ticket number is derived from
+the branch, else from the PR title's `(#N)`; `.reconcile.issue` can therefore be
+`null`, and when it is, skip the issue lock and the ticket comment below (there
+is no ticket) — the PR is still worked.
 
 `pr_triage_scan` owns the `gh pr list` call and rides out GitHub's async
 mergeability: a fresh master push leaves every open PR `UNKNOWN` for a few
@@ -116,6 +126,7 @@ RECON_REASON=$(printf '%s' "$TRIAGE" | jq -r '.reconcile.reason')
 HAD_DONE=$(printf '%s' "$TRIAGE" | jq -r '.reconcile.hadDone')
 # When the PR both conflicts AND carries AFK:revise, pass --reason both.
 # Reason "incomplete" (bot tail never finished) passes through as-is.
+# Reason "docs-merge" does NOT go to /pr-reconcile — see the branch below.
 
 # Single-flight lock: reuse the issue lock so §1's skip, the daemon's pacing,
 # and agent-run's crash cleanup all keep working unchanged. HAD_DONE (whether
@@ -128,6 +139,72 @@ Emit the pick line (this exact shape — agent-run's crash cleanup scrapes it):
 ```
 picked:   reconcile PR #<RECON_PR> (issue #<RECON_N>)
 ```
+
+**Reason `docs-merge` — merge it, do not reconcile it.** A docs-only PR skips
+`/pr-review` and `/verify-pr` entirely: green CI plus the gate's own re-check of
+the real diff are the whole bar. Run the **docs-only gate** (deep module
+`scripts/claude-agent/lib/docs-only-gate.sh` — it owns the docs-only rule and
+the merge recipe; never hand-roll either). The gate only ever **decides**: it
+prints a verdict plus the exact merge command, and **this section runs that
+command** — the one call site that can land a commit on master stays here,
+reviewable.
+
+The gate diffs locally, so the head commit must actually be in this clone —
+which it usually is not: the fire's checkout fetches `origin/master` only, and
+the PR branch may have been pruned or pushed from a different checkout. Fetch
+the PR head explicitly (`refs/pull/<P>/head` works even when the branch is gone)
+and pass the sha you fetched:
+
+```bash
+HEAD_SHA=$(gh pr view "$RECON_PR" --json headRefOid -q .headRefOid)
+git fetch origin master --quiet
+git fetch origin "refs/pull/$RECON_PR/head" --quiet   # or "$RECON_BRANCH"
+GATE=$(scripts/claude-agent/lib/docs-only-gate.sh \
+    --base origin/master --head "$HEAD_SHA" --pr "$RECON_PR" \
+    --repo benjr70/Smart-Smoker-V2 --check-state 2>&1 >/tmp/docs-gate.json)
+GATE_RC=$?
+GATE_JSON=$(cat /tmp/docs-gate.json)   # stdout is the verdict; $GATE is stderr
+```
+
+The gate exits **0 (approved)** or **1 (refused)** — nothing else; `.reason`
+(absent on 0) says why it refused. On `GATE_RC` 0, run the gate's own
+`.mergeCmd` verbatim (it carries `--squash --admin --repo` and
+`--match-head-commit "$HEAD_SHA"`, so a branch that moved under us fails the
+merge instead of landing unreviewed code). Never retype it:
+
+```bash
+if [ "$GATE_RC" -eq 0 ]; then
+    MERGE_CMD=$(printf '%s' "$GATE_JSON" | jq -r '.mergeCmd')
+    if eval "$MERGE_CMD"; then
+        gh issue comment "$RECON_N" \
+            --body "docs-merge: PR #$RECON_PR squash-merged $HEAD_SHA at $(date -u +%FT%TZ)"
+        # report, restore the lock, exit 0 — no agent is spawned, so the fire
+        # costs nothing beyond these calls.
+    fi
+fi
+```
+
+**Every refusal must show up in the §7 report** — a gate that could not run is a
+harness bug and must never vanish into a silent reconcile. Derive the
+`docs-merge:` line from `.reason`:
+
+| outcome                                                     | `docs-merge:` line                                                 | then                        |
+| ----------------------------------------------------------- | ------------------------------------------------------------------ | --------------------------- |
+| `GATE_RC` 0, merge command succeeded                        | `PR #<P> squash-merged <sha> at <ISO ts>`                          | comment, restore lock, exit |
+| `GATE_RC` 0, merge command failed                           | `REFUSED — merge-failed: <last line of the command's stderr>`      | fall through                |
+| `not-docs-only`                                             | `REFUSED — not-docs-only: <comma-joined .changed from $GATE_JSON>` | fall through                |
+| `checks-not-green` / `checks-missing` / `checks-unreadable` | `REFUSED — <.reason>`                                              | fall through                |
+| `head-missing` / `git-failed` / `usage`                     | `ERROR — gate could not run: <.reason, else $GATE>`                | fall through                |
+
+The first four rows are genuine refusals about the PR itself (`checks-missing`
+means _no_ check ran — an admin merge bypasses branch protection, so an empty
+check list vouches for nothing). The last row says nothing about the PR at all:
+bad args, git unusable, or `head-missing` (the fetch above did not land). Every
+refusal falls through to the `/pr-reconcile` path below with
+`RECON_REASON=incomplete` so the PR still gets finished the normal way — a
+red-CI docs PR gets its fix loop instead of sitting merged-never — but only the
+refusal rows are expected in steady state; a recurring `ERROR —` line is a bug
+to file.
 
 Then spawn the **`/pr-reconcile`** skill via the `Agent` tool —
 `subagent_type: general-purpose`, `model: opus`, `run_in_background: false`
@@ -694,6 +771,24 @@ instead:
 === /afk-pickup <ISO-8601> ===
 picked:   reconcile PR #<P> (issue #<N>)
 reconcile: <verbatim terminal pr-reconcile: line from the §1.2 agent>
+```
+
+A **docs-merge fire** (§1.2 ran the docs-only gate on a docs-only PR; no agent
+is spawned when it merges) emits this block instead:
+
+```
+=== /afk-pickup <ISO-8601> ===
+picked:   reconcile PR #<P> (issue #<N>)
+docs-merge: PR #<P> squash-merged <sha> at <ISO ts>
+```
+
+…or, when the gate refused or could not run, the matching `REFUSED — <reason>` /
+`ERROR — gate could not run: <reason>` line from §1.2's table, followed by the
+usual `reconcile:` line from the fall-through:
+
+```
+docs-merge: REFUSED — checks-not-green
+reconcile: <verbatim terminal pr-reconcile: line>
 ```
 
 `pr-watch` line mirrors verbatim the final message returned by the spawned
