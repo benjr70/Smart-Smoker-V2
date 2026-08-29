@@ -474,25 +474,31 @@ _WAYFINDER_TYPE_RE = re.compile(r"^wayfinder:(.+)$")
 # /github-dependency-apis.md). Same regex the picker used: `Blocked by #N`.
 _BODY_BLOCKER_RE = re.compile(r"Blocked by\s+#(\d+)", re.I)
 
-# first: 100 is GraphQL's per-page maximum; totalCount is exact regardless of
-# the page, so the card can say when its own list is partial.
+# Page sizes are bounded by GitHub's static node budget: it multiplies every
+# `first:` down each nesting path and rejects a query whose product exceeds
+# 500,000 nodes (MAX_NODE_LIMIT_EXCEEDED) before it looks at any data — so
+# GraphQL's per-page maximum of 100 everywhere is NOT usable here. These values
+# cost 20 + 20x30 + 20x30x(5+10+10) = 15,620 nodes, generous for this repo and
+# far under the ceiling. Truncation is never silent regardless of the sizes:
+# totalCount is exact whatever page was returned, and pageInfo.hasNextPage
+# flags a paged list, so the card marks its own view partial.
 MAPS_QUERY = """
 query($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
-    issues(first: 100, labels: ["wayfinder:map"], states: OPEN,
+    issues(first: 20, labels: ["wayfinder:map"], states: OPEN,
            orderBy: {field: CREATED_AT, direction: DESC}) {
       totalCount
       pageInfo { hasNextPage }
       nodes {
         number title url body
-        subIssues(first: 100) {
+        subIssues(first: 30) {
           totalCount
           pageInfo { hasNextPage }
           nodes {
             number title url state body
             assignees(first: 5) { nodes { login } }
-            labels(first: 30) { nodes { name } }
-            blockedBy(first: 20) { nodes { number state } }
+            labels(first: 10) { nodes { name } }
+            blockedBy(first: 10) { nodes { number state } }
           }
         }
       }

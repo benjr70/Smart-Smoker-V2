@@ -448,5 +448,70 @@ class DocsOnlyBadgeTests(unittest.TestCase):
             self.assertFalse(srv.is_docs_only(title), title)
 
 
+class MapsQueryBudgetTests(unittest.TestCase):
+    """GitHub rejects a query whose STATIC node budget — the product of the
+    `first:` arguments down each nesting path — exceeds 500,000, before it ever
+    looks at the data (MAX_NODE_LIMIT_EXCEEDED). Shipping 100/100 page sizes
+    made every Maps call fail on every repo, which the shaping tests could not
+    see because they feed literal payloads. This one reads MAPS_QUERY itself,
+    so raising a page size out of budget fails here instead of in production.
+    """
+
+    LIMIT = 500_000
+
+    @staticmethod
+    def node_budget(query):
+        """GitHub's formula: sum, over every connection, of the product of the
+        `first:` values on the path from the root down to it."""
+        stack = [1]
+        pending = None
+        total = 0
+        for token in re.finditer(r"first:\s*(\d+)|[{}]", query):
+            if token.group(1):
+                pending = int(token.group(1))
+            elif token.group(0) == "{":
+                multiplier = stack[-1] * pending if pending else stack[-1]
+                if pending:
+                    total += multiplier
+                    pending = None
+                stack.append(multiplier)
+            else:
+                stack.pop()
+        return total
+
+    def test_budget_formula_matches_githubs_rejected_example(self):
+        # The exact query GitHub answered with "requests up to 560,100 nodes".
+        over = """
+        query {
+          repository {
+            issues(first: 100) {
+              nodes {
+                subIssues(first: 100) {
+                  nodes {
+                    assignees(first: 5) { nodes { login } }
+                    labels(first: 30) { nodes { name } }
+                    blockedBy(first: 20) { nodes { number } }
+                  }
+                }
+              }
+            }
+          }
+        }
+        """
+        self.assertEqual(self.node_budget(over), 560_100)
+        self.assertGreater(self.node_budget(over), self.LIMIT)
+
+    def test_shipped_maps_query_is_under_githubs_node_limit(self):
+        budget = self.node_budget(srv.MAPS_QUERY)
+        self.assertGreater(budget, 0, "no first: arguments found — parser broke")
+        self.assertLess(
+            budget,
+            self.LIMIT,
+            f"MAPS_QUERY requests {budget:,} nodes; GitHub rejects over "
+            f"{self.LIMIT:,} with MAX_NODE_LIMIT_EXCEEDED and the Maps card "
+            "and Wayfinder tile go blank",
+        )
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
