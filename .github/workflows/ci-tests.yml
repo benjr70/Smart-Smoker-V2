@@ -26,6 +26,11 @@ on:
       - 'infra/README.md'
       - 'cloud.docker-compose*.yml'
       - 'scripts/repo-shape.test.sh'
+      # For the `repo-shape` job's README suite: the front page, the media it
+      # references, and the suite itself.
+      - 'README.md'
+      - 'docs/images/readme/**'
+      - 'scripts/readme.test.sh'
       - '.claude/skills/SKILLS.md'
       # Every workspace manifest, not just the root one: the licence assertion
       # covers `e2e/` and `packages/*` too, and those live outside the
@@ -104,15 +109,24 @@ jobs:
   # Guards the repo's open-source shape: MIT licence on every workspace
   # manifest, the contributor documents GitHub looks for, agent guides free of
   # the retired Ralph pipeline, and VAPID_CONTACT wired through every cloud
-  # deployment path. Pure text assertions, so no install is needed.
+  # deployment path. The README suite rides along here: same kind of text
+  # assertion over the project's front page (media present, diagram fenced,
+  # licence badge resolving). Pure text assertions, so no install is needed.
   repo-shape:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Full history: the README suite re-derives the agent commit share
+          # from the log, and at the default depth of 1 that guard is dead code.
+          fetch-depth: 0
 
       - name: Run repo shape suite
         run: bash scripts/repo-shape.test.sh
+
+      - name: Run README suite
+        run: bash scripts/readme.test.sh
 
   # Guards the backend environment contract (#568): the leaked backend dev
   # dotenv stays deleted, `apps/backend/.env.example` stays committed and
