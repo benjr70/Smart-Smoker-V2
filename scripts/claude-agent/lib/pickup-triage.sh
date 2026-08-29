@@ -50,7 +50,7 @@
 #   repository.issues(first: 100, labels: ["AFK"], states: OPEN) { nodes {
 #     number title createdAt
 #     labels(first: 30) { nodes { name } }
-#     blockedBy(first: 50) { nodes { number state } }
+#     blockedBy(first: 50) { nodes { number state } pageInfo { hasNextPage } }
 #     assignees(first: 10) { nodes { login } }
 #     projectItems(first: 10) { nodes { project { number }
 #       fieldValueByName(name: "Priority") { ... on
@@ -59,10 +59,18 @@
 # Eligibility rules applied to those nodes:
 #   blockers   GitHub's NATIVE issue dependencies only — every `blockedBy` node
 #              must be CLOSED. Body text such as "Blocked by #123" is prose and
-#              has no effect on the pick.
-#   assignee   never race a human: the issue must be unassigned, or assigned to
-#              the daemon's own login (`gh api user`). If that login is unknown
-#              (empty), only unassigned issues are eligible.
+#              has no effect on the pick. The 50-node page is a cap, not a
+#              promise: if `pageInfo.hasNextPage` is true the unseen blockers
+#              could be open, so the candidate fails SAFE (treated as blocked).
+#   assignee   never race a human: the issue must carry NO assignee other than
+#              the daemon's own login (`gh api user`) — so unassigned, or
+#              assigned to the daemon alone, is eligible; a human assignee is
+#              disqualifying even when the daemon is a co-assignee. If that
+#              login is unknown (empty), only unassigned issues are eligible.
+#   partials   GraphQL can return `data` with null fields alongside `errors`
+#              (per-node permission/rate failures). Every list is defaulted to
+#              `[]` so one partial node can never abort the whole filter and
+#              silently degrade the verdict to `idle`.
 #   project    must be an item of PICKUP_PROJECT_NUMBER; `Priority` field sorts
 #              P0 > P1 > P2 (missing/null = P2), then oldest `createdAt`.
 #   labels     none of AFK:in-progress / AFK:done / AFK:failed / AFK:paused.
@@ -187,7 +195,7 @@ query {
         title
         createdAt
         labels(first: 30) { nodes { name } }
-        blockedBy(first: 50) { nodes { number state } }
+        blockedBy(first: 50) { nodes { number state } pageInfo { hasNextPage } }
         assignees(first: 10) { nodes { login } }
         projectItems(first: 10) {
           nodes {
@@ -207,18 +215,18 @@ query {
               elif . == "P1" then 1
               elif . == "P2" then 2
               else 2 end;
-            [.data.repository.issues.nodes[]
+            [(.data.repository.issues.nodes // [])[]
               | . as $i
-              | ($i.labels.nodes | map(.name)) as $lbls
+              | (($i.labels.nodes // []) | map(.name)) as $lbls
               | select(($lbls | index("AFK:in-progress") | not)
                     and ($lbls | index("AFK:done") | not)
                     and ($lbls | index("AFK:failed") | not)
                     and ($lbls | index("AFK:paused") | not))
-              | select([$i.blockedBy.nodes[] | select(.state != "CLOSED")] | length == 0)
-              | ($i.assignees.nodes | map(.login)) as $asgn
-              | select(($asgn | length) == 0
-                    or (($login != "") and ($asgn | index($login) != null)))
-              | ($i.projectItems.nodes | map(select(.project.number == $pn)) | first) as $pi
+              | select([($i.blockedBy.nodes // [])[] | select(.state != "CLOSED")] | length == 0)
+              | select(($i.blockedBy.pageInfo.hasNextPage // false) | not)
+              | (($i.assignees.nodes // []) | map(.login)) as $asgn
+              | select((($asgn - [$login]) | length) == 0)
+              | (($i.projectItems.nodes // []) | map(select(.project.number == $pn)) | first) as $pi
               | select($pi != null)
               | ($pi.fieldValueByName.name // "P2") as $prio
               | {number, title, createdAt, priority: $prio,

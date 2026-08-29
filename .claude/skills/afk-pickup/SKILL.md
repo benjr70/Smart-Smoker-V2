@@ -197,16 +197,28 @@ silently — project membership is the explicit triage signal. Add them to the
 project (and set Priority) before the picker will consider them.
 
 An issue is eligible only when every GitHub **native** `blockedBy` dependency is
-closed (body text like `Blocked by #123` is prose and is ignored) and it is
-either unassigned or assigned to the daemon's own login — a ticket a human has
-claimed is never picked. The GraphQL query, the Priority/age sort, and those
-blocker/assignee checks all already ran inside §0's triage call. On verdict
-**`pick`**, the winner is in the verdict:
+closed (body text like `Blocked by #123` is prose and is ignored) and it carries
+no assignee other than the daemon's own login — so unassigned, or assigned to
+the daemon alone, is eligible; a ticket a human has claimed is never picked,
+even if the daemon is a co-assignee. If the first `blockedBy` page is full
+(`pageInfo.hasNextPage`), the candidate fails safe and is treated as blocked.
+The GraphQL query, the Priority/age sort, and those blocker/assignee checks all
+already ran inside §0's triage call. On verdict **`pick`**, the winner is in the
+verdict:
 
 ```bash
 N=$(printf '%s' "$TRIAGE" | jq -r '.pick.issue')
 TITLE=$(printf '%s' "$TRIAGE" | jq -r '.pick.title')
 ```
+
+> **Transitional gap:** the picker reads native dependencies only, but
+> `.claude/skills/prd-to-issues/SKILL.md` still WRITES blockers as body prose
+> and `.claude/skills/afk-dispatch/SKILL.md` still filters and topologically
+> sorts on that body section (`work-probe.sh` likewise cites "Blocked by
+> closure" in its rationale). An issue created with prose-only blockers and no
+> native edge is therefore pickable despite an open blocker. Until the
+> to-tickets slice of Spec #583 writes native edges everywhere, add the native
+> `blockedBy` edge by hand whenever you create a blocked `AFK` issue.
 
 Verdict `idle` means no candidate survived — print
 `afk-pickup: no eligible issue` and `exit 0`. Do not notify.

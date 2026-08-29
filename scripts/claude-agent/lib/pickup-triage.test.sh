@@ -41,6 +41,7 @@ make_env() {
     cat > "${dir}/gh-stub" <<EOF
 #!/usr/bin/env bash
 args="\$*"
+printf '%s\n' "\${args}" >> "${dir}/calls.log"
 case "\${args}" in
     "auth status")               # bare probe: exit code decides authed-or-not
         cat "${dir}/auth.out"
@@ -68,6 +69,7 @@ EOF
     echo '{"comments": []}' > "${dir}/prview.out"
     echo 'false' > "${dir}/haddone.out"
     echo 0 > "${dir}/pausecomments.out"
+    : > "${dir}/calls.log"
     graphql_fixture "${dir}"   # no candidates by default
     echo "${dir}"
 }
@@ -86,15 +88,21 @@ graphql_fixture() {
 }
 
 # issue_node <number> <title> <priority|null> <inProject:true/false> <createdAt>
-#           [body] [labels-csv] [blockedBy-nodes-json] [assignee-logins-csv]
+#           [labels-csv] [blockedBy-nodes-json|null] [assignee-logins-csv|null]
+#           [blockedByHasNextPage:true/false]
 #
 # blockedBy defaults to no dependencies ([]); assignees defaults to unassigned.
+# The literal string `null` for either emits `{"nodes": null}` — the partial
+# GraphQL response shape (data present, per-node fields null, errors alongside).
+# `body` is deliberately NOT emitted: the pick query no longer selects it.
 issue_node() {
-    local number="$1" title="$2" prio="$3" in_project="$4" created="$5" body="${6:-}" labels_csv="${7:-AFK}"
-    local blocked_by="${8:-[]}" assignees_csv="${9:-}"
+    local number="$1" title="$2" prio="$3" in_project="$4" created="$5" labels_csv="${6:-AFK}"
+    local blocked_by="${7:-[]}" assignees_csv="${8:-}" has_next="${9:-false}"
     local labels prio_json project_items assignees
     labels="$(printf '%s' "${labels_csv}" | jq -R 'split(",") | map({name: .})')"
-    if [ -n "${assignees_csv}" ]; then
+    if [ "${assignees_csv}" = "null" ]; then
+        assignees='null'
+    elif [ -n "${assignees_csv}" ]; then
         assignees="$(printf '%s' "${assignees_csv}" | jq -R 'split(",") | map({login: .})')"
     else
         assignees='[]'
@@ -106,11 +114,13 @@ issue_node() {
         project_items="[{\"project\": {\"number\": 9}, \"fieldValueByName\": ${prio_json}}]"
     fi
     jq -cn --argjson n "${number}" --arg t "${title}" --arg c "${created}" \
-        --arg b "${body}" --argjson l "${labels}" --argjson pi "${project_items}" \
+        --argjson l "${labels}" --argjson pi "${project_items}" \
         --argjson bb "${blocked_by}" --argjson as "${assignees}" \
-        '{number: $n, title: $t, body: $b, createdAt: $c,
+        --argjson hn "${has_next}" \
+        '{number: $n, title: $t, createdAt: $c,
           labels: {nodes: $l}, projectItems: {nodes: $pi},
-          blockedBy: {nodes: $bb}, assignees: {nodes: $as}}'
+          blockedBy: {nodes: $bb, pageInfo: {hasNextPage: $hn}},
+          assignees: {nodes: $as}}'
 }
 
 run_triage() { # run_triage <dir> — echoes JSON, returns pickup_triage's code
@@ -234,7 +244,7 @@ test_pick_priority_and_blockers() {
     # #10 is P0 but has an OPEN native blocker (#99); #20 is P1 → the pick.
     # #30 is P0 but not in project 1 → invisible.
     graphql_fixture "${dir}" \
-        "$(issue_node 10 'blocked-p0' P0 true  '2026-01-01T00:00:00Z' '' AFK \
+        "$(issue_node 10 'blocked-p0' P0 true  '2026-01-01T00:00:00Z' AFK \
             '[{"number": 99, "state": "OPEN"}]')" \
         "$(issue_node 20 'clean-p1'   P1 true  '2026-02-01T00:00:00Z')" \
         "$(issue_node 30 'orphan-p0'  P0 false '2026-01-01T00:00:00Z')"
@@ -253,7 +263,7 @@ test_pick_closed_blocker() {
     local dir out
     dir="$(make_env)"
     graphql_fixture "${dir}" \
-        "$(issue_node 10 'unblocked-p0' P0 true '2026-01-01T00:00:00Z' '' AFK \
+        "$(issue_node 10 'unblocked-p0' P0 true '2026-01-01T00:00:00Z' AFK \
             '[{"number": 98, "state": "CLOSED"}, {"number": 99, "state": "CLOSED"}]')"
     out="$(run_triage "${dir}")"
     if [ "$(printf '%s' "${out}" | jq -r '.verdict')" = "pick" ] \
@@ -264,19 +274,23 @@ test_pick_closed_blocker() {
     fi
 }
 
-# ── Test 9b: body "Blocked by #N" text is NOT a blocker signal ───────────────
-test_body_blocked_by_ignored() {
+# ── Test 9b: the picker never reads issue bodies at all ─────────────────────
+test_body_never_read() {
     local dir out
     dir="$(make_env)"
-    # No native dependency; the body line is prose the picker must ignore.
+    # A candidate with no native dependency. Prose blockers (a body line like
+    # "Blocked by #99") cannot influence this pick because the query does not
+    # select `body` and no per-candidate follow-up call is made.
     graphql_fixture "${dir}" \
-        "$(issue_node 10 'body-only' P0 true '2026-01-01T00:00:00Z' 'Blocked by #99')"
+        "$(issue_node 10 'prose-blocker-only' P0 true '2026-01-01T00:00:00Z')"
     out="$(run_triage "${dir}")"
-    if [ "$(printf '%s' "${out}" | jq -r '.verdict')" = "pick" ] \
-        && [ "$(printf '%s' "${out}" | jq -r '.pick.issue')" = "10" ]; then
-        pass "body 'Blocked by #N' with no native dependency → picked"
+    if [ "$(printf '%s' "${out}" | jq -r '.pick.issue')" = "10" ] \
+        && ! grep -q 'body' "${dir}/calls.log" \
+        && ! grep -q 'issue view' "${dir}/calls.log"; then
+        pass "pick reads no body: query omits it and no issue-view follow-up"
     else
-        fail "body 'Blocked by #N' with no native dependency → picked" "out=${out}"
+        fail "pick reads no body: query omits it and no issue-view follow-up" \
+            "out=${out} calls=$(tr '\n' '|' < "${dir}/calls.log")"
     fi
 }
 
@@ -287,8 +301,8 @@ test_skip_human_claimed() {
     # #10 (P0, oldest) is assigned to a human → never race them. #20 carries the
     # daemon's own login (agent-bot, from `gh api user`) → still eligible.
     graphql_fixture "${dir}" \
-        "$(issue_node 10 'human-claimed' P0 true '2026-01-01T00:00:00Z' '' AFK '[]' 'benjr70')" \
-        "$(issue_node 20 'daemon-claimed' P0 true '2026-02-01T00:00:00Z' '' AFK '[]' 'agent-bot')"
+        "$(issue_node 10 'human-claimed' P0 true '2026-01-01T00:00:00Z' AFK '[]' 'benjr70')" \
+        "$(issue_node 20 'daemon-claimed' P0 true '2026-02-01T00:00:00Z' AFK '[]' 'agent-bot')"
     out="$(run_triage "${dir}")"
     if [ "$(printf '%s' "${out}" | jq -r '.verdict')" = "pick" ] \
         && [ "$(printf '%s' "${out}" | jq -r '.pick.issue')" = "20" ]; then
@@ -303,7 +317,7 @@ test_all_human_claimed_idle() {
     local dir out
     dir="$(make_env)"
     graphql_fixture "${dir}" \
-        "$(issue_node 10 'human-claimed' P0 true '2026-01-01T00:00:00Z' '' AFK '[]' 'benjr70,other')"
+        "$(issue_node 10 'human-claimed' P0 true '2026-01-01T00:00:00Z' AFK '[]' 'benjr70,other')"
     out="$(run_triage "${dir}")"
     if [ "$(printf '%s' "${out}" | jq -r '.verdict')" = "idle" ]; then
         pass "only human-claimed candidates → verdict idle"
@@ -318,7 +332,7 @@ test_unknown_login_requires_unassigned() {
     dir="$(make_env)"
     printf '' > "${dir}/login.out"
     graphql_fixture "${dir}" \
-        "$(issue_node 10 'assigned' P0 true '2026-01-01T00:00:00Z' '' AFK '[]' 'agent-bot')" \
+        "$(issue_node 10 'assigned' P0 true '2026-01-01T00:00:00Z' AFK '[]' 'agent-bot')" \
         "$(issue_node 20 'unassigned' P1 true '2026-02-01T00:00:00Z')"
     out="$(run_triage "${dir}")"
     if [ "$(printf '%s' "${out}" | jq -r '.verdict')" = "pick" ] \
@@ -346,6 +360,61 @@ test_priority_then_age_order() {
         pass "P0>P1>P2 (missing = P2) then oldest wins"
     else
         fail "P0>P1>P2 (missing = P2) then oldest wins" "out=${out}"
+    fi
+}
+
+# ── Test 9g: a human co-assignee disqualifies even with the daemon on it ────
+test_mixed_assignee_skipped() {
+    local dir out
+    dir="$(make_env)"
+    # #10 carries BOTH a human and the daemon — a human is actively on it, so
+    # it must be skipped exactly like a human-only claim. #20 is the pick.
+    graphql_fixture "${dir}" \
+        "$(issue_node 10 'human-and-daemon' P0 true '2026-01-01T00:00:00Z' AFK '[]' 'benjr70,agent-bot')" \
+        "$(issue_node 20 'unassigned' P1 true '2026-02-01T00:00:00Z')"
+    out="$(run_triage "${dir}")"
+    if [ "$(printf '%s' "${out}" | jq -r '.verdict')" = "pick" ] \
+        && [ "$(printf '%s' "${out}" | jq -r '.pick.issue')" = "20" ]; then
+        pass "human + daemon co-assignees → skipped, not picked"
+    else
+        fail "human + daemon co-assignees → skipped, not picked" "out=${out}"
+    fi
+}
+
+# ── Test 9h: partial GraphQL response (null fields) must not abort the filter ─
+test_null_fields_do_not_abort() {
+    local dir out
+    dir="$(make_env)"
+    # #10 comes back with null blockedBy/assignees nodes (data + errors partial).
+    # It must be treated as unblocked/unassigned AND must not take #20 down with
+    # it — a jq abort here would degrade the whole verdict to idle.
+    graphql_fixture "${dir}" \
+        "$(issue_node 10 'partial-node' P1 true '2026-01-01T00:00:00Z' AFK 'null' 'null')" \
+        "$(issue_node 20 'healthy' P1 true '2026-02-01T00:00:00Z')"
+    out="$(run_triage "${dir}")"
+    if [ "$(printf '%s' "${out}" | jq -r '.verdict')" = "pick" ] \
+        && [ "$(printf '%s' "${out}" | jq -r '.pick.issue')" = "10" ]; then
+        pass "null blockedBy/assignees → treated as empty, filter survives"
+    else
+        fail "null blockedBy/assignees → treated as empty, filter survives" "out=${out}"
+    fi
+}
+
+# ── Test 9i: unpaginated blockedBy overflow fails SAFE (treated as blocked) ──
+test_blocker_page_overflow_fails_safe() {
+    local dir out
+    dir="$(make_env)"
+    # #10's first blockedBy page is all CLOSED but hasNextPage is true — the
+    # unseen blockers may be open, so it must not be picked.
+    graphql_fixture "${dir}" \
+        "$(issue_node 10 'over-50-blockers' P0 true '2026-01-01T00:00:00Z' AFK \
+            '[{"number": 98, "state": "CLOSED"}]' '' true)" \
+        "$(issue_node 20 'clean-p1' P1 true '2026-02-01T00:00:00Z')"
+    out="$(run_triage "${dir}")"
+    if [ "$(printf '%s' "${out}" | jq -r '.pick.issue')" = "20" ]; then
+        pass "blockedBy hasNextPage → candidate treated as blocked"
+    else
+        fail "blockedBy hasNextPage → candidate treated as blocked" "out=${out}"
     fi
 }
 
@@ -385,11 +454,14 @@ test_resume_below_cap
 test_resume_cap
 test_pick_priority_and_blockers
 test_pick_closed_blocker
-test_body_blocked_by_ignored
+test_body_never_read
 test_skip_human_claimed
 test_all_human_claimed_idle
 test_unknown_login_requires_unassigned
 test_priority_then_age_order
+test_mixed_assignee_skipped
+test_null_fields_do_not_abort
+test_blocker_page_overflow_fails_safe
 test_pick_mcp_on_missing_scope
 test_idle
 

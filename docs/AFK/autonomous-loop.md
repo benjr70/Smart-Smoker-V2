@@ -93,8 +93,8 @@ team dispatch routinely runs past the 600s default).
    new work starts; the partial branch is preserved, never reset.
 3. **Pick** the next eligible `AFK` issue (§2) — must be in GitHub Project
    #1, highest Priority (`P0` > `P1` > `P2`) then oldest, every native
-   `blockedBy` dependency closed, and unassigned (or assigned to the daemon
-   itself) so it never races a human. Dispatches a full TDD team via
+   `blockedBy` dependency closed, and carrying no assignee other than the
+   daemon itself so it never races a human. Dispatches a full TDD team via
    `/afk-dispatch`, opens a PR with the issue's Acceptance Criteria as a
    `## Manual verification` checklist, then drives the verification tail (next
    section).
