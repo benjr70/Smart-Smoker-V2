@@ -214,7 +214,7 @@ test_session_limit_is_exhausted() {
     local out status
     out="$(printf '%s\n' \
         "=== agent-run 20260708T223300Z ===" \
-        "prompt: /team-pickup" \
+        "prompt: /afk-pickup" \
         "You've hit your session limit · resets 10:50pm (America/New_York)" \
         | exhaustion_classify 1)"
 

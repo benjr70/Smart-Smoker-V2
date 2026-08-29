@@ -12,14 +12,14 @@
 #
 # "Ours" filter — a PR is only ever considered when ALL hold:
 #   - state OPEN and not a draft (drafts are the escalation parking state —
-#     team:checks-failed / exhausted fix loops — and must never be auto-picked);
-#   - head branch matches feat/issue-<M> (the only branch shape team-pickup
+#     AFK:checks-failed / exhausted fix loops — and must never be auto-picked);
+#   - head branch matches feat/issue-<M> (the only branch shape afk-pickup
 #     creates; defends against reconciling a human's hand-made PR);
 #   - author login equals PR_TRIAGE_AUTHOR when that env is non-empty (defends
 #     against a fork/mirror PR that happens to reuse the branch naming).
 #
 # Needs-attention — a filtered PR is picked when EITHER holds:
-#   - it carries the `team:revise` label (a human reviewed and explicitly handed
+#   - it carries the `AFK:revise` label (a human reviewed and explicitly handed
 #     it back to the agent) → reason "revise";
 #   - its mergeable state is CONFLICTING (master moved under it) → reason
 #     "conflict". MERGEABLE and UNKNOWN both skip: UNKNOWN means GitHub is still
@@ -31,10 +31,10 @@
 #     (below) merges them into the payload first; an un-enriched payload reads
 #     every PR as complete (only an explicit false flags incomplete — jq's //
 #     would swallow false, so the pick tests != false).
-#   PRs already escalated (team:revise-failed / team:rebase-failed) are skipped —
+#   PRs already escalated (AFK:revise-failed / AFK:rebase-failed) are skipped —
 #   they are parked for a human; re-picking them would loop on a known-stuck PR.
 #
-# Pick order: `team:revise` beats plain CONFLICTING (a human is actively waiting
+# Pick order: `AFK:revise` beats plain CONFLICTING (a human is actively waiting
 # on their own review), which beats "incomplete" (nothing blocks a merge yet —
 # the tail just needs finishing); within the same reason rank, oldest createdAt
 # wins.
@@ -99,7 +99,7 @@ pr_triage_scan() {
 #
 # Reads the `gh pr list --json ...` array on stdin and, for every PR that is
 # ours-shaped and otherwise attention-free (open, non-draft, feat/issue-<N>,
-# author match, no team:revise, not parked, not CONFLICTING), fetches its
+# author match, no AFK:revise, not parked, not CONFLICTING), fetches its
 # conversation comments once (`gh pr view --json comments`) and merges:
 #   reviewDone — any comment contains the <!-- pr-review-done --> marker
 #                (posted by /pr-review via lib/review-poster.sh)
@@ -133,9 +133,9 @@ pr_triage_enrich() {
         | select(.headRefName | test("^feat/issue-[0-9]+$"))
         | select(($author == "") or ((.author.login // "") == $author))
         | (labels_of) as $lbls
-        | select(($lbls | index("team:revise") | not)
-             and ($lbls | index("team:revise-failed") | not)
-             and ($lbls | index("team:rebase-failed") | not))
+        | select(($lbls | index("AFK:revise") | not)
+             and ($lbls | index("AFK:revise-failed") | not)
+             and ($lbls | index("AFK:rebase-failed") | not))
         | select((.mergeable // "UNKNOWN") != "CONFLICTING")
         | .number' 2>/dev/null || echo '')"
 
@@ -171,10 +171,10 @@ pr_triage_pick() {
           | select(.headRefName | test("^feat/issue-[0-9]+$"))
           | select(($author == "") or ((.author.login // "") == $author))
           | (labels_of) as $lbls
-          | select(($lbls | index("team:revise-failed") | not)
-                and ($lbls | index("team:rebase-failed") | not))
+          | select(($lbls | index("AFK:revise-failed") | not)
+                and ($lbls | index("AFK:rebase-failed") | not))
           | . + { reason:
-                    (if ($lbls | index("team:revise")) then "revise"
+                    (if ($lbls | index("AFK:revise")) then "revise"
                      elif (.mergeable // "UNKNOWN") == "CONFLICTING" then "conflict"
                      elif (((.reviewDone != false) and (.verifyDone != false)) | not) then "incomplete"
                      else null end) }

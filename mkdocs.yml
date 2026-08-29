@@ -82,11 +82,11 @@ nav:
       - Backpressure: Harness/backpressure.md
       - Self-Validation: Harness/self-validation.md
       - Infrastructure: Harness/infra.md
-  - Agent Teams:
-      - Overview: Teams/index.md
-      - Roles: Teams/roles.md
-      - Dispatch: Teams/dispatch.md
-      - Autonomous Loop: Teams/autonomous-loop.md
+  - AFK:
+      - Overview: AFK/index.md
+      - Roles: AFK/roles.md
+      - Dispatch: AFK/dispatch.md
+      - Autonomous Loop: AFK/autonomous-loop.md
   - Infrastructure:
       - Overview: Infrastructure/README.md
       - Getting Started: Infrastructure/guides/getting-started.md

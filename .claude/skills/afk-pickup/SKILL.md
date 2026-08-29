@@ -1,25 +1,25 @@
 ---
-name: team-pickup
+name: afk-pickup
 description:
   Reconcile an open agent PR needing attention (merge conflict or a human's
-  `team:revise` hand-back) if one exists, else resume a `team:paused` issue
-  (preserving its branch), otherwise pick the next eligible `team`-labeled
-  GitHub issue from the Smart Smoker V2 GitHub Project (highest Priority field
-  then oldest, blockers resolved, no other team in flight), invoke
-  `/team-dispatch --issue <N> [--resume]`, then open a PR on success or apply
-  `team:failed` on failure. Designed to be fired by a Claude routine on cron. No
-  arguments (besides optional --dry-run).
+  `AFK:revise` hand-back) if one exists, else resume an `AFK:paused` issue
+  (preserving its branch), otherwise pick the next eligible `AFK`-labeled GitHub
+  issue from the Smart Smoker V2 GitHub Project (highest Priority field then
+  oldest, blockers resolved, no other team in flight), invoke `/afk-dispatch
+  --issue <N> [--resume]`, then open a PR on success or apply `AFK:failed` on
+  failure. Designed to be fired by a Claude routine on cron. No arguments
+  (besides optional --dry-run).
 ---
 
-# Team Pickup — Autonomous Single-Issue Picker + PR Wrapper
+# AFK Pickup — Autonomous Single-Issue Picker + PR Wrapper
 
-You are the **pickup wrapper** around `/team-dispatch`. One fire = at most one
+You are the **pickup wrapper** around `/afk-dispatch`. One fire = at most one
 issue. Idempotent and silent when nothing is eligible.
 
 ## Invocation
 
 ```
-/team-pickup [--dry-run]
+/afk-pickup [--dry-run]
 ```
 
 - No positional args.
@@ -39,7 +39,7 @@ eliminate exactly those turns.
 ```bash
 TRIAGE=$(scripts/claude-agent/lib/pickup-triage.sh); TRIAGE_RC=$?
 VERDICT=$(printf '%s' "$TRIAGE" | jq -r '.verdict')
-echo "team-pickup: triage verdict=$VERDICT"
+echo "afk-pickup: triage verdict=$VERDICT"
 ```
 
 The script is **read-only** — it never touches labels, comments, branches, or
@@ -49,13 +49,13 @@ PRs. All mutations stay in the sections below. Branch on `$VERDICT`:
 | ------------ | ------------------------------------- | ------------------------------------------------------------------------------------------------- |
 | `abort`      | agent-teams env flag missing          | print the missing-flag line, `exit 1`                                                             |
 | `no-gh`      | gh unauthenticated                    | §0.5 MCP fallback (run §1.2/§1.5/§2 semantics via MCP tools)                                      |
-| `in-flight`  | `team:in-progress` lock held          | `echo "team-pickup: skip — $(jq -r '.inflight' <<<"$TRIAGE") issue(s) in flight"; exit 0`         |
+| `in-flight`  | `AFK:in-progress` lock held           | `echo "afk-pickup: skip — $(jq -r '.inflight' <<<"$TRIAGE") issue(s) in flight"; exit 0`          |
 | `reconcile`  | a PR needs attention                  | §1.2 (fields in `.reconcile`)                                                                     |
 | `resume`     | paused issue below the resume cap     | §1.5 resume path (fields in `.paused`)                                                            |
 | `resume-cap` | paused issue AT the cap               | §1.5 fail path (fields in `.paused`)                                                              |
 | `pick`       | eligible issue found, blockers closed | §3/§4 with `N=$(jq -r '.pick.issue' <<<"$TRIAGE")`, title in `.pick.title`                        |
 | `pick-mcp`   | gh token lacks `project` scope        | run §2's pick via the GitHub MCP GraphQL tool (same query/filters as the script — see its header) |
-| `idle`       | nothing to do                         | `echo "team-pickup: no eligible issue"; exit 0`                                                   |
+| `idle`       | nothing to do                         | `echo "afk-pickup: no eligible issue"; exit 0`                                                    |
 
 > **Routine env note.** When fired by a remote/cron routine, the routine's `gh`
 > token may not have the `project` scope. Refreshing the local token does not
@@ -74,7 +74,7 @@ label management, PR creation. Pick whichever works in the current env; do
 
 ### 1. Concurrency lock check (repo-wide)
 
-`team:in-progress` is the distributed lock. The check already ran inside §0's
+`AFK:in-progress` is the distributed lock. The check already ran inside §0's
 triage call (verdict `in-flight`, gh errors fail SAFE toward locked) — there is
 no separate probe to run here.
 
@@ -83,7 +83,7 @@ no separate probe to run here.
 An already-open agent PR that a human is waiting on outranks everything else:
 finishing it is the shortest path to a merge. Three signals make a PR "needing
 attention": its mergeable state is `CONFLICTING` (master moved under it — always
-auto-fixed, no label needed); it carries the **`team:revise`** label (a human
+auto-fixed, no label needed); it carries the **`AFK:revise`** label (a human
 reviewed it and explicitly handed it back — or §6a.1b's `/pr-review` posted 🤖
 findings and applied the label itself); or it is **bot-incomplete** — no
 conflict, no label, but its bot tail never finished: the one-time review marker
@@ -106,7 +106,7 @@ triages.
 
 The scan already ran inside §0's triage call. This section fires only on verdict
 `reconcile` (`--dry-run`: print
-`team-pickup: would-reconcile PR #<P> (issue #<N>)` and exit 0):
+`afk-pickup: would-reconcile PR #<P> (issue #<N>)` and exit 0):
 
 ```bash
 RECON_PR=$(printf '%s' "$TRIAGE" | jq -r '.reconcile.pr')
@@ -114,13 +114,13 @@ RECON_BRANCH=$(printf '%s' "$TRIAGE" | jq -r '.reconcile.branch')
 RECON_N=$(printf '%s' "$TRIAGE" | jq -r '.reconcile.issue')
 RECON_REASON=$(printf '%s' "$TRIAGE" | jq -r '.reconcile.reason')
 HAD_DONE=$(printf '%s' "$TRIAGE" | jq -r '.reconcile.hadDone')
-# When the PR both conflicts AND carries team:revise, pass --reason both.
+# When the PR both conflicts AND carries AFK:revise, pass --reason both.
 # Reason "incomplete" (bot tail never finished) passes through as-is.
 
 # Single-flight lock: reuse the issue lock so §1's skip, the daemon's pacing,
 # and agent-run's crash cleanup all keep working unchanged. HAD_DONE (whether
-# team:done was present) came from the triage read; restore it on exit.
-gh issue edit "$RECON_N" --remove-label team:done --add-label team:in-progress 2>/dev/null || true
+# AFK:done was present) came from the triage read; restore it on exit.
+gh issue edit "$RECON_N" --remove-label AFK:done --add-label AFK:in-progress 2>/dev/null || true
 ```
 
 Emit the pick line (this exact shape — agent-run's crash cleanup scrapes it):
@@ -141,8 +141,8 @@ restore the lock and exit — a reconcile fire never falls through to §1.5/§2 
 fire = one unit of work):
 
 ```bash
-gh issue edit "$RECON_N" --remove-label team:in-progress 2>/dev/null || true
-[ "$HAD_DONE" = "true" ] && gh issue edit "$RECON_N" --add-label team:done 2>/dev/null || true
+gh issue edit "$RECON_N" --remove-label AFK:in-progress 2>/dev/null || true
+[ "$HAD_DONE" = "true" ] && gh issue edit "$RECON_N" --add-label AFK:done 2>/dev/null || true
 ```
 
 Report per the reconcile output block in §7 and exit 0 (exit non-zero only if
@@ -150,7 +150,7 @@ the pr-reconcile agent itself crashed with no terminal line).
 
 ### 1.5. Resume paused work before any new pick
 
-A `team:paused` issue is work that a prior window started and the daemon froze
+A `AFK:paused` issue is work that a prior window started and the daemon froze
 mid-run (a `wip:` commit, branch kept) when Claude usage ran out. In-flight work
 is always finished before new work is started, so a paused issue is resumed
 **before** the §2 pick — and its partial branch is preserved, never reset.
@@ -174,9 +174,9 @@ human):
 ```bash
 PAUSED_N=$(printf '%s' "$TRIAGE" | jq -r '.paused.issue')
 PAUSE_COUNT=$(printf '%s' "$TRIAGE" | jq -r '.paused.pauseCount')
-gh issue edit "$PAUSED_N" --remove-label team:paused --add-label team:failed
-gh issue comment "$PAUSED_N" --body "team-pickup: paused $PAUSE_COUNT times (resume cap reached) — marking team:failed for human triage at $(date -Iseconds)."
-echo "team-pickup: #$PAUSED_N hit the resume cap — team:failed, stopping"
+gh issue edit "$PAUSED_N" --remove-label AFK:paused --add-label AFK:failed
+gh issue comment "$PAUSED_N" --body "afk-pickup: paused $PAUSE_COUNT times (resume cap reached) — marking AFK:failed for human triage at $(date -Iseconds)."
+echo "afk-pickup: #$PAUSED_N hit the resume cap — AFK:failed, stopping"
 exit 0
 ```
 
@@ -186,18 +186,18 @@ short-circuit still applies — print `would-resume #N` and exit). Otherwise
 
 ### 2. Pick next eligible issue (highest Priority field, then oldest)
 
-The pick set is: open issues with the `team` label, present in the **Smart
-Smoker V2** GitHub Project (number `1`), and not carrying `team:in-progress`,
-`team:done`, or `team:failed`. The `Priority` field on the project item drives
-the sort (`P0` > `P1` > `P2`); a missing or null `Priority` defaults to `P2`.
-Within the same Priority, oldest `createdAt` wins.
+The pick set is: open issues with the `AFK` label, present in the **Smart Smoker
+V2** GitHub Project (number `1`), and not carrying `AFK:in-progress`,
+`AFK:done`, or `AFK:failed`. The `Priority` field on the project item drives the
+sort (`P0` > `P1` > `P2`); a missing or null `Priority` defaults to `P2`. Within
+the same Priority, oldest `createdAt` wins.
 
-Issues that carry the `team` label but are **not in the project** are skipped
+Issues that carry the `AFK` label but are **not in the project** are skipped
 silently — project membership is the explicit triage signal. Add them to the
 project (and set Priority) before the picker will consider them.
 
 The GraphQL query, the Priority/age sort, and the `Blocked by\s+#(\d+)` blocker
-check (same regex `team-dispatch` §1 uses) all already ran inside §0's triage
+check (same regex `afk-dispatch` §1 uses) all already ran inside §0's triage
 call. On verdict **`pick`**, the winner is in the verdict:
 
 ```bash
@@ -206,7 +206,7 @@ TITLE=$(printf '%s' "$TRIAGE" | jq -r '.pick.title')
 ```
 
 Verdict `idle` means no candidate survived — print
-`team-pickup: no eligible issue` and `exit 0`. Do not notify.
+`afk-pickup: no eligible issue` and `exit 0`. Do not notify.
 
 > On verdict `pick-mcp` (or `no-gh`), gh can't run the project query — invoke
 > the GitHub MCP GraphQL tool with the same query and apply the same
@@ -219,8 +219,8 @@ Verdict `idle` means no candidate survived — print
 If `--dry-run` was passed:
 
 ```
-team-pickup: would-pick #<N> <title>        # normal pick
-team-pickup: would-resume #<N> <title>      # RESUME_MODE from §1.5
+afk-pickup: would-pick #<N> <title>        # normal pick
+afk-pickup: would-resume #<N> <title>      # RESUME_MODE from §1.5
 ```
 
 …and `exit 0`. No git or GitHub mutations.
@@ -234,38 +234,38 @@ stale branch from a prior failed fire exists.
 # N and TITLE already set from §2's verdict — no extra gh read here.
 git fetch origin master
 git checkout -B "feat/issue-$N" origin/master
-gh issue edit "$N" --add-label team:in-progress
+gh issue edit "$N" --add-label AFK:in-progress
 ```
 
 **Resume** (`RESUME_MODE=1` from §1.5) — the paused issue already has a
 `feat/issue-$N` branch carrying its partial work (a `wip:` freeze commit and any
 green tests from the prior window). Check it out **as-is** — do **not**
 `checkout -B` from `origin/master`, which would wipe exactly the work we are
-resuming. Move the lock `team:paused → team:in-progress`.
+resuming. Move the lock `AFK:paused → AFK:in-progress`.
 
 ```bash
 N="$PAUSED_N"
 TITLE=$(gh issue view "$N" --json title --jq .title)
 git fetch origin                              # refresh refs; do NOT reset the branch
 git checkout "feat/issue-$N"                  # existing branch, partial work intact
-gh issue edit "$N" --remove-label team:paused --add-label team:in-progress
+gh issue edit "$N" --remove-label AFK:paused --add-label AFK:in-progress
 ```
 
-### 5. Delegate to /team-dispatch
+### 5. Delegate to /afk-dispatch
 
-Invoke the team-dispatch skill in single-issue mode. On a resume, add the
-`--resume` flag so team-dispatch takes its resume entry path (read the partial
+Invoke the afk-dispatch skill in single-issue mode. On a resume, add the
+`--resume` flag so afk-dispatch takes its resume entry path (read the partial
 branch, run the tests to discover what remains, continue TDD) instead of
 starting the issue from scratch:
 
 ```
-/team-dispatch --issue <N>            # normal pick
-/team-dispatch --issue <N> --resume   # RESUME_MODE from §1.5
+/afk-dispatch --issue <N>            # normal pick
+/afk-dispatch --issue <N> --resume   # RESUME_MODE from §1.5
 ```
 
-Capture exit code and the final commit on `feat/issue-<N>`. team-dispatch is
+Capture exit code and the final commit on `feat/issue-<N>`. afk-dispatch is
 responsible for spawning implementer/reviewer/verifier, driving TDD, appending
-the `smoke:` trailer, applying `team:done`, closing the issue.
+the `smoke:` trailer, applying `AFK:done`, closing the issue.
 
 ### 6a. Success path → open PR
 
@@ -309,7 +309,7 @@ Closes #<N> — <issue title>
 
 ---
 
-Generated by `/team-pickup` at <ISO-8601 timestamp>
+Generated by `/afk-pickup` at <ISO-8601 timestamp>
 ```
 
 Build the PR title as a **conventional-commit subject** — never
@@ -342,7 +342,7 @@ made one line earlier. Never open the PR with a title that fails, and never edit
 the validator.
 
 ```bash
-PR_TITLE="feat(agent): conventional PR titles for team-pickup and ralph"  # example
+PR_TITLE="feat(agent): conventional PR titles for afk-pickup and ralph"  # example
 
 ATTEMPT=1
 until bash scripts/validate-pr-title.sh "$PR_TITLE"; do
@@ -365,9 +365,9 @@ PR_URL=$(gh pr create --base master --head "feat/issue-$N" \
   --body "$PR_BODY")
 PR_NUM=$(echo "$PR_URL" | grep -oE '[0-9]+$')
 
-# team-dispatch likely already applied team:done; this is idempotent insurance.
-gh issue edit "$N" --remove-label team:in-progress 2>/dev/null || true
-gh issue edit "$N" --add-label team:done           2>/dev/null || true
+# afk-dispatch likely already applied AFK:done; this is idempotent insurance.
+gh issue edit "$N" --remove-label AFK:in-progress 2>/dev/null || true
+gh issue edit "$N" --add-label AFK:done           2>/dev/null || true
 ```
 
 ### 6a.1. Hand off to `/pr-watch` (BLOCKING)
@@ -376,7 +376,7 @@ After the PR is open, immediately spawn the `/pr-watch` skill as a background
 agent using the `Agent` tool. This wrapper **blocks** until pr-watch returns —
 the autonomous fire is not complete until CI passes (or the fix-loop is
 exhausted and the PR is marked draft). The user picked this design knowing one
-VM = one issue in flight at a time; the `team:in-progress` lock and the blocking
+VM = one issue in flight at a time; the `AFK:in-progress` lock and the blocking
 pr-watch are the two halves of that constraint.
 
 Invoke pr-watch via the `Agent` tool with:
@@ -385,13 +385,13 @@ Invoke pr-watch via the `Agent` tool with:
 - `model: opus`
 - `run_in_background: false` ← blocking
 - `prompt`:
-  `"Invoke the /pr-watch skill for PR #<PR_NUM> on branch feat/issue-<N>, repo benjr70/Smart-Smoker-V2. Issue #<N>. Poll CI every 60s up to 45 minutes per round. On red, loop the implementer up to 10 rounds total. On exhaustion convert the PR to draft and add the team:checks-failed label."`
+  `"Invoke the /pr-watch skill for PR #<PR_NUM> on branch feat/issue-<N>, repo benjr70/Smart-Smoker-V2. Issue #<N>. Poll CI every 60s up to 45 minutes per round. On red, loop the implementer up to 10 rounds total. On exhaustion convert the PR to draft and add the AFK:checks-failed label."`
 
 Wait for the agent to return. Record its final message verbatim as
 `PR_WATCH_LINE`. It will be one of:
 
 - `pr-watch: PASS — all checks green at attempt <K>`
-- `pr-watch: DRAFT — exhausted 10 rounds, marked draft, team:checks-failed`
+- `pr-watch: DRAFT — exhausted 10 rounds, marked draft, AFK:checks-failed`
 - `pr-watch: ERROR — <reason>`
 
 **pr-watch is a blocking checkpoint, not a background task.** While the pr-watch
@@ -432,8 +432,8 @@ flight) — with the prompt:
 
 Record its terminal `pr-review:` line verbatim as `REVIEW_LINE`. Routing:
 
-- `pr-review: DONE — <N> findings posted, team:revise applied` → **end the
-  fire's success path here** (emit the §7 block with this `review:` line and no
+- `pr-review: DONE — <N> findings posted, AFK:revise applied` → **end the fire's
+  success path here** (emit the §7 block with this `review:` line and no
   `verify:` line). The label hands the PR to the NEXT fire's §1.2 triage →
   `/pr-reconcile`, whose comment loop fixes the 🤖 threads and then re-runs the
   full pr-watch + manual-verification tail — running §6a.2 now would verify code
@@ -446,7 +446,7 @@ Record its terminal `pr-review:` line verbatim as `REVIEW_LINE`. Routing:
   chance).
 
 `/pr-review` never fixes, replies, or resolves anything itself — its 🤖 threads
-are ordinary unresolved review threads that ride the `team:revise` →
+are ordinary unresolved review threads that ride the `AFK:revise` →
 `/pr-reconcile` machinery, exactly like a human hand-back.
 
 ### 6a.2. Manual verification round (delegates to `/verify-pr`, BLOCKING)
@@ -458,7 +458,7 @@ would produce stale evidence) **and §6a.1b has completed or skipped**. Skip whe
 verification loop** (`M` starts at 1, cap `MANUAL_ROUNDS_MAX=3` — see §6a.3).
 
 Delegate the whole round to the **`/verify-pr`** harness skill (the proven slice
-1–5 machinery). team-pickup no longer carries an inline verifier prompt: the
+1–5 machinery). afk-pickup no longer carries an inline verifier prompt: the
 harness parses the PR's checklist, boots a hermetic per-PR stack, spawns the
 `manual-verifier` agent to exercise each **unchecked** item in a REAL headful
 browser / Electron / hermetic Mongo, ticks the boxes that passed (previously
@@ -520,7 +520,7 @@ escalation below:
 gh pr comment "$PR_NUM" --body "Manual verification round did not run: <reason>.
 Parking for a human — no verification evidence exists for this PR."
 gh pr ready "$PR_NUM" --undo
-gh pr edit  "$PR_NUM" --add-label team:checks-failed
+gh pr edit  "$PR_NUM" --add-label AFK:checks-failed
 ```
 
 The draft flip is the load-bearing half. PR Triage
@@ -581,7 +581,7 @@ while true:
   §6a.1 pr-watch (blocking) → PR_WATCH_LINE
   if PR_WATCH_LINE != PASS: break            # DRAFT/ERROR — report, no verify line
   §6a.1b pr-review (blocking, marker-gated once-ever) → REVIEW_LINE
-  if REVIEW_LINE says team:revise applied: break   # fixes belong to the next fire's reconcile
+  if REVIEW_LINE says AFK:revise applied: break   # fixes belong to the next fire's reconcile
   §6a.2 /verify-pr round M (blocking) → MANUAL_LINE, OUTSTANDING_SPECS
   if FAIL == 0 and OUTSTANDING_SPECS == 0: break   # all pass / justified deferrals
   if M == MANUAL_ROUNDS_MAX: exhaust; break
@@ -619,21 +619,21 @@ a push):
 
 ```bash
 gh pr ready "$PR_NUM" --undo
-gh pr edit  "$PR_NUM" --add-label team:checks-failed
-gh issue comment "$N" --body "manual verification exhausted $MANUAL_ROUNDS_MAX fix rounds on PR #$PR_NUM — <f> item(s) still FAIL. Marked draft + team:checks-failed. Human triage required."
+gh pr edit  "$PR_NUM" --add-label AFK:checks-failed
+gh issue comment "$N" --body "manual verification exhausted $MANUAL_ROUNDS_MAX fix rounds on PR #$PR_NUM — <f> item(s) still FAIL. Marked draft + AFK:checks-failed. Human triage required."
 ```
 
 Report the last `MANUAL_LINE` in the §7 block, suffixed `— EXHAUSTED`.
 
 ### 6b. Failure path
 
-On any of: team-dispatch non-zero exit, missing smoke trailer, `smoke: FAIL`, or
+On any of: afk-dispatch non-zero exit, missing smoke trailer, `smoke: FAIL`, or
 unresolved reviewer change-request:
 
 ```bash
-gh issue edit "$N" --remove-label team:in-progress
-gh issue edit "$N" --add-label team:failed
-gh issue comment "$N" --body "team-pickup FAILED at $(date -Iseconds): ${FAIL_REASON:-team-dispatch returned non-zero}"
+gh issue edit "$N" --remove-label AFK:in-progress
+gh issue edit "$N" --add-label AFK:failed
+gh issue comment "$N" --body "afk-pickup FAILED at $(date -Iseconds): ${FAIL_REASON:-afk-dispatch returned non-zero}"
 ```
 
 Do NOT open a PR. Do NOT push the branch. Exit non-zero so the routine log
@@ -660,7 +660,7 @@ fire picked nothing (`skip` / `no eligible issue`).
 One block per fire, written to stdout:
 
 ```
-=== /team-pickup <ISO-8601> ===
+=== /afk-pickup <ISO-8601> ===
 picked:   #<N> <title>            (or: skip — N in flight, or: no eligible)
 dispatch: PASS | FAIL — <reason>
 pr:       <url>                    (success only)
@@ -676,7 +676,7 @@ A **reconcile fire** (§1.2 picked a PR instead of an issue) emits this block
 instead:
 
 ```
-=== /team-pickup <ISO-8601> ===
+=== /afk-pickup <ISO-8601> ===
 picked:   reconcile PR #<P> (issue #<N>)
 reconcile: <verbatim terminal pr-reconcile: line from the §1.2 agent>
 ```
@@ -697,17 +697,17 @@ concurrency skip (§1) or an empty queue (§2) — emit, in addition to the huma
 `picked:` line, one of these exact standalone lines so `agent-run` can tell the
 daemon to sleep out the window instead of hot-looping into the lock:
 
-- `team-pickup: skip` — a `team:in-progress` lock is already held (§1).
-- `team-pickup: no eligible issue` — nothing eligible in the queue (§2).
+- `afk-pickup: skip` — an `AFK:in-progress` lock is already held (§1).
+- `afk-pickup: no eligible issue` — nothing eligible in the queue (§2).
 
 **Hard validity rule.** On the §6a success path the output block MUST contain a
 `pr-watch:` line copied verbatim from the last pr-watch agent's terminal
 message, and — whenever that line says PASS — a `review:` line copied from
 §6a.1b's terminal `pr-review:` message (SKIPPED counts) and a `verify:` line
 copied from the last `/verify-pr` round's `manual-verify:` message. Exception:
-when the `review:` line says `team:revise applied`, the fire legally ends
-without a `verify:` line (the reconcile fire re-verifies after the fixes). If
-any required line is missing, the run is **invalid**: do not emit the report; go
+when the `review:` line says `AFK:revise applied`, the fire legally ends without
+a `verify:` line (the reconcile fire re-verifies after the fixes). If any
+required line is missing, the run is **invalid**: do not emit the report; go
 back and wait for the in-flight agent. `pr-watch: (in flight)` and
 `pr-review: (in flight)` are never legal values.
 
@@ -715,27 +715,27 @@ Whenever §6a.2 was reached, the `verify:` line therefore has exactly three lega
 shapes: a real `manual-verify:` verdict, a recorded
 `manual-verify: infra-error …` non-verdict, or `verify: MISSING — <reason>` from
 the §6a.2 park — and only the first may accompany a passing fire. The
-`team:revise applied` exception above is the **only** way past §6a.1b without
+`AFK:revise applied` exception above is the **only** way past §6a.1b without
 one: that fire ends before a round is ever owed, so it legally carries no
-`verify:` line, takes no park, and applies no `team:checks-failed` (the next
+`verify:` line, takes no park, and applies no `AFK:checks-failed` (the next
 fire's reconcile owns the round — double-labelling it here would muddy that
 fire's triage reason). Otherwise a reviewed PR must never reach a passing report
 on an absent round: when the round was owed and did not run, the fire ends
-parked (draft + `team:checks-failed` + the explanatory comment on the PR), not
+parked (draft + `AFK:checks-failed` + the explanatory comment on the PR), not
 green.
 
 ## Failure modes
 
-- **Stale `team:in-progress` from crashed prior fire** — §1 will block all
-  future fires until manually cleared. Fix:
-  `gh issue edit <N> --remove-label team:in-progress`.
+- **Stale `AFK:in-progress` from crashed prior fire** — §1 will block all future
+  fires until manually cleared. Fix:
+  `gh issue edit <N> --remove-label AFK:in-progress`.
 - **Branch `feat/issue-<N>` already exists from a prior failed fire** — §4's
   `checkout -B` resets it from `origin/master`, discarding stale work.
   Recoverable via `git reflog`. This reset applies to the **normal-pick** path
   only; the **resume** path (§1.5 → §4) deliberately checks the branch out as-is
   so the paused window's partial work survives.
 - **Paused issue loops across too many windows** — §1.5 caps resumes via the
-  Pause/Resume state logic (default 3); on the cap it applies `team:failed` and
+  Pause/Resume state logic (default 3); on the cap it applies `AFK:failed` and
   stops, so a too-big issue is handed to a human instead of bouncing forever.
 - **Acceptance Criteria section missing from issue body** — PR body uses a
   placeholder line. PR still opens; reviewer will notice and request the
@@ -747,7 +747,7 @@ green.
   post-deploy specs), the lead commits `fix(manual): round <M> …` and pushes,
   and the loop re-enters §6a.1 (CI must re-green before re-verification). Cap 3
   manual rounds; on exhaustion (or an implementer `manual-verify-dispute`) the
-  PR converts to draft + `team:checks-failed` with an issue comment — the same
+  PR converts to draft + `AFK:checks-failed` with an issue comment — the same
   escalation as pr-watch exhaustion. A **justified DEFER** item (real hardware /
   human observation, or a deployed-env item whose demanded
   `<!-- post-deploy: … -->` spec is already present) is not a failure and does
@@ -756,37 +756,37 @@ green.
   an invalid run per the §7 hard validity rule. The missing terminal `pr-watch:`
   / `verify:` line is the detection signal; the fix is to wait for the blocking
   agent before emitting anything.
-- **Network/auth flake mid-team-dispatch** — teammates may stay spawned.
+- **Network/auth flake mid-afk-dispatch** — teammates may stay spawned.
   Wrapper's §6b cleans GitHub state but cannot clean teammates. Run "Clean up
   the team." manually after a §6b failure.
-- **Crash mid-reconcile (§1.2)** — the issue is left `team:in-progress` with no
+- **Crash mid-reconcile (§1.2)** — the issue is left `AFK:in-progress` with no
   live fire. agent-run's crash cleanup scrapes the
   `picked:   reconcile PR #<P> (issue #<N>)` line and restores the lock
-  (`team:in-progress` removed, `team:done` re-added) instead of applying
-  `team:failed` — the issue's work was already done; only the PR needs care.
+  (`AFK:in-progress` removed, `AFK:done` re-added) instead of applying
+  `AFK:failed` — the issue's work was already done; only the PR needs care.
 - **Reconcile pick loops on the same PR** — cannot happen while parked:
   `/pr-reconcile` always exits having either removed the attention signal
-  (rebased ⇒ no longer CONFLICTING; threads done ⇒ `team:revise` dropped) or
-  applied a parked label (`team:rebase-failed` / `team:revise-failed`) that the
-  PR Triage skips. An `incomplete` pick self-clears the same way: every
-  reconcile tail run either posts the review marker / a verification round,
-  applies `team:revise` (re-picked as `revise` next fire), or parks the PR — the
-  PR exits the incomplete class every fire.
+  (rebased ⇒ no longer CONFLICTING; threads done ⇒ `AFK:revise` dropped) or
+  applied a parked label (`AFK:rebase-failed` / `AFK:revise-failed`) that the PR
+  Triage skips. An `incomplete` pick self-clears the same way: every reconcile
+  tail run either posts the review marker / a verification round, applies
+  `AFK:revise` (re-picked as `revise` next fire), or parks the PR — the PR exits
+  the incomplete class every fire.
 
 ## Boundaries
 
 - Never picks more than one unit of work per fire — a reconcile (§1.2), a resume
   (§1.5), or a fresh issue (§2), in that priority order, never two.
 - Never invokes `scripts/ralph/*` (separate Level 6 system).
-- Never modifies the parent PRD issue. Only operates on `team`-labeled child
-  issues. (PRDs themselves must NOT carry the `team` label.)
+- Never modifies the parent PRD issue. Only operates on `AFK`-labeled child
+  issues. (PRDs themselves must NOT carry the `AFK` label.)
 - Never opens a PR if smoke did not pass or skip.
 - Never exits before the §6a.1 pr-watch agent (and, on pr-watch PASS, the §6a.1b
-  `/pr-review` review and — unless the review applied `team:revise` — the §6a.2
+  `/pr-review` review and — unless the review applied `AFK:revise` — the §6a.2
   `/verify-pr` round, re-entered once per manual fix round) returns. One fire =
   one issue picked, implemented, PR opened, CI watched to verdict, code-reviewed
   once, and either manual verification executed and recorded on the PR or the
-  review's `team:revise` hand-off queued for the next fire's reconcile.
+  review's `AFK:revise` hand-off queued for the next fire's reconcile.
 - The §6a.2 **`/verify-pr` round** mutates nothing beyond the PR body (boxes it
   proved) and one evidence comment per round, and tears its hermetic stack down
   on every exit path; it does spend Claude usage (the `manual-verifier` is an
@@ -794,6 +794,6 @@ green.
   per manual round, cap 3) and pushes `fix(manual):` commits to the PR branch
   only — never to master, never force-pushed. The §6a.1b **`/pr-review` review**
   burns usage once per PR ever (two review subagents) and never pushes — its
-  only writes are inline review comments, at most one `team:revise` label add,
+  only writes are inline review comments, at most one `AFK:revise` label add,
   and one done-marker comment; the fixes it queues are pushed later by
   `/pr-reconcile` under that skill's own rules.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# agent-daemon — always-alive, usage-paced supervisor for `/team-pickup`.
+# agent-daemon — always-alive, usage-paced supervisor for `/afk-pickup`.
 #
 # The tracer-bullet loop for PRD #287 (issue #288): it establishes the end-to-end
 # path sensor -> decision -> action -> schedule with no pause/resume yet.
@@ -10,7 +10,7 @@
 #   2. Decision: fire when >= BUDGET_GATE_MIN_PCT (default 25) percent of the
 #                binding limit's budget remains (plan-agnostic).
 #   3. Action  : when enough window remains (>= BUDGET_GATE_MIN_PCT, default 25),
-#                fire `agent-run` (which invokes `/team-pickup`). After a clean
+#                fire `agent-run` (which invokes `/afk-pickup`). After a clean
 #                run the loop goes straight back to the gate and fires again if
 #                budget still allows — the backlog drains within one window.
 #                agent-run markers steer the exceptions: AGENT_RUN_NO_WORK=1
@@ -185,11 +185,11 @@ sleep_and_poll() {
 # probe_sleep — chunked sleep-to-reset that wakes early when the Work Probe
 # sees actionable work appear mid-window. Used only on the NO_WORK path: the
 # budget is there but the queue was empty at fire time, and work arrives on
-# human time (a merge that conflicts an open PR, a team:revise hand-back, a
+# human time (a merge that conflicts an open PR, an AFK:revise hand-back, a
 # new issue). Observed live 2026-07-10: a human merge 52s after a no-work
 # fire left a CONFLICTING PR waiting ~4h for the window reset. A probe is
 # pure `gh` — zero Claude cost. wp_decide's rules keep this loop-proof: a
-# held lock never wakes, reconcile/paused wake unconditionally (team-pickup
+# held lock never wakes, reconcile/paused wake unconditionally (afk-pickup
 # deterministically acts on them), and pick-class candidates wake only when
 # they differ from the baseline captured here at no-work time.
 probe_sleep() {
@@ -271,7 +271,7 @@ main() {
                 # burn the whole window (observed 2026-07-08: 1271 fires in 2h) —
                 # but an always-deaf sleep-to-reset makes a TRANSIENT failure cost
                 # hours (observed 2026-08-08: OAuth-expiry fires each slept 5h
-                # while a team:revise would have sat unseen). Bounded middle
+                # while an AFK:revise would have sat unseen). Bounded middle
                 # ground: probe-sleep so an actionable signal can retry the fire,
                 # capped at AGENT_DAEMON_FAIL_CAP consecutive failures — worst
                 # case CAP fires per window on a genuinely broken pick, then deaf

@@ -6,7 +6,7 @@
 # Strategy: pickup_triage's gh calls go through an injected GH_BIN stub serving
 # canned per-query fixtures from a temp workspace (same pattern as
 # work-probe.test.sh). Each test builds the GitHub-side state and asserts the
-# single JSON verdict — the external contract the team-pickup skill branches
+# single JSON verdict — the external contract the afk-pickup skill branches
 # on — never the internals.
 
 set -uo pipefail
@@ -46,8 +46,8 @@ case "\${args}" in
         cat "${dir}/auth.out"
         exit \$(cat "${dir}/auth.code") ;;
     *"api user"*)                cat "${dir}/login.out" ;;
-    *"--label team:in-progress"*) cat "${dir}/locked.out" ;;
-    *"--label team:paused"*)     cat "${dir}/paused.out" ;;
+    *"--label AFK:in-progress"*) cat "${dir}/locked.out" ;;
+    *"--label AFK:paused"*)     cat "${dir}/paused.out" ;;
     *"pr list"*)                 cat "${dir}/prs.out" ;;
     *"pr view"*)                 cat "${dir}/prview.out" ;;
     *"--json labels"*)           cat "${dir}/haddone.out" ;;
@@ -90,7 +90,7 @@ graphql_fixture() {
 
 # issue_node <number> <title> <priority|null> <inProject:true/false> <createdAt> [body] [labels-csv]
 issue_node() {
-    local number="$1" title="$2" prio="$3" in_project="$4" created="$5" body="${6:-}" labels_csv="${7:-team}"
+    local number="$1" title="$2" prio="$3" in_project="$4" created="$5" body="${6:-}" labels_csv="${7:-AFK}"
     local labels prio_json project_items
     labels="$(printf '%s' "${labels_csv}" | jq -R 'split(",") | map({name: .})')"
     if [ "${prio}" = "null" ]; then prio_json='null'; else prio_json="{\"name\": \"${prio}\"}"; fi
@@ -147,9 +147,9 @@ test_in_flight_lock() {
     out="$(run_triage "${dir}")"
     if [ "$(printf '%s' "${out}" | jq -r '.verdict')" = "in-flight" ] \
         && [ "$(printf '%s' "${out}" | jq -r '.inflight')" = "2" ]; then
-        pass "team:in-progress held → verdict in-flight"
+        pass "AFK:in-progress held → verdict in-flight"
     else
-        fail "team:in-progress held → verdict in-flight" "out=${out}"
+        fail "AFK:in-progress held → verdict in-flight" "out=${out}"
     fi
 }
 
@@ -172,7 +172,7 @@ test_reconcile_pick() {
     dir="$(make_env)"
     jq -cn '[{number: 501, headRefName: "feat/issue-441", isDraft: false,
               mergeable: "MERGEABLE", createdAt: "2026-08-01T00:00:00Z",
-              labels: [{name: "team:revise"}], author: {login: "agent-bot"}}]' \
+              labels: [{name: "AFK:revise"}], author: {login: "agent-bot"}}]' \
         > "${dir}/prs.out"
     echo 'true' > "${dir}/haddone.out"
     out="$(run_triage "${dir}")"

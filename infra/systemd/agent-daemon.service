@@ -1,4 +1,4 @@
-# agent-daemon.service — always-alive, usage-paced /team-pickup supervisor.
+# agent-daemon.service — always-alive, usage-paced /afk-pickup supervisor.
 #
 # Committed artifact for PRD #287 / issue #288. This slice authors the unit file
 # only; installing and enabling it on the host is the HITL deploy slice. To
@@ -13,7 +13,7 @@
 # `claude` CLI is on the agent user's PATH.
 
 [Unit]
-Description=Smart-Smoker usage-paced /team-pickup daemon
+Description=Smart-Smoker usage-paced /afk-pickup daemon
 Documentation=https://github.com/benjr70/Smart-Smoker-V2/issues/287
 # Pace off local Claude usage, which needs the network to be up.
 After=network-online.target
@@ -29,7 +29,7 @@ WorkingDirectory=/home/claude-agent-1/Smart-Smoker-V2
 # on the host changes.
 Environment=PATH=/home/claude-agent-1/.local/bin:/home/claude-agent-1/.nvm/versions/node/v24.7.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # Optional local secrets (e.g. GH_TOKEN=... if the stored gh keyring token is
-# absent or under-scoped — team-pickup needs the `project` scope). The file is
+# absent or under-scoped — afk-pickup needs the `project` scope). The file is
 # NOT committed; create it mode 0600 or rely on `gh auth login` instead.
 EnvironmentFile=-/home/claude-agent-1/.config/agent-daemon/env
 ExecStart=/home/claude-agent-1/Smart-Smoker-V2/scripts/claude-agent/agent-daemon

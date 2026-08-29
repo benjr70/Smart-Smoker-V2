@@ -212,7 +212,7 @@ test_no_work_sleeps_instead_of_relooping() {
     cat > "${dir}/agent-run-stub" <<EOF
 #!/usr/bin/env bash
 echo "fired \$*" >> "${dir}/calls.log"
-echo "team-pickup: no eligible issue"
+echo "afk-pickup: no eligible issue"
 echo "AGENT_RUN_NO_WORK=1"
 exit 0
 EOF
@@ -253,7 +253,7 @@ test_no_work_probe_wakes_early_on_new_work() {
     cat > "${dir}/agent-run-stub" <<EOF
 #!/usr/bin/env bash
 echo "fired \$*" >> "${dir}/calls.log"
-echo "team-pickup: no eligible issue"
+echo "afk-pickup: no eligible issue"
 echo "AGENT_RUN_NO_WORK=1"
 exit 0
 EOF
@@ -312,7 +312,7 @@ test_no_work_probe_suppresses_stale_candidates() {
     cat > "${dir}/agent-run-stub" <<EOF
 #!/usr/bin/env bash
 echo "fired \$*" >> "${dir}/calls.log"
-echo "team-pickup: no eligible issue"
+echo "afk-pickup: no eligible issue"
 echo "AGENT_RUN_NO_WORK=1"
 exit 0
 EOF
@@ -356,7 +356,7 @@ test_no_work_probe_wakes_on_pr_shrink() {
     cat > "${dir}/agent-run-stub" <<EOF
 #!/usr/bin/env bash
 echo "fired \$*" >> "${dir}/calls.log"
-echo "team-pickup: all issues blocked on open PRs"
+echo "afk-pickup: all issues blocked on open PRs"
 echo "AGENT_RUN_NO_WORK=1"
 exit 0
 EOF
@@ -494,7 +494,7 @@ $(cat "${dir}/calls.log")"
 #-------------------------------------------------------------------------------
 # Test 7b: below the fail cap, a failed fire probe-sleeps (wakeable) instead of
 # going deaf — the 2026-08-08 OAuth-expiry incident cost 5h of deaf sleep per
-# transient failure while a team:revise would have sat unseen.
+# transient failure while an AFK:revise would have sat unseen.
 #-------------------------------------------------------------------------------
 test_failed_fire_probe_sleeps() {
     echo "TEST: failed fire probe-sleeps below the cap"

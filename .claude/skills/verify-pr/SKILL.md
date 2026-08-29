@@ -7,7 +7,7 @@ description:
   boxes, post one evidence comment, emit a `manual-verify:` summary line, and
   tear everything down. Use when anyone says "verify PR <n>", "run manual
   verification", or invokes /verify-pr — a human, an agent calling the Skill
-  tool, or a subagent delegated the round by team-pickup §6a.2 or pr-reconcile
+  tool, or a subagent delegated the round by afk-pickup §6a.2 or pr-reconcile
   §3.
 argument-hint: '<PR number>'
 ---
@@ -42,7 +42,7 @@ equally valid entry points, and none of them needs a human in the loop:
 1. A human typing `/verify-pr <PR#>`.
 2. An agent calling the **`Skill` tool** for `verify-pr`.
 3. A `general-purpose` subagent spawned via the **`Agent` tool** that is told to
-   invoke this skill — the shape both automated callers use: **`team-pickup`
+   invoke this skill — the shape both automated callers use: **`afk-pickup`
    §6a.2** and **`pr-reconcile` §3**, each of which delegates its blocking
    verification round here and consumes the terminal `manual-verify:` line this
    skill emits.

@@ -6,7 +6,7 @@
 # BLOCKING (flipped in HITL slice #504): a non-conventional title turns this
 # check red, and "Conventional PR title" is in master's branch-protection
 # required status checks — a bad title cannot merge. Agent PR templates emit
-# conventional titles (#502 — team-pickup skill + scripts/ralph/ralph-pr.sh,
+# conventional titles (#502 — afk-pickup skill + scripts/ralph/ralph-pr.sh,
 # both pre-flighting this same validator).
 #
 # The validator-tests job below is NOT advisory — it is a real test suite for

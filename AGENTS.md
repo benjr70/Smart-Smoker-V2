@@ -63,19 +63,20 @@ self-correct without human review:
 Gates ship in **advisory mode** (warnings, non-blocking) and flip to blocking
 after a ~2-week bake window.
 
-## Agent Teams (Level 7)
+## AFK (Level 7)
 
-Parallel multi-agent implementation via
+**AFK** ("away from keyboard") is this repo's Level 7 layer: parallel
+multi-agent implementation via
 [Claude Code Agent Teams](https://code.claude.com/docs/en/agent-teams) — an
 implementer, reviewer, verifier, and on-demand researcher coordinate through a
-shared task list. Separate `team` label taxonomy. See
-[`docs/Teams/`](docs/Teams/index.md) for the full playbook.
+shared task list. Separate `AFK` label taxonomy. See
+[`docs/AFK/`](docs/AFK/index.md) for the full playbook.
 
-| Surface                                                                          | Purpose                                                                                                                                                |
-| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [`.claude/agents/`](.claude/agents/)                                             | Four subagent definitions: implementer, reviewer, verifier, researcher (all Opus; separation via tool allowlist)                                       |
-| [`.claude/skills/team-dispatch/SKILL.md`](.claude/skills/team-dispatch/SKILL.md) | The lead's playbook — invoke as `/team-dispatch <prd>` from inside Claude. Self-bootstraps labels + pre-flight on every run; no external setup script. |
-| [`.claude/hooks/`](.claude/hooks/)                                               | `TaskCompleted` (smoke-trailer enforcement) + `TeammateIdle` (unresolved-review blocker)                                                               |
+| Surface                                                                        | Purpose                                                                                                                                               |
+| ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`.claude/agents/`](.claude/agents/)                                           | Four subagent definitions: implementer, reviewer, verifier, researcher (all Opus; separation via tool allowlist)                                      |
+| [`.claude/skills/afk-dispatch/SKILL.md`](.claude/skills/afk-dispatch/SKILL.md) | The lead's playbook — invoke as `/afk-dispatch <prd>` from inside Claude. Self-bootstraps labels + pre-flight on every run; no external setup script. |
+| [`.claude/hooks/`](.claude/hooks/)                                             | `TaskCompleted` (smoke-trailer enforcement) + `TeammateIdle` (unresolved-review blocker)                                                              |
 
 Agent Teams is enabled via `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` in
 [`.claude/settings.json`](.claude/settings.json) and requires Claude Code ≥

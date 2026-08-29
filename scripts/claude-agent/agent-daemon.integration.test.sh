@@ -9,12 +9,12 @@
 # Pause/Resume state logic — and stubs ONLY the true external boundaries so
 # nothing real runs:
 #   CCUSAGE_CMD — prints a ccusage-shaped fixture (fresh / spent)
-#   CLAUDE_BIN  — stands in for the `claude` CLI running /team-pickup: the first
+#   CLAUDE_BIN  — stands in for the `claude` CLI running /afk-pickup: the first
 #                 fire is cut off by usage exhaustion; a later fire takes the
 #                 resume path, sourcing the real pause-resume.sh to decide, just
-#                 as the /team-pickup skill does
+#                 as the /afk-pickup skill does
 #   GH_BIN      — a STATEFUL gh: it remembers each issue's label across calls, so
-#                 agent-run's pause (team:in-progress -> team:paused) is visible
+#                 agent-run's pause (AFK:in-progress -> AFK:paused) is visible
 #                 to the next fire's resume lookup
 #   GIT_BIN     — logs each git call (and reports staged changes) so the wip
 #                 freeze path runs without real history
@@ -61,7 +61,7 @@ for f in "${DAEMON}" "${AGENT_RUN}" "${LIB_DIR}/pause-resume.sh"; do
     fi
 done
 
-# The in-flight issue the simulated /team-pickup is working when it runs dry.
+# The in-flight issue the simulated /afk-pickup is working when it runs dry.
 INFLIGHT_ISSUE=291
 
 NOW_EPOCH=$(date -u -d '2026-07-05T20:00:00Z' +%s)
@@ -80,13 +80,13 @@ fixture() {
 #
 # The gh + claude stubs are self-locating (they resolve paths from $0) and read
 # tunables from ${dir}/stub.env, so they can be quoted heredocs with no runtime
-# escaping. The in-flight issue starts labelled team:in-progress.
+# escaping. The in-flight issue starts labelled AFK:in-progress.
 make_env() {
     local dir; dir="$(mktemp -d)"
     mkdir -p "${dir}/repo/.git" "${dir}/logs" "${dir}/gh-state"
     : > "${dir}/gh.log"
     : > "${dir}/git.log"
-    : > "${dir}/team-pickup.log"
+    : > "${dir}/afk-pickup.log"
 
     # Shared tunables the stubs source at runtime.
     cat > "${dir}/stub.env" <<EOF
@@ -96,18 +96,18 @@ INFLIGHT_ISSUE="${INFLIGHT_ISSUE}"
 EOF
 
     # Initial label state: the in-flight issue is being worked.
-    echo "team:in-progress" > "${dir}/gh-state/label-${INFLIGHT_ISSUE}"
+    echo "AFK:in-progress" > "${dir}/gh-state/label-${INFLIGHT_ISSUE}"
 
-    # claude stub — stands in for `claude ... /team-pickup`. Call 1 is cut off by
+    # claude stub — stands in for `claude ... /afk-pickup`. Call 1 is cut off by
     # usage exhaustion (agent-run then pauses the issue). Any later call takes the
     # resume path: it finds the paused issue, counts its pauses, and asks the REAL
-    # pause-resume.sh what to do — exactly as the /team-pickup skill §1.5 does.
+    # pause-resume.sh what to do — exactly as the /afk-pickup skill §1.5 does.
     cat > "${dir}/claude-stub" <<'STUB'
 #!/usr/bin/env bash
 D="$(cd "$(dirname "$0")" && pwd)"
 . "${D}/stub.env"
 STATE="${D}/gh-state"
-TPLOG="${D}/team-pickup.log"
+TPLOG="${D}/afk-pickup.log"
 CALLS="${D}/claude-calls"
 
 n=$(( $(cat "${CALLS}" 2>/dev/null || echo 0) + 1 ))
@@ -121,12 +121,12 @@ if [ "${n}" -eq 1 ]; then
     exit 1
 fi
 
-# Later fire: the /team-pickup resume path. Discover the paused issue from label
+# Later fire: the /afk-pickup resume path. Discover the paused issue from label
 # state, count its pause comments, and let the real module decide.
 paused=""
 for f in "${STATE}"/label-*; do
     [ -e "${f}" ] || continue
-    [ "$(cat "${f}")" = "team:paused" ] && paused="${f##*/label-}"
+    [ "$(cat "${f}")" = "AFK:paused" ] && paused="${f##*/label-}"
 done
 count=0
 [ -f "${STATE}/pauses-${paused}" ] && count=$(wc -l < "${STATE}/pauses-${paused}")
@@ -135,10 +135,10 @@ count=0
 verdict="$(pause_resume_action "${paused}" "${count}")"
 action="$(printf '%s' "${verdict}" | jq -r '.action')"
 issue="$(printf '%s' "${verdict}" | jq -r '.issue')"
-echo "team-pickup: action=${action} issue=${issue}" | tee -a "${TPLOG}"
+echo "afk-pickup: action=${action} issue=${issue}" | tee -a "${TPLOG}"
 
-# On resume, /team-pickup §4 flips the issue back to in-progress and continues.
-[ "${action}" = "resume" ] && echo "team:in-progress" > "${STATE}/label-${issue}"
+# On resume, /afk-pickup §4 flips the issue back to in-progress and continues.
+[ "${action}" = "resume" ] && echo "AFK:in-progress" > "${STATE}/label-${issue}"
 echo "resume complete for #${issue}"
 exit 0
 STUB
@@ -228,7 +228,7 @@ run_daemon() {
 
 #-------------------------------------------------------------------------------
 # Test 1: fresh budget → the loop fires the real agent-run (which invokes the
-# stubbed claude/team-pickup), then sleeps (AC 2, behavior 1).
+# stubbed claude/afk-pickup), then sleeps (AC 2, behavior 1).
 #-------------------------------------------------------------------------------
 test_fresh_budget_fires() {
     echo "TEST: fresh budget fires the loop end-to-end"
@@ -240,8 +240,8 @@ test_fresh_budget_fires() {
     run_daemon "${dir}" 1
 
     if [ ! -s "${dir}/claude-calls" ]; then
-        fail "fresh budget must fire agent-run (claude invoked)" "team-pickup log:
-$(cat "${dir}/team-pickup.log")"
+        fail "fresh budget must fire agent-run (claude invoked)" "afk-pickup log:
+$(cat "${dir}/afk-pickup.log")"
         return
     fi
     if ! grep -q '^slept' "${dir}/calls.log" 2>/dev/null; then
@@ -255,7 +255,7 @@ $(cat "${dir}/calls.log" 2>/dev/null)"
 
 #-------------------------------------------------------------------------------
 # Test 2: spent budget → the loop sleeps and does NOT fire agent-run, so the
-# claude/team-pickup boundary is never touched (AC 3, behavior 2).
+# claude/afk-pickup boundary is never touched (AC 3, behavior 2).
 #-------------------------------------------------------------------------------
 test_spent_budget_sleeps() {
     echo "TEST: spent budget sleeps without firing"
@@ -267,8 +267,8 @@ test_spent_budget_sleeps() {
     run_daemon "${dir}" 1
 
     if [ -s "${dir}/claude-calls" ]; then
-        fail "spent budget must NOT fire agent-run" "team-pickup log:
-$(cat "${dir}/team-pickup.log")"
+        fail "spent budget must NOT fire agent-run" "afk-pickup log:
+$(cat "${dir}/afk-pickup.log")"
         return
     fi
     if ! grep -q '^slept' "${dir}/calls.log" 2>/dev/null; then
@@ -285,8 +285,8 @@ $(cat "${dir}/calls.log" 2>/dev/null)"
 # and the NEXT loop iteration resumes that SAME issue rather than restarting or
 # picking a new one (AC 4, behavior 3). This is the whole-loop assertion that no
 # single unit test covers: exhaustion (agent-run + Exhaustion Classifier) ->
-# pause (team:in-progress -> team:paused) -> next window -> resume (the real
-# pause-resume.sh, driven by the /team-pickup stub).
+# pause (AFK:in-progress -> AFK:paused) -> next window -> resume (the real
+# pause-resume.sh, driven by the /afk-pickup stub).
 #-------------------------------------------------------------------------------
 test_exhaustion_pauses_then_resumes_same_issue() {
     echo "TEST: mid-run exhaustion pauses, next iteration resumes the same issue"
@@ -299,29 +299,29 @@ test_exhaustion_pauses_then_resumes_same_issue() {
     run_daemon "${dir}" 2
 
     gh="$(cat "${dir}/gh.log")"
-    tp="$(cat "${dir}/team-pickup.log")"
+    tp="$(cat "${dir}/afk-pickup.log")"
 
     # The loop must have fired twice (paused window, then resume window).
     if [ "$(cat "${dir}/claude-calls" 2>/dev/null || echo 0)" != "2" ]; then
-        fail "the loop must fire once to pause and once to resume" "team-pickup log:
+        fail "the loop must fire once to pause and once to resume" "afk-pickup log:
 ${tp}"
         return
     fi
-    # Iteration 1: the in-flight issue was paused (team:in-progress -> team:paused).
-    if ! printf '%s' "${gh}" | grep -q "issue edit ${INFLIGHT_ISSUE}.*--remove-label team:in-progress.*--add-label team:paused"; then
+    # Iteration 1: the in-flight issue was paused (AFK:in-progress -> AFK:paused).
+    if ! printf '%s' "${gh}" | grep -q "issue edit ${INFLIGHT_ISSUE}.*--remove-label AFK:in-progress.*--add-label AFK:paused"; then
         fail "mid-run exhaustion must pause the in-flight issue" "gh log:
 ${gh}"
         return
     fi
     # An out-of-gas event must never be surfaced as a failure.
-    if printf '%s' "${gh}" | grep -q 'team:failed'; then
-        fail "an out-of-gas event must NEVER apply team:failed" "gh log:
+    if printf '%s' "${gh}" | grep -q 'AFK:failed'; then
+        fail "an out-of-gas event must NEVER apply AFK:failed" "gh log:
 ${gh}"
         return
     fi
     # Iteration 2: the next fire resumed the SAME issue that was paused.
     if ! printf '%s' "${tp}" | grep -q "action=resume issue=${INFLIGHT_ISSUE}"; then
-        fail "the next iteration must resume the same paused issue" "team-pickup log:
+        fail "the next iteration must resume the same paused issue" "afk-pickup log:
 ${tp}"
         return
     fi

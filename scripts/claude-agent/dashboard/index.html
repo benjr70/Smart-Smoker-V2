@@ -208,7 +208,7 @@ function render() {
     fc.style.display = "";
     const scan = (data.pipeline || {}).scan || {};
     let chips = "";
-    if (scan.locked) chips += `<span class="chip amber">team:in-progress lock held</span>`;
+    if (scan.locked) chips += `<span class="chip amber">AFK:in-progress lock held</span>`;
     if (scan.reconcile) chips += `<span class="chip amber">reconcile PR #${scan.reconcile}</span>`;
     if (scan.paused) chips += `<span class="chip">paused #${scan.paused}</span>`;
     if (scan.pickSig) chips += `<span class="chip">queue: #${esc(scan.pickSig)}</span>`;
@@ -233,7 +233,7 @@ function render() {
   const prs = (data.openPrs || {}).items || [];
   document.getElementById("prs").innerHTML = (prs.length ? prs.map(p => {
     let chips = p.labels.map(l =>
-      `<span class="chip ${l === "team:revise" ? "amber" : l.startsWith("team:") ? "red" : ""}">${esc(l)}</span>`).join("");
+      `<span class="chip ${l === "AFK:revise" ? "amber" : l.startsWith("AFK:") ? "red" : ""}">${esc(l)}</span>`).join("");
     if (p.mergeable === "CONFLICTING") chips += `<span class="chip red">conflict</span>`;
     if (p.isDraft) chips += `<span class="chip">draft</span>`;
     return `<a class="pr" href="${esc(p.url || "#")}" target="_blank" rel="noopener">

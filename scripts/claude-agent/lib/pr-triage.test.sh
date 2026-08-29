@@ -90,16 +90,16 @@ test_conflicting_pr_picked() {
 }
 
 #-------------------------------------------------------------------------------
-# Test 2: team:revise beats a plain conflict, even when the conflicting PR is
+# Test 2: AFK:revise beats a plain conflict, even when the conflicting PR is
 # older — a human explicitly waiting on their review outranks mechanical drift.
 #-------------------------------------------------------------------------------
 test_revise_beats_conflict() {
-    echo "TEST: team:revise outranks CONFLICTING"
+    echo "TEST: AFK:revise outranks CONFLICTING"
 
     local out
     out="$(jq -s '.' \
         <(pr_json 310 "feat/issue-281" "CONFLICTING" "2026-07-01T10:00:00Z" "") \
-        <(pr_json 311 "feat/issue-282" "MERGEABLE"   "2026-07-09T10:00:00Z" "team:revise") \
+        <(pr_json 311 "feat/issue-282" "MERGEABLE"   "2026-07-09T10:00:00Z" "AFK:revise") \
         | pr_triage_pick)"
 
     if [ "$(printf '%s' "${out}" | jq -r '.pr')" != "311" ] \
@@ -108,7 +108,7 @@ test_revise_beats_conflict() {
         return
     fi
 
-    pass "team:revise outranks CONFLICTING"
+    pass "AFK:revise outranks CONFLICTING"
 }
 
 #-------------------------------------------------------------------------------
@@ -119,8 +119,8 @@ test_oldest_wins_within_rank() {
 
     local out
     out="$(jq -s '.' \
-        <(pr_json 312 "feat/issue-283" "MERGEABLE" "2026-07-09T10:00:00Z" "team:revise") \
-        <(pr_json 311 "feat/issue-282" "MERGEABLE" "2026-07-05T10:00:00Z" "team:revise") \
+        <(pr_json 312 "feat/issue-283" "MERGEABLE" "2026-07-09T10:00:00Z" "AFK:revise") \
+        <(pr_json 311 "feat/issue-282" "MERGEABLE" "2026-07-05T10:00:00Z" "AFK:revise") \
         | pr_triage_pick)"
 
     if [ "$(printf '%s' "${out}" | jq -r '.pr')" != "311" ]; then
@@ -141,7 +141,7 @@ test_ours_filter_excludes() {
     local out rc
     out="$(jq -s '.' \
         <(pr_json 320 "feat/issue-290" "CONFLICTING" "2026-07-01T10:00:00Z" "" "agent-bot" "true") \
-        <(pr_json 321 "hotfix/human-branch" "CONFLICTING" "2026-07-01T10:00:00Z" "team:revise") \
+        <(pr_json 321 "hotfix/human-branch" "CONFLICTING" "2026-07-01T10:00:00Z" "AFK:revise") \
         <(pr_json 322 "feat/issue-291" "CONFLICTING" "2026-07-01T10:00:00Z" "" "some-human") \
         <(pr_json 323 "feat/issue-292" "CONFLICTING" "2026-07-01T10:00:00Z" "" "agent-bot" "false" "MERGED") \
         | PR_TRIAGE_AUTHOR="agent-bot" pr_triage_pick)"
@@ -175,7 +175,7 @@ test_empty_author_env_accepts_any() {
 }
 
 #-------------------------------------------------------------------------------
-# Test 6: MERGEABLE and UNKNOWN without team:revise are not attention-worthy;
+# Test 6: MERGEABLE and UNKNOWN without AFK:revise are not attention-worthy;
 # already-escalated PRs (revise-failed / rebase-failed) are parked for a human.
 #-------------------------------------------------------------------------------
 test_no_attention_no_pick() {
@@ -185,8 +185,8 @@ test_no_attention_no_pick() {
     out="$(jq -s '.' \
         <(pr_json 330 "feat/issue-294" "MERGEABLE" "2026-07-01T10:00:00Z" "") \
         <(pr_json 331 "feat/issue-295" "UNKNOWN"   "2026-07-01T10:00:00Z" "") \
-        <(pr_json 332 "feat/issue-296" "CONFLICTING" "2026-07-01T10:00:00Z" "team:rebase-failed") \
-        <(pr_json 333 "feat/issue-297" "MERGEABLE" "2026-07-01T10:00:00Z" "team:revise,team:revise-failed") \
+        <(pr_json 332 "feat/issue-296" "CONFLICTING" "2026-07-01T10:00:00Z" "AFK:rebase-failed") \
+        <(pr_json 333 "feat/issue-297" "MERGEABLE" "2026-07-01T10:00:00Z" "AFK:revise,AFK:revise-failed") \
         | pr_triage_pick)"
     rc=$?
 
@@ -377,7 +377,7 @@ test_revise_and_conflict_beat_incomplete() {
         <(pr_json 400 "feat/issue-350" "MERGEABLE" "2026-07-01T10:00:00Z" "" \
             | jq '. + {reviewDone: false, verifyDone: false}') \
         <(pr_json 401 "feat/issue-351" "CONFLICTING" "2026-07-05T10:00:00Z" "") \
-        <(pr_json 402 "feat/issue-352" "MERGEABLE" "2026-07-09T10:00:00Z" "team:revise") \
+        <(pr_json 402 "feat/issue-352" "MERGEABLE" "2026-07-09T10:00:00Z" "AFK:revise") \
         | pr_triage_pick)"
 
     if [ "$(printf '%s' "${out}" | jq -r '.pr')" != "402" ]; then
@@ -434,7 +434,7 @@ EOF
     out="$(jq -s '.' \
         <(pr_json 400 "feat/issue-350" "MERGEABLE" "2026-07-01T10:00:00Z" "") \
         <(pr_json 401 "feat/issue-351" "CONFLICTING" "2026-07-01T10:00:00Z" "") \
-        <(pr_json 402 "feat/issue-352" "MERGEABLE" "2026-07-01T10:00:00Z" "team:revise") \
+        <(pr_json 402 "feat/issue-352" "MERGEABLE" "2026-07-01T10:00:00Z" "AFK:revise") \
         <(pr_json 403 "feat/issue-353" "MERGEABLE" "2026-07-01T10:00:00Z" "" "agent-bot" "true") \
         <(pr_json 404 "feat/issue-354" "MERGEABLE" "2026-07-01T10:00:00Z" "" "some-human") \
         | GH_BIN="${dir}/gh-stub" PR_TRIAGE_AUTHOR="agent-bot" pr_triage_enrich)"

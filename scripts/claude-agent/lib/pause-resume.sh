@@ -2,7 +2,7 @@
 # pause-resume.sh — the Pause/Resume state logic: what to do next window.
 #
 # Sourceable library exposing one pure function, `pause_resume_action`. Given the
-# current GitHub label state — whether a `team:paused` issue exists and how many
+# current GitHub label state — whether an `AFK:paused` issue exists and how many
 # times it has already paused — it decides the single thing the pacing loop needs
 # before it does anything else, and emits a compact JSON verdict:
 #
@@ -10,11 +10,11 @@
 #       "pauseCount": <int> }
 #
 # The action maps onto the PRD's `resume-N | pick-new | fail-N` contract:
-#   resume    → resume-N: hand issue `.issue`'s existing branch to /team-dispatch
+#   resume    → resume-N: hand issue `.issue`'s existing branch to /afk-dispatch
 #               in resume mode (its partial work is preserved, not restarted).
 #   pick-new  → pick-new: no paused work; proceed to the normal fresh pick.
 #   fail      → fail-N:   issue `.issue` has paused too many times; the caller
-#               applies `team:failed` and the loop stops on it.
+#               applies `AFK:failed` and the loop stops on it.
 #
 # The single most important property is the resume-count cap: an issue that has
 # paused `PAUSE_RESUME_CAP` times must `fail` rather than `resume`, so a

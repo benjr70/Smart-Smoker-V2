@@ -72,22 +72,22 @@ issue numbers in the "Blocked by" field.
 First, bootstrap the labels (idempotent — safe to run every time):
 
 ```bash
-gh label create "team" --description "Issue eligible for Level 7 agent team implementation" --color "1D76DB" --force
+gh label create "AFK" --description "Issue eligible for Level 7 agent team implementation" --color "1D76DB" --force
 gh label create "HITL" --description "Requires human in the loop; not eligible for autonomous agent implementation" --color "5319E7" --force
 ```
 
 Then label each issue by type:
 
-- **AFK** slices → add the `team` label so they are eligible for autonomous
-  Level 7 agent-team pickup (`team-pickup` / `team-dispatch`):
-  `gh issue create --label team ...`
+- **AFK** slices → add the `AFK` label so they are eligible for autonomous Level
+  7 agent-team pickup (`afk-pickup` / `afk-dispatch`):
+  `gh issue create --label AFK ...`
 - **HITL** slices → add the `HITL` label so human-required work is filterable
   and excluded from autonomous pickup: `gh issue create --label HITL ...`
 
 <issue-template>
-## Parent PRD
+## Parent
 
-#<prd-issue-number>
+#<parent-spec-issue-number>
 
 ## What to build
 

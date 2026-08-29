@@ -3,7 +3,7 @@
 #
 # Sourceable library exposing one pure function, `exhaustion_classify`. Given the
 # `claude` process exit code and its captured stdout+stderr (piped on stdin), it
-# decides whether a `/team-pickup` fire ended cleanly, was cut off by Claude
+# decides whether a `/afk-pickup` fire ended cleanly, was cut off by Claude
 # usage exhaustion, or genuinely failed, and emits a compact JSON verdict:
 #
 #     { "status": "OK|EXHAUSTED|FAILED", "resetAt": "<iso8601|>" }

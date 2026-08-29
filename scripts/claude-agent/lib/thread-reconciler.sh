@@ -22,7 +22,7 @@
 #   tr_resolve <thread_id>
 #       → marks the thread resolved (GraphQL resolveReviewThread). The human
 #         reopens the thread if the fix missed — that reopening is the signal
-#         to re-apply `team:revise`.
+#         to re-apply `AFK:revise`.
 #
 # All functions shell out through GH_BIN (default `gh`) so tests stub the
 # network away; behavior under test is the arguments passed and the parse of

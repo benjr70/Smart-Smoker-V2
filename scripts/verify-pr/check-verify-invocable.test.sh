@@ -18,7 +18,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 CHECKER="${SCRIPT_DIR}/check-verify-invocable.sh"
 VERIFY_SKILL="${REPO_ROOT}/.claude/skills/verify-pr/SKILL.md"
-PICKUP_SKILL="${REPO_ROOT}/.claude/skills/team-pickup/SKILL.md"
+PICKUP_SKILL="${REPO_ROOT}/.claude/skills/afk-pickup/SKILL.md"
 RECONCILE_SKILL="${REPO_ROOT}/.claude/skills/pr-reconcile/SKILL.md"
 
 TESTS_RUN=0
@@ -54,7 +54,7 @@ fi
 #         and `Agent`-tool subagents can reach the harness (AC 1, behavior 1).
 #-------------------------------------------------------------------------------
 test_real_definitions_pass() {
-    echo "TEST: shipped verify-pr/team-pickup/pr-reconcile satisfy every rule"
+    echo "TEST: shipped verify-pr/afk-pickup/pr-reconcile satisfy every rule"
 
     local out rc
     out="$(bash "${CHECKER}" 2>&1)"
@@ -150,7 +150,7 @@ test_skill_licenses_automated_callers() {
     for phrase in \
         'Skill.{0,4}tool' \
         'Agent.{0,4}tool' \
-        'team-pickup' \
+        'afk-pickup' \
         'pr-reconcile'; do
         if grep -Eqi -- "${phrase}" <<< "${text}"; then
             pass "invocation section mentions: ${phrase}"
@@ -176,13 +176,13 @@ test_skill_licenses_automated_callers() {
 #         all (AC 4, behavior 3).
 #
 #         The asserted phrases are the park block's OWN wording, not the generic
-#         `team:checks-failed` / `gh pr comment` that the older escalation paths
+#         `AFK:checks-failed` / `gh pr comment` that the older escalation paths
 #         in these files already satisfy — including the `gh pr ready --undo`
 #         draft flip, without which PR Triage (pr_triage_pick skips drafts and
 #         PR labels only) re-picks the parked PR as `incomplete` every fire.
 #-------------------------------------------------------------------------------
 test_round_is_non_skippable_in_both_callers() {
-    echo "TEST: team-pickup and pr-reconcile cannot PASS without a round"
+    echo "TEST: afk-pickup and pr-reconcile cannot PASS without a round"
 
     local skill name text phrase
     for skill in "${PICKUP_SKILL}" "${RECONCILE_SKILL}"; do
@@ -194,7 +194,7 @@ test_round_is_non_skippable_in_both_callers() {
             'Manual verification round did not run' \
             'no verification evidence exists for this PR' \
             'gh pr ready "\$PR_NUM" --undo' \
-            'gh pr edit +"\$PR_NUM" --add-label team:checks-failed' \
+            'gh pr edit +"\$PR_NUM" --add-label AFK:checks-failed' \
             'drafting is what takes the PR out of the .{0,4}incomplete.{0,4} class'; do
             if grep -Eqi -- "${phrase}" <<< "${text}"; then
                 pass "${name} carries: ${phrase}"
