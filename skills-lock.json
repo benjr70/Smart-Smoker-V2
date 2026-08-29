@@ -14,7 +14,30 @@
     "tdd": {
       "source": "mattpocock/skills",
       "sourceType": "github",
-      "computedHash": "ad055544599481182d0079c4198e85da26677cb408a677be2da04915375f0427"
+      "computedHash": "234d94e74b869b5f1985c617c75ba0f77b93367b21cd0cfee57a05b417e41c49",
+      "forked": true,
+      "note": "Repo-owned fork of mattpocock/skills; deliberately diverged. computedHash pins the local content so a sync reports it up to date instead of restoring upstream. See .claude/skills/SKILLS.md."
+    },
+    "to-spec": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "computedHash": "b3d6cf2b042a5553eb869e1008451ab2f3594836ee98f18c89375f6139d6c4b6",
+      "forked": true,
+      "note": "Repo-owned fork of mattpocock/skills; deliberately diverged. computedHash pins the local content so a sync reports it up to date instead of restoring upstream. See .claude/skills/SKILLS.md."
+    },
+    "to-tickets": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "computedHash": "2028d5f06821e8f2702dc21b69201521f5e7692d55443883351427537825114b",
+      "forked": true,
+      "note": "Repo-owned fork of mattpocock/skills; deliberately diverged. computedHash pins the local content so a sync reports it up to date instead of restoring upstream. See .claude/skills/SKILLS.md."
+    },
+    "wayfinder": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "computedHash": "7ec34536762f10d26339b5142def1269626916a890c5a7785212c6fc667455f2",
+      "forked": true,
+      "note": "Repo-owned fork of mattpocock/skills; deliberately diverged. computedHash pins the local content so a sync reports it up to date instead of restoring upstream. See .claude/skills/SKILLS.md."
     }
   }
 }

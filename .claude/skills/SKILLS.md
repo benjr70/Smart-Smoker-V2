@@ -17,16 +17,33 @@ with `/skill-name`.
 AFK (Level 7) has **no bootstrap script** — `/afk-dispatch` self-bootstraps
 labels + pre-flight on every run.
 
-**Upstream provenance and `skills-lock.json`.** The lock file tracks only the
-skills still synced verbatim from
-[mattpocock/skills](https://github.com/mattpocock/skills) (`grill-me`,
-`improve-codebase-architecture`, `tdd`). `to-spec`, `to-tickets` and `wayfinder`
-are **repo-owned forks**: they diverge deliberately (harness labels, Project #1,
-native dependencies) and must never be re-synced, so they carry no lock entry.
-`tdd` is likewise locally extended (CONTEXT.md/ADR pointer, `codebase-design`
-reference, repo `deep-modules.md`), so treat any hash drift reported against it
-as expected and re-apply the local extensions after any upstream refresh — do
-not let a sync clobber them.
+**Upstream provenance and `skills-lock.json`.** The root `skills-lock.json`
+records every skill pulled from
+[mattpocock/skills](https://github.com/mattpocock/skills). It is written by the
+[`skills`](https://www.npmjs.com/package/skills) CLI, whose `computedHash` is a
+SHA-256 over the skill folder's sorted `relativePath + file bytes` — i.e. the
+hash of the **local** folder as installed, not an upstream fingerprint. The CLI
+reinstalls (and so overwrites) any skill whose folder no longer hashes to its
+lock entry.
+
+Two classes of entry live in the lock:
+
+| Class          | Entries                                     | `forked` | Meaning                                                                                                      |
+| -------------- | ------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
+| Upstream-track | `grill-me`, `improve-codebase-architecture` | absent   | Synced verbatim. Hash drift is a signal to **re-sync from upstream**.                                        |
+| Repo-owned     | `tdd`, `to-spec`, `to-tickets`, `wayfinder` | `true`   | Deliberately diverged. Hash is pinned to the local content so a sync sees "up to date" and does not clobber. |
+
+`to-spec`, `to-tickets` and `wayfinder` are forks carrying harness labels,
+Project #1 wiring and native dependencies; `tdd` is locally extended
+(CONTEXT.md/ADR pointer, `codebase-design` reference, repo `deep-modules.md`).
+When you intentionally edit any repo-owned skill, refresh its `computedHash`
+with the CLI's own algorithm rather than hand-writing a value, and keep
+`forked: true` in place.
+
+`forked` and `note` are **repo conventions**, not upstream lock schema — the CLI
+parses the lock as plain JSON and ignores unknown keys, but it rewrites an entry
+wholesale if it ever reinstalls that skill, which would drop both fields. Re-add
+them if that happens.
 
 ---
 
@@ -90,7 +107,8 @@ interfaces, mocking strategies, interface design for testability, and
 refactoring patterns. Prevents the anti-pattern of writing all tests first then
 all implementation.
 
-**Source:** Custom (project-specific)
+**Source:** [mattpocock/skills](https://github.com/mattpocock/skills), locally
+extended (repo-owned fork — see `skills-lock.json`).
 
 ---
 
