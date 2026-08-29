@@ -32,6 +32,31 @@ on:
       # `apps/**` / `packages/**` entries above (`package.json` alone matches
       # only the root file).
       - '**/package.json'
+      # For the `backend-env-contract` job below: the backend env template
+      # and the suite that guards it. `apps/**` above already covers the
+      # backend source the suite derives its expectations from.
+      - 'apps/backend/.env.example'
+      - 'scripts/backend-env-example.test.sh'
+      # The dotenv ignore rule the suite asserts on (Test 7) and every compose
+      # file it scans for `env_file:` directives (Test 6), wherever they live —
+      # a PR that only edits a root or `e2e/` compose file matches none of the
+      # entries above, and that is precisely the change the env_file guard
+      # exists to catch. Kept a superset of the suite's own
+      # `git ls-files '*docker-compose*'` discovery so the two cannot drift.
+      - '.gitignore'
+      - '**docker-compose*.yml'
+      - '**docker-compose*.yaml'
+      # Test 9 of that suite scans the *whole* tracked tree for the VAPID
+      # private key that leaked in the deleted backend dev dotenv — the copies
+      # it was written to catch lived in `scripts/`, which none of the entries
+      # above match. These cover the tracked text that sits outside
+      # `apps/**` / `packages/**`;
+      # GitHub push protection is the backstop for anywhere else.
+      - 'scripts/**'
+      - 'docs/**'
+      - 'infra/**'
+      - 'e2e/**'
+      - '**/*.md'
   push:
     branches: [master]
 
@@ -88,6 +113,19 @@ jobs:
 
       - name: Run repo shape suite
         run: bash scripts/repo-shape.test.sh
+
+  # Guards the backend environment contract (#568): the leaked backend dev
+  # dotenv stays deleted, `apps/backend/.env.example` stays committed and
+  # value-free, and every `process.env.*` the backend reads stays documented in
+  # it. Pure bash + git, so no workspace install is needed.
+  backend-env-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run backend env template suite
+        run: bash scripts/backend-env-example.test.sh
 
   # Run tests for all applications
   test-apps:
