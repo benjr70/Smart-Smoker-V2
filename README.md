@@ -6,10 +6,11 @@
 [![Docs](https://github.com/benjr70/Smart-Smoker-V2/actions/workflows/docs.yml/badge.svg)](https://github.com/benjr70/Smart-Smoker-V2/actions/workflows/docs.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-![Placeholder — the smoker kiosk running a cook on the pit](docs/images/readme/smoker-kiosk.png)
+![The smoker kiosk following a brisket cook — live probe readings, completion estimate, temperature history with cook-log markers](docs/images/readme/smoker-kiosk.png)
 
-_Heads up: the three images on this page are labelled placeholder cards, not
-real captures. The ones still awaiting a photo are listed in
+_The two app screenshots on this page are real captures of the running software.
+The hardware photo is still a placeholder card; the images awaiting a real photo
+are listed in
 [`docs/images/readme/PLACEHOLDERS.txt`](docs/images/readme/PLACEHOLDERS.txt)._
 
 Smart Smoker V2 turns a backyard smoker into a connected appliance. A
@@ -44,7 +45,7 @@ brisket starts from evidence instead of memory.
 - **Deployed for real** — multi-arch Docker images (amd64 + arm/v7), Terraform
   and Ansible for the Proxmox host, and an automated release train.
 
-![Placeholder — the web app following a cook in progress](docs/images/readme/web-app.png)
+![The web app on a phone, following the same cook in real time](docs/images/readme/web-app.png)
 
 ## Architecture
 
