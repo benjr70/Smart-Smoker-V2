@@ -11,6 +11,7 @@ the IO collectors (fetch_maps, fetch_prs) are thin wrappers around these.
 
 import importlib.util
 import os
+import re
 import tempfile
 import unittest
 
@@ -80,6 +81,23 @@ class FireKindTests(unittest.TestCase):
             "docs-merge: PR #601 deadbeef\n"
         )
         self.assertEqual(fire["kind"], "research")
+
+    def test_resolve_grilling_and_prototype_keep_their_own_kind(self):
+        # Four non-map wayfinder types exist; badging grilling as "research"
+        # would tell the maintainer the wrong kind of work happened.
+        self.assertEqual(
+            self.parse("resolve:  #578 grilling theming-tokens\n")["kind"], "grilling"
+        )
+        self.assertEqual(
+            self.parse("resolve:  #579 prototype chart-spike\n")["kind"], "prototype"
+        )
+
+    def test_unknown_or_unparseable_resolve_type_is_generic_resolve(self):
+        for block in (
+            "resolve:  #580 sideways some-slug\n",   # unknown type word
+            "resolve:  no issue number here\n",      # regex miss
+        ):
+            self.assertEqual(self.parse(block)["kind"], "resolve", block)
 
     def test_no_work_fire_has_no_kind(self):
         fire = self.parse("AGENT_RUN_NO_WORK=1\n")
@@ -235,6 +253,182 @@ class MapsShapingTests(unittest.TestCase):
     def test_empty_payload_yields_no_maps(self):
         empty = {"data": {"repository": {"issues": {"nodes": []}}}}
         self.assertEqual(srv.shape_maps(empty)["items"], [])
+
+
+def child(number, **kw):
+    """A sub-issue node with frontier-eligible defaults."""
+    node = {
+        "number": number,
+        "title": f"Ticket {number}",
+        "url": f"https://github.com/o/r/issues/{number}",
+        "state": "OPEN",
+        "body": "",
+        "assignees": {"nodes": []},
+        "labels": {"nodes": [{"name": "AFK"}]},
+        "blockedBy": {"nodes": []},
+    }
+    node.update(kw)
+    return node
+
+
+def payload(children, **subs):
+    sub = {"nodes": children}
+    sub.update(subs)
+    return {"data": {"repository": {"issues": {"nodes": [
+        {"number": 1, "title": "Map", "url": "u", "body": "", "subIssues": sub},
+    ]}}}}
+
+
+class BodyTextBlockerTests(unittest.TestCase):
+    """prd-to-issues slices declare blockers only in the body — the native
+    dependency graph is empty for them (docs/research/afk-planning-front-end/
+    github-dependency-apis.md), so a body-blocked slice must not be sold to the
+    phone as "ready to be worked next"."""
+
+    def frontier(self, children, states=None):
+        maps = srv.shape_maps(payload(children), states)["items"]
+        return [t["number"] for t in maps[0]["frontier"]]
+
+    def test_body_blocker_open_in_same_payload_drops_the_child(self):
+        # #561's "Blocked by #559" with blockedBy.totalCount == 0 natively.
+        blocked = child(561, body="## Blocked by\n\n- Blocked by #559\n")
+        self.assertEqual(self.frontier([child(559), blocked]), [559])
+
+    def test_body_blocker_closed_in_same_payload_keeps_the_child(self):
+        blocked = child(561, body="Blocked by #559\n")
+        self.assertEqual(
+            self.frontier([child(559, state="CLOSED"), blocked]), [561]
+        )
+
+    def test_body_blocker_state_supplied_by_lookup(self):
+        blocked = child(561, body="Blocked by #999\n")
+        self.assertEqual(self.frontier([blocked], {999: "CLOSED"}), [561])
+        self.assertEqual(self.frontier([blocked], {999: "OPEN"}), [])
+
+    def test_unknown_body_blocker_fails_safe_as_blocked(self):
+        self.assertEqual(self.frontier([child(561, body="Blocked by #999\n")]), [])
+
+    def test_unresolved_body_blockers_lists_only_unknown_numbers(self):
+        pl = payload([
+            child(559, state="CLOSED"),
+            child(561, body="Blocked by #559 and Blocked by #999\n"),
+        ])
+        self.assertEqual(srv.unresolved_body_blockers(pl), [999])
+
+    def test_body_blockers_parses_numbers_once_in_order(self):
+        self.assertEqual(
+            srv.body_blockers("Blocked by #12\nBlocked by  #7\nBlocked by #12"),
+            [12, 7],
+        )
+        self.assertEqual(srv.body_blockers(None), [])
+
+
+class DestinationParsingTests(unittest.TestCase):
+    """The Destination line is what the phone reads under a map's title."""
+
+    def dest(self, body):
+        pl = {"data": {"repository": {"issues": {"nodes": [
+            {"number": 1, "title": "m", "url": "u", "body": body,
+             "subIssues": {"nodes": []}},
+        ]}}}}
+        return srv.shape_maps(pl)["items"][0]["destination"]
+
+    def test_prose_starting_with_the_word_destination_is_not_a_destination(self):
+        self.assertEqual(self.dest("Destinations are still being scoped\n"), "")
+
+    def test_empty_destination_section_does_not_swallow_the_next_heading(self):
+        self.assertEqual(self.dest("## Destination\n\n## Frontier\n- #2\n"), "")
+
+    def test_heading_form_reads_the_following_sentence(self):
+        self.assertEqual(
+            self.dest("## Destination\n\nA spec ready for /to-tickets.\n"),
+            "A spec ready for /to-tickets.",
+        )
+
+
+class MapsTruncationTests(unittest.TestCase):
+    """A partial list must say so — silently showing 20 of 40 maps makes the
+    tile and the card disagree with no explanation."""
+
+    def test_total_count_wins_over_the_page_length(self):
+        pl = payload([])
+        pl["data"]["repository"]["issues"]["totalCount"] = 42
+        pl["data"]["repository"]["issues"]["pageInfo"] = {"hasNextPage": True}
+        shaped = srv.shape_maps(pl)
+        self.assertEqual(shaped["total"], 42)
+        self.assertTrue(shaped["truncated"])
+        self.assertEqual(srv.shape_wayfinder({"openMaps": 1}, shaped)["maps"], 42)
+
+    def test_truncated_sub_issues_flag_the_map_and_the_card(self):
+        shaped = srv.shape_maps(
+            payload([child(2)], totalCount=99, pageInfo={"hasNextPage": True})
+        )
+        self.assertTrue(shaped["items"][0]["partial"])
+        self.assertTrue(shaped["truncated"])
+
+    def test_complete_lists_are_not_flagged(self):
+        shaped = srv.shape_maps(
+            payload([child(2)], totalCount=1, pageInfo={"hasNextPage": False})
+        )
+        self.assertFalse(shaped["items"][0]["partial"])
+        self.assertFalse(shaped["truncated"])
+
+
+class WayfinderTileTests(unittest.TestCase):
+    """Unknown is not zero: a failed maps call must not read as a clear
+    frontier on the phone."""
+
+    def test_failed_maps_call_reports_unknown_not_zero(self):
+        tile = srv.shape_wayfinder(
+            {"openMaps": 3, "slices": 2, "wayfinder": 1},
+            {"stale": True, "error": "gh exit 1: boom"},
+        )
+        self.assertTrue(tile["unknown"])
+        self.assertIsNone(tile["frontier"])
+        self.assertIsNone(tile["afk"])
+        self.assertEqual(tile["maps"], 3)
+
+    def test_empty_cache_entry_reports_unknown(self):
+        tile = srv.shape_wayfinder({}, {})
+        self.assertTrue(tile["unknown"])
+        self.assertIsNone(tile["frontier"])
+        self.assertIsNone(tile["maps"])
+
+    def test_good_maps_report_real_counts(self):
+        shaped = srv.shape_maps(MAPS_PAYLOAD)
+        shaped["error"] = None
+        tile = srv.shape_wayfinder({"slices": 4, "wayfinder": 2}, shaped)
+        self.assertFalse(tile["unknown"])
+        self.assertEqual((tile["maps"], tile["frontier"], tile["afk"]), (1, 2, 1))
+        self.assertEqual((tile["queueSlices"], tile["queueWayfinder"]), (4, 2))
+
+
+class KindBadgeStyleTests(unittest.TestCase):
+    """kindBadge emits `<span class="badge kind COLOUR">`, so every colour it
+    can emit needs a `.badge.COLOUR` rule — otherwise the badge renders in the
+    default grey and reads like the neutral `idle` badge."""
+
+    def setUp(self):
+        with open(os.path.join(HERE, "index.html")) as f:
+            self.html = f.read()
+        # KIND_LABELS entries look like: research: ["research", "purple"],
+        self.colours = set(
+            re.findall(r'\w+:\s*\["[^"]*",\s*"(\w*)"\]', self.html)
+        )
+
+    def test_every_kind_colour_has_a_badge_rule(self):
+        self.assertIn("purple", self.colours)
+        for colour in self.colours:
+            if not colour:
+                continue
+            self.assertRegex(
+                self.html, r"\.badge\.%s\s*\{" % colour,
+                f"no .badge.{colour} rule for kind colour {colour}",
+            )
+
+    def test_no_dead_chip_purple_rule(self):
+        # .chip.purple was never emitted anywhere — dead CSS.
+        self.assertNotIn(".chip.purple", self.html)
 
 
 class DocsOnlyBadgeTests(unittest.TestCase):

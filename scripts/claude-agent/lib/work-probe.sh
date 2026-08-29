@@ -133,7 +133,9 @@ wp_scan() {
         | jq '[.[] | select(.labels | any(startswith("wayfinder:")) | not)] | length' \
         2>/dev/null || echo 0)"
 
-    open_maps="$("${gh}" issue list --label wayfinder:map --state open \
+    # --limit is explicit: gh defaults to 30, which would silently under-count
+    # the dashboard's map total once the repo passes 30 open maps.
+    open_maps="$("${gh}" issue list --label wayfinder:map --state open --limit 200 \
         --json number --jq 'length' 2>/dev/null || echo 0)"
     case "${open_maps}" in
         ''|*[!0-9]*) open_maps=0 ;;

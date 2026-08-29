@@ -24,9 +24,11 @@ Data sources (no state files exist; everything is journal + logs + gh):
   - Fire history: ~/claude-agent/logs/afk-pickup-<TS>.log (pre-rename fires
     kept the team-pickup- prefix; both are read), ordered by embedded
     timestamp. Each fire carries a `kind` derived from its block lines:
-    slice / research / task / reconcile.
+    slice / reconcile / resolve, the last narrowed to the wayfinder type it
+    resolved (research / task / grilling / prototype).
   - Maps: one `gh api graphql` call for open `wayfinder:map` issues and their
-    sub-issues, cached 5 minutes — the frontier moves on human time.
+    sub-issues, cached 5 minutes — the frontier moves on human time. A second
+    call fires only when a sub-issue declares blockers in prose alone.
 
 Every collector degrades independently: on failure the section keeps its last
 good value flagged stale:true with the error string — /api/status never 500s.
@@ -309,19 +311,26 @@ _BLOCK_LINE_RE = re.compile(
     r"|resolve|docs-merge):\s{1,}(.+)$",
     re.M,
 )
-# `resolve: #<n> <research|task> <slug>` — the word after the issue number is
-# the wayfinder ticket type written by /afk-resolve.
+# `resolve: #<n> <type> <slug>` — the word after the issue number is the
+# wayfinder ticket type written by /afk-resolve. The repo has four non-map
+# types; anything else (or an unparseable line) stays the generic "resolve"
+# rather than being mislabelled as research.
 _RESOLVE_TYPE_RE = re.compile(r"^#\d+\s+(\w+)")
+WAYFINDER_TYPES = ("research", "task", "grilling", "prototype")
 _HARD_FAIL_RE = re.compile(r"^agent-run: FAILED — exit (\d+)$", re.M)
 _PAUSED_RE = re.compile(r"^agent-run: paused #(\d+)", re.M)
 _RESET_RE = re.compile(r"^AGENT_RUN_RESET_AT=(\S+)$", re.M)
 
 
 def fire_kind(steps):
-    """What the fire WAS, from its block lines: slice/research/task/reconcile.
+    """What the fire WAS, from its block lines: slice/reconcile or the
+    wayfinder type it resolved (research/task/grilling/prototype).
 
     `resolve:` wins over `docs-merge:` because /afk-resolve merges its own
-    docs-only PR — such a fire is still the research (or task) it resolved.
+    docs-only PR — such a fire is still the ticket it resolved. The type is
+    read verbatim from the line and only accepted when it is one of the repo's
+    wayfinder types; an unknown or unparseable type badges as the neutral
+    "resolve" so the phone never claims research that did not happen.
     A bare `docs-merge:` (the pr-triage reason for an orphaned docs-only PR)
     and the existing `reconcile:` line are both PR reconciliation. Fires with
     no work block (no-work / crashed) have no kind at all.
@@ -329,7 +338,8 @@ def fire_kind(steps):
     resolve = steps.get("resolve")
     if resolve:
         m = _RESOLVE_TYPE_RE.match(resolve.strip())
-        return "task" if m and m.group(1).lower() == "task" else "research"
+        kind = m.group(1).lower() if m else ""
+        return kind if kind in WAYFINDER_TYPES else "resolve"
     if steps.get("docs-merge") or steps.get("reconcile"):
         return "reconcile"
     if steps.get("picked") or steps.get("dispatch"):
@@ -453,19 +463,33 @@ def fetch_prs():
 
 # A map's Destination is written by /wayfinder as a `## Destination` heading
 # (text on the following line) or, in older maps, an inline `**Destination**:`.
-_DEST_RE = re.compile(r"^[#*\s]*Destination\**\s*:?\s*(.*)$", re.I)
+# The word must END the label — bare (heading form) or followed by a colon —
+# so prose like "Destinations are still being scoped" is not a Destination.
+_DEST_RE = re.compile(
+    r"^(?:#{1,6}\s*)?\*{0,2}Destination\*{0,2}\s*(?::\s*(.*))?$", re.I
+)
 _WAYFINDER_TYPE_RE = re.compile(r"^wayfinder:(.+)$")
+# Body-text dependency, still the only form prd-to-issues slices use — the
+# native dependency graph is empty for them (docs/research/afk-planning-front-end
+# /github-dependency-apis.md). Same regex the picker used: `Blocked by #N`.
+_BODY_BLOCKER_RE = re.compile(r"Blocked by\s+#(\d+)", re.I)
 
+# first: 100 is GraphQL's per-page maximum; totalCount is exact regardless of
+# the page, so the card can say when its own list is partial.
 MAPS_QUERY = """
 query($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
-    issues(first: 20, labels: ["wayfinder:map"], states: OPEN,
+    issues(first: 100, labels: ["wayfinder:map"], states: OPEN,
            orderBy: {field: CREATED_AT, direction: DESC}) {
+      totalCount
+      pageInfo { hasNextPage }
       nodes {
         number title url body
-        subIssues(first: 50) {
+        subIssues(first: 100) {
+          totalCount
+          pageInfo { hasNextPage }
           nodes {
-            number title url state
+            number title url state body
             assignees(first: 5) { nodes { login } }
             labels(first: 30) { nodes { name } }
             blockedBy(first: 20) { nodes { number state } }
@@ -490,36 +514,106 @@ def _destination(body):
         m = _DEST_RE.match(line.strip())
         if not m:
             continue
-        value = m.group(1).strip()
+        value = (m.group(1) or "").strip()
         if not value:  # heading form — the sentence is on a following line
             for nxt in lines[i + 1:]:
-                if nxt.strip():
-                    value = nxt.strip()
-                    break
+                nxt = nxt.strip()
+                if not nxt:
+                    continue
+                # An empty Destination section: the next heading is the NEXT
+                # section, never this map's destination.
+                value = "" if nxt.startswith("#") else nxt
+                break
         return value.replace("**", "").strip()
     return ""
 
 
-def shape_maps(payload):
+def body_blockers(body):
+    """Issue numbers a body declares as blockers, in order, de-duplicated."""
+    numbers = []
+    for m in _BODY_BLOCKER_RE.finditer(body or ""):
+        n = int(m.group(1))
+        if n not in numbers:
+            numbers.append(n)
+    return numbers
+
+
+def _payload_children(payload):
+    """Every sub-issue node of every map in a GraphQL payload."""
+    nodes = (
+        ((payload or {}).get("data") or {}).get("repository") or {}
+    ).get("issues") or {}
+    for mp in nodes.get("nodes") or []:
+        for child in ((mp.get("subIssues") or {}).get("nodes") or []):
+            yield child
+
+
+def _states_in_payload(payload):
+    """number -> state for every issue the payload already reveals a state for.
+
+    Sub-issues carry their own state and native blockers carry theirs, so a
+    slice blocked by a sibling slice needs no extra API call.
+    """
+    states = {}
+    for child in _payload_children(payload):
+        if child.get("number") is not None and child.get("state"):
+            states.setdefault(child["number"], child["state"])
+        for b in ((child.get("blockedBy") or {}).get("nodes") or []):
+            if b.get("number") is not None and b.get("state"):
+                states.setdefault(b["number"], b["state"])
+    return states
+
+
+def unresolved_body_blockers(payload):
+    """Body-declared blocker numbers whose state the payload does not reveal."""
+    known = _states_in_payload(payload)
+    wanted = []
+    for child in _payload_children(payload):
+        for n in body_blockers(child.get("body")):
+            if n not in known and n not in wanted:
+                wanted.append(n)
+    return sorted(wanted)
+
+
+def shape_maps(payload, states=None):
     """Pure: GraphQL payload -> open maps, each with its frontier tickets.
 
     Frontier = sub-issues that are open, unassigned (a human claim keeps the
     daemon and this card out of it) and not blocked by an open issue — i.e.
     exactly what could be worked next.
+
+    Blockers are read from BOTH GitHub's native dependency graph and the
+    body-text `Blocked by #N` form, because prd-to-issues slices declare their
+    dependencies only in prose (the research note above). `states` supplies the
+    state of prose blockers the payload itself does not reveal; an unknown
+    blocker counts as OPEN — the card fails safe (hides work) rather than
+    calling blocked work "ready to be worked next".
+
+    The map list and each frontier list are also flagged when GitHub paged the
+    result, so a partial view is never shown as the whole truth.
     """
     nodes = (
         ((payload or {}).get("data") or {}).get("repository") or {}
     ).get("issues") or {}
+    known = dict(_states_in_payload(payload))
+    for n, state in (states or {}).items():
+        known[n] = state
     items = []
     for mp in nodes.get("nodes") or []:
         frontier = []
-        for child in ((mp.get("subIssues") or {}).get("nodes") or []):
+        subs = mp.get("subIssues") or {}
+        for child in (subs.get("nodes") or []):
             if child.get("state") != "OPEN":
                 continue
             if (child.get("assignees") or {}).get("nodes"):
                 continue
             blockers = (child.get("blockedBy") or {}).get("nodes") or []
             if any(b.get("state") == "OPEN" for b in blockers):
+                continue
+            if any(
+                known.get(n, "OPEN") == "OPEN"
+                for n in body_blockers(child.get("body"))
+            ):
                 continue
             labels = [
                 l.get("name") for l in ((child.get("labels") or {}).get("nodes") or [])
@@ -540,6 +634,10 @@ def shape_maps(payload):
                              "HITL" if "HITL" in labels else None,
                 }
             )
+        sub_total = subs.get("totalCount")
+        sub_partial = bool((subs.get("pageInfo") or {}).get("hasNextPage")) or (
+            isinstance(sub_total, int) and sub_total > len(subs.get("nodes") or [])
+        )
         items.append(
             {
                 "number": mp.get("number"),
@@ -547,9 +645,46 @@ def shape_maps(payload):
                 "url": mp.get("url"),
                 "destination": _destination(mp.get("body")),
                 "frontier": frontier,
+                "partial": sub_partial,
             }
         )
-    return {"items": items}
+    total = nodes.get("totalCount")
+    truncated = bool((nodes.get("pageInfo") or {}).get("hasNextPage")) or any(
+        m["partial"] for m in items
+    )
+    return {
+        "items": items,
+        # totalCount is exact even when the node list was paged, so the tile's
+        # map count and this card's list can never disagree silently.
+        "total": total if isinstance(total, int) else len(items),
+        "truncated": truncated,
+    }
+
+
+def fetch_blocker_states(numbers):
+    """State of issues referenced only as prose `Blocked by #N`, in one call."""
+    if not numbers:
+        return {}
+    owner, _, name = GH_REPO.partition("/")
+    fields = " ".join(
+        f"i{n}: issue(number: {n}) {{ number state }}" for n in numbers[:80]
+    )
+    query = (
+        "query($owner: String!, $name: String!) { "
+        f"repository(owner: $owner, name: $name) {{ {fields} }} }}"
+    )
+    out = run(
+        ["gh", "api", "graphql",
+         "-f", f"query={query}",
+         "-F", f"owner={owner}", "-F", f"name={name}"],
+        timeout=30,
+    )
+    repo = ((json.loads(out).get("data") or {}).get("repository") or {})
+    return {
+        v["number"]: v["state"]
+        for v in repo.values()
+        if isinstance(v, dict) and v.get("number") is not None and v.get("state")
+    }
 
 
 def fetch_maps():
@@ -560,18 +695,37 @@ def fetch_maps():
          "-F", f"owner={owner}", "-F", f"name={name}"],
         timeout=30,
     )
-    return shape_maps(json.loads(out))
+    payload = json.loads(out)
+    try:
+        # Only fires when a slice declares blockers in prose alone.
+        states = fetch_blocker_states(unresolved_body_blockers(payload))
+    except Exception:
+        states = {}  # unknown blockers read as OPEN: hide, never over-promise
+    return shape_maps(payload, states)
 
 
 def shape_wayfinder(scan, maps):
-    """Pure: the one-line Wayfinder tile — "N maps · M frontier · K AFK"."""
-    items = (maps or {}).get("items") or []
+    """Pure: the one-line Wayfinder tile — "N maps · M frontier · K AFK".
+
+    When the maps call failed (cached() hands back {} or a stale value with
+    `error` set) the counts are UNKNOWN, not zero: they come back as None with
+    `unknown: true` so the tile renders "?" instead of telling the maintainer
+    the frontier is clear when the truth was never fetched. `truncated` says
+    the fetched list itself was partial.
+    """
+    maps = maps or {}
+    unknown = bool(maps.get("error")) or maps.get("items") is None
+    items = maps.get("items") or []
     frontier = [t for m in items for t in m.get("frontier") or []]
-    open_maps = (scan or {}).get("openMaps")
+    total = maps.get("total")
+    open_maps = total if isinstance(total, int) else (scan or {}).get("openMaps")
     return {
-        "maps": open_maps if isinstance(open_maps, int) else len(items),
-        "frontier": len(frontier),
-        "afk": len([t for t in frontier if t.get("badge") == "AFK"]),
+        "maps": open_maps if isinstance(open_maps, int) else None,
+        "frontier": None if unknown else len(frontier),
+        "afk": None if unknown
+               else len([t for t in frontier if t.get("badge") == "AFK"]),
+        "unknown": unknown,
+        "truncated": bool(maps.get("truncated")),
         "queueSlices": (scan or {}).get("slices"),
         "queueWayfinder": (scan or {}).get("wayfinder"),
     }

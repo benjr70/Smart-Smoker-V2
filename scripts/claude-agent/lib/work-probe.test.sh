@@ -45,7 +45,7 @@ case "\${args}" in
     *"api user"*)                cat "${dir}/login.out" ;;
     *"--label AFK:in-progress"*) cat "${dir}/locked.out" ;;
     *"--label AFK:paused"*)     cat "${dir}/paused.out" ;;
-    *"--label wayfinder:map"*)   cat "${dir}/maps.out" ;;
+    *"--label wayfinder:map"*)   echo "\${args}" >> "${dir}/gh-args.log"; cat "${dir}/maps.out" ;;
     *"issue list --label AFK "*) cat "${dir}/picks.out" ;;
     *"pr list"*)                 cat "${dir}/prs.out" ;;
     *"pr view"*)                 cat "${dir}/prview.out" ;;
@@ -579,6 +579,30 @@ test_scan_counts_open_maps() {
 }
 
 #-------------------------------------------------------------------------------
+# Test 22b: the map count asks for an explicit --limit. gh's default is 30, so
+# without it the dashboard's map total silently under-reports past 30 maps.
+#-------------------------------------------------------------------------------
+test_scan_map_count_sets_explicit_limit() {
+    echo "TEST: wp_scan passes an explicit --limit to the map count"
+
+    local dir; dir="$(make_env)"
+    trap "rm -rf '${dir}'" RETURN
+    echo "2" > "${dir}/maps.out"
+
+    GH_BIN="${dir}/gh-stub" wp_scan >/dev/null
+    local args; args="$(cat "${dir}/gh-args.log" 2>/dev/null || true)"
+    case "${args}" in
+        *"--limit"*) ;;
+        *)
+            fail "map count must pass --limit" "args=${args}"
+            return
+            ;;
+    esac
+
+    pass "wp_scan passes an explicit --limit to the map count"
+}
+
+#-------------------------------------------------------------------------------
 # Test 23: the queue and map queries fail SAFE — a gh error must scan as an
 # empty queue with zero counts, never crash the probe or emit invalid JSON.
 #-------------------------------------------------------------------------------
@@ -630,6 +654,7 @@ test_scan_incomplete_pr_sets_reconcile
 test_scan_bot_complete_pr_no_reconcile
 test_scan_splits_slices_and_wayfinder
 test_scan_counts_open_maps
+test_scan_map_count_sets_explicit_limit
 test_scan_queue_error_reads_empty
 
 echo ""

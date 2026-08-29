@@ -81,7 +81,7 @@
   a.front { display: block; text-decoration: none; color: inherit; font-size: 13px; padding: 2px 0; }
   a.front .title { color: var(--blue); }
   .chip.blue { background: #1a2a3d; color: var(--blue); }
-  .chip.purple { background: #2d1f3d; color: #c9a6ff; }
+  .badge.purple { background: #2d1f3d; color: #c9a6ff; }
   .badge.kind { font-size: 11px; padding: 1px 8px; }
 </style>
 </head>
@@ -172,6 +172,9 @@ const KIND_LABELS = {
   slice: ["slice", "blue"],
   research: ["research", "purple"],
   task: ["task", "purple"],
+  grilling: ["grilling", "purple"],
+  prototype: ["prototype", "purple"],
+  resolve: ["resolve", "purple"],
   reconcile: ["reconcile", "amber"],
 };
 const kindBadge = k => {
@@ -206,10 +209,17 @@ function render() {
   }
   const w = data.wayfinder;
   if (w) {
+    // Unknown (maps call failed) must read "?" — never 0, which would claim a
+    // clear frontier the server never actually fetched.
+    const n = v => v == null ? "?" : v;
+    const note = w.unknown ? "frontier unknown — maps unavailable"
+      : w.truncated ? "partial list — more maps/tickets than shown"
+      : w.queueSlices == null ? ""
+      : `queue: ${w.queueSlices} slices · ${w.queueWayfinder} wayfinder`;
     tiles += `<div class="tile">
       <div class="label">Wayfinder</div>
-      <div class="num" style="font-size:20px">${w.maps} maps · ${w.frontier} frontier · ${w.afk} AFK</div>
-      <div class="sub">${w.queueSlices == null ? "" : `queue: ${w.queueSlices} slices · ${w.queueWayfinder} wayfinder`}</div>
+      <div class="num" style="font-size:20px">${n(w.maps)} maps · ${n(w.frontier)} frontier · ${n(w.afk)} AFK</div>
+      <div class="sub">${note}</div>
     </div>`;
   }
   document.getElementById("tiles").innerHTML =
@@ -287,12 +297,16 @@ function render() {
       return `<a class="front" href="${esc(t.url || "#")}" target="_blank" rel="noopener">
         #${t.number} <span class="title">${esc(t.title)}</span> ${type}${badge}</a>`;
     }).join("") || `<div class="kv">frontier clear — nothing ready</div>`;
+    const partial = m.partial ? `<div class="kv">partial — more sub-issues than shown</div>` : "";
     return `<div class="map">
       <a class="pr" href="${esc(m.url || "#")}" target="_blank" rel="noopener">
         <b>#${m.number}</b> <span class="title">${esc(m.title)}</span></a>
       ${m.destination ? `<div class="dest">${esc(m.destination)}</div>` : ""}
-      ${front}</div>`;
-  }).join("") : `<div class="kv">no open maps</div>`) +
+      ${front}${partial}</div>`;
+  }).join("") : ((data.maps || {}).error
+      ? `<div class="kv">maps unavailable — frontier unknown</div>`
+      : `<div class="kv">no open maps</div>`)) +
+    ((data.maps || {}).truncated ? `<div class="kv">partial list — more maps or frontier tickets exist than shown</div>` : "") +
     ((data.maps || {}).error ? `<div class="err">${esc(data.maps.error)}</div>` : "");
 
   // fire history
