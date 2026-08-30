@@ -157,6 +157,11 @@ const inheritedProvenance = (target: number): TargetSource =>
  * missing from it falls back to its default. One function so the read path, the
  * write path and the alert engine can never disagree about what "unset" means.
  *
+ * What "its default" means is the caller's to say. Reading a document, it is
+ * what the installation ships with. Merging what a client sent, it is what the
+ * installation already has stored — a field the client did not send is a field
+ * it is silent about, not one it asked to reset. See `saveSettings`.
+ *
  * Each field is named rather than copied wholesale, because what arrives here is
  * usually a Mongoose document: its nested blocks are subdocuments whose own
  * enumerable properties are persistence internals (`$__`, `_doc`, …), not the
@@ -166,6 +171,7 @@ const inheritedProvenance = (target: number): TargetSource =>
  */
 export const withSettingsDefaults = (
   stored: Partial<ApplicationSettings> | null | undefined,
+  defaults: ApplicationSettings = DEFAULT_APPLICATION_SETTINGS,
 ): ApplicationSettings => {
   const chamber = stored?.chamber;
   const probeTarget = stored?.probeTarget;
@@ -176,7 +182,6 @@ export const withSettingsDefaults = (
   const autoStop = stored?.autoStop;
   const cookLog = stored?.cookLog;
   const servePlan = stored?.servePlan;
-  const defaults = DEFAULT_APPLICATION_SETTINGS;
   return {
     chamber: {
       enabled: chamber?.enabled ?? defaults.chamber.enabled,
@@ -185,7 +190,9 @@ export const withSettingsDefaults = (
     },
     probeTarget: {
       enabled: probeTarget?.enabled ?? defaults.probeTarget.enabled,
-      probes: withProbeEntryPerSlot(probeTarget?.probes),
+      probes: withProbeEntryPerSlot(
+        probeTarget?.probes ?? defaults.probeTarget.probes,
+      ),
     },
     smokeComplete: {
       enabled: smokeComplete?.enabled ?? defaults.smokeComplete.enabled,
@@ -213,7 +220,9 @@ export const withSettingsDefaults = (
     // Normalized rather than defaulted field by field: what is stored is a
     // list the user edits, so "unset" is only one of the ways it can arrive
     // incomplete. See `normalizeStamps` for the rest.
-    cookLog: { stamps: normalizeStamps(cookLog?.stamps) },
+    cookLog: {
+      stamps: normalizeStamps(cookLog?.stamps ?? defaults.cookLog.stamps),
+    },
     servePlan: {
       enabled: servePlan?.enabled ?? defaults.servePlan.enabled,
       driftAlert: servePlan?.driftAlert ?? defaults.servePlan.driftAlert,

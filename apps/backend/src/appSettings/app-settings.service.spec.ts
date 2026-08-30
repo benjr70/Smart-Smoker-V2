@@ -870,6 +870,30 @@ describe('AppSettingsService', () => {
         wrapTemp: 150,
       });
     });
+
+    // The wrap temperature joined a card that already existed, so a client from
+    // before it did — a stale bundle, an older build — saves the three done
+    // temperatures and nothing else. Its silence is not a request to go back to
+    // the shipped 165°F: the plan's wrap milestone would start measuring
+    // against a temperature nobody chose, with nothing on screen saying so.
+    it('keeps a wrap temperature the presets card was saved without', async () => {
+      await service.saveSettings({
+        targetPresets: { beef: 203, pork: 195, poultry: 165, wrapTemp: 175 },
+      });
+
+      // The body as that client builds it: the block, without the field it has
+      // never heard of.
+      await service.saveSettings({
+        targetPresets: { beef: 210, pork: 195, poultry: 165 },
+      } as unknown as Partial<ApplicationSettings>);
+
+      expect((await service.getSettings()).targetPresets).toEqual({
+        beef: 210,
+        pork: 195,
+        poultry: 165,
+        wrapTemp: 175,
+      });
+    });
   });
 
   /**

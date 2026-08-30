@@ -121,14 +121,21 @@ export class AppSettingsService {
    * whole document would silently reset the other's block.
    *
    * The write is a single update the server applies as one operation, naming
-   * only the blocks it was given. Reading the document first and writing the
-   * whole thing back would leave a window in which the other writer's change
-   * landed and was then undone — an operator saving an alert while another
-   * browser repaints is exactly that window, and neither of them would be told.
+   * only the blocks it was given. Writing the whole document back would leave a
+   * window in which the other writer's change landed and was then undone — an
+   * operator saving an alert while another browser repaints is exactly that
+   * window, and neither of them would be told.
    *
    * The fields of a supplied block are still named one by one, so a partial
    * block cannot store half a setting, and the deleted freeform rule shape is
-   * removed outright rather than carried alongside.
+   * removed outright rather than carried alongside. A field the caller left out
+   * of a block it did send falls back to what is *stored*, not to what the
+   * installation ships with: a block travels whole, so an older client — or a
+   * cached bundle from before a field existed — sends the block without it, and
+   * defaulting there would write the shipped value over a number somebody set
+   * by hand and tell nobody. That is why the current document is read first;
+   * only the blocks named are still written, so the other writer's blocks are
+   * untouched either way.
    *
    * An upsert, so the first write needs no separate create step — the browser
    * that chooses an appearance on a fresh installation is writing into an empty
@@ -138,7 +145,9 @@ export class AppSettingsService {
     incoming: Partial<ApplicationSettings>,
   ): Promise<ApplicationSettings> {
     const defaults = DEFAULT_APPLICATION_SETTINGS;
-    const complete = withSettingsDefaults(incoming);
+    // On an empty database there is nothing to fall back to and the shipped
+    // defaults are the answer, which is what `getSettings` reads it as.
+    const complete = withSettingsDefaults(incoming, await this.getSettings());
 
     // Every client reads this document to decide what to paint, so a preference
     // that says two different things is refused rather than stored and left for
