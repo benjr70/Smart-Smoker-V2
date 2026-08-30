@@ -39,6 +39,7 @@ import {
   State,
   StatRecord,
   Stats,
+  TargetPresets,
   TempData,
   rating,
 } from './types';
@@ -83,7 +84,14 @@ export type StoredCookEvent = Omit<CookEvent, 'at' | 'tone'> & {
  * slot, with the resolved name optional — the backend resolves names from the
  * active cook on the way out, and rejects them on the way in.
  */
-export type StoredApplicationSettings = Omit<ApplicationSettings, 'probeTarget'> & {
+export type StoredApplicationSettings = Omit<
+  ApplicationSettings,
+  'probeTarget' | 'targetPresets'
+> & {
+  // The wrap temperature is optional for the reason the heads-up lead below is:
+  // a document stored before the field existed carries no such value, and a
+  // seed that says nothing about it models exactly that installation.
+  targetPresets: Omit<TargetPresets, 'wrapTemp'> & { wrapTemp?: number };
   probeTarget: Omit<ProbeTargetAlertSettings, 'probes'> & {
     // The heads-up lead is optional here as well: a document stored before the
     // setting existed carries no such field, and a seed that says nothing about
@@ -409,7 +417,7 @@ const PROBE_SLOTS = ['probe1', 'probe2', 'probe3'];
 const DEFAULT_PROBE_TARGET = 203;
 
 /** The default target temps an installation starts from, as the backend has them. */
-const DEFAULT_TARGET_PRESETS = { beef: 203, pork: 195, poultry: 165 };
+const DEFAULT_TARGET_PRESETS = { beef: 203, pork: 195, poultry: 165, wrapTemp: 165 };
 
 /**
  * The settings an installation starts from, mirroring the backend's own
@@ -455,6 +463,9 @@ const withSettingsDefaults = (
     beef: stored?.targetPresets?.beef ?? DEFAULT_TARGET_PRESETS.beef,
     pork: stored?.targetPresets?.pork ?? DEFAULT_TARGET_PRESETS.pork,
     poultry: stored?.targetPresets?.poultry ?? DEFAULT_TARGET_PRESETS.poultry,
+    // As the backend reads a document written before the wrap temperature
+    // existed: the shipped 165°F, never an absence.
+    wrapTemp: stored?.targetPresets?.wrapTemp ?? DEFAULT_TARGET_PRESETS.wrapTemp,
   },
   appearance: {
     mode: stored?.appearance?.mode ?? 'system',
@@ -471,6 +482,14 @@ const withSettingsDefaults = (
   // As the backend reads a document written before the threshold existed: the
   // six hours every auto-stop decision falls back to, never an absence.
   autoStop: { idleHours: stored?.autoStop?.idleHours ?? 6 },
+  // As the backend reads a document written before the Serve Plan existed: the
+  // shipped plan, which is *on* — unlike the alert blocks above, the planner is
+  // part of the cook screen and the switch exists to remove it.
+  servePlan: {
+    enabled: stored?.servePlan?.enabled ?? true,
+    driftAlert: stored?.servePlan?.driftAlert ?? true,
+    driftMin: stored?.servePlan?.driftMin ?? 30,
+  },
 });
 
 /** A user-added stamp's key, as the backend spells the rule: `custom-<ulid>`. */
@@ -543,6 +562,13 @@ const withResolvedProbeNames = (
   profile: StoredSmokeProfile
 ): ApplicationSettings => ({
   ...settings,
+  // Named because the seed type leaves the wrap temperature optional — a
+  // document stored before the field existed carries none — while what is
+  // served always has one, exactly as the backend fills it on the way out.
+  targetPresets: {
+    ...settings.targetPresets,
+    wrapTemp: settings.targetPresets?.wrapTemp ?? DEFAULT_TARGET_PRESETS.wrapTemp,
+  },
   probeTarget: {
     ...settings.probeTarget,
     probes: (settings.probeTarget?.probes ?? []).map(probe => ({

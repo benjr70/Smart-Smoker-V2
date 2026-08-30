@@ -73,6 +73,29 @@ export function TargetPresetsCard(): JSX.Element {
             ))}
           </Stack>
 
+          <Stack direction="row" spacing={2} alignItems="center">
+            <TextField
+              label="Wrap at"
+              type="number"
+              size="small"
+              variant="outlined"
+              value={presets.wrapTemp}
+              onChange={event =>
+                update({ wrapTemp: readTemperatureInput(event.target.value, presets.wrapTemp) })
+              }
+              inputProps={{ 'data-testid': 'settings-wrap-temp' }}
+              sx={{ width: 140 }}
+            />
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              data-testid="settings-wrap-temp-summary"
+            >
+              The Serve Plan reminds you to wrap around this temperature until you log a wrap on the
+              cook log.
+            </Typography>
+          </Stack>
+
           <Typography
             variant="body2"
             color="text.secondary"

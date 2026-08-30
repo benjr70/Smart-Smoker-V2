@@ -112,7 +112,12 @@ describe('stamp catalogue client — endpoint contract', () => {
     test('a refused catalogue leaves the rest of the settings document alone', async () => {
       const backend = createFakeBackend();
       const client = createApiClient(backend);
-      await client.notifications.saveTargetPresets({ beef: 210, pork: 195, poultry: 165 });
+      await client.notifications.saveTargetPresets({
+        beef: 210,
+        pork: 195,
+        poultry: 165,
+        wrapTemp: 165,
+      });
 
       await expect(
         client.cookStamps.save(DEFAULT_STAMPS.filter(stamp => stamp.key !== 'lid'))

@@ -179,6 +179,7 @@ export class AppSettingsService {
         'appearance',
         'autoStop',
         'cookLog',
+        'servePlan',
       ] as const
     ).forEach((block) => {
       if (incoming[block]) {

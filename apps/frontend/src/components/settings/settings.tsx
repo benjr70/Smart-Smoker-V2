@@ -4,6 +4,7 @@ import { BOTTOM_BAR_HEIGHT } from '../bottomBar/bottombar';
 import { AppearanceCard } from './appearance';
 import { AutoStopCard } from './autoStop';
 import { NotificationsCard } from './notifications';
+import { ServePlanCard } from './servePlan';
 import { StampEditorCard } from './stampEditor';
 import { TargetPresetsCard } from './targetPresets';
 
@@ -49,6 +50,7 @@ export const Settings = (): JSX.Element => (
       </Typography>
       <AppearanceCard />
       <NotificationsCard />
+      <ServePlanCard />
       <TargetPresetsCard />
       <StampEditorCard />
       <AutoStopCard />

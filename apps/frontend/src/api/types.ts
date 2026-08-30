@@ -125,6 +125,16 @@ export interface TargetPresets {
   beef: number;
   pork: number;
   poultry: number;
+  /**
+   * The temperature, °F, the Serve Plan expects the meat to be wrapped around —
+   * the milestone it keeps showing until a wrap is stamped.
+   *
+   * One global number rather than one per category, and stored in this block
+   * because the Default target temps card is where it is edited: the settings
+   * document is saved block by block, so a field written by one card and stored
+   * in another's block would have the two undoing each other.
+   */
+  wrapTemp: number;
 }
 
 /** The Probe Target Reached alert: switched on as a whole, plus a row per probe. */
@@ -219,6 +229,22 @@ export interface AutoStopSettings {
 }
 
 /**
+ * The Serve Plan: the during-cook planner that works backwards from the time
+ * the food is meant to hit the table, its off-schedule push, and the tolerance
+ * that decides what counts as off.
+ *
+ * `driftAlert` is nested under `enabled` in meaning as well as in the UI: with
+ * the planner off there is no verdict to be off, so the alert cannot fire
+ * whatever it says.
+ */
+export interface ServePlanSettings {
+  enabled: boolean;
+  driftAlert: boolean;
+  /** Minutes of slack, either side of the pull-by time, that count as off plan. */
+  driftMin: number;
+}
+
+/**
  * The application settings document: everything the installation configures,
  * whether or not it has anything to do with notifications.
  */
@@ -231,6 +257,7 @@ export interface ApplicationSettings {
   appearance: AppearancePreference;
   autoStop: AutoStopSettings;
   cookLog: CookLogSettings;
+  servePlan: ServePlanSettings;
 }
 
 /** The cook log's own settings: the stamps a cook may be logged with. */

@@ -200,4 +200,45 @@ describe('the settings document read back through Mongoose', () => {
 
     expect(stored.headsUp).toEqual({ enabled: false });
   });
+
+  /**
+   * The Serve Plan is the one block that ships switched *on*: it is the
+   * planner the cook screen is built around rather than a notification nobody
+   * asked for, and an installation upgrading into it has no stored block at
+   * all. A document written before it existed must therefore read as the
+   * shipped plan — on, alerting, 30 minutes of tolerance — instead of as
+   * `undefined`, which every reader would have to have its own opinion about.
+   */
+  it('reads a document stored before the Serve Plan existed as the shipped plan', () => {
+    const stored = withSettingsDefaults(
+      StoredSettings.hydrate({
+        chamber: { enabled: true, low: 225, high: 275 },
+      }) as unknown as ApplicationSettings,
+    );
+
+    expect(stored.servePlan).toEqual({
+      enabled: true,
+      driftAlert: true,
+      driftMin: 30,
+    });
+  });
+
+  // The wrap temperature decides when the plan stops reminding the cook about
+  // the wrap still ahead. A document written before the field existed reads as
+  // the shipped 165°F rather than as nothing, which would compare as "already
+  // wrapped" and drop the milestone for every upgraded installation.
+  it('reads a document stored before the wrap temperature existed as 165°F', () => {
+    const stored = withSettingsDefaults(
+      StoredSettings.hydrate({
+        targetPresets: { beef: 210, pork: 200, poultry: 165 },
+      }) as unknown as ApplicationSettings,
+    );
+
+    expect(stored.targetPresets).toEqual({
+      beef: 210,
+      pork: 200,
+      poultry: 165,
+      wrapTemp: 165,
+    });
+  });
 });

@@ -53,6 +53,7 @@ describe('TargetPresetsCard', () => {
         beef: 203,
         pork: 195,
         poultry: 175,
+        wrapTemp: 165,
       })
     );
 
@@ -82,8 +83,54 @@ describe('TargetPresetsCard', () => {
         beef: 203,
         pork: 190,
         poultry: 165,
+        wrapTemp: 165,
       })
     );
+  });
+
+  /**
+   * The wrap temperature the Serve Plan's wrap milestone is measured against.
+   * It lives in this card because it is a temperature the cook keeps beside the
+   * ones the meat is done at, and it is saved in this card's block.
+   */
+  test('shows the shipped wrap temperature and stores an edited one', async () => {
+    const backend = createFakeBackend();
+
+    const { unmount } = renderCard(backend);
+    const wrap = await screen.findByLabelText('Wrap at');
+    expect(wrap).toHaveValue(165);
+
+    fireEvent.change(wrap, { target: { value: '160' } });
+    unmount();
+
+    await waitFor(() =>
+      expect(backend.store.appSettings?.targetPresets).toEqual({
+        beef: 203,
+        pork: 195,
+        poultry: 165,
+        wrapTemp: 160,
+      })
+    );
+  });
+
+  test('shows the wrap temperature the installation has stored', async () => {
+    renderCard(
+      createFakeBackend({
+        appSettings: {
+          settings: { targetPresets: { beef: 203, pork: 195, poultry: 165, wrapTemp: 150 } },
+        },
+      })
+    );
+
+    await screen.findByDisplayValue('150');
+    expect(screen.getByLabelText('Wrap at')).toHaveValue(150);
+  });
+
+  test('says what the wrap temperature is for', async () => {
+    renderCard(createFakeBackend());
+
+    const summary = await screen.findByTestId('settings-wrap-temp-summary');
+    expect(summary).toHaveTextContent(/wrap/i);
   });
 
   test('says when the temperatures are applied and what they never overwrite', async () => {
