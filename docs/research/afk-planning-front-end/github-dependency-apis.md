@@ -115,3 +115,12 @@ Notes for the implementer:
 ## 4. Method
 
 Live probes: `gh api repos/.../issues/{575,576,578}{,/sub_issues,/dependencies/blocked_by}`, `gh api -i` for headers, `gh api graphql` with the query above and `__type` introspection, `gh auth status` for scopes; read `scripts/claude-agent/lib/pickup-triage.sh` §0/§2 and `infra/systemd/agent-daemon.service` (neither modified). Docs pages fetched with curl on 2026-08-29.
+
+## Sources
+
+- [REST — Sub-issues](https://docs.github.com/en/rest/issues/sub-issues?apiVersion=2022-11-28)
+- [REST — Issue dependencies](https://docs.github.com/en/rest/issues/issue-dependencies?apiVersion=2022-11-28)
+- [GraphQL — Issue object](https://docs.github.com/en/graphql/reference/objects#issue)
+- [Using the API to manage Projects](https://docs.github.com/en/issues/planning-and-tracking-with-projects/automating-your-project/using-the-api-to-manage-projects)
+- [Scopes for OAuth apps](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps)
+- Live probes against `benjr70/Smart-Smoker-V2` on 2026-08-29 (see §4 Method)
