@@ -423,6 +423,199 @@ ${gh}"
 }
 
 #-------------------------------------------------------------------------------
+# Test 8c: usage exhaustion during a RESOLVE fire (its log carries
+# `resolve: #N <type> <slug>`) leaves the agreed state instead of pausing: the
+# lock is dropped, any pushed `research/<slug>` branch is deleted, NO label is
+# applied (neither AFK:paused nor AFK:failed) and no wip commit freezes a
+# throwaway research tree — the next tick simply restarts the resolve.
+#-------------------------------------------------------------------------------
+test_exhausted_resolve_drops_lock_and_branch() {
+    echo "TEST: exhausted resolve fire drops the lock and its branch"
+
+    local dir rc gh git_calls out
+    dir="$(make_env "=== /afk-pickup 2026-08-30T00:00:00Z ===
+picked:   #700 Which merge gate lands a docs PR?
+resolve: #700 research which-merge-gate-lands-a-docs-pr
+Claude AI usage limit reached|1786060800" 1)"
+    trap "rm -rf '${dir}'" RETURN
+
+    out="$(run_agent "${dir}" 2>/dev/null)"
+    rc=$?
+
+    if [ "${rc}" -ne 0 ]; then
+        fail "an out-of-gas resolve is not a failure (exit 0)" "rc=${rc}"
+        return
+    fi
+
+    gh="$(cat "${dir}/gh.log")"
+    git_calls="$(cat "${dir}/git.log")"
+
+    if ! printf '%s' "${gh}" | grep -q 'issue edit 700 --remove-label AFK:in-progress'; then
+        fail "must drop the resolve lock from the resolved ticket" "gh:
+${gh}"
+        return
+    fi
+    if printf '%s' "${gh}" | grep -qE 'AFK:(paused|failed)'; then
+        fail "an exhausted resolve must apply NO label" "gh:
+${gh}"
+        return
+    fi
+    if ! printf '%s' "${git_calls}" | grep -q 'push origin --delete research/which-merge-gate-lands-a-docs-pr'; then
+        fail "must delete the pushed research branch" "git:
+${git_calls}"
+        return
+    fi
+    if printf '%s' "${git_calls}" | grep -q 'commit'; then
+        fail "an exhausted resolve must not freeze a wip commit" "git:
+${git_calls}"
+        return
+    fi
+    if ! printf '%s' "${out}" | grep -q '^AGENT_RUN_RESET_AT='; then
+        fail "must still emit the scraped resetAt for the daemon" "out:
+${out}"
+        return
+    fi
+
+    pass "exhausted resolve fire drops the lock and its branch"
+}
+
+#-------------------------------------------------------------------------------
+# Test 8d: a CRASHED resolve fire is a real failure — the ticket it locked flips
+# AFK:in-progress → AFK:failed with an explaining comment, scraped from the
+# `resolve: #N …` line (a resolve fire never emits `picked:   #N` alone in a
+# shape fail_inflight could otherwise trust for the branch cleanup).
+#-------------------------------------------------------------------------------
+test_failed_resolve_marks_ticket_failed() {
+    echo "TEST: crashed resolve fire fails its ticket"
+
+    local dir rc gh
+    dir="$(make_env "=== /afk-pickup 2026-08-30T00:00:00Z ===
+resolve: #700 research which-merge-gate-lands-a-docs-pr
+Error: process exited with code 1" 1)"
+    trap "rm -rf '${dir}'" RETURN
+
+    run_agent "${dir}" >/dev/null 2>&1
+    rc=$?
+
+    if [ "${rc}" -eq 0 ]; then
+        fail "a genuine failure must exit non-zero" "rc=${rc}"
+        return
+    fi
+
+    gh="$(cat "${dir}/gh.log")"
+    if ! printf '%s' "${gh}" | grep -q 'issue edit 700.*--remove-label AFK:in-progress'; then
+        fail "must clear the resolve lock" "gh:
+${gh}"
+        return
+    fi
+    if ! printf '%s' "${gh}" | grep -q 'issue edit 700.*--add-label AFK:failed'; then
+        fail "must mark the ticket AFK:failed for triage" "gh:
+${gh}"
+        return
+    fi
+    if ! printf '%s' "${gh}" | grep -q 'issue comment 700'; then
+        fail "must explain the failure on the ticket" "gh:
+${gh}"
+        return
+    fi
+
+    pass "crashed resolve fire fails its ticket"
+}
+
+#-------------------------------------------------------------------------------
+# Test 8e: a resolve fire that already printed its terminal `resolve: DONE` line
+# and THEN crashed (map append, fog graduation, token accounting all run after
+# the ticket is closed) must not be failed: the ticket is closed and answered,
+# so the lock is simply restored to AFK:done and no AFK:failed / "stays open"
+# comment lands on it.
+#-------------------------------------------------------------------------------
+test_failed_resolve_after_done_keeps_done() {
+    echo "TEST: crash after resolve DONE restores AFK:done, never AFK:failed"
+
+    local dir rc gh
+    dir="$(make_env "=== /afk-pickup 2026-08-30T00:00:00Z ===
+resolve: #700 research which-merge-gate-lands-a-docs-pr
+docs-merge: PR #701 abc1234
+resolve: DONE — #700 closed, PR #701 merged abc1234
+appending to the map…
+Error: process exited with code 1" 1)"
+    trap "rm -rf '${dir}'" RETURN
+
+    run_agent "${dir}" >/dev/null 2>&1
+    rc=$?
+
+    if [ "${rc}" -eq 0 ]; then
+        fail "a genuine failure must exit non-zero" "rc=${rc}"
+        return
+    fi
+
+    gh="$(cat "${dir}/gh.log")"
+    if printf '%s' "${gh}" | grep -q 'AFK:failed'; then
+        fail "a resolved ticket must NEVER be marked AFK:failed" "gh:
+${gh}"
+        return
+    fi
+    if ! printf '%s' "${gh}" | grep -q 'issue edit 700.*--add-label AFK:done'; then
+        fail "must leave the resolved ticket on AFK:done" "gh:
+${gh}"
+        return
+    fi
+    if printf '%s' "${gh}" | grep -q 'issue comment 700'; then
+        fail "must not comment failure on a closed, answered ticket" "gh:
+${gh}"
+        return
+    fi
+
+    pass "crash after resolve DONE restores AFK:done, never AFK:failed"
+}
+
+#-------------------------------------------------------------------------------
+# Test 8f: running out of gas AFTER the resolve is DONE is not a half-finished
+# resolve — the findings are merged and the ticket closed. Dropping the lock is
+# all that is owed; deleting `research/<slug>` would be destructive (the branch
+# is the merged PR's head) and a restart has nothing left to redo.
+#-------------------------------------------------------------------------------
+test_exhausted_after_resolve_done_only_drops_lock() {
+    echo "TEST: exhaustion after resolve DONE only drops the lock"
+
+    local dir rc gh git_calls
+    dir="$(make_env "=== /afk-pickup 2026-08-30T00:00:00Z ===
+resolve: #700 research which-merge-gate-lands-a-docs-pr
+resolve: DONE — #700 closed, PR #701 merged abc1234
+Claude AI usage limit reached|1786060800" 1)"
+    trap "rm -rf '${dir}'" RETURN
+
+    run_agent "${dir}" >/dev/null 2>&1
+    rc=$?
+
+    if [ "${rc}" -ne 0 ]; then
+        fail "an out-of-gas run must NOT fail (exit 0)" "rc=${rc}"
+        return
+    fi
+
+    gh="$(cat "${dir}/gh.log")"
+    git_calls="$(cat "${dir}/git.log")"
+
+    if ! printf '%s' "${gh}" | grep -q 'issue edit 700.*--remove-label AFK:in-progress'; then
+        fail "must still drop the lock" "gh:
+${gh}"
+        return
+    fi
+    if printf '%s' "${git_calls}" | grep -q 'push origin --delete'; then
+        fail "must NOT delete the branch of a finished resolve" "git:
+${git_calls}"
+        return
+    fi
+    if printf '%s' "${gh}" | grep -qE 'AFK:(paused|failed)'; then
+        fail "an out-of-gas resolve must apply no label" "gh:
+${gh}"
+        return
+    fi
+
+    pass "exhaustion after resolve DONE only drops the lock"
+}
+
+#-------------------------------------------------------------------------------
 # Test 9: the claude invocation runs with the print background-task ceiling
 # lifted (CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0), so a long team dispatch is not
 # killed at the default 600s. A host override (already-set value) is honored.
@@ -510,6 +703,10 @@ test_real_skip_output_emits_no_work_marker
 test_failed_run_clears_its_own_lock
 test_failed_run_without_pick_touches_no_lock
 test_failed_reconcile_restores_done_lock
+test_exhausted_resolve_drops_lock_and_branch
+test_failed_resolve_marks_ticket_failed
+test_failed_resolve_after_done_keeps_done
+test_exhausted_after_resolve_done_only_drops_lock
 test_bg_ceiling_lifted_for_claude
 test_model_fallback_env_pins_model
 

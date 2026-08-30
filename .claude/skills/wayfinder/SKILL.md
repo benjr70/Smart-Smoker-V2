@@ -298,9 +298,8 @@ User invokes with a loose idea.
    spin up an `/afk-resolve` subagent to resolve it in parallel. It follows the
    same persist-to-`docs/research/` protocol the Daemon uses — findings land as
    a docs-only PR under `docs/research/<map-slug>/<ticket-slug>.md`, never on a
-   throwaway branch. (`/afk-resolve` ships in a later slice of the AFK
-   planning-front-end effort; until it lands, resolve research tickets by hand
-   with the `research` skill and the same persistence rule.)
+   throwaway branch. Its protocol lives in
+   [`.claude/skills/afk-resolve/SKILL.md`](../afk-resolve/SKILL.md).
 6. Stop: charting is one session's work; it hand-resolves nothing.
 
 ### Work through the map

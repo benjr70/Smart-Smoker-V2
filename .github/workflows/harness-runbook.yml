@@ -21,6 +21,7 @@ on:
     paths:
       - '.claude/skills/verify-pr/SKILL.md'
       - '.claude/skills/afk-pickup/SKILL.md'
+      - '.claude/skills/afk-resolve/SKILL.md'
       - '.claude/skills/pr-reconcile/SKILL.md'
       - '.claude/agents/manual-verifier.md'
       - 'scripts/verify-pr/check-harness-runbook.sh'
@@ -33,6 +34,7 @@ on:
     paths:
       - '.claude/skills/verify-pr/SKILL.md'
       - '.claude/skills/afk-pickup/SKILL.md'
+      - '.claude/skills/afk-resolve/SKILL.md'
       - '.claude/skills/pr-reconcile/SKILL.md'
       - '.claude/agents/manual-verifier.md'
       - 'scripts/verify-pr/check-harness-runbook.sh'

@@ -98,6 +98,18 @@ team dispatch routinely runs past the 600s default).
    `/afk-dispatch`, opens a PR with the issue's Acceptance Criteria as a
    `## Manual verification` checklist, then drives the verification tail (next
    section).
+4. **Resolve** a wayfinder **Decision ticket** (§2b) — the same pick, but the
+   winner carries a `wayfinder:research` / `wayfinder:task` label, so the
+   picker returns verdict `pick-wayfinder` and the fire routes to
+   **`/afk-resolve`** instead of a team: claim, research against primary
+   sources, persist to `docs/research/<map-slug>/<ticket-slug>.md`, open a
+   `docs(research):` PR, green it with `/pr-watch`, merge it through the
+   docs-only gate, comment the answer, close the ticket, append the Map's
+   Decisions so far, and graduate at most three new tickets out of the fog. No
+   product code, no review or verification tail — the gate is the whole bar.
+   A crash fails the ticket (`AFK:failed`); running out of gas mid-resolve
+   drops the lock, deletes the pushed `research/<slug>` branch and applies no
+   label, so the next tick restarts it.
 
 `AFK:in-progress` is the repo-wide single-flight lock: any open issue holding
 it makes every other fire skip.
@@ -291,4 +303,4 @@ on every PR.
 - [Dispatch](dispatch.md) — `/afk-dispatch` playbook and hooks
 - [Claude Agent VM](../CI-CD/claude-agent-vm.md) — host setup
 - Skills: `.claude/skills/afk-pickup/`, `pr-watch/`, `pr-review/`,
-  `pr-reconcile/`, `afk-dispatch/` — the authoritative playbooks
+  `pr-reconcile/`, `afk-dispatch/`, `afk-resolve/` — the authoritative playbooks

@@ -13,6 +13,15 @@
 # intact), records the pause as a timestamped comment, emits any scraped reset
 # instant for the daemon, and exits 0 — an out-of-gas event is never a failure.
 #
+# A RESOLVE fire (`/afk-resolve` on a wayfinder Decision ticket, marked by the
+# `resolve: #<n> <type> <slug>` line the skill emits) is the exception: there is
+# no partial implementation worth resuming, only half-read research. Exhausting
+# one drops the `AFK:in-progress` lock, deletes any pushed `research/<slug>`
+# branch and applies NO label, so the next tick simply restarts the resolve from
+# scratch. Once the resolve has printed its terminal `resolve: DONE …` line the
+# ticket is closed and answered: a later crash or cutoff drops the lock (leaving
+# AFK:done) and touches nothing else.
+#
 # Usage:
 #   agent-run                     # fire once, exit per the classification below
 #   agent-run --dry-run           # forward --dry-run to /afk-pickup
@@ -119,6 +128,51 @@ VERDICT="$(exhaustion_classify "$EXIT_CODE" < "$LOG_FILE")"
 STATUS="$(printf '%s' "$VERDICT" | jq -r '.status')"
 RESET_AT="$(printf '%s' "$VERDICT" | jq -r '.resetAt')"
 
+# resolve_fire — echo the `resolve: #<n> <type> <slug>` line this run emitted, if
+# any. `/afk-resolve` prints it as its first act after claiming the ticket, the
+# same way §1.2 prints `picked:   reconcile PR …`; its presence is what tells the
+# cleanup paths below they are looking at a resolve rather than a slice.
+resolve_fire() {
+  grep -oE 'resolve:[[:space:]]+#[0-9]+[[:space:]]+(research|task)[[:space:]]+[A-Za-z0-9._-]+' \
+    "$LOG_FILE" | head -1 || true
+}
+
+# resolve_done — true when the resolve printed its terminal `resolve: DONE …`
+# line before dying. Everything after that line (map append, fog graduation,
+# token accounting) runs on a ticket that is already closed and answered, so a
+# crash or an out-of-gas exit there owes only the lock, never a label flip and
+# never the branch.
+resolve_done() {
+  grep -qE 'resolve:[[:space:]]+DONE' "$LOG_FILE"
+}
+
+# resolve_cleanup — the out-of-gas exit for a resolve fire. Research is cheap to
+# redo and expensive to half-keep: a frozen branch of partial notes would be
+# restarted-from anyway, and a label would take the ticket out of the queue it
+# must stay in. So: drop the lock, delete the pushed branch, apply NO label —
+# the state a fresh tick expects. Best-effort throughout (|| true).
+resolve_cleanup() {
+  local line="$1" issue slug
+  issue="$(printf '%s' "$line" | grep -oE '#[0-9]+' | grep -oE '[0-9]+')"
+  slug="$(printf '%s' "$line" | awk '{print $NF}')"
+
+  "$GH_BIN" issue edit "$issue" --remove-label AFK:in-progress || true
+
+  # Past the terminal DONE line there is no half-finished resolve to undo: the
+  # findings are merged and the ticket is closed, so deleting research/<slug>
+  # would delete the merged PR's head branch for nothing.
+  if resolve_done; then
+    echo "agent-run: resolve #${issue} finished before running out of gas — lock dropped only" \
+      | tee -a "$LOG_FILE"
+    return 0
+  fi
+
+  "$GIT_BIN" push origin --delete "research/${slug}" || true
+
+  echo "agent-run: resolve #${issue} out of gas — lock dropped, research/${slug} deleted, no label" \
+    | tee -a "$LOG_FILE"
+}
+
 # pause_inflight — freeze partial work and move the in-flight issue to
 # AFK:paused. Every step is best-effort (|| true): a pause must never itself
 # fail the run and re-wedge the pipeline. AFK:failed is never applied here.
@@ -159,13 +213,45 @@ pause_inflight() {
 # future fire skips (observed 2026-07-08: #280 stuck for a day). Never touches a
 # lock this run did not create. Idempotent with §6b (best-effort, || true).
 #
+# A resolve fire (`resolve: #N <type> <slug>`) fails like an issue: its ticket is
+# still open and unanswered, so it takes AFK:failed plus an explaining comment —
+# unless a terminal `resolve: DONE …` line already went out, in which case the
+# ticket is closed and answered and only AFK:done is restored.
+#
 # A reconcile fire (`picked:   reconcile PR #P (issue #N)`) is special: the
 # issue's work was already DONE — the fire only borrowed AFK:in-progress as
 # the single-flight lock while nursing the PR. On a crash the lock is restored
 # to AFK:done, never AFK:failed (failing a finished issue would lie), and the
 # breadcrumb lands on the PR where the human is looking.
 fail_inflight() {
-  local issue ts pr
+  local issue ts pr resolve
+  resolve="$(resolve_fire)"
+  if [ -n "$resolve" ]; then
+    issue="$(printf '%s' "$resolve" | grep -oE '#[0-9]+' | grep -oE '[0-9]+')"
+
+    # Crashed AFTER the terminal DONE line: the ticket is closed with its answer
+    # recorded, and the tail that died (map append, fog graduation, token
+    # accounting) is best-effort by design. Failing it here would label a
+    # resolved ticket AFK:failed and tell a human it is still open — a lie, the
+    # same one the reconcile path below exists to avoid. Restore AFK:done and
+    # say nothing on the ticket.
+    if resolve_done; then
+      "$GH_BIN" issue edit "$issue" \
+        --remove-label AFK:in-progress --add-label AFK:done || true
+      echo "agent-run: resolve #${issue} crashed after DONE — left AFK:done, no failure" \
+        | tee -a "$LOG_FILE"
+      return 0
+    fi
+
+    "$GH_BIN" issue edit "$issue" \
+      --remove-label AFK:in-progress --add-label AFK:failed || true
+    ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    "$GH_BIN" issue comment "$issue" \
+      --body "Resolve fire crashed at ${ts} — /afk-resolve exited non-zero. Lock cleared (AFK:in-progress → AFK:failed); the ticket stays open for human triage." || true
+    echo "agent-run: failed resolve — #${issue} (AFK:in-progress -> AFK:failed)" | tee -a "$LOG_FILE"
+    return 0
+  fi
+
   pr="$(grep -oE 'picked:[[:space:]]+reconcile PR #[0-9]+ \(issue #[0-9]+\)' "$LOG_FILE" | head -1 || true)"
   if [ -n "$pr" ]; then
     issue="$(printf '%s' "$pr" | grep -oE 'issue #[0-9]+' | grep -oE '[0-9]+' || true)"
@@ -196,8 +282,14 @@ fail_inflight() {
 
 case "$STATUS" in
   EXHAUSTED)
-    echo "agent-run: EXHAUSTED — pausing in-flight work; resetAt=${RESET_AT}" | tee -a "$LOG_FILE"
-    pause_inflight "$RESET_AT"
+    RESOLVE_LINE="$(resolve_fire)"
+    if [ -n "$RESOLVE_LINE" ]; then
+      echo "agent-run: EXHAUSTED mid-resolve — dropping the lock; resetAt=${RESET_AT}" | tee -a "$LOG_FILE"
+      resolve_cleanup "$RESOLVE_LINE"
+    else
+      echo "agent-run: EXHAUSTED — pausing in-flight work; resetAt=${RESET_AT}" | tee -a "$LOG_FILE"
+      pause_inflight "$RESET_AT"
+    fi
     # Emit the scraped reset instant on a stable line for the daemon to schedule off.
     echo "AGENT_RUN_RESET_AT=${RESET_AT}" | tee -a "$LOG_FILE"
     exit 0
