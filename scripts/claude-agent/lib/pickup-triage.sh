@@ -87,7 +87,10 @@
 #              `wayfinder:*` type (grilling, prototype) is HITL by definition
 #              and can only have reached the AFK queue by mislabelling: the
 #              candidate is skipped with a stderr note and the next one is
-#              considered — never resolved, never picked as a slice.
+#              considered — never resolved, never picked as a slice. A ticket
+#              carrying MORE than one `wayfinder:*` label is equally
+#              mislabelled and is skipped the same way, so the verdict never
+#              depends on GraphQL's label order.
 #
 # Env:
 #   GH_BIN                  gh CLI (default: gh) — injectable for tests
@@ -248,7 +251,7 @@ query {
               | (($i.projectItems.nodes // []) | map(select(.project.number == $pn)) | first) as $pi
               | select($pi != null)
               | ($pi.fieldValueByName.name // "P2") as $prio
-              | (($lbls | map(select(startswith("wayfinder:"))) | first) // "") as $wf
+              | (($lbls | map(select(startswith("wayfinder:"))) | sort | join(",")) // "") as $wf
               | {number, title, createdAt, priority: $prio,
                  prio_rank: ($prio | prio_rank), wf: $wf}]
             | sort_by([.prio_rank, .createdAt])
@@ -270,10 +273,20 @@ query {
         # need a human on the other side of the conversation, so a candidate
         # carrying one is skipped LOUDLY rather than resolved — it should never
         # have carried `AFK` in the first place, and the next candidate wins.
+        #
+        # `${cand_wf}` is the ticket's `wayfinder:*` labels SORTED and joined
+        # with commas, so the decision never depends on GraphQL's unspecified
+        # label order. More than one type on one ticket is a mislabelling with
+        # no safe reading — resolving it would pick a type by luck — so it is
+        # skipped loudly, exactly like a HITL type.
         case "${cand_wf}" in
             '')                  cand_type='' ;;
             wayfinder:research)  cand_type='research' ;;
             wayfinder:task)      cand_type='task' ;;
+            *,*)
+                echo "pickup-triage: skipping #${cand_n} — ambiguous wayfinder labels (${cand_wf})" >&2
+                continue
+                ;;
             *)
                 echo "pickup-triage: skipping #${cand_n} — ${cand_wf} is not an AFK ticket type" >&2
                 continue

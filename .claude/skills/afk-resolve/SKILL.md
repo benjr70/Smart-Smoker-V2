@@ -28,13 +28,17 @@ protocol.
 ## Invocation
 
 ```
-/afk-resolve --issue <N> --type <research|task>
+/afk-resolve --issue <N> --type <research|task> [--slug <slug>]
 ```
 
-Both required. `--type` comes from the picker's `.pick.type` (the ticket's
-`wayfinder:research` / `wayfinder:task` label); never re-derive it from the
-title. `wayfinder:grilling` and `wayfinder:prototype` are HITL types and are
-**never** resolvable here — refuse and exit if one arrives.
+`--issue` and `--type` are required. `--type` comes from the picker's
+`.pick.type` (the ticket's `wayfinder:research` / `wayfinder:task` label); never
+re-derive it from the title. `--slug` is the caller's already-computed ticket
+slug (`/afk-pickup` §2b passes the one it printed on the `resolve:` marker
+line): when present it is used **verbatim** for the branch, the file and every
+report line, so the branch `agent-run` may have to delete is exactly the one the
+marker names. `wayfinder:grilling` and `wayfinder:prototype` are HITL types and
+are **never** resolvable here — refuse and exit if one arrives.
 
 ## Process
 
@@ -66,16 +70,20 @@ MAP_TITLE=$(printf '%s' "$MAP" | jq -r '.title')
 
 Slugs are derived the same way everywhere (lowercase, non-alphanumerics to
 hyphens, trimmed, 60 chars) — the branch, the file path and the `resolve:` log
-line must all agree:
+line must all agree. The **ticket** slug is derived here only when the caller
+did not pass one; `--slug` always wins, so a caller that already published the
+slug (and whose cleanup deletes `research/<slug>`) can never disagree with the
+branch this skill pushes:
 
 ```bash
 slugify() { printf '%s' "$1" | tr 'A-Z' 'a-z' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g' | cut -c1-60; }
 MAP_SLUG=$(slugify "$MAP_TITLE")
-SLUG=$(slugify "$TICKET_TITLE")
+SLUG=${ARG_SLUG:-$(slugify "$TICKET_TITLE")}    # --slug verbatim when given
 ```
 
-Emit the structured marker (`/afk-pickup` §2b prints it too; printing it here as
-well is harmless and makes a `/wayfinder` chart-time invocation scrapeable):
+Emit the structured marker (`/afk-pickup` §2b prints the same line, with the
+same `--slug`, before invoking; printing it here as well is harmless and makes a
+`/wayfinder` chart-time invocation — which passes no `--slug` — scrapeable):
 
 ```
 resolve: #<N> <research|task> <SLUG>
@@ -156,6 +164,14 @@ PR=$(printf '%s' "$PR_URL" | grep -oE '[0-9]+$')
 closes the ticket itself in §6, with the resolution comment attached, and a
 GitHub auto-close on merge would close it bare.
 
+`PR_BODY` must also carry this machine marker on its own line — it is what lets
+a **later** fire that merges this PR find its way back to the ticket (§5b), so a
+research PR that lands out-of-band never orphans its Decision ticket:
+
+```markdown
+<!-- afk-resolve ticket:#<N> map:#<MAP_N> slug:<SLUG> -->
+```
+
 ### 5. Green it, then merge it through the gate
 
 Hand CI to **`/pr-watch`** via the `Agent` tool
@@ -205,6 +221,39 @@ PR is open, it just did not land. Report the gate's `.reason` verbatim on the
 §1.2 `docs-merge` triage, and go to [§7 Failure](#7-failure) with that reason —
 the ticket stays open, because its findings are not on master yet and the
 resolution comment must link master.
+
+The hand-off is only half the story: the fire that eventually merges the PR must
+come **back** here to finish the ticket, or the findings land on master with the
+ticket stuck `AFK:failed` forever — commented on by nobody, closed by nobody,
+absent from the Map. That return trip is §5b, and the `<!-- afk-resolve … -->`
+marker in the PR body (§4) is what makes it findable. Say so on the ticket's
+failure comment: _the PR is open; merging it finishes this ticket
+automatically._
+
+### 5b. Finish a resolve whose PR merged later
+
+```
+/afk-resolve --issue <N> --type research --finish-merged --pr <P>
+```
+
+`/afk-pickup` §1.2 fires this immediately after its `docs-merge` branch merges a
+PR whose body carries the `<!-- afk-resolve ticket:#<N> … -->` marker — i.e.
+exactly the PRs this skill left behind on a `gate-refused` failure. The research
+already exists and is now on master, so this mode does **no** research, writes
+no file, opens no PR and creates no branch:
+
+1. Re-read the marker for `MAP_N` / `MAP_SLUG` / `SLUG` (the PR body is the
+   record; do not re-derive them from titles), and read the merged file at
+   `docs/research/<MAP_SLUG>/<SLUG>.md` for its TL;DR.
+2. Clear the stale failure: `gh issue edit "$N" --remove-label AFK:failed`.
+3. Resume at [§6 Resolve the ticket](#6-resolve-the-ticket) and run it to the
+   end — resolution comment linking master, close, `AFK:done`, Map append, §6b
+   fog graduation. Terminal line is §6's usual
+   `resolve: DONE — #<N> closed, PR #<P> merged <sha>`.
+
+If the ticket is already closed, this mode is a no-op: print
+`resolve: DONE — #<N> closed, PR #<P> merged <sha>` and stop. Re-running it is
+therefore safe, which is what makes it callable from a best-effort tail.
 
 ### 6. Resolve the ticket
 
@@ -271,12 +320,12 @@ Any of these leaves the ticket **open** for a human, labelled `AFK:failed` with
 a comment naming what happened. Never invent an answer, and never close a ticket
 you could not resolve.
 
-| Reason               | Trigger                                                 | Comment says                                  |
-| -------------------- | ------------------------------------------------------- | --------------------------------------------- |
-| `research-error`     | the `research` skill errored or returned nothing usable | what it was asked, what came back             |
-| `no-sources`         | no primary source answers the question                  | which sources were tried, what is missing     |
-| `pr-watch-exhausted` | `pr-watch: DRAFT` / `ERROR` on the research PR          | the verbatim `pr-watch:` line and the PR link |
-| `gate-refused`       | the docs-only gate refused or could not run             | the verbatim `.reason` and the PR link        |
+| Reason               | Trigger                                                 | Comment says                                                                             |
+| -------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `research-error`     | the `research` skill errored or returned nothing usable | what it was asked, what came back                                                        |
+| `no-sources`         | no primary source answers the question                  | which sources were tried, what is missing                                                |
+| `pr-watch-exhausted` | `pr-watch: DRAFT` / `ERROR` on the research PR          | the verbatim `pr-watch:` line and the PR link                                            |
+| `gate-refused`       | the docs-only gate refused or could not run             | the verbatim `.reason`, the PR link, and that merging the PR finishes the ticket via §5b |
 
 ```bash
 gh issue edit "$N" --remove-label AFK:in-progress --add-label AFK:failed
@@ -345,6 +394,10 @@ printed.
 
 - **One ticket per invocation.** Never resolve a second ticket, and never a
   ticket this run created (§6b) — the next tick owns it.
+- **Never leave a merged research PR without its ticket.** A `gate-refused`
+  failure is a deferral, not an ending: the PR carries the
+  `<!-- afk-resolve … -->` marker so whichever fire merges it can call §5b and
+  close the loop.
 - **No product code, ever.** The only file this skill writes is
   `docs/research/<map-slug>/<ticket-slug>.md`; the only branch it creates is
   `research/<ticket-slug>`. A ticket that demands code is relabelled `HITL`.

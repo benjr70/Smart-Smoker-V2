@@ -616,6 +616,116 @@ ${gh}"
 }
 
 #-------------------------------------------------------------------------------
+# Test 8g: a resolve that ended `relabelled HITL` stripped the whole AFK family
+# on purpose (AFK + AFK:in-progress off, HITL on, un-projected) because the task
+# turned out to need product code. A crash in the tail afterwards must add NO
+# AFK-family label back — AFK:done would put a human's ticket back in the queue.
+#-------------------------------------------------------------------------------
+test_failed_resolve_after_hitl_adds_no_afk_label() {
+    echo "TEST: crash after relabelled-HITL adds no AFK label back"
+
+    local dir rc gh
+    dir="$(make_env "=== /afk-pickup 2026-08-30T00:00:00Z ===
+resolve: #700 task provision-the-api-key
+resolve: DONE — #700 relabelled HITL (needs code)
+Error: process exited with code 1" 1)"
+    trap "rm -rf '${dir}'" RETURN
+
+    run_agent "${dir}" >/dev/null 2>&1
+    rc=$?
+
+    if [ "${rc}" -eq 0 ]; then
+        fail "a genuine failure must exit non-zero" "rc=${rc}"
+        return
+    fi
+
+    gh="$(cat "${dir}/gh.log")"
+    if printf '%s' "${gh}" | grep -qE 'add-label AFK:(done|failed|paused)'; then
+        fail "a HITL-routed ticket must get NO AFK-family label back" "gh:
+${gh}"
+        return
+    fi
+    if printf '%s' "${gh}" | grep -q 'issue comment 700'; then
+        fail "must not comment a failure over the skill's HITL hand-off" "gh:
+${gh}"
+        return
+    fi
+
+    pass "crash after relabelled-HITL adds no AFK label back"
+}
+
+#-------------------------------------------------------------------------------
+# Test 8h: when /afk-resolve already failed the ticket itself (§7 applies
+# AFK:failed AND posts a comment naming the real reason), a non-zero exit must
+# not post a SECOND, contradictory "crashed / exited non-zero" comment over it.
+#-------------------------------------------------------------------------------
+test_failed_resolve_after_own_failure_posts_no_second_comment() {
+    echo "TEST: self-reported resolve failure gets no second comment"
+
+    local dir rc gh
+    dir="$(make_env "=== /afk-pickup 2026-08-30T00:00:00Z ===
+resolve: #700 research which-merge-gate-lands-a-docs-pr
+resolve: FAILED — #700 no-sources
+Error: process exited with code 1" 1)"
+    trap "rm -rf '${dir}'" RETURN
+
+    run_agent "${dir}" >/dev/null 2>&1
+    rc=$?
+
+    if [ "${rc}" -eq 0 ]; then
+        fail "a genuine failure must exit non-zero" "rc=${rc}"
+        return
+    fi
+
+    gh="$(cat "${dir}/gh.log")"
+    if printf '%s' "${gh}" | grep -q 'issue comment 700'; then
+        fail "must not post a second cause over the skill's own reason" "gh:
+${gh}"
+        return
+    fi
+    if ! printf '%s' "${gh}" | grep -q 'issue edit 700.*--add-label AFK:failed'; then
+        fail "must still assert AFK:failed idempotently" "gh:
+${gh}"
+        return
+    fi
+
+    pass "self-reported resolve failure gets no second comment"
+}
+
+#-------------------------------------------------------------------------------
+# Test 8i: running out of gas after a self-reported resolve FAILURE must not
+# delete `research/<slug>` — the gate-refused path deliberately leaves that
+# branch's PR open for the next fire's docs-merge reconcile.
+#-------------------------------------------------------------------------------
+test_exhausted_after_resolve_failed_keeps_branch() {
+    echo "TEST: exhaustion after resolve FAILED keeps the research branch"
+
+    local dir rc git_calls
+    dir="$(make_env "=== /afk-pickup 2026-08-30T00:00:00Z ===
+resolve: #700 research which-merge-gate-lands-a-docs-pr
+resolve: FAILED — #700 gate-refused
+Claude AI usage limit reached|1786060800" 1)"
+    trap "rm -rf '${dir}'" RETURN
+
+    run_agent "${dir}" >/dev/null 2>&1
+    rc=$?
+
+    if [ "${rc}" -ne 0 ]; then
+        fail "an out-of-gas run must NOT fail (exit 0)" "rc=${rc}"
+        return
+    fi
+
+    git_calls="$(cat "${dir}/git.log")"
+    if printf '%s' "${git_calls}" | grep -q 'push origin --delete'; then
+        fail "must NOT delete the branch behind an open research PR" "git:
+${git_calls}"
+        return
+    fi
+
+    pass "exhaustion after resolve FAILED keeps the research branch"
+}
+
+#-------------------------------------------------------------------------------
 # Test 9: the claude invocation runs with the print background-task ceiling
 # lifted (CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0), so a long team dispatch is not
 # killed at the default 600s. A host override (already-set value) is honored.
@@ -707,6 +817,9 @@ test_exhausted_resolve_drops_lock_and_branch
 test_failed_resolve_marks_ticket_failed
 test_failed_resolve_after_done_keeps_done
 test_exhausted_after_resolve_done_only_drops_lock
+test_failed_resolve_after_hitl_adds_no_afk_label
+test_failed_resolve_after_own_failure_posts_no_second_comment
+test_exhausted_after_resolve_failed_keeps_branch
 test_bg_ceiling_lifted_for_claude
 test_model_fallback_env_pins_model
 

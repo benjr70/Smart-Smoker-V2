@@ -75,6 +75,11 @@ toolset). The shapes are equivalent — issue listing, GraphQL, issue editing,
 label management, PR creation. Pick whichever works in the current env; do
 **not** abort the pickup just because `gh` is missing or under-scoped.
 
+A hand-run pick is the **whole** of §2 including its routing: read the winner's
+labels and apply §2's wayfinder rules (`wayfinder:research` / `wayfinder:task` →
+§2b, any other or multiple `wayfinder:*` → skip the candidate) before §3/§4 ever
+sees it. The fallback changes the transport, never the decision.
+
 ### 1. Concurrency lock check (repo-wide)
 
 `AFK:in-progress` is the distributed lock. The check already ran inside §0's
@@ -186,6 +191,27 @@ if [ "$GATE_RC" -eq 0 ]; then
     fi
 fi
 ```
+
+**A merged `/afk-resolve` PR still owes its Decision ticket.** A research PR
+that this section merges may be one an earlier resolve left open when the gate
+refused it: its findings are now on master, but the ticket is sitting
+`AFK:failed` with no resolution comment, no close and no Map entry. The PR
+body's marker is the back-reference; when it is there, finish the resolve before
+restoring the lock:
+
+```bash
+MARKER=$(gh pr view "$RECON_PR" --json body -q .body \
+    | grep -oE '<!-- afk-resolve ticket:#[0-9]+[^>]*-->' | head -1)
+```
+
+If `MARKER` is non-empty, take its `ticket:#<N>` and invoke the skill in-process
+via the `Skill` tool —
+`/afk-resolve --issue <N> --type research --finish-merged --pr <RECON_PR>` — and
+record its terminal `resolve:` line in the §7 report alongside the `docs-merge:`
+line. It does no research and opens nothing; it only posts the resolution
+comment linking master, closes the ticket, flips it to `AFK:done` and appends
+the Map. It is idempotent, so a repeat on an already-closed ticket costs one
+read. When `MARKER` is absent (an ordinary docs PR), skip this entirely.
 
 **Every refusal must show up in the §7 report** — a gate that could not run is a
 harness bug and must never vanish into a silent reconcile. Derive the
@@ -308,6 +334,20 @@ Verdict `idle` means no candidate survived — print
 > filters/sort/blocker rules by hand. The exact query string and jq shape live
 > in `scripts/claude-agent/lib/pickup-triage.sh` — read them from there rather
 > than reconstructing from memory.
+>
+> **The wayfinder routing is one of those rules, not an extra.** The query
+> selects `labels`; the winner's `wayfinder:*` label decides where it goes,
+> exactly as the script's own branch does:
+>
+> - no `wayfinder:*` label → a Slice: continue to §3/§4 as verdict `pick`.
+> - exactly `wayfinder:research` / `wayfinder:task` → a Decision ticket: go to
+>   §2b with `TYPE` = `research` / `task`, never to a team.
+> - any other `wayfinder:*` type (`grilling`, `prototype`, …), or **more than
+>   one** `wayfinder:*` label → mislabelled HITL/ambiguous: skip that candidate
+>   with a note on stderr and consider the next one.
+>
+> Skipping this by hand is how a Decision ticket ends up with an implementer
+> team writing code for a question — the failure §2b exists to prevent.
 
 ### 2b. Wayfinder Decision ticket → `/afk-resolve`
 
@@ -324,6 +364,13 @@ TYPE=$(printf '%s' "$TRIAGE" | jq -r '.pick.type')    # research | task
 TITLE=$(printf '%s' "$TRIAGE" | jq -r '.pick.title')
 SLUG=$(printf '%s' "$TITLE" | tr 'A-Z' 'a-z' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g' | cut -c1-60)
 ```
+
+This `SLUG` is the **only** one: it is passed to `/afk-resolve` below as
+`--slug`, and the skill branches, writes and reports on exactly the string it is
+handed rather than re-deriving one from the title. Two independent slug
+pipelines would drift on some title and leave `agent-run`'s out-of-gas cleanup
+deleting a `research/*` branch that never existed while the real one stayed
+pushed.
 
 `--dry-run`: print `afk-pickup: would-resolve #<N> <title>` and `exit 0` — no
 label, no branch, no agent.
@@ -350,7 +397,7 @@ gh issue edit "$N" --add-label AFK:in-progress
 `Agent` — the resolve's own subagents are its business):
 
 ```
-/afk-resolve --issue <N> --type <TYPE>
+/afk-resolve --issue <N> --type <TYPE> --slug <SLUG>
 ```
 
 Record its terminal line verbatim as `RESOLVE_RESULT`. `/afk-resolve` ends on

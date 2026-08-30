@@ -486,6 +486,46 @@ test_wayfinder_hitl_type_skipped() {
     fi
 }
 
+# ── Test 9n: two wayfinder types on one ticket is ambiguous, never a coin flip ─
+test_wayfinder_multiple_types_skipped() {
+    local dir out err
+    dir="$(make_env)"
+    # #10 carries both wayfinder:research and wayfinder:grilling. Reading only
+    # the "first" label would make the verdict depend on GraphQL's (unspecified)
+    # label order — resolve on one tick, skip on the next. The mislabelling is
+    # skipped deterministically instead, whichever order the labels arrive in.
+    graphql_fixture "${dir}" \
+        "$(issue_node 10 'both types at once' P0 true '2026-01-01T00:00:00Z' 'AFK,wayfinder:research,wayfinder:grilling')" \
+        "$(issue_node 20 'clean slice' P1 true '2026-02-01T00:00:00Z' AFK)"
+    out="$(run_triage "${dir}" 2>"${dir}/err.log")"
+    err="$(cat "${dir}/err.log")"
+    if [ "$(printf '%s' "${out}" | jq -r '.verdict')" = "pick" ] \
+        && [ "$(printf '%s' "${out}" | jq -r '.pick.issue')" = "20" ] \
+        && printf '%s' "${err}" | grep -q 'ambiguous wayfinder labels'; then
+        pass "multi-type wayfinder candidate skipped as ambiguous"
+    else
+        fail "multi-type wayfinder candidate skipped as ambiguous" "out=${out} err=${err}"
+    fi
+}
+
+# ── Test 9o: label order does not change the ambiguous verdict ──────────────
+test_wayfinder_multiple_types_order_independent() {
+    local dir out err
+    dir="$(make_env)"
+    graphql_fixture "${dir}" \
+        "$(issue_node 10 'both types at once' P0 true '2026-01-01T00:00:00Z' 'AFK,wayfinder:grilling,wayfinder:research')" \
+        "$(issue_node 20 'clean slice' P1 true '2026-02-01T00:00:00Z' AFK)"
+    out="$(run_triage "${dir}" 2>"${dir}/err.log")"
+    err="$(cat "${dir}/err.log")"
+    if [ "$(printf '%s' "${out}" | jq -r '.verdict')" = "pick" ] \
+        && [ "$(printf '%s' "${out}" | jq -r '.pick.issue')" = "20" ] \
+        && printf '%s' "${err}" | grep -q 'ambiguous wayfinder labels'; then
+        pass "ambiguous wayfinder verdict is label-order independent"
+    else
+        fail "ambiguous wayfinder verdict is label-order independent" "out=${out} err=${err}"
+    fi
+}
+
 # ── Test 10: missing project scope → pick-mcp (never guesses the pick) ───────
 test_pick_mcp_on_missing_scope() {
     local dir out
@@ -534,6 +574,8 @@ test_pick_wayfinder_research
 test_pick_wayfinder_task
 test_plain_slice_pick_unchanged
 test_wayfinder_hitl_type_skipped
+test_wayfinder_multiple_types_skipped
+test_wayfinder_multiple_types_order_independent
 test_pick_mcp_on_missing_scope
 test_idle
 

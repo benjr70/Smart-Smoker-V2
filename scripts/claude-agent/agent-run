@@ -18,9 +18,10 @@
 # no partial implementation worth resuming, only half-read research. Exhausting
 # one drops the `AFK:in-progress` lock, deletes any pushed `research/<slug>`
 # branch and applies NO label, so the next tick simply restarts the resolve from
-# scratch. Once the resolve has printed its terminal `resolve: DONE …` line the
-# ticket is closed and answered: a later crash or cutoff drops the lock (leaving
-# AFK:done) and touches nothing else.
+# scratch. Once the resolve has printed a terminal line the skill owns the
+# ticket's end state and a later crash or cutoff only tidies the lock: `DONE …
+# closed` leaves AFK:done, `DONE … relabelled HITL` leaves the HITL ticket
+# entirely alone, and `FAILED` keeps the skill's own AFK:failed and its comment.
 #
 # Usage:
 #   agent-run                     # fire once, exit per the classification below
@@ -146,6 +147,33 @@ resolve_done() {
   grep -qE 'resolve:[[:space:]]+DONE' "$LOG_FILE"
 }
 
+# resolve_hitl — true when the resolve's terminal line was the `relabelled HITL`
+# outcome: a Decision ticket that turned out to need product code. The skill has
+# already stripped the whole AFK family (AFK, AFK:in-progress) and added HITL, so
+# the ticket is a human's now. Re-adding AFK:done here would put the ticket back
+# in the AFK family the skill deliberately removed it from, so this case owes
+# nothing at all — not even the lock, which is already gone.
+resolve_hitl() {
+  grep -qE 'resolve:[[:space:]]+DONE.*relabelled HITL' "$LOG_FILE"
+}
+
+# resolve_failed — true when the resolve printed its own terminal
+# `resolve: FAILED — #<n> <reason>` line. The skill has already applied
+# AFK:failed AND posted the explaining comment naming the real reason, so a
+# second "crashed / exited non-zero" comment from here would contradict it.
+resolve_failed() {
+  grep -qE 'resolve:[[:space:]]+FAILED' "$LOG_FILE"
+}
+
+# resolve_settled — true once ANY terminal resolve line went out (DONE, HITL or
+# FAILED). Past it there is no half-finished resolve to undo: the ticket carries
+# its settled labels and the `research/<slug>` branch is either the merged PR's
+# head or the head of a PR left open on purpose for the docs-merge reconcile.
+# Either way, deleting it would be destructive.
+resolve_settled() {
+  resolve_done || resolve_failed
+}
+
 # resolve_cleanup — the out-of-gas exit for a resolve fire. Research is cheap to
 # redo and expensive to half-keep: a frozen branch of partial notes would be
 # restarted-from anyway, and a label would take the ticket out of the queue it
@@ -158,11 +186,13 @@ resolve_cleanup() {
 
   "$GH_BIN" issue edit "$issue" --remove-label AFK:in-progress || true
 
-  # Past the terminal DONE line there is no half-finished resolve to undo: the
-  # findings are merged and the ticket is closed, so deleting research/<slug>
-  # would delete the merged PR's head branch for nothing.
-  if resolve_done; then
-    echo "agent-run: resolve #${issue} finished before running out of gas — lock dropped only" \
+  # Past a terminal resolve line there is no half-finished resolve to undo: on
+  # DONE the findings are merged and the ticket is closed, and on FAILED the
+  # gate-refused path deliberately leaves the research PR open for the next
+  # fire's docs-merge reconcile. Deleting research/<slug> in either case would
+  # destroy a branch something else still needs.
+  if resolve_settled; then
+    echo "agent-run: resolve #${issue} settled before running out of gas — lock dropped only" \
       | tee -a "$LOG_FILE"
     return 0
   fi
@@ -215,8 +245,10 @@ pause_inflight() {
 #
 # A resolve fire (`resolve: #N <type> <slug>`) fails like an issue: its ticket is
 # still open and unanswered, so it takes AFK:failed plus an explaining comment —
-# unless a terminal `resolve: DONE …` line already went out, in which case the
-# ticket is closed and answered and only AFK:done is restored.
+# unless a terminal resolve line already went out, in which case the skill owns
+# the end state: `DONE … closed` restores AFK:done only, `DONE … relabelled HITL`
+# restores nothing (the AFK family was removed on purpose), and `FAILED` re-asserts
+# AFK:failed without a second, contradictory comment.
 #
 # A reconcile fire (`picked:   reconcile PR #P (issue #N)`) is special: the
 # issue's work was already DONE — the fire only borrowed AFK:in-progress as
@@ -235,10 +267,34 @@ fail_inflight() {
     # resolved ticket AFK:failed and tell a human it is still open — a lie, the
     # same one the reconcile path below exists to avoid. Restore AFK:done and
     # say nothing on the ticket.
+    #
+    # The `relabelled HITL` outcome is a DONE too, but its end state is the
+    # opposite: the skill stripped `AFK` AND `AFK:in-progress` and handed the
+    # ticket to a human. Restoring AFK:done there would re-add an AFK-family
+    # label to a ticket deliberately routed out of the queue, so this branch
+    # comes first and touches nothing.
+    if resolve_hitl; then
+      echo "agent-run: resolve #${issue} relabelled HITL before the crash — no AFK label restored" \
+        | tee -a "$LOG_FILE"
+      return 0
+    fi
+
     if resolve_done; then
       "$GH_BIN" issue edit "$issue" \
         --remove-label AFK:in-progress --add-label AFK:done || true
       echo "agent-run: resolve #${issue} crashed after DONE — left AFK:done, no failure" \
+        | tee -a "$LOG_FILE"
+      return 0
+    fi
+
+    # The skill already failed the ticket itself (§7): AFK:failed is on and a
+    # comment names the real reason. Re-assert the label idempotently in case
+    # the crash landed between the two calls, but post NO second comment — two
+    # conflicting causes on one ticket is worse than none.
+    if resolve_failed; then
+      "$GH_BIN" issue edit "$issue" \
+        --remove-label AFK:in-progress --add-label AFK:failed || true
+      echo "agent-run: resolve #${issue} already reported its own failure — no second comment" \
         | tee -a "$LOG_FILE"
       return 0
     fi
