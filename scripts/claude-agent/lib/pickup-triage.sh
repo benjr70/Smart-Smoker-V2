@@ -18,7 +18,8 @@
 #
 # Verdict JSON (one line, jq-compact):
 #
-#   { "verdict": "abort|no-gh|in-flight|reconcile|resume|resume-cap|pick|pick-mcp|idle",
+#   { "verdict": "abort|no-gh|in-flight|reconcile|resume|resume-cap|pick|
+#                 pick-wayfinder|pick-mcp|idle",
 #     "agentLogin": "<login|''>",
 #     "useMcpForProject": <bool>,       # gh token missing `project` scope
 #     "inflight": <int>,                # open AFK:in-progress count
@@ -27,7 +28,11 @@
 #                    "hadDone": <bool> } | null,
 #     "paused":    { "issue": N, "pauseCount": <int>,
 #                    "action": "resume|fail" } | null,
-#     "pick":      { "issue": N, "title": "...", "priority": "P0|P1|P2" } | null }
+#     "pick":      { "issue": N, "title": "...", "priority": "P0|P1|P2",
+#                    "type": "research|task" } | null }
+#
+# `.pick.type` is present only on `pick-wayfinder` — a plain Slice pick carries
+# no type, exactly as before.
 #
 # Verdict semantics (priority order — first match wins, same as the skill):
 #   abort      CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS flag missing → skill exits 1
@@ -36,7 +41,10 @@
 #   reconcile  a PR needs attention (pr-triage.sh verdict) → skill §1.2
 #   resume     paused issue below the resume cap → skill §4 resume path
 #   resume-cap paused issue AT the cap → skill applies AFK:failed + comment
-#   pick       eligible issue found (blockers closed, unclaimed) → skill §4
+#   pick       eligible Slice found (blockers closed, unclaimed) → skill §4
+#   pick-wayfinder  the eligible issue is a wayfinder Decision ticket
+#              (`wayfinder:research` / `wayfinder:task`) → skill §2b, which
+#              routes it to /afk-resolve instead of a /afk-dispatch team
 #   pick-mcp   token lacks `project` scope → skill runs §2 via GitHub MCP
 #   idle       nothing to do → skill exits silent
 #
@@ -74,6 +82,15 @@
 #   project    must be an item of PICKUP_PROJECT_NUMBER; `Priority` field sorts
 #              P0 > P1 > P2 (missing/null = P2), then oldest `createdAt`.
 #   labels     none of AFK:in-progress / AFK:done / AFK:failed / AFK:paused.
+#   wayfinder  a `wayfinder:research` / `wayfinder:task` label makes the winner
+#              a `pick-wayfinder` with that `.pick.type`. Any OTHER
+#              `wayfinder:*` type (grilling, prototype) is HITL by definition
+#              and can only have reached the AFK queue by mislabelling: the
+#              candidate is skipped with a stderr note and the next one is
+#              considered — never resolved, never picked as a slice. A ticket
+#              carrying MORE than one `wayfinder:*` label is equally
+#              mislabelled and is skipped the same way, so the verdict never
+#              depends on GraphQL's label order.
 #
 # Env:
 #   GH_BIN                  gh CLI (default: gh) — injectable for tests
@@ -234,19 +251,56 @@ query {
               | (($i.projectItems.nodes // []) | map(select(.project.number == $pn)) | first) as $pi
               | select($pi != null)
               | ($pi.fieldValueByName.name // "P2") as $prio
+              | (($lbls | map(select(startswith("wayfinder:"))) | sort | join(",")) // "") as $wf
               | {number, title, createdAt, priority: $prio,
-                 prio_rank: ($prio | prio_rank)}]
+                 prio_rank: ($prio | prio_rank), wf: $wf}]
             | sort_by([.prio_rank, .createdAt])
             | .[] | @base64' 2>/dev/null)" || rows=''
 
     # Eligibility (blockers, assignee) is decided inside the jq filter above, so
     # the first surviving row IS the pick — no follow-up gh calls.
-    local row cand_json cand_n cand_title cand_prio
+    local row cand_json cand_n cand_title cand_prio cand_wf cand_type
     for row in ${rows}; do
         cand_json="$(printf '%s' "${row}" | base64 -d 2>/dev/null)" || continue
         cand_n="$(printf '%s' "${cand_json}" | jq -r '.number')"
         cand_title="$(printf '%s' "${cand_json}" | jq -r '.title')"
         cand_prio="$(printf '%s' "${cand_json}" | jq -r '.priority')"
+        cand_wf="$(printf '%s' "${cand_json}" | jq -r '.wf // ""')"
+
+        # A `wayfinder:*` label makes the ticket a Decision ticket, not a Slice:
+        # it is resolved by /afk-resolve, never implemented by a team. Only the
+        # two AFK-shaped types route; grilling/prototype (and any future type)
+        # need a human on the other side of the conversation, so a candidate
+        # carrying one is skipped LOUDLY rather than resolved — it should never
+        # have carried `AFK` in the first place, and the next candidate wins.
+        #
+        # `${cand_wf}` is the ticket's `wayfinder:*` labels SORTED and joined
+        # with commas, so the decision never depends on GraphQL's unspecified
+        # label order. More than one type on one ticket is a mislabelling with
+        # no safe reading — resolving it would pick a type by luck — so it is
+        # skipped loudly, exactly like a HITL type.
+        case "${cand_wf}" in
+            '')                  cand_type='' ;;
+            wayfinder:research)  cand_type='research' ;;
+            wayfinder:task)      cand_type='task' ;;
+            *,*)
+                echo "pickup-triage: skipping #${cand_n} — ambiguous wayfinder labels (${cand_wf})" >&2
+                continue
+                ;;
+            *)
+                echo "pickup-triage: skipping #${cand_n} — ${cand_wf} is not an AFK ticket type" >&2
+                continue
+                ;;
+        esac
+
+        if [ -n "${cand_type}" ]; then
+            _pt_emit pick-wayfinder "${login}" "${use_mcp}" 0 null "${paused}" \
+                "$(jq -cn --argjson n "${cand_n}" --arg t "${cand_title}" \
+                    --arg p "${cand_prio}" --arg ty "${cand_type}" \
+                    '{issue: $n, title: $t, priority: $p, type: $ty}')"
+            return 0
+        fi
+
         _pt_emit pick "${login}" "${use_mcp}" 0 null "${paused}" \
             "$(jq -cn --argjson n "${cand_n}" --arg t "${cand_title}" --arg p "${cand_prio}" \
                 '{issue: $n, title: $t, priority: $p}')"

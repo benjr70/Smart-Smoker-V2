@@ -246,6 +246,28 @@ at [`docs/AFK/`](../../docs/AFK/index.md).
 
 ---
 
+### `/afk-resolve` -- Resolve One Wayfinder Decision Ticket (Level 7)
+
+**When to use:** A `wayfinder:research` or human-free `wayfinder:task` Decision
+ticket needs resolving without a human. Fired automatically by `/afk-pickup` §2b
+on triage verdict `pick-wayfinder`; `/wayfinder` also fires it as a subagent for
+chart-time research. Invoke with
+`/afk-resolve --issue <N> --type <research|task>`.
+
+**What it does:** Claims the ticket (assignee + `AFK:in-progress`), runs the
+`research` skill against primary sources, persists findings to
+`docs/research/<map-slug>/<ticket-slug>.md` with a ticket/map/date/sources
+header, opens a `docs(research): … (#N)` PR off `research/<ticket-slug>`, drives
+`/pr-watch` to green, merges through the docs-only gate
+(`scripts/claude-agent/lib/docs-only-gate.sh`), posts the resolution comment
+linking the file on master, closes the ticket, appends the Map's Decisions so
+far, and graduates fog into at most three new sub-issues under strict depth and
+routing guardrails. Task tickets follow the same skeleton without the file/PR; a
+task needing product code is relabelled `HITL`. Writes no application code.
+
+**Source:** Custom (project-specific). Full playbook at
+[`.claude/skills/afk-resolve/SKILL.md`](afk-resolve/SKILL.md).
+
 ---
 
 ## Subagent Definitions (Level 7)

@@ -7,8 +7,10 @@ description:
   issue from the Smart Smoker V2 GitHub Project (highest Priority field then
   oldest, blockers resolved, no other team in flight), invoke `/afk-dispatch
   --issue <N> [--resume]`, then open a PR on success or apply `AFK:failed` on
-  failure. Designed to be fired by a Claude routine on cron. No arguments
-  (besides optional --dry-run).
+  failure. A picked issue carrying a `wayfinder:research` / `wayfinder:task`
+  label is a Decision ticket instead and routes to `/afk-resolve`. Designed to
+  be fired by a Claude routine on cron. No arguments (besides optional
+  --dry-run).
 ---
 
 # AFK Pickup — Autonomous Single-Issue Picker + PR Wrapper
@@ -45,17 +47,18 @@ echo "afk-pickup: triage verdict=$VERDICT"
 The script is **read-only** — it never touches labels, comments, branches, or
 PRs. All mutations stay in the sections below. Branch on `$VERDICT`:
 
-| verdict      | meaning                                | go to                                                                                             |
-| ------------ | -------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `abort`      | agent-teams env flag missing           | print the missing-flag line, `exit 1`                                                             |
-| `no-gh`      | gh unauthenticated                     | §0.5 MCP fallback (run §1.2/§1.5/§2 semantics via MCP tools)                                      |
-| `in-flight`  | `AFK:in-progress` lock held            | `echo "afk-pickup: skip — $(jq -r '.inflight' <<<"$TRIAGE") issue(s) in flight"; exit 0`          |
-| `reconcile`  | a PR needs attention (or is docs-only) | §1.2 (fields in `.reconcile`; `.reconcile.reason` `docs-merge` takes the gate-and-merge branch)   |
-| `resume`     | paused issue below the resume cap      | §1.5 resume path (fields in `.paused`)                                                            |
-| `resume-cap` | paused issue AT the cap                | §1.5 fail path (fields in `.paused`)                                                              |
-| `pick`       | eligible issue found, blockers closed  | §3/§4 with `N=$(jq -r '.pick.issue' <<<"$TRIAGE")`, title in `.pick.title`                        |
-| `pick-mcp`   | gh token lacks `project` scope         | run §2's pick via the GitHub MCP GraphQL tool (same query/filters as the script — see its header) |
-| `idle`       | nothing to do                          | `echo "afk-pickup: no eligible issue"; exit 0`                                                    |
+| verdict          | meaning                                 | go to                                                                                             |
+| ---------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `abort`          | agent-teams env flag missing            | print the missing-flag line, `exit 1`                                                             |
+| `no-gh`          | gh unauthenticated                      | §0.5 MCP fallback (run §1.2/§1.5/§2 semantics via MCP tools)                                      |
+| `in-flight`      | `AFK:in-progress` lock held             | `echo "afk-pickup: skip — $(jq -r '.inflight' <<<"$TRIAGE") issue(s) in flight"; exit 0`          |
+| `reconcile`      | a PR needs attention (or is docs-only)  | §1.2 (fields in `.reconcile`; `.reconcile.reason` `docs-merge` takes the gate-and-merge branch)   |
+| `resume`         | paused issue below the resume cap       | §1.5 resume path (fields in `.paused`)                                                            |
+| `resume-cap`     | paused issue AT the cap                 | §1.5 fail path (fields in `.paused`)                                                              |
+| `pick`           | eligible Slice found, blockers closed   | §3/§4 with `N=$(jq -r '.pick.issue' <<<"$TRIAGE")`, title in `.pick.title`                        |
+| `pick-wayfinder` | the pick is a wayfinder Decision ticket | §2b — `/afk-resolve`, not a team (type in `.pick.type`)                                           |
+| `pick-mcp`       | gh token lacks `project` scope          | run §2's pick via the GitHub MCP GraphQL tool (same query/filters as the script — see its header) |
+| `idle`           | nothing to do                           | `echo "afk-pickup: no eligible issue"; exit 0`                                                    |
 
 > **Routine env note.** When fired by a remote/cron routine, the routine's `gh`
 > token may not have the `project` scope. Refreshing the local token does not
@@ -71,6 +74,11 @@ MCP** server tool (the `mcp__github__*`-style functions exposed in the available
 toolset). The shapes are equivalent — issue listing, GraphQL, issue editing,
 label management, PR creation. Pick whichever works in the current env; do
 **not** abort the pickup just because `gh` is missing or under-scoped.
+
+A hand-run pick is the **whole** of §2 including its routing: read the winner's
+labels and apply §2's wayfinder rules (`wayfinder:research` / `wayfinder:task` →
+§2b, any other or multiple `wayfinder:*` → skip the candidate) before §3/§4 ever
+sees it. The fallback changes the transport, never the decision.
 
 ### 1. Concurrency lock check (repo-wide)
 
@@ -183,6 +191,27 @@ if [ "$GATE_RC" -eq 0 ]; then
     fi
 fi
 ```
+
+**A merged `/afk-resolve` PR still owes its Decision ticket.** A research PR
+that this section merges may be one an earlier resolve left open when the gate
+refused it: its findings are now on master, but the ticket is sitting
+`AFK:failed` with no resolution comment, no close and no Map entry. The PR
+body's marker is the back-reference; when it is there, finish the resolve before
+restoring the lock:
+
+```bash
+MARKER=$(gh pr view "$RECON_PR" --json body -q .body \
+    | grep -oE '<!-- afk-resolve ticket:#[0-9]+[^>]*-->' | head -1)
+```
+
+If `MARKER` is non-empty, take its `ticket:#<N>` and invoke the skill in-process
+via the `Skill` tool —
+`/afk-resolve --issue <N> --type research --finish-merged --pr <RECON_PR>` — and
+record its terminal `resolve:` line in the §7 report alongside the `docs-merge:`
+line. It does no research and opens nothing; it only posts the resolution
+comment linking master, closes the ticket, flips it to `AFK:done` and appends
+the Map. It is idempotent, so a repeat on an already-closed ticket costs one
+read. When `MARKER` is absent (an ordinary docs PR), skip this entirely.
 
 **Every refusal must show up in the §7 report** — a gate that could not run is a
 harness bug and must never vanish into a silent reconcile. Derive the
@@ -305,6 +334,93 @@ Verdict `idle` means no candidate survived — print
 > filters/sort/blocker rules by hand. The exact query string and jq shape live
 > in `scripts/claude-agent/lib/pickup-triage.sh` — read them from there rather
 > than reconstructing from memory.
+>
+> **The wayfinder routing is one of those rules, not an extra.** The query
+> selects `labels`; the winner's `wayfinder:*` label decides where it goes,
+> exactly as the script's own branch does:
+>
+> - no `wayfinder:*` label → a Slice: continue to §3/§4 as verdict `pick`.
+> - exactly `wayfinder:research` / `wayfinder:task` → a Decision ticket: go to
+>   §2b with `TYPE` = `research` / `task`, never to a team.
+> - any other `wayfinder:*` type (`grilling`, `prototype`, …), or **more than
+>   one** `wayfinder:*` label → mislabelled HITL/ambiguous: skip that candidate
+>   with a note on stderr and consider the next one.
+>
+> Skipping this by hand is how a Decision ticket ends up with an implementer
+> team writing code for a question — the failure §2b exists to prevent.
+
+### 2b. Wayfinder Decision ticket → `/afk-resolve`
+
+Verdict `pick-wayfinder` means the winner of §2 is a **Decision ticket** off a
+wayfinder **Map**, not a Slice: its resolution is a decision or a fact, so it
+takes no branch, no team and no code review. It is worked by `/afk-resolve`
+instead, which owns the whole protocol (claim → research → docs PR → docs-only
+merge → resolution comment → close → Map append → fog graduation). This section
+is only the routing.
+
+```bash
+N=$(printf '%s' "$TRIAGE" | jq -r '.pick.issue')
+TYPE=$(printf '%s' "$TRIAGE" | jq -r '.pick.type')    # research | task
+TITLE=$(printf '%s' "$TRIAGE" | jq -r '.pick.title')
+SLUG=$(printf '%s' "$TITLE" | tr 'A-Z' 'a-z' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g' | cut -c1-60)
+```
+
+This `SLUG` is the **only** one: it is passed to `/afk-resolve` below as
+`--slug`, and the skill branches, writes and reports on exactly the string it is
+handed rather than re-deriving one from the title. Two independent slug
+pipelines would drift on some title and leave `agent-run`'s out-of-gas cleanup
+deleting a `research/*` branch that never existed while the real one stayed
+pushed.
+
+`--dry-run`: print `afk-pickup: would-resolve #<N> <title>` and `exit 0` — no
+label, no branch, no agent.
+
+Otherwise emit **both** report lines before doing anything else, then take the
+lock. The `resolve:` line is the machine marker `agent-run` scrapes to tell a
+resolve fire from a slice fire on a crash or an out-of-gas exit (it drops the
+lock and deletes `research/<slug>` instead of pausing), so it must be printed
+**before** the resolve can be interrupted, and its slug must be the one
+`/afk-resolve` branches on:
+
+```
+picked:   #<N> <title>
+resolve: #<N> <type> <slug>
+```
+
+```bash
+gh issue edit "$N" --add-label AFK:in-progress
+```
+
+`AFK:in-progress` is the same single-flight lock as every other fire: while
+`/afk-resolve` runs, §1 makes every other fire skip. Then invoke the skill
+**in-process** via the `Skill` tool (like `/afk-dispatch`, not as a spawned
+`Agent` — the resolve's own subagents are its business):
+
+```
+/afk-resolve --issue <N> --type <TYPE> --slug <SLUG>
+```
+
+Record its terminal line verbatim as `RESOLVE_RESULT`. `/afk-resolve` ends on
+exactly one of four lines, and each leaves the ticket in a settled state this
+wrapper must not second-guess:
+
+| terminal line                                       | ticket end state                                                      |
+| --------------------------------------------------- | --------------------------------------------------------------------- |
+| `resolve: DONE — #<N> closed, PR #<P> merged <sha>` | closed; `AFK:in-progress` → `AFK:done`                                |
+| `resolve: DONE — #<N> closed (task)`                | closed; `AFK:in-progress` → `AFK:done`                                |
+| `resolve: DONE — #<N> relabelled HITL (needs code)` | open; `AFK` and `AFK:in-progress` removed, `HITL` added, un-projected |
+| `resolve: FAILED — #<N> <reason>`                   | open; `AFK:in-progress` → `AFK:failed`, explaining comment posted     |
+
+The skill has already released the lock and applied every label in that column,
+including the `AFK:failed` + comment on `FAILED` — this wrapper adds nothing to
+any of them. The `relabelled HITL` row is a normal, successful outcome, not a
+failure: a Decision ticket that turns out to need product code belongs to a
+human to re-route, and dropping `AFK` plus the Project #1 membership is what
+stops the picker offering it again.
+
+Then run §6c token accounting for `$N`, emit the resolve output block from §7,
+and `exit 0` — a resolve fire never falls through to §4 (one fire = one unit of
+work). Exit non-zero only if the skill crashed with no terminal line at all.
 
 ### 3. Dry-run short-circuit
 
@@ -313,6 +429,7 @@ If `--dry-run` was passed:
 ```
 afk-pickup: would-pick #<N> <title>        # normal pick
 afk-pickup: would-resume #<N> <title>      # RESUME_MODE from §1.5
+afk-pickup: would-resolve #<N> <title>     # pick-wayfinder from §2b
 ```
 
 …and `exit 0`. No git or GitHub mutations.
@@ -733,11 +850,11 @@ captures the failure.
 
 ### 6c. Token accounting (every fire that worked an issue — one call)
 
-Before emitting the output block — on the success path, the failure path, AND a
-reconcile fire — post the issue's cumulative token spend as a single
-create-or-update comment (marker `<!-- token-usage -->`, PATCHed in place on
-re-runs, so resumes and reconciles keep one comment current instead of stacking
-new ones):
+Before emitting the output block — on the success path, the failure path, a
+reconcile fire, AND a resolve fire (§2b) — post the issue's cumulative token
+spend as a single create-or-update comment (marker `<!-- token-usage -->`,
+PATCHed in place on re-runs, so resumes and reconciles keep one comment current
+instead of stacking new ones):
 
 ```bash
 scripts/claude-agent/lib/token-usage.sh post --issue "$N" || true
@@ -789,6 +906,22 @@ usual `reconcile:` line from the fall-through:
 ```
 docs-merge: REFUSED — checks-not-green
 reconcile: <verbatim terminal pr-reconcile: line>
+```
+
+A **resolve fire** (§2b picked a wayfinder Decision ticket) emits this block
+instead — the `resolve:` marker line, then `/afk-resolve`'s terminal line and,
+for a research ticket that merged, the `docs-merge:` line the skill emitted.
+Echo that line **verbatim** from `/afk-resolve` — it is the resolve-side marker
+shape (`docs-merge: PR #<p> <sha>`), which is deliberately terser than §1.2's
+reconcile `docs-merge:` line; never reformat one into the other:
+
+```
+=== /afk-pickup <ISO-8601> ===
+picked:   #<N> <title>
+resolve: #<N> <research|task> <slug>
+docs-merge: PR #<P> <sha>                            (research only, on merge)
+result:   <verbatim terminal resolve: DONE|FAILED line from /afk-resolve>
+tokens:   <verbatim token-usage: line from §6c>
 ```
 
 `pr-watch` line mirrors verbatim the final message returned by the spawned
@@ -866,6 +999,21 @@ green.
   an invalid run per the §7 hard validity rule. The missing terminal `pr-watch:`
   / `verify:` line is the detection signal; the fix is to wait for the blocking
   agent before emitting anything.
+- **Crash or out-of-gas mid-resolve (§2b)** — the `resolve: #<N> <type> <slug>`
+  line is what `agent-run` scrapes to tell a resolve fire apart: a crash flips
+  the ticket `AFK:in-progress → AFK:failed` with a comment, and an out-of-gas
+  exit drops the lock, deletes the pushed `research/<slug>` branch and applies
+  **no** label, so the next tick restarts the resolve from scratch. A resolve is
+  never paused — there is no partial implementation worth resuming. Once the
+  terminal `resolve: DONE …` line has gone out, neither cleanup applies: the
+  ticket is closed and answered, so a crash in the best-effort tail (map append,
+  fog graduation, token accounting) only restores `AFK:done`, and a cutoff there
+  only drops the lock — the branch is the merged PR's head and is left alone.
+- **A `wayfinder:grilling` / `wayfinder:prototype` ticket carries `AFK`** — a
+  mislabelled HITL ticket. `pickup-triage.sh` skips the candidate with a stderr
+  note and considers the next one; fix the labels (drop `AFK`, add `HITL`,
+  remove it from Project #1) rather than letting an agent stand in for the
+  human.
 - **Network/auth flake mid-afk-dispatch** — teammates may stay spawned.
   Wrapper's §6b cleans GitHub state but cannot clean teammates. Run "Clean up
   the team." manually after a §6b failure.
@@ -886,7 +1034,8 @@ green.
 ## Boundaries
 
 - Never picks more than one unit of work per fire — a reconcile (§1.2), a resume
-  (§1.5), or a fresh issue (§2), in that priority order, never two.
+  (§1.5), a fresh Slice (§2), or a wayfinder Decision ticket resolved via
+  `/afk-resolve` (§2b), in that priority order, never two.
 - Never invokes `scripts/ralph/*` (separate Level 6 system).
 - Never modifies the parent PRD issue. Only operates on `AFK`-labeled child
   issues. (PRDs themselves must NOT carry the `AFK` label.)

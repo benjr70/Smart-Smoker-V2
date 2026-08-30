@@ -418,6 +418,114 @@ test_blocker_page_overflow_fails_safe() {
     fi
 }
 
+# ── Test 9j: a wayfinder:research pick routes to /afk-resolve, not a slice ──
+test_pick_wayfinder_research() {
+    local dir out
+    dir="$(make_env)"
+    graphql_fixture "${dir}" \
+        "$(issue_node 10 'Which merge gate?' P1 true '2026-01-01T00:00:00Z' 'AFK,wayfinder:research')"
+    out="$(run_triage "${dir}")"
+    if [ "$(printf '%s' "${out}" | jq -r '.verdict')" = "pick-wayfinder" ] \
+        && [ "$(printf '%s' "${out}" | jq -r '.pick.issue')" = "10" ] \
+        && [ "$(printf '%s' "${out}" | jq -r '.pick.type')" = "research" ]; then
+        pass "wayfinder:research pick → verdict pick-wayfinder, type research"
+    else
+        fail "wayfinder:research pick → verdict pick-wayfinder, type research" "out=${out}"
+    fi
+}
+
+# ── Test 9k: a human-free wayfinder:task pick carries type task ─────────────
+test_pick_wayfinder_task() {
+    local dir out
+    dir="$(make_env)"
+    graphql_fixture "${dir}" \
+        "$(issue_node 11 'Provision the API key' P1 true '2026-01-01T00:00:00Z' 'AFK,wayfinder:task')"
+    out="$(run_triage "${dir}")"
+    if [ "$(printf '%s' "${out}" | jq -r '.verdict')" = "pick-wayfinder" ] \
+        && [ "$(printf '%s' "${out}" | jq -r '.pick.type')" = "task" ]; then
+        pass "wayfinder:task pick → verdict pick-wayfinder, type task"
+    else
+        fail "wayfinder:task pick → verdict pick-wayfinder, type task" "out=${out}"
+    fi
+}
+
+# ── Test 9l: a plain slice is untouched by the wayfinder routing ────────────
+test_plain_slice_pick_unchanged() {
+    local dir out
+    dir="$(make_env)"
+    graphql_fixture "${dir}" \
+        "$(issue_node 20 'Tracer: stamps on the chart' P1 true '2026-02-01T00:00:00Z' AFK)"
+    out="$(run_triage "${dir}")"
+    if [ "$(printf '%s' "${out}" | jq -r '.verdict')" = "pick" ] \
+        && [ "$(printf '%s' "${out}" | jq -r '.pick.issue')" = "20" ] \
+        && [ "$(printf '%s' "${out}" | jq -r '.pick.type')" = "null" ]; then
+        pass "plain AFK slice → verdict pick, no type (unchanged)"
+    else
+        fail "plain AFK slice → verdict pick, no type (unchanged)" "out=${out}"
+    fi
+}
+
+# ── Test 9m: a HITL-shaped wayfinder type is skipped, never resolved ────────
+test_wayfinder_hitl_type_skipped() {
+    local dir out err
+    dir="$(make_env)"
+    # #10 is a grilling ticket that should never have carried AFK. Resolving it
+    # alone would put the agent on both sides of a human conversation, so the
+    # candidate is skipped (loudly) and the next one wins.
+    graphql_fixture "${dir}" \
+        "$(issue_node 10 'grill the shape' P0 true '2026-01-01T00:00:00Z' 'AFK,wayfinder:grilling')" \
+        "$(issue_node 20 'clean slice' P1 true '2026-02-01T00:00:00Z' AFK)"
+    out="$(run_triage "${dir}" 2>"${dir}/err.log")"
+    err="$(cat "${dir}/err.log")"
+    if [ "$(printf '%s' "${out}" | jq -r '.verdict')" = "pick" ] \
+        && [ "$(printf '%s' "${out}" | jq -r '.pick.issue')" = "20" ] \
+        && printf '%s' "${err}" | grep -q '10'; then
+        pass "wayfinder:grilling candidate skipped with a stderr note"
+    else
+        fail "wayfinder:grilling candidate skipped with a stderr note" "out=${out} err=${err}"
+    fi
+}
+
+# ── Test 9n: two wayfinder types on one ticket is ambiguous, never a coin flip ─
+test_wayfinder_multiple_types_skipped() {
+    local dir out err
+    dir="$(make_env)"
+    # #10 carries both wayfinder:research and wayfinder:grilling. Reading only
+    # the "first" label would make the verdict depend on GraphQL's (unspecified)
+    # label order — resolve on one tick, skip on the next. The mislabelling is
+    # skipped deterministically instead, whichever order the labels arrive in.
+    graphql_fixture "${dir}" \
+        "$(issue_node 10 'both types at once' P0 true '2026-01-01T00:00:00Z' 'AFK,wayfinder:research,wayfinder:grilling')" \
+        "$(issue_node 20 'clean slice' P1 true '2026-02-01T00:00:00Z' AFK)"
+    out="$(run_triage "${dir}" 2>"${dir}/err.log")"
+    err="$(cat "${dir}/err.log")"
+    if [ "$(printf '%s' "${out}" | jq -r '.verdict')" = "pick" ] \
+        && [ "$(printf '%s' "${out}" | jq -r '.pick.issue')" = "20" ] \
+        && printf '%s' "${err}" | grep -q 'ambiguous wayfinder labels'; then
+        pass "multi-type wayfinder candidate skipped as ambiguous"
+    else
+        fail "multi-type wayfinder candidate skipped as ambiguous" "out=${out} err=${err}"
+    fi
+}
+
+# ── Test 9o: label order does not change the ambiguous verdict ──────────────
+test_wayfinder_multiple_types_order_independent() {
+    local dir out err
+    dir="$(make_env)"
+    graphql_fixture "${dir}" \
+        "$(issue_node 10 'both types at once' P0 true '2026-01-01T00:00:00Z' 'AFK,wayfinder:grilling,wayfinder:research')" \
+        "$(issue_node 20 'clean slice' P1 true '2026-02-01T00:00:00Z' AFK)"
+    out="$(run_triage "${dir}" 2>"${dir}/err.log")"
+    err="$(cat "${dir}/err.log")"
+    if [ "$(printf '%s' "${out}" | jq -r '.verdict')" = "pick" ] \
+        && [ "$(printf '%s' "${out}" | jq -r '.pick.issue')" = "20" ] \
+        && printf '%s' "${err}" | grep -q 'ambiguous wayfinder labels'; then
+        pass "ambiguous wayfinder verdict is label-order independent"
+    else
+        fail "ambiguous wayfinder verdict is label-order independent" "out=${out} err=${err}"
+    fi
+}
+
 # ── Test 10: missing project scope → pick-mcp (never guesses the pick) ───────
 test_pick_mcp_on_missing_scope() {
     local dir out
@@ -462,6 +570,12 @@ test_priority_then_age_order
 test_mixed_assignee_skipped
 test_null_fields_do_not_abort
 test_blocker_page_overflow_fails_safe
+test_pick_wayfinder_research
+test_pick_wayfinder_task
+test_plain_slice_pick_unchanged
+test_wayfinder_hitl_type_skipped
+test_wayfinder_multiple_types_skipped
+test_wayfinder_multiple_types_order_independent
 test_pick_mcp_on_missing_scope
 test_idle
 
