@@ -149,6 +149,53 @@ EOF
 }
 
 #-------------------------------------------------------------------------------
+# Test 4: Python suites (*.test.py — the dashboard's stdlib unittest file) are
+# discovered and run alongside the bash ones, and a failing one fails the
+# aggregate. Without this the dashboard tests would silently never run in CI.
+#-------------------------------------------------------------------------------
+test_python_suite_discovered() {
+    echo "TEST: *.test.py suites are discovered and their failures counted"
+
+    local dir rc
+    dir="$(mktemp -d)"
+    RAN_LOG="$(mktemp)"
+    make_suite "${dir}" "a_ok.test.sh" 0
+    cat >"${dir}/py_ok.test.py" <<EOF
+import sys
+open("${RAN_LOG}", "a").write("py_ok.test.py\n")
+sys.exit(0)
+EOF
+
+    bash "${RUNNER}" "${dir}" >/dev/null 2>&1
+    rc=$?
+
+    if [ "${rc}" -ne 0 ]; then
+        fail "a passing python suite must keep the aggregate at 0" "rc=${rc}"
+        rm -rf "${dir}" "${RAN_LOG}"
+        return
+    fi
+    if ! grep -q "py_ok.test.py" "${RAN_LOG}"; then
+        fail "*.test.py must be discovered" "ran=$(tr '\n' ',' <"${RAN_LOG}")"
+        rm -rf "${dir}" "${RAN_LOG}"
+        return
+    fi
+
+    cat >"${dir}/z_bad.test.py" <<'EOF'
+import sys
+sys.exit(1)
+EOF
+    bash "${RUNNER}" "${dir}" >/dev/null 2>&1
+    rc=$?
+    if [ "${rc}" -eq 0 ]; then
+        fail "a failing python suite must fail the aggregate" "rc=0"
+    else
+        pass "*.test.py suites are discovered and their failures counted"
+    fi
+
+    rm -rf "${dir}" "${RAN_LOG}"
+}
+
+#-------------------------------------------------------------------------------
 # Run suite
 #-------------------------------------------------------------------------------
 echo "=========================================="
@@ -158,6 +205,7 @@ echo "=========================================="
 test_all_pass_exits_zero
 test_mid_list_failure_not_masked
 test_recursive_discovery_and_name_filter
+test_python_suite_discovered
 
 echo ""
 echo "=========================================="
