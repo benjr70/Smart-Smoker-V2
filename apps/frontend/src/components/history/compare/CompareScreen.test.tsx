@@ -14,7 +14,7 @@ import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { ApiClientProvider, SnackbarProvider, createApiClient } from '../../../api';
 import { createFakeBackend, FakeBackend } from '../../../api/fakeBackend';
-import { Smoke } from '../../../api/types';
+import { Smoke, SmokeHistory } from '../../../api/types';
 import { WeightUnits } from '../../common/interfaces/enums';
 import { DesignSurface, appTheme, carbonLight } from '../../../theme';
 import { CompareScreen } from './CompareScreen';
@@ -113,6 +113,48 @@ const seedTwoCooks = (): FakeBackend =>
       },
     },
   });
+
+/**
+ * A third cook, so there is something in the archive to pick that is not
+ * already in one of the two slots.
+ */
+const seedThreeCooks = (): FakeBackend => {
+  const backend = seedTwoCooks();
+  backend.store.smoke.records['smoke-c'] = smokeAggregate('smoke-c', '2026-06-12T12:00:00.000Z');
+  backend.store.preSmoke.records['pre-smoke-c'] = {
+    name: 'Beer can chicken',
+    meatType: 'Poultry',
+    weight: { weight: 5, unit: WeightUnits.LB },
+    steps: [],
+  };
+  backend.store.smokeProfile.records['profile-smoke-c'] = {
+    chamberName: 'Chamber',
+    woodType: 'Apple',
+    notes: '',
+  };
+  backend.store.postSmoke.records['post-smoke-c'] = { restTime: '00:15', steps: [] };
+  return backend;
+};
+
+/** The archive the picker offers, as the history read hands it over. */
+const archiveRow = (smokeId: string, name: string, meatType: string): SmokeHistory => ({
+  smokeId,
+  name,
+  meatType,
+  weight: '10',
+  weightUnit: 'LB',
+  woodType: 'Oak',
+  date: 'Aug 1, 2026',
+  overAllRating: '8',
+  durationMs: 3600000,
+  notes: [],
+});
+
+const archive: SmokeHistory[] = [
+  archiveRow('smoke-a', 'Brisket', 'Beef'),
+  archiveRow('smoke-b', 'Pork Butt', 'Pork'),
+  archiveRow('smoke-c', 'Beer can chicken', 'Poultry'),
+];
 
 const renderCompare = (
   backend: FakeBackend,
@@ -392,6 +434,116 @@ describe('CompareScreen', () => {
       'Could not load these cooks.'
     );
     await waitFor(() => expect(screen.getByTestId('compare-slot-a')).toHaveTextContent('Brisket'));
+  });
+
+  /**
+   * The slot cards are the only place the comparison names its cooks — every
+   * section below them identifies a cook by colour alone — so the control has
+   * to say which cook is in it, not only what pressing it does. Naming it
+   * "Change cook A" and nothing else leaves a screen-reader user comparing two
+   * anonymous cooks.
+   */
+  test('a slot says which cook is in it, not only that it can be changed', async () => {
+    renderCompare(seedThreeCooks(), { cooks: archive });
+
+    // While the cook is on its way, and before there is one at all, the slot
+    // says which of those it is rather than naming a cook it does not have.
+    expect(screen.getByRole('button', { name: /Change cook A$/ })).toHaveAccessibleName(
+      'Cook A: still being read. Change cook A'
+    );
+
+    await screen.findByTestId('compare-summary');
+
+    expect(screen.getByRole('button', { name: /Change cook A$/ })).toHaveAccessibleName(
+      'Cook A: Brisket, Aug 1, 2026, Beef. Change cook A'
+    );
+    expect(screen.getByRole('button', { name: /Change cook B$/ })).toHaveAccessibleName(
+      'Cook B: Pork Butt, Jul 4, 2026, Pork. Change cook B'
+    );
+  });
+
+  test('an empty slot says it is empty rather than naming nothing', async () => {
+    renderCompare(seedThreeCooks(), { cooks: archive, smokeIdB: undefined });
+
+    await screen.findByTestId('compare-empty');
+
+    expect(screen.getByRole('button', { name: /Change cook B$/ })).toHaveAccessibleName(
+      'Cook B: no cook chosen yet. Change cook B'
+    );
+  });
+
+  /**
+   * The slots are how the comparison is re-aimed: pressing one asks the archive
+   * for a cook, and the cook that comes back lands in the slot that was pressed
+   * and nowhere else.
+   */
+  test('a slot opens the picker for that slot, and the cook picked lands in it', async () => {
+    renderCompare(seedThreeCooks(), { cooks: archive });
+    await screen.findByTestId('compare-summary');
+
+    await userEvent.click(screen.getByRole('button', { name: /Change cook A$/ }));
+    expect(screen.getByTestId('cook-picker')).toHaveTextContent('PICK COOK A');
+
+    await userEvent.click(screen.getByRole('button', { name: /^Pick Beer can chicken/ }));
+
+    // The sheet has answered its one question, so it is gone.
+    await waitFor(() => expect(screen.queryByTestId('cook-picker')).toBeNull());
+    await waitFor(() =>
+      expect(screen.getByTestId('compare-slot-a')).toHaveTextContent('Beer can chicken')
+    );
+    expect(screen.getByTestId('compare-slot-b')).toHaveTextContent('Pork Butt');
+  });
+
+  test('the cook in the other slot is offered as in use rather than as a choice', async () => {
+    renderCompare(seedThreeCooks(), { cooks: archive });
+    await screen.findByTestId('compare-summary');
+
+    await userEvent.click(screen.getByRole('button', { name: /Change cook B$/ }));
+
+    expect(screen.getByTestId('cook-picker')).toHaveTextContent('PICK COOK B');
+    const inUse = screen.getByRole('button', { name: /^Pick Brisket/ });
+    expect(inUse).toHaveTextContent('IN USE');
+    expect(inUse).toBeDisabled();
+  });
+
+  /**
+   * Choosing the cook that is already in the slot is a change of mind, not a
+   * change of cook: the sheet closes and nothing is read again.
+   */
+  test('picking the cook already in the slot changes nothing', async () => {
+    const backend = seedThreeCooks();
+    renderCompare(backend, { cooks: archive });
+    await screen.findByTestId('compare-summary');
+    const readsBefore = backend.requests.length;
+
+    await userEvent.click(screen.getByRole('button', { name: /Change cook A$/ }));
+    await userEvent.click(screen.getByRole('button', { name: /^Pick Brisket/ }));
+
+    await waitFor(() => expect(screen.queryByTestId('cook-picker')).toBeNull());
+    expect(screen.getByTestId('compare-slot-a')).toHaveTextContent('Brisket');
+    expect(backend.requests).toHaveLength(readsBefore);
+  });
+
+  /**
+   * A swap moves the cooks between the slots, so afterwards the slot on the
+   * left is not the one the comparison was opened with. A pick still fills the
+   * slot that was pressed — the alternative is a comparison that quietly
+   * replaces the cook the pitmaster was looking at.
+   */
+  test('a pick after a swap still fills the slot that was pressed', async () => {
+    renderCompare(seedThreeCooks(), { cooks: archive });
+    await screen.findByTestId('compare-summary');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Swap cooks' }));
+    expect(screen.getByTestId('compare-slot-a')).toHaveTextContent('Pork Butt');
+
+    await userEvent.click(screen.getByRole('button', { name: /Change cook A$/ }));
+    await userEvent.click(screen.getByRole('button', { name: /^Pick Beer can chicken/ }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('compare-slot-a')).toHaveTextContent('Beer can chicken')
+    );
+    expect(screen.getByTestId('compare-slot-b')).toHaveTextContent('Brisket');
   });
 
   test('the back control returns to wherever the comparison was opened from', async () => {

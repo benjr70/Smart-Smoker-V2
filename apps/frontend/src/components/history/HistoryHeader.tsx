@@ -1,6 +1,7 @@
 import { Box, IconButton, InputBase, Typography } from '@mui/material';
 import React from 'react';
 import { SearchIcon } from '../common/components/DesignIcons';
+import { FilterChip } from '../common/components/FilterChip';
 
 export interface HistoryHeaderProps {
   /** How many cooks there are in all. */
@@ -27,48 +28,6 @@ export interface HistoryHeaderProps {
    * pressed rather than there and inert.
    */
   onCompare?: () => void;
-}
-
-interface FilterChipProps {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}
-
-/**
- * One filter chip: a pill that is either in effect or not.
- *
- * A toggle, so it says so (`aria-pressed`) — the design tells the two states
- * apart by colour alone, which is nothing at all to a screen reader.
- */
-function FilterChip({ label, active, onClick }: FilterChipProps): JSX.Element {
-  return (
-    <Box
-      component="button"
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      sx={theme => ({
-        flexShrink: 0,
-        height: 36,
-        padding: '0 14px',
-        borderRadius: '18px',
-        cursor: 'pointer',
-        font: 'inherit',
-        fontSize: '0.8125rem',
-        fontWeight: 600,
-        whiteSpace: 'nowrap',
-        backgroundColor: active ? theme.design.accent : theme.design.surfaceAlt,
-        color: active
-          ? theme.palette.getContrastText(theme.design.accent)
-          : theme.design.textSecondary,
-        border: `1.5px solid ${active ? theme.design.accent : theme.design.border}`,
-        transition: 'background-color 150ms ease, color 150ms ease',
-      })}
-    >
-      {label}
-    </Box>
-  );
 }
 
 /**

@@ -122,6 +122,11 @@ export function History(): JSX.Element {
         <CompareScreen
           smokeIdA={compared.a}
           smokeIdB={compared.b}
+          // The whole archive, not the filtered list: which two cooks the
+          // comparison *opens* on comes from what is on the screen, but what it
+          // can be re-aimed at is everything ever cooked — a search made before
+          // opening it is not a statement about what may be compared.
+          cooks={history}
           onBack={() => setCompared(undefined)}
         />
       </Box>
