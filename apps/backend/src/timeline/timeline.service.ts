@@ -13,6 +13,7 @@ import { PreSmoke, PreSmokeDocument } from '../presmoke/presmoke.schema';
 import {
   CompletionEstimate,
   estimateCompletion,
+  EstimateReading,
   LIVE_WINDOW_MINUTES,
   needsHistoricalRate,
 } from './completion-estimate';
@@ -32,6 +33,10 @@ import {
 } from './timeline.derive';
 import { CurrentSmokeTimeline, SmokeTimeline } from './timeline.dto';
 import { primaryWatchedProbe, primaryWatchedTarget } from './watched-probe';
+import { ServePlanStatus, servePlanStatus } from './serve-plan-status';
+import { CookEventDocument } from '../cookEvents/cook-events.schema';
+import { cookEventsOfSmoke } from '../cookEvents/cook-events.filter';
+import { WRAP_STAMP_KEY } from '../appSettings/stamp-catalogue';
 
 /**
  * How many rows from the start of a cook are read looking for the first reading
@@ -106,6 +111,14 @@ export class TimelineService {
     @InjectModel('state') private readonly stateModel: Model<StateDocument>,
     @InjectModel(PreSmoke.name)
     private readonly preSmokeModel: Model<PreSmokeDocument>,
+    /**
+     * The cook's log, read for one question only: has a wrap been stamped yet.
+     * Through the model rather than `CookEventsService`, for the same reason as
+     * the collections above — that service depends on this module's
+     * dependencies, and importing it back would close a DI cycle.
+     */
+    @InjectModel('CookEvent')
+    private readonly cookEventModel: Model<CookEventDocument>,
   ) {}
 
   /**
@@ -436,18 +449,76 @@ export class TimelineService {
       now,
       peakTemp: probe ? peaks[probeField(probe.slot)] ?? null : null,
     };
+    const estimate = estimateCompletion({
+      ...input,
+      // Asked of the projection first: reading the user's history costs a
+      // query per past cook of the meat, and for most of a cook the answer
+      // would be weighted to nothing and thrown away.
+      historicalRate: needsHistoricalRate(input)
+        ? await this.historicalRate(smoke)
+        : null,
+    });
+    const servePlan = await this.servePlanOf(
+      smoke,
+      settings,
+      estimate,
+      lastTemp(input.readings),
+    );
     return {
       ...timeline,
-      estimate: estimateCompletion({
-        ...input,
-        // Asked of the projection first: reading the user's history costs a
-        // query per past cook of the meat, and for most of a cook the answer
-        // would be weighted to nothing and thrown away.
-        historicalRate: needsHistoricalRate(input)
-          ? await this.historicalRate(smoke)
-          : null,
-      }),
+      estimate,
+      // Spread rather than set, so a cook with no plan — and an installation
+      // with the planner switched off — answers a response without the field
+      // at all rather than one carrying an explicit nothing.
+      ...(servePlan ? { servePlan } : {}),
     };
+  }
+
+  /**
+   * The Serve Plan of the cook in progress, or nothing at all: the planner is
+   * switched off, or this cook was never given a serve time.
+   *
+   * The verdict itself is the pure {@link servePlanStatus}, which the alert
+   * engine calls with the same inputs — this reads them out of the store and
+   * decides nothing.
+   */
+  private async servePlanOf(
+    smoke: StoredSmoke & { _id?: unknown },
+    settings: ApplicationSettings,
+    estimate: CompletionEstimate,
+    probeTemp: number | null,
+  ): Promise<ServePlanStatus | null> {
+    if (!settings.servePlan.enabled || !smoke.serveAt) {
+      return null;
+    }
+    return servePlanStatus({
+      serveAt: new Date(smoke.serveAt),
+      restMinutes: smoke.restMinutes ?? null,
+      // Only a settled projection is judged against the plan: warming, stalled
+      // and paused are the states the Estimated Completion card itself refuses
+      // to put a time on, and a verdict drawn from one would be a guess with a
+      // number on it. The plan says `unknown` instead, and the card says
+      // gathering data.
+      eta: estimate.state === 'ok' ? estimate.eta : null,
+      driftMin: settings.servePlan.driftMin,
+      wrapTemp: settings.targetPresets.wrapTemp,
+      wrapStamped: await this.wrapStamped(String(smoke['_id'] ?? '')),
+      probeTemp,
+    });
+  }
+
+  /** Whether this cook's log already carries a wrap. */
+  private async wrapStamped(smokeId: string): Promise<boolean> {
+    if (!smokeId) {
+      return false;
+    }
+    const stamped = await this.cookEventModel
+      .findOne({ ...cookEventsOfSmoke(smokeId), stampKey: WRAP_STAMP_KEY })
+      // One field of one row: the question is whether such an event exists,
+      // and this read is made on every poll of a running cook.
+      .select('_id')
+      .exec();
+    return stamped !== null;
   }
 
   /**
@@ -992,7 +1063,18 @@ export interface StoredSmoke {
   /** The pre-smoke stage carrying what the cook was of, and what it weighed. */
   preSmokeId?: string;
   status?: SmokeStatus;
+  /** When the food is meant to hit the table; absent for an unplanned cook. */
+  serveAt?: Date | null;
+  /** How long the meat rests before it is carved, in minutes. */
+  restMinutes?: number | null;
 }
+
+/**
+ * The last temperature the watched probe read, or `null` for a cook that has
+ * not read one yet — what the wrap milestone is decided against.
+ */
+const lastTemp = (readings: EstimateReading[]): number | null =>
+  readings.length === 0 ? null : readings[readings.length - 1].temp;
 
 /** A persisted smoke read as the half the derivation cares about. */
 const asTimelineSmoke = (smoke: StoredSmoke): TimelineSmoke => ({

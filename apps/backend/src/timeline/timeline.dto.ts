@@ -1,5 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { CompletionEstimate } from './completion-estimate';
+import {
+  ServePlanMilestone,
+  ServePlanStatus,
+  ServeVerdict,
+} from './serve-plan-status';
 
 /**
  * A smoke's timing and extremes, as every client reads them.
@@ -85,8 +90,69 @@ export class CompletionEstimateDto implements CompletionEstimate {
   targetTemp: number | null;
 }
 
+/** One thing the plan is still waiting on, as the clients render it. */
+export class ServePlanMilestoneDto implements ServePlanMilestone {
+  @ApiProperty({ enum: ['wrap', 'pullBy', 'restUntil'] })
+  kind: ServePlanMilestone['kind'];
+
+  /** When it happens; `null` for the wrap, which is a temperature not a time. */
+  @ApiProperty({ type: Date, nullable: true })
+  at: Date | null;
+
+  /** The temperature it happens at, °F; only the wrap hint carries one. */
+  @ApiProperty({ type: Number, nullable: true })
+  temp: number | null;
+}
+
+/**
+ * The Serve Plan of the cook in progress, worked out server-side.
+ *
+ * Derived on every read and never stored, like the projection it is judged
+ * against: the plan itself is what is stored, on the cook. The clients render
+ * this verdict and never re-derive one, so the phone, the touchscreen and the
+ * push notification cannot disagree about whether dinner is on time.
+ */
+export class ServePlanStatusDto implements ServePlanStatus {
+  /** When the food is meant to hit the table, as the cook stored it. */
+  @ApiProperty({ type: Date })
+  serveAt: Date;
+
+  /** How long the meat rests, in minutes, as the cook stored it. */
+  @ApiProperty()
+  restMinutes: number;
+
+  /** Serve time less the rest: the last moment the meat can come off. */
+  @ApiProperty({ type: Date })
+  pullBy: Date;
+
+  /**
+   * Minutes of cushion between the projection and the pull-by time — negative
+   * when the cook is running late, and `null` while no trustworthy projection
+   * exists, which is the only thing that makes the verdict `unknown`.
+   */
+  @ApiProperty({ type: Number, nullable: true })
+  slackMinutes: number | null;
+
+  @ApiProperty({ enum: ['early', 'ontrack', 'behind', 'unknown'] })
+  verdict: ServeVerdict;
+
+  @ApiProperty({ type: [ServePlanMilestoneDto] })
+  milestones: ServePlanMilestoneDto[];
+}
+
 /** The cook in progress: its timeline so far, and where it is going. */
 export class CurrentSmokeTimeline extends SmokeTimeline {
   @ApiProperty({ type: CompletionEstimateDto })
   estimate: CompletionEstimateDto;
+
+  /**
+   * The Serve Plan, when the feature is on and this cook has one.
+   *
+   * Absent rather than null in both other cases: a client reading no plan
+   * renders no card, and it has no use for the difference between a feature
+   * that is switched off and a cook nobody planned — the settings it already
+   * reads say which it is.
+   */
+  @ApiProperty({ type: ServePlanStatusDto, required: false })
+  servePlan?: ServePlanStatusDto;
 }

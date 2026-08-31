@@ -458,4 +458,102 @@ describe('SmokeService', () => {
       expect(deleteLog).toEqual([]);
     });
   });
+
+  /**
+   * The plan the cook is run backwards from lives on the cook itself, so a
+   * reload and a second device read back what was set — written through the
+   * update path every other field of a cook is written through.
+   */
+  describe('the serve plan', () => {
+    /** A store the update writes into and the read reads back out of. */
+    let stored: Record<string, unknown>;
+
+    beforeEach(() => {
+      stored = { _id: 'test-smoke-id', ...mockSmoke };
+      mockSmokeModel.findByIdAndUpdate = jest
+        .fn()
+        .mockImplementation((_id: string, update: { $set: object }) => {
+          Object.assign(stored, update.$set);
+          return { exec: jest.fn().mockResolvedValue(stored) };
+        });
+      mockSmokeModel.findById = jest
+        .fn()
+        .mockReturnValue({ exec: jest.fn().mockResolvedValue(stored) });
+    });
+
+    it('stores a serve time and a rest, and reads them back', async () => {
+      const serveAt = new Date('2026-08-30T18:00:00.000Z');
+      const smokeDto: SmokeDto = {
+        preSmokeId: 'pre-smoke-id',
+        status: SmokeStatus.InProgress,
+        serveAt,
+        restMinutes: 45,
+      };
+
+      const updated = await service.update('test-smoke-id', smokeDto);
+
+      expect(updated.serveAt).toEqual(serveAt);
+      expect(updated.restMinutes).toBe(45);
+      const read = await service.getById('test-smoke-id');
+      expect(read?.serveAt).toEqual(serveAt);
+      expect(read?.restMinutes).toBe(45);
+    });
+
+    it('leaves a plan alone when something else about the cook is written', async () => {
+      await service.update('test-smoke-id', {
+        preSmokeId: 'pre-smoke-id',
+        status: SmokeStatus.InProgress,
+        serveAt: new Date('2026-08-30T18:00:00.000Z'),
+        restMinutes: 45,
+      } as SmokeDto);
+
+      await service.update('test-smoke-id', {
+        preSmokeId: 'pre-smoke-id',
+        status: SmokeStatus.Complete,
+      } as SmokeDto);
+
+      const read = await service.getById('test-smoke-id');
+      expect(read?.restMinutes).toBe(45);
+    });
+
+    /**
+     * How a client writes one: against the cook in progress, without having to
+     * know its id or to send back the five links between it and its children.
+     */
+    describe('written against the cook in progress', () => {
+      it('writes the plan onto the cook that is running', async () => {
+        const serveAt = new Date('2026-08-30T18:00:00.000Z');
+
+        const updated = await service.updateServePlan({
+          serveAt,
+          restMinutes: 45,
+        });
+
+        expect(updated?.serveAt).toEqual(serveAt);
+        expect(updated?.restMinutes).toBe(45);
+      });
+
+      it('leaves the half of the plan it was not given alone', async () => {
+        await service.updateServePlan({
+          serveAt: new Date('2026-08-30T18:00:00.000Z'),
+          restMinutes: 45,
+        });
+
+        // Dinner moves; the rest the meat needs has not changed.
+        const updated = await service.updateServePlan({
+          serveAt: new Date('2026-08-30T19:00:00.000Z'),
+        });
+
+        expect(updated?.serveAt).toEqual(new Date('2026-08-30T19:00:00.000Z'));
+        expect(updated?.restMinutes).toBe(45);
+      });
+
+      it('has nothing to write when no cook is in progress', async () => {
+        mockStateService.GetState = jest.fn().mockResolvedValue(null);
+
+        expect(await service.updateServePlan({ restMinutes: 45 })).toBeNull();
+        expect(mockSmokeModel.findByIdAndUpdate).not.toHaveBeenCalled();
+      });
+    });
+  });
 });

@@ -45,6 +45,16 @@ export interface CookStamp {
 }
 
 /**
+ * The stamp that says the meat has been wrapped.
+ *
+ * Named rather than spelled out where it is looked for, because it is asked
+ * about outside the cook log: the Serve Plan drops its wrap hint once one of
+ * these is stamped, and a second copy of the string would leave the hint on
+ * forever the day the catalogue's key changed.
+ */
+export const WRAP_STAMP_KEY = 'wrap';
+
+/**
  * The six stamps a pitmaster who has configured nothing gets, in the order the
  * buttons are laid out. Frozen: the exported defaults are the one copy of this
  * decision, and a caller that edited them in place would change what every
@@ -58,7 +68,13 @@ const DEFAULTS: readonly CookStamp[] = Object.freeze([
     enabled: true,
     custom: false,
   },
-  { key: 'wrap', label: 'Wrapped', tone: 'p1', enabled: true, custom: false },
+  {
+    key: WRAP_STAMP_KEY,
+    label: 'Wrapped',
+    tone: 'p1',
+    enabled: true,
+    custom: false,
+  },
   {
     key: 'spritz',
     label: 'Spritzed',
@@ -169,7 +185,7 @@ export const normalizeStamps = (
     kept.push({
       key,
       label: label || (fallback as CookStamp).label,
-      tone: isTone(entry?.tone) ? entry.tone : (fallback?.tone ?? 'sub'),
+      tone: isTone(entry?.tone) ? entry.tone : fallback?.tone ?? 'sub',
       enabled: entry?.enabled !== false,
       custom: !isDefault,
     });

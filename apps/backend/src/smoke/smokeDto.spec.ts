@@ -16,6 +16,42 @@ describe('SmokeDto', () => {
       expect(errors).toHaveLength(0);
     });
 
+    it('accepts a serve plan sent as an ISO serve time and whole minutes', async () => {
+      const dto = plainToInstance(SmokeDto, {
+        preSmokeId: 'pre-smoke-1',
+        status: SmokeStatus.InProgress,
+        serveAt: '2026-08-30T18:00:00.000Z',
+        restMinutes: 45,
+      });
+
+      expect(await validate(dto)).toHaveLength(0);
+      expect(dto.serveAt).toEqual(new Date('2026-08-30T18:00:00.000Z'));
+    });
+
+    it('rejects a rest that would put the pull after the serve', async () => {
+      const dto = plainToInstance(SmokeDto, {
+        preSmokeId: 'pre-smoke-1',
+        status: SmokeStatus.InProgress,
+        restMinutes: -15,
+      });
+
+      const errors = await validate(dto);
+
+      expect(errors.some((e) => e.property === 'restMinutes')).toBe(true);
+    });
+
+    it('rejects a serve time that is not a date', async () => {
+      const dto = plainToInstance(SmokeDto, {
+        preSmokeId: 'pre-smoke-1',
+        status: SmokeStatus.InProgress,
+        serveAt: 'dinner time',
+      });
+
+      const errors = await validate(dto);
+
+      expect(errors.some((e) => e.property === 'serveAt')).toBe(true);
+    });
+
     it('rejects a non-string preSmokeId', async () => {
       const dto = plainToInstance(SmokeDto, {
         preSmokeId: 123,
