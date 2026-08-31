@@ -1,7 +1,17 @@
-import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Query,
+} from '@nestjs/common';
+import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ParseObjectIdPipe } from '../common/parse-object-id.pipe';
 import { TempDto } from './tempDto';
+import { TempSample } from './temp-series';
+import { TempSampleDto, TempSeriesQueryDto } from './temp-series.dto';
 import { Temp } from './temps.schema';
 import { TempsService } from './temps.service';
 
@@ -23,6 +33,23 @@ export class TempsController {
   @Get('/:id')
   getAllTempsById(@Param('id', ParseObjectIdPipe) id: string): Promise<Temp[]> {
     return this.tempsService.getAllTempsById(id);
+  }
+
+  /**
+   * A stored cook as a chart draws it: numbers rather than the strings the
+   * device sent, thinned to a size that fits in one response, instead of the
+   * tens of thousands of raw readings a long cook holds.
+   */
+  @Get('/:id/series')
+  @ApiOperation({
+    summary: "A stored cook's readings, thinned and chart-ready",
+  })
+  @ApiOkResponse({ type: TempSampleDto, isArray: true })
+  getSeriesById(
+    @Param('id', ParseObjectIdPipe) id: string,
+    @Query() query: TempSeriesQueryDto,
+  ): Promise<TempSample[]> {
+    return this.tempsService.getSeriesById(id, query.points);
   }
 
   @Post('/batch')
