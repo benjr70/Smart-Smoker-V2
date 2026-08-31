@@ -37,3 +37,25 @@ end-to-end path, demoable alone. _Avoid_: task, story, sub-issue
 
 **Resolve**: The Daemon closing a Decision ticket: findings recorded, ticket
 closed, Map index appended. _Avoid_: complete, finish
+
+### Product
+
+**Serve Plan**: The during-cook planner that works backwards from a serve time:
+serve time minus rest duration gives the pull-by time, compared against the ETA.
+_Avoid_: schedule, timeline
+
+**Slack**: Minutes between the pull-by time and the ETA; positive = cushion,
+negative = late.
+
+**Verdict**: The Serve Plan status derived from slack vs tolerance: `early`,
+`ontrack`, `behind`, or `unknown`. _Avoid_: drift status
+
+**Tolerance**: The user's definition of "off plan": how many minutes of slack
+(either direction) before the off-schedule alert fires.
+
+**Rest duration**: The single canonical per-cook minutes the meat rests after
+pull; edited from either the Serve Plan card or the Post-Smoke rest field.
+_Avoid_: restMin, rest time (as separate values)
+
+**Wrap temp**: Global setting (Default Target Temps): probe temperature below
+which the Serve Plan shows the wrap milestone until a wrap stamp is logged.
