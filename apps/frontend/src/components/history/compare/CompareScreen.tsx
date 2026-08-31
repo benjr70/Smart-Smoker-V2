@@ -3,14 +3,16 @@
  * side by side.
  */
 import { Box, Card, CircularProgress, IconButton, Typography } from '@mui/material';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { CompareStatus, useCompare } from '../../../api';
+import { SmokeHistory } from '../../../api/types';
 import { BackIcon, SwapIcon } from '../../common/components/DesignIcons';
 import { useCompareSlotColors } from './compareColors';
 import { CompareFactsTable } from './CompareFactsTable';
 import { CompareNotesCard } from './CompareNotesCard';
 import { CompareSlotCard } from './CompareSlotCard';
 import { CompareSummaryCard } from './CompareSummaryCard';
+import { CookPickerSheet } from './CookPickerSheet';
 
 /**
  * Where the two cooks' traces will be overlaid. The chart itself is a later
@@ -82,13 +84,52 @@ export interface CompareScreenProps {
   smokeIdA?: string;
   /** The cook the B slot starts on. */
   smokeIdB?: string;
+  /**
+   * Every cook that can be compared, newest first — what the picker offers.
+   *
+   * Handed down from the history screen, which has already read it, rather than
+   * read again here: the comparison is a third view of that screen, and asking
+   * the backend for the same archive a second time to fill a sheet the user may
+   * never open would be a read for nothing.
+   */
+  cooks?: readonly SmokeHistory[];
   /** Back to wherever the comparison was opened from. */
   onBack: () => void;
 }
 
-export function CompareScreen({ smokeIdA, smokeIdB, onBack }: CompareScreenProps): JSX.Element {
-  const { a, b, status, swap } = useCompare(smokeIdA, smokeIdB);
+export function CompareScreen({
+  smokeIdA,
+  smokeIdB,
+  cooks = [],
+  onBack,
+}: CompareScreenProps): JSX.Element {
+  // Which two cooks are being compared is the screen's own, seeded by where the
+  // comparison was opened from: the picker re-aims it from here, and the
+  // history screen underneath keeps saying where it started.
+  const [chosen, setChosen] = useState<{ a?: string; b?: string }>({ a: smokeIdA, b: smokeIdB });
+  // Which slot the picker is filling, or `null` while it is closed.
+  const [picking, setPicking] = useState<'A' | 'B' | null>(null);
+
+  useEffect(() => {
+    setChosen({ a: smokeIdA, b: smokeIdB });
+  }, [smokeIdA, smokeIdB]);
+
+  const { a, b, idA, idB, status, swap } = useCompare(chosen.a, chosen.b);
   const colors = useCompareSlotColors();
+
+  /**
+   * The cook chosen for a slot goes into the slot that was pressed.
+   *
+   * The pair is recorded in the order it is on the screen — which, after a
+   * swap, is not the order it was asked for — so that a pick fills the slot the
+   * pitmaster pressed rather than the one whose cook has since moved out of it.
+   */
+  const pick = (side: 'A' | 'B', smokeId: string): void => {
+    if ((side === 'A' ? idA : idB) === smokeId) {
+      return;
+    }
+    setChosen({ a: side === 'A' ? smokeId : idA, b: side === 'B' ? smokeId : idB });
+  };
 
   return (
     <Box data-testid="compare-screen">
@@ -147,7 +188,13 @@ export function CompareScreen({ smokeIdA, smokeIdB, onBack }: CompareScreenProps
           </Box>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <CompareSlotCard side="A" cook={a} color={colors.a} loading={status === 'loading'} />
+          <CompareSlotCard
+            side="A"
+            cook={a}
+            color={colors.a}
+            loading={status === 'loading'}
+            onPick={() => setPicking('A')}
+          />
           <IconButton
             aria-label="Swap cooks"
             onClick={swap}
@@ -163,9 +210,29 @@ export function CompareScreen({ smokeIdA, smokeIdB, onBack }: CompareScreenProps
           >
             <SwapIcon size={17} />
           </IconButton>
-          <CompareSlotCard side="B" cook={b} color={colors.b} loading={status === 'loading'} />
+          <CompareSlotCard
+            side="B"
+            cook={b}
+            color={colors.b}
+            loading={status === 'loading'}
+            onPick={() => setPicking('B')}
+          />
         </Box>
       </Box>
+      {/* The picker only exists while a slot is asking: mounting it on demand
+          is what makes each opening a fresh question, with no search text or
+          chips left over from the last cook that was chosen. */}
+      {picking !== null && (
+        <CookPickerSheet
+          open
+          side={picking}
+          cooks={cooks}
+          selectedId={picking === 'A' ? idA : idB}
+          otherId={picking === 'A' ? idB : idA}
+          onPick={smokeId => pick(picking, smokeId)}
+          onClose={() => setPicking(null)}
+        />
+      )}
       {a !== null && b !== null ? (
         <Box
           sx={{

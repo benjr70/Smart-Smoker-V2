@@ -23,6 +23,12 @@ export interface CompareSlotCardProps {
    * thing to say: one asks the user to choose, the other asks them to wait.
    */
   loading?: boolean;
+  /**
+   * Opens the cook picker for this slot. The card is the way to change the cook
+   * in it — there is nowhere else on the screen to do it — so the whole card is
+   * the control rather than an affordance tucked inside it.
+   */
+  onPick: () => void;
 }
 
 export function CompareSlotCard({
@@ -30,9 +36,26 @@ export function CompareSlotCard({
   cook,
   color,
   loading = false,
+  onPick,
 }: CompareSlotCardProps): JSX.Element {
+  // Which cook is in the slot, in words. The slot cards are the only place the
+  // comparison names its two cooks — every section below identifies them by
+  // colour alone — so a control named only after what pressing it does would
+  // leave a screen-reader user with a comparison of two anonymous cooks.
+  const held = cook
+    ? `${cook.name || 'Unnamed cook'}, ${formatDateLabel(cook.date)}, ${
+        cook.preSmoke.meatType || 'no meat recorded'
+      }`
+    : loading
+      ? 'still being read'
+      : 'no cook chosen yet';
+
   return (
     <Box
+      component="button"
+      type="button"
+      aria-label={`Cook ${side}: ${held}. Change cook ${side}`}
+      onClick={onPick}
       data-testid={`compare-slot-${side.toLowerCase()}`}
       sx={theme => ({
         flex: 1,
@@ -40,6 +63,9 @@ export function CompareSlotCard({
         minHeight: 66,
         padding: '10px 12px',
         borderRadius: '13px',
+        textAlign: 'left',
+        font: 'inherit',
+        cursor: 'pointer',
         backgroundColor: theme.design.surface,
         border: `1.5px solid ${theme.design.border}`,
       })}

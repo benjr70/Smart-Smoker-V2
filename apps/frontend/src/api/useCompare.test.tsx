@@ -227,6 +227,24 @@ describe('useCompare', () => {
   });
 
   /**
+   * Which cook is *in* each slot, by id — what a screen needs to re-aim a slot,
+   * since after a swap the A slot is no longer holding the id it was asked for
+   * and replacing the wrong one would swap out the cook the user is reading.
+   */
+  test('says which cook is in which slot, and a swap moves that too', async () => {
+    const { result } = renderCompare(seedTwoCooks(), 'smoke-a', 'smoke-b');
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+
+    expect(result.current.idA).toBe('smoke-a');
+    expect(result.current.idB).toBe('smoke-b');
+
+    act(() => result.current.swap());
+
+    expect(result.current.idA).toBe('smoke-b');
+    expect(result.current.idB).toBe('smoke-a');
+  });
+
+  /**
    * A legacy cook — one logged before stamps existed, or one whose readings
    * cannot be fetched — is still comparable. It just has less on the screen.
    */
