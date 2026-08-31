@@ -29,23 +29,42 @@ const readingOf = (stored: string | undefined | null): number | null => {
   return reading;
 };
 
-/** A stored row as a chart sample. */
-export const sampleOf = (row: Temp): TempSample => ({
-  date: timeOf(row) === null ? null : new Date(row.date).toISOString(),
-  chamberTemp: readingOf(row.ChamberTemp),
-  probe1Temp: readingOf(row.MeatTemp),
-  probe2Temp: readingOf(row.Meat2Temp),
-  probe3Temp: readingOf(row.Meat3Temp),
-});
-
 /**
  * When a row was taken, or `null` when it cannot be placed in time — the
  * archive holds undated rows, and a bucket of them is dated to nothing rather
  * than to the epoch.
+ *
+ * A missing date is asked about before a `Date` is built from it, because
+ * `Date` does not answer the question this asks. `new Date(undefined)` is an
+ * invalid date and reads as nothing, but `new Date(null)` is the epoch — and a
+ * row dated to null reaches the archive through the public API, where the
+ * create DTO's optional date lets a null past validation and Mongo stores it as
+ * written. Coerced to the epoch, one such row stretches the span the buckets
+ * divide from the minutes a cook ran to the decades since 1970, and the whole
+ * cook lands in a single bucket at every size a caller can ask for.
  */
 const timeOf = (row: Temp): number | null => {
+  if (row.date === null || row.date === undefined) {
+    return null;
+  }
+  // Anything else unreadable as a time — an empty or malformed stored string —
+  // is an invalid date, which reads as nothing here.
   const at = new Date(row.date).getTime();
   return Number.isNaN(at) ? null : at;
+};
+
+/** A stored row as a chart sample. */
+export const sampleOf = (row: Temp): TempSample => {
+  // Dated from the time `timeOf` read rather than from the stored value a
+  // second time, so a row can never be undated for bucketing and dated here.
+  const at = timeOf(row);
+  return {
+    date: at === null ? null : new Date(at).toISOString(),
+    chamberTemp: readingOf(row.ChamberTemp),
+    probe1Temp: readingOf(row.MeatTemp),
+    probe2Temp: readingOf(row.Meat2Temp),
+    probe3Temp: readingOf(row.Meat3Temp),
+  };
 };
 
 /** The probe readings of a sample, by the name each is answered under. */

@@ -833,6 +833,78 @@ describe('TempsService', () => {
     });
 
     /**
+     * A row can reach the archive dated to `null` as well as to nothing at all:
+     * the create DTO's date is optional, which lets a null through validation,
+     * and Mongo stores it as written. Null is undated in every way that
+     * matters, and is answered as undated — the alternative is `new Date(null)`,
+     * which is not a rejection but the epoch.
+     */
+    it('answers a reading dated to null dated to nothing', async () => {
+      const rows = [
+        { ...mockTempRows[0], date: null as unknown as Date },
+        { ...mockTempRows[0], date: null as unknown as Date },
+      ];
+      model.find = jest.fn().mockImplementation(() => orderedQuery(rows));
+
+      const result = await service.getSeriesById('some-group', 1);
+
+      expect(result).toEqual([
+        expect.objectContaining({ date: null, chamberTemp: 225 }),
+      ]);
+    });
+
+    /**
+     * A stored date that is present but unreadable is no more placeable in time
+     * than a missing one, and is answered the same way rather than as whatever
+     * a chart would make of an invalid date.
+     */
+    it('answers a reading dated to something unreadable dated to nothing', async () => {
+      const rows = [
+        { ...mockTempRows[0], date: 'not-a-date' as unknown as Date },
+        { ...mockTempRows[0], date: 'not-a-date' as unknown as Date },
+      ];
+      model.find = jest.fn().mockImplementation(() => orderedQuery(rows));
+
+      const result = await service.getSeriesById('some-group', 1);
+
+      expect(result).toEqual([
+        expect.objectContaining({ date: null, chamberTemp: 225 }),
+      ]);
+    });
+
+    /**
+     * One null-dated row must not take the whole cook with it. Read as the
+     * epoch it would stretch the span the buckets divide from the twenty
+     * seconds the cook actually ran to fifty-odd years, and every real reading
+     * would fall into the same bucket — a cook of any length, at any size asked
+     * for, flattened to a single point.
+     */
+    it('thins a cook holding a null-dated reading by the cook’s own span', async () => {
+      const rows = [
+        { ...mockTempRows[0], date: null as unknown as Date },
+        ...Array.from({ length: 20 }, (_, at) =>
+          reading(new Date(Date.UTC(2026, 7, 20, 10, 0, at)).toISOString(), {
+            ChamberTemp: String(200 + at),
+          }),
+        ),
+      ];
+      model.find = jest.fn().mockImplementation(() => orderedQuery(rows));
+
+      const result = await service.getSeriesById('some-group', 6);
+
+      // The null row as its own undated point, then the twenty readings spread
+      // evenly over the twenty seconds they were taken in.
+      expect(result.map((point) => point.date)).toEqual([
+        null,
+        new Date(Date.UTC(2026, 7, 20, 10, 0, 1, 500)).toISOString(),
+        new Date(Date.UTC(2026, 7, 20, 10, 0, 5, 500)).toISOString(),
+        new Date(Date.UTC(2026, 7, 20, 10, 0, 9, 500)).toISOString(),
+        new Date(Date.UTC(2026, 7, 20, 10, 0, 13, 500)).toISOString(),
+        new Date(Date.UTC(2026, 7, 20, 10, 0, 17, 500)).toISOString(),
+      ]);
+    });
+
+    /**
      * The chart these points feed plots elapsed time, so buckets divide time,
      * not the array. A cook whose device went quiet for hours has its readings
      * piled either side of that silence; bucketed by position, each point would
