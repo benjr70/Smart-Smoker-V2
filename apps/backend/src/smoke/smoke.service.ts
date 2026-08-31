@@ -2,8 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { BaseService } from '../common/base.service';
+import { documentId } from '../common/document-id';
 import { Smoke, SmokeDocument, SmokeStatus } from './smoke.schema';
 import { SmokeDto } from './smokeDto';
+import { ServePlanDto } from './serve-plan.dto';
 import { StateService } from '../State/state.service';
 import { TimelineService } from '../timeline/timeline.service';
 import { tempSeriesFilter } from '../temps/temp-series.filter';
@@ -145,6 +147,38 @@ export class SmokeService extends BaseService<SmokeDocument> {
       }
       return this.getById(state.smokeId);
     });
+  }
+
+  /**
+   * Write the Serve Plan onto the cook in progress — the path the planner card
+   * and the Post-Smoke rest field both persist through.
+   *
+   * Against the current cook rather than an id, because that is the only cook a
+   * plan can be about: the card is on the Smoke step of the session that is
+   * running, and asking a client to carry the cook's id would give it a way to
+   * plan a cook that finished last weekend.
+   *
+   * Only the fields the caller sent are written. The plan is two steppers on
+   * one card and one of them moves at a time, so a write that carried the whole
+   * plan would let a phone that had not seen the touchscreen's last tap undo
+   * it. A field sent as `null` is the one way to say "unset it" — a pitmaster
+   * who abandons the plan mid-cook — and is written as stored `null`, which the
+   * timeline reads back as no plan.
+   *
+   * `null` where nothing is cooking: there is no cook to plan, which is a fact
+   * about the session rather than a failure of the request.
+   */
+  async updateServePlan(plan: ServePlanDto): Promise<Smoke | null> {
+    const smokeId = documentId(await this.getCurrentSmoke());
+    if (!smokeId) {
+      return null;
+    }
+    return this.update(smokeId, {
+      ...(plan.serveAt === undefined ? {} : { serveAt: plan.serveAt }),
+      ...(plan.restMinutes === undefined
+        ? {}
+        : { restMinutes: plan.restMinutes }),
+    } as Partial<SmokeDocument>);
   }
 
   /**

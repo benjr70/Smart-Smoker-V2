@@ -95,6 +95,35 @@ describe('SmokeController', () => {
     });
   });
 
+  describe('SaveServePlan', () => {
+    it('writes the plan against the cook in progress', async () => {
+      const serveAt = new Date('2026-08-30T18:00:00.000Z');
+      const planned = { ...mockSmoke, serveAt, restMinutes: 45 };
+      mockSmokeService.updateServePlan = jest.fn().mockResolvedValue(planned);
+
+      const result = await controller.SaveServePlan({
+        serveAt,
+        restMinutes: 45,
+      });
+
+      expect(mockSmokeService.updateServePlan).toHaveBeenCalledWith({
+        serveAt,
+        restMinutes: 45,
+      });
+      expect(result).toEqual(planned);
+    });
+
+    /**
+     * Nothing is cooking, so there is no cook to plan. A 404 would say the
+     * route does not exist; the answer is that the session does not.
+     */
+    it('answers nothing when no cook is in progress', async () => {
+      mockSmokeService.updateServePlan = jest.fn().mockResolvedValue(null);
+
+      expect(await controller.SaveServePlan({ restMinutes: 45 })).toBeNull();
+    });
+  });
+
   describe('CreateSmoke', () => {
     it('should persist a new smoke via the service (no self-recursion)', async () => {
       const smokeDto: SmokeDto = {

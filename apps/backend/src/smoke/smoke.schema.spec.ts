@@ -44,6 +44,22 @@ describe('SmokeSchema constraints', () => {
     expect(doc.toObject().peakChamber).toBeUndefined();
   });
 
+  it('keeps the serve plan the cook was planned around', () => {
+    const serveAt = new Date('2026-08-30T18:00:00.000Z');
+
+    const doc = new SmokeModel({
+      status: SmokeStatus.InProgress,
+      serveAt,
+      restMinutes: 45,
+    });
+
+    expect(doc.validateSync()).toBeUndefined();
+    // A field the schema does not declare is dropped on the way to storage, so
+    // a plan set on one device would never reach the next one.
+    expect(doc.toObject().serveAt).toEqual(serveAt);
+    expect(doc.toObject().restMinutes).toBe(45);
+  });
+
   /**
    * Reading a stored temperature series asks which cook owns it, by its
    * `tempsId`, on every chart draw — so that lookup has to be an index seek

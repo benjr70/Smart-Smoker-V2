@@ -27,6 +27,7 @@ describe('TimelineService', () => {
   let settings: FakeDoc[];
   let states: FakeDoc[];
   let preSmokes: FakeDoc[];
+  let cookEvents: FakeDoc[];
 
   /** The models the service was built on, so a test can watch what it reads. */
   let models: {
@@ -55,6 +56,10 @@ describe('TimelineService', () => {
           provide: getModelToken(PreSmoke.name),
           useValue: models.preSmokes,
         },
+        {
+          provide: getModelToken('CookEvent'),
+          useValue: fakeModel(cookEvents),
+        },
       ],
     }).compile();
     return module.get<TimelineService>(TimelineService);
@@ -63,6 +68,7 @@ describe('TimelineService', () => {
   beforeEach(async () => {
     states = [];
     preSmokes = [];
+    cookEvents = [];
     smokes = [
       {
         _id: 'smoke-id',
@@ -356,6 +362,175 @@ describe('TimelineService', () => {
       expect(estimate.state).toBeNull();
       expect(estimate.targetTemp).toBeNull();
       expect(estimate.eta).toBeNull();
+    });
+
+    /**
+     * The Serve Plan, read off the cook in progress: the pull-by time, how the
+     * cook is running against it, and what is still ahead. Judged against the
+     * same projection the Estimated Completion card is drawn from — here, meat
+     * at 163°F climbing 20°F/hr to a 203°F target, so an ETA of 20:00.
+     */
+    describe('the serve plan', () => {
+      /**
+       * A cook planned to be served at `serveAt` after an hour of rest, with
+       * the climb the projection reads unless a test gives its own readings.
+       */
+      const planTheCook = (
+        serveAt: string,
+        readings: FakeDoc[] = [
+          running(60, '143'),
+          running(30, '153'),
+          running(0, '163'),
+        ],
+      ): void => {
+        const live = startTheCook();
+        live.serveAt = new Date(serveAt);
+        live.restMinutes = 60;
+        temps.push(...readings);
+      };
+
+      it('answers the plan the cook was given, judged against its ETA', async () => {
+        // Pull by 21:00 against an ETA of 20:00: an hour of cushion.
+        planTheCook('2026-08-17T22:00:00.000Z');
+        service = await build();
+
+        const { servePlan } = await service.getCurrentTimeline(NOW);
+
+        expect(servePlan?.serveAt).toEqual(
+          new Date('2026-08-17T22:00:00.000Z'),
+        );
+        expect(servePlan?.restMinutes).toBe(60);
+        expect(servePlan?.pullBy).toEqual(new Date('2026-08-17T21:00:00.000Z'));
+        expect(servePlan?.slackMinutes).toBe(60);
+        expect(servePlan?.verdict).toBe('early');
+      });
+
+      it('is on track when the pull-by time sits on the ETA', async () => {
+        // Pull by 20:00, which is exactly when the meat is expected to be done.
+        planTheCook('2026-08-17T21:00:00.000Z');
+        service = await build();
+
+        const { servePlan } = await service.getCurrentTimeline(NOW);
+
+        expect(servePlan?.verdict).toBe('ontrack');
+      });
+
+      it('leaves the plan out when the feature is switched off', async () => {
+        planTheCook('2026-08-17T22:00:00.000Z');
+        settings[0].servePlan = {
+          enabled: false,
+          driftAlert: true,
+          driftMin: 30,
+        };
+        service = await build();
+
+        const timeline = await service.getCurrentTimeline(NOW);
+
+        expect(timeline.servePlan).toBeUndefined();
+      });
+
+      it('leaves the plan out for a cook nobody planned', async () => {
+        startTheCook();
+        temps.push(running(60, '143'), running(0, '163'));
+        service = await build();
+
+        const timeline = await service.getCurrentTimeline(NOW);
+
+        expect(timeline.servePlan).toBeUndefined();
+      });
+
+      it('judges nothing while the projection is not trustworthy', async () => {
+        // The lid is up and nothing is being read: the card says gathering
+        // data, and the plan must not bluff a verdict from a stale ETA.
+        planTheCook('2026-08-17T22:00:00.000Z');
+        states[0].smoking = false;
+        service = await build();
+
+        const { servePlan, estimate } = await service.getCurrentTimeline(NOW);
+
+        expect(estimate.state).not.toBe('ok');
+        expect(servePlan?.slackMinutes).toBeNull();
+        expect(servePlan?.verdict).toBe('unknown');
+      });
+
+      it('hints at the wrap while the meat is short of the wrap temperature', async () => {
+        // 163°F against the shipped 165°F wrap, and nothing stamped.
+        planTheCook('2026-08-17T22:00:00.000Z');
+        service = await build();
+
+        const { servePlan } = await service.getCurrentTimeline(NOW);
+
+        expect(servePlan?.milestones).toContainEqual({
+          kind: 'wrap',
+          at: null,
+          temp: 165,
+        });
+      });
+
+      /**
+       * The wrap is judged against what the probe read last, not against the
+       * last of the rows the projection was drawn from: those are the opening
+       * of the cook plus the last half hour, so a long cook whose smoker has
+       * been quiet longer than that — a poll gap, a restart, a paused cook —
+       * ends on a cold opening row, and reading that as the meat's temperature
+       * puts "wrap around 165°" back on a brisket at 190°F.
+       */
+      it('reads the wrap against the newest reading of a smoker gone quiet', async () => {
+        // Past the opening the projection reads, and nothing in the last half
+        // hour: the newest row is the only thing that says where the meat is.
+        const opening = Array.from({ length: 200 }, (_, index) =>
+          running(250 - index, '80'),
+        );
+        planTheCook('2026-08-17T22:00:00.000Z', [
+          ...opening,
+          running(40, '190'),
+        ]);
+        smokes[smokes.length - 1].startedAt = new Date(
+          NOW.getTime() - 300 * 60_000,
+        );
+        service = await build();
+
+        const { servePlan } = await service.getCurrentTimeline(NOW);
+
+        expect(servePlan?.milestones.map((one) => one.kind)).not.toContain(
+          'wrap',
+        );
+      });
+
+      /**
+       * Nothing is watched, so nothing can say where the meat is: the plan says
+       * nothing about the wrap rather than hinting at one all cook.
+       */
+      it('says nothing about the wrap with no probe watched', async () => {
+        planTheCook('2026-08-17T22:00:00.000Z');
+        settings[0].probeTarget = { enabled: true, probes: [] };
+        service = await build();
+
+        const { servePlan } = await service.getCurrentTimeline(NOW);
+
+        expect(servePlan?.milestones.map((one) => one.kind)).toEqual([
+          'pullBy',
+          'restUntil',
+        ]);
+      });
+
+      it('drops the wrap hint once a wrap has been stamped into the log', async () => {
+        planTheCook('2026-08-17T22:00:00.000Z');
+        cookEvents.push({
+          _id: 'wrap-event',
+          smokeId: 'live-smoke',
+          stampKey: 'wrap',
+          at: new Date(NOW.getTime() - 20 * 60_000),
+        });
+        service = await build();
+
+        const { servePlan } = await service.getCurrentTimeline(NOW);
+
+        expect(servePlan?.milestones.map((one) => one.kind)).toEqual([
+          'pullBy',
+          'restUntil',
+        ]);
+      });
     });
 
     it('answers an empty timeline and an empty estimate when nothing is cooking', async () => {

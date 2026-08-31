@@ -1,4 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { ServePlan } from './serve-plan';
 
 export type SmokeDocument = Smoke & Document;
 
@@ -8,7 +9,7 @@ export enum SmokeStatus {
 }
 
 @Schema()
-export class Smoke {
+export class Smoke implements ServePlan {
   @Prop()
   preSmokeId: string;
 
@@ -95,6 +96,20 @@ export class Smoke {
    */
   @Prop()
   cookWindowBackfilled?: boolean;
+
+  /**
+   * The Serve Plan, stored on the cook rather than in the settings because it
+   * is this dinner's, not this installation's: a reload, the touchscreen and a
+   * second phone all read the one plan back, and next weekend's cook starts
+   * without one. Declared by {@link ServePlan}; the props are here because
+   * Mongoose learns a field from the decorator, and a field the schema does not
+   * declare never reaches storage.
+   */
+  @Prop()
+  serveAt?: Date | null;
+
+  @Prop()
+  restMinutes?: number | null;
 
   @Prop({
     required: true,

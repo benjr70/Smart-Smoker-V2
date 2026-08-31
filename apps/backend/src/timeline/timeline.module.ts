@@ -4,6 +4,7 @@ import {
   ApplicationSettings,
   ApplicationSettingsSchema,
 } from '../appSettings/app-settings.schema';
+import { CookEventSchema } from '../cookEvents/cook-events.schema';
 import { PreSmoke, PreSmokeSchema } from '../presmoke/presmoke.schema';
 import { SmokeSchema } from '../smoke/smoke.schema';
 import { stateSchema } from '../State/state.schema';
@@ -29,6 +30,10 @@ import { TimelineService } from './timeline.service';
       // cycle, since the state stamps its start through this service.
       { name: 'state', schema: stateSchema },
       { name: PreSmoke.name, schema: PreSmokeSchema },
+      // The cook's log, for the one question the Serve Plan asks of it: has a
+      // wrap been stamped. Owned here like the rest, since `CookEventsModule`
+      // sits downstream of this one.
+      { name: 'CookEvent', schema: CookEventSchema },
       {
         name: ApplicationSettings.name,
         schema: ApplicationSettingsSchema,

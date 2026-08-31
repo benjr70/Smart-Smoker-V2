@@ -91,6 +91,9 @@ describe('StatsService', () => {
           provide: getModelToken(PreSmoke.name),
           useValue: fakeModel(preSmokes),
         },
+        // The cook log the timeline reads a wrap stamp out of. Empty: nothing
+        // here asks about the Serve Plan, and a stats read never touches it.
+        { provide: getModelToken('CookEvent'), useValue: fakeModel([]) },
         {
           provide: getModelToken('SmokeProfile'),
           useValue: fakeModel(profiles),
