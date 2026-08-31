@@ -2,7 +2,7 @@
  * The comparison: two cooks, from the plan through the cook to the verdict,
  * side by side.
  */
-import { Box, Card, IconButton, Typography } from '@mui/material';
+import { Box, Card, CircularProgress, IconButton, Typography } from '@mui/material';
 import React from 'react';
 import { CompareStatus, useCompare } from '../../../api';
 import { BackIcon, SwapIcon } from '../../common/components/DesignIcons';
@@ -38,9 +38,28 @@ function CompareChartPlaceholder(): JSX.Element {
 }
 
 /** Why there is no comparison on the screen, in the words of the reason. */
-function Message({ status }: { status: CompareStatus }): JSX.Element | null {
+function Message({ status }: { status: CompareStatus }): JSX.Element {
   if (status === 'loading') {
-    return null;
+    // A read in flight says so out loud rather than leaving the page blank: a
+    // comparison that is coming and one that is broken look identical to a
+    // pitmaster on a slow link, and only one of them is worth waiting through.
+    return (
+      <Box
+        data-testid="compare-loading"
+        sx={theme => ({
+          padding: '48px 24px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '14px',
+          fontSize: '0.875rem',
+          color: theme.design.textSecondary,
+        })}
+      >
+        <CircularProgress size={26} aria-hidden="true" />
+        Reading both cooks…
+      </Box>
+    );
   }
   const failed = status === 'failed';
   return (
@@ -128,7 +147,7 @@ export function CompareScreen({ smokeIdA, smokeIdB, onBack }: CompareScreenProps
           </Box>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <CompareSlotCard side="A" cook={a} color={colors.a} />
+          <CompareSlotCard side="A" cook={a} color={colors.a} loading={status === 'loading'} />
           <IconButton
             aria-label="Swap cooks"
             onClick={swap}
@@ -144,7 +163,7 @@ export function CompareScreen({ smokeIdA, smokeIdB, onBack }: CompareScreenProps
           >
             <SwapIcon size={17} />
           </IconButton>
-          <CompareSlotCard side="B" cook={b} color={colors.b} />
+          <CompareSlotCard side="B" cook={b} color={colors.b} loading={status === 'loading'} />
         </Box>
       </Box>
       {a !== null && b !== null ? (
@@ -163,9 +182,10 @@ export function CompareScreen({ smokeIdA, smokeIdB, onBack }: CompareScreenProps
         </Box>
       ) : (
         // A comparison needs two cooks, and there are three reasons there may
-        // not be two: nobody has chosen a second one (or logged one), a read is
+        // not be two on the screen: nobody has logged a second one, a read is
         // still in flight, or a read failed. Each is said in its own words —
-        // "log another cook" is wrong advice for a cook that failed to load.
+        // "log another cook" is wrong advice for a cook that failed to load,
+        // and both are wrong for one that is simply still on its way.
         <Message status={status} />
       )}
     </Box>

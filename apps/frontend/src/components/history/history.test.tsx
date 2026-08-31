@@ -305,8 +305,7 @@ describe('History', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'View Brisket' }));
     expect(screen.getByTestId('smoke-review')).toHaveTextContent('smoke-1');
 
-    // The only button on the review view is the back IconButton.
-    fireEvent.click(screen.getByRole('button'));
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
     await screen.findByRole('heading', { name: 'Brisket' });
     expect(screen.queryByTestId('smoke-review')).not.toBeInTheDocument();
   });
@@ -341,11 +340,70 @@ describe('History', () => {
       expect(screen.queryByTestId('compare-screen')).not.toBeInTheDocument();
     });
 
-    test('a single cook is not offered a comparison', async () => {
+    test('a single cook is not offered a comparison from the list', async () => {
       renderHistory(createFakeBackend({ history: [historyRow('smoke-1', 'Brisket')] }));
 
       await screen.findByRole('heading', { name: 'Brisket' });
       expect(screen.queryByRole('button', { name: 'Compare two cooks' })).not.toBeInTheDocument();
+    });
+
+    /**
+     * The pair is taken from the cooks on the screen, not from the archive
+     * behind them: a search narrowed to two cooks compares those two, and a
+     * search that leaves only one offers no comparison at all rather than
+     * opening one on cooks the filter has hidden.
+     */
+    test('a filtered list compares the cooks it is showing', async () => {
+      const backend = createFakeBackend({
+        history: [
+          historyRow('smoke-1', 'Pork Butt', { meatType: 'Pork' }),
+          historyRow('smoke-2', 'Pork Shoulder', { meatType: 'Pork' }),
+          historyRow('smoke-3', 'Brisket', { meatType: 'Beef' }),
+        ],
+      });
+
+      renderHistory(backend);
+      fireEvent.change(await screen.findByPlaceholderText('Search sessions, wood, notes…'), {
+        target: { value: 'Pork' },
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Compare two cooks' }));
+
+      const compare = screen.getByTestId('compare-screen');
+      expect(compare).toHaveAttribute('data-a', 'smoke-2');
+      expect(compare).toHaveAttribute('data-b', 'smoke-1');
+    });
+
+    test('a search that leaves one cook on the screen is offered no comparison', async () => {
+      const backend = createFakeBackend({
+        history: [
+          historyRow('smoke-1', 'Pork Butt', { meatType: 'Pork' }),
+          historyRow('smoke-2', 'Brisket', { meatType: 'Beef' }),
+        ],
+      });
+
+      renderHistory(backend);
+      fireEvent.change(await screen.findByPlaceholderText('Search sessions, wood, notes…'), {
+        target: { value: 'Brisket' },
+      });
+
+      expect(screen.queryByRole('button', { name: 'Compare two cooks' })).not.toBeInTheDocument();
+    });
+
+    /**
+     * The only cook in the archive can still be taken to the comparison, which
+     * is where it is told what it would take to have one — a control that is
+     * simply not there explains nothing.
+     */
+    test('a cook with nothing to compare against opens the comparison with an empty B slot', async () => {
+      renderHistory(createFakeBackend({ history: [historyRow('smoke-1', 'Brisket')] }));
+      fireEvent.click(await screen.findByRole('button', { name: 'View Brisket' }));
+
+      fireEvent.click(screen.getByRole('button', { name: 'Compare' }));
+
+      const compare = screen.getByTestId('compare-screen');
+      expect(compare).toHaveAttribute('data-a', 'smoke-1');
+      expect(compare).not.toHaveAttribute('data-b');
     });
 
     test('comparing from a cook’s own page makes it cook A, and back returns to that page', async () => {

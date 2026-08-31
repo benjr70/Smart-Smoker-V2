@@ -371,14 +371,18 @@ export interface CurrentSmokeTimeline extends SmokeTimeline {
 }
 
 /**
- * The composed review read-model: a smoke parent plus its five resolved child
- * resources, the shape the history review screen renders. The deep client's
- * review-aggregate call fetches the parent, then the children in parallel, and
- * fills any absent piece with a typed default so a single missing child never
- * fails the whole read. Every field is non-optional: callers render it without
- * per-piece guards.
+ * A cook described whole, without its readings: the smoke parent plus the child
+ * resources that say what was planned, what was stamped on it, how long it took
+ * and how it scored. The deep client fetches the parent, then the children in
+ * parallel, and fills any absent piece with a typed default so a single missing
+ * child never fails the whole read. Every field is non-optional: callers render
+ * it without per-piece guards.
+ *
+ * This is what a screen that describes a cook needs. The raw temperature log —
+ * tens of thousands of readings on a long cook — is deliberately not part of
+ * it; see {@link SmokeReview} for the read that carries it.
  */
-export interface SmokeReview {
+export interface SmokeSummary {
   smoke: Smoke;
   /**
    * The cook's timing, derived server-side. `null` when the backend could not
@@ -388,9 +392,19 @@ export interface SmokeReview {
   timeline: SmokeTimeline | null;
   preSmoke: PreSmoke;
   smokeProfile: SmokeProfile;
-  temps: TempData[];
   postSmoke: PostSmoke;
   rating: rating;
+}
+
+/**
+ * The review read-model, raw log and all: everything {@link SmokeSummary} says
+ * about a cook plus the readings themselves, for the one screen that draws them
+ * from the log. A reader that only describes a cook takes the summary, so the
+ * megabytes of a long cook's log are fetched where they are drawn and nowhere
+ * else.
+ */
+export interface SmokeReview extends SmokeSummary {
+  temps: TempData[];
 }
 
 /**

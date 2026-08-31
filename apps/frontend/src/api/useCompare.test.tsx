@@ -125,7 +125,10 @@ const renderCompare = (backend: FakeBackend, idA?: string, idB?: string) => {
       <SnackbarProvider>{children}</SnackbarProvider>
     </ApiClientProvider>
   );
-  return renderHook(() => useCompare(idA, idB), { wrapper });
+  return renderHook(({ a, b }: { a?: string; b?: string }) => useCompare(a, b), {
+    wrapper,
+    initialProps: { a: idA, b: idB },
+  });
 };
 
 describe('useCompare', () => {
@@ -158,6 +161,51 @@ describe('useCompare', () => {
     expect(result.current.b?.name).toBe('Pork Butt');
     // The cook's own series, read by the temps id its record carries.
     expect(result.current.b?.series[0].chamberTemp).toBe(250);
+  });
+
+  /**
+   * The chart is drawn from the decimated series, so the raw log — tens of
+   * thousands of readings on a long cook, megabytes of them for two cooks at
+   * once — is never asked for. Reading it would undo the whole point of the
+   * series endpoint on the one screen that opens two cooks at a time.
+   */
+  test('reads no cook’s raw temperature log', async () => {
+    const backend = seedTwoCooks();
+
+    const { result } = renderCompare(backend, 'smoke-a', 'smoke-b');
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+
+    const paths = backend.requests.map(request => request.path);
+    expect(paths).not.toContain('temps/temps-smoke-a');
+    expect(paths).not.toContain('temps/temps-smoke-b');
+    expect(paths).toContain('temps/temps-smoke-a/series?points=300');
+  });
+
+  /**
+   * Swapping is about the two cooks in hand. Choosing a different cook for a
+   * slot ends that: the newly chosen cook belongs in the slot it was chosen
+   * for, not in the other one because of a swap made about a different pair.
+   */
+  test('a swap does not outlive the pair it was made about', async () => {
+    const backend = seedTwoCooks();
+    backend.store.smoke.records['smoke-c'] = smokeAggregate('smoke-c');
+    backend.store.preSmoke.records['pre-smoke-c'] = {
+      name: 'Ribs',
+      meatType: 'Pork',
+      weight: {},
+      steps: [],
+    };
+
+    const { result, rerender } = renderCompare(backend, 'smoke-a', 'smoke-b');
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    act(() => result.current.swap());
+    expect(result.current.a?.name).toBe('Pork Butt');
+
+    rerender({ a: 'smoke-c', b: 'smoke-b' });
+
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(result.current.a?.name).toBe('Ribs');
+    expect(result.current.b?.name).toBe('Pork Butt');
   });
 
   /**

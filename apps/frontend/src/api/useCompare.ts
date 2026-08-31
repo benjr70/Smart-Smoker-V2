@@ -5,9 +5,15 @@
  * was planned, what happened, what was stamped on it and how it scored — for
  * two cooks side by side. There is no aggregate for that on the backend and
  * deliberately none added: this hook composes the reads that already exist (the
- * review composite, which carries the cook's timing with it; the cook log by
- * smoke id; and the decimated chart series by the cook's temps id) into one
- * value per slot.
+ * cook's description, which carries its timing with it; the cook log by smoke
+ * id; and the decimated chart series by the cook's temps id) into one value per
+ * slot.
+ *
+ * What it never reads is the raw temperature log. A cook's readings reach this
+ * screen as the decimated series — a few hundred chart points rather than the
+ * tens of thousands a twelve-hour cook holds — which is the whole reason that
+ * endpoint exists, and why the description read is composed here rather than
+ * the review read the detail screen uses.
  *
  * The composition is per cook, not per pair, so a cook that could not be read
  * fails its own slot; and the pair's status is the worse of the two, because a
@@ -77,10 +83,14 @@ export interface UseCompareResult {
  * one whose readings could not be fetched are both comparable, they are just
  * comparable with less on the screen. The record itself is the cook — without it
  * there is nothing to put in the slot — so its failure is the read's failure.
+ *
+ * The cook is described rather than reviewed: the review read would drag the
+ * whole raw log of both cooks over the wire before the screen could paint, and
+ * nothing here would ever look at it.
  */
 const readCook = async (client: ApiClient, smokeId: string): Promise<CompareCook> => {
   const [review, events] = await Promise.all([
-    client.smoke.getReview(smokeId),
+    client.smoke.getSummary(smokeId),
     client.cookEvents.listForSmoke(smokeId).catch((): CookEvent[] => []),
   ]);
   const tempsId = review.smoke.tempsId;
@@ -160,6 +170,13 @@ export function useCompare(
   const second = useCompareCook(smokeIdB);
   const [swapped, setSwapped] = useState(false);
   const swap = useCallback(() => setSwapped(exchanged => !exchanged), []);
+
+  // Swapping is about the two cooks in hand, so it does not outlive them: when
+  // either id changes, the cook just chosen belongs in the slot it was chosen
+  // for, not in the other one because of a swap made about a different pair.
+  useEffect(() => {
+    setSwapped(false);
+  }, [smokeIdA, smokeIdB]);
 
   return {
     status: pairStatus(first.status, second.status),

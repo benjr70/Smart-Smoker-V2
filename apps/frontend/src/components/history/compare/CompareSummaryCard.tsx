@@ -5,7 +5,8 @@
  * The verdict is a sentence rather than two numbers because it is the answer to
  * the question the whole screen was opened to ask. Two cooks that scored the
  * same get no sentence at all: "scored higher overall — 0.0 points better" is a
- * claim about nothing.
+ * claim about nothing. Neither does a pair with a cook nobody rated: a verdict
+ * is a comparison of two scores, and an unrated cook has none to compare.
  */
 import { Box, Card } from '@mui/material';
 import React from 'react';
@@ -67,10 +68,27 @@ function Swatch({ side, cook, color }: SwatchProps): JSX.Element {
   );
 }
 
+/**
+ * The score a cook was given, or `null` for one nobody scored.
+ *
+ * A zero is read as unrated rather than as the worst cook ever made: every
+ * slider on the ratings screen starts at zero, a cook archived without opening
+ * that screen has no ratings document at all and reads back as zeros, and the
+ * archive's own statistics have always read a zero the same way.
+ */
+const scoreOf = (cook: CompareCook): number | null => {
+  const score = cook.rating.overallTaste;
+  return Number.isFinite(score) && score > 0 ? score : null;
+};
+
 export function CompareSummaryCard({ a, b, colors }: CompareSummaryCardProps): JSX.Element {
-  const scoreA = a.rating.overallTaste;
-  const scoreB = b.rating.overallTaste;
-  const winner = scoreA === scoreB ? null : scoreA > scoreB ? a : b;
+  const scoreA = scoreOf(a);
+  const scoreB = scoreOf(b);
+  // Only two cooks that were both scored have a winner between them. An
+  // unrated cook does not lose the comparison; it simply was never in one.
+  const winner =
+    scoreA === null || scoreB === null || scoreA === scoreB ? null : scoreA > scoreB ? a : b;
+  const margin = scoreA !== null && scoreB !== null ? Math.abs(scoreA - scoreB) : 0;
 
   return (
     <Card data-testid="compare-summary" sx={{ padding: '16px' }}>
@@ -93,7 +111,7 @@ export function CompareSummaryCard({ a, b, colors }: CompareSummaryCardProps): J
           <Box component="strong" sx={theme => ({ fontWeight: 700, color: theme.design.text })}>
             {winner.name || 'The unnamed cook'}
           </Box>{' '}
-          scored higher overall — {Math.abs(scoreA - scoreB).toFixed(1)} points better.
+          scored higher overall — {margin.toFixed(1)} points better.
         </Box>
       )}
     </Card>

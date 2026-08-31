@@ -42,6 +42,7 @@ export type {
   SmokeHistory,
   SmokeProfile,
   SmokeReview,
+  SmokeSummary,
   SmokeTimeline,
   State,
   StatRecord,

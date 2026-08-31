@@ -17,9 +17,20 @@ export interface CompareSlotCardProps {
   cook: CompareCook | null;
   /** The colour that means this cook, everywhere on the screen. */
   color: string;
+  /**
+   * Whether the cook for this slot is still being read. An empty slot and one
+   * whose cook is on its way look the same otherwise, and they are not the same
+   * thing to say: one asks the user to choose, the other asks them to wait.
+   */
+  loading?: boolean;
 }
 
-export function CompareSlotCard({ side, cook, color }: CompareSlotCardProps): JSX.Element {
+export function CompareSlotCard({
+  side,
+  cook,
+  color,
+  loading = false,
+}: CompareSlotCardProps): JSX.Element {
   return (
     <Box
       data-testid={`compare-slot-${side.toLowerCase()}`}
@@ -63,7 +74,7 @@ export function CompareSlotCard({ side, cook, color }: CompareSlotCardProps): JS
           whiteSpace: 'nowrap',
         })}
       >
-        {cook?.name || 'Choose…'}
+        {cook?.name || (loading ? 'Loading…' : 'Choose…')}
       </Box>
       <Box
         sx={theme => ({
@@ -75,7 +86,11 @@ export function CompareSlotCard({ side, cook, color }: CompareSlotCardProps): JS
           whiteSpace: 'nowrap',
         })}
       >
-        {cook ? `${formatDateLabel(cook.date)} · ${cook.preSmoke.meatType || '—'}` : 'Nothing yet'}
+        {cook
+          ? `${formatDateLabel(cook.date)} · ${cook.preSmoke.meatType || '—'}`
+          : loading
+            ? 'Reading this cook'
+            : 'Nothing yet'}
       </Box>
     </Box>
   );

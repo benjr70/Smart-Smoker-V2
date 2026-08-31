@@ -537,4 +537,23 @@ describe('endpoint-contract table — aggregate operations emit the full path se
     // The parent is always read first.
     expect(backend.requests[0]).toEqual({ method: 'get', path: 'smoke/smoke-1', body: undefined });
   });
+
+  test('smoke.getSummary reads the same paths except the raw temperature log', async () => {
+    const backend = fullySeededBackend();
+    const client = createApiClient(backend);
+
+    await client.smoke.getSummary('smoke-1');
+
+    expect(backend.requests).toEqual(
+      expect.arrayContaining<RecordedRequest>([
+        { method: 'get', path: 'smoke/smoke-1', body: undefined },
+        { method: 'get', path: 'presmoke/pre-1', body: undefined },
+        { method: 'get', path: 'smokeProfile/prof-1', body: undefined },
+        { method: 'get', path: 'postSmoke/post-1', body: undefined },
+        { method: 'get', path: 'ratings/rate-1', body: undefined },
+        { method: 'get', path: 'timeline/smoke-1', body: undefined },
+      ])
+    );
+    expect(backend.requests.map(request => request.path)).not.toContain('temps/temps-1');
+  });
 });

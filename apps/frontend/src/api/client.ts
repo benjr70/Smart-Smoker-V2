@@ -32,6 +32,7 @@ import {
   SmokeHistory,
   SmokeProfile,
   SmokeReview,
+  SmokeSummary,
   SmokeTimeline,
   State,
   Stats,
@@ -346,8 +347,22 @@ export interface SmokeResource {
    * with a typed default (see {@link SmokeReview}). A missing parent rejects
    * with the typed {@link ApiError}; a missing single child does not fail the
    * whole read.
+   *
+   * This read carries the cook's whole raw temperature log, which on a long
+   * cook is megabytes. Only a caller that draws from the log itself should ask
+   * for it; a caller that merely describes a cook takes {@link getSummary}.
    */
   getReview(id: string): Promise<SmokeReview>;
+  /**
+   * GET the same composition without the raw temperature log: the cook's
+   * record, plan, profile, post-smoke, rating and timing.
+   *
+   * Not an option on {@link getReview} but a read of its own, because the log
+   * is the expensive part: a screen that never draws a reading — compare, above
+   * all, which draws its chart from the decimated series endpoint instead —
+   * cannot silently pay for it, since the value it gets back does not have it.
+   */
+  getSummary(id: string): Promise<SmokeSummary>;
 }
 
 export interface TimelineResource {
@@ -772,6 +787,39 @@ const defaultRating: rating = {
   notes: '',
 };
 
+/**
+ * A cook described from its record: the five children that say what was
+ * planned, how it went and how it scored, read in parallel.
+ *
+ * Each absent piece (404) falls back to its typed default rather than failing
+ * the whole aggregate. The raw temperature log is not among them — it is the
+ * one child that costs megabytes, so it is read by the caller that draws it.
+ */
+const describeCook = async (
+  transport: TransportPort,
+  id: string,
+  smoke: Smoke
+): Promise<SmokeSummary> => {
+  const [preSmoke, smokeProfile, postSmoke, rating, timeline] = await Promise.all([
+    transport.get<PreSmoke>(`presmoke/${smoke.preSmokeId}`).catch(() => defaultPreSmoke),
+    transport
+      .get<SmokeProfile>(`smokeProfile/${smoke.smokeProfileId}`)
+      .then(normalizeProfile)
+      .catch(() => defaultSmokeProfile),
+    transport.get<PostSmoke>(`postSmoke/${smoke.postSmokeId}`).catch(() => defaultPostSmoke),
+    transport.get<rating>(`ratings/${smoke.ratingId}`).catch(() => defaultRating),
+    // The cook's timing rides along with the children: it is derived from the
+    // same series the chart draws, and the detail screen shows both. An
+    // unreachable timeline blanks those fields rather than failing the screen,
+    // exactly as an absent child does.
+    transport
+      .get<WireTimeline>(`timeline/${id}`)
+      .then(normalizeTimeline)
+      .catch(() => null),
+  ]);
+  return { smoke, timeline, preSmoke, smokeProfile, postSmoke, rating };
+};
+
 export const createApiClient = (
   transport: TransportPort,
   events: SmokeEventPort = noopEventPort
@@ -968,30 +1016,20 @@ export const createApiClient = (
     getReview: async (id: string): Promise<SmokeReview> => {
       // Fetch the parent first: a missing parent throws the typed ApiError.
       const smoke = await transport.get<Smoke>(`smoke/${id}`);
-      // Fetch the five children in parallel; each absent piece (404) falls back
-      // to its typed default rather than failing the whole aggregate.
-      const [preSmoke, smokeProfile, temps, postSmoke, rating, timeline] = await Promise.all([
-        transport.get<PreSmoke>(`presmoke/${smoke.preSmokeId}`).catch(() => defaultPreSmoke),
-        transport
-          .get<SmokeProfile>(`smokeProfile/${smoke.smokeProfileId}`)
-          .then(normalizeProfile)
-          .catch(() => defaultSmokeProfile),
+      // The log is read alongside the other children rather than after them, so
+      // asking for it costs no extra round trip's worth of waiting.
+      const [described, temps] = await Promise.all([
+        describeCook(transport, id, smoke),
         transport
           .get<TempData[]>(`temps/${smoke.tempsId}`)
           .then(normalizeTemps)
           .catch(() => defaultTemps),
-        transport.get<PostSmoke>(`postSmoke/${smoke.postSmokeId}`).catch(() => defaultPostSmoke),
-        transport.get<rating>(`ratings/${smoke.ratingId}`).catch(() => defaultRating),
-        // The cook's timing rides along with the five children: it is derived
-        // from the same series the chart draws, and the detail screen shows
-        // both. An unreachable timeline blanks those fields rather than
-        // failing the screen, exactly as an absent child does.
-        transport
-          .get<WireTimeline>(`timeline/${id}`)
-          .then(normalizeTimeline)
-          .catch(() => null),
       ]);
-      return { smoke, timeline, preSmoke, smokeProfile, temps, postSmoke, rating };
+      return { ...described, temps };
+    },
+    getSummary: async (id: string): Promise<SmokeSummary> => {
+      const smoke = await transport.get<Smoke>(`smoke/${id}`);
+      return describeCook(transport, id, smoke);
     },
   },
   timeline: {

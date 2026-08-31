@@ -21,7 +21,10 @@ export function History(): JSX.Element {
   // view of this screen rather than a place of its own — no router — and it sits
   // *over* whichever of the other two is open, so leaving it restores where it
   // was opened from without this screen having to remember where that was.
-  const [compared, setCompared] = useState<{ a: string; b: string } | undefined>(undefined);
+  // The B slot may be empty: a cook opened from its own page can be the only
+  // cook there is, and the comparison says so rather than the page pretending
+  // the control was never offered.
+  const [compared, setCompared] = useState<{ a: string; b?: string } | undefined>(undefined);
   const [query, setQuery] = useState('');
   const [meats, setMeats] = useState<string[]>([]);
   // The cook the confirmation sheet is asking about, if it is up.
@@ -68,16 +71,30 @@ export function History(): JSX.Element {
     setSmokeId(id);
   };
 
-  // Opened from the list, a comparison starts on the two most recent cooks —
-  // the comparison a pitmaster is most likely to have come for. Opened from a
-  // cook's own page, that cook is A and the most recent other cook is B.
-  const onCompareClick = (viewed?: string) => {
-    const a = viewed ?? history[0]?.smokeId;
-    const b = history.find(smoke => smoke.smokeId !== a)?.smokeId;
-    if (a !== undefined && b !== undefined) {
+  // Opened from the list, a comparison starts on the two most recent cooks the
+  // list is *showing* — the comparison a pitmaster is most likely to have come
+  // for, and never two cooks a filter has taken off their screen.
+  const onCompareFromList = () => {
+    const a = shown[0]?.smokeId;
+    const b = shown[1]?.smokeId;
+    if (a !== undefined) {
       setCompared({ a, b });
     }
   };
+
+  // Opened from a cook's own page, that cook is A and the most recent other
+  // cook is B. The whole archive is what B is drawn from here, not the filtered
+  // list: the detail view shows no filter, so narrowing one down on the list
+  // and then opening a cook is not a statement about what to compare it with.
+  // A cook with nothing to be held against still opens the comparison, which
+  // says what it would take to have one.
+  const onCompareFromDetail = (viewed: string) => {
+    setCompared({ a: viewed, b: history.find(smoke => smoke.smokeId !== viewed)?.smokeId });
+  };
+
+  // The list's own control is offered against what is on the screen: a filter
+  // narrowed to one cook has no pair to compare, whatever the archive holds.
+  const onCompareShown = shown.length > 1 ? onCompareFromList : undefined;
 
   const onBackClick = async () => {
     setSmokeId(undefined);
@@ -123,28 +140,28 @@ export function History(): JSX.Element {
           <IconButton aria-label="Back" color="primary" component="label" onClick={onBackClick}>
             <ArrowBackIosIcon />
           </IconButton>
-          {/* Only when there is another cook to hold this one against. */}
-          {history.length > 1 && (
-            <Box
-              component="button"
-              type="button"
-              onClick={() => onCompareClick(smokeId)}
-              sx={theme => ({
-                height: 44,
-                padding: '0 16px',
-                borderRadius: '11px',
-                cursor: 'pointer',
-                font: 'inherit',
-                fontSize: '0.8125rem',
-                fontWeight: 600,
-                color: theme.design.text,
-                backgroundColor: theme.design.surface,
-                border: `1.5px solid ${theme.design.border}`,
-              })}
-            >
-              Compare
-            </Box>
-          )}
+          {/* Always offered: comparing is about the cook on the screen, and a
+              cook with nothing to be held against is told so by the comparison
+              rather than by a control that quietly is not there. */}
+          <Box
+            component="button"
+            type="button"
+            onClick={() => onCompareFromDetail(smokeId)}
+            sx={theme => ({
+              height: 44,
+              padding: '0 16px',
+              borderRadius: '11px',
+              cursor: 'pointer',
+              font: 'inherit',
+              fontSize: '0.8125rem',
+              fontWeight: 600,
+              color: theme.design.text,
+              backgroundColor: theme.design.surface,
+              border: `1.5px solid ${theme.design.border}`,
+            })}
+          >
+            Compare
+          </Box>
         </Grid>
       ) : (
         <HistoryHeader
@@ -157,7 +174,7 @@ export function History(): JSX.Element {
           meats={chosenMeats}
           onToggleMeat={onToggleMeat}
           onClearMeats={() => setMeats([])}
-          onCompare={history.length > 1 ? () => onCompareClick() : undefined}
+          onCompare={onCompareShown}
         />
       )}
       {/* The gap below the last card is the list's own rhythm now — it matches

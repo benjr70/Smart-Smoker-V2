@@ -539,14 +539,20 @@ const refusesStamps = (stamps: readonly Partial<CookStamp>[] | undefined): boole
 
 /**
  * The size the caller asked a chart to be, read off the query the way the
- * endpoint reads it: a size that cannot be read as a number is the default,
- * and one outside the range is served at the nearest size in range.
+ * endpoint reads it: a size nobody asked for and one that is no number at all
+ * are the default, and any other size is served at the nearest size in range —
+ * so `points=0`, which is a number, is a chart of one point rather than the
+ * default (see the backend's own `pointsAsked`).
  */
 const SERIES_POINTS = { min: 1, max: 2000, fallback: 300 };
 const pointsAsked = (search: string | undefined): number => {
-  const asked = Number(new URLSearchParams(search ?? '').get('points'));
-  if (!Number.isFinite(asked) || asked === 0) return SERIES_POINTS.fallback;
-  return Math.min(Math.max(Math.trunc(asked), SERIES_POINTS.min), SERIES_POINTS.max);
+  const raw = new URLSearchParams(search ?? '').get('points');
+  // `?points=` with nothing after it is a caller who named the parameter
+  // without choosing a size, which the endpoint reads as not naming it.
+  if (raw === null || raw === '') return SERIES_POINTS.fallback;
+  const asked = Number(raw);
+  if (Number.isNaN(asked)) return SERIES_POINTS.fallback;
+  return Math.min(Math.max(Math.floor(asked), SERIES_POINTS.min), SERIES_POINTS.max);
 };
 
 /**

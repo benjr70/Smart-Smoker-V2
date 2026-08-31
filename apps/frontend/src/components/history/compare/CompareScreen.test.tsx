@@ -137,8 +137,15 @@ const renderCompare = (
   );
 };
 
-/** The row of the facts table whose label is `label`. */
+/**
+ * The row of the facts table whose label is `label`.
+ *
+ * Found by the fact it states rather than by a test id per row: the row's
+ * identity is which of the eight facts it is, and Testing Library has no query
+ * for "the element carrying this data attribute".
+ */
 const factRow = (label: string): HTMLElement =>
+  // eslint-disable-next-line testing-library/no-node-access
   screen.getByTestId('compare-facts').querySelector(`[data-fact="${label}"]`) as HTMLElement;
 
 describe('CompareScreen', () => {
@@ -202,6 +209,44 @@ describe('CompareScreen', () => {
 
     await screen.findByTestId('compare-summary');
     expect(screen.getByTestId('compare-summary')).not.toHaveTextContent('scored higher');
+  });
+
+  /**
+   * A cook nobody rated has no score, and a verdict is a comparison of two
+   * scores: claiming a win over a cook that was never scored invents a result
+   * the pitmaster never gave. Every slider starts at zero and a cook archived
+   * without opening the ratings screen reads back as zeros, which is why a zero
+   * is read as unrated here exactly as the archive's statistics read it.
+   */
+  test('a cook nobody rated gets no verdict against it', async () => {
+    const backend = seedTwoCooks();
+    delete backend.store.ratings.records['rating-smoke-b'];
+
+    renderCompare(backend);
+
+    const summary = await screen.findByTestId('compare-summary');
+    expect(summary).toHaveTextContent('Pork Butt');
+    expect(summary).not.toHaveTextContent('scored higher');
+  });
+
+  /**
+   * Until both cooks are read there is nothing to compare, and the screen says
+   * that it is reading them: a blank page under slot cards that read "Choose…"
+   * tells a pitmaster on a slow link that nothing was selected and nothing is
+   * coming, when in fact both are.
+   */
+  test('a comparison still being read says so, in the body and in both slots', async () => {
+    renderCompare(seedTwoCooks());
+
+    expect(screen.getByTestId('compare-loading')).toHaveTextContent('Reading both cooks…');
+    expect(screen.getByTestId('compare-slot-a')).toHaveTextContent('Loading…');
+    expect(screen.getByTestId('compare-slot-b')).toHaveTextContent('Reading this cook');
+    expect(screen.queryByTestId('compare-empty')).toBeNull();
+    expect(screen.queryByTestId('compare-facts')).toBeNull();
+
+    // And once both have landed, the wait is over rather than merely hidden.
+    await screen.findByTestId('compare-summary');
+    expect(screen.queryByTestId('compare-loading')).toBeNull();
   });
 
   test('the facts table states the eight smoke facts for both cooks', async () => {
