@@ -1,4 +1,4 @@
-import { DEFAULT_REST_MINUTES, servePlanStatus } from './serve-plan-status';
+import { servePlanStatus } from './serve-plan-status';
 
 const SERVE_AT = new Date('2026-08-30T18:00:00.000Z');
 
@@ -61,11 +61,20 @@ describe('servePlanStatus', () => {
     expect(plan({ serveAt: null })).toBeNull();
   });
 
-  it('rests a plan stored without one for the shipped hour', () => {
+  it('pulls a plan stored without a rest at the serve time itself', () => {
     const status = plan({ restMinutes: null });
 
-    expect(status?.restMinutes).toBe(DEFAULT_REST_MINUTES);
-    expect(status?.pullBy).toEqual(new Date('2026-08-30T17:00:00.000Z'));
+    expect(status?.restMinutes).toBe(0);
+    expect(status?.pullBy).toEqual(SERVE_AT);
+  });
+
+  it('answers cushion in whole minutes', () => {
+    // Thirty-seven seconds past the pull-by time is a minute late, not
+    // "-0.6166666666666667" for a client to render verbatim.
+    const status = plan({ eta: new Date('2026-08-30T17:00:37.000Z') });
+
+    expect(status?.slackMinutes).toBe(-1);
+    expect(status?.verdict).toBe('ontrack');
   });
 
   describe('milestones', () => {
@@ -102,10 +111,15 @@ describe('servePlanStatus', () => {
       expect(status?.milestones.map((one) => one.kind)).not.toContain('wrap');
     });
 
-    it('keeps the hint for a cook that has not read a temperature yet', () => {
+    /**
+     * Nothing is watched, or the watched probe has read nothing: there is no
+     * temperature to say the meat is short of the wrap, so the plan says
+     * nothing rather than hinting at a wrap the meat may be long past.
+     */
+    it('says nothing about the wrap with no reading to judge it by', () => {
       const status = plan({ wrapStamped: false, probeTemp: null });
 
-      expect(status?.milestones.map((one) => one.kind)).toContain('wrap');
+      expect(status?.milestones.map((one) => one.kind)).not.toContain('wrap');
     });
   });
 });

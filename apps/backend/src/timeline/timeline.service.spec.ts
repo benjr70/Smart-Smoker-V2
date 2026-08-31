@@ -371,12 +371,22 @@ describe('TimelineService', () => {
      * at 163°F climbing 20°F/hr to a 203°F target, so an ETA of 20:00.
      */
     describe('the serve plan', () => {
-      /** A cook planned to be served at `serveAt` after an hour of rest. */
-      const planTheCook = (serveAt: string): void => {
+      /**
+       * A cook planned to be served at `serveAt` after an hour of rest, with
+       * the climb the projection reads unless a test gives its own readings.
+       */
+      const planTheCook = (
+        serveAt: string,
+        readings: FakeDoc[] = [
+          running(60, '143'),
+          running(30, '153'),
+          running(0, '163'),
+        ],
+      ): void => {
         const live = startTheCook();
         live.serveAt = new Date(serveAt);
         live.restMinutes = 60;
-        temps.push(running(60, '143'), running(30, '153'), running(0, '163'));
+        temps.push(...readings);
       };
 
       it('answers the plan the cook was given, judged against its ETA', async () => {
@@ -455,6 +465,53 @@ describe('TimelineService', () => {
           at: null,
           temp: 165,
         });
+      });
+
+      /**
+       * The wrap is judged against what the probe read last, not against the
+       * last of the rows the projection was drawn from: those are the opening
+       * of the cook plus the last half hour, so a long cook whose smoker has
+       * been quiet longer than that — a poll gap, a restart, a paused cook —
+       * ends on a cold opening row, and reading that as the meat's temperature
+       * puts "wrap around 165°" back on a brisket at 190°F.
+       */
+      it('reads the wrap against the newest reading of a smoker gone quiet', async () => {
+        // Past the opening the projection reads, and nothing in the last half
+        // hour: the newest row is the only thing that says where the meat is.
+        const opening = Array.from({ length: 200 }, (_, index) =>
+          running(250 - index, '80'),
+        );
+        planTheCook('2026-08-17T22:00:00.000Z', [
+          ...opening,
+          running(40, '190'),
+        ]);
+        smokes[smokes.length - 1].startedAt = new Date(
+          NOW.getTime() - 300 * 60_000,
+        );
+        service = await build();
+
+        const { servePlan } = await service.getCurrentTimeline(NOW);
+
+        expect(servePlan?.milestones.map((one) => one.kind)).not.toContain(
+          'wrap',
+        );
+      });
+
+      /**
+       * Nothing is watched, so nothing can say where the meat is: the plan says
+       * nothing about the wrap rather than hinting at one all cook.
+       */
+      it('says nothing about the wrap with no probe watched', async () => {
+        planTheCook('2026-08-17T22:00:00.000Z');
+        settings[0].probeTarget = { enabled: true, probes: [] };
+        service = await build();
+
+        const { servePlan } = await service.getCurrentTimeline(NOW);
+
+        expect(servePlan?.milestones.map((one) => one.kind)).toEqual([
+          'pullBy',
+          'restUntil',
+        ]);
       });
 
       it('drops the wrap hint once a wrap has been stamped into the log', async () => {

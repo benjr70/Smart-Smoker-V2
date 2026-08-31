@@ -29,6 +29,15 @@ describe('ServePlanDto', () => {
     ).toHaveLength(0);
   });
 
+  /** How a pitmaster who has abandoned the plan says so. */
+  it('takes either half sent as nothing, which clears it', async () => {
+    expect(
+      await validate(
+        plainToInstance(ServePlanDto, { serveAt: null, restMinutes: null }),
+      ),
+    ).toHaveLength(0);
+  });
+
   it('refuses a rest that would put the pull after the serve', async () => {
     const errors = await validate(
       plainToInstance(ServePlanDto, { restMinutes: -15 }),

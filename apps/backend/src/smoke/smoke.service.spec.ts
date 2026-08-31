@@ -548,6 +548,23 @@ describe('SmokeService', () => {
         expect(updated?.restMinutes).toBe(45);
       });
 
+      /**
+       * The pitmaster abandons the plan mid-cook. Sending `null` is how they
+       * say so — distinct from omitting the field, which leaves the stored
+       * value alone — and the timeline stops answering a plan for the cook.
+       */
+      it('clears a plan sent as nothing', async () => {
+        await service.updateServePlan({
+          serveAt: new Date('2026-08-30T18:00:00.000Z'),
+          restMinutes: 45,
+        });
+
+        const updated = await service.updateServePlan({ serveAt: null });
+
+        expect(updated?.serveAt).toBeNull();
+        expect(updated?.restMinutes).toBe(45);
+      });
+
       it('has nothing to write when no cook is in progress', async () => {
         mockStateService.GetState = jest.fn().mockResolvedValue(null);
 

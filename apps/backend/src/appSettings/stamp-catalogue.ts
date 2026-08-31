@@ -185,7 +185,7 @@ export const normalizeStamps = (
     kept.push({
       key,
       label: label || (fallback as CookStamp).label,
-      tone: isTone(entry?.tone) ? entry.tone : fallback?.tone ?? 'sub',
+      tone: isTone(entry?.tone) ? entry.tone : (fallback?.tone ?? 'sub'),
       enabled: entry?.enabled !== false,
       custom: !isDefault,
     });

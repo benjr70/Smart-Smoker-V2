@@ -1,4 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { ServePlan } from './serve-plan';
 
 export type SmokeDocument = Smoke & Document;
 
@@ -8,7 +9,7 @@ export enum SmokeStatus {
 }
 
 @Schema()
-export class Smoke {
+export class Smoke implements ServePlan {
   @Prop()
   preSmokeId: string;
 
@@ -97,28 +98,18 @@ export class Smoke {
   cookWindowBackfilled?: boolean;
 
   /**
-   * When the food is meant to hit the table — the moment the Serve Plan works
-   * the whole cook backwards from.
-   *
-   * On the cook rather than in the settings because it is this dinner's, not
-   * this installation's: a reload, the touchscreen and a second phone all read
-   * the one plan back, and next weekend's cook starts without one. Optional —
-   * a cook nobody planned, and every cook recorded before the plan existed,
-   * has none, which is what the timeline reads as "no plan".
+   * The Serve Plan, stored on the cook rather than in the settings because it
+   * is this dinner's, not this installation's: a reload, the touchscreen and a
+   * second phone all read the one plan back, and next weekend's cook starts
+   * without one. Declared by {@link ServePlan}; the props are here because
+   * Mongoose learns a field from the decorator, and a field the schema does not
+   * declare never reaches storage.
    */
   @Prop()
-  serveAt?: Date;
+  serveAt?: Date | null;
 
-  /**
-   * How long the meat will rest before it is carved, in minutes.
-   *
-   * The one canonical rest of the cook: the Serve Plan's stepper and the
-   * Post-Smoke "Rest Time" field are two views of this number, so the plan and
-   * the record cannot disagree. Minutes rather than the post-smoke's free text
-   * because the pull-by time is arithmetic on it.
-   */
   @Prop()
-  restMinutes?: number;
+  restMinutes?: number | null;
 
   @Prop({
     required: true,

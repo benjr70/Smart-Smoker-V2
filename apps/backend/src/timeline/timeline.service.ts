@@ -6,6 +6,8 @@ import {
   ApplicationSettings,
   ApplicationSettingsDocument,
 } from '../appSettings/app-settings.schema';
+import { documentId, WithDocumentId } from '../common/document-id';
+import { ServePlan } from '../smoke/serve-plan';
 import { SmokeDocument, SmokeStatus } from '../smoke/smoke.schema';
 import { TempDocument } from '../temps/temps.schema';
 import { StateDocument } from '../State/state.schema';
@@ -13,7 +15,6 @@ import { PreSmoke, PreSmokeDocument } from '../presmoke/presmoke.schema';
 import {
   CompletionEstimate,
   estimateCompletion,
-  EstimateReading,
   LIVE_WINDOW_MINUTES,
   needsHistoricalRate,
 } from './completion-estimate';
@@ -447,7 +448,7 @@ export class TimelineService {
       target: probe?.target ?? null,
       smoking: state?.smoking === true,
       now,
-      peakTemp: probe ? peaks[probeField(probe.slot)] ?? null : null,
+      peakTemp: probe ? (peaks[probeField(probe.slot)] ?? null) : null,
     };
     const estimate = estimateCompletion({
       ...input,
@@ -462,7 +463,7 @@ export class TimelineService {
       smoke,
       settings,
       estimate,
-      lastTemp(input.readings),
+      probe?.slot,
     );
     return {
       ...timeline,
@@ -483,10 +484,10 @@ export class TimelineService {
    * decides nothing.
    */
   private async servePlanOf(
-    smoke: StoredSmoke & { _id?: unknown },
+    smoke: StoredSmoke & WithDocumentId,
     settings: ApplicationSettings,
     estimate: CompletionEstimate,
-    probeTemp: number | null,
+    watchedSlot: string | null | undefined,
   ): Promise<ServePlanStatus | null> {
     if (!settings.servePlan.enabled || !smoke.serveAt) {
       return null;
@@ -502,13 +503,37 @@ export class TimelineService {
       eta: estimate.state === 'ok' ? estimate.eta : null,
       driftMin: settings.servePlan.driftMin,
       wrapTemp: settings.targetPresets.wrapTemp,
-      wrapStamped: await this.wrapStamped(String(smoke['_id'] ?? '')),
-      probeTemp,
+      wrapStamped: await this.wrapStamped(documentId(smoke)),
+      probeTemp: await this.watchedProbeTemp(smoke, watchedSlot),
     });
   }
 
+  /**
+   * What the watched probe read last, °F, or `null` where it has read nothing.
+   *
+   * The newest dated row of the whole series rather than the last of the rows
+   * the projection was drawn from: those are the opening of the cook plus the
+   * last half hour, and a smoker that has been silent longer than that — a poll
+   * gap, a restart, a paused cook — leaves the recent slice empty, so the last
+   * of them is an opening reading. Read as the meat's temperature it would put
+   * a 190°F brisket back below the wrap.
+   */
+  private async watchedProbeTemp(
+    smoke: StoredSmoke,
+    slot: string | null | undefined,
+  ): Promise<number | null> {
+    const row = await this.edgeReadingRow(smoke, -1);
+    if (!row || !slot) {
+      return null;
+    }
+    // Through `probeSeries` so an unplugged probe's zero is dropped here for
+    // the same reason it is dropped from the climb: it is not a temperature
+    // anything took.
+    return probeSeries([row], slot, null)[0]?.temp ?? null;
+  }
+
   /** Whether this cook's log already carries a wrap. */
-  private async wrapStamped(smokeId: string): Promise<boolean> {
+  private async wrapStamped(smokeId: string | null): Promise<boolean> {
     if (!smokeId) {
       return false;
     }
@@ -868,7 +893,7 @@ export class TimelineService {
       const startedAt = smoke.startedAt ?? edge?.first ?? null;
       const finishedAt =
         smoke.finishedAt ??
-        (smoke.status === SmokeStatus.Complete ? edge?.last ?? null : null);
+        (smoke.status === SmokeStatus.Complete ? (edge?.last ?? null) : null);
       return durationBetween(startedAt, finishedAt);
     });
   }
@@ -1055,7 +1080,7 @@ const insertionMomentOf = (row: StoredReading): Date | null =>
  * A persisted smoke, as much of one as the timeline reads. Structural rather
  * than the Mongoose document type so a caller may hand over a lean object.
  */
-export interface StoredSmoke {
+export interface StoredSmoke extends ServePlan {
   startedAt?: Date | null;
   finishedAt?: Date | null;
   targetTemp?: number | null;
@@ -1063,18 +1088,7 @@ export interface StoredSmoke {
   /** The pre-smoke stage carrying what the cook was of, and what it weighed. */
   preSmokeId?: string;
   status?: SmokeStatus;
-  /** When the food is meant to hit the table; absent for an unplanned cook. */
-  serveAt?: Date | null;
-  /** How long the meat rests before it is carved, in minutes. */
-  restMinutes?: number | null;
 }
-
-/**
- * The last temperature the watched probe read, or `null` for a cook that has
- * not read one yet — what the wrap milestone is decided against.
- */
-const lastTemp = (readings: EstimateReading[]): number | null =>
-  readings.length === 0 ? null : readings[readings.length - 1].temp;
 
 /** A persisted smoke read as the half the derivation cares about. */
 const asTimelineSmoke = (smoke: StoredSmoke): TimelineSmoke => ({

@@ -52,16 +52,6 @@ export interface ServePlanStatus {
   milestones: ServePlanMilestone[];
 }
 
-/**
- * How long a cook rests when a plan says nothing about it.
- *
- * A plan is seeded with a rest, so this is only what a plan stored without one
- * reads as. Zero would be the alternative, and it is a worse one: it puts the
- * pull-by time at the serve time and tells a cook that meat coming off as the
- * guests sit down is on plan.
- */
-export const DEFAULT_REST_MINUTES = 60;
-
 const MINUTE_MS = 60_000;
 
 /**
@@ -80,10 +70,18 @@ export const servePlanStatus = (
   if (!serveAt) {
     return null;
   }
-  const restMinutes = input.restMinutes ?? DEFAULT_REST_MINUTES;
+  // No rest is no rest: the pull-by time is the serve time, which is what a
+  // plan carrying only a serve time says. Inventing a rest here would move the
+  // pull-by time of every cook stored without one — including every cook
+  // recorded before the plan existed — and report it behind while it is on
+  // plan.
+  const restMinutes = input.restMinutes ?? 0;
   const pullBy = new Date(serveAt.getTime() - restMinutes * MINUTE_MS);
+  // Whole minutes, because that is the unit the clients render and the unit the
+  // tolerance is set in: a cook thirty-seven seconds late is a minute late, not
+  // "0.6166666666666667".
   const slackMinutes = eta
-    ? (pullBy.getTime() - eta.getTime()) / MINUTE_MS
+    ? Math.round((pullBy.getTime() - eta.getTime()) / MINUTE_MS)
     : null;
   return {
     serveAt,
@@ -114,19 +112,19 @@ const milestonesOf = (
 
 /**
  * Whether the wrap is still ahead of the cook: nothing has been stamped, and
- * the watched probe has not reached the wrap temperature.
+ * the watched probe reads below the wrap temperature.
  *
- * A cook with no reading yet is ahead of the wrap rather than past it — the
- * meat went on cold, and the hint exists to remind the cook of the stall still
- * to come. Reading that absence as "past it" would drop the milestone exactly
- * when the plan is furthest from the pull.
+ * A cook with no reading at all is not hinted at. The hint is a claim about
+ * where the meat is, and with no probe watched — or none reading — there is
+ * nothing to make that claim from: a probe pulled out of a 190°F brisket would
+ * otherwise put "wrap around 165°" back on the plan for the rest of the cook.
  */
 const wrapAhead = ({
   wrapStamped,
   probeTemp,
   wrapTemp,
 }: ServePlanInput): boolean =>
-  !wrapStamped && (probeTemp === null || probeTemp < wrapTemp);
+  !wrapStamped && probeTemp !== null && probeTemp < wrapTemp;
 
 /**
  * The verdict the design's prototype gives: cushion beyond the tolerance is
