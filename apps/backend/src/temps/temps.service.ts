@@ -5,6 +5,7 @@ import { BaseService } from '../common/base.service';
 import { CurrentSmokeService } from '../common/current-smoke.service';
 import { SmokeDocument } from '../smoke/smoke.schema';
 import { TempDto } from './tempDto';
+import { TempSample, decimateSeries, pointsAsked } from './temp-series';
 import { tempSeriesFilter } from './temp-series.filter';
 import { Temp, TempDocument } from './temps.schema';
 
@@ -170,6 +171,19 @@ export class TempsService extends BaseService<TempDocument> {
     // choice is between a blank chart and an unclipped one. The unclipped one
     // at least shows the cook.
     return this.series(id);
+  }
+
+  /**
+   * A stored cook as a chart-ready series: numbers rather than the strings the
+   * device sent, and at most `points` of them.
+   *
+   * Read through {@link getAllTempsById} rather than beside it, so a series
+   * asked for this way is the same cook — clipped to its own window, ordered
+   * as it was cooked — that every other reader is handed.
+   */
+  async getSeriesById(id: string, points?: number): Promise<TempSample[]> {
+    const rows = await this.getAllTempsById(id);
+    return decimateSeries(rows, pointsAsked(points));
   }
 
   /** One stored series, oldest first, under an optional extra condition. */

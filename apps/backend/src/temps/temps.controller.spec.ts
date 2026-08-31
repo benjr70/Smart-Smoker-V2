@@ -3,6 +3,7 @@ import { TempsController } from './temps.controller';
 import { TempsService } from './temps.service';
 import { Temp } from './temps.schema';
 import { TempDto } from './tempDto';
+import { TempSample } from './temp-series';
 
 describe('TempsController', () => {
   let controller: TempsController;
@@ -19,8 +20,19 @@ describe('TempsController', () => {
 
   const mockTemps: Temp[] = [mockTemp];
 
+  const mockSeries: TempSample[] = [
+    {
+      date: new Date('2023-01-01').toISOString(),
+      chamberTemp: 225,
+      probe1Temp: 150,
+      probe2Temp: 160,
+      probe3Temp: 170,
+    },
+  ];
+
   beforeEach(async () => {
     mockTempsService = {
+      getSeriesById: jest.fn().mockResolvedValue(mockSeries),
       saveNewTemp: jest.fn().mockResolvedValue(undefined),
       getAllTempsCurrent: jest.fn().mockResolvedValue(mockTemps),
       getAllTempsById: jest.fn().mockResolvedValue(mockTemps),
@@ -82,6 +94,49 @@ describe('TempsController', () => {
 
       expect(mockTempsService.getAllTempsById).toHaveBeenCalledWith(id);
       expect(result).toEqual(mockTemps);
+    });
+  });
+
+  describe('getSeriesById', () => {
+    it('asks for the series of the cook named in the path', async () => {
+      const result = await controller.getSeriesById('temps-id', {});
+
+      expect(mockTempsService.getSeriesById).toHaveBeenCalledWith(
+        'temps-id',
+        undefined,
+      );
+      expect(result).toEqual(mockSeries);
+    });
+
+    /**
+     * The size is the caller's to choose — a phone comparing two cooks side by
+     * side wants fewer points than a full-screen chart does.
+     */
+    /**
+     * A cook nobody recorded is an empty chart, whatever the id looked like:
+     * this route takes the id as it comes rather than refusing one that is not
+     * object-id shaped, so a client walking a list of cooks draws the same
+     * nothing for a legacy or malformed tempsId as for an unknown one.
+     */
+    it('asks for a series under an id that is not object-id shaped', async () => {
+      mockTempsService.getSeriesById = jest.fn().mockResolvedValue([]);
+
+      const result = await controller.getSeriesById('legacy-series', {});
+
+      expect(mockTempsService.getSeriesById).toHaveBeenCalledWith(
+        'legacy-series',
+        undefined,
+      );
+      expect(result).toEqual([]);
+    });
+
+    it('passes on the size the caller asked for', async () => {
+      await controller.getSeriesById('temps-id', { points: 50 });
+
+      expect(mockTempsService.getSeriesById).toHaveBeenCalledWith(
+        'temps-id',
+        50,
+      );
     });
   });
 
