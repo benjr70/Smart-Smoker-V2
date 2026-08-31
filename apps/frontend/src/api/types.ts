@@ -12,6 +12,24 @@ import type { CookStamp, StampTone } from './cookStamps';
 export type { TempData };
 
 /**
+ * One point of a stored cook as a chart draws it.
+ *
+ * The chart-ready read of a cook, not the raw log: the backend thins a cook's
+ * tens of thousands of readings to a chart's worth of points and answers in
+ * numbers rather than the strings the device sent. Every reading is nullable
+ * because a probe nobody plugged in reported nothing — a gap in the line, never
+ * a temperature — and so is the moment, because a reading stored without a date
+ * cannot be placed on any axis.
+ */
+export interface TempSample {
+  date: Date | null;
+  chamberTemp: number | null;
+  probe1Temp: number | null;
+  probe2Temp: number | null;
+  probe3Temp: number | null;
+}
+
+/**
  * A smoke profile as seen by the frontend.
  *
  * The optional-on-the-wire `notes` and `woodType` fields are normalized to

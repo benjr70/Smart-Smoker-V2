@@ -49,6 +49,7 @@ export type {
   TargetPresets,
   TargetSource,
   TempData,
+  TempSample,
   WoodStat,
   rating,
 } from './types';
@@ -102,6 +103,8 @@ export type { UseHistoryResult } from './useHistory';
 export { useHistory } from './useHistory';
 export type { UseReviewResult } from './useReview';
 export { useReview } from './useReview';
+export type { CompareCook, CompareStatus, UseCompareResult } from './useCompare';
+export { COMPARE_SERIES_POINTS, useCompare } from './useCompare';
 export type {
   CookEventsSubscriptionPort,
   UseCookEventsOptions,

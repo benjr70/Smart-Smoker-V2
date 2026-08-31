@@ -37,6 +37,7 @@ import {
   Stats,
   TargetPresets,
   TempData,
+  TempSample,
   rating,
 } from './types';
 
@@ -96,6 +97,13 @@ export interface TempsResource {
   getCurrent(): Promise<TempData[]>;
   /** GET `temps/:id` — a stored temperature series by id. */
   getById(id: string): Promise<TempData[]>;
+  /**
+   * GET `temps/:id/series?points=N` — a stored cook thinned to a chart's worth
+   * of points. `points` is what the caller wants rather than what it gets: the
+   * backend serves the nearest size it draws, so a caller never has to know the
+   * range.
+   */
+  getSeries(id: string, points?: number): Promise<TempSample[]>;
   /** DELETE `temps/:id` — remove a stored temperature series. */
   deleteById(id: string): Promise<void>;
 }
@@ -495,6 +503,30 @@ const normalizeTemps = (raw: TempData[]): TempData[] =>
     .sort((one, other) => new Date(one.date).getTime() - new Date(other.date).getTime());
 
 /**
+ * A chart-ready point as JSON carries it: the moment is a string, since JSON
+ * has no date type.
+ */
+type WireTempSample = Omit<TempSample, 'date'> & { date: string | Date | null };
+
+/**
+ * Read-path normalization for a thinned cook: the moment of each point becomes
+ * a `Date`.
+ *
+ * The readings themselves arrive as the numbers (and the nulls) the series
+ * endpoint already made of them, so this is the only crossing left — and it is
+ * the one that matters to a chart, which subtracts one moment from another to
+ * place a point along an elapsed axis.
+ */
+const normalizeSeries = (raw: WireTempSample[]): TempSample[] =>
+  (raw ?? []).map(sample => ({
+    date: asMoment(sample.date),
+    chamberTemp: sample.chamberTemp ?? null,
+    probe1Temp: sample.probe1Temp ?? null,
+    probe2Temp: sample.probe2Temp ?? null,
+    probe3Temp: sample.probe3Temp ?? null,
+  }));
+
+/**
  * A timeline as JSON carries it: the two stamps are strings, since JSON has no
  * date type and Nest serializes a `Date` as ISO.
  */
@@ -747,6 +779,12 @@ export const createApiClient = (
   temps: {
     getCurrent: async () => normalizeTemps(await transport.get<TempData[]>('temps')),
     getById: async (id: string) => normalizeTemps(await transport.get<TempData[]>(`temps/${id}`)),
+    getSeries: async (id: string, points?: number) =>
+      normalizeSeries(
+        await transport.get<WireTempSample[]>(
+          `temps/${id}/series${points === undefined ? '' : `?points=${points}`}`
+        )
+      ),
     deleteById: async (id: string) => {
       await transport.delete<void>(`temps/${id}`);
     },

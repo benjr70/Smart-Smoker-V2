@@ -231,6 +231,16 @@ const rows: ContractRow[] = [
     expected: { method: 'get', path: 'temps/t1', body: undefined },
   },
   {
+    name: 'temps.getSeries → GET temps/:id/series (unsized, the endpoint decides)',
+    run: c => c.temps.getSeries('t1'),
+    expected: { method: 'get', path: 'temps/t1/series', body: undefined },
+  },
+  {
+    name: 'temps.getSeries → GET temps/:id/series?points=N',
+    run: c => c.temps.getSeries('t1', 300),
+    expected: { method: 'get', path: 'temps/t1/series?points=300', body: undefined },
+  },
+  {
     name: 'temps.deleteById → DELETE temps/:id',
     run: c => c.temps.deleteById('t1'),
     expected: { method: 'delete', path: 'temps/t1', body: undefined },

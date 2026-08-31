@@ -222,6 +222,50 @@ describe('temps client — a series that arrives newest-first', () => {
   });
 });
 
+/**
+ * The chart-ready read of a stored cook: the backend thins the tens of
+ * thousands of raw readings a long cook holds down to a chart's worth of
+ * points, and answers with numbers rather than the strings the device sent.
+ * What this boundary still owes the app is the moment each point was taken as a
+ * `Date`, since JSON carries it as a string.
+ */
+describe('temps client — the decimated series a chart is drawn from', () => {
+  const storedCook = [
+    {
+      ChamberTemp: '225',
+      MeatTemp: '145',
+      Meat2Temp: '0',
+      Meat3Temp: 'nonsense',
+      date: new Date('2025-01-01T12:00:00Z'),
+    },
+  ];
+
+  test('a cook is asked for at the size the caller wants and reads back as numbers', async () => {
+    const backend = createFakeBackend({ temps: { records: { abc123: storedCook } } });
+    const client = createApiClient(backend);
+
+    const series = await client.temps.getSeries('abc123', 300);
+
+    expect(series).toEqual([
+      {
+        date: new Date('2025-01-01T12:00:00Z'),
+        chamberTemp: 225,
+        probe1Temp: 145,
+        // The zero the hardware sends for a probe nobody plugged in, and a
+        // reading that is no number at all, are both nothing rather than a
+        // temperature the smoker never reached.
+        probe2Temp: null,
+        probe3Temp: null,
+      },
+    ]);
+    expect(backend.requests).toContainEqual({
+      method: 'get',
+      path: 'temps/abc123/series?points=300',
+      body: undefined,
+    });
+  });
+});
+
 const sampleProfile: SmokeProfile = {
   chamberName: 'Main Chamber',
   probe1Name: 'Meat Probe',

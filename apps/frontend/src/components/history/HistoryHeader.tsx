@@ -21,6 +21,12 @@ export interface HistoryHeaderProps {
   onToggleMeat: (meat: string) => void;
   /** Called when the "All" chip is pressed, to drop every chosen meat. */
   onClearMeats: () => void;
+  /**
+   * Opens the comparison. Absent when there is nothing to compare — a single
+   * cook has nothing to be held against, so the control is not there to be
+   * pressed rather than there and inert.
+   */
+  onCompare?: () => void;
 }
 
 interface FilterChipProps {
@@ -82,6 +88,7 @@ export function HistoryHeader({
   meats,
   onToggleMeat,
   onClearMeats,
+  onCompare,
 }: HistoryHeaderProps): JSX.Element {
   return (
     <Box
@@ -219,6 +226,32 @@ export function HistoryHeader({
           />
         ))}
       </Box>
+
+      {/* Only once there are two cooks to hold against each other. Full width
+          and 44px tall: the whole point of compare is that it is drivable with
+          one thumb. */}
+      {onCompare !== undefined && (
+        <Box
+          component="button"
+          type="button"
+          onClick={onCompare}
+          sx={theme => ({
+            marginTop: '10px',
+            width: '100%',
+            height: 44,
+            borderRadius: '11px',
+            cursor: 'pointer',
+            font: 'inherit',
+            fontSize: '0.8125rem',
+            fontWeight: 600,
+            color: theme.design.text,
+            backgroundColor: theme.design.surface,
+            border: `1.5px solid ${theme.design.border}`,
+          })}
+        >
+          Compare two cooks
+        </Box>
+      )}
     </Box>
   );
 }

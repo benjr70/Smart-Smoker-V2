@@ -15,6 +15,16 @@ jest.mock('./smokeReview/smokeReview', () => ({
   SmokeReview: ({ smokeId }: any) => <div data-testid="smoke-review">{smokeId}</div>,
 }));
 
+// The comparison is a screen of its own, tested as one. What this screen owes
+// it is the two cooks it opens on and a way back to wherever it came from.
+jest.mock('./compare/CompareScreen', () => ({
+  CompareScreen: ({ smokeIdA, smokeIdB, onBack }: any) => (
+    <div data-testid="compare-screen" data-a={smokeIdA} data-b={smokeIdB}>
+      <button onClick={onBack}>Back from compare</button>
+    </div>
+  ),
+}));
+
 const historyRow = (
   smokeId: string,
   name: string,
@@ -299,6 +309,65 @@ describe('History', () => {
     fireEvent.click(screen.getByRole('button'));
     await screen.findByRole('heading', { name: 'Brisket' });
     expect(screen.queryByTestId('smoke-review')).not.toBeInTheDocument();
+  });
+
+  /**
+   * Compare is a third view of the History tab, alongside the list and the
+   * detail, and it is reachable from both. Which two cooks it opens on depends
+   * on where it was opened from, and where "back" goes depends on the same.
+   */
+  describe('comparing two cooks', () => {
+    test('the list offers a comparison of the two most recent cooks, and back returns to the list', async () => {
+      const backend = createFakeBackend({
+        history: [
+          historyRow('smoke-1', 'Oldest'),
+          historyRow('smoke-2', 'Middle'),
+          historyRow('smoke-3', 'Newest'),
+        ],
+      });
+
+      renderHistory(backend);
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Compare two cooks' }));
+
+      const compare = screen.getByTestId('compare-screen');
+      expect(compare).toHaveAttribute('data-a', 'smoke-3');
+      expect(compare).toHaveAttribute('data-b', 'smoke-2');
+      expect(screen.queryByTestId('history-header')).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Back from compare' }));
+
+      await screen.findByRole('heading', { name: 'Newest' });
+      expect(screen.queryByTestId('compare-screen')).not.toBeInTheDocument();
+    });
+
+    test('a single cook is not offered a comparison', async () => {
+      renderHistory(createFakeBackend({ history: [historyRow('smoke-1', 'Brisket')] }));
+
+      await screen.findByRole('heading', { name: 'Brisket' });
+      expect(screen.queryByRole('button', { name: 'Compare two cooks' })).not.toBeInTheDocument();
+    });
+
+    test('comparing from a cook’s own page makes it cook A, and back returns to that page', async () => {
+      const backend = createFakeBackend({
+        history: [historyRow('smoke-1', 'Oldest'), historyRow('smoke-2', 'Newest')],
+      });
+
+      renderHistory(backend);
+      fireEvent.click(await screen.findByRole('button', { name: 'View Oldest' }));
+
+      fireEvent.click(screen.getByRole('button', { name: 'Compare' }));
+
+      const compare = screen.getByTestId('compare-screen');
+      expect(compare).toHaveAttribute('data-a', 'smoke-1');
+      // The most recent cook that is not the one being viewed.
+      expect(compare).toHaveAttribute('data-b', 'smoke-2');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Back from compare' }));
+
+      expect(screen.getByTestId('smoke-review')).toHaveTextContent('smoke-1');
+      expect(screen.queryByTestId('compare-screen')).not.toBeInTheDocument();
+    });
   });
 
   test('offers no way to delete a cook once it is open — deleting is the list’s', async () => {
