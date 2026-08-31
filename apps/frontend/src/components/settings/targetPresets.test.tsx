@@ -133,6 +133,22 @@ describe('TargetPresetsCard', () => {
     expect(summary).toHaveTextContent(/wrap/i);
   });
 
+  /**
+   * At the phone width this app actually ships at, a fixed-width field sharing a
+   * row with a paragraph of explanation gets squeezed below its declared width —
+   * the label reads "Wra…" and 165 reads as 16. The explanation belongs on its
+   * own row, the way the card's other explanatory copy already is, and the field
+   * must not shrink.
+   */
+  test('holds the wrap temperature field at its full width beside anything else', async () => {
+    renderCard(createFakeBackend());
+
+    const field = await screen.findByTestId('settings-wrap-temp-field');
+
+    expect(getComputedStyle(field).width).toBe('140px');
+    expect(getComputedStyle(field).flexShrink).toBe('0');
+  });
+
   test('says when the temperatures are applied and what they never overwrite', async () => {
     renderCard(createFakeBackend());
 
