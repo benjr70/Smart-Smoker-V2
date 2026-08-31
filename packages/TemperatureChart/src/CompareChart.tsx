@@ -1,10 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { LABEL_SIZE, SeriesKey, formatTemperature, plotEdges } from './chartGeometry';
 import {
   COMPARE_BOX,
   CompareReading,
   CompareRun,
-  DEFAULT_POSITIONS,
   ElapsedReading,
   POSITION_DASH,
   POSITION_LABEL,
@@ -47,6 +46,14 @@ export interface CompareCookSeries {
   pts: readonly CompareReading[];
   /** How long it ran, in minutes: where its end marker is ruled. */
   mins: number;
+  /**
+   * When the cook started — the moment `mins` and every stamp's `minutes` were
+   * measured from, so that the traces are placed on that same zero.
+   *
+   * Optional, because a cook can come back with no start on record at all; the
+   * chart then measures from the earliest reading it was handed.
+   */
+  startedAt?: Date | string | number | null;
   /** Its cook log. Accepted now, drawn by the next slice. */
   stamps: readonly CompareStamp[];
   /** What it called the probe in each position, from its own smoke profile. */
@@ -73,6 +80,18 @@ export interface CompareChartProps {
   a: CompareCookSeries;
   b: CompareCookSeries;
   colors: ComparePalette;
+  /**
+   * The positions the reader has asked to see.
+   *
+   * Held by the caller rather than in here: which probes are on the plot
+   * outlives the plot — a slot swap, a re-pick, or a comparison reopened from
+   * somewhere else all have an answer to what should be shown, and only the
+   * screen knows which. Positions neither cook ran are ignored rather than
+   * refused, so a caller can hold a choice across a change of cooks.
+   */
+  positions: readonly SeriesKey[];
+  /** Called with the positions after a chip is pressed. */
+  onPositionsChange: (positions: readonly SeriesKey[]) => void;
 }
 
 /** The dash an end marker is ruled with, so it reads as an annotation. */
@@ -81,6 +100,11 @@ const END_DASH = '3,3';
 const END_OPACITY = 0.45;
 /** How far the hour labels sit under the plot. */
 const HOUR_LABEL_DROP = 8;
+/**
+ * How tall a chip is: the thumb target the whole screen is drivable at, since
+ * the chips are the only control on the chart.
+ */
+const CHIP_HEIGHT = 44;
 
 /** What the key says of a cook that never ran the position it is naming. */
 const NOT_USED = 'not used';
@@ -105,11 +129,24 @@ const nameIn = (
   return named ? named : POSITION_LABEL[position];
 };
 
-/** A cook prepared for the plot: its readings placed against its own start. */
+/**
+ * A cook prepared for the plot: its readings placed against the same start its
+ * length and its stamps were measured from.
+ */
 const runOf = (series: CompareCookSeries): CompareRun => ({
-  points: elapsedPoints(series.pts),
+  points: elapsedPoints(series.pts, series.startedAt ?? null),
   mins: series.mins,
 });
+
+/**
+ * Whether there is an end to rule for a cook.
+ *
+ * A cook with no derived timing and no datable readings comes back with no
+ * length at all; ruling its marker at zero would have the plot claim it ended
+ * the moment it was lit, which is a stronger statement than the archive can
+ * make. It goes unmarked instead.
+ */
+const hasEnd = (run: CompareRun): boolean => Number.isFinite(run.mins) && run.mins > 0;
 
 /**
  * Two cooks overlaid.
@@ -123,7 +160,13 @@ const runOf = (series: CompareCookSeries): CompareRun => ({
  * Like the single-cook chart, it is drawn out of `compareGeometry` and holds
  * nothing but what the reader has asked to see.
  */
-function CompareChart({ a, b, colors }: CompareChartProps): JSX.Element {
+function CompareChart({
+  a,
+  b,
+  colors,
+  positions: chosen,
+  onPositionsChange,
+}: CompareChartProps): JSX.Element {
   const box = COMPARE_BOX;
   const edges = plotEdges(box);
 
@@ -142,22 +185,23 @@ function CompareChart({ a, b, colors }: CompareChartProps): JSX.Element {
   const available = useMemo(() => availablePositions(cooks.map(cook => cook.run.points)), [cooks]);
 
   /**
-   * Which positions the reader has asked for — the only thing this chart
-   * remembers. It opens on the pit and the money probe, kept to what is
-   * actually on offer so that a pair of cooks that ran no chamber does not open
-   * on a position with nothing behind it.
+   * What is actually drawn: what the caller asked for, kept to what is on
+   * offer, so that a choice carried over from another pair of cooks cannot put
+   * a position on the plot with nothing behind it.
    */
-  const [chosen, setChosen] = useState<readonly SeriesKey[]>(DEFAULT_POSITIONS);
   const positions = available.filter(position => chosen.includes(position));
 
   const toggle = (position: SeriesKey): void =>
-    setChosen(on =>
-      on.includes(position) ? on.filter(other => other !== position) : [...on, position]
+    onPositionsChange(
+      chosen.includes(position) ? chosen.filter(other => other !== position) : [...chosen, position]
     );
 
   const runs = cooks.map(cook => cook.run);
   const span = compareSpanMinutes(runs);
-  const scales = compareScales(runs, positions, box);
+  // The temperature axis is measured over every position on offer, not over
+  // the ones currently drawn: pressing a chip should add or remove a line, not
+  // move the axis and every other line with it.
+  const scales = compareScales(runs, available, box);
 
   return (
     <div>
@@ -182,7 +226,7 @@ function CompareChart({ a, b, colors }: CompareChartProps): JSX.Element {
               onClick={() => toggle(position)}
               style={{
                 minWidth: 0,
-                height: 38,
+                height: CHIP_HEIGHT,
                 padding: '0 6px',
                 borderRadius: 10,
                 cursor: 'pointer',
@@ -297,20 +341,22 @@ function CompareChart({ a, b, colors }: CompareChartProps): JSX.Element {
             {`${hour}h`}
           </text>
         ))}
-        {cooks.map(cook => (
-          <line
-            key={cook.id}
-            data-cook-end={cook.id}
-            x1={scales.x(cook.run.mins)}
-            y1={edges.top}
-            x2={scales.x(cook.run.mins)}
-            y2={edges.bottom}
-            stroke={cook.series.color}
-            strokeWidth={1}
-            strokeDasharray={END_DASH}
-            opacity={END_OPACITY}
-          />
-        ))}
+        {cooks
+          .filter(cook => hasEnd(cook.run))
+          .map(cook => (
+            <line
+              key={cook.id}
+              data-cook-end={cook.id}
+              x1={scales.x(cook.run.mins)}
+              y1={edges.top}
+              x2={scales.x(cook.run.mins)}
+              y2={edges.bottom}
+              stroke={cook.series.color}
+              strokeWidth={1}
+              strokeDasharray={END_DASH}
+              opacity={END_OPACITY}
+            />
+          ))}
         {cooks.map(cook =>
           positions
             .filter(position => ranIn(cook.run.points, position))

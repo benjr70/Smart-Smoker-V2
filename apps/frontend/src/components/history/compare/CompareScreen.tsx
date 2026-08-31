@@ -4,6 +4,8 @@
  */
 import { Box, CircularProgress, IconButton, Typography } from '@mui/material';
 import React, { useEffect, useState } from 'react';
+import type { SeriesKey } from 'temperaturechart/src/chartGeometry';
+import { DEFAULT_POSITIONS } from 'temperaturechart/src/compareGeometry';
 import { CompareStatus, useCompare } from '../../../api';
 import { SmokeHistory } from '../../../api/types';
 import { BackIcon, SwapIcon } from '../../common/components/DesignIcons';
@@ -92,6 +94,16 @@ export function CompareScreen({
 
   const { a, b, idA, idB, status, swap } = useCompare(chosen.a, chosen.b);
   const colors = useCompareSlotColors();
+
+  // Which probes the overlay is showing belongs to the screen rather than to
+  // the chart: it is a question about the pair being compared, so a new pair —
+  // picked, or swapped into the other slot — is asked afresh rather than
+  // inheriting the last pair's chips, which may have been chosen for probes
+  // neither of these cooks ran.
+  const [positions, setPositions] = useState<readonly SeriesKey[]>(DEFAULT_POSITIONS);
+  useEffect(() => {
+    setPositions(DEFAULT_POSITIONS);
+  }, [idA, idB]);
 
   /**
    * The cook chosen for a slot goes into the slot that was pressed.
@@ -219,7 +231,13 @@ export function CompareScreen({
           }}
         >
           <CompareSummaryCard a={a} b={b} colors={colors} />
-          <CompareChartCard a={a} b={b} colors={colors} />
+          <CompareChartCard
+            a={a}
+            b={b}
+            colors={colors}
+            positions={positions}
+            onPositionsChange={setPositions}
+          />
           <CompareFactsTable a={a} b={b} />
           <CompareNotesCard a={a} b={b} colors={colors} />
         </Box>

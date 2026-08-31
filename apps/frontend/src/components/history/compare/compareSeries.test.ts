@@ -73,6 +73,38 @@ describe('compareSeriesOf', () => {
     expect(compareSeriesOf(cook({ timeline: null, series: [] }), '#2A6FB8', design).mins).toBe(0);
   });
 
+  /**
+   * The traces, the end marker and the stamps are all placed on one zero. A
+   * cook whose first stored reading is later than its derived start — clipped,
+   * or decimated away — would otherwise have its traces drawn from a start of
+   * their own, minutes off the marks annotating them.
+   */
+  it('hands the chart the same start its length and its stamps are measured from', () => {
+    const series = compareSeriesOf(
+      cook({ series: [sample(60), sample(300, { probe1Temp: 203 })] }),
+      '#2A6FB8',
+      design
+    );
+
+    expect(series.startedAt).toBe(START.getTime());
+  });
+
+  it('gives the earliest reading as the start of a cook with no derived timing', () => {
+    const series = compareSeriesOf(
+      cook({ timeline: null, series: [sample(150), sample(60)] }),
+      '#2A6FB8',
+      design
+    );
+
+    expect(series.startedAt).toBe(at(60).getTime());
+  });
+
+  it('has no start to give for a cook with neither timing nor datable readings', () => {
+    expect(compareSeriesOf(cook({ timeline: null, series: [] }), '#2A6FB8', design).startedAt).toBe(
+      null
+    );
+  });
+
   it('names each position as the pitmaster named it', () => {
     expect(compareSeriesOf(cook(), '#2A6FB8', design).probeNames).toEqual({
       chamber: 'Pit',

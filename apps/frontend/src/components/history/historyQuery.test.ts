@@ -31,6 +31,19 @@ describe('the history query', () => {
     expect(shown).toEqual([byWood, byNote]);
   });
 
+  /**
+   * The day as the card writes it, because that is the form the user has read
+   * it in and will type a fragment of.
+   */
+  it('searches the day the cook happened, as it is written on the card', () => {
+    const july = session({ name: 'Sunday cook', date: 'Jul 4, 2026' });
+    const august = session({ name: 'Monday cook', date: 'Aug 1, 2026' });
+
+    const { shown } = selectHistory([july, august], { query: 'jul', meats: [] });
+
+    expect(shown).toEqual([july]);
+  });
+
   it('keeps any of the chosen meats, and narrows them further by the search', () => {
     const brisket = session({ name: 'Sunday Brisket', meatType: 'Brisket' });
     const pork = session({ name: 'Pulled pork', meatType: 'Pork' });

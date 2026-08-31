@@ -145,6 +145,42 @@ describe('selectPickerCooks', () => {
     expect(idsOf(shown)).toEqual(['ribs', 'brisket', 'pork', 'unrated']);
   });
 
+  /**
+   * The rows show a zero-rated cook as unrated, so the order has to agree:
+   * ranking it as a genuine 0.0 would have one screen call the same cook rated
+   * and unrated at once.
+   */
+  test('a cook scored zero is unrated in the order too, not the worst cook there is', () => {
+    const zeroed = cook({ smokeId: 'zeroed', name: 'Never scored', overAllRating: '0' });
+    const unrated = cook({ smokeId: 'unrated', name: 'Unscored', overAllRating: '' });
+
+    const { shown } = selectPickerCooks([zeroed, unrated, ...archive], {
+      query: '',
+      meats: [],
+      sort: 'rated',
+    });
+
+    // Both unrated, so both below every rated cook, in the order they arrived.
+    expect(idsOf(shown)).toEqual(['ribs', 'brisket', 'pork', 'zeroed', 'unrated']);
+  });
+
+  /**
+   * The picker searches by the history list's rule rather than one of its own —
+   * a cook the list can find and the picker cannot is the same archive read two
+   * different ways.
+   */
+  test('the search finds a cook by what was written about it, as the history list does', () => {
+    const spritzed = cook({ smokeId: 'spritzed', name: 'Late night', notes: ['Spritzed hourly'] });
+
+    const { shown } = selectPickerCooks([spritzed, ...archive], {
+      query: 'spritzed',
+      meats: [],
+      sort: 'recent',
+    });
+
+    expect(idsOf(shown)).toEqual(['spritzed']);
+  });
+
   test('A–Z sorts by name, whatever case it was typed in', () => {
     const { shown } = selectPickerCooks(archive, { query: '', meats: [], sort: 'name' });
 

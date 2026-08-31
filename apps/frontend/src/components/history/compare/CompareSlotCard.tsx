@@ -9,6 +9,7 @@ import { Box } from '@mui/material';
 import React from 'react';
 import { CompareCook } from '../../../api';
 import { formatDateLabel } from '../../common/timeFormat';
+import { UNNAMED_COOK } from './cookLabels';
 
 export interface CompareSlotCardProps {
   /** Which slot this is — the letter the rest of the screen refers to it by. */
@@ -43,7 +44,7 @@ export function CompareSlotCard({
   // colour alone — so a control named only after what pressing it does would
   // leave a screen-reader user with a comparison of two anonymous cooks.
   const held = cook
-    ? `${cook.name || 'Unnamed cook'}, ${formatDateLabel(cook.date)}, ${
+    ? `${cook.name || UNNAMED_COOK}, ${formatDateLabel(cook.date)}, ${
         cook.preSmoke.meatType || 'no meat recorded'
       }`
     : loading

@@ -2,6 +2,7 @@ import { Box, IconButton, InputBase, Typography } from '@mui/material';
 import React from 'react';
 import { SearchIcon } from '../common/components/DesignIcons';
 import { FilterChip } from '../common/components/FilterChip';
+import { CompareEntryButton } from './CompareEntryButton';
 
 export interface HistoryHeaderProps {
   /** How many cooks there are in all. */
@@ -190,25 +191,8 @@ export function HistoryHeader({
           and 44px tall: the whole point of compare is that it is drivable with
           one thumb. */}
       {onCompare !== undefined && (
-        <Box
-          component="button"
-          type="button"
-          onClick={onCompare}
-          sx={theme => ({
-            marginTop: '10px',
-            width: '100%',
-            height: 44,
-            borderRadius: '11px',
-            cursor: 'pointer',
-            font: 'inherit',
-            fontSize: '0.8125rem',
-            fontWeight: 600,
-            color: theme.design.text,
-            backgroundColor: theme.design.surface,
-            border: `1.5px solid ${theme.design.border}`,
-          })}
-        >
-          Compare two cooks
+        <Box sx={{ marginTop: '10px' }}>
+          <CompareEntryButton label="Compare two cooks" fullWidth onClick={onCompare} />
         </Box>
       )}
     </Box>

@@ -20,7 +20,9 @@ import { SmokeHistory } from '../../../api/types';
 import { FilterChip } from '../../common/components/FilterChip';
 import { SearchIcon } from '../../common/components/DesignIcons';
 import { NOT_RECORDED, formatCookDuration } from '../../common/timeFormat';
+import { UNNAMED_COOK } from './cookLabels';
 import { CookSort, selectPickerCooks } from './cookPickerQuery';
+import { ratedScore } from './cookRating';
 
 /** The sort pills, in the order they are offered; the first is the default. */
 const SORTS: ReadonlyArray<{ sort: CookSort; label: string }> = [
@@ -28,9 +30,6 @@ const SORTS: ReadonlyArray<{ sort: CookSort; label: string }> = [
   { sort: 'rated', label: 'Top rated' },
   { sort: 'name', label: 'A–Z' },
 ];
-
-/** What the archive shows for a cook nobody named. */
-const UNNAMED = 'Unnamed cook';
 
 /** The score bar's scale. */
 const MAX_SCORE = 10;
@@ -51,12 +50,6 @@ export interface CookPickerSheetProps {
   /** Called for every way out that is not picking: the ×, Escape, the scrim. */
   onClose: () => void;
 }
-
-/** A cook's overall taste, or `null` for one nobody scored. */
-const scoreOf = (cook: SmokeHistory): number | null => {
-  const rated = parseFloat(cook.overAllRating);
-  return Number.isFinite(rated) && rated > 0 ? rated : null;
-};
 
 /** What a row says about the cook, after its name: the four recognising facts. */
 const factsOf = (cook: SmokeHistory): string[] => [
@@ -85,8 +78,8 @@ interface CookRowProps {
  * cannot be compared against itself.
  */
 function CookRow({ cook, selected, taken, onPick }: CookRowProps): JSX.Element {
-  const name = cook.name || UNNAMED;
-  const score = scoreOf(cook);
+  const name = cook.name || UNNAMED_COOK;
+  const score = ratedScore(cook.overAllRating);
 
   // The row is recognised by its facts, not by its name — that is the whole
   // reason the facts are on it — so the accessible name carries them too.

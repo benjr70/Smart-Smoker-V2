@@ -102,12 +102,14 @@ export const EMPTY_Y_DOMAIN: [number, number] = [0, 100];
 
 /**
  * The temperature axis for the pair: both cooks' readings, in the positions
- * currently drawn, padded and rounded outward the way the single-cook chart
- * rounds its own.
+ * given, padded and rounded outward the way the single-cook chart rounds its
+ * own.
  *
- * Only the positions on the plot are measured. A chamber left switched off
- * while two meat probes are compared would otherwise hold the axis up at 250°
- * and squash the climb the reader is actually looking at into the bottom of it.
+ * The positions given are the ones the plot can offer rather than the ones
+ * currently drawn — see `CompareChart`, which hands it the whole chip row. A
+ * domain that followed the chips would move the axis and every remaining trace
+ * under the reader's eye each time one was pressed, and two glances at the same
+ * plot would not be comparable.
  */
 export const compareYDomain = (
   runs: readonly CompareRun[],
@@ -278,31 +280,45 @@ export const hourTicks = (spanMinutes: number): number[] => {
 /** How many milliseconds a minute is, which is the whole of the conversion. */
 const MINUTE = 60_000;
 
-/** A reading's moment, or nothing when it carries none that can be read. */
-const momentOf = (reading: CompareReading): number | null => {
-  if (reading.date === null || reading.date === undefined) return null;
-  const moment = new Date(reading.date).getTime();
+/** A moment as a number, or nothing when it is not one that can be read. */
+export const momentValue = (value: Date | string | number | null | undefined): number | null => {
+  if (value === null || value === undefined) return null;
+  const moment = new Date(value).getTime();
   return Number.isNaN(moment) ? null : moment;
 };
+
+/** A reading's moment, or nothing when it carries none that can be read. */
+const momentOf = (reading: CompareReading): number | null => momentValue(reading.date);
 
 /**
  * A cook's readings placed against its own start, oldest first.
  *
- * The start is the earliest reading rather than the first in the array, because
- * a stored cook comes back in whatever order the database found its rows in —
- * newest-first, in practice — and a cook measured from its last reading would
- * be drawn entirely to the left of zero. Readings that cannot be placed in time
- * are dropped rather than dated to the epoch, which would stretch the axis from
- * this cook's few hours to the decades since 1970.
+ * The start is the caller's where it has one, because the caller is the only
+ * one that knows it: the app derives a cook's start, its length and the moment
+ * of every stamp from the same timeline, and a chart that re-derived zero from
+ * its own readings would put the traces on a different origin from the end
+ * marker and the stamp rail drawn beside them — a cook whose leading rows were
+ * clipped or decimated away starts, as far as its readings go, some minutes
+ * after it started.
+ *
+ * Where no start is given the earliest reading stands in, rather than the first
+ * in the array: a stored cook comes back in whatever order the database found
+ * its rows in — newest-first, in practice — and a cook measured from its last
+ * reading would be drawn entirely to the left of zero. Readings that cannot be
+ * placed in time are dropped rather than dated to the epoch, which would
+ * stretch the axis from this cook's few hours to the decades since 1970.
  */
-export const elapsedPoints = (readings: readonly CompareReading[]): ElapsedReading[] => {
+export const elapsedPoints = (
+  readings: readonly CompareReading[],
+  startedAt: Date | string | number | null = null
+): ElapsedReading[] => {
   const dated = readings
     .map(reading => ({ reading, moment: momentOf(reading) }))
     .filter((one): one is { reading: CompareReading; moment: number } => one.moment !== null)
     .sort((one, other) => one.moment - other.moment);
 
   if (dated.length === 0) return [];
-  const start = dated[0].moment;
+  const start = momentValue(startedAt) ?? dated[0].moment;
 
   return dated.map(({ reading, moment }) => ({
     minutes: (moment - start) / MINUTE,

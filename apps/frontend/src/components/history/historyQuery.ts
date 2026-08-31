@@ -12,6 +12,14 @@ export interface HistoryQuerySession {
   meatType: string;
   woodType: string;
   /**
+   * The day the cook happened, as the archive carries it and the card shows it
+   * ("Jul 4, 2026") — matched in that form, because the form the user has read
+   * it in is the form they will type a fragment of.
+   *
+   * Optional, and tolerant of gaps, like the notes below it.
+   */
+  date?: string;
+  /**
    * Everything written about the cook — the pre-smoke, smoke, post-smoke and
    * review notes — in no particular order, because the search treats them
    * alike. The history row carries them flattened; see `SmokeHistory`.
@@ -79,11 +87,17 @@ export type HistoryEmptyState = 'never-smoked' | 'no-matches';
  * Whether a session answers to the search text, which it does when any one of
  * the fields it is searched by contains it.
  *
+ * This is the one answer to "what is a cook findable by" in this app — the
+ * history list and the compare picker both ask it here, because a cook the
+ * picker can find and the list cannot is the same archive read two ways. A cook
+ * is remembered by what it was called, what was in it, what it was smoked over,
+ * when it happened and what was written about it.
+ *
  * The comparison is lower-cased on both sides: nobody types "Hickory" with the
  * capital when they are looking for a cook.
  */
-const matches = (session: HistoryQuerySession, query: string): boolean =>
-  [session.name, session.meatType, session.woodType, ...(session.notes ?? [])].some(
+export const matchesQuery = (session: HistoryQuerySession, query: string): boolean =>
+  [session.name, session.meatType, session.woodType, session.date, ...(session.notes ?? [])].some(
     field => typeof field === 'string' && field.toLowerCase().includes(query)
   );
 
@@ -117,7 +131,7 @@ export function selectHistory<Session extends HistoryQuerySession>(
     session =>
       // No chip chosen is "every meat", not "no meat": the chips narrow the
       // list, and a list narrowed by nothing is the whole list.
-      (meats.length === 0 || meats.includes(session.meatType)) && matches(session, query)
+      (meats.length === 0 || meats.includes(session.meatType)) && matchesQuery(session, query)
   );
 
   return {

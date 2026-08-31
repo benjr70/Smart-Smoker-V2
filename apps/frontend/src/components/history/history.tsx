@@ -4,6 +4,7 @@ import React, { useMemo, useState } from 'react';
 import { useHistory } from '../../api';
 import { ConfirmSheet } from '../common/components/ConfirmSheet';
 import { CompareScreen } from './compare/CompareScreen';
+import { CompareEntryButton } from './CompareEntryButton';
 import { HistoryEmpty, HistoryEmptyKind } from './HistoryEmpty';
 import { HistoryHeader } from './HistoryHeader';
 import './history.style.css';
@@ -148,25 +149,7 @@ export function History(): JSX.Element {
           {/* Always offered: comparing is about the cook on the screen, and a
               cook with nothing to be held against is told so by the comparison
               rather than by a control that quietly is not there. */}
-          <Box
-            component="button"
-            type="button"
-            onClick={() => onCompareFromDetail(smokeId)}
-            sx={theme => ({
-              height: 44,
-              padding: '0 16px',
-              borderRadius: '11px',
-              cursor: 'pointer',
-              font: 'inherit',
-              fontSize: '0.8125rem',
-              fontWeight: 600,
-              color: theme.design.text,
-              backgroundColor: theme.design.surface,
-              border: `1.5px solid ${theme.design.border}`,
-            })}
-          >
-            Compare
-          </Box>
+          <CompareEntryButton label="Compare" onClick={() => onCompareFromDetail(smokeId)} />
         </Grid>
       ) : (
         <HistoryHeader

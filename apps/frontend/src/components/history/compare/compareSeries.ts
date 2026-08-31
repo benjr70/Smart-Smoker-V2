@@ -101,10 +101,19 @@ export const compareSeriesOf = (
   cook: CompareCook,
   color: string,
   design: DesignPalette
-): CompareCookSeries => ({
-  color,
-  pts: cook.series.map(readingOf),
-  mins: minutesOf(cook),
-  stamps: stampsOf(cook.events, startOf(cook), design),
-  probeNames: probeNamesOf(cook.smokeProfile),
-});
+): CompareCookSeries => {
+  // One start for the whole cook. The chart places the traces on it, the stamps
+  // are measured from it and the length is measured from it — a trace drawn
+  // from its own earliest reading instead would sit off the end marker and off
+  // the stamps annotating it whenever the leading readings were clipped or
+  // decimated away.
+  const start = startOf(cook);
+  return {
+    color,
+    pts: cook.series.map(readingOf),
+    mins: minutesOf(cook),
+    startedAt: start,
+    stamps: stampsOf(cook.events, start, design),
+    probeNames: probeNamesOf(cook.smokeProfile),
+  };
+};

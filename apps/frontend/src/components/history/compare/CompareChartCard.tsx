@@ -8,6 +8,7 @@
 import { Card, Typography } from '@mui/material';
 import React, { useMemo } from 'react';
 import CompareChart from 'temperaturechart/src/CompareChart';
+import type { SeriesKey } from 'temperaturechart/src/chartGeometry';
 import { CompareCook } from '../../../api';
 import { useDesignPalette } from '../../../theme';
 import { CompareSlotColors } from './compareColors';
@@ -18,9 +19,19 @@ export interface CompareChartCardProps {
   b: CompareCook;
   /** Which colour means which cook, the same pair the rest of the screen uses. */
   colors: CompareSlotColors;
+  /** Which probe positions are on the plot; the screen holds them. */
+  positions: readonly SeriesKey[];
+  /** Called with the positions after a chip is pressed. */
+  onPositionsChange: (positions: readonly SeriesKey[]) => void;
 }
 
-export function CompareChartCard({ a, b, colors }: CompareChartCardProps): JSX.Element {
+export function CompareChartCard({
+  a,
+  b,
+  colors,
+  positions,
+  onPositionsChange,
+}: CompareChartCardProps): JSX.Element {
   const design = useDesignPalette();
 
   // Held against the cooks and the scheme: the chart derives its whole drawing
@@ -63,6 +74,8 @@ export function CompareChartCard({ a, b, colors }: CompareChartCardProps): JSX.E
       <CompareChart
         a={cookA}
         b={cookB}
+        positions={positions}
+        onPositionsChange={onPositionsChange}
         colors={{
           panel: design.surfaceAlt,
           grid: design.border,

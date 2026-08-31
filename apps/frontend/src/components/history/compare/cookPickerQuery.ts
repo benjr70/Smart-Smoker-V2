@@ -3,17 +3,19 @@
  *
  * The picker's whole reason to exist is that a pitmaster does not remember the
  * name of the cook they want — they remember that it was pork, on cherry, some
- * time in July. So the narrowing is one search across the four things a cook is
+ * time in July. So the narrowing is one search across the things a cook is
  * remembered by, plus the meat chips, plus the order to hand the survivors back
  * in; and all of it lives here rather than in the sheet, so the sheet renders an
  * answer instead of working one out.
  *
- * The meat chips are the history list's, delegated rather than restated: which
- * meats there are chips for, and what happens to a chip whose last cook has been
- * deleted, is one decision this app has already made once.
+ * The search and the meat chips are the history list's, delegated rather than
+ * restated: what a cook is findable by, which meats there are chips for, and
+ * what happens to a chip whose last cook has been deleted, are decisions this
+ * app has already made once. The order is the only thing the picker adds.
  */
 import { SmokeHistory } from '../../../api/types';
 import { selectHistory } from '../historyQuery';
+import { sortableScore } from './cookRating';
 
 /** The three orders the picker offers, in the order it offers them. */
 export type CookSort = 'recent' | 'rated' | 'name';
@@ -40,31 +42,6 @@ export interface CookPickerSelection {
 }
 
 /**
- * How a cook is remembered: what it was called, what was in it, what it was
- * smoked over, and when it happened.
- *
- * The date is matched as the string the archive carries and the card shows
- * ("Jul 4, 2026"), because the form the user has read it in is the form they
- * will type a fragment of.
- */
-const remembered = (cook: SmokeHistory): string[] => [
-  cook.name,
-  cook.meatType,
-  cook.woodType,
-  cook.date,
-];
-
-const matches = (cook: SmokeHistory, needle: string): boolean =>
-  needle === '' ||
-  remembered(cook).some(field => typeof field === 'string' && field.toLowerCase().includes(needle));
-
-/** A cook's overall taste as a number; a cook nobody rated scores nothing. */
-const score = (cook: SmokeHistory): number => {
-  const rated = parseFloat(cook.overAllRating);
-  return Number.isFinite(rated) ? rated : 0;
-};
-
-/**
  * The cooks in the chosen order.
  *
  * "Recent" is the order they arrive in — the history read hands them over
@@ -74,7 +51,12 @@ const score = (cook: SmokeHistory): number => {
  */
 const inOrder = (cooks: SmokeHistory[], sort: CookSort): SmokeHistory[] => {
   if (sort === 'rated') {
-    return [...cooks].sort((one, other) => score(other) - score(one));
+    // Unrated by the same rule the rows and the verdict read a rating by, and
+    // below every score there is: a cook nobody rated has not come last in
+    // "Top rated", it was never in the order at all.
+    return [...cooks].sort(
+      (one, other) => sortableScore(other.overAllRating) - sortableScore(one.overAllRating)
+    );
   }
   if (sort === 'name') {
     return [...cooks].sort((one, other) => {
@@ -93,21 +75,17 @@ export function selectPickerCooks(
   cooks: readonly SmokeHistory[],
   filters: CookPickerFilters
 ): CookPickerSelection {
-  // The chips first, by the history list's own rules — including dropping a
-  // choice the archive no longer has a cook for.
-  const {
-    shown: byMeat,
-    meatTypes,
-    meats,
-  } = selectHistory(cooks, { query: '', meats: filters.meats });
-
-  const needle = filters.query.trim().toLowerCase();
+  // The search and the chips are the history list's own — what a cook is
+  // findable by is one decision this app has already made, and a picker that
+  // made it a second time would drift from the list it is picking out of. All
+  // the picker adds is the order.
+  const { shown, meatTypes, meats } = selectHistory(cooks, {
+    query: filters.query,
+    meats: filters.meats,
+  });
 
   return {
-    shown: inOrder(
-      byMeat.filter(one => matches(one, needle)),
-      filters.sort
-    ),
+    shown: inOrder(shown, filters.sort),
     total: cooks.length,
     meatTypes,
     meats,

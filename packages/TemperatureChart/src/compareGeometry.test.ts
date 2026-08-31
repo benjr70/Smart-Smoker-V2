@@ -65,6 +65,27 @@ describe('elapsedPoints', () => {
     expect(elapsedPoints([])).toEqual([]);
     expect(elapsedPoints([reading({ chamber: 225 })])).toEqual([]);
   });
+
+  /**
+   * The caller measures the cook's length and every stamp from the start it
+   * derived; readings that begin after that start — clipped, or decimated away
+   * — must not quietly move the traces' zero away from it.
+   */
+  it('measures from the start it is given rather than from the first reading', () => {
+    const points = elapsedPoints(
+      [reading({ date: at(30), chamber: 240 }), reading({ date: at(90), chamber: 250 })],
+      START
+    );
+
+    expect(points.map(point => point.minutes)).toEqual([30, 90]);
+  });
+
+  it('falls back to the earliest reading when the start given cannot be read', () => {
+    const readings = [reading({ date: at(30), chamber: 240 }), reading({ date: at(90) })];
+
+    expect(elapsedPoints(readings, null).map(point => point.minutes)).toEqual([0, 60]);
+    expect(elapsedPoints(readings, 'not a date').map(point => point.minutes)).toEqual([0, 60]);
+  });
 });
 
 describe('ranIn', () => {

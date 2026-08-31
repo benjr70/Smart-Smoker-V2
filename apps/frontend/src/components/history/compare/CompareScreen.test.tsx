@@ -394,8 +394,9 @@ describe('CompareScreen', () => {
     renderCompare(backend);
 
     const summary = await screen.findByTestId('compare-summary');
-    expect(summary).toHaveTextContent('Unnamed cook');
-    expect(summary).toHaveTextContent('The unnamed cook scored higher overall');
+    // One name for the nameless cook, in the swatch and in the verdict alike:
+    // two spellings on one card read as two different cooks.
+    expect(summary).toHaveTextContent('Unnamed cook scored higher overall');
   });
 
   test('a cook nobody weighed, wooded or named a meat for reads as absent', async () => {
@@ -609,5 +610,33 @@ describe('the temperature overlay', () => {
     // Neither cook named a probe, so each falls back to the position itself
     // rather than claiming a name the pitmaster never gave.
     expect(screen.getByTestId('compare-chart')).toHaveTextContent('Chamber');
+  });
+
+  /**
+   * Which probes are shown is a question about the pair on the screen, and the
+   * screen — not the chart — is what holds the answer, so a new pair is asked
+   * afresh instead of inheriting chips chosen about two other cooks.
+   */
+  test('a change of cooks asks again which probes to show', async () => {
+    renderCompare(seedWithReadings());
+    await screen.findByTestId('compare-chart');
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Chamber' })).toBeInTheDocument()
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Chamber' }));
+    expect(screen.getByRole('button', { name: 'Chamber' })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Swap cooks' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Chamber' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      )
+    );
   });
 });
