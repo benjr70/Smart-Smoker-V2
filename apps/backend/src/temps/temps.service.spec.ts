@@ -714,6 +714,40 @@ describe('TempsService', () => {
       expect(point.probe2Temp).toEqual(100);
     });
 
+    /** A probe that reported nothing all bucket long reports nothing. */
+    it('reports nothing for a probe that was unplugged the whole point', async () => {
+      const rows = [
+        reading('2026-08-20T10:00:00Z', { Meat3Temp: '0' }),
+        reading('2026-08-20T10:01:00Z', { Meat3Temp: '0' }),
+      ];
+      model.find = jest.fn().mockImplementation(() => orderedQuery(rows));
+
+      const [point] = await service.getSeriesById('some-group', 1);
+
+      expect(point.probe3Temp).toBeNull();
+    });
+
+    /**
+     * Readings that all carry the same timestamp — a batch written under one
+     * clock tick — divide no time at all, so they stand for the one moment
+     * they were taken at rather than being spread across an empty axis.
+     */
+    it('answers readings taken at one instant as one point', async () => {
+      const rows = Array.from({ length: 10 }, () =>
+        reading('2026-08-20T10:00:00Z', { ChamberTemp: '220' }),
+      );
+      model.find = jest.fn().mockImplementation(() => orderedQuery(rows));
+
+      const result = await service.getSeriesById('some-group', 4);
+
+      expect(result).toEqual([
+        expect.objectContaining({
+          date: new Date('2026-08-20T10:00:00Z').toISOString(),
+          chamberTemp: 220,
+        }),
+      ]);
+    });
+
     /** A cook short enough to draw as it is comes back as it is. */
     it('leaves a cook shorter than the size asked for alone', async () => {
       const rows = [
@@ -798,11 +832,108 @@ describe('TempsService', () => {
       ]);
     });
 
+    /**
+     * The chart these points feed plots elapsed time, so buckets divide time,
+     * not the array. A cook whose device went quiet for hours has its readings
+     * piled either side of that silence; bucketed by position, each point would
+     * stand for a different width of cook and two cooks overlaid would line up
+     * against the wrong elapsed times. Bucketed by time, the silence comes back
+     * as the gap it was.
+     */
+    it('spaces the points evenly in time across a cook with a gap in it', async () => {
+      const rows = [
+        // Four readings in the first minute, then two hours of silence, then
+        // four more: half the readings stand for a sliver of the cook.
+        ...Array.from({ length: 4 }, (_, at) =>
+          reading(
+            new Date(Date.UTC(2026, 7, 20, 10, 0, at * 15)).toISOString(),
+          ),
+        ),
+        ...Array.from({ length: 4 }, (_, at) =>
+          reading(
+            new Date(Date.UTC(2026, 7, 20, 12, 0, at * 15)).toISOString(),
+          ),
+        ),
+      ];
+      model.find = jest.fn().mockImplementation(() => orderedQuery(rows));
+
+      const result = await service.getSeriesById('some-group', 4);
+
+      // Two points, an hour apart in the middle, because the two hours nobody
+      // recorded hold no readings to average — rather than four points, two of
+      // which would each stand for forty-five seconds.
+      expect(result.map((point) => point.date)).toEqual([
+        new Date('2026-08-20T10:00:22.500Z').toISOString(),
+        new Date('2026-08-20T12:00:22.500Z').toISOString(),
+      ]);
+    });
+
+    /**
+     * The archive holds undated rows, and Mongo sorts them to the head of the
+     * series, so a cook can begin with rows that cannot be placed in time at
+     * all. They must not be folded in with dated readings: the mean of the
+     * times that do exist would stamp them with a moment nobody recorded them
+     * at, and the chart would draw them there.
+     */
+    it('keeps undated readings out of the dated points of the same cook', async () => {
+      const rows = [
+        { ...mockTempRows[0], date: undefined as unknown as Date },
+        ...Array.from({ length: 9 }, (_, at) =>
+          reading(new Date(Date.UTC(2026, 7, 20, 10, at)).toISOString(), {
+            ChamberTemp: String(200 + at),
+          }),
+        ),
+      ];
+      model.find = jest.fn().mockImplementation(() => orderedQuery(rows));
+
+      const result = await service.getSeriesById('some-group', 2);
+
+      const [undated, ...dated] = result;
+      expect(undated.date).toBeNull();
+      expect(dated.every((point) => point.date !== null)).toBe(true);
+      // The undated reading is its own point, not averaged into a dated one.
+      expect(undated.chamberTemp).toEqual(225);
+    });
+
+    /**
+     * A cook made of both kinds of reading is worth a point of each, even to a
+     * caller who asked for one point: dropping either run would drop half the
+     * cook, so such a cook is answered a point over the size asked for.
+     */
+    it('never thins a cook below one dated and one undated point', async () => {
+      const rows = [
+        { ...mockTempRows[0], date: undefined as unknown as Date },
+        { ...mockTempRows[0], date: undefined as unknown as Date },
+        reading('2026-08-20T10:00:00Z'),
+        reading('2026-08-20T11:00:00Z'),
+      ];
+      model.find = jest.fn().mockImplementation(() => orderedQuery(rows));
+
+      const result = await service.getSeriesById('some-group', 1);
+
+      expect(result.map((point) => point.date)).toEqual([
+        null,
+        new Date('2026-08-20T10:30:00Z').toISOString(),
+      ]);
+    });
+
     /** A cook nobody recorded, or an id nobody used, is an empty chart. */
     it('answers a series with no readings with nothing', async () => {
       model.find = jest.fn().mockImplementation(() => orderedQuery([]));
 
       expect(await service.getSeriesById('no-such-group', 300)).toEqual([]);
+    });
+
+    /**
+     * A client walking a list of cooks should not have to tell an id nobody
+     * used from an id that was never object-id shaped: a legacy or malformed
+     * tempsId draws the same empty chart as an unknown one.
+     */
+    it('answers an id that was never object-id shaped with nothing', async () => {
+      model.find = jest.fn().mockImplementation(() => orderedQuery([]));
+
+      expect(await service.getSeriesById('not-an-object-id', 300)).toEqual([]);
+      expect(model.find).toHaveBeenCalledWith({ tempsId: 'not-an-object-id' });
     });
   });
 

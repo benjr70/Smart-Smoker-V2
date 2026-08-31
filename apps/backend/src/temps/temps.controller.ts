@@ -39,6 +39,13 @@ export class TempsController {
    * A stored cook as a chart draws it: numbers rather than the strings the
    * device sent, thinned to a size that fits in one response, instead of the
    * tens of thousands of raw readings a long cook holds.
+   *
+   * The id is taken as it comes, without the object-id check the sibling routes
+   * make: a cook nobody recorded is an empty chart, and a client comparing a
+   * list of cooks should not have to tell "no readings" from "that id was not
+   * shaped like an id" to draw the same nothing either way. Nothing is cast
+   * from it — a series is found by its `tempsId`, which is stored as a plain
+   * string — so an unrecognisable id simply matches no readings.
    */
   @Get('/:id/series')
   @ApiOperation({
@@ -46,7 +53,7 @@ export class TempsController {
   })
   @ApiOkResponse({ type: TempSampleDto, isArray: true })
   getSeriesById(
-    @Param('id', ParseObjectIdPipe) id: string,
+    @Param('id') id: string,
     @Query() query: TempSeriesQueryDto,
   ): Promise<TempSample[]> {
     return this.tempsService.getSeriesById(id, query.points);

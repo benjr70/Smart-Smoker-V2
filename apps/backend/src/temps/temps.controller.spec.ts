@@ -112,6 +112,24 @@ describe('TempsController', () => {
      * The size is the caller's to choose — a phone comparing two cooks side by
      * side wants fewer points than a full-screen chart does.
      */
+    /**
+     * A cook nobody recorded is an empty chart, whatever the id looked like:
+     * this route takes the id as it comes rather than refusing one that is not
+     * object-id shaped, so a client walking a list of cooks draws the same
+     * nothing for a legacy or malformed tempsId as for an unknown one.
+     */
+    it('asks for a series under an id that is not object-id shaped', async () => {
+      mockTempsService.getSeriesById = jest.fn().mockResolvedValue([]);
+
+      const result = await controller.getSeriesById('legacy-series', {});
+
+      expect(mockTempsService.getSeriesById).toHaveBeenCalledWith(
+        'legacy-series',
+        undefined,
+      );
+      expect(result).toEqual([]);
+    });
+
     it('passes on the size the caller asked for', async () => {
       await controller.getSeriesById('temps-id', { points: 50 });
 
