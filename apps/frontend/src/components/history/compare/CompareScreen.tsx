@@ -2,42 +2,18 @@
  * The comparison: two cooks, from the plan through the cook to the verdict,
  * side by side.
  */
-import { Box, Card, CircularProgress, IconButton, Typography } from '@mui/material';
+import { Box, CircularProgress, IconButton, Typography } from '@mui/material';
 import React, { useEffect, useState } from 'react';
 import { CompareStatus, useCompare } from '../../../api';
 import { SmokeHistory } from '../../../api/types';
 import { BackIcon, SwapIcon } from '../../common/components/DesignIcons';
 import { useCompareSlotColors } from './compareColors';
+import { CompareChartCard } from './CompareChartCard';
 import { CompareFactsTable } from './CompareFactsTable';
 import { CompareNotesCard } from './CompareNotesCard';
 import { CompareSlotCard } from './CompareSlotCard';
 import { CompareSummaryCard } from './CompareSummaryCard';
 import { CookPickerSheet } from './CookPickerSheet';
-
-/**
- * Where the two cooks' traces will be overlaid. The chart itself is a later
- * slice; the space it occupies is held here so the sections around it sit where
- * they will end up, rather than shuffling down the page when it lands.
- */
-function CompareChartPlaceholder(): JSX.Element {
-  return (
-    <Card
-      data-testid="compare-chart-placeholder"
-      sx={theme => ({
-        minHeight: 180,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '16px',
-        textAlign: 'center',
-        fontSize: '0.8125rem',
-        color: theme.design.textSecondary,
-      })}
-    >
-      The temperature overlay lands here.
-    </Card>
-  );
-}
 
 /** Why there is no comparison on the screen, in the words of the reason. */
 function Message({ status }: { status: CompareStatus }): JSX.Element {
@@ -243,7 +219,7 @@ export function CompareScreen({
           }}
         >
           <CompareSummaryCard a={a} b={b} colors={colors} />
-          <CompareChartPlaceholder />
+          <CompareChartCard a={a} b={b} colors={colors} />
           <CompareFactsTable a={a} b={b} />
           <CompareNotesCard a={a} b={b} colors={colors} />
         </Box>

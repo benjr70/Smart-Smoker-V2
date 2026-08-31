@@ -13,7 +13,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { ApiClientProvider, SnackbarProvider, createApiClient } from '../../../api';
-import { createFakeBackend, FakeBackend } from '../../../api/fakeBackend';
+import { createFakeBackend, FakeBackend, StoredTempData } from '../../../api/fakeBackend';
 import { Smoke, SmokeHistory } from '../../../api/types';
 import { WeightUnits } from '../../common/interfaces/enums';
 import { DesignSurface, appTheme, carbonLight } from '../../../theme';
@@ -554,5 +554,60 @@ describe('CompareScreen', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Back' }));
 
     expect(onBack).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * The overlay, which is the one thing on this screen drawn rather than written:
+ * two cooks' traces on one plot, each in the colour its slot means.
+ */
+describe('the temperature overlay', () => {
+  /** A cook's readings as the archive holds them, climbing over `hours`. */
+  const storedCook = (start: string, hours: number, peak: number): StoredTempData[] =>
+    Array.from({ length: 7 }, (_, step) => ({
+      ChamberTemp: `${240 + step}`,
+      MeatTemp: `${90 + Math.round(((peak - 90) * step) / 6)}`,
+      Meat2Temp: '0',
+      Meat3Temp: '0',
+      date: new Date(new Date(start).getTime() + ((hours * 60 * 60_000) / 6) * step),
+    }));
+
+  const seedWithReadings = (): FakeBackend => {
+    const backend = seedTwoCooks();
+    backend.store.temps.records['temps-smoke-a'] = storedCook('2026-08-01T06:00:00.000Z', 12, 203);
+    backend.store.temps.records['temps-smoke-b'] = storedCook('2026-07-04T07:00:00.000Z', 9, 197);
+    return backend;
+  };
+
+  const overlayLine = (cook: 'a' | 'b', position: string): Element | null =>
+    // eslint-disable-next-line testing-library/no-node-access
+    screen
+      .getByTestId('compare-chart')
+      .querySelector(`path[data-cook="${cook}"][data-position="${position}"]`);
+
+  test('draws both cooks on one plot, each in its slot’s colour', async () => {
+    renderCompare(seedWithReadings());
+
+    await screen.findByTestId('compare-chart');
+
+    await waitFor(() =>
+      expect(overlayLine('a', 'probe1')).toHaveAttribute('stroke', carbonLight.probes.probe2)
+    );
+    expect(overlayLine('b', 'probe1')).toHaveAttribute('stroke', carbonLight.probes.chamber);
+    expect(screen.queryByTestId('compare-chart-placeholder')).not.toBeInTheDocument();
+  });
+
+  test('offers the positions the cooks ran and names them as each cook did', async () => {
+    renderCompare(seedWithReadings());
+
+    await screen.findByTestId('compare-chart');
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Probe 1' })).toBeInTheDocument()
+    );
+    expect(screen.queryByRole('button', { name: 'Probe 3' })).not.toBeInTheDocument();
+    // Neither cook named a probe, so each falls back to the position itself
+    // rather than claiming a name the pitmaster never gave.
+    expect(screen.getByTestId('compare-chart')).toHaveTextContent('Chamber');
   });
 });
