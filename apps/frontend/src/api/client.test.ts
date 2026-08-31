@@ -222,6 +222,74 @@ describe('temps client — a series that arrives newest-first', () => {
   });
 });
 
+/**
+ * The chart-ready read of a stored cook: the backend thins the tens of
+ * thousands of raw readings a long cook holds down to a chart's worth of
+ * points, and answers with numbers rather than the strings the device sent.
+ * What this boundary still owes the app is the moment each point was taken as a
+ * `Date`, since JSON carries it as a string.
+ */
+describe('temps client — the decimated series a chart is drawn from', () => {
+  const storedCook = [
+    {
+      ChamberTemp: '225',
+      MeatTemp: '145',
+      Meat2Temp: '0',
+      Meat3Temp: 'nonsense',
+      date: new Date('2025-01-01T12:00:00Z'),
+    },
+  ];
+
+  test('a cook is asked for at the size the caller wants and reads back as numbers', async () => {
+    const backend = createFakeBackend({ temps: { records: { abc123: storedCook } } });
+    const client = createApiClient(backend);
+
+    const series = await client.temps.getSeries('abc123', 300);
+
+    expect(series).toEqual([
+      {
+        date: new Date('2025-01-01T12:00:00Z'),
+        chamberTemp: 225,
+        probe1Temp: 145,
+        // The zero the hardware sends for a probe nobody plugged in, and a
+        // reading that is no number at all, are both nothing rather than a
+        // temperature the smoker never reached.
+        probe2Temp: null,
+        probe3Temp: null,
+      },
+    ]);
+    expect(backend.requests).toContainEqual({
+      method: 'get',
+      path: 'temps/abc123/series?points=300',
+      body: undefined,
+    });
+  });
+
+  /**
+   * A size of zero is a size, not a missing one: the endpoint clamps it up to
+   * the smallest chart it draws rather than falling back to its default. The
+   * in-memory backend answers the same way, so a test written against it says
+   * something true about production.
+   */
+  test('a chart asked for at zero points is served the smallest chart there is', async () => {
+    const backend = createFakeBackend({
+      temps: {
+        records: {
+          abc123: [
+            ...storedCook,
+            { ...storedCook[0], ChamberTemp: '250', date: new Date('2025-01-01T13:00:00Z') },
+          ],
+        },
+      },
+    });
+    const client = createApiClient(backend);
+
+    const series = await client.temps.getSeries('abc123', 0);
+
+    expect(series).toHaveLength(1);
+  });
+});
+
 const sampleProfile: SmokeProfile = {
   chamberName: 'Main Chamber',
   probe1Name: 'Meat Probe',
@@ -1236,6 +1304,49 @@ describe('smoke client — review aggregate', () => {
     // This is the series the review card charts, so string readings reaching it
     // are a blank chart on a smoke that was recorded perfectly well.
     expect(review.temps[0]).toMatchObject({ ChamberTemp: 225, MeatTemp: 145 });
+  });
+});
+
+/**
+ * The same composition without the raw log: what a screen that only describes a
+ * cook — compare, above all — reads, so a long cook's megabytes of readings are
+ * fetched where they are drawn and nowhere else.
+ */
+describe('smoke client — a cook described without its readings', () => {
+  test('composes the parent and its children, and never asks for the log', async () => {
+    const backend = seedFullSmoke();
+    const client = createApiClient(backend);
+
+    const summary = await client.smoke.getSummary('smoke-1');
+
+    expect(summary.smoke).toEqual(seededSmoke);
+    expect(summary.preSmoke.name).toBe('Brisket');
+    expect(summary.smokeProfile.chamberName).toBe('Main');
+    expect(summary.postSmoke.restTime).toBe('30');
+    expect(summary.rating.overallTaste).toBe(5);
+    // The one read this is here to avoid.
+    expect(backend.requests.map(request => request.path)).not.toContain('temps/temps-1');
+    expect(summary).not.toHaveProperty('temps');
+  });
+
+  test('an absent child yields its typed default rather than failing the read', async () => {
+    const backend = createFakeBackend({ smoke: { records: { 'smoke-1': seededSmoke } } });
+    const client = createApiClient(backend);
+
+    const summary = await client.smoke.getSummary('smoke-1');
+
+    expect(summary.preSmoke).toEqual({ weight: {}, steps: [] });
+    expect(summary.timeline).toBeNull();
+    expect(summary.rating.overallTaste).toBe(0);
+  });
+
+  test('a missing parent rejects with the typed ApiError', async () => {
+    const client = createApiClient(createFakeBackend());
+
+    const error = (await client.smoke.getSummary('missing').catch(e => e)) as ApiError;
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.status).toBe(404);
   });
 });
 

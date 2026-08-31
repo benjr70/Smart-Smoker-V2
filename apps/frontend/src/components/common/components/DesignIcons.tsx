@@ -97,6 +97,25 @@ export function TrashIcon({ size }: DesignIconProps = {}): JSX.Element {
   );
 }
 
+/** The chevron back: out of a screen, to the one it was opened from. */
+export function BackIcon({ size }: DesignIconProps = {}): JSX.Element {
+  return (
+    <OutlineIcon size={size}>
+      <path d="M15 5l-7 7 7 7" />
+    </OutlineIcon>
+  );
+}
+
+/** Two arrows passing: exchanging one thing for the other. */
+export function SwapIcon({ size }: DesignIconProps = {}): JSX.Element {
+  return (
+    <OutlineIcon size={size}>
+      <path d="M7 8h11m0 0l-3-3m3 3l-3 3" />
+      <path d="M17 16H6m0 0l3-3m-3 3l3 3" />
+    </OutlineIcon>
+  );
+}
+
 /** The gear: the Settings destination. */
 export function SettingsIcon({ size }: DesignIconProps = {}): JSX.Element {
   return (

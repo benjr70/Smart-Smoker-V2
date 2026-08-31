@@ -537,6 +537,58 @@ const refusesStamps = (stamps: readonly Partial<CookStamp>[] | undefined): boole
   return DEFAULT_STAMPS.some(stamp => !seen.has(stamp.key));
 };
 
+/**
+ * The size the caller asked a chart to be, read off the query the way the
+ * endpoint reads it: a size nobody asked for and one that is no number at all
+ * are the default, and any other size is served at the nearest size in range —
+ * so `points=0`, which is a number, is a chart of one point rather than the
+ * default (see the backend's own `pointsAsked`).
+ */
+const SERIES_POINTS = { min: 1, max: 2000, fallback: 300 };
+const pointsAsked = (search: string | undefined): number => {
+  const raw = new URLSearchParams(search ?? '').get('points');
+  // `?points=` with nothing after it is a caller who named the parameter
+  // without choosing a size, which the endpoint reads as not naming it.
+  if (raw === null || raw === '') return SERIES_POINTS.fallback;
+  const asked = Number(raw);
+  if (Number.isNaN(asked)) return SERIES_POINTS.fallback;
+  return Math.min(Math.max(Math.floor(asked), SERIES_POINTS.min), SERIES_POINTS.max);
+};
+
+/**
+ * A reading as the series endpoint answers it: the number the string held, and
+ * nothing at all for the zero the hardware sends on an empty port or for a
+ * reading that is no number.
+ */
+const seriesReading = (value: number | string | undefined | null): number | null => {
+  const reading = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(reading) && reading !== 0 ? reading : null;
+};
+
+/**
+ * A stored cook as the decimated endpoint serves it: chart-ready points, in the
+ * order the cook was cooked, thinned to the size asked for.
+ *
+ * Thinned by taking an even spread rather than by the backend's bucket mean —
+ * this mirrors the endpoint's contract (at most `points` chart-ready samples,
+ * oldest first), not its arithmetic, which is the backend's own tested concern.
+ */
+const tempSeriesOf = (readings: StoredTempData[], points: number): unknown[] => {
+  const ordered = [...readings].sort(
+    (one, other) => new Date(one.date).getTime() - new Date(other.date).getTime()
+  );
+  const stride = Math.max(1, Math.ceil(ordered.length / points));
+  return ordered
+    .filter((_, index) => index % stride === 0)
+    .map(reading => ({
+      date: new Date(reading.date).toISOString(),
+      chamberTemp: seriesReading(reading.ChamberTemp),
+      probe1Temp: seriesReading(reading.MeatTemp),
+      probe2Temp: seriesReading(reading.Meat2Temp),
+      probe3Temp: seriesReading(reading.Meat3Temp),
+    }));
+};
+
 /** The smoke profile field naming a probe slot, as the backend reads it. */
 const PROBE_NAME_FIELDS: Record<string, keyof SmokeProfile> = {
   probe1: 'probe1Name',
@@ -698,10 +750,20 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
     },
   };
   const route = ({ method, path, body }: FakeRequest): unknown => {
-    const segments = path.split('/');
+    // A route is a path; what a caller asked *of* it rides behind the `?`. The
+    // recorded request keeps the whole thing, so a test can still assert on the
+    // size a chart asked for.
+    const [routePath, search] = path.split('?');
+    const segments = routePath.split('/');
     const [resource, id] = segments;
 
     if (resource === 'temps') {
+      // The chart-ready read, before the by-id read below can claim the id: a
+      // cook nobody recorded is an empty chart here rather than a 404, exactly
+      // as the endpoint answers it.
+      if (method === 'get' && segments[2] === 'series') {
+        return tempSeriesOf(store.temps.records[id] ?? [], pointsAsked(search));
+      }
       if (method === 'get' && id === undefined) {
         return clone(store.temps.current);
       }

@@ -12,6 +12,24 @@ import type { CookStamp, StampTone } from './cookStamps';
 export type { TempData };
 
 /**
+ * One point of a stored cook as a chart draws it.
+ *
+ * The chart-ready read of a cook, not the raw log: the backend thins a cook's
+ * tens of thousands of readings to a chart's worth of points and answers in
+ * numbers rather than the strings the device sent. Every reading is nullable
+ * because a probe nobody plugged in reported nothing — a gap in the line, never
+ * a temperature — and so is the moment, because a reading stored without a date
+ * cannot be placed on any axis.
+ */
+export interface TempSample {
+  date: Date | null;
+  chamberTemp: number | null;
+  probe1Temp: number | null;
+  probe2Temp: number | null;
+  probe3Temp: number | null;
+}
+
+/**
  * A smoke profile as seen by the frontend.
  *
  * The optional-on-the-wire `notes` and `woodType` fields are normalized to
@@ -353,14 +371,18 @@ export interface CurrentSmokeTimeline extends SmokeTimeline {
 }
 
 /**
- * The composed review read-model: a smoke parent plus its five resolved child
- * resources, the shape the history review screen renders. The deep client's
- * review-aggregate call fetches the parent, then the children in parallel, and
- * fills any absent piece with a typed default so a single missing child never
- * fails the whole read. Every field is non-optional: callers render it without
- * per-piece guards.
+ * A cook described whole, without its readings: the smoke parent plus the child
+ * resources that say what was planned, what was stamped on it, how long it took
+ * and how it scored. The deep client fetches the parent, then the children in
+ * parallel, and fills any absent piece with a typed default so a single missing
+ * child never fails the whole read. Every field is non-optional: callers render
+ * it without per-piece guards.
+ *
+ * This is what a screen that describes a cook needs. The raw temperature log —
+ * tens of thousands of readings on a long cook — is deliberately not part of
+ * it; see {@link SmokeReview} for the read that carries it.
  */
-export interface SmokeReview {
+export interface SmokeSummary {
   smoke: Smoke;
   /**
    * The cook's timing, derived server-side. `null` when the backend could not
@@ -370,9 +392,19 @@ export interface SmokeReview {
   timeline: SmokeTimeline | null;
   preSmoke: PreSmoke;
   smokeProfile: SmokeProfile;
-  temps: TempData[];
   postSmoke: PostSmoke;
   rating: rating;
+}
+
+/**
+ * The review read-model, raw log and all: everything {@link SmokeSummary} says
+ * about a cook plus the readings themselves, for the one screen that draws them
+ * from the log. A reader that only describes a cook takes the summary, so the
+ * megabytes of a long cook's log are fetched where they are drawn and nowhere
+ * else.
+ */
+export interface SmokeReview extends SmokeSummary {
+  temps: TempData[];
 }
 
 /**
