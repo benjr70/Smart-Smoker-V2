@@ -14,7 +14,11 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { TargetSource } from './app-settings.schema';
+import {
+  MAX_DRIFT_MIN,
+  MIN_DRIFT_MIN,
+  TargetSource,
+} from './app-settings.schema';
 import { AppearanceMode, ColorScheme } from './appearance';
 import { MAX_STAMP_LABEL, STAMP_TONES, StampTone } from './stamp-catalogue';
 
@@ -103,6 +107,45 @@ export class TargetPresetsDto {
   @ApiProperty()
   @IsNumber()
   poultry: number;
+
+  /**
+   * The temperature the Serve Plan's wrap milestone is measured against, edited
+   * in the same card and saved in the same block.
+   *
+   * Optional, unlike the three beside it: a client older than this field sends
+   * the card's block without it, and the strict edge would 400 a body missing a
+   * required field — on a save that happens as the page is left, where the
+   * refusal is a card's worth of edits lost with nobody looking. Absent reads
+   * back as the shipped default.
+   */
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsNumber()
+  wrapTemp?: number;
+}
+
+/**
+ * The Serve Plan as the settings page's "During the cook" card saves it.
+ *
+ * The tolerance is refused rather than clamped when it is outside the range the
+ * stepper offers: it is the whole of what "off plan" means, and a client left
+ * showing a number the backend is not alerting on would be lying about when the
+ * push arrives.
+ */
+export class ServePlanDto {
+  @ApiProperty()
+  @IsBoolean()
+  enabled: boolean;
+
+  @ApiProperty()
+  @IsBoolean()
+  driftAlert: boolean;
+
+  @ApiProperty({ minimum: MIN_DRIFT_MIN, maximum: MAX_DRIFT_MIN })
+  @IsInt()
+  @Min(MIN_DRIFT_MIN)
+  @Max(MAX_DRIFT_MIN)
+  driftMin: number;
 }
 
 /** The Probe Target Reached alert as the settings page sends it. */
@@ -284,4 +327,10 @@ export class ApplicationSettingsDto {
   @ValidateNested()
   @Type(() => CookLogDto)
   cookLog?: CookLogDto;
+
+  @ApiProperty({ type: ServePlanDto, required: false })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ServePlanDto)
+  servePlan?: ServePlanDto;
 }

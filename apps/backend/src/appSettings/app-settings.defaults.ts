@@ -1,7 +1,10 @@
 import {
   ApplicationSettings,
   DEFAULT_AUTO_STOP_IDLE_HOURS,
+  DEFAULT_DRIFT_MIN,
+  DEFAULT_WRAP_TEMP,
   ProbeTargetEntry,
+  ServePlanSettings,
   TargetPresets,
   TargetSource,
 } from './app-settings.schema';
@@ -24,6 +27,21 @@ export const DEFAULT_TARGET_PRESETS: TargetPresets = {
   beef: 203,
   pork: 195,
   poultry: 165,
+  wrapTemp: DEFAULT_WRAP_TEMP,
+};
+
+/**
+ * The Serve Plan an installation starts with: the planner on, its off-schedule
+ * push on, and half an hour of tolerance either side of the pull-by time.
+ *
+ * On rather than off, unlike the alert blocks: the planner is part of the cook
+ * screen and the switch exists to remove it, so a fresh installation — and one
+ * upgrading into this slice — finds it there.
+ */
+export const DEFAULT_SERVE_PLAN: ServePlanSettings = {
+  enabled: true,
+  driftAlert: true,
+  driftMin: DEFAULT_DRIFT_MIN,
 };
 
 /**
@@ -36,6 +54,18 @@ export const DEFAULT_TARGET_PRESETS: TargetPresets = {
  * a second opinion about what "unset" means.
  */
 export { DEFAULT_AUTO_STOP_IDLE_HOURS } from './app-settings.schema';
+
+/**
+ * The tolerance and the wrap temperature, re-exported for the same reason: each
+ * is declared beside the Mongoose field it defaults, so the schema's default
+ * and this module's fallback cannot drift apart.
+ */
+export {
+  DEFAULT_DRIFT_MIN,
+  DEFAULT_WRAP_TEMP,
+  MAX_DRIFT_MIN,
+  MIN_DRIFT_MIN,
+} from './app-settings.schema';
 
 /**
  * The settings an installation starts from.
@@ -78,6 +108,10 @@ export const DEFAULT_APPLICATION_SETTINGS: ApplicationSettings = {
   // and so an installation upgrading into this slice reads the same buttons it
   // already had, rather than an empty grid.
   cookLog: { stamps: defaultStamps() },
+  // On, alerting, half an hour of tolerance: the planner is the cook screen's,
+  // not an alert nobody asked for, so an installation upgrading into this slice
+  // finds it already there.
+  servePlan: DEFAULT_SERVE_PLAN,
 };
 
 /**
@@ -123,6 +157,11 @@ const inheritedProvenance = (target: number): TargetSource =>
  * missing from it falls back to its default. One function so the read path, the
  * write path and the alert engine can never disagree about what "unset" means.
  *
+ * What "its default" means is the caller's to say. Reading a document, it is
+ * what the installation ships with. Merging what a client sent, it is what the
+ * installation already has stored — a field the client did not send is a field
+ * it is silent about, not one it asked to reset. See `saveSettings`.
+ *
  * Each field is named rather than copied wholesale, because what arrives here is
  * usually a Mongoose document: its nested blocks are subdocuments whose own
  * enumerable properties are persistence internals (`$__`, `_doc`, …), not the
@@ -132,6 +171,7 @@ const inheritedProvenance = (target: number): TargetSource =>
  */
 export const withSettingsDefaults = (
   stored: Partial<ApplicationSettings> | null | undefined,
+  defaults: ApplicationSettings = DEFAULT_APPLICATION_SETTINGS,
 ): ApplicationSettings => {
   const chamber = stored?.chamber;
   const probeTarget = stored?.probeTarget;
@@ -141,7 +181,7 @@ export const withSettingsDefaults = (
   const appearance = stored?.appearance;
   const autoStop = stored?.autoStop;
   const cookLog = stored?.cookLog;
-  const defaults = DEFAULT_APPLICATION_SETTINGS;
+  const servePlan = stored?.servePlan;
   return {
     chamber: {
       enabled: chamber?.enabled ?? defaults.chamber.enabled,
@@ -150,7 +190,9 @@ export const withSettingsDefaults = (
     },
     probeTarget: {
       enabled: probeTarget?.enabled ?? defaults.probeTarget.enabled,
-      probes: withProbeEntryPerSlot(probeTarget?.probes),
+      probes: withProbeEntryPerSlot(
+        probeTarget?.probes ?? defaults.probeTarget.probes,
+      ),
     },
     smokeComplete: {
       enabled: smokeComplete?.enabled ?? defaults.smokeComplete.enabled,
@@ -162,6 +204,10 @@ export const withSettingsDefaults = (
       beef: targetPresets?.beef ?? defaults.targetPresets.beef,
       pork: targetPresets?.pork ?? defaults.targetPresets.pork,
       poultry: targetPresets?.poultry ?? defaults.targetPresets.poultry,
+      // A document written before the wrap temperature existed reads as the
+      // shipped 165°F. An absence here would compare as "already past the wrap"
+      // and drop the milestone the plan exists to remind the cook of.
+      wrapTemp: targetPresets?.wrapTemp ?? defaults.targetPresets.wrapTemp,
     },
     appearance: {
       mode: appearance?.mode ?? defaults.appearance.mode,
@@ -174,6 +220,13 @@ export const withSettingsDefaults = (
     // Normalized rather than defaulted field by field: what is stored is a
     // list the user edits, so "unset" is only one of the ways it can arrive
     // incomplete. See `normalizeStamps` for the rest.
-    cookLog: { stamps: normalizeStamps(cookLog?.stamps) },
+    cookLog: {
+      stamps: normalizeStamps(cookLog?.stamps ?? defaults.cookLog.stamps),
+    },
+    servePlan: {
+      enabled: servePlan?.enabled ?? defaults.servePlan.enabled,
+      driftAlert: servePlan?.driftAlert ?? defaults.servePlan.driftAlert,
+      driftMin: servePlan?.driftMin ?? defaults.servePlan.driftMin,
+    },
   };
 };

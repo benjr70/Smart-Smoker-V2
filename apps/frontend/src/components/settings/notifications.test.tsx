@@ -38,7 +38,7 @@ const chamberAlertOn: NotificationSettings = {
   probeTarget: { enabled: false, probes: probeRows() },
   smokeComplete: { enabled: false },
   headsUp: { enabled: false },
-  targetPresets: { beef: 203, pork: 195, poultry: 165 },
+  targetPresets: { beef: 203, pork: 195, poultry: 165, wrapTemp: 165 },
 };
 
 const browserSubscription: PushSubscriptionPayload = {

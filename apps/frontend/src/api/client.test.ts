@@ -548,7 +548,7 @@ const savedSettings: NotificationSettings = {
   },
   smokeComplete: { enabled: true },
   headsUp: { enabled: false },
-  targetPresets: { beef: 203, pork: 195, poultry: 165 },
+  targetPresets: { beef: 203, pork: 195, poultry: 165, wrapTemp: 165 },
 };
 
 /**
@@ -712,7 +712,7 @@ describe('notifications client — settings', () => {
       },
       smokeComplete: { enabled: false },
       headsUp: { enabled: false },
-      targetPresets: { beef: 203, pork: 195, poultry: 165 },
+      targetPresets: { beef: 203, pork: 195, poultry: 165, wrapTemp: 165 },
     });
   });
 
@@ -800,14 +800,22 @@ describe('notifications client — default target temps', () => {
   test('getSettings carries the stored default target temps', async () => {
     const backend = createFakeBackend({
       appSettings: {
-        settings: { ...savedSettingsBody, targetPresets: { beef: 210, pork: 190, poultry: 170 } },
+        settings: {
+          ...savedSettingsBody,
+          targetPresets: { beef: 210, pork: 190, poultry: 170, wrapTemp: 165 },
+        },
       },
     });
     const client = createApiClient(backend);
 
     const result = await client.notifications.getSettings();
 
-    expect(result?.targetPresets).toEqual({ beef: 210, pork: 190, poultry: 170 });
+    expect(result?.targetPresets).toEqual({
+      beef: 210,
+      pork: 190,
+      poultry: 170,
+      wrapTemp: 165,
+    });
   });
 
   // A deployment that has never opened the card — and one older than the card
@@ -818,19 +826,29 @@ describe('notifications client — default target temps', () => {
 
     const result = await client.notifications.getSettings();
 
-    expect(result?.targetPresets).toEqual({ beef: 203, pork: 195, poultry: 165 });
+    expect(result?.targetPresets).toEqual({
+      beef: 203,
+      pork: 195,
+      poultry: 165,
+      wrapTemp: 165,
+    });
   });
 
   test('saveTargetPresets sends the presets block on its own', async () => {
     const backend = createFakeBackend();
     const client = createApiClient(backend);
 
-    await client.notifications.saveTargetPresets({ beef: 210, pork: 190, poultry: 170 });
+    await client.notifications.saveTargetPresets({
+      beef: 210,
+      pork: 190,
+      poultry: 170,
+      wrapTemp: 160,
+    });
 
     expect(backend.requests).toContainEqual({
       method: 'post',
       path: 'appSettings',
-      body: { targetPresets: { beef: 210, pork: 190, poultry: 170 } },
+      body: { targetPresets: { beef: 210, pork: 190, poultry: 170, wrapTemp: 160 } },
     });
   });
 
@@ -842,7 +860,12 @@ describe('notifications client — default target temps', () => {
   test('saving the alerts leaves edited presets exactly as they were', async () => {
     const backend = createFakeBackend();
     const client = createApiClient(backend);
-    await client.notifications.saveTargetPresets({ beef: 210, pork: 190, poultry: 170 });
+    await client.notifications.saveTargetPresets({
+      beef: 210,
+      pork: 190,
+      poultry: 170,
+      wrapTemp: 160,
+    });
 
     await client.notifications.saveSettings({ chamber: { enabled: true, low: 200, high: 300 } });
 
@@ -856,7 +879,12 @@ describe('notifications client — default target temps', () => {
     const backend = createFakeBackend();
     const client = createApiClient(backend);
 
-    await client.notifications.saveTargetPresets({ beef: 210, pork: 190, poultry: 170 });
+    await client.notifications.saveTargetPresets({
+      beef: 210,
+      pork: 190,
+      poultry: 170,
+      wrapTemp: 160,
+    });
 
     await expect(client.notifications.getSettings()).resolves.toMatchObject({
       targetPresets: { beef: 210, pork: 190, poultry: 170 },

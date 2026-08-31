@@ -161,6 +161,27 @@ describe('ApplicationSettingsDto validation', () => {
     });
   });
 
+  /**
+   * The wrap temperature is edited in the same card as the presets and rides in
+   * the same block. Optional, so a client older than the field can still save
+   * the three presets: the strict edge 400s a body missing a required field,
+   * and that 400 would land on a save nobody is looking at.
+   */
+  it('accepts the wrap temperature alongside the default target temps', async () => {
+    const body = {
+      targetPresets: { beef: 210, pork: 200, poultry: 165, wrapTemp: 160 },
+    };
+
+    const result = await pipe.transform(body, metadata);
+
+    expect(result.targetPresets).toEqual({
+      beef: 210,
+      pork: 200,
+      poultry: 165,
+      wrapTemp: 160,
+    });
+  });
+
   it('rejects a preset temperature that is not a number', async () => {
     const body = { targetPresets: { beef: 'hot', pork: 200, poultry: 165 } };
 
@@ -376,6 +397,75 @@ describe('ApplicationSettingsDto validation', () => {
       await expect(
         pipe.transform(
           { cookLog: { stamps: [{ ...catalogue[0], tone: 'purple' }] } },
+          metadata,
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+  });
+
+  /**
+   * The Serve Plan block the "During the cook" card saves. The tolerance is the
+   * whole of what "off plan" means, so a number outside the range the stepper
+   * offers is refused rather than clamped: a client that sends nonsense is told,
+   * instead of being left showing a tolerance the backend is not alerting on.
+   */
+  describe('the Serve Plan block', () => {
+    it('accepts the plan the During-the-cook card saves', async () => {
+      const body = {
+        servePlan: { enabled: true, driftAlert: false, driftMin: 45 },
+      };
+
+      const result = await pipe.transform(body, metadata);
+
+      expect(result.servePlan).toEqual({
+        enabled: true,
+        driftAlert: false,
+        driftMin: 45,
+      });
+    });
+
+    it('accepts every tolerance the stepper can reach', async () => {
+      for (let driftMin = 15; driftMin <= 180; driftMin += 15) {
+        const result = await pipe.transform(
+          { servePlan: { enabled: true, driftAlert: true, driftMin } },
+          metadata,
+        );
+
+        expect(result.servePlan.driftMin).toBe(driftMin);
+      }
+    });
+
+    it('refuses a tolerance below the shortest one on offer', async () => {
+      await expect(
+        pipe.transform(
+          { servePlan: { enabled: true, driftAlert: true, driftMin: 5 } },
+          metadata,
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('refuses a tolerance beyond the longest one on offer', async () => {
+      await expect(
+        pipe.transform(
+          { servePlan: { enabled: true, driftAlert: true, driftMin: 240 } },
+          metadata,
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('refuses a tolerance that is not a whole number of minutes', async () => {
+      await expect(
+        pipe.transform(
+          { servePlan: { enabled: true, driftAlert: true, driftMin: 22.5 } },
+          metadata,
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('refuses a switch that is not a boolean', async () => {
+      await expect(
+        pipe.transform(
+          { servePlan: { enabled: 'yes', driftAlert: true, driftMin: 30 } },
           metadata,
         ),
       ).rejects.toBeInstanceOf(BadRequestException);

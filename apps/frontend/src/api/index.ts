@@ -36,6 +36,7 @@ export type {
   ProbeTargetAlertSettings,
   ProbeTargetEntry,
   PushSubscriptionPayload,
+  ServePlanSettings,
   Smoke,
   SmokeCompleteAlertSettings,
   SmokeHistory,
@@ -73,6 +74,7 @@ export type {
   PostSmokeResource,
   PreSmokeResource,
   RatingsResource,
+  ServePlanResource,
   SmokeProfileResource,
   SmokeResource,
   StateResource,
@@ -82,6 +84,10 @@ export type {
 } from './client';
 export {
   DEFAULT_AUTO_STOP_SETTINGS,
+  DEFAULT_SERVE_PLAN_SETTINGS,
+  DRIFT_MINUTES_STEP,
+  MAX_DRIFT_MINUTES,
+  MIN_DRIFT_MINUTES,
   createApiClient,
   createProductionApiClient,
   defaultNotificationSettings,

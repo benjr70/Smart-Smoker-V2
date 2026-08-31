@@ -27,6 +27,9 @@ const COOK_LOG_DEFAULT = DEFAULT_APPLICATION_SETTINGS.cookLog;
 /** The idle threshold a deployment that has tuned nothing auto-stops on. */
 const AUTO_STOP_DEFAULT = DEFAULT_APPLICATION_SETTINGS.autoStop;
 
+/** The Serve Plan a deployment that has changed nothing about it carries. */
+const SERVE_PLAN_DEFAULT = DEFAULT_APPLICATION_SETTINGS.servePlan;
+
 /** A target the user typed in themselves, as a row records that. */
 const byHand = { targetSource: 'user', leadMinutes: null } as const;
 
@@ -115,7 +118,7 @@ const createSettingsCollection = <T>(seed: T | null = null) => {
       }),
     ),
     /** Every document in the collection right now. */
-    all: () => documents.map((document) => ({ ...(document as object) }) as T),
+    all: () => documents.map((document) => ({ ...(document as object) } as T)),
   };
 };
 
@@ -192,6 +195,7 @@ describe('AppSettingsService', () => {
         appearance: { mode: 'system', resolvedMode: 'dark' },
         autoStop: AUTO_STOP_DEFAULT,
         cookLog: COOK_LOG_DEFAULT,
+        servePlan: SERVE_PLAN_DEFAULT,
       });
     });
   });
@@ -226,6 +230,7 @@ describe('AppSettingsService', () => {
         appearance: { mode: 'dark', resolvedMode: 'dark' },
         autoStop: AUTO_STOP_DEFAULT,
         cookLog: COOK_LOG_DEFAULT,
+        servePlan: SERVE_PLAN_DEFAULT,
       });
     });
   });
@@ -284,7 +289,7 @@ describe('AppSettingsService', () => {
             enabled: true,
             probes: [{ slot: 'probe1', enabled: true, target }],
           },
-        }) as unknown as ApplicationSettings;
+        } as unknown as ApplicationSettings);
 
       it('treats a target that is not the shipped default as the user’s own', async () => {
         const reading = await serviceReading(legacyDocument(145));
@@ -634,7 +639,7 @@ describe('AppSettingsService', () => {
     it('applies the presets the user edited rather than the shipped ones', async () => {
       await service.saveSettings({
         probeTarget: watchingEveryProbe,
-        targetPresets: { beef: 210, pork: 200, poultry: 165 },
+        targetPresets: { beef: 210, pork: 200, poultry: 165, wrapTemp: 165 },
       });
 
       await service.seedProbeTargets('Packer brisket');
@@ -678,6 +683,7 @@ describe('AppSettingsService', () => {
         appearance: { mode: 'dark', resolvedMode: 'dark' },
         autoStop: AUTO_STOP_DEFAULT,
         cookLog: COOK_LOG_DEFAULT,
+        servePlan: SERVE_PLAN_DEFAULT,
       });
       expect(settings.all()).toHaveLength(1);
     });
@@ -699,6 +705,7 @@ describe('AppSettingsService', () => {
         appearance: { mode: 'system', resolvedMode: 'dark' },
         autoStop: AUTO_STOP_DEFAULT,
         cookLog: COOK_LOG_DEFAULT,
+        servePlan: SERVE_PLAN_DEFAULT,
       });
     });
 
@@ -757,6 +764,7 @@ describe('AppSettingsService', () => {
         appearance: { mode: 'dark', resolvedMode: 'dark' },
         autoStop: { idleHours: 12 },
         cookLog: COOK_LOG_DEFAULT,
+        servePlan: SERVE_PLAN_DEFAULT,
       });
     });
 
@@ -770,6 +778,121 @@ describe('AppSettingsService', () => {
       });
 
       expect((await service.getSettings()).autoStop).toEqual({ idleHours: 12 });
+    });
+  });
+
+  describe('the Serve Plan', () => {
+    // The planner ships on, so an installation that has never opened the
+    // settings page — and one whose document predates the block — still draws
+    // the card. An absent block would read as "off" and remove the feature from
+    // every deployment upgrading into it.
+    it('reads as on, alerting and half an hour of tolerance until somebody changes it', async () => {
+      expect((await service.getSettings()).servePlan).toEqual({
+        enabled: true,
+        driftAlert: true,
+        driftMin: 30,
+      });
+    });
+
+    it('reads back the plan that was saved', async () => {
+      await service.saveSettings({
+        servePlan: { enabled: true, driftAlert: false, driftMin: 60 },
+      });
+
+      expect((await service.getSettings()).servePlan).toEqual({
+        enabled: true,
+        driftAlert: false,
+        driftMin: 60,
+      });
+    });
+
+    // Its card sits on the settings page beside the ones that save the alerts,
+    // the presets and the threshold. A save that carried more than its own
+    // block would undo whatever the operator had just changed in another.
+    it('leaves the other blocks as they were', async () => {
+      await service.saveSettings({
+        chamber: { enabled: true, low: 200, high: 250 },
+        autoStop: { idleHours: 12 },
+      });
+
+      await service.saveSettings({
+        servePlan: { enabled: false, driftAlert: false, driftMin: 15 },
+      });
+
+      expect(await service.getSettings()).toEqual({
+        chamber: { enabled: true, low: 200, high: 250 },
+        probeTarget: DEFAULT_PROBE_TARGET_BLOCK,
+        smokeComplete: SMOKE_COMPLETE_OFF,
+        headsUp: HEADS_UP_OFF,
+        targetPresets: DEFAULT_TARGET_PRESETS,
+        appearance: { mode: 'system', resolvedMode: 'dark' },
+        autoStop: { idleHours: 12 },
+        cookLog: COOK_LOG_DEFAULT,
+        servePlan: { enabled: false, driftAlert: false, driftMin: 15 },
+      });
+    });
+
+    // Switching the planner off is the one edit a defaults-shaped merge would
+    // silently undo: `false` is exactly what a "missing" block falls back from.
+    it('survives a save from another card', async () => {
+      await service.saveSettings({
+        servePlan: { enabled: false, driftAlert: false, driftMin: 45 },
+      });
+
+      await service.saveSettings({
+        chamber: { enabled: true, low: 200, high: 250 },
+      });
+
+      expect((await service.getSettings()).servePlan).toEqual({
+        enabled: false,
+        driftAlert: false,
+        driftMin: 45,
+      });
+    });
+  });
+
+  describe('the wrap temperature', () => {
+    // Read by the plan's wrap milestone, and stored in the presets card's block
+    // because that is the card it is edited in.
+    it('reads as 165°F until somebody sets one', async () => {
+      expect((await service.getSettings()).targetPresets.wrapTemp).toBe(165);
+    });
+
+    it('is saved and read back with the default target temps', async () => {
+      await service.saveSettings({
+        targetPresets: { beef: 210, pork: 200, poultry: 165, wrapTemp: 150 },
+      });
+
+      expect((await service.getSettings()).targetPresets).toEqual({
+        beef: 210,
+        pork: 200,
+        poultry: 165,
+        wrapTemp: 150,
+      });
+    });
+
+    // The wrap temperature joined a card that already existed, so a client from
+    // before it did — a stale bundle, an older build — saves the three done
+    // temperatures and nothing else. Its silence is not a request to go back to
+    // the shipped 165°F: the plan's wrap milestone would start measuring
+    // against a temperature nobody chose, with nothing on screen saying so.
+    it('keeps a wrap temperature the presets card was saved without', async () => {
+      await service.saveSettings({
+        targetPresets: { beef: 203, pork: 195, poultry: 165, wrapTemp: 175 },
+      });
+
+      // The body as that client builds it: the block, without the field it has
+      // never heard of.
+      await service.saveSettings({
+        targetPresets: { beef: 210, pork: 195, poultry: 165 },
+      } as unknown as Partial<ApplicationSettings>);
+
+      expect((await service.getSettings()).targetPresets).toEqual({
+        beef: 210,
+        pork: 195,
+        poultry: 165,
+        wrapTemp: 175,
+      });
     });
   });
 
@@ -797,6 +920,7 @@ describe('AppSettingsService', () => {
         appearance: { mode: 'dark', resolvedMode: 'dark' },
         autoStop: AUTO_STOP_DEFAULT,
         cookLog: COOK_LOG_DEFAULT,
+        servePlan: SERVE_PLAN_DEFAULT,
       });
     });
 
@@ -818,6 +942,7 @@ describe('AppSettingsService', () => {
         appearance: { mode: 'light', resolvedMode: 'light' },
         autoStop: AUTO_STOP_DEFAULT,
         cookLog: COOK_LOG_DEFAULT,
+        servePlan: SERVE_PLAN_DEFAULT,
       });
     });
 
@@ -849,6 +974,7 @@ describe('AppSettingsService', () => {
         appearance: { mode: 'dark', resolvedMode: 'dark' },
         autoStop: AUTO_STOP_DEFAULT,
         cookLog: COOK_LOG_DEFAULT,
+        servePlan: SERVE_PLAN_DEFAULT,
       });
       expect(settings.all()).toHaveLength(1);
     });
@@ -879,6 +1005,7 @@ describe('AppSettingsService', () => {
         appearance: { mode: 'dark', resolvedMode: 'dark' },
         autoStop: AUTO_STOP_DEFAULT,
         cookLog: COOK_LOG_DEFAULT,
+        servePlan: SERVE_PLAN_DEFAULT,
       });
     });
   });

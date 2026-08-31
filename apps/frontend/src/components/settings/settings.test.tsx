@@ -53,7 +53,9 @@ describe('Settings page', () => {
 
   // The mock's order: the alerts, then the temperatures those alerts start
   // from, then the build.
-  it('shows the default target temps card between the notifications and the version', async () => {
+  // The mock's "DURING THE COOK" block: the planner and its alert sit with the
+  // notifications they extend, above the temperatures the plan is measured in.
+  it('shows the During-the-cook card between the notifications and the target temps', async () => {
     await renderSettings();
     await screen.findByText('Notifications');
 
@@ -62,6 +64,7 @@ describe('Settings page', () => {
     expect(cards).toEqual([
       'Appearance',
       'Notifications',
+      'During the cook',
       'Default target temps',
       'Cook log stamps',
       'Auto-stop',
@@ -101,7 +104,7 @@ describe('Settings page', () => {
     await renderSettings(markedTheme);
     await screen.findByText('Notifications');
 
-    expect(screen.getAllByTestId('styled-by-application-theme')).toHaveLength(6);
+    expect(screen.getAllByTestId('styled-by-application-theme')).toHaveLength(7);
   });
 
   it('paints the page with the design background and typeface', async () => {

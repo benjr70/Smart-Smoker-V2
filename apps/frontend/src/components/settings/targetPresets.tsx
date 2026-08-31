@@ -73,6 +73,35 @@ export function TargetPresetsCard(): JSX.Element {
             ))}
           </Stack>
 
+          {/*
+            The explanation gets its own row, like the card's other explanatory
+            copy below. Beside the field it squeezed the fixed 140px down to
+            ~59px at the phone width this app ships at, clipping the label to
+            "Wra…" and 165 to "16". flexShrink pins the field at its declared
+            width whatever ends up alongside it.
+          */}
+          <TextField
+            label="Wrap at"
+            type="number"
+            size="small"
+            variant="outlined"
+            value={presets.wrapTemp}
+            onChange={event =>
+              update({ wrapTemp: readTemperatureInput(event.target.value, presets.wrapTemp) })
+            }
+            inputProps={{ 'data-testid': 'settings-wrap-temp' }}
+            data-testid="settings-wrap-temp-field"
+            sx={{ width: 140, flexShrink: 0 }}
+          />
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            data-testid="settings-wrap-temp-summary"
+          >
+            The Serve Plan reminds you to wrap around this temperature until you log a wrap on the
+            cook log.
+          </Typography>
+
           <Typography
             variant="body2"
             color="text.secondary"

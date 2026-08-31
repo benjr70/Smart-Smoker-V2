@@ -154,6 +154,18 @@ export class HeadsUpAlertSettings {
 export const HeadsUpAlertSettingsSchema =
   SchemaFactory.createForClass(HeadsUpAlertSettings);
 /**
+ * The temperature, °F, a cook is taken to wrap the meat around until they say
+ * otherwise — the top of the stall a brisket is wrapped through.
+ *
+ * Declared beside the field it defaults and re-exported from
+ * `app-settings.defaults`, like the auto-stop threshold, so Mongoose's default
+ * and the defaults layer's fallback are the same number by construction: the
+ * wrap milestone and the settings card both read the setting, and neither may
+ * carry a second opinion about what "unset" means.
+ */
+export const DEFAULT_WRAP_TEMP = 165;
+
+/**
  * The default target temperature, °F, per meat category.
  *
  * One field per category rather than a free-form map: the categories are the
@@ -173,6 +185,20 @@ export class TargetPresets {
   @ApiProperty()
   @Prop({ default: 165 })
   poultry: number;
+
+  /**
+   * The temperature, °F, the Serve Plan expects the meat to be wrapped around.
+   *
+   * One global number rather than one per category: it is the stall the cook
+   * wraps through, and the wrap milestone only ever describes the probe the
+   * plan is measured on. It sits in this block — not in the Serve Plan's own —
+   * because the card the user edits it in is the Default target temps card,
+   * and the document is saved block by block: a field written by one card and
+   * stored in another card's block would have the two undoing each other.
+   */
+  @ApiProperty()
+  @Prop({ default: DEFAULT_WRAP_TEMP })
+  wrapTemp: number;
 }
 
 export const TargetPresetsSchema = SchemaFactory.createForClass(TargetPresets);
@@ -309,6 +335,57 @@ export const CookLogSettingsSchema =
   SchemaFactory.createForClass(CookLogSettings);
 
 /**
+ * The tolerance a cook is off plan by before the Serve Plan says so, in
+ * minutes, and the range one may be set to.
+ *
+ * Thirty minutes: half an hour either side of the pull-by time is the cushion a
+ * cook can still absorb by holding the meat warm or pushing the pit, so it is
+ * the point at which the news is worth a push notification. The floor is the
+ * stepper's own step — a tolerance finer than the plan is edited in would be
+ * off the moment either end moved — and the ceiling is three hours, past which
+ * nothing short of a different dinner is off plan.
+ */
+export const DEFAULT_DRIFT_MIN = 30;
+export const MIN_DRIFT_MIN = 15;
+export const MAX_DRIFT_MIN = 180;
+
+/**
+ * The Serve Plan: the planner that works backwards from the time the food is
+ * meant to hit the table, its off-schedule push, and what counts as off.
+ *
+ * Shipped on, unlike every alert block above it, because it is the cook screen
+ * the plan is drawn on rather than a notification: an installation that reads
+ * this document expects to see the planner, and the switch exists for the cook
+ * who does not plan this way to remove it.
+ *
+ * `driftAlert` is nested under `enabled` in meaning as well as in the UI —
+ * with the plan off there is no verdict to be off, so the alert cannot fire
+ * whatever this says.
+ */
+@Schema({ _id: false })
+export class ServePlanSettings {
+  @ApiProperty()
+  @Prop({ default: true })
+  enabled: boolean;
+
+  @ApiProperty()
+  @Prop({ default: true })
+  driftAlert: boolean;
+
+  /**
+   * How many minutes off the pull-by time, in either direction, count as off
+   * plan. Defaulted from the one shipped tolerance above so a change to it
+   * reaches newly written documents rather than being contradicted here.
+   */
+  @ApiProperty({ minimum: MIN_DRIFT_MIN, maximum: MAX_DRIFT_MIN })
+  @Prop({ default: DEFAULT_DRIFT_MIN })
+  driftMin: number;
+}
+
+export const ServePlanSettingsSchema =
+  SchemaFactory.createForClass(ServePlanSettings);
+
+/**
  * The single application settings document.
  *
  * Holds nothing the machine writes: armed flags, excursion counters and
@@ -348,6 +425,10 @@ export class ApplicationSettings {
   @ApiProperty({ type: CookLogSettings })
   @Prop({ type: CookLogSettingsSchema, default: () => ({}) })
   cookLog: CookLogSettings;
+
+  @ApiProperty({ type: ServePlanSettings })
+  @Prop({ type: ServePlanSettingsSchema, default: () => ({}) })
+  servePlan: ServePlanSettings;
 }
 
 export const ApplicationSettingsSchema =

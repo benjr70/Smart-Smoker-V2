@@ -27,6 +27,7 @@ import {
   PostSmoke,
   PreSmoke,
   PushSubscriptionPayload,
+  ServePlanSettings,
   Smoke,
   SmokeHistory,
   SmokeProfile,
@@ -73,7 +74,12 @@ const DEFAULT_PROBE_TARGET = 203;
  * says otherwise, mirroring the backend's own defaults so a deployment that has
  * never saved any renders the same three numbers the backend would seed from.
  */
-const DEFAULT_TARGET_PRESETS: TargetPresets = { beef: 203, pork: 195, poultry: 165 };
+const DEFAULT_TARGET_PRESETS: TargetPresets = {
+  beef: 203,
+  pork: 195,
+  poultry: 165,
+  wrapTemp: 165,
+};
 
 /**
  * The settings document as it goes over the wire on a save: the same shape
@@ -254,6 +260,42 @@ export interface AutoStopResource {
   save(settings: AutoStopSettings): Promise<AutoStopSettings>;
 }
 
+/**
+ * The Serve Plan a deployment nobody has changed it on carries: the planner on,
+ * its off-schedule push on, half an hour of tolerance.
+ *
+ * The API layer's copy of the backend's own defaults — on rather than off,
+ * unlike the alert blocks, because the planner is part of the cook screen and
+ * the switch exists to remove it. A card that guessed "off" here would blank
+ * the feature for a moment on every load.
+ */
+export const DEFAULT_SERVE_PLAN_SETTINGS: ServePlanSettings = {
+  enabled: true,
+  driftAlert: true,
+  driftMin: 30,
+};
+
+/** The tolerance range and step the During-the-cook stepper offers, in minutes. */
+export const MIN_DRIFT_MINUTES = 15;
+export const MAX_DRIFT_MINUTES = 180;
+export const DRIFT_MINUTES_STEP = 15;
+
+export interface ServePlanResource {
+  /**
+   * GET `appSettings` — the installation's Serve Plan.
+   *
+   * Always a plan: a document written before the block existed reads as the
+   * shipped one, which is what the backend serves, rather than as an absence
+   * every caller would have to have its own opinion about.
+   */
+  get(): Promise<ServePlanSettings>;
+  /**
+   * POST `appSettings` — store the plan, sending its block alone so the cards
+   * beside it on the settings screen keep whatever they last saved.
+   */
+  save(settings: ServePlanSettings): Promise<ServePlanSettings>;
+}
+
 export interface StateResource {
   /** GET `state` — the current smoke-session state. */
   get(): Promise<State>;
@@ -383,6 +425,7 @@ export interface ApiClient {
   notifications: NotificationsResource;
   appearance: AppearanceResource;
   autoStop: AutoStopResource;
+  servePlan: ServePlanResource;
   state: StateResource;
   smoke: SmokeResource;
   timeline: TimelineResource;
@@ -666,6 +709,10 @@ const presetsWithDefaults = (
   beef: presets?.beef ?? DEFAULT_TARGET_PRESETS.beef,
   pork: presets?.pork ?? DEFAULT_TARGET_PRESETS.pork,
   poultry: presets?.poultry ?? DEFAULT_TARGET_PRESETS.poultry,
+  // A document written before the wrap temperature existed reads as the shipped
+  // 165°F, mirroring the backend: the field has to show the number the plan is
+  // actually measuring against rather than a blank.
+  wrapTemp: presets?.wrapTemp ?? DEFAULT_TARGET_PRESETS.wrapTemp,
 });
 
 /**
@@ -780,6 +827,10 @@ export const createApiClient = (
           beef: presets.beef,
           pork: presets.pork,
           poultry: presets.poultry,
+          // Sent by name like the three beside it: the wrap temperature is part
+          // of this card's block, and a spread would carry back anything a read
+          // put on the object that the strict edge refuses.
+          wrapTemp: presets.wrapTemp,
         },
       });
       return saved?.targetPresets ?? presets;
@@ -832,6 +883,30 @@ export const createApiClient = (
         autoStop: { idleHours: settings.idleHours },
       });
       return saved?.autoStop ?? settings;
+    },
+  },
+  servePlan: {
+    get: async () => {
+      // The route answers with a complete document, so the only body without a
+      // serve-plan block comes from a deployment older than the block — which
+      // the backend reads as the shipped plan.
+      const response = await transport.get<{
+        servePlan?: ServePlanSettings;
+      } | null>('appSettings');
+      return response?.servePlan ?? DEFAULT_SERVE_PLAN_SETTINGS;
+    },
+    save: async (settings: ServePlanSettings) => {
+      const saved = await transport.post<{ servePlan?: ServePlanSettings }>('appSettings', {
+        // Named rather than spread: the strict validation edge 400s a body
+        // carrying anything the DTO does not declare, and this save happens on
+        // the way out of the screen where a refusal is an edit silently lost.
+        servePlan: {
+          enabled: settings.enabled,
+          driftAlert: settings.driftAlert,
+          driftMin: settings.driftMin,
+        },
+      });
+      return saved?.servePlan ?? settings;
     },
   },
   state: {

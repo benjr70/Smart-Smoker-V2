@@ -94,7 +94,7 @@ const seededNotifications: NotificationSettings = {
   },
   smokeComplete: { enabled: true },
   headsUp: { enabled: true },
-  targetPresets: { beef: 203, pork: 195, poultry: 165 },
+  targetPresets: { beef: 203, pork: 195, poultry: 165, wrapTemp: 165 },
 };
 
 // A browser push subscription in its wire form — the exact body the backend
@@ -341,11 +341,17 @@ const rows: ContractRow[] = [
   },
   {
     name: 'notifications.saveTargetPresets → POST appSettings (presets block alone)',
-    run: c => c.notifications.saveTargetPresets({ beef: 210, pork: 190, poultry: 170 }),
+    run: c =>
+      c.notifications.saveTargetPresets({
+        beef: 210,
+        pork: 190,
+        poultry: 170,
+        wrapTemp: 160,
+      }),
     expected: {
       method: 'post',
       path: 'appSettings',
-      body: { targetPresets: { beef: 210, pork: 190, poultry: 170 } },
+      body: { targetPresets: { beef: 210, pork: 190, poultry: 170, wrapTemp: 160 } },
     },
   },
   {
@@ -380,6 +386,21 @@ const rows: ContractRow[] = [
       method: 'post',
       path: 'appSettings',
       body: { autoStop: { idleHours: 12 } },
+    },
+  },
+  // serve plan
+  {
+    name: 'servePlan.get → GET appSettings',
+    run: c => c.servePlan.get(),
+    expected: { method: 'get', path: 'appSettings', body: undefined },
+  },
+  {
+    name: 'servePlan.save → POST appSettings (serve-plan block alone)',
+    run: c => c.servePlan.save({ enabled: true, driftAlert: false, driftMin: 45 }),
+    expected: {
+      method: 'post',
+      path: 'appSettings',
+      body: { servePlan: { enabled: true, driftAlert: false, driftMin: 45 } },
     },
   },
   // state
