@@ -385,13 +385,16 @@ class WayfinderTileTests(unittest.TestCase):
         )
         self.assertTrue(tile["unknown"])
         self.assertIsNone(tile["frontier"])
-        self.assertIsNone(tile["afk"])
+        # AFK comes from wp_scan, which still worked — a maps failure must
+        # not blank it.
+        self.assertEqual(tile["afk"], 2)
         self.assertEqual(tile["maps"], 3)
 
     def test_empty_cache_entry_reports_unknown(self):
         tile = srv.shape_wayfinder({}, {})
         self.assertTrue(tile["unknown"])
         self.assertIsNone(tile["frontier"])
+        self.assertIsNone(tile["afk"])
         self.assertIsNone(tile["maps"])
 
     def test_good_maps_report_real_counts(self):
@@ -399,8 +402,22 @@ class WayfinderTileTests(unittest.TestCase):
         shaped["error"] = None
         tile = srv.shape_wayfinder({"slices": 4, "wayfinder": 2}, shaped)
         self.assertFalse(tile["unknown"])
-        self.assertEqual((tile["maps"], tile["frontier"], tile["afk"]), (1, 2, 1))
+        # AFK is the wp_scan slice count, not a frontier-badge count: slices
+        # sit two levels below a map (map -> spec -> slice) so badges on the
+        # direct frontier read 0 forever once a spec is sliced.
+        self.assertEqual((tile["maps"], tile["frontier"], tile["afk"]), (1, 2, 4))
         self.assertEqual((tile["queueSlices"], tile["queueWayfinder"]), (4, 2))
+
+    def test_locked_scan_reports_unknown_afk_not_zero(self):
+        # A fire in flight skips wp_scan; its empty counts are unknown.
+        shaped = srv.shape_maps(MAPS_PAYLOAD)
+        shaped["error"] = None
+        tile = srv.shape_wayfinder(
+            {"locked": True, "slices": 0, "wayfinder": 0}, shaped
+        )
+        self.assertIsNone(tile["afk"])
+        self.assertIsNone(tile["queueSlices"])
+        self.assertIsNone(tile["queueWayfinder"])
 
 
 class KindBadgeStyleTests(unittest.TestCase):

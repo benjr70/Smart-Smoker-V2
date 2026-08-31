@@ -718,22 +718,29 @@ def shape_wayfinder(scan, maps):
     `unknown: true` so the tile renders "?" instead of telling the maintainer
     the frontier is clear when the truth was never fetched. `truncated` says
     the fetched list itself was partial.
+
+    The AFK count comes from wp_scan, not from map-frontier badges: AFK slices
+    live two levels below a map (map -> spec -> slices) so a frontier badge
+    count reads 0 forever once a spec is sliced. A locked scan (a fire is in
+    flight, so wp_scan was skipped) reports empty counts that are unknown,
+    not zero — those come back None too.
     """
     maps = maps or {}
+    scan = scan or {}
     unknown = bool(maps.get("error")) or maps.get("items") is None
     items = maps.get("items") or []
     frontier = [t for m in items for t in m.get("frontier") or []]
     total = maps.get("total")
-    open_maps = total if isinstance(total, int) else (scan or {}).get("openMaps")
+    open_maps = total if isinstance(total, int) else scan.get("openMaps")
+    scan_ok = not scan.get("locked") and isinstance(scan.get("slices"), int)
     return {
         "maps": open_maps if isinstance(open_maps, int) else None,
         "frontier": None if unknown else len(frontier),
-        "afk": None if unknown
-               else len([t for t in frontier if t.get("badge") == "AFK"]),
+        "afk": scan.get("slices") if scan_ok else None,
         "unknown": unknown,
         "truncated": bool(maps.get("truncated")),
-        "queueSlices": (scan or {}).get("slices"),
-        "queueWayfinder": (scan or {}).get("wayfinder"),
+        "queueSlices": scan.get("slices") if scan_ok else None,
+        "queueWayfinder": scan.get("wayfinder") if scan_ok else None,
     }
 
 
