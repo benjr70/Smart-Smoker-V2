@@ -1169,6 +1169,52 @@ const seedFullSmoke = () =>
     },
   });
 
+describe('smoke client — the serve plan of the cook in progress', () => {
+  test('moving dinner writes the serve time alone, on the current cook', async () => {
+    const backend = seedFullSmoke();
+    backend.store.state = { smokeId: 'smoke-1', smoking: true };
+
+    const saved = await createApiClient(backend).smoke.saveServePlan({
+      serveAt: new Date('2026-08-01T22:00:00.000Z'),
+    });
+
+    // The rest is not carried: a tap on "Serving at" says nothing about it, and
+    // sending it anyway would overwrite a rest another device had just moved.
+    expect(backend.requests).toEqual([
+      {
+        method: 'put',
+        path: 'smoke/current/serve-plan',
+        body: { serveAt: new Date('2026-08-01T22:00:00.000Z') },
+      },
+    ]);
+    expect(saved?.serveAt).toEqual(new Date('2026-08-01T22:00:00.000Z'));
+  });
+
+  test('changing the rest writes the rest alone', async () => {
+    const backend = seedFullSmoke();
+    backend.store.state = { smokeId: 'smoke-1', smoking: true };
+
+    const saved = await createApiClient(backend).smoke.saveServePlan({ restMinutes: 45 });
+
+    expect(backend.requests).toEqual([
+      { method: 'put', path: 'smoke/current/serve-plan', body: { restMinutes: 45 } },
+    ]);
+    expect(saved?.restMinutes).toBe(45);
+  });
+
+  /**
+   * The backend answers the write with an empty body when no cook is set up —
+   * there is nothing to plan — which this app's transport reads as `null`. A
+   * plan nobody could store is not an error the screen shouts about; it is the
+   * same nothing as having no cook.
+   */
+  test('a plan written with no cook set up stores nothing', async () => {
+    const backend = createFakeBackend({ state: { smokeId: '', smoking: false } });
+
+    expect(await createApiClient(backend).smoke.saveServePlan({ restMinutes: 45 })).toBeNull();
+  });
+});
+
 describe('smoke client — cascade delete', () => {
   test('one delete request removes the smoke and all five of its children', async () => {
     const backend = seedFullSmoke();
@@ -1468,6 +1514,55 @@ describe('timeline client — the cook clock', () => {
       startTemp: 45,
       targetTemp: 203,
     });
+  });
+
+  test('the running cook carries its serve plan, its moments read as dates', async () => {
+    const backend = createFakeBackend({
+      state: { smokeId: 'smoke-1', smoking: true },
+      timeline: {
+        current: {
+          ...NO_CURRENT_TIMELINE,
+          startedAt: '2025-01-01T12:00:00.000Z',
+          servePlan: {
+            serveAt: '2025-01-01T22:00:00.000Z',
+            restMinutes: 45,
+            pullBy: '2025-01-01T21:15:00.000Z',
+            slackMinutes: 20,
+            verdict: 'ontrack',
+            milestones: [
+              { kind: 'wrap', at: null, temp: 165 },
+              { kind: 'pullBy', at: '2025-01-01T21:15:00.000Z', temp: null },
+              { kind: 'restUntil', at: '2025-01-01T22:00:00.000Z', temp: null },
+            ],
+          },
+        },
+      },
+    });
+
+    const timeline = await createApiClient(backend).timeline.getCurrent();
+
+    // The card steps these moments by quarter-hours and prints them as clock
+    // times: a string here is arithmetic on text, the same failure the estimate
+    // is converted for.
+    expect(timeline?.servePlan?.serveAt).toEqual(new Date('2025-01-01T22:00:00.000Z'));
+    expect(timeline?.servePlan?.pullBy).toEqual(new Date('2025-01-01T21:15:00.000Z'));
+    expect(timeline?.servePlan?.milestones[1].at).toEqual(new Date('2025-01-01T21:15:00.000Z'));
+    expect(timeline?.servePlan).toMatchObject({
+      restMinutes: 45,
+      slackMinutes: 20,
+      verdict: 'ontrack',
+    });
+  });
+
+  /**
+   * The block is absent for two different reasons — the feature is switched
+   * off, or this cook has no plan — and the client has no use for the
+   * difference: either way there is no plan to render.
+   */
+  test('a cook the backend answers no serve plan for has none', async () => {
+    const backend = createFakeBackend({ state: { smokeId: 'smoke-1', smoking: true } });
+
+    expect((await createApiClient(backend).timeline.getCurrent())?.servePlan).toBeNull();
   });
 
   /**

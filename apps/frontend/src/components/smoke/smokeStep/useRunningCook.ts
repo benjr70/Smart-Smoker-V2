@@ -29,6 +29,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   CompletionEstimate,
   NotificationSettings,
+  ServePlanStatus,
   useApiClient,
   useApiSnackbar,
 } from '../../../api';
@@ -45,6 +46,16 @@ export interface RunningCook {
   /** The probe the estimate is taken to, or `null` when none is watched. */
   probe: WatchedProbe | null;
   /**
+   * The cook's Serve Plan as the backend judged it, or `null` when there is
+   * none — the feature switched off, or a cook nobody planned, which are the
+   * same nothing to a screen that renders no card for either.
+   *
+   * Read off the same request as the estimate, because it is a judgement *of*
+   * that estimate: two hooks asking separately could show a verdict about an
+   * ETA that is no longer on screen.
+   */
+  servePlan: ServePlanStatus | null;
+  /**
    * Set the watched probe's target temperature: written to the settings
    * document the settings screen edits, and followed by a re-read, so the card
    * shows the consequence of the change rather than the estimate before it.
@@ -53,6 +64,15 @@ export interface RunningCook {
    * for it knows whether to keep showing it.
    */
   setTarget: (target: number) => Promise<boolean>;
+  /**
+   * Ask for the cook to be read again, now.
+   *
+   * The estimate and the plan are the backend's, so a client that changes
+   * something they depend on — the plan, above all — has nothing worth showing
+   * until it has been judged again. The refresh identity is stable, so asking
+   * for one never re-renders anything on its own.
+   */
+  refresh: () => void;
 }
 
 /**
@@ -71,6 +91,7 @@ export function useRunningCook(smoking: boolean): RunningCook {
   const [startedAt, setStartedAt] = useState<Date | null>(null);
   const [estimate, setEstimate] = useState<CompletionEstimate | null>(null);
   const [probe, setProbe] = useState<WatchedProbe | null>(null);
+  const [servePlan, setServePlan] = useState<ServePlanStatus | null>(null);
   // Bumped by an edit, which is how a write asks for the read that follows it
   // without the read effect having to know what was written.
   const [revision, setRevision] = useState(0);
@@ -105,6 +126,7 @@ export function useRunningCook(smoking: boolean): RunningCook {
         // them again.
         setStartedAt(cook.timeline?.startedAt ?? null);
         setEstimate(cook.timeline?.estimate ?? null);
+        setServePlan(cook.timeline?.servePlan ?? null);
         if (cook.read) {
           reported.current = false;
         } else if (!reported.current) {
@@ -175,5 +197,7 @@ export function useRunningCook(smoking: boolean): RunningCook {
     []
   );
 
-  return { startedAt, estimate, probe, setTarget };
+  const refresh = useCallback(() => setRevision(current => current + 1), []);
+
+  return { startedAt, estimate, probe, servePlan, setTarget, refresh };
 }

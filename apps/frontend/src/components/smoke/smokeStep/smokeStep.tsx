@@ -19,6 +19,7 @@ import { useChartPalette } from '../../../theme';
 import { chartNamesOf } from '../../common/chartNames';
 import { useChartEvents } from '../../common/chartEvents';
 import { CompletionCard } from './CompletionCard';
+import { ServePlanCard } from './ServePlanCard';
 import { EventLog } from './EventLog';
 import { SmokeStatusBar } from './SmokeStatusBar';
 import { StaleCookDialog } from './StaleCookDialog';
@@ -26,6 +27,7 @@ import { useSmokingToggle } from './useSmokingToggle';
 import { TemperatureChannel, TemperatureRow } from './TemperatureRow';
 import { useRunningCook } from './useRunningCook';
 import { useProbeTargets } from './useProbeTargets';
+import { useServePlan } from './useServePlan';
 import { useTemperatureSeries } from './useTemperatureSeries';
 
 /**
@@ -94,6 +96,15 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
   // screen can change about the estimate; the other is the target, which the
   // card edits through this same hook.
   const cook = useRunningCook(session.smoking);
+  // The plan that estimate is judged against: whether the planner is on at all,
+  // the two steppers, and the plan a cook that has none is started with. The
+  // verdict itself is the backend's and rides in on the read above — this
+  // screen renders it and never works one out.
+  const servePlan = useServePlan({
+    plan: cook.servePlan,
+    estimate: cook.estimate,
+    refresh: cook.refresh,
+  });
   // What has been done to the cook, and the two things this screen does to that
   // record. The log is the backend's — read on mount and replaced whenever any
   // client changes it — so the same taps show here, on the touchscreen and in
@@ -186,6 +197,17 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
         onTargetChange={cook.setTarget}
         onOpenSettings={props.onOpenSettings}
       />
+      {/* Directly under the estimate, because it is a judgement of it: the ETA
+          and what it means for dinner read as one answer. Absent when the
+          planner is switched off, and absent for a cook the backend has
+          answered no plan for — there is nothing to render a verdict from. */}
+      {servePlan.enabled && cook.servePlan !== null && (
+        <ServePlanCard
+          plan={cook.servePlan}
+          onServeAtChange={servePlan.setServeAt}
+          onRestChange={servePlan.setRestMinutes}
+        />
+      )}
       <Card data-testid="smoke-temps-card">
         {readings.map((reading, index) => (
           <React.Fragment key={reading.channel}>

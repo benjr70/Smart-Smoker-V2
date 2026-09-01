@@ -27,7 +27,10 @@ import {
   PostSmoke,
   PreSmoke,
   PushSubscriptionPayload,
+  ServePlanMilestone,
   ServePlanSettings,
+  ServePlanStatus,
+  ServePlanWrite,
   Smoke,
   SmokeHistory,
   SmokeProfile,
@@ -363,6 +366,22 @@ export interface SmokeResource {
    * cannot silently pay for it, since the value it gets back does not have it.
    */
   getSummary(id: string): Promise<SmokeSummary>;
+  /**
+   * PUT `smoke/current/serve-plan` — set the plan of the cook in progress:
+   * when the food is meant to hit the table, how long the meat rests, or
+   * either on its own.
+   *
+   * Either half alone, because that is how the planner card writes them: a tap
+   * on "Serving at" moves dinner and says nothing about the rest, and a payload
+   * carrying both every time would have the two steppers overwriting each other
+   * whenever another device had just moved the other one.
+   *
+   * On the current cook rather than an id: a plan is only ever about the
+   * session that is running. Answered with the cook as it now stands — or
+   * `null` when no cook is set up, which is not an error but the same nothing
+   * as having no cook to plan.
+   */
+  saveServePlan(plan: ServePlanWrite): Promise<Smoke | null>;
 }
 
 export interface TimelineResource {
@@ -582,6 +601,43 @@ const normalizeTimeline = (raw: WireTimeline): SmokeTimeline => ({
  */
 type WireCurrentTimeline = WireTimeline & {
   estimate?: (Omit<CompletionEstimate, 'eta'> & { eta: string | Date | null }) | null;
+  servePlan?: WireServePlan | null;
+};
+
+/** A Serve Plan as JSON carries it: every moment in it is a string. */
+type WireServePlan = Omit<ServePlanStatus, 'serveAt' | 'pullBy' | 'milestones'> & {
+  serveAt: string | Date;
+  pullBy: string | Date;
+  milestones?: (Omit<ServePlanMilestone, 'at'> & { at: string | Date | null })[];
+};
+
+/**
+ * Read-path normalization for the Serve Plan: every moment in it becomes a
+ * `Date`, and a backend that answers no block at all — the feature switched
+ * off, or a cook nobody planned — reads as no plan.
+ *
+ * A plan without the serve time it is worked back from is not a plan: nothing
+ * downstream could place the pull or the rest, so it is answered as none rather
+ * than as a card built around `Invalid Date`.
+ */
+const normalizeServePlan = (raw: WireServePlan | null | undefined): ServePlanStatus | null => {
+  const serveAt = asMoment(raw?.serveAt);
+  const pullBy = asMoment(raw?.pullBy);
+  if (!raw || !serveAt || !pullBy) {
+    return null;
+  }
+  return {
+    serveAt,
+    pullBy,
+    restMinutes: raw.restMinutes ?? 0,
+    slackMinutes: raw.slackMinutes ?? null,
+    verdict: raw.verdict ?? 'unknown',
+    milestones: (raw.milestones ?? []).map(milestone => ({
+      kind: milestone.kind,
+      at: asMoment(milestone.at),
+      temp: milestone.temp ?? null,
+    })),
+  };
 };
 
 /**
@@ -601,6 +657,7 @@ const normalizeCurrentTimeline = (raw: WireCurrentTimeline): CurrentSmokeTimelin
     startTemp: raw?.estimate?.startTemp ?? null,
     targetTemp: raw?.estimate?.targetTemp ?? null,
   },
+  servePlan: normalizeServePlan(raw?.servePlan),
 });
 
 /**
@@ -1030,6 +1087,17 @@ export const createApiClient = (
     getSummary: async (id: string): Promise<SmokeSummary> => {
       const smoke = await transport.get<Smoke>(`smoke/${id}`);
       return describeCook(transport, id, smoke);
+    },
+    saveServePlan: async (plan: ServePlanWrite): Promise<Smoke | null> => {
+      // Named rather than spread, and only the halves the caller actually set:
+      // the backend leaves an omitted half alone, while `null` clears it, and
+      // the two must not be confused by a body that carried `undefined`.
+      const body: ServePlanWrite = {
+        ...(plan.serveAt === undefined ? {} : { serveAt: plan.serveAt }),
+        ...(plan.restMinutes === undefined ? {} : { restMinutes: plan.restMinutes }),
+      };
+      const saved = await transport.put<Smoke | null>('smoke/current/serve-plan', body);
+      return saved ?? null;
     },
   },
   timeline: {

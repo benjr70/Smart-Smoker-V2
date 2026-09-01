@@ -446,6 +446,21 @@ const rows: ContractRow[] = [
     expected: { method: 'post', path: 'smoke/finish', body: undefined },
   },
   {
+    // Both halves of the plan at once here, because the row pins the body a
+    // caller that set both sends; the card itself sends one at a time.
+    name: 'smoke.saveServePlan → PUT smoke/current/serve-plan (plan halves only)',
+    run: c =>
+      c.smoke.saveServePlan({
+        serveAt: new Date('2026-08-01T22:00:00.000Z'),
+        restMinutes: 45,
+      }),
+    expected: {
+      method: 'put',
+      path: 'smoke/current/serve-plan',
+      body: { serveAt: new Date('2026-08-01T22:00:00.000Z'), restMinutes: 45 },
+    },
+  },
+  {
     // The route is a deep delete, so the client's only smoke delete is the
     // cascade; there is no shallow `deleteById` on this resource.
     name: 'smoke.deleteCascade → DELETE smoke/:id (deep delete)',

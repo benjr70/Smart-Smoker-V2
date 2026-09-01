@@ -412,4 +412,38 @@ describe('editing the target', () => {
 
     expect(await screen.findByText('Could not save the target temperature.')).toBeInTheDocument();
   });
+
+  test('answers the plan the backend judged this cook against', async () => {
+    const backend = runningCook();
+    backend.store.timeline.current.servePlan = {
+      serveAt: '2026-08-01T22:00:00.000Z',
+      restMinutes: 45,
+      pullBy: '2026-08-01T21:15:00.000Z',
+      slackMinutes: 20,
+      verdict: 'ontrack',
+      milestones: [{ kind: 'pullBy', at: '2026-08-01T21:15:00.000Z', temp: null }],
+    };
+    const { result } = renderCook(backend);
+
+    // Read from the timeline this screen already polls: the plan and the
+    // estimate it is judged against come off one request, not two.
+    await waitFor(() => expect(result.current.servePlan?.verdict).toBe('ontrack'));
+    expect(result.current.servePlan?.serveAt).toEqual(new Date('2026-08-01T22:00:00.000Z'));
+    expect(estimateReads(backend)).toBe(1);
+  });
+
+  test('re-reads the cook when something it does not own asks it to', async () => {
+    const backend = runningCook();
+    const { result } = renderCook(backend);
+
+    await waitFor(() => expect(estimateReads(backend)).toBe(1));
+
+    await act(async () => {
+      result.current.refresh();
+    });
+
+    // A plan just written is not the plan on screen until the backend has
+    // judged it again, so whoever wrote one can ask for that read.
+    await waitFor(() => expect(estimateReads(backend)).toBe(2));
+  });
 });
