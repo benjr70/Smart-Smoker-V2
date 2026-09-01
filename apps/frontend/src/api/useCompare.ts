@@ -70,6 +70,18 @@ export interface UseCompareResult {
   a: CompareCook | null;
   /** The cook in the B slot, same. */
   b: CompareCook | null;
+  /**
+   * Which cook is in the A slot, by id, whichever of the two given ids that
+   * currently is — a swap moves the cooks between the slots, so after one the A
+   * slot is no longer holding the id it was asked for.
+   *
+   * The screen needs this to re-aim a slot: a pick has to replace the cook the
+   * user is looking at in the slot they pressed, not the one that was there
+   * before the swap.
+   */
+  idA: string | undefined;
+  /** Which cook is in the B slot, by id, same. */
+  idB: string | undefined;
   /** Exchanges the two slots. Reads nothing: both cooks are already held. */
   swap: () => void;
 }
@@ -182,6 +194,8 @@ export function useCompare(
     status: pairStatus(first.status, second.status),
     a: swapped ? second.cook : first.cook,
     b: swapped ? first.cook : second.cook,
+    idA: swapped ? smokeIdB : smokeIdA,
+    idB: swapped ? smokeIdA : smokeIdB,
     swap,
   };
 }

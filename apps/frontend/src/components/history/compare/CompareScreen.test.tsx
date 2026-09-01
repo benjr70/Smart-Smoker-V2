@@ -13,8 +13,8 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { ApiClientProvider, SnackbarProvider, createApiClient } from '../../../api';
-import { createFakeBackend, FakeBackend } from '../../../api/fakeBackend';
-import { Smoke } from '../../../api/types';
+import { createFakeBackend, FakeBackend, StoredTempData } from '../../../api/fakeBackend';
+import { Smoke, SmokeHistory } from '../../../api/types';
 import { WeightUnits } from '../../common/interfaces/enums';
 import { DesignSurface, appTheme, carbonLight } from '../../../theme';
 import { CompareScreen } from './CompareScreen';
@@ -113,6 +113,48 @@ const seedTwoCooks = (): FakeBackend =>
       },
     },
   });
+
+/**
+ * A third cook, so there is something in the archive to pick that is not
+ * already in one of the two slots.
+ */
+const seedThreeCooks = (): FakeBackend => {
+  const backend = seedTwoCooks();
+  backend.store.smoke.records['smoke-c'] = smokeAggregate('smoke-c', '2026-06-12T12:00:00.000Z');
+  backend.store.preSmoke.records['pre-smoke-c'] = {
+    name: 'Beer can chicken',
+    meatType: 'Poultry',
+    weight: { weight: 5, unit: WeightUnits.LB },
+    steps: [],
+  };
+  backend.store.smokeProfile.records['profile-smoke-c'] = {
+    chamberName: 'Chamber',
+    woodType: 'Apple',
+    notes: '',
+  };
+  backend.store.postSmoke.records['post-smoke-c'] = { restTime: '00:15', steps: [] };
+  return backend;
+};
+
+/** The archive the picker offers, as the history read hands it over. */
+const archiveRow = (smokeId: string, name: string, meatType: string): SmokeHistory => ({
+  smokeId,
+  name,
+  meatType,
+  weight: '10',
+  weightUnit: 'LB',
+  woodType: 'Oak',
+  date: 'Aug 1, 2026',
+  overAllRating: '8',
+  durationMs: 3600000,
+  notes: [],
+});
+
+const archive: SmokeHistory[] = [
+  archiveRow('smoke-a', 'Brisket', 'Beef'),
+  archiveRow('smoke-b', 'Pork Butt', 'Pork'),
+  archiveRow('smoke-c', 'Beer can chicken', 'Poultry'),
+];
 
 const renderCompare = (
   backend: FakeBackend,
@@ -352,8 +394,9 @@ describe('CompareScreen', () => {
     renderCompare(backend);
 
     const summary = await screen.findByTestId('compare-summary');
-    expect(summary).toHaveTextContent('Unnamed cook');
-    expect(summary).toHaveTextContent('The unnamed cook scored higher overall');
+    // One name for the nameless cook, in the swatch and in the verdict alike:
+    // two spellings on one card read as two different cooks.
+    expect(summary).toHaveTextContent('Unnamed cook scored higher overall');
   });
 
   test('a cook nobody weighed, wooded or named a meat for reads as absent', async () => {
@@ -394,6 +437,116 @@ describe('CompareScreen', () => {
     await waitFor(() => expect(screen.getByTestId('compare-slot-a')).toHaveTextContent('Brisket'));
   });
 
+  /**
+   * The slot cards are the only place the comparison names its cooks — every
+   * section below them identifies a cook by colour alone — so the control has
+   * to say which cook is in it, not only what pressing it does. Naming it
+   * "Change cook A" and nothing else leaves a screen-reader user comparing two
+   * anonymous cooks.
+   */
+  test('a slot says which cook is in it, not only that it can be changed', async () => {
+    renderCompare(seedThreeCooks(), { cooks: archive });
+
+    // While the cook is on its way, and before there is one at all, the slot
+    // says which of those it is rather than naming a cook it does not have.
+    expect(screen.getByRole('button', { name: /Change cook A$/ })).toHaveAccessibleName(
+      'Cook A: still being read. Change cook A'
+    );
+
+    await screen.findByTestId('compare-summary');
+
+    expect(screen.getByRole('button', { name: /Change cook A$/ })).toHaveAccessibleName(
+      'Cook A: Brisket, Aug 1, 2026, Beef. Change cook A'
+    );
+    expect(screen.getByRole('button', { name: /Change cook B$/ })).toHaveAccessibleName(
+      'Cook B: Pork Butt, Jul 4, 2026, Pork. Change cook B'
+    );
+  });
+
+  test('an empty slot says it is empty rather than naming nothing', async () => {
+    renderCompare(seedThreeCooks(), { cooks: archive, smokeIdB: undefined });
+
+    await screen.findByTestId('compare-empty');
+
+    expect(screen.getByRole('button', { name: /Change cook B$/ })).toHaveAccessibleName(
+      'Cook B: no cook chosen yet. Change cook B'
+    );
+  });
+
+  /**
+   * The slots are how the comparison is re-aimed: pressing one asks the archive
+   * for a cook, and the cook that comes back lands in the slot that was pressed
+   * and nowhere else.
+   */
+  test('a slot opens the picker for that slot, and the cook picked lands in it', async () => {
+    renderCompare(seedThreeCooks(), { cooks: archive });
+    await screen.findByTestId('compare-summary');
+
+    await userEvent.click(screen.getByRole('button', { name: /Change cook A$/ }));
+    expect(screen.getByTestId('cook-picker')).toHaveTextContent('PICK COOK A');
+
+    await userEvent.click(screen.getByRole('button', { name: /^Pick Beer can chicken/ }));
+
+    // The sheet has answered its one question, so it is gone.
+    await waitFor(() => expect(screen.queryByTestId('cook-picker')).toBeNull());
+    await waitFor(() =>
+      expect(screen.getByTestId('compare-slot-a')).toHaveTextContent('Beer can chicken')
+    );
+    expect(screen.getByTestId('compare-slot-b')).toHaveTextContent('Pork Butt');
+  });
+
+  test('the cook in the other slot is offered as in use rather than as a choice', async () => {
+    renderCompare(seedThreeCooks(), { cooks: archive });
+    await screen.findByTestId('compare-summary');
+
+    await userEvent.click(screen.getByRole('button', { name: /Change cook B$/ }));
+
+    expect(screen.getByTestId('cook-picker')).toHaveTextContent('PICK COOK B');
+    const inUse = screen.getByRole('button', { name: /^Pick Brisket/ });
+    expect(inUse).toHaveTextContent('IN USE');
+    expect(inUse).toBeDisabled();
+  });
+
+  /**
+   * Choosing the cook that is already in the slot is a change of mind, not a
+   * change of cook: the sheet closes and nothing is read again.
+   */
+  test('picking the cook already in the slot changes nothing', async () => {
+    const backend = seedThreeCooks();
+    renderCompare(backend, { cooks: archive });
+    await screen.findByTestId('compare-summary');
+    const readsBefore = backend.requests.length;
+
+    await userEvent.click(screen.getByRole('button', { name: /Change cook A$/ }));
+    await userEvent.click(screen.getByRole('button', { name: /^Pick Brisket/ }));
+
+    await waitFor(() => expect(screen.queryByTestId('cook-picker')).toBeNull());
+    expect(screen.getByTestId('compare-slot-a')).toHaveTextContent('Brisket');
+    expect(backend.requests).toHaveLength(readsBefore);
+  });
+
+  /**
+   * A swap moves the cooks between the slots, so afterwards the slot on the
+   * left is not the one the comparison was opened with. A pick still fills the
+   * slot that was pressed — the alternative is a comparison that quietly
+   * replaces the cook the pitmaster was looking at.
+   */
+  test('a pick after a swap still fills the slot that was pressed', async () => {
+    renderCompare(seedThreeCooks(), { cooks: archive });
+    await screen.findByTestId('compare-summary');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Swap cooks' }));
+    expect(screen.getByTestId('compare-slot-a')).toHaveTextContent('Pork Butt');
+
+    await userEvent.click(screen.getByRole('button', { name: /Change cook A$/ }));
+    await userEvent.click(screen.getByRole('button', { name: /^Pick Beer can chicken/ }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('compare-slot-a')).toHaveTextContent('Beer can chicken')
+    );
+    expect(screen.getByTestId('compare-slot-b')).toHaveTextContent('Brisket');
+  });
+
   test('the back control returns to wherever the comparison was opened from', async () => {
     const onBack = jest.fn();
     renderCompare(seedTwoCooks(), { onBack });
@@ -402,5 +555,88 @@ describe('CompareScreen', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Back' }));
 
     expect(onBack).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * The overlay, which is the one thing on this screen drawn rather than written:
+ * two cooks' traces on one plot, each in the colour its slot means.
+ */
+describe('the temperature overlay', () => {
+  /** A cook's readings as the archive holds them, climbing over `hours`. */
+  const storedCook = (start: string, hours: number, peak: number): StoredTempData[] =>
+    Array.from({ length: 7 }, (_, step) => ({
+      ChamberTemp: `${240 + step}`,
+      MeatTemp: `${90 + Math.round(((peak - 90) * step) / 6)}`,
+      Meat2Temp: '0',
+      Meat3Temp: '0',
+      date: new Date(new Date(start).getTime() + ((hours * 60 * 60_000) / 6) * step),
+    }));
+
+  const seedWithReadings = (): FakeBackend => {
+    const backend = seedTwoCooks();
+    backend.store.temps.records['temps-smoke-a'] = storedCook('2026-08-01T06:00:00.000Z', 12, 203);
+    backend.store.temps.records['temps-smoke-b'] = storedCook('2026-07-04T07:00:00.000Z', 9, 197);
+    return backend;
+  };
+
+  const overlayLine = (cook: 'a' | 'b', position: string): Element | null =>
+    // eslint-disable-next-line testing-library/no-node-access
+    screen
+      .getByTestId('compare-chart')
+      .querySelector(`path[data-cook="${cook}"][data-position="${position}"]`);
+
+  test('draws both cooks on one plot, each in its slot’s colour', async () => {
+    renderCompare(seedWithReadings());
+
+    await screen.findByTestId('compare-chart');
+
+    await waitFor(() =>
+      expect(overlayLine('a', 'probe1')).toHaveAttribute('stroke', carbonLight.probes.probe2)
+    );
+    expect(overlayLine('b', 'probe1')).toHaveAttribute('stroke', carbonLight.probes.chamber);
+    expect(screen.queryByTestId('compare-chart-placeholder')).not.toBeInTheDocument();
+  });
+
+  test('offers the positions the cooks ran and names them as each cook did', async () => {
+    renderCompare(seedWithReadings());
+
+    await screen.findByTestId('compare-chart');
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Probe 1' })).toBeInTheDocument()
+    );
+    expect(screen.queryByRole('button', { name: 'Probe 3' })).not.toBeInTheDocument();
+    // Neither cook named a probe, so each falls back to the position itself
+    // rather than claiming a name the pitmaster never gave.
+    expect(screen.getByTestId('compare-chart')).toHaveTextContent('Chamber');
+  });
+
+  /**
+   * Which probes are shown is a question about the pair on the screen, and the
+   * screen — not the chart — is what holds the answer, so a new pair is asked
+   * afresh instead of inheriting chips chosen about two other cooks.
+   */
+  test('a change of cooks asks again which probes to show', async () => {
+    renderCompare(seedWithReadings());
+    await screen.findByTestId('compare-chart');
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Chamber' })).toBeInTheDocument()
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Chamber' }));
+    expect(screen.getByRole('button', { name: 'Chamber' })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Swap cooks' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Chamber' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      )
+    );
   });
 });

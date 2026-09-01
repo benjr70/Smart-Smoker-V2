@@ -13,6 +13,8 @@ import React from 'react';
 import { CompareCook } from '../../../api';
 import { formatDateLabel } from '../../common/timeFormat';
 import { CompareSlotColors } from './compareColors';
+import { UNNAMED_COOK } from './cookLabels';
+import { ratedScore } from './cookRating';
 
 export interface CompareSummaryCardProps {
   a: CompareCook;
@@ -59,7 +61,7 @@ function Swatch({ side, cook, color }: SwatchProps): JSX.Element {
           whiteSpace: 'nowrap',
         })}
       >
-        {cook.name || 'Unnamed cook'}
+        {cook.name || UNNAMED_COOK}
       </Box>
       <Box sx={theme => ({ fontSize: '0.75rem', color: theme.design.textSecondary })}>
         {formatDateLabel(cook.date)}
@@ -69,17 +71,11 @@ function Swatch({ side, cook, color }: SwatchProps): JSX.Element {
 }
 
 /**
- * The score a cook was given, or `null` for one nobody scored.
- *
- * A zero is read as unrated rather than as the worst cook ever made: every
- * slider on the ratings screen starts at zero, a cook archived without opening
- * that screen has no ratings document at all and reads back as zeros, and the
- * archive's own statistics have always read a zero the same way.
+ * The score a cook was given, or `null` for one nobody scored — by the same
+ * rule the picker's rows and its "Top rated" order read a rating by, so that a
+ * cook cannot be unrated here and a genuine 0.0 there.
  */
-const scoreOf = (cook: CompareCook): number | null => {
-  const score = cook.rating.overallTaste;
-  return Number.isFinite(score) && score > 0 ? score : null;
-};
+const scoreOf = (cook: CompareCook): number | null => ratedScore(cook.rating.overallTaste);
 
 export function CompareSummaryCard({ a, b, colors }: CompareSummaryCardProps): JSX.Element {
   const scoreA = scoreOf(a);
@@ -109,7 +105,7 @@ export function CompareSummaryCard({ a, b, colors }: CompareSummaryCardProps): J
           })}
         >
           <Box component="strong" sx={theme => ({ fontWeight: 700, color: theme.design.text })}>
-            {winner.name || 'The unnamed cook'}
+            {winner.name || UNNAMED_COOK}
           </Box>{' '}
           scored higher overall — {margin.toFixed(1)} points better.
         </Box>

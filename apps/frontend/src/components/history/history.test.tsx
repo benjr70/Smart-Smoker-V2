@@ -18,8 +18,13 @@ jest.mock('./smokeReview/smokeReview', () => ({
 // The comparison is a screen of its own, tested as one. What this screen owes
 // it is the two cooks it opens on and a way back to wherever it came from.
 jest.mock('./compare/CompareScreen', () => ({
-  CompareScreen: ({ smokeIdA, smokeIdB, onBack }: any) => (
-    <div data-testid="compare-screen" data-a={smokeIdA} data-b={smokeIdB}>
+  CompareScreen: ({ smokeIdA, smokeIdB, cooks, onBack }: any) => (
+    <div
+      data-testid="compare-screen"
+      data-a={smokeIdA}
+      data-b={smokeIdB}
+      data-cooks={(cooks ?? []).map((cook: any) => cook.smokeId).join(' ')}
+    >
       <button onClick={onBack}>Back from compare</button>
     </div>
   ),
@@ -372,6 +377,34 @@ describe('History', () => {
       const compare = screen.getByTestId('compare-screen');
       expect(compare).toHaveAttribute('data-a', 'smoke-2');
       expect(compare).toHaveAttribute('data-b', 'smoke-1');
+    });
+
+    /**
+     * The pair the comparison opens on comes from the list on the screen; the
+     * cooks it can be re-aimed at do not. A filter is a statement about what to
+     * look at, not about what exists — the picker inside the comparison offers
+     * the whole archive, or a search made before opening it would silently
+     * shrink the choice of what to compare against.
+     */
+    test('the comparison can be re-aimed at any cook, not just the ones filtered to', async () => {
+      const backend = createFakeBackend({
+        history: [
+          historyRow('smoke-1', 'Pork Butt', { meatType: 'Pork' }),
+          historyRow('smoke-2', 'Pork Shoulder', { meatType: 'Pork' }),
+          historyRow('smoke-3', 'Brisket', { meatType: 'Beef' }),
+        ],
+      });
+
+      renderHistory(backend);
+      fireEvent.change(await screen.findByPlaceholderText('Search sessions, wood, notes…'), {
+        target: { value: 'Pork' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Compare two cooks' }));
+
+      expect(screen.getByTestId('compare-screen')).toHaveAttribute(
+        'data-cooks',
+        'smoke-3 smoke-2 smoke-1'
+      );
     });
 
     test('a search that leaves one cook on the screen is offered no comparison', async () => {
