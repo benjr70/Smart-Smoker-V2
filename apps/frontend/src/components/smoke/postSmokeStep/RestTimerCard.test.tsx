@@ -168,6 +168,35 @@ describe('the safe-to-hold window', () => {
     expect(safeHold).toHaveAttribute('data-urgent', 'true');
   });
 
+  /**
+   * The window is counted down in whole minutes it still has, not in whole
+   * minutes it is nearest to: a line reading "1h 00m" with fifty seconds of
+   * that hour already spent is promising time the meat does not have, and it is
+   * the one number on the card a pitmaster might plan the table around.
+   */
+  it('counts only the whole minutes the window still has', () => {
+    jest.setSystemTime(new Date('2026-08-30T18:00:50.000Z'));
+
+    renderCard();
+
+    expect(screen.getByTestId('rest-timer-safe-hold')).toHaveTextContent('2h 59m');
+  });
+
+  /**
+   * And the other end of the same rounding: twenty seconds of the four hours
+   * are still twenty seconds of it, so the card must not have called the window
+   * gone half a minute before it is.
+   */
+  it('holds off saying to serve now while seconds of the window remain', () => {
+    jest.setSystemTime(new Date('2026-08-30T20:59:40.000Z'));
+
+    renderCard();
+
+    const safeHold = screen.getByTestId('rest-timer-safe-hold');
+    expect(safeHold).toHaveTextContent('Safe to hold under a minute');
+    expect(safeHold).toHaveAttribute('data-urgent', 'true');
+  });
+
   it('says to serve now once the window is gone', () => {
     jest.setSystemTime(new Date('2026-08-30T21:30:00.000Z'));
 

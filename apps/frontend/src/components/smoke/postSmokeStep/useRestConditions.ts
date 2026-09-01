@@ -43,17 +43,25 @@ export const poundsOf = (weight?: { weight?: number; unit?: WeightUnits }): numb
  * The two things about the installation and the cut that the rest timer is
  * drawn with, read once when the step opens.
  *
- * A failure of either read leaves the shipped answer standing — the planner is
- * on, and the cut is unweighed — rather than taking the card down: the step
- * raises its own snackbar for the document it is editing, and a rest counting
- * from a stamped pull is still true when the settings could not be reached.
+ * The switch is answered before the card is drawn, not guessed at: `enabled`
+ * starts false and only a read that came back says otherwise. A read that never
+ * came back is not permission to render the feature — a pitmaster who switched
+ * the Serve Plan off would get the card anyway on the first 5xx — and starting
+ * from the shipped default would flash the card onto every open before the
+ * answer arrives. The route answers with the shipped plan for a deployment that
+ * never touched it, so waiting costs a switched-on installation nothing but the
+ * round trip.
+ *
+ * The weight is different: it only scales the carryover, so a pre-smoke that
+ * could not be read is treated as the unweighed cook it might as well be, and
+ * the countdown stands.
  */
 export const useRestConditions = (): RestConditions => {
   const client = useApiClient();
   const clientRef = useRef(client);
   clientRef.current = client;
   const [conditions, setConditions] = useState<RestConditions>({
-    enabled: true,
+    enabled: false,
     weightLb: null,
   });
 
@@ -67,7 +75,7 @@ export const useRestConditions = (): RestConditions => {
         return;
       }
       setConditions({
-        enabled: settings?.enabled ?? true,
+        enabled: settings?.enabled ?? false,
         weightLb: poundsOf(preSmoke?.weight),
       });
     });

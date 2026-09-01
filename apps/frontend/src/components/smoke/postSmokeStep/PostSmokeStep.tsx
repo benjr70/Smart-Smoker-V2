@@ -23,6 +23,12 @@ type PostSmokeStepProps = {
  * from the same edit.
  */
 interface CookRest {
+  /**
+   * Whether a cook in progress was actually read. A step opened with no session
+   * under way has no cook to write a rest onto, and `restMinutes: null` alone
+   * cannot tell that apart from a cook nobody has set a rest for.
+   */
+  present: boolean;
   restMinutes: number | null;
   pullAt: Date | null;
   pullTemp: number | null;
@@ -34,9 +40,30 @@ export const minutesOfRestTime = (restTime: string): number => {
   return (hours || 0) * 60 + (minutes || 0);
 };
 
+/**
+ * The rest the field is carrying, or `null` where it carries none.
+ *
+ * An empty field is not a rest of no time — a cook nobody has planned a rest
+ * for and a cook somebody deliberately gave none say different things — and
+ * neither is the `02:3` a half-typed value passes through on its way.
+ */
+export const fieldRestMinutes = (restTime: string): number | null =>
+  /^\d{2}:\d{2}$/.test(restTime) ? minutesOfRestTime(restTime) : null;
+
 /** A rest in minutes, in the `HH:MM` the field is masked to. */
 export const restTimeOf = (minutes: number): string =>
   `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+
+/**
+ * The rest the card counts when nobody has said how long the meat rests: half
+ * an hour, which is the shortest rest worth calling one on the cuts this app is
+ * used for.
+ *
+ * Counted rather than assumed onto the cook — nothing is stored from it. It is
+ * only what the card shows in place of a countdown that would otherwise start
+ * finished, telling the pitmaster to carve the moment the meat came off.
+ */
+export const DEFAULT_REST_MINUTES = 30;
 
 export const PostSmokeStep: React.FC<PostSmokeStepProps> = ({ nextButton }) => {
   const [postSmokeState, setPostSmokeState] = useCurrentResource<PostSmoke>({
@@ -55,11 +82,12 @@ export const PostSmokeStep: React.FC<PostSmokeStepProps> = ({ nextButton }) => {
   // / save-on-leave seam as the document above: the rest the pitmaster sets
   // here is stored on the cook, where the planner reads it.
   const [cook, setCook] = useCurrentResource<CookRest>({
-    initialValue: { restMinutes: null, pullAt: null, pullTemp: null },
+    initialValue: { present: false, restMinutes: null, pullAt: null, pullTemp: null },
     load: client =>
       client.smoke.getCurrent().then(smoke =>
         smoke
           ? {
+              present: true,
               restMinutes: smoke.restMinutes ?? null,
               pullAt: smoke.pullAt ?? null,
               pullTemp: smoke.pullTemp ?? null,
@@ -81,14 +109,28 @@ export const PostSmokeStep: React.FC<PostSmokeStepProps> = ({ nextButton }) => {
   // a half-typed `02:3` re-rendered as `02:03` would fight the typist.
   const restEdited = React.useRef(false);
   const storedRest = cook.restMinutes;
-  const typedRest = postSmokeState.restTime;
+  const recordRest = fieldRestMinutes(postSmokeState.restTime);
+  // The cook's rest shown *through* the field rather than written into the
+  // document behind it: a step that was opened and left again must save
+  // nothing, and a document state nudged by a display decision is an edit the
+  // pitmaster never made (see `useCurrentResource`'s untouched-form guard).
+  const shownRest =
+    !restEdited.current && storedRest !== null ? restTimeOf(storedRest) : postSmokeState.restTime;
+
+  const cookPresent = cook.present;
   React.useEffect(() => {
-    // Both loads land in whichever order they land in, so this reconciles the
-    // two whenever either arrives rather than assuming the cook came second.
-    if (!restEdited.current && storedRest !== null && storedRest !== minutesOfRestTime(typedRest)) {
-      setPostSmokeState(current => ({ ...current, restTime: restTimeOf(storedRest) }));
+    // The other direction of the same one value: a record carrying a rest the
+    // cook does not have — written before the planner existed, or on a device
+    // that never opened it — makes that rest the canonical one, so the planner
+    // and the record cannot sit disagreeing until somebody retypes the field.
+    // Both loads land in whichever order they land in, so this reconciles them
+    // whenever either arrives rather than assuming the cook came second.
+    if (!restEdited.current && cookPresent && storedRest === null && recordRest !== null) {
+      setCook(current =>
+        current.restMinutes === null ? { ...current, restMinutes: recordRest } : current
+      );
     }
-  }, [storedRest, typedRest, setPostSmokeState]);
+  }, [cookPresent, storedRest, recordRest, setCook]);
 
   /**
    * A rest the pitmaster set: written to the cook, where the planner reads it,
@@ -99,7 +141,7 @@ export const PostSmokeStep: React.FC<PostSmokeStepProps> = ({ nextButton }) => {
     // setting the field from the store raises a change carrying exactly what
     // was set. Only a value that differs from what is on screen is somebody
     // typing, and only that counts as the rest having been edited.
-    if (restTime === typedRest) {
+    if (restTime === shownRest) {
       return;
     }
     restEdited.current = true;
@@ -126,7 +168,11 @@ export const PostSmokeStep: React.FC<PostSmokeStepProps> = ({ nextButton }) => {
         <RestTimerCard
           pullAt={cook.pullAt}
           pullTemp={cook.pullTemp}
-          restMinutes={cook.restMinutes ?? minutesOfRestTime(postSmokeState.restTime)}
+          // The cook's rest, the record's own words for one where the cook has
+          // none yet, and a sensible half hour where neither has said: a
+          // countdown of no minutes at all would read "Ready to slice" the
+          // instant the meat came off.
+          restMinutes={storedRest ?? recordRest ?? DEFAULT_REST_MINUTES}
           weightLb={weightLb}
         />
       )}
@@ -138,7 +184,7 @@ export const PostSmokeStep: React.FC<PostSmokeStepProps> = ({ nextButton }) => {
           id="postsmoke-rest-time"
           fullWidth
           size="small"
-          value={postSmokeState.restTime}
+          value={shownRest}
           // What the design puts under the field: what the answer is for, rather
           // than a second telling of the format the label already gives.
           helperText="How long will you let it rest?"

@@ -100,10 +100,13 @@ export function RestTimerCard({
   const elapsedMs = now.getTime() - pullAt.getTime();
   const remainingMs = restMs - elapsedMs;
   const rise = carryoverRise(weightLb);
-  // Whole minutes, never negative: the window is rendered in minutes, and a
-  // window that ran out an hour ago is as gone as one that ran out a minute
-  // ago — both say the same thing, which is to serve the food.
-  const holdLeftMinutes = Math.max(0, Math.round(SAFE_HOLD_MINUTES - elapsedMs / 60_000));
+  // Never negative: a window that ran out an hour ago is as gone as one that
+  // ran out a minute ago — both say the same thing, which is to serve the food.
+  const holdLeftMs = Math.max(0, SAFE_HOLD_MINUTES * 60_000 - elapsedMs);
+  // Whole minutes the window still *has*, rounded down rather than to nearest:
+  // rounding up would promise time the meat does not have, and rounding a part
+  // minute down to nothing would call the window gone while it is still open.
+  const holdLeftMinutes = Math.floor(holdLeftMs / 60_000);
   const holdUrgent = holdLeftMinutes <= SAFE_HOLD_URGENT_MINUTES;
 
   return (
@@ -169,7 +172,14 @@ export function RestTimerCard({
             color: holdUrgent ? theme.design.danger : theme.design.textSecondary,
           })}
         >
-          {holdLeftMinutes > 0 ? `Safe to hold ${spanOf(holdLeftMinutes)}` : 'Serve now'}
+          {/* The last minute of the window is said in words rather than as a
+              `0m` that reads like the window has closed: it has not, and what
+              is left of it is worth knowing. */}
+          {holdLeftMs <= 0
+            ? 'Serve now'
+            : holdLeftMinutes > 0
+              ? `Safe to hold ${spanOf(holdLeftMinutes)}`
+              : 'Safe to hold under a minute'}
         </Typography>
       </Stack>
     </Card>
