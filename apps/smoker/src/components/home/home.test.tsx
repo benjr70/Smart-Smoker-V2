@@ -2,7 +2,7 @@ import React from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { Home } from './home';
-import { ESTIMATE_REFRESH_MS } from './useCompletionEstimate';
+import { CURRENT_COOK_REFRESH_MS } from './useCurrentCook';
 import { SessionConfig, SmokeProfile, decodeEvents } from 'smoke-session/src';
 import { SmokeSessionProvider } from 'smoke-session/src/react';
 import {
@@ -18,6 +18,7 @@ import {
   CompletionState,
   CookCompletionEstimate,
   CookEvent,
+  CookServePlan,
   CurrentCookTimeline,
   ProbeTargetSetting,
 } from '../../api';
@@ -839,7 +840,7 @@ describe('the top bar', () => {
         expect(screen.queryByTestId('smoker-eta')).not.toBeInTheDocument();
 
         await act(async () => {
-          jest.advanceTimersByTime(ESTIMATE_REFRESH_MS);
+          jest.advanceTimersByTime(CURRENT_COOK_REFRESH_MS);
           await Promise.resolve();
         });
 
@@ -872,7 +873,7 @@ describe('the top bar', () => {
 
         // The minute's read answers first, with a cook that is on track.
         await act(async () => {
-          jest.advanceTimersByTime(ESTIMATE_REFRESH_MS);
+          jest.advanceTimersByTime(CURRENT_COOK_REFRESH_MS);
           await Promise.resolve();
         });
         await act(async () => {
@@ -1592,5 +1593,345 @@ describe('the stamp bar under the chart', () => {
 
     expect(screen.getByTestId('smoker-stamp-bar')).toHaveStyle({ opacity: '0.4' });
     expect(screen.getByTestId('smoker-stamp-wood')).toBeDisabled();
+  });
+});
+
+/**
+ * The plan, mirrored on the glass by the smoker.
+ *
+ * Read-only, every word of it: the verdict is the backend's — the same one the
+ * phone card and the push notification are showing — and there is no way to
+ * move dinner from here. A pitmaster standing at the pit with gloves on is
+ * deciding whether to raise the heat, not re-planning the meal.
+ */
+describe('Home — the serve readouts', () => {
+  const asClockTime = (moment: Date): string =>
+    moment.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+  const smoking = (): SmokerKit => {
+    const kit = smokerKit();
+    kit.api.seedSmoking(true).seedCookStart(new Date());
+    return kit;
+  };
+
+  /** A plan as the backend judged it, on the cook the panel is reading. */
+  const planned = (plan: CookServePlan | null, pullAt: Date | null = null) => ({
+    getCurrent: async (): Promise<CurrentCookTimeline | null> => ({
+      startedAt: new Date(),
+      finishedAt: null,
+      estimate: { state: null, eta: null, hoursRemaining: null },
+      servePlan: plan,
+      pullAt,
+    }),
+  });
+
+  /**
+   * The same cook, answered afresh on every read, so a test can stamp the pull
+   * partway through — which is the one thing about a running cook that changes
+   * what the panel is drawing.
+   */
+  const planPort = (plan: CookServePlan | null) => {
+    const port = {
+      pullAt: null as Date | null,
+      getCurrent: async (): Promise<CurrentCookTimeline | null> => ({
+        startedAt: new Date(),
+        finishedAt: null,
+        estimate: { state: null, eta: null, hoursRemaining: null },
+        servePlan: plan,
+        pullAt: port.pullAt,
+      }),
+    };
+    return port;
+  };
+
+  /**
+   * The panel taken through to the rest the way the pit takes it there: a cook
+   * running, then the meat off — which stamps the pull and puts the smoker out
+   * in one gesture. Nothing else produces a resting panel, so nothing else is
+   * worth testing the countdown against.
+   */
+  const restAfterPull = async (plan: CookServePlan, pulledAt: Date): Promise<void> => {
+    const kit = smoking();
+    const cook = planPort(plan);
+    renderHome(kit, fakeProbeTargets([]), cook);
+    await act(async () => {
+      await flushPromises();
+    });
+    cook.pullAt = pulledAt;
+    await act(async () => {
+      kit.socket.injectSmokeUpdate({
+        smoking: false,
+        chamberName: 'Chamber',
+        probe1Name: 'Probe 1',
+        probe2Name: 'Probe 2',
+        probe3Name: 'Probe 3',
+      });
+      await flushPromises();
+    });
+  };
+
+  /** Dinner at six, after an hour's rest: the meat comes off by five. */
+  const PULL_BY = new Date('2026-08-30T17:00:00.000Z');
+  const SERVE_AT = new Date('2026-08-30T18:00:00.000Z');
+  const planOf = (
+    verdict: CookServePlan['verdict'],
+    slackMinutes: number | null
+  ): CookServePlan => ({
+    serveAt: SERVE_AT,
+    pullBy: PULL_BY,
+    restMinutes: 60,
+    slackMinutes,
+    verdict,
+  });
+
+  it('says how the cook is running against the plan, and when the meat comes off', async () => {
+    renderHome(smoking(), fakeProbeTargets([]), planned(planOf('ontrack', 25)));
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(screen.getByTestId('smoker-serve-status')).toHaveTextContent('On schedule · 25m spare');
+    expect(screen.getByTestId('smoker-serve-pull-by')).toHaveTextContent(asClockTime(PULL_BY));
+  });
+
+  /**
+   * The verdict is the backend's, and the panel only says it out loud — in the
+   * same words the web card uses, so the phone in the kitchen and the glass in
+   * the garage do not describe one cook two ways.
+   */
+  it.each`
+    verdict      | slack   | said
+    ${'behind'}  | ${-40}  | ${'Running 40m late'}
+    ${'early'}   | ${75}   | ${'1h 15m of cushion'}
+    ${'ontrack'} | ${-5}   | ${'On schedule · 5m behind'}
+    ${'unknown'} | ${null} | ${'Gathering data'}
+    ${'unknown'} | ${25}   | ${'Gathering data'}
+    ${'unknown'} | ${-8}   | ${'Gathering data'}
+  `('says a $verdict cook as "$said"', async ({ verdict, slack, said }) => {
+    renderHome(smoking(), fakeProbeTargets([]), planned(planOf(verdict, slack)));
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(screen.getByTestId('smoker-serve-status')).toHaveTextContent(said);
+  });
+
+  /**
+   * A verdict this build has never heard of arrives as `unknown` — with
+   * whatever cushion the backend worked out still on it — and a cushion is not
+   * a verdict. The panel says it is waiting rather than putting the one verdict
+   * it has a line for against a judgement nobody made: an installation whose
+   * backend has just flagged a cook off plan must not read "on schedule".
+   */
+  it('claims no verdict for a cook the backend has not judged, cushion or no', async () => {
+    renderHome(smoking(), fakeProbeTargets([]), planned(planOf('unknown', 25)));
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(screen.getByTestId('smoker-serve-status')).not.toHaveTextContent('On schedule');
+    expect(screen.getByTestId('smoker-serve-status')).not.toHaveTextContent('25m');
+  });
+
+  /**
+   * Once the meat is off, when it should have come off is history. What is left
+   * to say is how long it has to rest — counted from the pull the backend
+   * stamped, so a cook pulled early rests its full hour from when it really
+   * came off rather than from a plan it beat.
+   */
+  it('counts the rest down once the meat has been pulled, instead of the plan', async () => {
+    // Pulled twenty minutes ago, resting an hour: forty minutes left, and the
+    // slicing time is measured from the pull rather than from the planned serve.
+    const pulledAt = new Date(Date.now() - 20 * 60_000);
+    await restAfterPull(planOf('ontrack', 25), pulledAt);
+
+    expect(screen.getByTestId('smoker-rest-countdown')).toHaveTextContent('40m');
+    expect(screen.getByTestId('smoker-rest-at')).toHaveTextContent(
+      `Slice at ${asClockTime(new Date(pulledAt.getTime() + 60 * 60_000))}`
+    );
+    // The plan's own line has given way to it: one readout, whichever is the
+    // news.
+    expect(screen.queryByTestId('smoker-serve-status')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('smoker-serve-pull-by')).not.toBeInTheDocument();
+  });
+
+  /** A rest that is over is not a countdown of nought: the meat is ready. */
+  it('says the meat is ready to slice once the rest is up', async () => {
+    await restAfterPull(planOf('ontrack', 25), new Date(Date.now() - 90 * 60_000));
+
+    expect(screen.getByTestId('smoker-rest-countdown')).toHaveTextContent('Ready to slice');
+  });
+
+  /**
+   * A cook that rests for nothing — carved straight off the pit, or planned
+   * before anybody said how long it would rest — is ready the moment it is
+   * pulled. No rest is no rest, the same thing the backend makes of it when it
+   * works the pull-by time back from dinner.
+   */
+  it('has nothing to count down for a cook that rests for nothing', async () => {
+    const pulledAt = new Date(Date.now() - 60_000);
+    await restAfterPull({ ...planOf('ontrack', 25), restMinutes: null }, pulledAt);
+
+    expect(screen.getByTestId('smoker-rest-countdown')).toHaveTextContent('Ready to slice');
+    expect(screen.getByTestId('smoker-rest-at')).toHaveTextContent(
+      `Slice at ${asClockTime(pulledAt)}`
+    );
+  });
+
+  /**
+   * The countdown is a clock, so it keeps its own time: nobody standing at the
+   * pit should have to touch the glass to find out that a minute has gone.
+   */
+  it('counts the rest down as the time passes, with nothing touched', async () => {
+    jest.useFakeTimers();
+    try {
+      const kit = smoking();
+      const cook = planPort(planOf('ontrack', 25));
+      renderHome(kit, fakeProbeTargets([]), cook);
+      await act(async () => {
+        await Promise.resolve();
+      });
+      // The meat comes off twenty minutes in, resting an hour: forty to go.
+      cook.pullAt = new Date(Date.now() - 20 * 60_000);
+      await act(async () => {
+        kit.socket.injectSmokeUpdate({
+          smoking: false,
+          chamberName: 'Chamber',
+          probe1Name: 'Probe 1',
+          probe2Name: 'Probe 2',
+          probe3Name: 'Probe 3',
+        });
+        await Promise.resolve();
+      });
+      expect(screen.getByTestId('smoker-rest-countdown')).toHaveTextContent('40m');
+
+      await act(async () => {
+        jest.advanceTimersByTime(60_000);
+      });
+
+      expect(screen.getByTestId('smoker-rest-countdown')).toHaveTextContent('39m');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  /**
+   * No plan is no readout: a cook nobody planned and an installation with the
+   * planner switched off both answer no block at all, and the panel claims
+   * neither a verdict nor a time it has not been given.
+   */
+  it('shows nothing at all when the cook carries no plan', async () => {
+    renderHome(smoking(), fakeProbeTargets([]), planned(null));
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(screen.getByTestId('smoker-elapsed-clock')).toBeInTheDocument();
+    expect(screen.queryByTestId('smoker-serve-readout')).not.toBeInTheDocument();
+  });
+
+  /**
+   * The real order of things at the pit: the meat comes off, and the same
+   * gesture that stamps the pull puts the smoker out. The readout has to live
+   * through that — the rest starts at exactly the moment the cook stops — or
+   * the countdown would blank the instant it became the only news there is.
+   */
+  it('turns into the countdown when the meat comes off and the smoker goes out', async () => {
+    const kit = smoking();
+    const cook = planPort(planOf('ontrack', 25));
+    renderHome(kit, fakeProbeTargets([]), cook);
+    await act(async () => {
+      await flushPromises();
+    });
+    expect(screen.getByTestId('smoker-serve-status')).toBeInTheDocument();
+
+    // The pull: stamped by the backend, and the cook put out in the same
+    // breath, which is how the panel hears about it.
+    cook.pullAt = new Date(Date.now() - 20 * 60_000);
+    await act(async () => {
+      kit.socket.injectSmokeUpdate({
+        smoking: false,
+        chamberName: 'Chamber',
+        probe1Name: 'Probe 1',
+        probe2Name: 'Probe 2',
+        probe3Name: 'Probe 3',
+      });
+      await flushPromises();
+    });
+
+    expect(screen.getByTestId('smoker-rest-countdown')).toHaveTextContent('40m');
+  });
+
+  /**
+   * And the other end of it: the cook is finished with and cleared away, so the
+   * backend stops stamping a pull on anything. The rest is over as far as the
+   * panel is concerned, and a countdown left on the glass would be counting
+   * down somebody else's dinner.
+   */
+  it('lets the countdown go once the cook has been cleared away', async () => {
+    const kit = smoking();
+    const cook = planPort(planOf('ontrack', 25));
+    cook.pullAt = new Date(Date.now() - 20 * 60_000);
+    renderHome(kit, fakeProbeTargets([]), cook);
+    await act(async () => {
+      await flushPromises();
+    });
+    expect(screen.getByTestId('smoker-rest-countdown')).toBeInTheDocument();
+
+    cook.pullAt = null;
+    await act(async () => {
+      kit.socket.injectSmokeUpdate({
+        smoking: false,
+        chamberName: 'Chamber',
+        probe1Name: 'Probe 1',
+        probe2Name: 'Probe 2',
+        probe3Name: 'Probe 3',
+      });
+      await flushPromises();
+    });
+
+    expect(screen.queryByTestId('smoker-serve-readout')).not.toBeInTheDocument();
+  });
+
+  /** A panel between cooks has nothing of anybody's to show. */
+  it('shows nothing at all when the backend has no cook to answer with', async () => {
+    const kit = smokerKit();
+    kit.api.seedSmoking(false);
+    renderHome(kit, fakeProbeTargets([]), {
+      getCurrent: async (): Promise<CurrentCookTimeline | null> => null,
+    });
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(screen.queryByTestId('smoker-serve-readout')).not.toBeInTheDocument();
+  });
+
+  it('shows nothing while no cook is running, whatever the last plan said', async () => {
+    const kit = smokerKit();
+    kit.api.seedSmoking(false);
+    renderHome(kit, fakeProbeTargets([]), planned(planOf('ontrack', 25)));
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(screen.getByText('No active smoke')).toBeInTheDocument();
+    expect(screen.queryByTestId('smoker-serve-readout')).not.toBeInTheDocument();
+  });
+
+  /**
+   * A plan the pitmaster is reading is a plan they cannot move from here: the
+   * panel offers no control that writes one. The plan is set on a phone, by
+   * somebody who knows when the guests arrive.
+   */
+  it('offers nothing to press: the plan is read here and written elsewhere', async () => {
+    renderHome(smoking(), fakeProbeTargets([]), planned(planOf('behind', -40)));
+    await act(async () => {
+      await flushPromises();
+    });
+
+    const readout = screen.getByTestId('smoker-serve-readout');
+    expect(within(readout).queryAllByRole('button')).toEqual([]);
+    expect(within(readout).queryAllByRole('textbox')).toEqual([]);
   });
 });

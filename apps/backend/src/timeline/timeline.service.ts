@@ -523,6 +523,9 @@ export class TimelineService {
       // with the planner switched off — answers a response without the field
       // at all rather than one carrying an explicit nothing.
       ...(servePlan ? { servePlan } : {}),
+      // The same spread for the same reason: a cook still on the smoker has no
+      // pull, and its absence is what tells the screens the rest has not begun.
+      ...(smoke.pullAt ? { pullAt: smoke.pullAt } : {}),
     };
   }
 

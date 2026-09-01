@@ -360,6 +360,110 @@ describe('smoker api client', () => {
     });
 
     /**
+     * The Serve Plan rides on the same read as the estimate, because the two
+     * are one answer about one cook: the verdict was worked out server-side
+     * against that very estimate, and reading them apart would let the ETA on
+     * the bar and the verdict beside it come from two different moments.
+     */
+    it('getCurrent carries the serve plan, its moments revived', async () => {
+      const { cloud, client } = buildClient({
+        timeline: {
+          current: {
+            startedAt: '2026-08-30T10:00:00.000Z',
+            finishedAt: null,
+            servePlan: {
+              serveAt: '2026-08-30T18:00:00.000Z',
+              pullBy: '2026-08-30T17:00:00.000Z',
+              restMinutes: 60,
+              slackMinutes: 25,
+              verdict: 'ontrack',
+            },
+          },
+        },
+      });
+
+      const current = await client.timeline.getCurrent();
+
+      expect(current?.servePlan).toEqual({
+        serveAt: new Date('2026-08-30T18:00:00.000Z'),
+        pullBy: new Date('2026-08-30T17:00:00.000Z'),
+        restMinutes: 60,
+        slackMinutes: 25,
+        verdict: 'ontrack',
+      });
+      // Still the one request: the plan cost the panel no second read.
+      expect(cloud.requests).toEqual([
+        { method: 'get', path: 'timeline/current', body: undefined },
+      ]);
+    });
+
+    /**
+     * The pull is what the rest is counted from, so it is revived like every
+     * other stamp: an ISO string subtracted from the current time is `NaN`, and
+     * a countdown of nothing would tell the pit master the rest was over.
+     */
+    it('getCurrent revives the pull stamp of a cook whose meat is off', async () => {
+      const { client } = buildClient({
+        timeline: {
+          current: {
+            startedAt: '2026-08-30T10:00:00.000Z',
+            finishedAt: null,
+            pullAt: '2026-08-30T16:40:00.000Z',
+          },
+        },
+      });
+
+      await expect(client.timeline.getCurrent()).resolves.toMatchObject({
+        pullAt: new Date('2026-08-30T16:40:00.000Z'),
+      });
+    });
+
+    /**
+     * Three absences the panel makes one nothing of: a cook nobody planned, an
+     * installation with the planner switched off, and a deployment older than
+     * the planner. None of them has a plan to show, and the readout is absent
+     * for all three — the settings that say which it is are not read here.
+     */
+    it('reads a body with no plan block as a cook with no plan, still on the smoker', async () => {
+      const { client } = buildClient({
+        timeline: { current: { startedAt: '2026-08-30T10:00:00.000Z', finishedAt: null } },
+      });
+
+      await expect(client.timeline.getCurrent()).resolves.toMatchObject({
+        servePlan: null,
+        pullAt: null,
+      });
+    });
+
+    /**
+     * A verdict this build has never heard of — an older or a newer backend
+     * saying something else entirely — is read as `unknown`, the one verdict
+     * that names no amount and asks the reader to wait. Passing the word
+     * through would put a status on the glass that no line is written for.
+     */
+    it('reads a verdict it does not know as unknown', async () => {
+      const { client } = buildClient({
+        timeline: {
+          current: {
+            startedAt: '2026-08-30T10:00:00.000Z',
+            finishedAt: null,
+            servePlan: {
+              serveAt: '2026-08-30T18:00:00.000Z',
+              pullBy: '2026-08-30T17:00:00.000Z',
+              restMinutes: 60,
+              slackMinutes: 25,
+              verdict: 'sideways' as never,
+            },
+          },
+        },
+      });
+
+      const current = await client.timeline.getCurrent();
+
+      expect(current?.servePlan?.verdict).toBe('unknown');
+    });
+
+    /**
      * A deployment older than the route rejects the read — as an unknown id, or
      * as nothing found — and that is the same nothing a panel with no session
      * gets, rather than a failure the one screen with no reload button has to

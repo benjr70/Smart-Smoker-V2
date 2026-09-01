@@ -533,6 +533,50 @@ describe('TimelineService', () => {
       });
     });
 
+    /**
+     * The pull stamp, carried on the running cook's answer: the rest is
+     * measured from the moment the meat actually came off, and the screens
+     * that show that countdown — the touchscreen above all — read this route
+     * and nothing else while the cook is still the current one.
+     */
+    describe('the pull stamp', () => {
+      it('carries when the meat came off, once it has', async () => {
+        startTheCook().pullAt = new Date('2026-08-17T17:45:00.000Z');
+        temps.push(running(60, '143'), running(0, '163'));
+        service = await build();
+
+        const timeline = await service.getCurrentTimeline(NOW);
+
+        expect(timeline.pullAt).toEqual(new Date('2026-08-17T17:45:00.000Z'));
+      });
+
+      it('leaves the stamp out while the meat is still on', async () => {
+        startTheCook();
+        temps.push(running(60, '143'), running(0, '163'));
+        service = await build();
+
+        const timeline = await service.getCurrentTimeline(NOW);
+
+        expect(timeline.pullAt).toBeUndefined();
+      });
+
+      /**
+       * The rest is exactly when the cook has been advanced to Post-Smoke and
+       * the state's `smoking` flag has been put out, so an answer that went
+       * quiet then would blank the countdown at the moment it is wanted.
+       */
+      it('carries the stamp on through the rest, with the smoker no longer on', async () => {
+        startTheCook().pullAt = new Date('2026-08-17T17:45:00.000Z');
+        states[0].smoking = false;
+        temps.push(running(60, '143'), running(0, '163'));
+        service = await build();
+
+        const timeline = await service.getCurrentTimeline(NOW);
+
+        expect(timeline.pullAt).toEqual(new Date('2026-08-17T17:45:00.000Z'));
+      });
+    });
+
     it('answers an empty timeline and an empty estimate when nothing is cooking', async () => {
       service = await build();
 

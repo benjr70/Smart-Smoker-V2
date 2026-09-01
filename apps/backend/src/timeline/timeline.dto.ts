@@ -155,4 +155,20 @@ export class CurrentSmokeTimeline extends SmokeTimeline {
    */
   @ApiProperty({ type: ServePlanStatusDto, required: false })
   servePlan?: ServePlanStatusDto;
+
+  /**
+   * When the meat came off, once it has.
+   *
+   * Absent rather than null while it is still on, for the same reason the plan
+   * is: a client reading no stamp has a cook that is still cooking, and its
+   * arrival is the whole signal — the rest began, so the screens stop counting
+   * towards the pull and start counting the rest down.
+   *
+   * Carried here as well as on the cook itself because this is the route the
+   * screens watching a running cook read, and the rest happens while the state
+   * still points at this cook: reading it any other way would mean a second
+   * request for one date.
+   */
+  @ApiProperty({ type: Date, required: false })
+  pullAt?: Date;
 }

@@ -125,6 +125,20 @@ export type StoredTimeline = {
     /** How long is left, as the backend serves it — absent where it cannot say. */
     hoursRemaining?: number | null;
   };
+  /**
+   * The Serve Plan of the running cook, as the backend serves it — absent for a
+   * cook nobody planned, for an installation with the planner switched off, and
+   * for a deployment older than the planner, which are one absence on the wire.
+   */
+  servePlan?: {
+    serveAt: string | null;
+    pullBy: string | null;
+    restMinutes: number | null;
+    slackMinutes: number | null;
+    verdict: 'early' | 'ontrack' | 'behind' | 'unknown';
+  };
+  /** When the meat came off, once the backend has stamped it. */
+  pullAt?: string | null;
 };
 
 /** What the transport yields for an empty-body 200 (axios surfaces `''`). */

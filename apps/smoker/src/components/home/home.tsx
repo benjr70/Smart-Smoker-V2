@@ -21,7 +21,8 @@ import {
 import { toneColor } from '../../theme/stampTones';
 import { SmokerEventBar } from './SmokerEventBar';
 import { StaleCookDialog } from './StaleCookDialog';
-import { CurrentCookReadPort, useCompletionEstimate } from './useCompletionEstimate';
+import { ServeReadout } from './ServeReadout';
+import { CurrentCookReadPort, useCurrentCook } from './useCurrentCook';
 import { SessionRecoveryPort, useSmokingToggle } from './useSmokingToggle';
 import { ProbeTargetsReadPort, useProbeTargets } from './useProbeTargets';
 import { useTemperatureSeries } from './useTemperatureSeries';
@@ -282,7 +283,12 @@ export function Home({
   // When the backend expects this cook to be done, re-read on its own cadence
   // while one is running — the same answer, off the same route, that the web
   // card is showing whoever is not standing at the smoker.
-  const eta = etaReadout(useCompletionEstimate(session.smoking, currentCook));
+  // The cook the backend is running, re-read on its own cadence while one is
+  // on: where it is going, and how that stands against the plan somebody made
+  // for it. One read feeds both readouts, so the time on the bar and the
+  // verdict beside it are always news of the same moment.
+  const cook = useCurrentCook(session.smoking, currentCook);
+  const eta = etaReadout(cook?.estimate ?? null);
   // What has been stamped on this cook, and the one thing this screen does to
   // that record. The log is the backend's — read when the panel comes up and
   // replaced whenever any client changes it — so the same taps show here, on a
@@ -487,6 +493,13 @@ export function Home({
         onConfirm={toggle.confirm}
         onCancel={toggle.dismiss}
       />
+
+      {/* The plan, mirrored on its own line under the bar rather than squeezed
+          into it: the bar is already the cook's clock and the two controls, and
+          a verdict read from across a garage needs the room to be a sentence.
+          It is the backend's plan and the backend's verdict — there is nothing
+          here to press. */}
+      <ServeReadout plan={cook?.servePlan} pullAt={cook?.pullAt} />
 
       {/* ————— Cards ————— */}
       <Box sx={{ display: 'flex', gap: '10px', flex: 1, minHeight: 0 }}>

@@ -262,6 +262,41 @@ export interface CookCompletionEstimate {
 }
 
 /**
+ * How the cook is running against its Serve Plan, as the backend decided it.
+ *
+ * Decided there and only there: the same union the web card and the push alert
+ * read, off the same route, so the phone, the touchscreen and the notification
+ * cannot disagree about whether dinner is on time.
+ */
+export type ServeVerdict = 'early' | 'ontrack' | 'behind' | 'unknown';
+
+/**
+ * The Serve Plan of the cook in progress, as much of it as the touchscreen has
+ * any use for: the verdict, the cushion behind it, the last moment the meat can
+ * come off, and the rest that follows.
+ *
+ * The plan carries more — the milestone list the web card renders as a schedule
+ * — and none of it is carried here: the panel is read from across a garage, and
+ * shows the one line and the one time somebody standing at the pit acts on. It
+ * is a read and nothing else; the plan is edited on a phone, never from here.
+ */
+export interface CookServePlan {
+  /** Serve time less the rest: the last moment the meat can come off. */
+  pullBy: Date | null;
+  /** When the food is meant to hit the table, as the cook stored it. */
+  serveAt: Date | null;
+  /** How long the meat rests after it comes off, in minutes. */
+  restMinutes: number | null;
+  /**
+   * Minutes of cushion between the projection and the pull-by time — negative
+   * when the cook is running late, and `null` while no trustworthy projection
+   * exists, which is the only thing that makes the verdict `unknown`.
+   */
+  slackMinutes: number | null;
+  verdict: ServeVerdict;
+}
+
+/**
  * The cook in progress: when it started, whether it has already been finished,
  * and when it will be done.
  *
@@ -275,6 +310,20 @@ export interface CurrentCookTimeline extends CookTimeline {
   /** When the cook finished, or `null` while it is still going. */
   finishedAt: Date | null;
   estimate: CookCompletionEstimate;
+  /**
+   * The Serve Plan, or `null` for a cook nobody planned — and for an
+   * installation with the planner switched off, which answers the same nothing.
+   * The panel has no use for the difference: with no plan there is no readout,
+   * and the settings that say which it is are not read here.
+   */
+  servePlan?: CookServePlan | null;
+  /**
+   * When the meat came off, or `null` while it is still on. Stamped by the
+   * backend when the cook is advanced to Post-Smoke, and never written from
+   * here: it is what happened, not what was asked for. Its presence is what
+   * turns the plan readout into the rest countdown.
+   */
+  pullAt?: Date | null;
 }
 
 export interface TimelineResource {
@@ -368,6 +417,20 @@ type WireCurrentTimeline = {
     eta?: string | Date | null;
     hoursRemaining?: number | null;
   } | null;
+  /**
+   * The plan block, absent altogether for a cook nobody planned, for an
+   * installation with the planner switched off, and for a deployment older than
+   * the planner — three absences the panel makes the same nothing of.
+   */
+  servePlan?: {
+    serveAt?: string | Date | null;
+    pullBy?: string | Date | null;
+    restMinutes?: number | null;
+    slackMinutes?: number | null;
+    verdict?: ServeVerdict | null;
+  } | null;
+  /** When the meat came off, absent until it has. */
+  pullAt?: string | Date | null;
 };
 
 /** A stamp off the wire as the moment it names, or `null` when there is none. */
@@ -378,6 +441,27 @@ const asMoment = (value: string | Date | null | undefined): Date | null => {
   const moment = value instanceof Date ? value : new Date(value);
   return Number.isNaN(moment.getTime()) ? null : moment;
 };
+
+/**
+ * The plan block off the wire, with its two moments revived.
+ *
+ * A verdict the panel does not recognise — an older or newer backend saying
+ * something this build has never heard of — reads as `unknown`, which is the
+ * one verdict that names no amount and asks the reader to wait. Rendering a
+ * word nobody has written a line for would put an empty status on the glass.
+ */
+const servePlanOf = (raw: NonNullable<WireCurrentTimeline['servePlan']>): CookServePlan => ({
+  serveAt: asMoment(raw.serveAt),
+  pullBy: asMoment(raw.pullBy),
+  restMinutes: raw.restMinutes ?? null,
+  slackMinutes: raw.slackMinutes ?? null,
+  verdict: KNOWN_VERDICTS.includes(raw.verdict as ServeVerdict)
+    ? (raw.verdict as ServeVerdict)
+    : 'unknown',
+});
+
+/** The verdicts this build knows how to say out loud. */
+const KNOWN_VERDICTS: ServeVerdict[] = ['early', 'ontrack', 'behind', 'unknown'];
 
 /**
  * Centralized read-path normalization: the optional-on-the-wire `notes` and
@@ -456,6 +540,16 @@ export const createApiClient = (
           eta: asMoment(raw.estimate?.eta),
           hoursRemaining: raw.estimate?.hoursRemaining ?? null,
         },
+        // A block that is there is carried whole; one that is not is `null`
+        // rather than a plan with nothing in it, because a cook nobody planned
+        // has no plan — not a plan of nothing — and the readout is absent for
+        // it either way.
+        servePlan: raw.servePlan ? servePlanOf(raw.servePlan) : null,
+        // Revived here for the same reason the stamps are: the rest countdown
+        // subtracts this from the current time, and an ISO string subtracted
+        // from a moment is `NaN` — a countdown of nothing on a readout that
+        // would then claim the rest was over.
+        pullAt: asMoment(raw.pullAt),
       };
     },
   };
