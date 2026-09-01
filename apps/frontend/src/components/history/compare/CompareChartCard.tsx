@@ -77,6 +77,9 @@ export function CompareChartCard({
         positions={positions}
         onPositionsChange={onPositionsChange}
         colors={{
+          // The card the chart is drawn on: what its scrub dots and stamps are
+          // outlined against, so they read over a line they are sitting on.
+          surface: design.surface,
           panel: design.surfaceAlt,
           grid: design.border,
           label: design.textSecondary,

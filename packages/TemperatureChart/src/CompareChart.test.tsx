@@ -11,6 +11,7 @@ import { COMPARE_BOX, CompareReading, DEFAULT_POSITIONS } from './compareGeometr
 import { SeriesKey, plotEdges } from './chartGeometry';
 
 const colors: ComparePalette = {
+  surface: '#FFFFFF',
   panel: '#ECECEA',
   grid: '#E2E2DF',
   label: '#6B6B68',
@@ -414,16 +415,437 @@ describe('a pair with nothing recorded', () => {
   });
 });
 
-describe('a cook log handed over before it is drawn', () => {
-  it('takes each cook’s stamps without drawing them yet', () => {
+describe('a cook log as it was logged', () => {
+  it('draws each stamp under the name and the tone it was stamped with', () => {
     const stamped = cook({
       color: COLOR_A,
-      stamps: [{ id: 's1', label: 'Wrapped', minutes: 70, color: '#3F7D46' }],
+      stamps: [{ id: 's1', label: 'Wrapped in foil', minutes: 70, color: '#3F7D46' }],
     });
 
     const { container } = render(<Chart a={stamped} b={pork} colors={colors} />);
+    const stamp = screen.getByRole('button', { name: 'Wrapped in foil' });
 
-    expect(screen.queryByText('Wrapped')).not.toBeInTheDocument();
+    expect(stamp.querySelector('span')).toHaveStyle({ background: '#3F7D46' });
     expect(container.querySelector('path[data-cook="a"][data-position="probe1"]')).not.toBeNull();
+  });
+
+  it('draws an empty rail for a cook nothing was stamped on', () => {
+    const { container } = render(<Chart a={brisket} b={pork} colors={colors} />);
+    const rail = container.querySelector('[data-stamp-rail="a"]');
+
+    expect(rail).not.toBeNull();
+    expect(rail?.querySelectorAll('button')).toHaveLength(0);
+  });
+});
+
+/** The x of a minute of the cooks, in the chart's own coordinates. */
+const xOfMinute = (minutes: number, span: number): number => {
+  const edges = plotEdges(COMPARE_BOX);
+  return edges.left + ((edges.right - edges.left) * minutes) / span;
+};
+
+const plotOf = (container: HTMLElement): SVGSVGElement => {
+  const svg = container.querySelector<SVGSVGElement>('svg[data-testid="compare-plot"]');
+  if (svg === null) throw new Error('no plot');
+  return svg;
+};
+
+describe('scrubbing the plot', () => {
+  it('rules a guide down the plot where the pointer is', () => {
+    const { container } = render(<Chart a={brisket} b={pork} colors={colors} />);
+
+    fireEvent.mouseMove(plotOf(container), { clientX: xOfMinute(120, 240) });
+
+    const guide = container.querySelector('line[data-scrub-guide]');
+    expect(Number(guide?.getAttribute('x1'))).toBeCloseTo(xOfMinute(120, 240));
+  });
+
+  it('rules no guide until the plot is touched, and none once it is let go', () => {
+    const { container } = render(<Chart a={brisket} b={pork} colors={colors} />);
+    expect(container.querySelector('line[data-scrub-guide]')).toBeNull();
+
+    fireEvent.mouseMove(plotOf(container), { clientX: xOfMinute(60, 240) });
+    expect(container.querySelector('line[data-scrub-guide]')).not.toBeNull();
+
+    fireEvent.mouseLeave(plotOf(container));
+    expect(container.querySelector('line[data-scrub-guide]')).toBeNull();
+  });
+
+  it('scrubs under a finger as well as a pointer', () => {
+    const { container } = render(<Chart a={brisket} b={pork} colors={colors} />);
+
+    fireEvent.touchStart(plotOf(container), {
+      touches: [{ clientX: xOfMinute(60, 240), clientY: 0 }],
+    });
+
+    expect(container.querySelector('line[data-scrub-guide]')).not.toBeNull();
+
+    fireEvent.touchEnd(plotOf(container), { touches: [] });
+
+    expect(container.querySelector('line[data-scrub-guide]')).toBeNull();
+  });
+
+  /**
+   * A touch left unclaimed is replayed by the browser as a mouse event at the
+   * release point, which would set the cursor straight back — and no mouseleave
+   * ever arrives on a touch device to clear it again.
+   */
+  it('claims the end of a touch, so the browser does not replay it as a pointer', () => {
+    const { container } = render(<Chart a={brisket} b={pork} colors={colors} />);
+    const plot = plotOf(container);
+
+    fireEvent.touchStart(plot, { touches: [{ clientX: xOfMinute(60, 240), clientY: 0 }] });
+    const notReplayed = fireEvent.touchEnd(plot, { touches: [], cancelable: true });
+
+    expect(notReplayed).toBe(false);
+    expect(container.querySelector('line[data-scrub-guide]')).toBeNull();
+  });
+
+  it('ends the scrub when the system takes the touch away', () => {
+    const { container } = render(<Chart a={brisket} b={pork} colors={colors} />);
+    const plot = plotOf(container);
+
+    fireEvent.touchStart(plot, { touches: [{ clientX: xOfMinute(60, 240), clientY: 0 }] });
+    fireEvent.touchCancel(plot, { touches: [] });
+
+    expect(container.querySelector('line[data-scrub-guide]')).toBeNull();
+  });
+
+  /**
+   * A finger dragged across the plot moves the guide with it. That the page
+   * does not scroll out from under that drag is `touch-action: none` on the
+   * plot, which is CSS jsdom drops rather than behaviour a test can drive.
+   */
+  it('follows a finger as it drags across the plot', () => {
+    const { container } = render(<Chart a={brisket} b={pork} colors={colors} />);
+    const plot = plotOf(container);
+
+    fireEvent.touchStart(plot, { touches: [{ clientX: xOfMinute(60, 240), clientY: 0 }] });
+    fireEvent.touchMove(plot, { touches: [{ clientX: xOfMinute(180, 240), clientY: 0 }] });
+
+    const guide = container.querySelector('line[data-scrub-guide]');
+    expect(Number(guide?.getAttribute('x1'))).toBeCloseTo(xOfMinute(180, 240));
+  });
+});
+
+describe('the dots a scrub puts on the lines', () => {
+  const dotOf = (container: HTMLElement, key: string): SVGCircleElement | null =>
+    container.querySelector<SVGCircleElement>(`circle[data-scrub-dot="${key}"]`);
+
+  it('marks each drawn line of each cook at the scrubbed minute', () => {
+    const { container } = render(<Chart a={brisket} b={pork} colors={colors} />);
+
+    fireEvent.mouseMove(plotOf(container), { clientX: xOfMinute(60, 240) });
+
+    expect(dotOf(container, 'a-probe1')?.getAttribute('fill')).toBe(COLOR_A);
+    expect(dotOf(container, 'b-chamber')?.getAttribute('fill')).toBe(COLOR_B);
+  });
+
+  it('puts the dot on the nearest sample that cook actually took', () => {
+    const { container } = render(<Chart a={brisket} b={pork} colors={colors} />);
+
+    fireEvent.mouseMove(plotOf(container), { clientX: xOfMinute(55, 240) });
+
+    // The brisket reported at hour one; the dot sits on that reading, not on
+    // the minute the finger is at.
+    expect(Number(dotOf(container, 'a-probe1')?.getAttribute('cx'))).toBeCloseTo(
+      xOfMinute(60, 240)
+    );
+  });
+
+  it('marks nothing on a cook that had already finished', () => {
+    const { container } = render(<Chart a={brisket} b={pork} colors={colors} />);
+
+    fireEvent.mouseMove(plotOf(container), { clientX: xOfMinute(200, 240) });
+
+    expect(dotOf(container, 'a-probe1')).toBeNull();
+    expect(dotOf(container, 'b-probe1')).not.toBeNull();
+  });
+});
+
+describe('the footer under the chart', () => {
+  const footerOf = (container: HTMLElement): HTMLElement => {
+    const footer = container.querySelector<HTMLElement>('[data-testid="compare-footer"]');
+    if (footer === null) throw new Error('no footer');
+    return footer;
+  };
+
+  const named = {
+    a: cook({ ...brisket, name: 'Sunday brisket' }),
+    b: cook({ ...pork, name: 'Pork butt' }),
+  };
+
+  it('names both cooks, how long they ran and how to read the chart', () => {
+    const { container } = render(<Chart a={named.a} b={named.b} colors={colors} />);
+    const footer = footerOf(container);
+
+    expect(within(footer).getByText('Sunday brisket')).toBeInTheDocument();
+    expect(within(footer).getByText('2h 00m')).toBeInTheDocument();
+    expect(within(footer).getByText('Pork butt')).toBeInTheDocument();
+    expect(within(footer).getByText('4h 00m')).toBeInTheDocument();
+    expect(within(footer).getByText(/Drag to scrub/)).toBeInTheDocument();
+  });
+
+  it('reads out the scrubbed minute and both cooks’ temperatures there', () => {
+    const { container } = render(<Chart a={named.a} b={named.b} colors={colors} />);
+
+    fireEvent.mouseMove(plotOf(container), { clientX: xOfMinute(60, 240) });
+    const footer = footerOf(container);
+
+    expect(within(footer).getByText('1h 00m in')).toBeInTheDocument();
+    expect(within(footer).getByText('250° / 150°')).toBeInTheDocument();
+    expect(within(footer).queryByText(/Drag to scrub/)).not.toBeInTheDocument();
+  });
+
+  it('says a cook was finished rather than reading temperatures it never took', () => {
+    const { container } = render(<Chart a={named.a} b={named.b} colors={colors} />);
+
+    fireEvent.mouseMove(plotOf(container), { clientX: xOfMinute(200, 240) });
+    const footer = footerOf(container);
+
+    expect(within(footer).getByText('finished')).toBeInTheDocument();
+  });
+
+  /**
+   * The values are read slot by slot against the chips, so a cook with nothing
+   * in a position cannot slide its meat probe into the slot the other cook
+   * prints its chamber in.
+   */
+  it('keeps a slot for a position a cook has no reading in', () => {
+    const noChamber = cook({
+      ...brisket,
+      name: 'Sunday brisket',
+      pts: [reading(0, { probe1: 90 }), reading(60, { probe1: 150 })],
+    });
+    const { container } = render(<Chart a={noChamber} b={named.b} colors={colors} />);
+
+    fireEvent.mouseMove(plotOf(container), { clientX: xOfMinute(60, 240) });
+    const readout = container.querySelector<HTMLElement>('[data-readout="a"]');
+
+    expect(readout?.textContent).toContain('— / 150°');
+  });
+
+  it('goes back to naming the cooks once the scrub is let go', () => {
+    const { container } = render(<Chart a={named.a} b={named.b} colors={colors} />);
+
+    fireEvent.mouseMove(plotOf(container), { clientX: xOfMinute(60, 240) });
+    fireEvent.mouseLeave(plotOf(container));
+
+    expect(within(footerOf(container)).getByText(/Drag to scrub/)).toBeInTheDocument();
+  });
+});
+
+const WRAPPED = { id: 's1', label: 'Wrapped', minutes: 60, color: '#3F7D46' };
+const PULLED = { id: 's2', label: 'Pulled', minutes: 120, color: '#B4453A' };
+
+const stampedBrisket = cook({ ...brisket, name: 'Sunday brisket', stamps: [WRAPPED, PULLED] });
+const stampedPork = cook({
+  ...pork,
+  name: 'Pork butt',
+  stamps: [{ id: 's3', label: 'Spritzed', minutes: 30, color: '#2F6F8F' }],
+});
+
+const railOf = (container: HTMLElement, cookId: 'a' | 'b'): HTMLElement => {
+  const rail = container.querySelector<HTMLElement>(`[data-stamp-rail="${cookId}"]`);
+  if (rail === null) throw new Error(`no rail for ${cookId}`);
+  return rail;
+};
+
+const trackOf = (container: HTMLElement, cookId: 'a' | 'b'): HTMLElement => {
+  const track = railOf(container, cookId).querySelector<HTMLElement>('[data-rail-track]');
+  if (track === null) throw new Error(`no track for ${cookId}`);
+  return track;
+};
+
+describe('the stamp rails under the plot', () => {
+  it('gives each cook a rail of its own, lettered in that cook’s colour', () => {
+    const { container } = render(<Chart a={stampedBrisket} b={stampedPork} colors={colors} />);
+
+    expect(within(railOf(container, 'a')).getByText('A')).toHaveStyle({ color: COLOR_A });
+    expect(within(railOf(container, 'b')).getByText('B')).toHaveStyle({ color: COLOR_B });
+  });
+
+  /** The rail claims to share the plot's x scale; the inset is that claim. */
+  it('insets each rail’s track by exactly the plot’s own horizontal padding', () => {
+    const { container } = render(<Chart a={stampedBrisket} b={stampedPork} colors={colors} />);
+    const track = trackOf(container, 'a');
+
+    expect(track).toHaveStyle({
+      left: `${(COMPARE_BOX.margin.left / COMPARE_BOX.width) * 100}%`,
+      right: `${(COMPARE_BOX.margin.right / COMPARE_BOX.width) * 100}%`,
+    });
+  });
+
+  /** The letter is in the left gutter, so it cannot push the track off the plot. */
+  it('writes the cook’s letter outside the track rather than in front of it', () => {
+    const { container } = render(<Chart a={stampedBrisket} b={stampedPork} colors={colors} />);
+
+    expect(within(railOf(container, 'a')).getByText('A')).toHaveStyle({ position: 'absolute' });
+    expect(trackOf(container, 'a')).toHaveStyle({ position: 'absolute' });
+  });
+
+  it('stops each rail’s baseline where that cook stopped cooking', () => {
+    const { container } = render(<Chart a={stampedBrisket} b={stampedPork} colors={colors} />);
+    const baseline = (cookId: 'a' | 'b'): string | undefined =>
+      trackOf(container, cookId).querySelector<HTMLElement>('[data-rail-baseline]')?.style.width;
+
+    expect(baseline('a')).toBe('50%');
+    expect(baseline('b')).toBe('100%');
+  });
+
+  it('puts each stamp where the plot puts that minute', () => {
+    const { container } = render(<Chart a={stampedBrisket} b={stampedPork} colors={colors} />);
+    const wrapped = within(railOf(container, 'a')).getByRole('button', { name: 'Wrapped' });
+
+    expect(wrapped).toHaveStyle({ left: '25%' });
+  });
+
+  it('gives every stamp a thumb-sized target coloured by the tone it was logged with', () => {
+    const { container } = render(<Chart a={stampedBrisket} b={stampedPork} colors={colors} />);
+    const wrapped = within(railOf(container, 'a')).getByRole('button', { name: 'Wrapped' });
+
+    expect(wrapped).toHaveStyle({ width: '30px', height: '30px' });
+    expect(wrapped.querySelector('span')).toHaveStyle({ background: WRAPPED.color });
+  });
+
+  it('swells the stamp the scrub is over, and leaves the others alone', () => {
+    const { container } = render(<Chart a={stampedBrisket} b={stampedPork} colors={colors} />);
+    const dotOf = (name: string): HTMLElement | null =>
+      within(railOf(container, 'a')).getByRole('button', { name }).querySelector('span');
+    const restingSize = dotOf('Wrapped')?.style.width;
+
+    fireEvent.mouseMove(plotOf(container), { clientX: xOfMinute(61, 240) });
+
+    expect(dotOf('Wrapped')?.style.width).not.toBe(restingSize);
+    expect(dotOf('Pulled')?.style.width).toBe(restingSize);
+  });
+
+  /**
+   * The cursor moves along the shared axis, so the shorter cook's stamps swell
+   * over the same band as the longer cook's — measured against its own two
+   * hours they would only swell within a couple of pixels of the cursor.
+   */
+  it('swells the shorter cook’s stamps over the same band as the longer cook’s', () => {
+    const { container } = render(<Chart a={stampedBrisket} b={stampedPork} colors={colors} />);
+    const dotOf = (cookId: 'a' | 'b', name: string): HTMLElement | null =>
+      within(railOf(container, cookId)).getByRole('button', { name }).querySelector('span');
+    const restingSize = dotOf('a', 'Wrapped')?.style.width;
+
+    // Five minutes off the stamp: inside 3% of the shared four-hour axis, but
+    // outside 3% of the two-hour cook the stamp belongs to.
+    fireEvent.mouseMove(plotOf(container), { clientX: xOfMinute(65, 240) });
+
+    expect(dotOf('a', 'Wrapped')?.style.width).not.toBe(restingSize);
+    expect(dotOf('b', 'Spritzed')?.style.width).toBe(restingSize);
+  });
+});
+
+describe('picking a stamp', () => {
+  const footer = (container: HTMLElement): HTMLElement => {
+    const found = container.querySelector<HTMLElement>('[data-testid="compare-footer"]');
+    if (found === null) throw new Error('no footer');
+    return found;
+  };
+
+  const pick = (container: HTMLElement, cookId: 'a' | 'b', name: string): void => {
+    fireEvent.click(within(railOf(container, cookId)).getByRole('button', { name }));
+  };
+
+  it('names the stamp, whose cook it is and how far into that cook it was', () => {
+    const { container } = render(<Chart a={stampedBrisket} b={stampedPork} colors={colors} />);
+
+    pick(container, 'a', 'Wrapped');
+
+    expect(within(footer(container)).getByText('Wrapped')).toBeInTheDocument();
+    expect(within(footer(container)).getByText('Cook A · 1h 00m in')).toBeInTheDocument();
+  });
+
+  it('drops a dashed guide onto the plot in the stamp’s own colour', () => {
+    const { container } = render(<Chart a={stampedBrisket} b={stampedPork} colors={colors} />);
+
+    pick(container, 'b', 'Spritzed');
+    const guide = container.querySelector('line[data-stamp-guide]');
+
+    expect(guide?.getAttribute('stroke')).toBe('#2F6F8F');
+    expect(guide?.getAttribute('stroke-dasharray')).toBe('3,3');
+    expect(Number(guide?.getAttribute('x1'))).toBeCloseTo(xOfMinute(30, 240));
+  });
+
+  it('clears the pick when the same stamp is tapped again', () => {
+    const { container } = render(<Chart a={stampedBrisket} b={stampedPork} colors={colors} />);
+
+    pick(container, 'a', 'Wrapped');
+    pick(container, 'a', 'Wrapped');
+
+    expect(container.querySelector('line[data-stamp-guide]')).toBeNull();
+    expect(within(footer(container)).getByText(/Drag to scrub/)).toBeInTheDocument();
+  });
+
+  /**
+   * The span is taken from the readings and the durations, so a stamp logged
+   * after a cook's last reading falls outside it. Its dot is held to the end of
+   * the track, and its guide has to be ruled at that same minute rather than
+   * off the end of the plot, or the two point at different moments.
+   */
+  it('rules the guide of a stamp logged past the axis where its dot sits', () => {
+    const late = cook({
+      ...brisket,
+      name: 'Sunday brisket',
+      stamps: [{ id: 's9', label: 'Rested', minutes: 300, color: '#3F7D46' }],
+    });
+    const { container } = render(<Chart a={late} b={stampedPork} colors={colors} />);
+
+    pick(container, 'a', 'Rested');
+    const guide = container.querySelector('line[data-stamp-guide]');
+    const edges = plotEdges(COMPARE_BOX);
+
+    expect(Number(guide?.getAttribute('x1'))).toBeCloseTo(edges.right);
+    expect(within(railOf(container, 'a')).getByRole('button', { name: 'Rested' })).toHaveStyle({
+      left: '100%',
+    });
+  });
+
+  /** Every control on the chart is a thumb target; the x is one of them. */
+  it('offers the dismiss at the thumb target the rest of the screen is driven at', () => {
+    const { container } = render(<Chart a={stampedBrisket} b={stampedPork} colors={colors} />);
+
+    pick(container, 'a', 'Wrapped');
+
+    expect(screen.getByRole('button', { name: 'Clear stamp' })).toHaveStyle({
+      width: '44px',
+      height: '44px',
+    });
+  });
+
+  it('clears the pick when the detail is dismissed', () => {
+    const { container } = render(<Chart a={stampedBrisket} b={stampedPork} colors={colors} />);
+
+    pick(container, 'a', 'Wrapped');
+    fireEvent.click(screen.getByRole('button', { name: 'Clear stamp' }));
+
+    expect(container.querySelector('line[data-stamp-guide]')).toBeNull();
+    expect(within(footer(container)).getByText(/Drag to scrub/)).toBeInTheDocument();
+  });
+
+  it('moves the pick straight to another stamp rather than needing a clear first', () => {
+    const { container } = render(<Chart a={stampedBrisket} b={stampedPork} colors={colors} />);
+
+    pick(container, 'a', 'Wrapped');
+    pick(container, 'b', 'Spritzed');
+
+    expect(within(footer(container)).getByText('Cook B · 0h 30m in')).toBeInTheDocument();
+  });
+
+  /** The reader asked about a stamp; a scrub passing by does not un-ask it. */
+  it('keeps the picked stamp in the footer while the plot is scrubbed', () => {
+    const { container } = render(<Chart a={stampedBrisket} b={stampedPork} colors={colors} />);
+
+    pick(container, 'a', 'Wrapped');
+    fireEvent.mouseMove(plotOf(container), { clientX: xOfMinute(200, 240) });
+
+    expect(within(footer(container)).getByText('Wrapped')).toBeInTheDocument();
+    expect(within(footer(container)).queryByText('3h 20m in')).not.toBeInTheDocument();
+    // The scrub itself still reads the plot underneath.
+    expect(container.querySelector('line[data-scrub-guide]')).not.toBeNull();
   });
 });
