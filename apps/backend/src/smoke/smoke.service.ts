@@ -182,6 +182,32 @@ export class SmokeService extends BaseService<SmokeDocument> {
   }
 
   /**
+   * Record that the meat of the cook in progress has come off — the path the
+   * Smoke → Post-Smoke advance stamps the pull through.
+   *
+   * Against the current cook rather than an id, for the same reason the plan
+   * is: the advance happens on the session that is running, and a client
+   * carrying an id could stamp a pull onto a cook that finished last weekend.
+   *
+   * The moment and the temperature are the timeline's to decide (see
+   * {@link TimelineService.stampPull}), which is also where "only once" lives:
+   * this may be called by every client that advances, and by the same one
+   * twice, and the pull stays where it was first stamped.
+   *
+   * Answered with the cook as it now stands, so the step that advanced renders
+   * the pull that was actually stored — and `null` where nothing is cooking,
+   * which is a fact about the session rather than a failure of the request.
+   */
+  async stampPull(): Promise<Smoke | null> {
+    const smokeId = documentId(await this.getCurrentSmoke());
+    if (!smokeId) {
+      return null;
+    }
+    await this.timeline.stampPull(smokeId);
+    return this.getById(smokeId);
+  }
+
+  /**
    * Complete the current cook: record that it ended, and what it was being
    * taken to, before marking it complete.
    *

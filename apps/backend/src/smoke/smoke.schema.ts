@@ -1,4 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { PullStamp } from './pull-stamp';
 import { ServePlan } from './serve-plan';
 
 export type SmokeDocument = Smoke & Document;
@@ -9,7 +10,7 @@ export enum SmokeStatus {
 }
 
 @Schema()
-export class Smoke implements ServePlan {
+export class Smoke implements ServePlan, PullStamp {
   @Prop()
   preSmokeId: string;
 
@@ -110,6 +111,18 @@ export class Smoke implements ServePlan {
 
   @Prop()
   restMinutes?: number | null;
+
+  /**
+   * The pull: when the meat came off and how hot it was, stamped by the step
+   * advance that took the cook to Post-Smoke. Declared by {@link PullStamp};
+   * the props are here for the same reason the plan's are — a field the schema
+   * does not declare never reaches storage.
+   */
+  @Prop()
+  pullAt?: Date | null;
+
+  @Prop()
+  pullTemp?: number | null;
 
   @Prop({
     required: true,

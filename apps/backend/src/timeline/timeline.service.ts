@@ -249,6 +249,57 @@ export class TimelineService {
   }
 
   /**
+   * Record that the meat has come off, if it has not already: when it did, and
+   * what the watched probe read as it did.
+   *
+   * Written here rather than asked of the pitmaster because the gesture that
+   * ends the cook — leaving the Smoke step — is the gesture that pulls the
+   * meat, and everything the rest is measured from (the countdown, the
+   * carryover, the safe-to-hold window) hangs off this one moment.
+   *
+   * The condition is part of the write, as it is for the start and the finish:
+   * a step control tapped back and forth, two clients advancing at once, or a
+   * screen that remounts must not move a pull that has already happened —
+   * moving it would restart a rest that is already half over.
+   *
+   * The temperature is snapshotted rather than looked up later for the same
+   * reason the finished cook's target is: the readings go on arriving after the
+   * meat is off the smoker, and a probe left in a resting brisket — or pulled
+   * out and left on the bench — would rewrite what the meat was pulled at.
+   * `null` where no probe is being watched or none has read: nothing was
+   * measuring this meat, and a stamped zero would say something about it that
+   * nobody knows.
+   *
+   * Answers whether this call is the one that stamped, so a caller may do the
+   * work that must happen once per pull exactly once.
+   */
+  async stampPull(smokeId: string): Promise<boolean> {
+    const smoke = await this.smokeModel.findById(smokeId).exec();
+    if (!smoke || smoke.pullAt) {
+      return false;
+    }
+    const settings = withSettingsDefaults(
+      await this.settingsModel.findOne().exec(),
+    );
+    const pullTemp = await this.watchedProbeTemp(
+      smoke,
+      primaryWatchedProbe(settings)?.slot,
+    );
+    const result = await this.smokeModel
+      .updateOne(
+        { _id: smokeId, pullAt: null },
+        {
+          $set: {
+            pullAt: new Date(),
+            ...(pullTemp === null ? {} : { pullTemp }),
+          },
+        },
+      )
+      .exec();
+    return result.modifiedCount > 0;
+  }
+
+  /**
    * A cook's newest dated reading told by both clocks: when the device says it
    * was taken, and when this backend accepted it.
    *

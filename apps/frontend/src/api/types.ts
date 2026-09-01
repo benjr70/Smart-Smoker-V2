@@ -312,20 +312,35 @@ export interface Smoke {
    * The Serve Plan as the cook stored it: when the food is meant to hit the
    * table, and how long the meat rests before it is carved.
    *
+   * The rest is the cook's one canonical rest — the planner's stepper and the
+   * Post-Smoke "Rest Time" field are two views of this single value, so the
+   * plan and the record can never disagree.
+   *
    * Optional because a cook nobody planned — and every cook recorded before the
    * plan existed — has neither. `null` is how a plan is cleared.
    */
   serveAt?: Date | null;
   restMinutes?: number | null;
+  /**
+   * The pull: when the meat came off the smoker, and what the watched probe
+   * read as it did. Stamped by the server on the Smoke → Post-Smoke advance,
+   * never written from here — it is what happened, not what was asked for.
+   *
+   * Absent until the meat comes off; the temperature stays absent for a cook
+   * pulled with no probe being watched, since nothing was measuring the meat.
+   */
+  pullAt?: Date | null;
+  pullTemp?: number | null;
 }
 
 /**
  * A write of the Serve Plan: either half on its own.
  *
- * Either half, because that is how the card writes them: a tap on "Serving at"
- * moves dinner and says nothing about the rest. A payload carrying both every
- * time would have the two steppers overwriting each other whenever another
- * device had just moved the other one.
+ * Either half, because that is how the plan is edited: a tap on the card's
+ * "Serving at" stepper moves dinner and says nothing about the rest, and the
+ * Post-Smoke rest field says nothing about dinner. A payload carrying both
+ * every time would have the two overwriting each other whenever another device
+ * had just moved the other one.
  */
 export interface ServePlanWrite {
   serveAt?: Date | null;

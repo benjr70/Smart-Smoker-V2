@@ -993,6 +993,58 @@ describe('TimelineService', () => {
   });
 
   /**
+   * The rest begins when the meat comes off, and the meat comes off when the
+   * pitmaster leaves the Smoke step — so the moment and the temperature it came
+   * off at are recorded there rather than asked for a second time.
+   */
+  describe('stampPull', () => {
+    beforeEach(() => {
+      settings.push({
+        _id: 'settings-id',
+        probeTarget: {
+          enabled: true,
+          probes: [
+            { slot: 'probe1', enabled: true, target: 203 },
+            { slot: 'probe2', enabled: false, target: 165 },
+          ],
+        },
+      });
+    });
+
+    it('records when the meat came off and what the watched probe read', async () => {
+      const before = Date.now();
+
+      expect(await service.stampPull('smoke-id')).toBe(true);
+
+      expect(smokes[0].pullAt.getTime()).toBeGreaterThanOrEqual(before);
+      expect(smokes[0].pullTemp).toBe(198);
+    });
+
+    it('leaves the pull already stamped alone, and says it stamped nothing', async () => {
+      await service.stampPull('smoke-id');
+      const first = smokes[0].pullAt;
+
+      await tick();
+
+      expect(await service.stampPull('smoke-id')).toBe(false);
+      expect(smokes[0].pullAt).toEqual(first);
+    });
+
+    it('stamps the pull of a cook with no probe watched, without a temperature', async () => {
+      settings.length = 0;
+
+      expect(await service.stampPull('smoke-id')).toBe(true);
+
+      expect(smokes[0].pullAt).toBeInstanceOf(Date);
+      expect(smokes[0].pullTemp ?? null).toBeNull();
+    });
+
+    it('stamps nothing for a cook that does not exist', async () => {
+      expect(await service.stampPull('no-such-smoke')).toBe(false);
+    });
+  });
+
+  /**
    * Two clocks put a moment on a reading, and they can disagree by days: the
    * device stamps the date, the store stamps the id. Anything deciding a cook
    * has gone quiet needs the second one, which no device can be wrong about.

@@ -994,24 +994,40 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
     }
 
     if (resource === 'smoke') {
-      // The plan of the cook in progress. Each half is written only when the
-      // caller sent it — the backend leaves an omitted half alone — and a
-      // session with no cook set up stores nothing and answers nothing, which
-      // this app's transport reads as `null`.
-      if (method === 'put' && id === 'current' && segments[2] === 'serve-plan') {
+      // The cook the session names, and the two things written against it
+      // rather than against an id: its plan, and the pull the step advance
+      // stamps. All three answer nothing where no cook is set up, which this
+      // app's transport reads as `null` — the ordinary state of an app nobody
+      // is cooking with, not a failure.
+      if (id === 'current') {
         const smokeId = store.state?.smokeId;
         const record = smokeId ? store.smoke.records[smokeId] : undefined;
         if (!record) {
           return null;
         }
-        const plan = (body ?? {}) as ServePlanWrite;
-        if (plan.serveAt !== undefined) {
-          record.serveAt = plan.serveAt;
+        if (method === 'get' && segments[2] === undefined) {
+          return clone(record);
         }
-        if (plan.restMinutes !== undefined) {
-          record.restMinutes = plan.restMinutes;
+        if (method === 'put' && segments[2] === 'serve-plan') {
+          // Each half is written only when the caller sent it — the backend
+          // leaves an omitted half alone.
+          const plan = (body ?? {}) as ServePlanWrite;
+          if (plan.serveAt !== undefined) {
+            record.serveAt = plan.serveAt;
+          }
+          if (plan.restMinutes !== undefined) {
+            record.restMinutes = plan.restMinutes;
+          }
+          return clone(record);
         }
-        return clone(record);
+        if (method === 'post' && segments[2] === 'pull') {
+          // Stamped once, as the backend stamps it: a second advance answers
+          // the cook with the pull it already had, so the rest never restarts.
+          if (!record.pullAt) {
+            record.pullAt = new Date();
+          }
+          return clone(record);
+        }
       }
       if (method === 'get' && id === 'all') {
         return clone(store.smoke.all);
