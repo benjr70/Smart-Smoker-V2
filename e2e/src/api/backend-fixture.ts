@@ -96,6 +96,19 @@ export interface SeedCompletedSmokeOptions extends CreatePreSmokeOptions {
   woodType?: string;
   restTime?: string;
   ratings?: SeedRatings;
+  /**
+   * The prep steps the cook was planned with. Defaulted to the empty row the
+   * wizard starts on, so a seed that says nothing about method looks exactly
+   * like the untouched form it always did.
+   */
+  steps?: string[];
+  /** The wrap-up steps, same. */
+  postSmokeSteps?: string[];
+  /**
+   * Stamps to tap onto the cook log, by catalogue key (`wood`, `wrap`, …), in
+   * the order they happened. A seeded cook is unstamped unless asked for.
+   */
+  stamps?: string[];
 }
 
 /** The ids `adoptCurrentSmoke()` resolved for the smoke the UI created. */
@@ -118,6 +131,12 @@ export interface SeededSmoke {
   woodType: string;
   restTime: string;
   ratings: Required<SeedRatings>;
+  /** The prep steps the cook was planned with, as they were written. */
+  steps: string[];
+  /** The wrap-up steps, same. */
+  postSmokeSteps: string[];
+  /** The stamp keys tapped onto the cook log, in the order they happened. */
+  stamps: string[];
 }
 
 interface NamedDoc {
@@ -350,6 +369,11 @@ export class BackendFixture {
       weightUnit: 'Lb',
       woodType: options.woodType ?? 'Hickory',
       restTime: options.restTime ?? '00:45',
+      // The empty row the wizard starts on, so a seed that says nothing about
+      // method still writes what an untouched form would have written.
+      steps: options.steps ?? [''],
+      postSmokeSteps: options.postSmokeSteps ?? [''],
+      stamps: options.stamps ?? [],
       ratings: {
         smokeFlavor: options.ratings?.smokeFlavor ?? 6,
         seasoning: options.ratings?.seasoning ?? 7,
@@ -366,7 +390,7 @@ export class BackendFixture {
       name: resolved.name,
       meatType: resolved.meatType,
       weight: { unit: resolved.weightUnit, weight: resolved.weightLb },
-      steps: [''],
+      steps: resolved.steps,
       notes: '',
     });
     // The pre-smoke POST wires up state.smokeId asynchronously; the current-
@@ -382,10 +406,11 @@ export class BackendFixture {
       notes: '',
     });
     await this.seedCook();
+    await this.seedStamps(resolved.stamps);
 
     await this.http.post('/api/postSmoke/current', {
       restTime: resolved.restTime,
-      steps: [''],
+      steps: resolved.postSmokeSteps,
       notes: '',
     });
     await this.http.post('/api/ratings', { ...resolved.ratings, notes: '' });
@@ -423,6 +448,24 @@ export class BackendFixture {
         Meat3Temp: '0',
         date: new Date(start + reading * SEEDED_READING_GAP_MS).toISOString(),
       });
+    }
+  }
+
+  /**
+   * Tap the given stamps onto the cook log, the way both surfaces do it: the
+   * key is the whole body, because the moment is the server's clock and the
+   * temperatures are read from the stored series by the backend itself.
+   *
+   * Posted after the cook and before the finish, and both halves of that matter.
+   * The route logs against the *current* smoke, so a stamp posted after the
+   * archive would be refused (409) or, worse, land on whichever cook is set up
+   * next; and a stamp posted before the readings would snapshot a pit that has
+   * reported nothing, which is a legal entry but not the one a seeded cook is
+   * meant to have.
+   */
+  private async seedStamps(stampKeys: readonly string[]): Promise<void> {
+    for (const stampKey of stampKeys) {
+      await this.http.post('/api/cook-events', { stampKey });
     }
   }
 

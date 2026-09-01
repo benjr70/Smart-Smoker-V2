@@ -396,6 +396,59 @@ describe('BackendFixture.seedCompletedSmoke', () => {
     assert.ok(seeded.smokeId, 'must expose the finished smoke id for cleanup');
   });
 
+  it('writes the caller-supplied prep and wrap-up steps, so two seeded cooks can differ', async () => {
+    // The comparison journey is the caller that needs this: a step diff between
+    // two cooks that both logged the fixture's empty step is a diff of nothing.
+    http.getResponses['/api/state'] = { smokeId: 'smoke-1' };
+
+    await fixture.seedCompletedSmoke({
+      steps: ['Trim the fat cap', 'Dry brine overnight'],
+      postSmokeSteps: ['Rest in a dry cooler'],
+    });
+
+    const preSmoke = http.posts.find(p => p.path === '/api/presmoke');
+    assert.deepEqual(preSmoke?.body.steps, ['Trim the fat cap', 'Dry brine overnight']);
+    const postSmoke = http.posts.find(p => p.path === '/api/postSmoke/current');
+    assert.deepEqual(postSmoke?.body.steps, ['Rest in a dry cooler']);
+  });
+
+  it('stamps the cook log while the smoke is still the current one', async () => {
+    http.getResponses['/api/state'] = { smokeId: 'smoke-1' };
+
+    await fixture.seedCompletedSmoke({ stamps: ['wood', 'wrap'] });
+
+    assert.deepEqual(
+      http.posts.filter(p => p.path === '/api/cook-events').map(p => p.body),
+      [{ stampKey: 'wood' }, { stampKey: 'wrap' }],
+      'a stamp is a tap: the key is the whole body the backend accepts'
+    );
+    // The cook-events route logs against the *current* smoke, so a stamp posted
+    // after the finish would be recorded against nothing (409) or against
+    // whatever cook is set up next.
+    assert.ok(
+      http.calls.lastIndexOf('POST /api/cook-events') <
+        http.calls.indexOf('POST /api/smoke/finish'),
+      'stamps must be recorded before the smoke is archived'
+    );
+    // ...and after the cook, so each stamp snapshots a pit that has reported.
+    assert.ok(
+      http.calls.indexOf('POST /api/cook-events') > http.calls.lastIndexOf('POST /api/temps'),
+      'stamps must be recorded once the cook has readings to snapshot'
+    );
+  });
+
+  it('leaves the cook log alone for a seed that asked for no stamps', async () => {
+    http.getResponses['/api/state'] = { smokeId: 'smoke-1' };
+
+    await fixture.seedCompletedSmoke();
+
+    assert.deepEqual(
+      http.posts.filter(p => p.path === '/api/cook-events'),
+      [],
+      'an unstamped cook must stay unstamped'
+    );
+  });
+
   it('cleanup() cascade-deletes the whole smoke so no smoke-test-* residue remains', async () => {
     http.getResponses['/api/state'] = { smokeId: 'smoke-1' };
     const seeded = await fixture.seedCompletedSmoke();

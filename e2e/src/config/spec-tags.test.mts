@@ -44,6 +44,18 @@ describe('virtual-smoker spec tags (issue #321)', () => {
     );
   });
 
+  it('leaves the compare journey untagged so only the hermetic project runs it', () => {
+    // Compare seeds two whole cooks and asserts what the archive holds around
+    // them — the entry into compare is only offered once a second cook exists —
+    // so it is only sound on a stack it owns outright. The deployed projects run
+    // against a shared dev-cloud carrying somebody's real cooks.
+    const compare = read('compare.spec.ts');
+    assert.ok(
+      !compare.includes(DEPLOYED_TAG) && !compare.includes(VIRTUAL_SMOKER_TAG),
+      'the compare journey must stay hermetic-only'
+    );
+  });
+
   it('does not tag the no-temp @deployed flows as @virtual-smoker', () => {
     for (const name of [
       'history-review.spec.ts',

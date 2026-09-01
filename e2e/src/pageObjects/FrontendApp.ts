@@ -1326,6 +1326,188 @@ export class FrontendApp {
     await expect(sheet).toBeHidden();
   }
 
+  /** How many cooks the history list is showing right now. */
+  async historyCardNames(): Promise<string[]> {
+    const names = await this.page.getByTestId('smoke-card-name').allInnerTexts();
+    return names.map(name => name.trim()).sort();
+  }
+
+  /** The way into the comparison, offered by the history header and a cook's own page. */
+  private get compareEntry(): Locator {
+    return this.page.getByTestId('compare-entry');
+  }
+
+  /**
+   * Assert the history list does not offer a comparison over the cooks named —
+   * which must be every cook the list is showing.
+   *
+   * The rule is about the pair, not about the button: comparing needs two cooks,
+   * so the entry is offered only once the list is showing a second one. That
+   * makes "no entry" a claim about the whole list rather than about the caller's
+   * own records, and the caller has to name what the list may hold for the claim
+   * to mean anything — a lone cook of its own says nothing while somebody else's
+   * cook is on the same screen, where the button is *rightly* offered.
+   *
+   * So the archive is held to exactly those names first. A stack that has picked
+   * up records this journey does not own then fails as what it is — a suite whose
+   * earlier specs left cooks behind, or one no longer running its specs one at a
+   * time — instead of reading as the app having lost the visibility rule.
+   */
+  async expectCompareNotOffered(owned: readonly string[]): Promise<void> {
+    const expected = [...owned].sort();
+    await expect
+      .poll(async () => this.historyCardNames(), {
+        message:
+          "the single-cook rule can only be read off a list holding this journey's cooks alone",
+      })
+      .toEqual(expected);
+    await expect(this.compareEntry).toHaveCount(0);
+  }
+
+  /** Assert the history list now offers a comparison over the cooks it shows. */
+  async expectCompareOffered(): Promise<void> {
+    await expect(this.compareEntry).toBeVisible();
+  }
+
+  /** Open the comparison from the history list, and wait for both cooks to land. */
+  async openCompare(): Promise<void> {
+    await this.compareEntry.click();
+    await expect(this.page.getByTestId('compare-screen')).toBeVisible();
+    // Both cooks are read after the screen mounts, so the sections below only
+    // exist once the reads have landed — and a read that failed says so here
+    // rather than as an anonymous timeout on the first section asserted.
+    await expect(this.page.getByTestId('compare-failed')).toHaveCount(0);
+    await expect(this.page.getByTestId('compare-loading')).toHaveCount(0);
+  }
+
+  /**
+   * Assert which cook is in which slot.
+   *
+   * Order is pinned rather than treated as a set: opened from the list, the
+   * comparison starts on the two cooks at the top of it, and the list is
+   * newest-first — so the later-seeded cook is A and the earlier one B. A pair
+   * that arrives the other way round is the screen having taken its slots from
+   * somewhere other than the list it was opened over.
+   */
+  async expectCompareSlots(names: { a: string; b: string }): Promise<void> {
+    for (const side of ['a', 'b'] as const) {
+      await expect(
+        this.page.getByTestId(`compare-slot-${side}`).getByTestId('compare-slot-name')
+      ).toHaveText(names[side]);
+    }
+  }
+
+  /**
+   * Assert the overlay is drawing both cooks: a line per position each cook
+   * ran, with that cook's readings actually in it.
+   *
+   * The geometry is the assertion for the same reason it is on the review card —
+   * a path is put on the plot whether or not anything could be plotted into it,
+   * so counting paths alone passes on an empty frame.
+   */
+  async expectCompareChartDrawsBothCooks(): Promise<void> {
+    const plot = this.page.getByTestId('compare-chart').getByTestId('compare-plot');
+    await expect(plot).toBeVisible();
+    for (const cook of ['a', 'b'] as const) {
+      const lines = plot.locator(`path[data-cook="${cook}"]`);
+      // The chamber and the first probe: the positions the overlay opens on,
+      // and the two a seeded cook records.
+      await expect(lines).toHaveCount(2);
+      await expect
+        .poll(async () => pointsDrawnBy(lines), {
+          message: `the overlay drew cook ${cook.toUpperCase()}'s lines with none of its cook in them`,
+        })
+        .toBeGreaterThan(0);
+    }
+  }
+
+  /** One row of the facts table, by the fact it states. */
+  private compareFactRow(label: string): Locator {
+    return this.page.getByTestId('compare-facts').locator(`[data-fact="${label}"]`);
+  }
+
+  /**
+   * Assert a fact both cooks share is drawn quietly, and one they differ on is
+   * not.
+   *
+   * Greying identical values is the whole reason the table exists — the eye is
+   * meant to land on the differences — so the claim is made against the row's
+   * own label, which is written in the quiet colour by definition: a shared
+   * value reads as quietly as its label, and a differing one does not. Colours
+   * are read as the browser computes them, so no theme token is duplicated here.
+   */
+  async expectCompareGreysSharedFact(shared: string, differing: string): Promise<void> {
+    const colorOf = async (row: Locator, part: 'label' | 'a' | 'b'): Promise<string> =>
+      (part === 'label'
+        ? row.locator('span').first()
+        : row.getByTestId(`compare-fact-${part}`)
+      ).evaluate(element => getComputedStyle(element).color);
+
+    const sharedRow = this.compareFactRow(shared);
+    await expect(sharedRow).toBeVisible();
+    // A row is only the shared case if the two cooks really did write the same
+    // thing in it; otherwise this asserts greying on a fact that differs.
+    const [sharedA, sharedB] = [
+      await sharedRow.getByTestId('compare-fact-a').innerText(),
+      await sharedRow.getByTestId('compare-fact-b').innerText(),
+    ];
+    expect(sharedA, `both cooks were seeded with the same ${shared}`).toBe(sharedB);
+    expect(await colorOf(sharedRow, 'a'), `the shared ${shared} was not greyed`).toBe(
+      await colorOf(sharedRow, 'label')
+    );
+
+    const differingRow = this.compareFactRow(differing);
+    await expect(differingRow).toBeVisible();
+    expect(await colorOf(differingRow, 'a'), `the differing ${differing} was greyed`).not.toBe(
+      await colorOf(differingRow, 'label')
+    );
+  }
+
+  /**
+   * Assert a method section diffed the two cooks' steps: what both did in the
+   * shared group, and what each did alone in its own.
+   */
+  async expectCompareStepDiff(
+    section: 'pre' | 'post',
+    steps: { both: string; onlyA: string; onlyB: string }
+  ): Promise<void> {
+    const card = this.page.getByTestId(`compare-diff-${section}`);
+    await expect(card.getByTestId('compare-diff-same')).toContainText(steps.both);
+    await expect(card.getByTestId('compare-diff-only-a')).toContainText(steps.onlyA);
+    await expect(card.getByTestId('compare-diff-only-b')).toContainText(steps.onlyB);
+  }
+
+  /**
+   * Assert an axis the two cooks scored differently on reports the margin
+   * between them, with the arrow that says which way it went.
+   *
+   * Anchored, so a margin printed without its arrow — or with something else
+   * beside it — fails rather than matching loosely; but padded, because the
+   * margin is drawn with a separating space inside its own element and a regex
+   * expectation is matched against the text verbatim, whitespace and all.
+   */
+  async expectCompareRatingDelta(axis: string, margin: string): Promise<void> {
+    const row = this.page.getByTestId('compare-ratings').locator(`[data-axis="${axis}"]`);
+    await expect(row.getByTestId('compare-rating-delta')).toHaveText(
+      new RegExp(`^\\s*[▲▼]${escapeForRegExp(margin)}\\s*$`)
+    );
+  }
+
+  /**
+   * Assert each cook's stamp rail carries the stamp it was tapped with, on the
+   * rail belonging to that cook.
+   */
+  async expectCompareStamps(stamps: { a: string; b: string }): Promise<void> {
+    for (const side of ['a', 'b'] as const) {
+      await expect(
+        this.page
+          .getByTestId('compare-chart')
+          .locator(`[data-stamp-rail="${side}"]`)
+          .getByRole('button', { name: stamps[side] })
+      ).toBeVisible();
+    }
+  }
+
   /**
    * Assert the review cards render the values a smoke was finished with. Covers
    * the pre-smoke, smoke-profile and post-smoke cards in one intent-revealing
