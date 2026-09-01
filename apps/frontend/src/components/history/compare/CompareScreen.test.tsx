@@ -547,6 +547,75 @@ describe('CompareScreen', () => {
     expect(screen.getByTestId('compare-slot-b')).toHaveTextContent('Brisket');
   });
 
+  /**
+   * Section 1 is the plan: what wood each cook was given, and what was done to
+   * the meat before it went on — as a diff, since the point is the difference.
+   */
+  test('the pre-smoke section diffs the prep steps under the wood', async () => {
+    renderCompare(seedTwoCooks());
+    await screen.findByTestId('compare-summary');
+
+    const section = screen.getByTestId('compare-diff-pre');
+    expect(section).toHaveTextContent('PRE-SMOKE');
+    expect(within(section).getByTestId('compare-diff-headline')).toHaveTextContent('Wood');
+    // Both cooks burned hickory, so the headline is not a difference.
+    expect(within(section).getByTestId('compare-diff-headline-a')).toHaveStyle({
+      color: carbonLight.textSecondary,
+    });
+    expect(within(section).getByTestId('compare-diff-only-a')).toHaveTextContent('Trim');
+    expect(within(section).getByTestId('compare-diff-only-b')).toHaveTextContent('Rub');
+  });
+
+  /** Section 3 is the same diff, hung off how long each cook rested. */
+  test('the post-smoke section diffs the post steps under the rest', async () => {
+    renderCompare(seedTwoCooks());
+    await screen.findByTestId('compare-summary');
+
+    const section = screen.getByTestId('compare-diff-post');
+    expect(section).toHaveTextContent('POST-SMOKE');
+    expect(within(section).getByTestId('compare-diff-headline')).toHaveTextContent('Rest');
+    expect(within(section).getByTestId('compare-diff-headline-a')).toHaveTextContent('1h 00m');
+    expect(within(section).getByTestId('compare-diff-headline-b')).toHaveTextContent('30m');
+    // Both cooks rested, and nothing else was logged after the cook.
+    expect(within(section).getByTestId('compare-diff-identical')).toBeInTheDocument();
+  });
+
+  test("each section carries that section's notes from both cooks", async () => {
+    const backend = seedTwoCooks();
+    backend.store.preSmoke.records['pre-smoke-a'] = {
+      name: 'Brisket',
+      meatType: 'Beef',
+      weight: { weight: 12, unit: WeightUnits.LB },
+      steps: ['Trim'],
+      notes: 'Trimmed the cap hard',
+    };
+    backend.store.postSmoke.records['post-smoke-b'] = {
+      restTime: '00:30',
+      steps: ['Rest'],
+      notes: 'Pulled it early',
+    };
+
+    renderCompare(backend);
+    await screen.findByTestId('compare-summary');
+
+    expect(
+      within(screen.getByTestId('compare-diff-pre')).getByTestId('compare-diff-note-a')
+    ).toHaveTextContent('Trimmed the cap hard');
+    expect(
+      within(screen.getByTestId('compare-diff-post')).getByTestId('compare-diff-note-b')
+    ).toHaveTextContent('Pulled it early');
+  });
+
+  test('the ratings section scores both cooks on every axis', async () => {
+    renderCompare(seedTwoCooks());
+    await screen.findByTestId('compare-summary');
+
+    const ratings = screen.getByTestId('compare-ratings');
+    expect(within(ratings).getAllByTestId('compare-rating-row')).toHaveLength(4);
+    expect(ratings).toHaveTextContent('8.0 · 6.0');
+    expect(ratings).toHaveTextContent('▲2.0');
+  });
+
   test('the back control returns to wherever the comparison was opened from', async () => {
     const onBack = jest.fn();
     renderCompare(seedTwoCooks(), { onBack });
