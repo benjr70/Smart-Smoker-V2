@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { ServePlanStatus } from '../../../api';
@@ -103,8 +103,10 @@ describe('the serve plan card', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Serve later' }));
     expect(onServeAtChange).toHaveBeenCalledWith(new Date(2026, 7, 1, 18, 15));
 
+    // Back down from where the first tap left it — the taps are of one plan
+    // being moved, not two independent readings of the stored one.
     await userEvent.click(screen.getByRole('button', { name: 'Serve earlier' }));
-    expect(onServeAtChange).toHaveBeenLastCalledWith(new Date(2026, 7, 1, 17, 45));
+    expect(onServeAtChange).toHaveBeenLastCalledWith(new Date(2026, 7, 1, 18, 0));
   });
 
   test('moves the rest a quarter of an hour a tap, either way', async () => {
@@ -115,7 +117,7 @@ describe('the serve plan card', () => {
     expect(onRestChange).toHaveBeenCalledWith(45);
 
     await userEvent.click(screen.getByRole('button', { name: 'Rest less' }));
-    expect(onRestChange).toHaveBeenLastCalledWith(15);
+    expect(onRestChange).toHaveBeenLastCalledWith(30);
   });
 
   test('never asks for a rest shorter than none or longer than six hours', async () => {
@@ -135,6 +137,95 @@ describe('the serve plan card', () => {
 
     expect(screen.getByTestId('serve-plan-serve-at')).toHaveTextContent('6:00 PM');
     expect(screen.getByTestId('serve-plan-rest')).toHaveTextContent('1h 30m');
+  });
+
+  test('adds up taps made inside one round trip rather than collapsing them', async () => {
+    // Three taps in the time one write takes: the card is still holding the
+    // plan the backend judged, so a stepper reading the prop each time would
+    // ask for the same quarter-hour three times and move dinner fifteen
+    // minutes instead of forty-five.
+    const onServeAtChange = jest.fn((_serveAt: Date) => new Promise<boolean>(() => undefined));
+    renderCard({ onServeAtChange });
+
+    const later = screen.getByRole('button', { name: 'Serve later' });
+    await userEvent.click(later);
+    await userEvent.click(later);
+    await userEvent.click(later);
+
+    expect(onServeAtChange.mock.calls.map(call => call[0])).toEqual([
+      new Date(2026, 7, 1, 18, 15),
+      new Date(2026, 7, 1, 18, 30),
+      new Date(2026, 7, 1, 18, 45),
+    ]);
+    expect(screen.getByTestId('serve-plan-serve-at')).toHaveTextContent('6:45 PM');
+  });
+
+  test('holds the rest inside its range across taps the backend has not answered', async () => {
+    const onRestChange = jest.fn((_restMinutes: number) => new Promise<boolean>(() => undefined));
+    renderCard({ plan: plan({ restMinutes: 330 }), onRestChange });
+
+    const longer = screen.getByRole('button', { name: 'Rest longer' });
+    await userEvent.click(longer);
+    await userEvent.click(longer);
+    await userEvent.click(longer);
+
+    // The third tap is at the ceiling, and asks for nothing.
+    expect(onRestChange.mock.calls.map(call => call[0])).toEqual([345, 360]);
+    expect(screen.getByTestId('serve-plan-rest')).toHaveTextContent('6h 00m');
+  });
+
+  test('falls back to the stored plan when the tap could not be saved', async () => {
+    const onServeAtChange = jest.fn((_serveAt: Date) => Promise.resolve(false));
+    renderCard({ onServeAtChange });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Serve later' }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('serve-plan-serve-at')).toHaveTextContent('6:00 PM')
+    );
+  });
+
+  test('shows the plan the backend judged once it answers, not the tap that asked', async () => {
+    const onServeAtChange = jest.fn((_serveAt: Date) => new Promise<boolean>(() => undefined));
+    const { rerender } = render(
+      <DesignSurface>
+        <ServePlanCard plan={plan()} onServeAtChange={onServeAtChange} onRestChange={jest.fn()} />
+      </DesignSurface>
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Serve later' }));
+
+    // Another device moved dinner while this one was mid-tap: the plan the
+    // backend judged wins over the guess on screen.
+    rerender(
+      <DesignSurface>
+        <ServePlanCard
+          plan={plan({ serveAt: new Date(2026, 7, 1, 19, 30) })}
+          onServeAtChange={onServeAtChange}
+          onRestChange={jest.fn()}
+        />
+      </DesignSurface>
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId('serve-plan-serve-at')).toHaveTextContent('7:30 PM')
+    );
+  });
+
+  test('says it is gathering data before the cook has a plan at all', async () => {
+    const onCreatePlan = jest.fn();
+    renderCard({ plan: null, onCreatePlan });
+
+    expect(screen.getByTestId('serve-plan-headline')).toHaveTextContent('Gathering data');
+    expect(screen.getByTestId('serve-plan-advice')).toHaveTextContent(
+      'Waiting for a steady estimate'
+    );
+    // Nothing to step yet — and no clock time invented for a plan that does
+    // not exist.
+    expect(screen.queryByTestId('serve-plan-serve-at')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('serve-plan-milestone')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Set serving time' }));
+    expect(onCreatePlan).toHaveBeenCalled();
   });
 
   test('reads the plan as a schedule: the wrap still ahead, the pull, the rest', () => {

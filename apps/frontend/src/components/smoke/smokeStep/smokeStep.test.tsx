@@ -571,6 +571,10 @@ describe('the shape of the step', () => {
     expect(parts).toEqual([
       'smoke-status-bar',
       'smoke-completion-card',
+      // The plan reads directly under the estimate it judges, and is there
+      // from the start of a cook — before there is a plan it says it is
+      // gathering data rather than appearing halfway through.
+      'smoke-serve-plan-card',
       'smoke-temps-card',
       'smoke-chart-card',
       // The cook log reads after the chart: it explains the shape of the plot
@@ -728,6 +732,37 @@ describe('the serve plan on the step', () => {
           body: { serveAt: new Date('2026-08-01T22:15:00.000Z') },
         },
       ])
+    );
+  });
+
+  test('gathers data in front of the cook while it has no plan to judge', async () => {
+    // A cook still warming up: the backend has no plan to answer, because
+    // nothing has seeded one yet and no estimate is worth planning around. The
+    // card says so rather than being absent, which is the only way the user
+    // learns the planner is watching at all.
+    const backend = createFakeBackend({
+      state: { smokeId: 'smoke-1', smoking: true },
+      appSettings: { settings: settingsWatching({ probe1: 203 }) },
+      timeline: {
+        current: {
+          ...NO_CURRENT_TIMELINE,
+          startedAt: new Date(Date.now() - 20 * 60 * 1000).toISOString(),
+          estimate: {
+            state: 'warming',
+            eta: null,
+            hoursRemaining: null,
+            ratePerHour: null,
+            progressPercent: null,
+            startTemp: 45,
+            targetTemp: 203,
+          },
+        },
+      },
+    });
+    renderView(harness(), backend);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('serve-plan-headline')).toHaveTextContent('Gathering data')
     );
   });
 

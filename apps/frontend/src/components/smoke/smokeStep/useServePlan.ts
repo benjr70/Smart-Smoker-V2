@@ -38,10 +38,20 @@ export interface UseServePlanInput {
 export interface UseServePlanResult {
   /** Whether the planner is switched on at all. */
   enabled: boolean;
-  /** Move the moment the food hits the table. */
-  setServeAt: (serveAt: Date) => void;
+  /**
+   * Move the moment the food hits the table. Resolves `true` when the plan was
+   * stored, so a card showing the tap ahead of the backend knows whether to
+   * keep showing it.
+   */
+  setServeAt: (serveAt: Date) => Promise<boolean>;
   /** Change how long the meat rests before it is carved, in minutes. */
-  setRestMinutes: (restMinutes: number) => void;
+  setRestMinutes: (restMinutes: number) => Promise<boolean>;
+  /**
+   * Start a plan for a cook that has none, on the pitmaster's say-so rather
+   * than on an estimate: the same arithmetic the seed does, worked from now,
+   * because now is the only moment a warming cook can be planned from.
+   */
+  createPlan: () => Promise<boolean>;
 }
 
 /**
@@ -82,10 +92,14 @@ export function useServePlan({ plan, estimate, refresh }: UseServePlanInput): Us
   const notifyRef = useRef(notify);
   notifyRef.current = notify;
   // Whether this screen has already seeded a plan. Seeding is a guess made on
-  // the cook's behalf, and it is only ever made once: the write and the read
-  // that confirms it are a round trip apart, and a second poll landing in
-  // between would otherwise seed a second plan over the first.
+  // the cook's behalf, and it is only ever made once *successfully*: the write
+  // and the read that confirms it are a round trip apart, and a second poll
+  // landing in between would otherwise seed a second plan over the first. A
+  // seed that failed seeded nothing, so it is not one of those.
   const seeded = useRef(false);
+  // The write in flight, if any. Every write is chained onto it, so the plan
+  // stored last is the one tapped last however fast the taps come.
+  const pending = useRef<Promise<unknown>>(Promise.resolve());
 
   useEffect(() => {
     let active = true;
@@ -105,17 +119,52 @@ export function useServePlan({ plan, estimate, refresh }: UseServePlanInput): Us
   }, [client]);
 
   const write = useCallback(
-    (change: ServePlanWrite): void => {
-      void clientRef.current.smoke
-        .saveServePlan(change)
+    (change: ServePlanWrite): Promise<boolean> => {
+      // Queued behind whatever is already in flight, so two taps inside one
+      // round trip are stored in the order they were tapped: unordered writes
+      // of the same field mean the plan that ends up stored is whichever
+      // request the network happened to deliver last.
+      const stored = pending.current
+        .catch(() => undefined)
+        .then(() => clientRef.current.smoke.saveServePlan(change))
         // The verdict is the backend's, and the plan it judged is the one that
         // just changed: what is on screen is out of date the instant the write
         // lands, so the cook is read again rather than re-judged here.
-        .then(() => refresh())
-        .catch(() => notifyRef.current('Could not save the serve plan.'));
+        .then(() => {
+          refresh();
+          return true;
+        })
+        .catch(() => {
+          notifyRef.current('Could not save the serve plan.');
+          return false;
+        });
+      pending.current = stored;
+      return stored;
     },
     [refresh]
   );
+
+  /**
+   * The rest this cook already has stored, in minutes — the value the
+   * Post-Smoke rest field and the rest stepper are two views of.
+   *
+   * Read rather than assumed, because a cook can carry a rest with no serving
+   * time beside it (the touchscreen writes either half on its own), and the
+   * backend answers no plan at all until there is a serving time. Seeding as
+   * though such a cook rested for nothing would put dinner a whole rest early
+   * and have the backend calling an on-time cook late the moment it judged it.
+   *
+   * Rejects rather than guessing when the cook cannot be read: a seed made on a
+   * guess is a plan the pitmaster has to notice and undo.
+   */
+  const readStoredRest = useCallback(async (): Promise<number> => {
+    const session = await clientRef.current.state.get();
+    if (!session?.smokeId) {
+      throw new Error('no cook is set up to plan');
+    }
+    const smoke = await clientRef.current.smoke.getById(session.smokeId);
+    return smoke.restMinutes ?? 0;
+  }, []);
 
   const eta = realEta(estimate);
 
@@ -123,12 +172,33 @@ export function useServePlan({ plan, estimate, refresh }: UseServePlanInput): Us
     if (enabled !== true || plan !== null || eta === null || seeded.current) {
       return;
     }
+    // Claimed before the read and the write, so a poll landing mid-round-trip
+    // does not seed a second plan over the first — and released again if the
+    // seed never happened, so a dropped request costs one poll rather than the
+    // whole cook's plan.
     seeded.current = true;
-    // No plan means no stored rest to read either, so the seed is the ETA plus
-    // the cushion; the rest is left alone rather than invented, and the rest
-    // stepper writes one the moment the pitmaster wants one.
-    write({ serveAt: seededServeAt(eta, 0) });
-  }, [enabled, plan, eta, write]);
+    void readStoredRest()
+      .then(rest => write({ serveAt: seededServeAt(eta, rest) }))
+      .catch(() => false)
+      .then(stored => {
+        if (!stored) {
+          seeded.current = false;
+        }
+      });
+  }, [enabled, plan, eta, write, readStoredRest]);
+
+  const createPlan = useCallback(async (): Promise<boolean> => {
+    try {
+      const rest = await readStoredRest();
+      // The seed's own arithmetic, from now: a cook with no trustworthy
+      // estimate has no other moment to work back from, and this one was asked
+      // for rather than guessed on the cook's behalf.
+      return await write({ serveAt: seededServeAt(new Date(), rest) });
+    } catch {
+      notifyRef.current('Could not save the serve plan.');
+      return false;
+    }
+  }, [readStoredRest, write]);
 
   return {
     // Before the settings have been read the shipped answer is given, so the
@@ -137,5 +207,6 @@ export function useServePlan({ plan, estimate, refresh }: UseServePlanInput): Us
     enabled: enabled ?? DEFAULT_SERVE_PLAN_SETTINGS.enabled,
     setServeAt: useCallback((serveAt: Date) => write({ serveAt }), [write]),
     setRestMinutes: useCallback((restMinutes: number) => write({ restMinutes }), [write]),
+    createPlan,
   };
 }

@@ -5,6 +5,8 @@ import {
   ApiClientProvider,
   CompletionEstimate,
   ServePlanStatus,
+  Smoke,
+  TransportPort,
   createApiClient,
   SnackbarProvider,
 } from '../../../api';
@@ -12,7 +14,7 @@ import { createFakeBackend, FakeBackend } from '../../../api/fakeBackend';
 import { useServePlan } from './useServePlan';
 
 /** A cook set up on the backend, so a plan written against it has somewhere to go. */
-const backendWithCook = (): FakeBackend =>
+const backendWithCook = (record: Partial<Smoke> = {}): FakeBackend =>
   createFakeBackend({
     state: { smokeId: 'smoke-1', smoking: true },
     smoke: {
@@ -26,6 +28,7 @@ const backendWithCook = (): FakeBackend =>
           ratingId: 'rate-1',
           date: new Date('2026-08-01T10:00:00.000Z'),
           status: 0,
+          ...record,
         },
       },
     },
@@ -55,9 +58,10 @@ const estimateAt = (eta: string | null, state: CompletionEstimate['state'] = 'ok
 
 const renderPlan = (
   backend: FakeBackend,
-  props: Partial<Parameters<typeof useServePlan>[0]> = {}
+  props: Partial<Parameters<typeof useServePlan>[0]> = {},
+  transport: TransportPort = backend
 ) => {
-  const client = createApiClient(backend);
+  const client = createApiClient(transport);
   const wrapper = ({ children }: { children: React.ReactNode }) => (
     <ApiClientProvider client={client}>
       <SnackbarProvider>{children}</SnackbarProvider>
@@ -177,6 +181,101 @@ describe('the serve plan of the cook on screen', () => {
       { method: 'put', path: 'smoke/current/serve-plan', body: { restMinutes: 45 } },
     ]);
     expect(backend.store.smoke.records['smoke-1'].serveAt).toBeUndefined();
+  });
+
+  test('seeds a plan around the rest the cook already has stored', async () => {
+    // A rest written on its own — the touchscreen's Post-Smoke field and this
+    // stepper are one value — with no serving time beside it. Seeding as
+    // though the meat rested for nothing would put dinner an hour before the
+    // plan the spec describes, and the backend would call the cook late the
+    // moment it judged it.
+    const backend = backendWithCook({ restMinutes: 60 });
+
+    renderPlan(backend);
+
+    // 18:37 plus the hour of rest plus the half-hour cushion is 20:07, and a
+    // quarter past eight once it is rounded up to the plan's quarter-hours.
+    await waitFor(() => expect(planWrites(backend)).toHaveLength(1));
+    expect(planWrites(backend)[0].body).toEqual({
+      serveAt: new Date('2026-08-01T20:15:00.000Z'),
+    });
+  });
+
+  test('seeds again after a seed the backend refused', async () => {
+    const backend = backendWithCook();
+    let refused = false;
+    const flaky: TransportPort = {
+      ...backend,
+      put: <T,>(path: string, body?: unknown): Promise<T> => {
+        if (path === 'smoke/current/serve-plan' && !refused) {
+          refused = true;
+          return Promise.reject(new Error('the backend was restarting'));
+        }
+        return backend.put<T>(path, body);
+      },
+    };
+    const { rerender } = renderPlan(backend, {}, flaky);
+
+    // The first seed was dropped, so the cook still has no plan when the next
+    // poll answers — and a cook with no plan is one to seed.
+    await waitFor(() => expect(screen.getByText('Could not save the serve plan.')).toBeTruthy());
+    rerender({
+      plan: null,
+      estimate: estimateAt('2026-08-01T18:52:00.000Z'),
+      refresh: jest.fn(),
+    });
+
+    await waitFor(() => expect(planWrites(backend)).toHaveLength(1));
+    expect(planWrites(backend)[0].body).toEqual({
+      serveAt: new Date('2026-08-01T19:30:00.000Z'),
+    });
+  });
+
+  test('stores what was tapped in the order it was tapped', async () => {
+    const backend = backendWithCook();
+    const { result } = renderPlan(backend, {
+      plan: judged(),
+      estimate: estimateAt('2026-08-01T18:37:00.000Z'),
+      refresh: jest.fn(),
+    });
+
+    // Two taps inside one round trip: the second must not overtake the first,
+    // or the plan stored last is not the plan tapped last.
+    await act(async () => {
+      result.current.setServeAt(new Date('2026-08-01T22:15:00.000Z'));
+      result.current.setServeAt(new Date('2026-08-01T22:30:00.000Z'));
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(planWrites(backend)).toHaveLength(2));
+    expect(planWrites(backend).map(write => write.body)).toEqual([
+      { serveAt: new Date('2026-08-01T22:15:00.000Z') },
+      { serveAt: new Date('2026-08-01T22:30:00.000Z') },
+    ]);
+    expect(backend.store.smoke.records['smoke-1'].serveAt).toEqual(
+      new Date('2026-08-01T22:30:00.000Z')
+    );
+  });
+
+  test('starts a plan on request when no estimate is trustworthy yet', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-01T14:02:00.000Z'));
+    try {
+      const backend = backendWithCook({ restMinutes: 30 });
+      const { result } = renderPlan(backend, { estimate: estimateAt(null, 'warming') });
+
+      await act(async () => {
+        await result.current.createPlan();
+      });
+
+      // Now, plus the stored rest, plus the cushion — the seed's own formula,
+      // with the moment nobody can project replaced by the moment it is.
+      await waitFor(() => expect(planWrites(backend)).toHaveLength(1));
+      expect(planWrites(backend)[0].body).toEqual({
+        serveAt: new Date('2026-08-01T15:15:00.000Z'),
+      });
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   test('says so when the plan could not be stored', async () => {

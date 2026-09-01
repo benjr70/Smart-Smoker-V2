@@ -199,13 +199,16 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
       />
       {/* Directly under the estimate, because it is a judgement of it: the ETA
           and what it means for dinner read as one answer. Absent when the
-          planner is switched off, and absent for a cook the backend has
-          answered no plan for — there is nothing to render a verdict from. */}
-      {servePlan.enabled && cook.servePlan !== null && (
+          planner is switched off, and absent when there is no cook to plan —
+          but present from the start of one the backend has answered no plan
+          for yet, saying it is gathering data rather than leaving the planner
+          invisible for the first hours of every cook. */}
+      {servePlan.enabled && (cook.servePlan !== null || cook.estimate !== null) && (
         <ServePlanCard
           plan={cook.servePlan}
           onServeAtChange={servePlan.setServeAt}
           onRestChange={servePlan.setRestMinutes}
+          onCreatePlan={servePlan.createPlan}
         />
       )}
       <Card data-testid="smoke-temps-card">

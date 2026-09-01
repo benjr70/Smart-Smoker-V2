@@ -1,16 +1,48 @@
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
-import { Box, Card, IconButton, Stack, Typography } from '@mui/material';
-import React from 'react';
+import { Box, Button, Card, IconButton, Stack, Typography } from '@mui/material';
+import React, { useState } from 'react';
 import { ServePlanMilestone, ServePlanStatus } from '../../../api';
 
+/**
+ * What a write of the plan answers: whether it was stored.
+ *
+ * A stepper shows the tap it just made before the backend has judged it, so it
+ * has to hear about a write that never landed — otherwise the card sits there
+ * showing a plan the cook does not have.
+ */
+export type ServePlanWriteResult = void | Promise<boolean>;
+
 export interface ServePlanCardProps {
-  /** The plan as the backend last judged it. */
-  plan: ServePlanStatus;
+  /**
+   * The plan as the backend last judged it, or `null` for a cook that has none
+   * yet — still warming, with no estimate worth planning around. The card is
+   * shown either way: "gathering data" is a state of the planner, not an
+   * excuse to hide it.
+   */
+  plan: ServePlanStatus | null;
   /** Move the moment the food hits the table. */
-  onServeAtChange: (serveAt: Date) => void;
+  onServeAtChange: (serveAt: Date) => ServePlanWriteResult;
   /** Change how long the meat rests, in minutes. */
-  onRestChange: (restMinutes: number) => void;
+  onRestChange: (restMinutes: number) => ServePlanWriteResult;
+  /**
+   * Start a plan for a cook that has none, without waiting for an estimate to
+   * settle. Absent when the screen offers no way to — the card then simply
+   * says it is gathering data.
+   */
+  onCreatePlan?: () => void;
+}
+
+/**
+ * The plan as this card is showing it, which for one round trip is not the
+ * plan the backend has: the value a tap moved to, held until the read that
+ * confirms it — or replaces it.
+ */
+interface ServePlanDraft {
+  serveAt: Date;
+  restMinutes: number;
+  /** The stored plan this draft was stepped from; a newer one replaces it. */
+  of: string;
 }
 
 /**
@@ -32,12 +64,14 @@ export const spanOf = (minutes: number): string => {
  * once, server-side, so this card, the touchscreen and the push notification
  * cannot disagree about whether dinner is on time.
  */
-export const headlineOf = (plan: ServePlanStatus): string => {
-  const slack = plan.slackMinutes;
+export const headlineOf = (plan: ServePlanStatus | null): string => {
+  const slack = plan?.slackMinutes ?? null;
   // No slack is no trustworthy projection, which is the only thing that makes
   // the verdict unknown — and the only state with no amount to say. The card
-  // says so rather than bluffing a time.
-  if (slack === null) {
+  // says so rather than bluffing a time. A cook with no plan at all is the
+  // same nothing said the same way: there is no verdict to render, and none is
+  // worked out here to fill the gap.
+  if (plan === null || slack === null) {
     return 'Gathering data';
   }
   switch (plan.verdict) {
@@ -56,8 +90,8 @@ export const headlineOf = (plan: ServePlanStatus): string => {
 };
 
 /** The next move that comes with the number. */
-export const adviceOf = (plan: ServePlanStatus): string => {
-  switch (plan.verdict) {
+export const adviceOf = (plan: ServePlanStatus | null): string => {
+  switch (plan?.verdict) {
     case 'ontrack':
       return 'Hold your pace — dinner is on plan';
     case 'behind':
@@ -77,7 +111,10 @@ export const adviceOf = (plan: ServePlanStatus): string => {
  * verdict was decided by the backend against the tolerance the user set. The
  * banner says which side of the plan the cook fell off, and by how much.
  */
-export const offPlanWarning = (plan: ServePlanStatus): string | null => {
+export const offPlanWarning = (plan: ServePlanStatus | null): string | null => {
+  if (plan === null) {
+    return null;
+  }
   const slack = plan.slackMinutes ?? 0;
   if (plan.verdict === 'behind') {
     return `Off plan — dinner will be ${spanOf(-slack)} later than you planned`;
@@ -178,12 +215,46 @@ export function ServePlanCard({
   plan,
   onServeAtChange,
   onRestChange,
+  onCreatePlan,
 }: ServePlanCardProps): JSX.Element {
   const offPlan = offPlanWarning(plan);
+  // What the taps have moved the plan to, ahead of the backend agreeing. A
+  // stepper that read the prop every time would collapse three taps inside one
+  // round trip into one — the plan on screen only changes a request and a poll
+  // later — so dinner would move a quarter of an hour however many times it
+  // was tapped.
+  const [draft, setDraft] = useState<ServePlanDraft | null>(null);
+  // The plan a draft was made against. When the backend answers a different one
+  // — this client's write landing, or another device's — the guess has served
+  // its purpose and the stored plan takes over, without an effect racing the
+  // render to notice.
+  const storedPlan = plan === null ? 'none' : `${plan.serveAt.getTime()}:${plan.restMinutes}`;
+  const showing = draft !== null && draft.of === storedPlan ? draft : null;
+  const serveAt = showing?.serveAt ?? plan?.serveAt ?? null;
+  const restMinutes = showing?.restMinutes ?? plan?.restMinutes ?? 0;
+
+  /**
+   * Show the plan the tap asked for, and ask for it — putting the stored plan
+   * back if the write never landed, so the card never keeps showing a plan the
+   * cook does not have.
+   */
+  const commit = (next: Omit<ServePlanDraft, 'of'>, ask: () => ServePlanWriteResult): void => {
+    setDraft({ ...next, of: storedPlan });
+    void Promise.resolve(ask()).then(stored => {
+      if (stored === false) {
+        setDraft(null);
+      }
+    });
+  };
 
   /** Move dinner, in the quarter-hours the plan is made in. */
-  const stepServeAt = (steps: number): void =>
-    onServeAtChange(new Date(plan.serveAt.getTime() + steps * PLAN_STEP_MINUTES * 60_000));
+  const stepServeAt = (steps: number): void => {
+    if (serveAt === null) {
+      return;
+    }
+    const next = new Date(serveAt.getTime() + steps * PLAN_STEP_MINUTES * 60_000);
+    commit({ serveAt: next, restMinutes }, () => onServeAtChange(next));
+  };
 
   /**
    * Change the rest, held inside the range a rest lives in — and asked for only
@@ -191,12 +262,15 @@ export function ServePlanCard({
    * storing the value that is already stored.
    */
   const stepRest = (steps: number): void => {
+    if (serveAt === null) {
+      return;
+    }
     const next = Math.min(
       MAX_REST_MINUTES,
-      Math.max(MIN_REST_MINUTES, plan.restMinutes + steps * PLAN_STEP_MINUTES)
+      Math.max(MIN_REST_MINUTES, restMinutes + steps * PLAN_STEP_MINUTES)
     );
-    if (next !== plan.restMinutes) {
-      onRestChange(next);
+    if (next !== restMinutes) {
+      commit({ serveAt, restMinutes: next }, () => onRestChange(next));
     }
   };
 
@@ -253,27 +327,44 @@ export function ServePlanCard({
         </Box>
       )}
       {/* The two halves of the plan, as the only two things about it anybody
-          sets: when dinner is, and how long the meat rests first. */}
-      <Stack spacing={0.5} sx={{ marginTop: '10px' }}>
-        <StepperRow
-          label="Serving at"
-          value={clockTime(plan.serveAt)}
-          testId="serve-plan-serve-at"
-          downLabel="Serve earlier"
-          upLabel="Serve later"
-          onDown={() => stepServeAt(-1)}
-          onUp={() => stepServeAt(1)}
-        />
-        <StepperRow
-          label="Rest for"
-          value={spanOf(plan.restMinutes)}
-          testId="serve-plan-rest"
-          downLabel="Rest less"
-          upLabel="Rest longer"
-          onDown={() => stepRest(-1)}
-          onUp={() => stepRest(1)}
-        />
-      </Stack>
+          sets: when dinner is, and how long the meat rests first. Both are
+          absent until there is a plan — a stepper for a cook with no serving
+          time would have to invent one to show. */}
+      {serveAt !== null && (
+        <Stack spacing={0.5} sx={{ marginTop: '10px' }}>
+          <StepperRow
+            label="Serving at"
+            value={clockTime(serveAt)}
+            testId="serve-plan-serve-at"
+            downLabel="Serve earlier"
+            upLabel="Serve later"
+            onDown={() => stepServeAt(-1)}
+            onUp={() => stepServeAt(1)}
+          />
+          <StepperRow
+            label="Rest for"
+            value={spanOf(restMinutes)}
+            testId="serve-plan-rest"
+            downLabel="Rest less"
+            upLabel="Rest longer"
+            onDown={() => stepRest(-1)}
+            onUp={() => stepRest(1)}
+          />
+        </Stack>
+      )}
+      {/* A cook with no plan is offered one, rather than being made to wait for
+          an estimate to settle before dinner can be named: somebody who already
+          knows when they are eating should be able to say so. */}
+      {plan === null && onCreatePlan !== undefined && (
+        <Button
+          size="small"
+          variant="outlined"
+          sx={{ marginTop: '10px' }}
+          onClick={() => onCreatePlan()}
+        >
+          Set serving time
+        </Button>
+      )}
       {/* The plan as the schedule it reads as, in the order it happens — the
           list is the backend's, so a wrap already stamped simply stops being
           part of it. */}
@@ -282,7 +373,7 @@ export function ServePlanCard({
         spacing={0.5}
         sx={{ margin: '12px 0 0', padding: 0, listStyle: 'none' }}
       >
-        {plan.milestones.map(milestone => (
+        {(plan?.milestones ?? []).map(milestone => (
           <Box
             component="li"
             key={milestone.kind}
