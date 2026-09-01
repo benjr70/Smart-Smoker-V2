@@ -5,6 +5,7 @@ import {
   EMPTY_Y_DOMAIN,
   MIN_SPAN_MINUTES,
   availablePositions,
+  clampToSpan,
   comparePath,
   compareScales,
   compareSpanMinutes,
@@ -299,6 +300,38 @@ describe('nearestSample', () => {
   it('reads nothing from a cook with no readings', () => {
     expect(nearestSample([], 'chamber', 30)).toBeNull();
   });
+
+  /**
+   * A probe unplugged early stopped saying anything; quoting its last reading
+   * hours later would have the footer claim it is still live, while the trace
+   * beside it correctly breaks.
+   */
+  it('reads nothing from a probe that stopped reporting hours before the scrub', () => {
+    const dense = elapsedPoints(
+      Array.from({ length: 200 }, (_, index) =>
+        reading({
+          date: at(index * 3),
+          chamber: 225,
+          probe3: index * 3 <= 30 ? 100 : null,
+        })
+      )
+    );
+
+    expect(nearestSample(dense, 'probe3', 30)).toBe(100);
+    expect(nearestSample(dense, 'probe3', 480)).toBeNull();
+    // The chamber was reporting the whole way, so it still reads.
+    expect(nearestSample(dense, 'chamber', 480)).toBe(225);
+  });
+
+  it('reads a sparsely logged cook the way it was logged, not by the clock', () => {
+    const thinned = elapsedPoints([
+      reading({ date: START, chamber: 200 }),
+      reading({ date: at(60), chamber: 250 }),
+      reading({ date: at(120), chamber: 240 }),
+    ]);
+
+    expect(nearestSample(thinned, 'chamber', 95)).toBe(240);
+  });
 });
 
 describe('nearestPoint', () => {
@@ -318,6 +351,19 @@ describe('nearestPoint', () => {
     const scales = compareScales([{ points, mins: 120 }], ['probe1'], COMPARE_BOX);
 
     expect(nearestPoint(points, 'probe2', 10, scales)).toBeNull();
+  });
+
+  /** A dot parked hours from the guide reads as a live probe that is not one. */
+  it('marks nothing where the nearest sample is hours behind the scrub', () => {
+    const dense = elapsedPoints(
+      Array.from({ length: 100 }, (_, index) =>
+        reading({ date: at(index * 5), chamber: 225, probe2: index === 0 ? 70 : null })
+      )
+    );
+    const scales = compareScales([{ points: dense, mins: 495 }], ['chamber'], COMPARE_BOX);
+
+    expect(nearestPoint(dense, 'probe2', 0, scales)).not.toBeNull();
+    expect(nearestPoint(dense, 'probe2', 480, scales)).toBeNull();
   });
 });
 
@@ -372,19 +418,46 @@ describe('the stamp rail’s alignment with the plot', () => {
   it('places a stamp at the start of a span nothing was measured over', () => {
     expect(railOffset(30, 0)).toBe('0%');
   });
+
+  /**
+   * The rail dot and the picked stamp's guide are placed from the same minute,
+   * so a stamp logged after the last reading cannot be shown in two places.
+   */
+  it('holds a minute logged past the axis to the end of the axis', () => {
+    expect(clampToSpan(300, 240)).toBe(240);
+    expect(clampToSpan(120, 240)).toBe(120);
+    expect(clampToSpan(-30, 240)).toBe(0);
+  });
+
+  it('holds every minute to the start of a span nothing was measured over', () => {
+    expect(clampToSpan(30, 0)).toBe(0);
+  });
 });
 
 describe('which stamp a scrub is over', () => {
-  it('swells a stamp within a few per cent of that cook’s length', () => {
+  it('swells a stamp within a few per cent of the shared axis', () => {
     expect(isNearStamp(60, 62, 240)).toBe(true);
     expect(isNearStamp(60, 80, 240)).toBe(false);
+  });
+
+  /**
+   * The cursor moves along the shared axis, so nearness is measured there: a
+   * three-hour cook beside a twelve-hour one would otherwise have a hit band a
+   * couple of pixels wide.
+   */
+  it('gives both cooks the same band, however long each of them ran', () => {
+    const span = 12 * 60;
+    const bandEdge = span * 0.03;
+
+    expect(isNearStamp(60, 60 + bandEdge / 2, span)).toBe(true);
+    expect(isNearStamp(600, 600 + bandEdge / 2, span)).toBe(true);
   });
 
   it('swells nothing while nothing is being scrubbed', () => {
     expect(isNearStamp(60, null, 240)).toBe(false);
   });
 
-  it('swells nothing on a cook with no length to measure nearness against', () => {
+  it('swells nothing on an axis with no length to measure nearness against', () => {
     expect(isNearStamp(60, 60, 0)).toBe(false);
   });
 });

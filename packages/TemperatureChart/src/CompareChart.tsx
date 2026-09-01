@@ -10,6 +10,7 @@ import {
   POSITION_OPACITY,
   POSITION_WIDTH,
   availablePositions,
+  clampToSpan,
   comparePath,
   compareScales,
   compareSpanMinutes,
@@ -117,12 +118,17 @@ const END_OPACITY = 0.45;
 /** How far the hour labels sit under the plot. */
 const HOUR_LABEL_DROP = 8;
 /**
- * How tall a chip is: the thumb target the whole screen is drivable at, since
- * the chips are the only control on the chart.
+ * The thumb target every control on the chart is offered at — the chips, and
+ * the x that dismisses a picked stamp — since the whole screen is meant to be
+ * drivable one-handed. The rail's stamps are the one carve-out: two cooks' logs
+ * on one axis cannot each be 44px without colliding.
  */
-const CHIP_HEIGHT = 44;
-/** How tall the footer is held, so its three states do not resize the card. */
-const FOOTER_HEIGHT = 38;
+const TAP_TARGET = 44;
+/**
+ * How tall the footer is held, so its three states do not resize the card. It
+ * is the tap target, because the stamp state has a control in it.
+ */
+const FOOTER_HEIGHT = TAP_TARGET;
 
 /** What the key says of a cook that never ran the position it is naming. */
 const NOT_USED = 'not used';
@@ -166,10 +172,14 @@ const isFinished = (run: CompareRun, minutes: number): boolean =>
  */
 const readoutOf = (run: CompareRun, positions: readonly SeriesKey[], minutes: number): string => {
   if (isFinished(run, minutes)) return FINISHED;
-  const readings = positions
-    .map(position => nearestSample(run.points, position, minutes))
-    .filter((sample): sample is number => sample !== null)
-    .map(formatTemperature);
+  // One slot per drawn position, in the order the chips are in, whether or not
+  // this cook had anything to say in it: dropping the empty ones would slide
+  // the values along and print a meat probe where the other cook prints its
+  // chamber, with nothing to say a reading was missing.
+  const readings = positions.map(position => {
+    const sample = nearestSample(run.points, position, minutes);
+    return sample === null ? NO_READING : formatTemperature(sample);
+  });
   return readings.length === 0 ? NO_READING : readings.join(' / ');
 };
 
@@ -291,7 +301,9 @@ function StampRail({
         />
         {cook.series.stamps.map(stamp => {
           const isPicked = picked?.cook === cook.id && picked.id === stamp.id;
-          const swollen = isPicked || isNearStamp(stamp.minutes, cursor, cook.run.mins);
+          // Nearness is measured along the shared axis the cursor moves on, so
+          // a stamp on the shorter cook is as easy to find as one on the longer.
+          const swollen = isPicked || isNearStamp(stamp.minutes, cursor, span);
           return (
             <button
               key={stamp.id}
@@ -369,8 +381,8 @@ function StampDetail({
         onClick={onClear}
         style={{
           marginLeft: 'auto',
-          width: FOOTER_HEIGHT,
-          height: FOOTER_HEIGHT,
+          width: TAP_TARGET,
+          height: TAP_TARGET,
           flexShrink: 0,
           border: 'none',
           background: 'transparent',
@@ -576,6 +588,19 @@ function CompareChart({
     setCursor(elapsedAt(at, event.currentTarget.getBoundingClientRect(), box, scales));
   };
 
+  /**
+   * The end of a touch scrub.
+   *
+   * The event is taken as handled as well as cleared: a touch left unclaimed is
+   * replayed by the browser as a mouse event at the same place, which would
+   * re-set the cursor the moment it was cleared and leave the scrub stuck there
+   * — a touch device never sends the mouseleave that would clear it again.
+   */
+  const endScrub = (event: React.TouchEvent<SVGSVGElement>): void => {
+    if (event.cancelable) event.preventDefault();
+    setCursor(null);
+  };
+
   return (
     <div>
       {/* Chips first, then the plot: what is drawn is chosen above the drawing,
@@ -599,7 +624,7 @@ function CompareChart({
               onClick={() => toggle(position)}
               style={{
                 minWidth: 0,
-                height: CHIP_HEIGHT,
+                height: TAP_TARGET,
                 padding: '0 6px',
                 borderRadius: 10,
                 cursor: 'pointer',
@@ -691,7 +716,15 @@ function CompareChart({
         onMouseLeave={() => setCursor(null)}
         onTouchStart={scrub}
         onTouchMove={scrub}
-        onTouchEnd={() => setCursor(null)}
+        // Lifting a finger ends the scrub, and the browser is told so: left to
+        // itself it follows a touch with an emulated mousemove at the release
+        // point, which would set the cursor straight back — and no mouseleave
+        // ever arrives on a touch device to clear it again, so the guide, the
+        // dots and the readout would stay parked at the release minute forever.
+        onTouchEnd={endScrub}
+        // A touch the system takes away — a call, a gesture, a palm — ended the
+        // scrub just as surely as lifting a finger did.
+        onTouchCancel={endScrub}
       >
         {scales.y.ticks(4).map(temperature => (
           <g key={temperature}>
@@ -764,13 +797,16 @@ function CompareChart({
         )}
         {/* The stamp the reader picked, ruled down onto the traces: the rail
             says when it happened, and this says what the cooks were doing at
-            that moment. */}
+            that moment. Ruled at the same held-to-the-axis minute the rail puts
+            its dot at — a stamp logged after the last reading would otherwise
+            be ruled off the end of the plot while its dot sat at the end of the
+            track, and the two would point at different moments. */}
         {pickedStamp !== null && (
           <line
             data-stamp-guide=""
-            x1={scales.x(pickedStamp.stamp.minutes)}
+            x1={scales.x(clampToSpan(pickedStamp.stamp.minutes, span))}
             y1={edges.top}
-            x2={scales.x(pickedStamp.stamp.minutes)}
+            x2={scales.x(clampToSpan(pickedStamp.stamp.minutes, span))}
             y2={edges.bottom}
             stroke={pickedStamp.stamp.color}
             strokeWidth={1.5}

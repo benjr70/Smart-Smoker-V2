@@ -486,6 +486,32 @@ describe('scrubbing the plot', () => {
   });
 
   /**
+   * A touch left unclaimed is replayed by the browser as a mouse event at the
+   * release point, which would set the cursor straight back — and no mouseleave
+   * ever arrives on a touch device to clear it again.
+   */
+  it('claims the end of a touch, so the browser does not replay it as a pointer', () => {
+    const { container } = render(<Chart a={brisket} b={pork} colors={colors} />);
+    const plot = plotOf(container);
+
+    fireEvent.touchStart(plot, { touches: [{ clientX: xOfMinute(60, 240), clientY: 0 }] });
+    const notReplayed = fireEvent.touchEnd(plot, { touches: [], cancelable: true });
+
+    expect(notReplayed).toBe(false);
+    expect(container.querySelector('line[data-scrub-guide]')).toBeNull();
+  });
+
+  it('ends the scrub when the system takes the touch away', () => {
+    const { container } = render(<Chart a={brisket} b={pork} colors={colors} />);
+    const plot = plotOf(container);
+
+    fireEvent.touchStart(plot, { touches: [{ clientX: xOfMinute(60, 240), clientY: 0 }] });
+    fireEvent.touchCancel(plot, { touches: [] });
+
+    expect(container.querySelector('line[data-scrub-guide]')).toBeNull();
+  });
+
+  /**
    * A finger dragged across the plot moves the guide with it. That the page
    * does not scroll out from under that drag is `touch-action: none` on the
    * plot, which is CSS jsdom drops rather than behaviour a test can drive.
@@ -578,6 +604,25 @@ describe('the footer under the chart', () => {
     const footer = footerOf(container);
 
     expect(within(footer).getByText('finished')).toBeInTheDocument();
+  });
+
+  /**
+   * The values are read slot by slot against the chips, so a cook with nothing
+   * in a position cannot slide its meat probe into the slot the other cook
+   * prints its chamber in.
+   */
+  it('keeps a slot for a position a cook has no reading in', () => {
+    const noChamber = cook({
+      ...brisket,
+      name: 'Sunday brisket',
+      pts: [reading(0, { probe1: 90 }), reading(60, { probe1: 150 })],
+    });
+    const { container } = render(<Chart a={noChamber} b={named.b} colors={colors} />);
+
+    fireEvent.mouseMove(plotOf(container), { clientX: xOfMinute(60, 240) });
+    const readout = container.querySelector<HTMLElement>('[data-readout="a"]');
+
+    expect(readout?.textContent).toContain('— / 150°');
   });
 
   it('goes back to naming the cooks once the scrub is let go', () => {
@@ -674,6 +719,25 @@ describe('the stamp rails under the plot', () => {
     expect(dotOf('Wrapped')?.style.width).not.toBe(restingSize);
     expect(dotOf('Pulled')?.style.width).toBe(restingSize);
   });
+
+  /**
+   * The cursor moves along the shared axis, so the shorter cook's stamps swell
+   * over the same band as the longer cook's — measured against its own two
+   * hours they would only swell within a couple of pixels of the cursor.
+   */
+  it('swells the shorter cook’s stamps over the same band as the longer cook’s', () => {
+    const { container } = render(<Chart a={stampedBrisket} b={stampedPork} colors={colors} />);
+    const dotOf = (cookId: 'a' | 'b', name: string): HTMLElement | null =>
+      within(railOf(container, cookId)).getByRole('button', { name }).querySelector('span');
+    const restingSize = dotOf('a', 'Wrapped')?.style.width;
+
+    // Five minutes off the stamp: inside 3% of the shared four-hour axis, but
+    // outside 3% of the two-hour cook the stamp belongs to.
+    fireEvent.mouseMove(plotOf(container), { clientX: xOfMinute(65, 240) });
+
+    expect(dotOf('a', 'Wrapped')?.style.width).not.toBe(restingSize);
+    expect(dotOf('b', 'Spritzed')?.style.width).toBe(restingSize);
+  });
 });
 
 describe('picking a stamp', () => {
@@ -715,6 +779,42 @@ describe('picking a stamp', () => {
 
     expect(container.querySelector('line[data-stamp-guide]')).toBeNull();
     expect(within(footer(container)).getByText(/Drag to scrub/)).toBeInTheDocument();
+  });
+
+  /**
+   * The span is taken from the readings and the durations, so a stamp logged
+   * after a cook's last reading falls outside it. Its dot is held to the end of
+   * the track, and its guide has to be ruled at that same minute rather than
+   * off the end of the plot, or the two point at different moments.
+   */
+  it('rules the guide of a stamp logged past the axis where its dot sits', () => {
+    const late = cook({
+      ...brisket,
+      name: 'Sunday brisket',
+      stamps: [{ id: 's9', label: 'Rested', minutes: 300, color: '#3F7D46' }],
+    });
+    const { container } = render(<Chart a={late} b={stampedPork} colors={colors} />);
+
+    pick(container, 'a', 'Rested');
+    const guide = container.querySelector('line[data-stamp-guide]');
+    const edges = plotEdges(COMPARE_BOX);
+
+    expect(Number(guide?.getAttribute('x1'))).toBeCloseTo(edges.right);
+    expect(within(railOf(container, 'a')).getByRole('button', { name: 'Rested' })).toHaveStyle({
+      left: '100%',
+    });
+  });
+
+  /** Every control on the chart is a thumb target; the x is one of them. */
+  it('offers the dismiss at the thumb target the rest of the screen is driven at', () => {
+    const { container } = render(<Chart a={stampedBrisket} b={stampedPork} colors={colors} />);
+
+    pick(container, 'a', 'Wrapped');
+
+    expect(screen.getByRole('button', { name: 'Clear stamp' })).toHaveStyle({
+      width: '44px',
+      height: '44px',
+    });
   });
 
   it('clears the pick when the detail is dismissed', () => {
