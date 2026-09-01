@@ -77,6 +77,22 @@ export class AlertState {
    */
   @Prop({ type: [String], default: [] })
   headsUpFired: string[];
+
+  /**
+   * How many consecutive ticks the Serve Plan has read off schedule. Persisted
+   * like the heads-up run and for the same reason: a restart mid-cook must
+   * confirm the drift again rather than page on its first tick.
+   */
+  @Prop({ default: 0 })
+  offScheduleTicks: number;
+
+  /**
+   * Whether the drift the cook is currently in has already been pushed. Cleared
+   * by a return to plan, which re-arms the alert — and scoped by `smokeId` like
+   * every marker above, so next weekend's cook is warned on its own account.
+   */
+  @Prop({ default: false })
+  offScheduleFired: boolean;
 }
 
 export const AlertStateSchema = SchemaFactory.createForClass(AlertState);

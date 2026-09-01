@@ -8,6 +8,8 @@
  * verifiable with plain table tests and no fake timers.
  */
 
+import { ServePlanStatus } from '../timeline/serve-plan-status';
+
 /** The user-owned chamber range alert. */
 export interface ChamberAlertSettings {
   enabled: boolean;
@@ -67,12 +69,39 @@ export interface HeadsUpAlertSettings {
   enabled: boolean;
 }
 
+/**
+ * The Serve Plan as the alert reads it: the verdict, and how far off the
+ * pull-by time the cook is projected to be.
+ *
+ * A slice of {@link ServePlanStatus} rather than a shape of its own, so the
+ * alert and the plan cannot drift apart — the engine compares nothing here, it
+ * only reports what the plan already decided.
+ */
+export type ServePlanState = Pick<ServePlanStatus, 'verdict' | 'slackMinutes'>;
+
+/**
+ * The user-owned Serve Plan block, as the off-schedule alert reads it.
+ *
+ * `enabled` is the planner itself and `driftAlert` the push nested under it:
+ * with no plan on the screen there is no verdict to be off, so the alert cannot
+ * fire whatever the nested switch says. `driftMin` is here because the alert
+ * has to say what tolerance was exceeded — the comparison itself was already
+ * made by the plan.
+ */
+export interface ServePlanAlertSettings {
+  enabled: boolean;
+  driftAlert: boolean;
+  /** How many minutes off the pull-by time, either way, still count as on plan. */
+  driftMin: number;
+}
+
 /** The user-owned notification settings the engine reads. */
 export interface AlertSettings {
   chamber: ChamberAlertSettings;
   probeTarget: ProbeTargetAlertSettings;
   smokeComplete: SmokeCompleteAlertSettings;
   headsUp: HeadsUpAlertSettings;
+  servePlan: ServePlanAlertSettings;
 }
 
 /** The latest reading from the smoker. `null` means "nothing readable". */
@@ -135,6 +164,19 @@ export interface AlertRuntimeState {
    * by the caller, like the other fired-once markers.
    */
   headsUpFired: string[];
+  /**
+   * How many consecutive ticks the Serve Plan has read off plan. The same
+   * debounce the heads-up rule keeps, for the same reason: the verdict is drawn
+   * from a live projection, and one tick past the tolerance is as likely to be
+   * the rate settling as the cook genuinely drifting.
+   */
+  offScheduleTicks: number;
+  /**
+   * Whether the crossing the cook is currently in has already been announced.
+   * Cleared by a return to on track, which is what re-arms the alert — so the
+   * cook is told once per drift rather than every half minute of one.
+   */
+  offScheduleFired: boolean;
 }
 
 /** A notification the engine decided to send. */
@@ -160,6 +202,16 @@ export interface AlertEvaluationInput {
    * itself is made outside the engine, which keeps this a pure comparison.
    */
   etaMinutes?: Record<string, number | null | undefined>;
+  /**
+   * How the cook is running against its Serve Plan, or `null` where there is no
+   * plan to run against.
+   *
+   * The plan's own output, computed once by the caller from the serve-plan
+   * status module and handed to the clients unchanged — the alert and the
+   * timeline read the same verdict, so a banner saying "on schedule" can never
+   * sit next to a push saying the cook is late.
+   */
+  servePlan?: ServePlanState | null;
   settings: AlertSettings;
   state: AlertRuntimeState;
   names: AlertNames;
@@ -176,6 +228,8 @@ export const initialAlertRuntimeState = (): AlertRuntimeState => ({
   smokeCompleteFired: false,
   headsUpCounters: {},
   headsUpFired: [],
+  offScheduleTicks: 0,
+  offScheduleFired: false,
 });
 
 /**
@@ -498,6 +552,98 @@ const evaluateHeadsUp = (
 };
 
 /**
+ * How many consecutive off-plan ticks are needed before the cook is paged:
+ * two, the same confirmation the heads-up rule asks for.
+ *
+ * The verdict is drawn from the same live projection, and it moves with it —
+ * one tick past the tolerance is as often the rate settling as the cook
+ * genuinely drifting, and this alert asks someone to change their dinner plans.
+ */
+export const OFF_SCHEDULE_CONFIRMING_TICKS = 2;
+
+/**
+ * Which way the cook is off plan and by how many minutes, or `null` where the
+ * plan says nothing to page about: no plan at all, a verdict of `unknown` — the
+ * cook is still warming, or the projection is not yet trustworthy — or an
+ * off-plan verdict carrying no amount, when how far off is the whole of what
+ * this alert has to say.
+ *
+ * Always plural minutes: the smallest tolerance a plan can be set to is
+ * fifteen, and this is the drift that exceeded it.
+ */
+const offPlanBy = (
+  plan: ServePlanState | null | undefined,
+): { direction: string; minutes: string } | null => {
+  if (plan?.verdict !== 'early' && plan?.verdict !== 'behind') {
+    return null;
+  }
+  if (plan.slackMinutes === null) {
+    return null;
+  }
+  return {
+    direction: plan.verdict === 'behind' ? 'behind plan' : 'ahead of plan',
+    minutes: `${Math.abs(Math.round(plan.slackMinutes))} minutes`,
+  };
+};
+
+/**
+ * The off-schedule rule: the cook is running further off their Serve Plan than
+ * they said they would accept.
+ *
+ * It compares nothing itself. The verdict comes from the serve-plan status the
+ * timeline hands every client, so the push and the card on the screen always
+ * say the same thing; all this rule owns is when to speak — twice confirmed,
+ * once per crossing, re-armed by a return to plan.
+ */
+const evaluateOffSchedule = (
+  input: AlertEvaluationInput,
+  state: AlertRuntimeState,
+): AlertEvaluation => {
+  const { enabled, driftAlert, driftMin } = input.settings.servePlan;
+  // Inert, and inert all the way down: a planner switched off — or a push
+  // silenced under it — banks no confirming ticks, so switching it back on
+  // judges the cook from that moment instead of firing on its first tick.
+  if (!enabled || !driftAlert) {
+    return { notifications: [], state: { ...state, offScheduleTicks: 0 } };
+  }
+
+  const plan = input.servePlan;
+  if (plan?.verdict === 'ontrack') {
+    // Back on plan: the run is over and the alert is re-armed, so the next
+    // drift is announced on its own account.
+    return {
+      notifications: [],
+      state: { ...state, offScheduleTicks: 0, offScheduleFired: false },
+    };
+  }
+  const drift = offPlanBy(plan);
+  // Neither a plan that cannot be judged nor one with no amount to name is
+  // evidence of being back on plan, so the run of confirming ticks is broken
+  // but the crossing stays spent.
+  if (!drift) {
+    return { notifications: [], state: { ...state, offScheduleTicks: 0 } };
+  }
+  if (state.offScheduleFired) {
+    return { notifications: [], state: { ...state, offScheduleTicks: 0 } };
+  }
+
+  const ticks = state.offScheduleTicks + 1;
+  if (ticks < OFF_SCHEDULE_CONFIRMING_TICKS) {
+    return { notifications: [], state: { ...state, offScheduleTicks: ticks } };
+  }
+
+  return {
+    notifications: [
+      {
+        title: ALERT_TITLE,
+        body: `Running ${drift.minutes} ${drift.direction} — more than the ${driftMin} minutes you allow.`,
+      },
+    ],
+    state: { ...state, offScheduleTicks: 0, offScheduleFired: true },
+  };
+};
+
+/**
  * Evaluate every alert against one reading. Each rule owns its own slice of the
  * runtime state, and the state each returns is threaded into the next, so the
  * caller persists a single answer.
@@ -509,13 +655,15 @@ export const evaluateAlerts = (
   const probes = evaluateProbeTargets(input, chamber.state);
   const complete = evaluateSmokeComplete(input, probes.state);
   const headsUp = evaluateHeadsUp(input, complete.state);
+  const offSchedule = evaluateOffSchedule(input, headsUp.state);
   return {
     notifications: [
       ...chamber.notifications,
       ...probes.notifications,
       ...complete.notifications,
       ...headsUp.notifications,
+      ...offSchedule.notifications,
     ],
-    state: headsUp.state,
+    state: offSchedule.state,
   };
 };

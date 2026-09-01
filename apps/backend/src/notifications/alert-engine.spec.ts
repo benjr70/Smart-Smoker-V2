@@ -1,9 +1,11 @@
+import { ServeVerdict } from '../timeline/serve-plan-status';
 import {
   AlertNames,
   AlertRuntimeState,
   ChamberAlertSettings,
   HeadsUpAlertSettings,
   ProbeTargetAlertSettings,
+  ServePlanAlertSettings,
   SmokeCompleteAlertSettings,
   evaluateAlerts,
   initialAlertRuntimeState,
@@ -98,6 +100,7 @@ const runCook = (
         // about the rule they name and nothing else.
         smokeComplete: options.smokeComplete ?? { enabled: false },
         headsUp: options.headsUp ?? { enabled: false },
+        servePlan: servePlanOn({ enabled: false, driftAlert: false }),
       },
       state,
       names: options.names ?? COOK_NAMES,
@@ -229,6 +232,7 @@ describe('alert engine — chamber temperature alert', () => {
       probeTarget: watching({ probe1: 203 }),
       smokeComplete: { enabled: true },
       headsUp: { enabled: true },
+      servePlan: servePlanOn(),
     };
     const state = initialAlertRuntimeState();
 
@@ -245,6 +249,7 @@ describe('alert engine — chamber temperature alert', () => {
       probeTarget: watching({ probe1: 203 }),
       smokeComplete: { enabled: true },
       headsUp: { enabled: true },
+      servePlan: servePlanOn(),
     });
     expect(state).toEqual(initialAlertRuntimeState());
     expect(evaluation.state.chamberArmed).toBe(true);
@@ -819,5 +824,228 @@ describe('alert engine — heads-up alert', () => {
 
     expect(started.state.headsUpCounters).toEqual({ probe1: 1 });
     expect(state.headsUpCounters).toEqual({});
+  });
+});
+
+/**
+ * Feed the engine a run of Serve Plan verdicts, one per evaluation tick, and
+ * collect what it decided to say.
+ *
+ * Each entry is `[verdict, minutes of slack]` — the plan's own output, as the
+ * timeline hands it to every other client — so these tests read as the shape of
+ * a cook drifting rather than as plan arithmetic, which the serve-plan status
+ * module's own tests already own.
+ */
+const runPlan = (
+  ticks: Array<[ServeVerdict, number | null] | null>,
+  options: {
+    servePlan?: ServePlanAlertSettings;
+    state?: AlertRuntimeState;
+  } = {},
+) => {
+  let state = options.state ?? initialAlertRuntimeState();
+  const bodies: string[] = [];
+  ticks.forEach((tick, index) => {
+    const evaluation = evaluateAlerts({
+      reading: { chamberTemp: null, probeTemps: {} },
+      servePlan: tick
+        ? { verdict: tick[0], slackMinutes: tick[1] }
+        : // No plan at all: this cook was never given a serve time, or the
+          // planner is switched off upstream.
+          null,
+      settings: {
+        // Every other rule off, so what these tests read is the off-schedule
+        // rule and nothing else.
+        chamber: chamberRange({ enabled: false }),
+        probeTarget: watching({}, { enabled: false }),
+        smokeComplete: { enabled: false },
+        headsUp: { enabled: false },
+        servePlan: options.servePlan ?? servePlanOn(),
+      },
+      state,
+      names: COOK_NAMES,
+      now: minutesAfterStart(index),
+    });
+    bodies.push(...evaluation.notifications.map((sent) => sent.body));
+    state = evaluation.state;
+  });
+  return { bodies, state };
+};
+
+const servePlanOn = (
+  overrides: Partial<ServePlanAlertSettings> = {},
+): ServePlanAlertSettings => ({
+  enabled: true,
+  driftAlert: true,
+  driftMin: 30,
+  ...overrides,
+});
+
+describe('alert engine — off-schedule alert', () => {
+  it('tells the cook once, on the second consecutive tick the plan reads behind', () => {
+    const { bodies } = runPlan([
+      ['ontrack', 10],
+      ['behind', -45],
+      ['behind', -48],
+      ['behind', -52],
+    ]);
+
+    expect(bodies).toEqual([
+      'Running 48 minutes behind plan — more than the 30 minutes you allow.',
+    ]);
+  });
+
+  // A cook that is going to be ready long before dinner is news too: the meat
+  // has to be held warm, or the plan moved.
+  it('names the other direction when the cook is running ahead of the plan', () => {
+    const { bodies } = runPlan([
+      ['early', 55],
+      ['early', 61],
+    ]);
+
+    expect(bodies).toEqual([
+      'Running 61 minutes ahead of plan — more than the 30 minutes you allow.',
+    ]);
+  });
+
+  // The verdict rides a live projection that moves with every reading. One tick
+  // past the tolerance is the rate settling as often as it is the cook drifting,
+  // and this alert asks someone to change their dinner plans.
+  it('says nothing about a single off-plan tick, and counts the run again from scratch afterwards', () => {
+    const { bodies } = runPlan([
+      ['behind', -44],
+      ['ontrack', -12],
+      ['behind', -40],
+      ['behind', -41],
+    ]);
+
+    expect(bodies).toEqual([
+      'Running 41 minutes behind plan — more than the 30 minutes you allow.',
+    ]);
+  });
+
+  it('says nothing more while the cook stays off plan, however long it stays there', () => {
+    const { bodies } = runPlan([
+      ['behind', -40],
+      ['behind', -45],
+      ['behind', -50],
+      ['behind', -80],
+      ['behind', -95],
+    ]);
+
+    expect(bodies).toHaveLength(1);
+  });
+
+  // Once per crossing, and a crossing ends by coming back on plan. A cook who
+  // pushed the pit, got back on schedule and then fell behind again is being
+  // told about a second thing that happened.
+  it('re-arms on a return to plan, so a second drift is announced too', () => {
+    const { bodies } = runPlan([
+      ['behind', -40],
+      ['behind', -45],
+      ['ontrack', -10],
+      ['ontrack', 5],
+      ['behind', -35],
+      ['behind', -38],
+    ]);
+
+    expect(bodies).toEqual([
+      'Running 45 minutes behind plan — more than the 30 minutes you allow.',
+      'Running 38 minutes behind plan — more than the 30 minutes you allow.',
+    ]);
+  });
+
+  it('is silent with the off-schedule push switched off, and with the planner switched off entirely', () => {
+    const pushOff = runPlan(
+      [
+        ['behind', -60],
+        ['behind', -65],
+        ['behind', -70],
+      ],
+      { servePlan: servePlanOn({ driftAlert: false }) },
+    );
+    const plannerOff = runPlan(
+      [
+        ['behind', -60],
+        ['behind', -65],
+        ['behind', -70],
+      ],
+      // The nested switch still reads on: with no plan on the screen there is
+      // no verdict to be off, so it cannot fire whatever it says.
+      { servePlan: servePlanOn({ enabled: false }) },
+    );
+
+    expect(pushOff.bodies).toEqual([]);
+    expect(plannerOff.bodies).toEqual([]);
+  });
+
+  // Nothing is banked while the alert is off: the ticks either side of an off
+  // period are not consecutive, and keeping the run would page the cook on the
+  // first tick after they switched it back on.
+  it('drops a half-finished run of ticks when the cook switches the alert off', () => {
+    const started = runPlan([['behind', -40]]);
+    const off = runPlan([['behind', -45]], {
+      servePlan: servePlanOn({ driftAlert: false }),
+      state: started.state,
+    });
+    const { bodies } = runPlan([['behind', -50]], { state: off.state });
+
+    expect(started.state.offScheduleTicks).toBe(1);
+    expect(off.state.offScheduleTicks).toBe(0);
+    expect(bodies).toEqual([]);
+  });
+
+  // "Gathering data" is the plan saying it cannot tell yet — a cook still
+  // warming, stalled, or with no serve time at all. Not evidence of drift, and
+  // not evidence of being back on plan either.
+  it('neither fires nor re-arms on a plan it cannot judge', () => {
+    const gathering = runPlan([
+      ['behind', -40],
+      ['unknown', null],
+      ['behind', -45],
+      null,
+      ['behind', -50],
+      // Off plan by no stated amount: how far off is the whole of what this
+      // alert has to say, so there is nothing to send.
+      ['behind', null],
+      ['behind', null],
+    ]);
+
+    expect(gathering.bodies).toEqual([]);
+
+    const fired = runPlan([
+      ['behind', -40],
+      ['behind', -45],
+    ]);
+    const { bodies } = runPlan(
+      [
+        ['unknown', null],
+        ['behind', -60],
+        ['behind', -65],
+      ],
+      { state: fired.state },
+    );
+
+    expect(fired.bodies).toHaveLength(1);
+    expect(bodies).toEqual([]);
+  });
+
+  // The bookkeeping lives in the runtime state the caller persists per smoke,
+  // never in the settings the cook is editing — so clearing a smoke lets the
+  // next cook be warned about its own drift.
+  it('keeps its counter and fired marker in the runtime state', () => {
+    const confirming = runPlan([['behind', -40]]);
+    const firedState = runPlan([['behind', -45]], {
+      state: confirming.state,
+    }).state;
+
+    expect(confirming.state.offScheduleTicks).toBe(1);
+    expect(confirming.state.offScheduleFired).toBe(false);
+    expect(firedState.offScheduleTicks).toBe(0);
+    expect(firedState.offScheduleFired).toBe(true);
+    expect(initialAlertRuntimeState()).toMatchObject({
+      offScheduleTicks: 0,
+      offScheduleFired: false,
+    });
   });
 });
