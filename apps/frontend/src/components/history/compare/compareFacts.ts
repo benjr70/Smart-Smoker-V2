@@ -37,6 +37,17 @@ const formatTemp = (reading: number | null | undefined): string =>
 /** Anything written down, or an em-dash for a blank the record never held. */
 const written = (value: string | undefined): string => value?.trim() || NOT_RECORDED;
 
+/**
+ * The wood a cook burned, and how long it rested, as this table writes them.
+ *
+ * Exported because the two method sections lead with these same two figures:
+ * the pre-smoke diff is headed by the wood and the post-smoke diff by the rest,
+ * and a figure written one way in the table and another above the diff would
+ * read as two different facts about the same cook.
+ */
+export const woodOf = (cook: CompareCook): string => written(cook.smokeProfile.woodType);
+export const restOf = (cook: CompareCook): string => formatRestTime(cook.postSmoke.restTime);
+
 /** The cut as it was weighed, unit and all, or an em-dash for a cook nobody weighed. */
 const formatWeight = (cook: CompareCook): string => {
   const { weight, unit } = cook.preSmoke.weight;
@@ -48,12 +59,12 @@ export const compareFacts = (a: CompareCook, b: CompareCook): CompareFact[] => {
   const facts: { label: string; of: (cook: CompareCook) => string }[] = [
     { label: 'Meat', of: cook => written(cook.preSmoke.meatType) },
     { label: 'Weight', of: formatWeight },
-    { label: 'Wood', of: cook => written(cook.smokeProfile.woodType) },
+    { label: 'Wood', of: woodOf },
     { label: 'Duration', of: cook => formatCookDuration(cook.timeline?.durationMs ?? null) },
     { label: 'Target', of: cook => formatTemp(cook.timeline?.targetTemp) },
     { label: 'Peak chamber', of: cook => formatTemp(cook.timeline?.peakChamber) },
     { label: 'Peak probe', of: cook => formatTemp(cook.timeline?.peakMeat) },
-    { label: 'Rest', of: cook => formatRestTime(cook.postSmoke.restTime) },
+    { label: 'Rest', of: restOf },
   ];
 
   return facts.map(fact => {
