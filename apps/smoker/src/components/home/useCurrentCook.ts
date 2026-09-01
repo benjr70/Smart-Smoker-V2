@@ -1,42 +1,51 @@
 import { useEffect, useRef, useState } from 'react';
-import { CookCompletionEstimate, TimelineResource, getDefaultApiClient } from '../../api';
+import { CurrentCookTimeline, getDefaultApiClient, TimelineResource } from '../../api';
 
-/** Where the touchscreen reads the running cook, and its estimate, from. */
+/** Where the touchscreen reads the running cook — and everything on it — from. */
 export type CurrentCookReadPort = Pick<TimelineResource, 'getCurrent'>;
 
 /**
  * How often the running cook is re-read while a cook is on.
  *
- * The same minute the web card uses, and for the same reason: the estimate is
- * derived from three collections on the backend on every read, and a moment
- * that is a couple of hours away does not move enough between one minute and
- * the next for anybody standing at the smoker to see it change.
+ * The same minute the web card uses, and for the same reason: the cook is
+ * derived from three collections on the backend on every read, and neither a
+ * moment that is a couple of hours away nor a plan measured in quarter-hours
+ * moves enough between one minute and the next for anybody standing at the
+ * smoker to see it change.
  */
-export const ESTIMATE_REFRESH_MS = 60_000;
+export const CURRENT_COOK_REFRESH_MS = 60_000;
 
 /**
- * When the cook that is running will be done, as the backend last answered.
+ * The cook that is running, as the backend last answered: its stamps, the
+ * estimate of when it will be done, and the Serve Plan it is being judged
+ * against.
  *
  * `null` until an answer has arrived, and while no cook is running — an idle
  * panel is not estimating anything, so it does not ask, and does not go on
  * showing the last cook's moment.
  *
- * The estimate itself is entirely the backend's: it is recomputed from the
- * readings, the settings and the user's own history on every read, so this hook
- * only decides *when* to ask. It asks when a cook starts and every minute it
- * goes on — the panel has no push channel for the estimate, and the readings
- * that would move it arrive far too fast to re-derive it on each one.
+ * Everything on it is entirely the backend's: the estimate and the verdict are
+ * recomputed from the readings, the settings and the user's own history on every
+ * read, so this hook only decides *when* to ask. It asks when a cook starts and
+ * every minute it goes on — the panel has no push channel for either, and the
+ * readings that would move them arrive far too fast to re-derive anything on
+ * each one.
+ *
+ * One read feeds every readout on the screen. A second poll for the plan would
+ * be the same three collections derived twice a minute, and would let the ETA on
+ * the bar and the verdict beside it come from two different moments of the same
+ * cook.
  *
  * A read that fails leaves the last answer on the screen rather than an error.
  * The panel is the one screen with nowhere to go — no reload, no back button,
  * and a cook running — and a minute-old ETA beside a live clock is worth more
  * than a gap where it was.
  */
-export const useCompletionEstimate = (
+export const useCurrentCook = (
   smoking: boolean,
   source?: CurrentCookReadPort
-): CookCompletionEstimate | null => {
-  const [estimate, setEstimate] = useState<CookCompletionEstimate | null>(null);
+): CurrentCookTimeline | null => {
+  const [cook, setCook] = useState<CurrentCookTimeline | null>(null);
 
   // The appliance's own backend unless the screen was handed a source. The
   // client behind it is built once, on first use, and hands back the same
@@ -58,7 +67,7 @@ export const useCompletionEstimate = (
 
   /**
    * Which read is which: the number the next one is given, and the newest one
-   * whose answer is on the bar.
+   * whose answer is on the screen.
    *
    * The panel asks again every minute whether or not the last answer has
    * arrived, so a read held up by a slow link can land behind a newer one. It
@@ -76,7 +85,7 @@ export const useCompletionEstimate = (
     if (!smoking) {
       // Nothing is being cooked to anything, so there is nothing to ask about
       // and nothing the last cook's answer can still be true of.
-      setEstimate(null);
+      setCook(null);
       return undefined;
     }
     let reading = true;
@@ -93,17 +102,17 @@ export const useCompletionEstimate = (
           // history.
           if (readNumber < shownRead.current) return;
           shownRead.current = readNumber;
-          setEstimate(current?.estimate ?? null);
+          setCook(current ?? null);
         })
         .catch(() => undefined);
     };
     read();
-    const refresh = setInterval(read, ESTIMATE_REFRESH_MS);
+    const refresh = setInterval(read, CURRENT_COOK_REFRESH_MS);
     return () => {
       reading = false;
       clearInterval(refresh);
     };
   }, [smoking, port]);
 
-  return estimate;
+  return cook;
 };
