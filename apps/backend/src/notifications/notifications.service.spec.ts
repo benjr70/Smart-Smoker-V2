@@ -324,6 +324,7 @@ describe('NotificationsService', () => {
         headsUpCounters: {},
         headsUpFired: [],
         offScheduleTicks: 0,
+        offScheduleDirection: null,
         offScheduleFired: false,
       });
       smokeSession.GetState.mockResolvedValue({
@@ -413,6 +414,7 @@ describe('NotificationsService', () => {
         headsUpCounters: {},
         headsUpFired: [],
         offScheduleTicks: 0,
+        offScheduleDirection: null,
         offScheduleFired: false,
       });
       smokeSession.GetState.mockResolvedValue({
@@ -443,6 +445,7 @@ describe('NotificationsService', () => {
         headsUpCounters: {},
         headsUpFired: [],
         offScheduleTicks: 0,
+        offScheduleDirection: null,
         offScheduleFired: false,
       });
     });
@@ -653,6 +656,7 @@ describe('NotificationsService', () => {
         headsUpCounters: {},
         headsUpFired: [],
         offScheduleTicks: 0,
+        offScheduleDirection: null,
         offScheduleFired: false,
       });
       smokeSession.GetState.mockResolvedValue({
@@ -677,6 +681,7 @@ describe('NotificationsService', () => {
         headsUpCounters: {},
         headsUpFired: [],
         offScheduleTicks: 0,
+        offScheduleDirection: null,
         offScheduleFired: false,
       });
     });
@@ -932,13 +937,15 @@ describe('NotificationsService', () => {
         expect(alertState.stored()).toMatchObject({
           smokeId: 'smoke-1',
           offScheduleTicks: 1,
+          offScheduleDirection: 'behind',
           offScheduleFired: false,
         });
 
         await service.checkAlerts();
         expect(alertState.stored()).toMatchObject({
           smokeId: 'smoke-1',
-          offScheduleTicks: 0,
+          offScheduleTicks: 2,
+          offScheduleDirection: 'behind',
           offScheduleFired: true,
         });
         expect(settings.stored().servePlan).toEqual({

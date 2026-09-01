@@ -4,6 +4,7 @@ import {
   AlertRuntimeState,
   ChamberAlertSettings,
   HeadsUpAlertSettings,
+  OFF_SCHEDULE_CONFIRMING_TICKS,
   ProbeTargetAlertSettings,
   ServePlanAlertSettings,
   SmokeCompleteAlertSettings,
@@ -996,9 +997,9 @@ describe('alert engine — off-schedule alert', () => {
   });
 
   // "Gathering data" is the plan saying it cannot tell yet — a cook still
-  // warming, stalled, or with no serve time at all. Not evidence of drift, and
-  // not evidence of being back on plan either.
-  it('neither fires nor re-arms on a plan it cannot judge', () => {
+  // warming, stalled, or with no serve time at all. Not evidence of drift, so
+  // it never fires, and it breaks the run of confirming ticks.
+  it('says nothing on a plan it cannot judge, and counts the run again from scratch afterwards', () => {
     const gathering = runPlan([
       ['behind', -40],
       ['unknown', null],
@@ -1012,7 +1013,13 @@ describe('alert engine — off-schedule alert', () => {
     ]);
 
     expect(gathering.bodies).toEqual([]);
+  });
 
+  // A crossing ends however it ends. The ETA going untrustworthy — a probe
+  // re-seated, a stall, the serve time edited — ends the drift that was
+  // announced just as surely as getting back on plan does, and the cook that
+  // comes out of it 90 minutes behind is a new thing to be told about.
+  it('re-arms when the plan stops being judgeable, not only on a return to plan', () => {
     const fired = runPlan([
       ['behind', -40],
       ['behind', -45],
@@ -1020,32 +1027,130 @@ describe('alert engine — off-schedule alert', () => {
     const { bodies } = runPlan(
       [
         ['unknown', null],
-        ['behind', -60],
-        ['behind', -65],
+        ['behind', -85],
+        ['behind', -90],
       ],
       { state: fired.state },
     );
 
     expect(fired.bodies).toHaveLength(1);
-    expect(bodies).toEqual([]);
+    expect(bodies).toEqual([
+      'Running 90 minutes behind plan — more than the 30 minutes you allow.',
+    ]);
+  });
+
+  // Switching the planner off and back on — to move the serve time, say — is
+  // another way out of a crossing, and it must not leave the alert latched
+  // silent for the rest of the cook.
+  it('re-arms after the planner is switched off and back on', () => {
+    const fired = runPlan([
+      ['behind', -40],
+      ['behind', -45],
+    ]);
+    const paused = runPlan([['behind', -50]], {
+      servePlan: servePlanOn({ enabled: false }),
+      state: fired.state,
+    });
+    const { bodies } = runPlan(
+      [
+        ['behind', -70],
+        ['behind', -75],
+      ],
+      { state: paused.state },
+    );
+
+    expect(bodies).toEqual([
+      'Running 75 minutes behind plan — more than the 30 minutes you allow.',
+    ]);
+  });
+
+  // The debounce exists to filter projection noise, and a swing from behind to
+  // early is that noise at its loudest. Two ticks that disagree about which way
+  // the cook is off confirm nothing: the direction announced has to be the one
+  // that was seen twice.
+  it('does not let a behind tick and an early tick confirm each other', () => {
+    const swinging = runPlan([
+      ['behind', -40],
+      ['early', 40],
+    ]);
+
+    expect(swinging.bodies).toEqual([]);
+    expect(swinging.state.offScheduleTicks).toBe(1);
+    expect(swinging.state.offScheduleDirection).toBe('early');
+
+    const { bodies } = runPlan([['early', 45]], { state: swinging.state });
+
+    expect(bodies).toEqual([
+      'Running 45 minutes ahead of plan — more than the 30 minutes you allow.',
+    ]);
+  });
+
+  // Having been told the cook is late does not mean being left in the dark when
+  // it turns out to be running early instead: that is a different crossing, and
+  // a different thing to do about dinner.
+  it('announces a drift the other way after one has already been announced', () => {
+    const { bodies } = runPlan([
+      ['behind', -40],
+      ['behind', -45],
+      ['early', 50],
+      ['early', 55],
+    ]);
+
+    expect(bodies).toEqual([
+      'Running 45 minutes behind plan — more than the 30 minutes you allow.',
+      'Running 55 minutes ahead of plan — more than the 30 minutes you allow.',
+    ]);
   });
 
   // The bookkeeping lives in the runtime state the caller persists per smoke,
   // never in the settings the cook is editing — so clearing a smoke lets the
   // next cook be warned about its own drift.
-  it('keeps its counter and fired marker in the runtime state', () => {
+  it('keeps its counter, direction and fired marker in the runtime state', () => {
     const confirming = runPlan([['behind', -40]]);
     const firedState = runPlan([['behind', -45]], {
       state: confirming.state,
     }).state;
 
-    expect(confirming.state.offScheduleTicks).toBe(1);
-    expect(confirming.state.offScheduleFired).toBe(false);
-    expect(firedState.offScheduleTicks).toBe(0);
-    expect(firedState.offScheduleFired).toBe(true);
-    expect(initialAlertRuntimeState()).toMatchObject({
-      offScheduleTicks: 0,
+    expect(confirming.state).toMatchObject({
+      offScheduleTicks: 1,
+      offScheduleDirection: 'behind',
       offScheduleFired: false,
     });
+    expect(firedState).toMatchObject({
+      offScheduleTicks: OFF_SCHEDULE_CONFIRMING_TICKS,
+      offScheduleDirection: 'behind',
+      offScheduleFired: true,
+    });
+    // The run is counted no further than the confirmation needs, however long
+    // the cook stays in the crossing.
+    expect(
+      runPlan(
+        [
+          ['behind', -50],
+          ['behind', -55],
+        ],
+        { state: firedState },
+      ).state.offScheduleTicks,
+    ).toBe(OFF_SCHEDULE_CONFIRMING_TICKS);
+    expect(initialAlertRuntimeState()).toMatchObject({
+      offScheduleTicks: 0,
+      offScheduleDirection: null,
+      offScheduleFired: false,
+    });
+  });
+
+  // A verdict of `early` or `behind` with no amount is not something the plan
+  // can emit — `servePlanStatus` answers `unknown` for every cook it cannot
+  // measure. If that contract ever comes apart, the alert stays quiet rather
+  // than pushing a drift with no number in it.
+  it('stays quiet on an off-plan verdict carrying no amount', () => {
+    const { bodies, state } = runPlan([
+      ['behind', null],
+      ['behind', null],
+      ['behind', null],
+    ]);
+
+    expect(bodies).toEqual([]);
+    expect(state.offScheduleDirection).toBeNull();
   });
 });

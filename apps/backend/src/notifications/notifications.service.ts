@@ -323,6 +323,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
         headsUpCounters: stored.headsUpCounters ?? {},
         headsUpFired: stored.headsUpFired ?? [],
         offScheduleTicks: stored.offScheduleTicks ?? 0,
+        offScheduleDirection: stored.offScheduleDirection ?? null,
         offScheduleFired: stored.offScheduleFired ?? false,
       },
       sessionStart: false,

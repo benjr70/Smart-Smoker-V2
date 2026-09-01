@@ -8,7 +8,7 @@
  * verifiable with plain table tests and no fake timers.
  */
 
-import { ServePlanStatus } from '../timeline/serve-plan-status';
+import { ServePlanStatus, ServeVerdict } from '../timeline/serve-plan-status';
 
 /** The user-owned chamber range alert. */
 export interface ChamberAlertSettings {
@@ -78,6 +78,12 @@ export interface HeadsUpAlertSettings {
  * only reports what the plan already decided.
  */
 export type ServePlanState = Pick<ServePlanStatus, 'verdict' | 'slackMinutes'>;
+
+/**
+ * The two verdicts that are a drift: the ones the off-schedule alert speaks
+ * about, and the ones its run of confirming ticks is counted per.
+ */
+export type OffPlanDirection = Extract<ServeVerdict, 'early' | 'behind'>;
 
 /**
  * The user-owned Serve Plan block, as the off-schedule alert reads it.
@@ -172,9 +178,21 @@ export interface AlertRuntimeState {
    */
   offScheduleTicks: number;
   /**
-   * Whether the crossing the cook is currently in has already been announced.
-   * Cleared by a return to on track, which is what re-arms the alert — so the
-   * cook is told once per drift rather than every half minute of one.
+   * Which way the run of off-plan ticks is going, or `null` when the cook is
+   * not in one.
+   *
+   * The debounce is per direction, not per "off plan": a tick reading behind
+   * and a tick reading early are the projection swinging, and confirming one
+   * with the other would page the cook with a direction no two ticks ever
+   * agreed on. This is also the crossing the `fired` marker belongs to.
+   */
+  offScheduleDirection: OffPlanDirection | null;
+  /**
+   * Whether the crossing named by `offScheduleDirection` has already been
+   * announced. Cleared whenever the cook leaves that crossing — back on track,
+   * off into a plan that cannot be judged, or off into a drift the other way —
+   * because each of those ends the drift that was announced, and what comes
+   * after it is news of its own.
    */
   offScheduleFired: boolean;
 }
@@ -229,6 +247,7 @@ export const initialAlertRuntimeState = (): AlertRuntimeState => ({
   headsUpCounters: {},
   headsUpFired: [],
   offScheduleTicks: 0,
+  offScheduleDirection: null,
   offScheduleFired: false,
 });
 
@@ -563,26 +582,34 @@ export const OFF_SCHEDULE_CONFIRMING_TICKS = 2;
 
 /**
  * Which way the cook is off plan and by how many minutes, or `null` where the
- * plan says nothing to page about: no plan at all, a verdict of `unknown` — the
- * cook is still warming, or the projection is not yet trustworthy — or an
- * off-plan verdict carrying no amount, when how far off is the whole of what
- * this alert has to say.
+ * plan says nothing to page about: no plan at all, or a verdict of `unknown` —
+ * the cook is still warming, or the projection is not yet trustworthy.
+ *
+ * One guard, not two. A drift is a verdict of `early` or `behind` carrying an
+ * amount, and the plan cannot hold one without the other: `servePlanStatus`
+ * answers `unknown` for every unmeasured cook, so slack is only ever `null`
+ * alongside that verdict. The amount is read straight off the plan rather than
+ * trusted from the verdict alone, so that if the producer's contract ever does
+ * come apart this rule stays quiet instead of naming a drift it cannot measure.
  *
  * Always plural minutes: the smallest tolerance a plan can be set to is
  * fifteen, and this is the drift that exceeded it.
  */
 const offPlanBy = (
   plan: ServePlanState | null | undefined,
-): { direction: string; minutes: string } | null => {
-  if (plan?.verdict !== 'early' && plan?.verdict !== 'behind') {
-    return null;
-  }
-  if (plan.slackMinutes === null) {
+): { direction: OffPlanDirection; wording: string; minutes: string } | null => {
+  const direction = plan?.verdict;
+  const slackMinutes = plan?.slackMinutes;
+  if (
+    (direction !== 'early' && direction !== 'behind') ||
+    typeof slackMinutes !== 'number'
+  ) {
     return null;
   }
   return {
-    direction: plan.verdict === 'behind' ? 'behind plan' : 'ahead of plan',
-    minutes: `${Math.abs(Math.round(plan.slackMinutes))} minutes`,
+    direction,
+    wording: direction === 'behind' ? 'behind plan' : 'ahead of plan',
+    minutes: `${Math.abs(Math.round(slackMinutes))} minutes`,
   };
 };
 
@@ -593,53 +620,76 @@ const offPlanBy = (
  * It compares nothing itself. The verdict comes from the serve-plan status the
  * timeline hands every client, so the push and the card on the screen always
  * say the same thing; all this rule owns is when to speak — twice confirmed,
- * once per crossing, re-armed by a return to plan.
+ * once per crossing, re-armed by leaving it.
  */
 const evaluateOffSchedule = (
   input: AlertEvaluationInput,
   state: AlertRuntimeState,
 ): AlertEvaluation => {
   const { enabled, driftAlert, driftMin } = input.settings.servePlan;
+  // Not in a crossing: no run of ticks banked, and nothing spent. Every exit
+  // from a drift lands here, and each of them re-arms the alert.
+  const idle = {
+    ...state,
+    offScheduleTicks: 0,
+    offScheduleDirection: null,
+    offScheduleFired: false,
+  };
   // Inert, and inert all the way down: a planner switched off — or a push
   // silenced under it — banks no confirming ticks, so switching it back on
   // judges the cook from that moment instead of firing on its first tick.
   if (!enabled || !driftAlert) {
-    return { notifications: [], state: { ...state, offScheduleTicks: 0 } };
+    return { notifications: [], state: idle };
   }
 
-  const plan = input.servePlan;
-  if (plan?.verdict === 'ontrack') {
-    // Back on plan: the run is over and the alert is re-armed, so the next
-    // drift is announced on its own account.
+  const drift = offPlanBy(input.servePlan);
+  // The crossing is over, whichever way it ended: back on track, or off into a
+  // plan that cannot be judged — the ETA gone untrustworthy, the serve time
+  // edited, the planner switched off and on. None of them is the drift that
+  // was announced, so what comes next is a new crossing and is announced on its
+  // own account. Silence beats a cook 90 minutes late hearing nothing because a
+  // stall once made them 45.
+  if (!drift) {
+    return { notifications: [], state: idle };
+  }
+
+  // The run is per direction: a `behind` tick and an `early` tick are the
+  // projection swinging, not two ticks confirming anything, so a change of
+  // direction starts a fresh crossing rather than continuing the old one.
+  const sameCrossing = state.offScheduleDirection === drift.direction;
+  const fired = sameCrossing && state.offScheduleFired;
+  // Counted no further than the confirmation needs: an announced crossing that
+  // lasts eight hours is still one crossing, and the number persisted per smoke
+  // says how far along the confirmation is, not how long the cook has been late.
+  const ticks = Math.min(
+    sameCrossing ? state.offScheduleTicks + 1 : 1,
+    OFF_SCHEDULE_CONFIRMING_TICKS,
+  );
+  if (fired || ticks < OFF_SCHEDULE_CONFIRMING_TICKS) {
     return {
       notifications: [],
-      state: { ...state, offScheduleTicks: 0, offScheduleFired: false },
+      state: {
+        ...state,
+        offScheduleTicks: ticks,
+        offScheduleDirection: drift.direction,
+        offScheduleFired: fired,
+      },
     };
-  }
-  const drift = offPlanBy(plan);
-  // Neither a plan that cannot be judged nor one with no amount to name is
-  // evidence of being back on plan, so the run of confirming ticks is broken
-  // but the crossing stays spent.
-  if (!drift) {
-    return { notifications: [], state: { ...state, offScheduleTicks: 0 } };
-  }
-  if (state.offScheduleFired) {
-    return { notifications: [], state: { ...state, offScheduleTicks: 0 } };
-  }
-
-  const ticks = state.offScheduleTicks + 1;
-  if (ticks < OFF_SCHEDULE_CONFIRMING_TICKS) {
-    return { notifications: [], state: { ...state, offScheduleTicks: ticks } };
   }
 
   return {
     notifications: [
       {
         title: ALERT_TITLE,
-        body: `Running ${drift.minutes} ${drift.direction} — more than the ${driftMin} minutes you allow.`,
+        body: `Running ${drift.minutes} ${drift.wording} — more than the ${driftMin} minutes you allow.`,
       },
     ],
-    state: { ...state, offScheduleTicks: 0, offScheduleFired: true },
+    state: {
+      ...state,
+      offScheduleTicks: ticks,
+      offScheduleDirection: drift.direction,
+      offScheduleFired: true,
+    },
   };
 };
 
