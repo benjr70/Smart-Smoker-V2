@@ -6,6 +6,7 @@ import { CompareCook } from '../../../api';
 import { PostSmoke, PreSmoke, SmokeProfile, TempSample, rating } from '../../../api/types';
 import { carbonLight, resolveDesignPalette } from '../../../theme';
 import { compareSeriesOf } from './compareSeries';
+import { UNNAMED_COOK } from './cookLabels';
 import { WeightUnits } from '../../common/interfaces/enums';
 
 const design = resolveDesignPalette(carbonLight, 'light');
@@ -192,5 +193,15 @@ describe('compareSeriesOf', () => {
     );
 
     expect(series.stamps).toEqual([]);
+  });
+});
+
+describe('what the chart calls each cook', () => {
+  it('carries the cook’s own name through to the chart’s key', () => {
+    expect(compareSeriesOf(cook(), '#2A6FB8', design).name).toBe('Sunday Brisket');
+  });
+
+  it('spells a cook nobody named the way the rest of the comparison spells it', () => {
+    expect(compareSeriesOf(cook({ name: '' }), '#2A6FB8', design).name).toBe(UNNAMED_COOK);
   });
 });

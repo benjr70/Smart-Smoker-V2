@@ -328,3 +328,133 @@ export const elapsedPoints = (
     probe3: reading.probe3,
   }));
 };
+
+/**
+ * How far into a cook a moment is, as the readout writes it.
+ *
+ * Hours and whole minutes rather than decimal hours: a pitmaster reads a cook
+ * in the units they set timers in, and "4h 05m" is a time where "4.09h" is a
+ * number. The minutes are padded so that a finger dragged across the plot does
+ * not have the readout jitter in width as it passes each ten-minute mark.
+ */
+export const formatElapsed = (minutes: number): string => {
+  const total = Math.max(0, Math.round(minutes));
+  return `${Math.floor(total / 60)}h ${String(total % 60).padStart(2, '0')}m`;
+};
+
+/**
+ * The reading nearest a scrubbed minute that actually reported a position.
+ *
+ * Asked per position rather than per reading, because the two cooks report
+ * unevenly: a probe plugged in late, or one that dropped out for a few rows,
+ * leaves readings that carry a chamber and nothing else, and reading straight
+ * off the nearest row would blank a probe that was cooking happily either side
+ * of it.
+ */
+const nearestReading = (
+  points: readonly ElapsedReading[],
+  position: SeriesKey,
+  minutes: number
+): ElapsedReading | null => {
+  let nearest: ElapsedReading | null = null;
+  let distance = Number.POSITIVE_INFINITY;
+  points.forEach(point => {
+    if (sampleOf(point, position) === null) return;
+    const away = Math.abs(point.minutes - minutes);
+    if (away >= distance) return;
+    distance = away;
+    nearest = point;
+  });
+  return nearest;
+};
+
+/** What a cook read on a position at a scrubbed minute, or nothing. */
+export const nearestSample = (
+  points: readonly ElapsedReading[],
+  position: SeriesKey,
+  minutes: number
+): number | null => {
+  const point = nearestReading(points, position, minutes);
+  return point === null ? null : sampleOf(point, position);
+};
+
+/** Where the sample a scrub is reading sits on the plot, for the dot on it. */
+export const nearestPoint = (
+  points: readonly ElapsedReading[],
+  position: SeriesKey,
+  minutes: number,
+  scales: CompareScales
+): { x: number; y: number } | null => {
+  const point = nearestReading(points, position, minutes);
+  const sample = point === null ? null : sampleOf(point, position);
+  if (point === null || sample === null) return null;
+  return { x: scales.x(point.minutes), y: scales.y(sample) };
+};
+
+/** Where on the screen the chart is drawn, as the browser measures it. */
+export interface CompareBounds {
+  left: number;
+  width: number;
+}
+
+/**
+ * The minute of the cooks under a pointer.
+ *
+ * The plot is drawn at whatever width its card gives it, so a touch has to be
+ * brought back through that scaling before it means a minute. A finger dragged
+ * off either end of the plot is held to the axis rather than reading a minute
+ * outside it: the readout should say the first or the last of the cook, not a
+ * time before it was lit. A chart the browser has not measured — under a test,
+ * or before the first layout — is read as drawn at its own size, which is the
+ * only assumption available and keeps the sum finite.
+ */
+export const elapsedAt = (
+  viewportX: number,
+  bounds: CompareBounds,
+  box: PlotBox,
+  scales: CompareScales
+): number => {
+  const scale = bounds.width > 0 ? box.width / bounds.width : 1;
+  const minutes = scales.x.invert((viewportX - bounds.left) * scale);
+  const [first, last] = scales.x.domain();
+  return Math.min(Math.max(minutes, first), last);
+};
+
+/**
+ * How far in each stamp rail's track is held from the edges of the card.
+ *
+ * The rails are laid out in HTML rather than drawn in the SVG — a stamp is a
+ * thumb target with a label, and those are cheaper to make right as elements
+ * than as shapes — so the one thing that keeps a rail honest is that its track
+ * is inset by the plot's own padding, as a share of the box. A stamp at hour
+ * zero then sits over hour zero on the plot above it, which is the whole claim
+ * a rail makes.
+ */
+export const railInset = (box: PlotBox = COMPARE_BOX): { left: string; right: string } => ({
+  left: `${(box.margin.left / box.width) * 100}%`,
+  right: `${(box.margin.right / box.width) * 100}%`,
+});
+
+/** Where along a rail's track a minute sits, as the track's own share. */
+export const railOffset = (minutes: number, spanMinutes: number): string => {
+  if (!Number.isFinite(spanMinutes) || spanMinutes <= 0) return '0%';
+  const share = Math.min(Math.max(minutes / spanMinutes, 0), 1);
+  return `${share * 100}%`;
+};
+
+/**
+ * How close to a stamp a scrub has to come for it to swell: a share of the
+ * cook's own length, so that a stamp on a three-hour cook and one on a
+ * twelve-hour cook are equally easy to find with a finger.
+ */
+export const STAMP_NEAR_FRACTION = 0.03;
+
+/** Whether the scrub is near enough to a stamp for it to swell. */
+export const isNearStamp = (
+  stampMinutes: number,
+  cursorMinutes: number | null,
+  cookMinutes: number
+): boolean => {
+  if (cursorMinutes === null || !Number.isFinite(cookMinutes) || cookMinutes <= 0) return false;
+  return Math.abs(stampMinutes - cursorMinutes) < cookMinutes * STAMP_NEAR_FRACTION;
+};

@@ -14,6 +14,7 @@ import type { DesignPalette } from 'theme/src';
 import { CompareCook } from '../../../api';
 import { CookEvent, SmokeProfile, TempSample } from '../../../api/types';
 import { toneColor } from '../../common/stampTones';
+import { UNNAMED_COOK } from './cookLabels';
 
 /** How many milliseconds a minute is. */
 const MINUTE = 60_000;
@@ -110,6 +111,9 @@ export const compareSeriesOf = (
   const start = startOf(cook);
   return {
     color,
+    // The chart's key names both cooks, and a cook nobody named is spelled
+    // there the way it is spelled everywhere else on the screen.
+    name: cook.name || UNNAMED_COOK,
     pts: cook.series.map(readingOf),
     mins: minutesOf(cook),
     startedAt: start,
