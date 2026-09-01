@@ -132,7 +132,10 @@ describe('NotificationsService', () => {
   let smokeProfile: { getCurrentSmokeProfile: jest.Mock };
   let preSmoke: { GetByCurrent: jest.Mock };
   let temps: { getLatestCurrentTemp: jest.Mock };
-  let timeline: { estimateForProbes: jest.Mock };
+  let timeline: {
+    estimateForProbes: jest.Mock;
+    getCurrentTimeline: jest.Mock;
+  };
 
   const mockSubscription: NotificationSubscription = {
     endpoint: 'https://fcm.googleapis.com/fcm/send/test-endpoint',
@@ -169,7 +172,12 @@ describe('NotificationsService', () => {
       GetByCurrent: jest.fn().mockResolvedValue({ meatType: 'Packer brisket' }),
     };
     temps = { getLatestCurrentTemp: jest.fn().mockResolvedValue(undefined) };
-    timeline = { estimateForProbes: jest.fn().mockResolvedValue({}) };
+    timeline = {
+      estimateForProbes: jest.fn().mockResolvedValue({}),
+      // A cook with no Serve Plan — no serve time set, or the planner off — is
+      // the timeline answering without the block at all.
+      getCurrentTimeline: jest.fn().mockResolvedValue({}),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -315,6 +323,9 @@ describe('NotificationsService', () => {
         smokeCompleteFired: false,
         headsUpCounters: {},
         headsUpFired: [],
+        offScheduleTicks: 0,
+        offScheduleDirection: null,
+        offScheduleFired: false,
       });
       smokeSession.GetState.mockResolvedValue({
         smokeId: 'this-weekend',
@@ -402,6 +413,9 @@ describe('NotificationsService', () => {
         smokeCompleteFired: true,
         headsUpCounters: {},
         headsUpFired: [],
+        offScheduleTicks: 0,
+        offScheduleDirection: null,
+        offScheduleFired: false,
       });
       smokeSession.GetState.mockResolvedValue({
         smokeId: 'this-weekend',
@@ -430,6 +444,9 @@ describe('NotificationsService', () => {
         smokeCompleteFired: true,
         headsUpCounters: {},
         headsUpFired: [],
+        offScheduleTicks: 0,
+        offScheduleDirection: null,
+        offScheduleFired: false,
       });
     });
 
@@ -638,6 +655,9 @@ describe('NotificationsService', () => {
         smokeCompleteFired: true,
         headsUpCounters: {},
         headsUpFired: [],
+        offScheduleTicks: 0,
+        offScheduleDirection: null,
+        offScheduleFired: false,
       });
       smokeSession.GetState.mockResolvedValue({
         smokeId: 'fresh-smoke',
@@ -660,6 +680,9 @@ describe('NotificationsService', () => {
         smokeCompleteFired: false,
         headsUpCounters: {},
         headsUpFired: [],
+        offScheduleTicks: 0,
+        offScheduleDirection: null,
+        offScheduleFired: false,
       });
     });
 
@@ -811,6 +834,134 @@ describe('NotificationsService', () => {
         await service.checkAlerts();
         await service.checkAlerts();
         expect(pushDispatcher.notify).toHaveBeenCalledTimes(1);
+
+        smokeSession.GetState.mockResolvedValue({
+          smokeId: 'next-weekend',
+          smoking: true,
+        });
+        await service.checkAlerts();
+        await service.checkAlerts();
+
+        expect(pushDispatcher.notify).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    describe('the off-schedule alert', () => {
+      /** Everything silent but the planner, so only its push can be heard. */
+      const planningOnly = (
+        servePlan: Partial<ApplicationSettings['servePlan']> = {},
+      ) => ({
+        chamber: { enabled: false, low: 225, high: 275 },
+        probeTarget: { enabled: false, probes: [] },
+        smokeComplete: { enabled: false },
+        headsUp: { enabled: false },
+        servePlan: {
+          enabled: true,
+          driftAlert: true,
+          driftMin: 30,
+          ...servePlan,
+        },
+      });
+
+      /** The Serve Plan block the timeline hands every client. */
+      const runningBehind = (slackMinutes: number) => ({
+        serveAt: new Date('2026-08-02T22:00:00.000Z'),
+        restMinutes: 60,
+        pullBy: new Date('2026-08-02T21:00:00.000Z'),
+        slackMinutes,
+        verdict: 'behind' as const,
+        milestones: [],
+      });
+
+      beforeEach(() => {
+        temps.getLatestCurrentTemp.mockResolvedValue({ ChamberTemp: '240' });
+      });
+
+      it('tells the cook once the plan has read off schedule for two consecutive ticks', async () => {
+        settings.seed(planningOnly());
+        timeline.getCurrentTimeline.mockResolvedValue({
+          servePlan: runningBehind(-47),
+        });
+
+        await service.checkAlerts();
+        await service.checkAlerts();
+        await service.checkAlerts();
+
+        expect(pushDispatcher.notify).toHaveBeenCalledTimes(1);
+        expect(pushDispatcher.notify).toHaveBeenCalledWith(
+          'Smoker',
+          'Running 47 minutes behind plan — more than the 30 minutes you allow.',
+        );
+      });
+
+      // The verdict is the timeline's, not one this service works out again:
+      // the banner on the screen and the push in the pocket are the same
+      // sentence about the same cook.
+      it('says nothing while the plan the timeline gives reads on track', async () => {
+        settings.seed(planningOnly());
+        timeline.getCurrentTimeline.mockResolvedValue({
+          servePlan: { ...runningBehind(-5), verdict: 'ontrack' as const },
+        });
+
+        await service.checkAlerts();
+        await service.checkAlerts();
+
+        expect(pushDispatcher.notify).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        ['the off-schedule push is switched off', { driftAlert: false }],
+        ['the planner itself is switched off', { enabled: false }],
+      ])(
+        'asks the timeline for no plan at all while %s',
+        async (_case, off) => {
+          settings.seed(planningOnly(off));
+
+          await service.checkAlerts();
+          await service.checkAlerts();
+
+          expect(timeline.getCurrentTimeline).not.toHaveBeenCalled();
+          expect(pushDispatcher.notify).not.toHaveBeenCalled();
+        },
+      );
+
+      // The counters are the machine's, so they belong in the alert state
+      // document scoped to this cook — never in the settings the user edits.
+      it('records its bookkeeping against the smoke in the alert state', async () => {
+        settings.seed(planningOnly());
+        timeline.getCurrentTimeline.mockResolvedValue({
+          servePlan: runningBehind(-47),
+        });
+
+        await service.checkAlerts();
+        expect(alertState.stored()).toMatchObject({
+          smokeId: 'smoke-1',
+          offScheduleTicks: 1,
+          offScheduleDirection: 'behind',
+          offScheduleFired: false,
+        });
+
+        await service.checkAlerts();
+        expect(alertState.stored()).toMatchObject({
+          smokeId: 'smoke-1',
+          offScheduleTicks: 2,
+          offScheduleDirection: 'behind',
+          offScheduleFired: true,
+        });
+        expect(settings.stored().servePlan).toEqual({
+          enabled: true,
+          driftAlert: true,
+          driftMin: 30,
+        });
+      });
+
+      it('warns again on the next cook, though the last one was already warned about', async () => {
+        settings.seed(planningOnly());
+        timeline.getCurrentTimeline.mockResolvedValue({
+          servePlan: runningBehind(-47),
+        });
+        await service.checkAlerts();
+        await service.checkAlerts();
 
         smokeSession.GetState.mockResolvedValue({
           smokeId: 'next-weekend',

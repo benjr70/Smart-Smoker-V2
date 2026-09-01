@@ -1,4 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { OffPlanDirection } from './alert-engine';
 
 export type AlertStateDocument = AlertState & Document;
 
@@ -77,6 +78,33 @@ export class AlertState {
    */
   @Prop({ type: [String], default: [] })
   headsUpFired: string[];
+
+  /**
+   * How many consecutive ticks the Serve Plan has read off schedule. Persisted
+   * like the heads-up run and for the same reason: a restart mid-cook must
+   * confirm the drift again rather than page on its first tick.
+   */
+  @Prop({ default: 0 })
+  offScheduleTicks: number;
+
+  /**
+   * Which way the current run of off-plan ticks is going — `early`, `behind`,
+   * or null when the cook is not in one. The confirmation is per direction, so
+   * a swing from behind to early starts a fresh crossing rather than confirming
+   * a drift no two ticks agreed on.
+   */
+  @Prop({ type: String, default: null })
+  offScheduleDirection: OffPlanDirection | null;
+
+  /**
+   * Whether the drift the cook is currently in has already been pushed. Cleared
+   * by leaving that drift — back on plan, into a plan that cannot be judged, or
+   * into a drift the other way — which re-arms the alert; and scoped by
+   * `smokeId` like every marker above, so next weekend's cook is warned on its
+   * own account.
+   */
+  @Prop({ default: false })
+  offScheduleFired: boolean;
 }
 
 export const AlertStateSchema = SchemaFactory.createForClass(AlertState);

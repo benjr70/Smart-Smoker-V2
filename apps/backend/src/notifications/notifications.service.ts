@@ -22,6 +22,7 @@ import { TempsService } from '../temps/temps.service';
 import { TimelineService } from '../timeline/timeline.service';
 import {
   AlertRuntimeState,
+  ServePlanState,
   evaluateAlerts,
   initialAlertRuntimeState,
 } from './alert-engine';
@@ -193,6 +194,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     const evaluation = evaluateAlerts({
       reading,
       etaMinutes: await this.headsUpMinutes(settings, state, reading),
+      servePlan: await this.servePlan(settings),
       settings,
       state,
       names: { chamber: CHAMBER_NAME, probes: resolveProbeNames(profile) },
@@ -203,6 +205,29 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     for (const notification of evaluation.notifications) {
       await this.pushDispatcher.notify(notification.title, notification.body);
     }
+  }
+
+  /**
+   * How the cook is running against its Serve Plan, as the off-schedule alert
+   * reads it — or nothing at all, when there is no plan to be off.
+   *
+   * Read off the current timeline rather than worked out again here: that is
+   * the same block the cook screen draws its verdict banner from, so the push
+   * in their pocket cannot contradict the card in front of them.
+   *
+   * Asked for only while both switches are on. With the planner off — or its
+   * push silenced — nothing could be decided from an answer, and this runs
+   * every thirty seconds for the length of every cook, so the read is skipped
+   * rather than made and thrown away.
+   */
+  private async servePlan(
+    settings: ApplicationSettings,
+  ): Promise<ServePlanState | null> {
+    if (!settings.servePlan.enabled || !settings.servePlan.driftAlert) {
+      return null;
+    }
+    const timeline = await this.timelineService.getCurrentTimeline();
+    return timeline.servePlan ?? null;
   }
 
   /**
@@ -297,6 +322,9 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
         smokeCompleteFired: stored.smokeCompleteFired ?? false,
         headsUpCounters: stored.headsUpCounters ?? {},
         headsUpFired: stored.headsUpFired ?? [],
+        offScheduleTicks: stored.offScheduleTicks ?? 0,
+        offScheduleDirection: stored.offScheduleDirection ?? null,
+        offScheduleFired: stored.offScheduleFired ?? false,
       },
       sessionStart: false,
     };
