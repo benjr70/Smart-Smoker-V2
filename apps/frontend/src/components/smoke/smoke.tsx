@@ -120,6 +120,22 @@ export function Smoke({ onViewHistory, onOpenSettings }: SmokeProps = {}): JSX.E
     }
     nextStep++;
     if (nextStep < 3) {
+      // Leaving the Smoke step is the meat coming off, so it is what stamps the
+      // pull the rest is counted from — the pitmaster makes no second gesture
+      // and fills in no time. Only this advance stamps: the header's step
+      // control switches steps freely, and opening Post-Smoke to read back a
+      // note is not a cook being pulled.
+      if (activeStep === 1) {
+        // Swallowed and logged like the finish flow's calls: what is stamped is
+        // the backend's business, and a stamp that did not land must not keep
+        // the pitmaster on a step they have finished with. The stamp is written
+        // once server-side, so an advance made twice — or by two devices — does
+        // not restart a rest already under way.
+        await client.smoke.stampPull().catch(error => {
+          console.log(error);
+          return null;
+        });
+      }
       setActiveStep(nextStep);
     }
   };

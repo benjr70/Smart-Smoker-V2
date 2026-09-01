@@ -446,8 +446,18 @@ const rows: ContractRow[] = [
     expected: { method: 'post', path: 'smoke/finish', body: undefined },
   },
   {
+    name: 'smoke.getCurrent → GET smoke/current',
+    run: c => c.smoke.getCurrent(),
+    expected: { method: 'get', path: 'smoke/current', body: undefined },
+  },
+  {
+    name: 'smoke.stampPull → POST smoke/current/pull',
+    run: c => c.smoke.stampPull(),
+    expected: { method: 'post', path: 'smoke/current/pull', body: undefined },
+  },
+  {
     // Both halves of the plan at once here, because the row pins the body a
-    // caller that set both sends; the card itself sends one at a time.
+    // caller that set both sends; the card and the rest field each send one.
     name: 'smoke.saveServePlan → PUT smoke/current/serve-plan (plan halves only)',
     run: c =>
       c.smoke.saveServePlan({

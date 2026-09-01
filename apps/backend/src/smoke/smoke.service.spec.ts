@@ -15,7 +15,7 @@ describe('SmokeService', () => {
   let service: SmokeService;
   let mockSmokeModel: any;
   let mockStateService: Partial<StateService>;
-  let mockTimelineService: { stampFinish: jest.Mock };
+  let mockTimelineService: { stampFinish: jest.Mock; stampPull: jest.Mock };
   let mockStatsService: { recalculate: jest.Mock };
   let mockPreSmokeModel: any;
   let mockSmokeProfileModel: any;
@@ -103,6 +103,7 @@ describe('SmokeService', () => {
 
     mockTimelineService = {
       stampFinish: jest.fn().mockResolvedValue(undefined),
+      stampPull: jest.fn().mockResolvedValue(true),
     };
 
     // The statistics recompute announces itself into the same log as the
@@ -570,6 +571,34 @@ describe('SmokeService', () => {
 
         expect(await service.updateServePlan({ restMinutes: 45 })).toBeNull();
         expect(mockSmokeModel.findByIdAndUpdate).not.toHaveBeenCalled();
+      });
+    });
+
+    /**
+     * The pull is what the rest is measured from, and it is stamped by the
+     * step advance that takes the cook to Post-Smoke — against the cook in
+     * progress, like the plan, and no more than once however many times the
+     * advance is made.
+     */
+    describe('the pull stamp', () => {
+      it('stamps the pull of the cook in progress and answers the cook', async () => {
+        stored.pullAt = new Date('2026-08-30T17:00:00.000Z');
+        stored.pullTemp = 203;
+
+        const pulled = await service.stampPull();
+
+        expect(mockTimelineService.stampPull).toHaveBeenCalledWith(
+          'test-smoke-id',
+        );
+        expect(pulled?.pullAt).toEqual(new Date('2026-08-30T17:00:00.000Z'));
+        expect(pulled?.pullTemp).toBe(203);
+      });
+
+      it('has nothing to stamp when no cook is in progress', async () => {
+        mockStateService.GetState = jest.fn().mockResolvedValue(null);
+
+        expect(await service.stampPull()).toBeNull();
+        expect(mockTimelineService.stampPull).not.toHaveBeenCalled();
       });
     });
   });

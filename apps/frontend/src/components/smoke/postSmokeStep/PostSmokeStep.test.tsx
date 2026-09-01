@@ -4,8 +4,9 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import React from 'react';
 import { ApiClientProvider, SnackbarProvider, createApiClient } from '../../../api';
 import { createFakeBackend, FakeBackend } from '../../../api/fakeBackend';
-import { PostSmoke } from '../../../api/types';
+import { PostSmoke, Smoke } from '../../../api/types';
 import { DesignSurface, appTheme } from '../../../theme';
+import { WeightUnits } from '../../common/interfaces/enums';
 import { PostSmokeStep } from './PostSmokeStep';
 
 const seededPostSmoke: PostSmoke = {
@@ -188,5 +189,132 @@ describe('PostSmokeStep', () => {
     renderStep(backend);
 
     expect(await screen.findByText('Could not load post-smoke details.')).toBeInTheDocument();
+  });
+});
+
+/**
+ * The step a cook lands on the moment the meat comes off: the rest is already
+ * running, counted from the pull the advance stamped, and the field that says
+ * how long it runs for is the planner's rest duration rather than a second
+ * opinion about it.
+ */
+describe('the rest timer on the Post-Smoke step', () => {
+  const PULL_AT = '2026-08-30T17:00:00.000Z';
+
+  /** A session whose cook has been pulled, with a weight to scale carryover by. */
+  const pulledCook = (
+    smoke: Partial<Smoke> = {},
+    settings?: Record<string, unknown>
+  ): FakeBackend =>
+    createFakeBackend({
+      state: { smokeId: 'cook-1', smoking: false },
+      smoke: {
+        records: {
+          'cook-1': {
+            preSmokeId: 'pre-1',
+            tempsId: 'temps-1',
+            postSmokeId: 'post-1',
+            smokeProfileId: 'profile-1',
+            ratingId: 'rating-1',
+            date: new Date('2026-08-30T09:00:00.000Z'),
+            status: 0,
+            // As the wire carries it, which is what a real deployment answers.
+            pullAt: PULL_AT as unknown as Date,
+            pullTemp: 203,
+            restMinutes: 60,
+            ...smoke,
+          },
+        },
+      },
+      preSmoke: {
+        current: {
+          name: 'Brisket',
+          meatType: 'Beef',
+          weight: { weight: 14, unit: WeightUnits.LB },
+          steps: [''],
+          notes: '',
+        },
+      },
+      postSmoke: { current: seededPostSmoke },
+      ...(settings ? { appSettings: { settings } } : {}),
+    });
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-08-30T17:10:00.000Z'));
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  test('counts the rest of the cook that was just pulled', async () => {
+    renderStep(pulledCook());
+
+    expect(await screen.findByTestId('rest-timer-card')).toBeInTheDocument();
+    expect(screen.getByTestId('rest-timer-remaining')).toHaveTextContent('50:00');
+    // Scaled by the weight the pre-smoke step recorded: a fourteen-pound
+    // packer is a large cut.
+    expect(screen.getByTestId('rest-timer-carryover')).toHaveTextContent('213°F');
+  });
+
+  test('counts the rest from the duration the planner stores, not the typed field', async () => {
+    // The record says an hour and a half; the cook's canonical rest says one
+    // hour, and the two are one value — the stored one.
+    renderStep(pulledCook());
+
+    expect(await screen.findByTestId('rest-timer-remaining')).toHaveTextContent('50:00');
+    expect(screen.getByTestId('postsmoke-rest-time-input')).toHaveValue('01:00');
+  });
+
+  test('writes an edited rest time to the duration the planner reads', async () => {
+    const backend = pulledCook();
+
+    const { unmount } = renderStep(backend);
+
+    await screen.findByTestId('rest-timer-card');
+    fireEvent.input(screen.getByTestId('postsmoke-rest-time-input'), {
+      target: { value: '0230' },
+    });
+    // The countdown is against the new rest at once: the field and the timer
+    // are two views of one duration, not a form that is read on the way out.
+    expect(screen.getByTestId('rest-timer-remaining')).toHaveTextContent('2:20:00');
+
+    unmount();
+
+    await waitFor(() => expect(backend.store.smoke.records['cook-1'].restMinutes).toBe(150));
+    // And the record keeps its own words for the rest, as history reads it.
+    await waitFor(() => expect(backend.store.postSmoke.current?.restTime).toBe('02:30'));
+  });
+
+  test('shows no rest timer when the Serve Plan is switched off', async () => {
+    renderStep(pulledCook({}, { servePlan: { enabled: false, driftAlert: false, driftMin: 30 } }));
+
+    expect(await screen.findByDisplayValue('Post-smoke notes')).toBeInTheDocument();
+    expect(screen.queryByTestId('rest-timer-card')).not.toBeInTheDocument();
+  });
+
+  /**
+   * The rest is running whether or not the settings could be reached, and the
+   * planner ships on — so an unreachable backend leaves the countdown standing
+   * rather than taking the card away at the one moment it is being watched. The
+   * cut it cannot weigh is given the smaller carryover, as an unweighed one is.
+   */
+  test('keeps counting when the settings and the pre-smoke cannot be read', async () => {
+    const backend = pulledCook();
+    backend.injectFault({ method: 'get', path: 'appSettings', status: 500 });
+    backend.injectFault({ method: 'get', path: 'presmoke/', status: 500 });
+
+    renderStep(backend);
+
+    expect(await screen.findByTestId('rest-timer-remaining')).toHaveTextContent('50:00');
+    expect(screen.getByTestId('rest-timer-carryover')).toHaveTextContent('208°F');
+  });
+
+  test('shows no rest timer for a cook that was never pulled', async () => {
+    renderStep(pulledCook({ pullAt: null }));
+
+    expect(await screen.findByDisplayValue('Post-smoke notes')).toBeInTheDocument();
+    expect(screen.queryByTestId('rest-timer-card')).not.toBeInTheDocument();
   });
 });
