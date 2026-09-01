@@ -308,6 +308,70 @@ export interface Smoke {
   ratingId: string;
   date: Date;
   status: number;
+  /**
+   * The Serve Plan as the cook stored it: when the food is meant to hit the
+   * table, and how long the meat rests before it is carved.
+   *
+   * Optional because a cook nobody planned — and every cook recorded before the
+   * plan existed — has neither. `null` is how a plan is cleared.
+   */
+  serveAt?: Date | null;
+  restMinutes?: number | null;
+}
+
+/**
+ * A write of the Serve Plan: either half on its own.
+ *
+ * Either half, because that is how the card writes them: a tap on "Serving at"
+ * moves dinner and says nothing about the rest. A payload carrying both every
+ * time would have the two steppers overwriting each other whenever another
+ * device had just moved the other one.
+ */
+export interface ServePlanWrite {
+  serveAt?: Date | null;
+  restMinutes?: number | null;
+}
+
+/** How the cook is running against the plan, as the backend judges it. */
+export type ServeVerdict = 'early' | 'ontrack' | 'behind' | 'unknown';
+
+/**
+ * One thing the plan is still waiting on: the wrap while it is still ahead, the
+ * pull, and the end of the rest.
+ *
+ * `at` is a `Date` here rather than the ISO string the wire carries — converted
+ * in the client's read path, for the same reason the estimate's `eta` is.
+ */
+export interface ServePlanMilestone {
+  kind: 'wrap' | 'pullBy' | 'restUntil';
+  /** When it happens; `null` for the wrap, which is a temperature not a time. */
+  at: Date | null;
+  /** The temperature it happens at, °F; only the wrap hint carries one. */
+  temp: number | null;
+}
+
+/**
+ * The Serve Plan of the cook in progress, worked out server-side.
+ *
+ * The verdict is the backend's and is never re-derived here: the phone, the
+ * touchscreen and the push notification must not be able to disagree about
+ * whether dinner is on time.
+ */
+export interface ServePlanStatus {
+  /** When the food is meant to hit the table, as the cook stored it. */
+  serveAt: Date;
+  /** How long the meat rests, in minutes, as the cook stored it. */
+  restMinutes: number;
+  /** Serve time less the rest: the last moment the meat can come off. */
+  pullBy: Date;
+  /**
+   * Minutes of cushion between the projection and the pull-by time — negative
+   * when the cook is running late, and `null` while no trustworthy projection
+   * exists, which is the only thing that makes the verdict `unknown`.
+   */
+  slackMinutes: number | null;
+  verdict: ServeVerdict;
+  milestones: ServePlanMilestone[];
 }
 
 /**
@@ -368,6 +432,12 @@ export interface CompletionEstimate {
 /** The cook in progress: its timeline so far, and where it is going. */
 export interface CurrentSmokeTimeline extends SmokeTimeline {
   estimate: CompletionEstimate;
+  /**
+   * The Serve Plan, when the feature is on and this cook has one. `null` in
+   * both other cases — a client reading no plan renders no card, and the
+   * settings it already reads say which of the two it is.
+   */
+  servePlan: ServePlanStatus | null;
 }
 
 /**

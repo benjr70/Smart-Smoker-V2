@@ -32,6 +32,9 @@ import {
   ProbeTargetEntry,
   PreSmoke,
   PushSubscriptionPayload,
+  ServePlanMilestone,
+  ServePlanStatus,
+  ServePlanWrite,
   Smoke,
   SmokeHistory,
   SmokeProfile,
@@ -121,6 +124,19 @@ export type StoredSmokeTimeline = Omit<SmokeTimeline, 'startedAt' | 'finishedAt'
  */
 export type StoredCurrentTimeline = StoredSmokeTimeline & {
   estimate: Omit<CompletionEstimate, 'eta'> & { eta: string | null };
+  /**
+   * The cook's Serve Plan, as the backend embeds it — absent both when the
+   * feature is switched off and when nobody planned this cook, which is the one
+   * answer a client has any use for.
+   */
+  servePlan?: StoredServePlan | null;
+};
+
+/** A Serve Plan as `GET timeline/current` serves it: every moment a string. */
+export type StoredServePlan = Omit<ServePlanStatus, 'serveAt' | 'pullBy' | 'milestones'> & {
+  serveAt: string;
+  pullBy: string;
+  milestones: (Omit<ServePlanMilestone, 'at'> & { at: string | null })[];
 };
 
 /**
@@ -978,6 +994,25 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
     }
 
     if (resource === 'smoke') {
+      // The plan of the cook in progress. Each half is written only when the
+      // caller sent it — the backend leaves an omitted half alone — and a
+      // session with no cook set up stores nothing and answers nothing, which
+      // this app's transport reads as `null`.
+      if (method === 'put' && id === 'current' && segments[2] === 'serve-plan') {
+        const smokeId = store.state?.smokeId;
+        const record = smokeId ? store.smoke.records[smokeId] : undefined;
+        if (!record) {
+          return null;
+        }
+        const plan = (body ?? {}) as ServePlanWrite;
+        if (plan.serveAt !== undefined) {
+          record.serveAt = plan.serveAt;
+        }
+        if (plan.restMinutes !== undefined) {
+          record.restMinutes = plan.restMinutes;
+        }
+        return clone(record);
+      }
       if (method === 'get' && id === 'all') {
         return clone(store.smoke.all);
       }

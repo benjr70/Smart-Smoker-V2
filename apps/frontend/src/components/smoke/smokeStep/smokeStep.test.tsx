@@ -571,6 +571,10 @@ describe('the shape of the step', () => {
     expect(parts).toEqual([
       'smoke-status-bar',
       'smoke-completion-card',
+      // The plan reads directly under the estimate it judges, and is there
+      // from the start of a cook — before there is a plan it says it is
+      // gathering data rather than appearing halfway through.
+      'smoke-serve-plan-card',
       'smoke-temps-card',
       'smoke-chart-card',
       // The cook log reads after the chart: it explains the shape of the plot
@@ -657,6 +661,122 @@ describe('the estimate on the step', () => {
     // Nothing was written: no finish, no session change, no settings save. The
     // screen only ever read.
     expect(backend.requests.filter(request => request.method !== 'get')).toEqual([]);
+  });
+});
+
+describe('the serve plan on the step', () => {
+  /** A cook the backend has judged against a plan, watched on probe 1. */
+  const backendWithPlan = (settings: Partial<StoredApplicationSettings> = {}) =>
+    createFakeBackend({
+      state: { smokeId: 'smoke-1', smoking: true },
+      appSettings: { settings: { ...settingsWatching({ probe1: 203 }), ...settings } },
+      timeline: {
+        current: {
+          ...NO_CURRENT_TIMELINE,
+          startedAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+          estimate: {
+            state: 'ok',
+            eta: '2026-08-01T21:00:00.000Z',
+            hoursRemaining: 2.5,
+            ratePerHour: 8.2,
+            progressPercent: 62,
+            startTemp: 45,
+            targetTemp: 203,
+          },
+          servePlan: {
+            serveAt: '2026-08-01T22:00:00.000Z',
+            restMinutes: 45,
+            pullBy: '2026-08-01T21:15:00.000Z',
+            slackMinutes: -35,
+            verdict: 'behind',
+            milestones: [{ kind: 'pullBy', at: '2026-08-01T21:15:00.000Z', temp: null }],
+          },
+        },
+      },
+    });
+
+  test('reads under the estimate it is a judgement of', async () => {
+    renderView(harness(), backendWithPlan());
+
+    await waitFor(() =>
+      expect(screen.getByTestId('serve-plan-headline')).toHaveTextContent('Running 35m late')
+    );
+    const parts = screen
+      .getAllByTestId(/^smoke-status-bar$|-card$/)
+      .map(part => part.getAttribute('data-testid'));
+    expect(parts).toEqual([
+      'smoke-status-bar',
+      'smoke-completion-card',
+      'smoke-serve-plan-card',
+      'smoke-temps-card',
+      'smoke-chart-card',
+      'cook-log-card',
+      'smoke-details-card',
+    ]);
+  });
+
+  test('a tap on a stepper stores the plan it moved to', async () => {
+    const backend = backendWithPlan();
+    renderView(harness(), backend);
+
+    await screen.findByTestId('smoke-serve-plan-card');
+    fireEvent.click(screen.getByRole('button', { name: 'Serve later' }));
+
+    await waitFor(() =>
+      expect(
+        backend.requests.filter(request => request.path === 'smoke/current/serve-plan')
+      ).toEqual([
+        {
+          method: 'put',
+          path: 'smoke/current/serve-plan',
+          body: { serveAt: new Date('2026-08-01T22:15:00.000Z') },
+        },
+      ])
+    );
+  });
+
+  test('gathers data in front of the cook while it has no plan to judge', async () => {
+    // A cook still warming up: the backend has no plan to answer, because
+    // nothing has seeded one yet and no estimate is worth planning around. The
+    // card says so rather than being absent, which is the only way the user
+    // learns the planner is watching at all.
+    const backend = createFakeBackend({
+      state: { smokeId: 'smoke-1', smoking: true },
+      appSettings: { settings: settingsWatching({ probe1: 203 }) },
+      timeline: {
+        current: {
+          ...NO_CURRENT_TIMELINE,
+          startedAt: new Date(Date.now() - 20 * 60 * 1000).toISOString(),
+          estimate: {
+            state: 'warming',
+            eta: null,
+            hoursRemaining: null,
+            ratePerHour: null,
+            progressPercent: null,
+            startTemp: 45,
+            targetTemp: 203,
+          },
+        },
+      },
+    });
+    renderView(harness(), backend);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('serve-plan-headline')).toHaveTextContent('Gathering data')
+    );
+  });
+
+  test('off is off: the planner switched off leaves no card behind', async () => {
+    const backend = backendWithPlan({
+      servePlan: { enabled: false, driftAlert: true, driftMin: 30 },
+    });
+    renderView(harness(), backend);
+
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(screen.queryByTestId('smoke-serve-plan-card')).not.toBeInTheDocument();
   });
 });
 
