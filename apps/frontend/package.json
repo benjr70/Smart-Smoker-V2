@@ -1,6 +1,6 @@
 {
   "name": "frontend",
-  "version": "1.12.0",
+  "version": "1.13.0",
   "private": true,
   "license": "MIT",
   "dependencies": {
@@ -23,7 +23,7 @@
     "smoke-session": "^1.0.0",
     "socket.io": "^4.5.1",
     "socket.io-client": "^4.5.1",
-    "temperaturechart": "^1.12.0",
+    "temperaturechart": "^1.13.0",
     "theme": "^1.0.0",
     "web-push": "^3.6.6",
     "web-vitals": "^1.1.2"
