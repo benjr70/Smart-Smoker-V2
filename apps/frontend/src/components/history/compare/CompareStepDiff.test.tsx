@@ -86,22 +86,30 @@ describe('CompareStepDiff', () => {
   });
 
   /**
-   * A step typed into two rows is one step, so it is listed once rather than
-   * twice under the same heading.
+   * A cook that logged two spritzes did two things, and the card shows what
+   * that cook did rather than a tidied-up version of it.
    */
-  test('a step one cook wrote twice is listed once', () => {
+  test('a step one cook did twice is listed twice', () => {
     renderDiff({ aSteps: ['Spritz', 'spritz'], bSteps: [] });
 
     const onlyA = screen.getByTestId('compare-diff-only-a');
-    // eslint-disable-next-line testing-library/no-node-access
-    expect(within(onlyA).getAllByTestId('compare-diff-bullet')).toHaveLength(1);
+    expect(within(onlyA).getAllByTestId('compare-diff-bullet')).toHaveLength(2);
     expect(onlyA).toHaveTextContent('Spritz');
+    expect(onlyA).toHaveTextContent('spritz');
   });
 
-  test('a section neither cook wrote a step for still says the cooks matched', () => {
+  /**
+   * Two cooks the record is silent about were not prepared the same way; they
+   * were prepared unwatched. Calling that "identical" asserts a match nobody
+   * recorded — the same inference the headline and the facts table refuse.
+   */
+  test('a section neither cook wrote a step for says the record is silent', () => {
     renderDiff({ aSteps: [], bSteps: ['   '] });
 
-    expect(screen.getByTestId('compare-diff-identical')).toBeInTheDocument();
+    expect(screen.getByTestId('compare-diff-no-steps')).toHaveTextContent(
+      'Neither cook recorded any steps here.'
+    );
+    expect(screen.queryByTestId('compare-diff-identical')).toBeNull();
     expect(screen.queryByTestId('compare-diff-same')).toBeNull();
   });
 
@@ -135,12 +143,26 @@ describe('CompareStepDiff', () => {
   });
 
   /**
-   * Two absences are not a shared figure — the same rule the facts table
-   * follows. A record silent about both cooks' wood says nothing about whether
-   * they burned the same wood, so it is not greyed as though it did.
+   * Colour on this card means "these two differ", and a record silent about
+   * both cooks' wood records no difference to shout about: two em-dashes in the
+   * cooks' own colours would give the least informative row on the card the
+   * loudest treatment it has.
    */
-  test('a headline figure neither cook recorded is not greyed as a match', () => {
+  test('a headline figure neither cook recorded is not coloured as a difference', () => {
     renderDiff({ headlineA: NOT_RECORDED, headlineB: NOT_RECORDED });
+
+    const headline = screen.getByTestId('compare-diff-headline');
+    expect(within(headline).getByTestId('compare-diff-headline-a')).toHaveStyle({
+      color: carbonLight.textSecondary,
+    });
+    expect(within(headline).getByTestId('compare-diff-headline-b')).toHaveStyle({
+      color: carbonLight.textSecondary,
+    });
+  });
+
+  /** One cook's figure against the other's silence is still a difference. */
+  test('a figure only one cook recorded is coloured as a difference', () => {
+    renderDiff({ headlineA: 'Hickory', headlineB: NOT_RECORDED });
 
     const headline = screen.getByTestId('compare-diff-headline');
     expect(within(headline).getByTestId('compare-diff-headline-a')).toHaveStyle({

@@ -11,7 +11,6 @@
  */
 import { Box, Card } from '@mui/material';
 import React from 'react';
-import { NOT_RECORDED } from '../../common/timeFormat';
 import { CompareSlotColors } from './compareColors';
 import { diffSteps } from './compareSteps';
 
@@ -70,8 +69,13 @@ function Group({ testId, label, items, color }: GroupProps): JSX.Element | null 
         {label}
       </Box>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-        {items.map(step => (
-          <Box key={step} sx={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+        {/* Keyed by position: a cook that logged the same step twice has two
+            rows here, and they are two rows the list never reorders. */}
+        {items.map((step, index) => (
+          <Box
+            key={`${index}-${step}`}
+            sx={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}
+          >
             <Box
               component="span"
               aria-hidden="true"
@@ -116,13 +120,15 @@ export function CompareStepDiff({
   colors,
 }: CompareStepDiffProps): JSX.Element {
   const { both, onlyA, onlyB } = diffSteps(aSteps, bSteps);
+  // Colour here means "these two differ", so it is spent only where they do.
   // Two cooks that used the same wood, or rested the same length, made no
-  // choice worth colouring: the headline steps back into the quiet colour for
-  // the same reason the facts table greys a shared fact — and, by the same
-  // rule, two absences are not a shared figure. A record silent about both
-  // cooks' wood says nothing about whether they burned the same wood, so it is
-  // not written as though it did.
-  const sameHeadline = headlineA === headlineB && headlineA !== NOT_RECORDED;
+  // choice worth colouring; neither do two the record is silent about — a pair
+  // of em-dashes shouted in each cook's colour is the loudest treatment on the
+  // card given to the least informative row it can hold. Greying an absence is
+  // not a claim that the cooks matched, which is why the facts table still
+  // refuses to call two em-dashes the `same` fact; it is only a refusal to
+  // claim they differed.
+  const differentHeadline = headlineA !== headlineB;
   const notes = [
     { side: 'A' as const, note: aNotes?.trim(), color: colors.a },
     { side: 'B' as const, note: bNotes?.trim(), color: colors.b },
@@ -207,7 +213,7 @@ export function CompareStepDiff({
                 fontSize: '0.875rem',
                 fontWeight: 700,
                 fontVariantNumeric: 'tabular-nums',
-                color: sameHeadline ? theme.design.textSecondary : color,
+                color: differentHeadline ? color : theme.design.textSecondary,
               })}
             >
               {value}
@@ -222,16 +228,21 @@ export function CompareStepDiff({
       {onlyA.length === 0 && onlyB.length === 0 && (
         // An empty diff is a finding of its own — two cooks that were prepared
         // identically — and saying so is the difference between "no differences"
-        // and a card that failed to draw.
+        // and a card that failed to draw. But it is only that finding when
+        // there were steps to match: two cooks that logged nothing were not
+        // prepared the same way, they were prepared unwatched, and the card
+        // says which of the two it is looking at.
         <Box
-          data-testid="compare-diff-identical"
+          data-testid={both.length > 0 ? 'compare-diff-identical' : 'compare-diff-no-steps'}
           sx={theme => ({
             fontSize: '0.75rem',
             marginTop: '10px',
             color: theme.design.textSecondary,
           })}
         >
-          Identical steps in both cooks.
+          {both.length > 0
+            ? 'Identical steps in both cooks.'
+            : 'Neither cook recorded any steps here.'}
         </Box>
       )}
 

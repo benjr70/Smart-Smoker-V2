@@ -70,23 +70,24 @@ describe('diffSteps', () => {
   });
 
   /**
-   * A step written twice in one cook's list is one thing that cook did — a
-   * spritz logged as two rows is one instruction typed twice, not two steps —
-   * so it is stated once, however many rows it was typed into.
+   * A cook that logged two spritzes did two things, so both rows survive the
+   * diff: the split reports what a cook recorded, and quietly collapsing a
+   * repeat would drop a step out of that cook's history on the way to the
+   * screen.
    */
-  test('a step repeated within one cook’s list is one step', () => {
+  test('a step one cook did twice is listed twice', () => {
     expect(diffSteps(['Spritz', 'spritz ', 'Trim'], ['Spritz'])).toEqual({
-      both: ['Spritz'],
+      both: ['Spritz', 'spritz '],
       onlyA: ['Trim'],
       onlyB: [],
     });
   });
 
-  test('a step only one cook did, repeated, is still listed once', () => {
+  test('a step only one cook did, repeated, is listed as often as it was done', () => {
     expect(diffSteps(['Spritz', 'Spritz'], ['Trim', 'Trim'])).toEqual({
       both: [],
-      onlyA: ['Spritz'],
-      onlyB: ['Trim'],
+      onlyA: ['Spritz', 'Spritz'],
+      onlyB: ['Trim', 'Trim'],
     });
   });
 

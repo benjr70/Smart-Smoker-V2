@@ -61,41 +61,51 @@ describe('CompareRatingsCard', () => {
       scored({ smokeFlavor: 6, seasoning: 7 })
     );
 
-    const smoke = within(axisRow('Smoke flavor')).getByTestId('compare-rating-delta');
-    expect(smoke).toHaveTextContent('▲2.0');
-    expect(smoke).toHaveStyle({ color: carbonLight.probes.probe2 });
+    const smoke = within(axisRow('Smoke flavor'));
+    expect(smoke.getByTestId('compare-rating-delta')).toHaveTextContent('▲2.0');
+    expect(smoke.getByTestId('compare-rating-values')).toHaveStyle({
+      color: carbonLight.probes.probe2,
+    });
 
-    const seasoning = within(axisRow('Seasoning')).getByTestId('compare-rating-delta');
-    expect(seasoning).toHaveTextContent('▼2.0');
-    expect(seasoning).toHaveStyle({ color: carbonLight.probes.chamber });
+    const seasoning = within(axisRow('Seasoning'));
+    expect(seasoning.getByTestId('compare-rating-delta')).toHaveTextContent('▼2.0');
+    expect(seasoning.getByTestId('compare-rating-values')).toHaveStyle({
+      color: carbonLight.probes.chamber,
+    });
   });
 
   /**
    * A tenth of a point apart on a ten-point scale is two cooks that scored the
-   * same; colouring it would claim a win nobody would taste.
+   * same; colouring it would claim a win nobody would taste. The scores
+   * themselves carry that — there is no arrow left to grey.
    */
   test('a difference too small to matter is greyed', () => {
     renderRatings(scored({ tenderness: 9 }), scored({ tenderness: 9.04 }));
 
-    const delta = within(axisRow('Tenderness')).getByTestId('compare-rating-delta');
-    expect(delta).toHaveStyle({ color: carbonLight.textSecondary });
-    expect(delta).not.toHaveTextContent('▲');
-    expect(delta).not.toHaveTextContent('▼');
+    const row = within(axisRow('Tenderness'));
+    const values = row.getByTestId('compare-rating-values');
+    expect(values).toHaveTextContent('9.0 · 9.0');
+    expect(values).toHaveStyle({ color: carbonLight.textSecondary });
+    expect(row.queryByTestId('compare-rating-delta')).toBeNull();
   });
 
   test('two cooks that scored an axis identically get no arrow', () => {
     renderRatings(scored({ seasoning: 7 }), scored({ seasoning: 7 }));
 
-    const delta = within(axisRow('Seasoning')).getByTestId('compare-rating-delta');
-    expect(delta).toHaveStyle({ color: carbonLight.textSecondary });
-    expect(delta).toHaveTextContent('');
+    const row = within(axisRow('Seasoning'));
+    expect(row.getByTestId('compare-rating-values')).toHaveStyle({
+      color: carbonLight.textSecondary,
+    });
+    expect(row.queryByTestId('compare-rating-delta')).toBeNull();
   });
 
   /** A hair over the threshold is a difference, and is coloured as one. */
   test('a difference just over the threshold counts', () => {
     renderRatings(scored({ tenderness: 9 }), scored({ tenderness: 8.95 }));
 
-    expect(within(axisRow('Tenderness')).getByTestId('compare-rating-delta')).toHaveStyle({
+    const row = within(axisRow('Tenderness'));
+    expect(row.getByTestId('compare-rating-delta')).toHaveTextContent('▲0.1');
+    expect(row.getByTestId('compare-rating-values')).toHaveStyle({
       color: carbonLight.probes.probe2,
     });
   });
@@ -116,20 +126,56 @@ describe('CompareRatingsCard', () => {
     expect(barA.compareDocumentPosition(barB) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  test('a cook nobody scored on an axis draws an empty bar', () => {
+  /**
+   * A zero is a slider nobody moved, not the worst cook ever made — the same
+   * reading the summary card and the archive's statistics give it. Scoring it
+   * 0.0 would hand the other cook a win by the whole scale on an axis nobody
+   * ever tasted.
+   */
+  test('an axis nobody scored is written as absent, not as a zero', () => {
     renderRatings(scored({ tenderness: 0 }), scored({ tenderness: 10 }));
 
-    const row = axisRow('Tenderness');
-    expect(within(row).getByTestId('compare-rating-bar-a')).toHaveStyle({ width: '0%' });
-    expect(within(row).getByTestId('compare-rating-bar-b')).toHaveStyle({ width: '100%' });
+    const row = within(axisRow('Tenderness'));
+    expect(row.getByTestId('compare-rating-values')).toHaveTextContent('— · 10.0');
+    expect(row.queryByTestId('compare-rating-delta')).toBeNull();
+    expect(row.getByTestId('compare-rating-values')).toHaveStyle({
+      color: carbonLight.textSecondary,
+    });
+    expect(row.getByTestId('compare-rating-bar-a')).toHaveStyle({ width: '0%' });
+    expect(row.getByTestId('compare-rating-bar-b')).toHaveStyle({ width: '100%' });
+  });
+
+  /**
+   * A cook archived without opening the ratings screen has no ratings document
+   * at all and reads back as zeros on every axis. It is not the loser of every
+   * axis by eight points — it was never in the comparison, which is exactly
+   * what the summary card above says about the same pair.
+   */
+  test('a cook nobody rated loses no axis', () => {
+    const unrated: rating = {
+      smokeFlavor: 0,
+      seasoning: 0,
+      tenderness: 0,
+      overallTaste: 0,
+      notes: '',
+    };
+    renderRatings(unrated, scored());
+
+    screen.getAllByTestId('compare-rating-row').forEach(row => {
+      expect(within(row).queryByTestId('compare-rating-delta')).toBeNull();
+      expect(within(row).getByTestId('compare-rating-values')).toHaveStyle({
+        color: carbonLight.textSecondary,
+      });
+      expect(within(row).getByTestId('compare-rating-bar-a')).toHaveStyle({ width: '0%' });
+    });
   });
 
   /** A score beyond the scale still fills the bar rather than overflowing it. */
   test('a score past the top of the scale fills the bar and no more', () => {
-    renderRatings(scored({ seasoning: 12 }), scored({ seasoning: -3 }));
+    renderRatings(scored({ seasoning: 12 }), scored({ seasoning: 4 }));
 
     const row = axisRow('Seasoning');
     expect(within(row).getByTestId('compare-rating-bar-a')).toHaveStyle({ width: '100%' });
-    expect(within(row).getByTestId('compare-rating-bar-b')).toHaveStyle({ width: '0%' });
+    expect(within(row).getByTestId('compare-rating-bar-b')).toHaveStyle({ width: '40%' });
   });
 });

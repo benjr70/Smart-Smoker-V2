@@ -269,6 +269,12 @@ describe('CompareScreen', () => {
     const summary = await screen.findByTestId('compare-summary');
     expect(summary).toHaveTextContent('Pork Butt');
     expect(summary).not.toHaveTextContent('scored higher');
+    // And the axes below say the same thing: a screen that declared no winner
+    // at the top and a four-axis sweep a few cards down would be two verdicts
+    // on one pair of cooks.
+    const ratings = screen.getByTestId('compare-ratings');
+    expect(within(ratings).queryAllByTestId('compare-rating-delta')).toHaveLength(0);
+    expect(ratings).toHaveTextContent('8.0 · —');
   });
 
   /**

@@ -9,7 +9,7 @@
 
 /** A pair of step lists split three ways: shared first, then each cook's own. */
 export interface StepDiff {
-  /** Steps both cooks did, in the order cook A wrote them. */
+  /** Steps both cooks did, in the order — and as often as — cook A wrote them. */
   both: string[];
   /** Steps only cook A did, in A's order. */
   onlyA: string[];
@@ -25,26 +25,17 @@ export interface StepDiff {
 const normalise = (step: string): string => step.trim().toLowerCase();
 
 /**
- * The distinct things a cook did.
+ * The steps a cook actually wrote down.
  *
  * Blanks are dropped — an empty row in the step editor is a row nobody filled
- * in, not a step one cook did and the other skipped — and a step written twice
- * is kept once: a spritz logged as two rows is one instruction typed twice, and
- * the diff is a statement about what was done, not about how many rows it took
- * to say so. The first spelling wins, since that is the one the cook led with.
- * A record old enough to hold no step list at all is read the same way as one
- * whose list is empty: as no steps.
+ * in, not a step one cook did and the other skipped. A step written twice is
+ * kept twice: a cook that logged two spritzes did two things, and the diff
+ * reports a cook's list as that cook recorded it rather than editing its
+ * history down on the way to the screen. A record old enough to hold no step
+ * list at all is read the same way as one whose list is empty: as no steps.
  */
-const written = (steps: string[] | undefined): string[] => {
-  const seen = new Set<string>();
-  return (steps ?? []).filter(step => {
-    if (step.trim() === '') return false;
-    const key = normalise(step);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-};
+const written = (steps: string[] | undefined): string[] =>
+  (steps ?? []).filter(step => step.trim() !== '');
 
 export const diffSteps = (aSteps: string[] | undefined, bSteps: string[] | undefined): StepDiff => {
   const a = written(aSteps);
