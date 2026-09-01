@@ -1373,11 +1373,13 @@ export class FrontendApp {
   async openCompare(): Promise<void> {
     await this.compareEntry.click();
     await expect(this.page.getByTestId('compare-screen')).toBeVisible();
-    // Both cooks are read after the screen mounts, so the sections below only
-    // exist once the reads have landed — and a read that failed says so here
-    // rather than as an anonymous timeout on the first section asserted.
-    await expect(this.page.getByTestId('compare-failed')).toHaveCount(0);
+    // The screen mounts before the two cooks are read, so wait for the loading
+    // message to clear first — only then has the read settled and the failure
+    // check below means anything. Reversing these two lines makes the failure
+    // check pass vacuously while the reads are still in flight, and a failed
+    // read then shows up as an anonymous timeout on the first section asserted.
     await expect(this.page.getByTestId('compare-loading')).toHaveCount(0);
+    await expect(this.page.getByTestId('compare-failed')).toHaveCount(0);
   }
 
   /**
