@@ -12,8 +12,11 @@ import { BackIcon, SwapIcon } from '../../common/components/DesignIcons';
 import { useCompareSlotColors } from './compareColors';
 import { CompareChartCard } from './CompareChartCard';
 import { CompareFactsTable } from './CompareFactsTable';
+import { restOf, woodOf } from './compareFacts';
 import { CompareNotesCard } from './CompareNotesCard';
+import { CompareRatingsCard } from './CompareRatingsCard';
 import { CompareSlotCard } from './CompareSlotCard';
+import { CompareStepDiff } from './CompareStepDiff';
 import { CompareSummaryCard } from './CompareSummaryCard';
 import { CookPickerSheet } from './CookPickerSheet';
 
@@ -231,6 +234,22 @@ export function CompareScreen({
           }}
         >
           <CompareSummaryCard a={a} b={b} colors={colors} />
+          {/* The whole arc, in the order it was cooked: what was planned, what
+              happened, what was done afterwards — and only then how it scored,
+              so the method is in the eye before the outcome is. */}
+          <CompareStepDiff
+            testId="compare-diff-pre"
+            section="1"
+            title="PRE-SMOKE"
+            headlineLabel="Wood"
+            headlineA={woodOf(a)}
+            headlineB={woodOf(b)}
+            aSteps={a.preSmoke.steps}
+            bSteps={b.preSmoke.steps}
+            aNotes={a.preSmoke.notes}
+            bNotes={b.preSmoke.notes}
+            colors={colors}
+          />
           <CompareChartCard
             a={a}
             b={b}
@@ -240,6 +259,20 @@ export function CompareScreen({
           />
           <CompareFactsTable a={a} b={b} />
           <CompareNotesCard a={a} b={b} colors={colors} />
+          <CompareStepDiff
+            testId="compare-diff-post"
+            section="3"
+            title="POST-SMOKE"
+            headlineLabel="Rest"
+            headlineA={restOf(a)}
+            headlineB={restOf(b)}
+            aSteps={a.postSmoke.steps}
+            bSteps={b.postSmoke.steps}
+            aNotes={a.postSmoke.notes}
+            bNotes={b.postSmoke.notes}
+            colors={colors}
+          />
+          <CompareRatingsCard a={a.rating} b={b.rating} colors={colors} />
         </Box>
       ) : (
         // A comparison needs two cooks, and there are three reasons there may

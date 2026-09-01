@@ -60,11 +60,38 @@ export function Smoke({ onViewHistory, onOpenSettings }: SmokeProps = {}): JSX.E
   // how the next cook is started.
   const [complete, setComplete] = React.useState(false);
 
+  /**
+   * The meat coming off the smoker, recorded where it happened: reaching
+   * Post-Smoke *from* Smoke is the pull, however the pitmaster got there — the
+   * step's own Next, or the header's step control, which is a supported way
+   * across and not a shortcut around the wizard.
+   *
+   * Swallowed and logged like the finish flow's calls: what is stamped is the
+   * backend's business, and a stamp that did not land must not keep the
+   * pitmaster on a step they have finished with. The stamp is written once
+   * server-side, so an advance made twice — or by two devices — does not
+   * restart a rest already under way.
+   */
+  const stampPull = async (): Promise<void> => {
+    await client.smoke.stampPull().catch(error => {
+      console.log(error);
+      return null;
+    });
+  };
+
   const handleStep = (step: any) => {
     // Coming back to a step from the completion screen starts the next cook:
     // the wizard is mounted for as long as the Smoke tab is the screen in
     // effect, so nothing else would ever take the completion screen down.
     setComplete(false);
+    // Stepping out of Smoke into Post-Smoke is the meat coming off, exactly as
+    // the step's own Next is; stepping back to Pre-Smoke leaves it on the
+    // smoker. The stamp lands before the step opens — as it does on the Next
+    // path — because the Post-Smoke step reads the pull once, when it mounts.
+    if (activeStep === 1 && step === 2) {
+      void stampPull().then(() => setActiveStep(step));
+      return;
+    }
     setActiveStep(step);
   };
 
@@ -120,6 +147,16 @@ export function Smoke({ onViewHistory, onOpenSettings }: SmokeProps = {}): JSX.E
     }
     nextStep++;
     if (nextStep < 3) {
+      // Leaving the Smoke step is the meat coming off, so it is what stamps the
+      // pull the rest is counted from — the pitmaster makes no second gesture
+      // and fills in no time. Swallowed and logged like the finish flow's
+      // calls: what is stamped is the backend's business, and a stamp that did
+      // not land must not keep the pitmaster on a step they have finished with.
+      // The stamp is written once server-side, so an advance made twice — or by
+      // two devices — does not restart a rest already under way.
+      if (activeStep === 1) {
+        await stampPull();
+      }
       setActiveStep(nextStep);
     }
   };

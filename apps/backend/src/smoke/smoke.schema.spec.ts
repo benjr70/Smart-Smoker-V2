@@ -60,6 +60,23 @@ describe('SmokeSchema constraints', () => {
     expect(doc.toObject().restMinutes).toBe(45);
   });
 
+  it('keeps the pull the cook was stamped with', () => {
+    const pullAt = new Date('2026-08-30T17:00:00.000Z');
+
+    const doc = new SmokeModel({
+      status: SmokeStatus.InProgress,
+      pullAt,
+      pullTemp: 203,
+    });
+
+    expect(doc.validateSync()).toBeUndefined();
+    // The rest countdown, the carryover and the safe-to-hold window are all
+    // measured from this stamp, so a stamp the schema drops is a Post-Smoke
+    // step with nothing to count from after a reload.
+    expect(doc.toObject().pullAt).toEqual(pullAt);
+    expect(doc.toObject().pullTemp).toBe(203);
+  });
+
   /**
    * Reading a stored temperature series asks which cook owns it, by its
    * `tempsId`, on every chart draw — so that lookup has to be an index seek

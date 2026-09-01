@@ -367,14 +367,35 @@ export interface SmokeResource {
    */
   getSummary(id: string): Promise<SmokeSummary>;
   /**
+   * GET `smoke/current` — the cook in progress, or `null` when no session is
+   * set up.
+   *
+   * The read the Post-Smoke step is drawn from: the pull it was stamped with,
+   * and the rest duration it shares with the planner. Nothing is set up is not
+   * an error but the ordinary state of an app nobody is cooking with, so it is
+   * answered as no cook rather than raised.
+   */
+  getCurrent(): Promise<Smoke | null>;
+  /**
+   * POST `smoke/current/pull` — record that the meat has come off.
+   *
+   * The moment and the temperature are the backend's own: it stamps its clock
+   * and what the watched probe last read, so two devices advancing the same
+   * cook cannot disagree about when the rest began. Safe to repeat — the pull
+   * is stamped once and every later call answers the cook unchanged — which is
+   * what lets the step advance make it without knowing whether it already has.
+   */
+  stampPull(): Promise<Smoke | null>;
+  /**
    * PUT `smoke/current/serve-plan` — set the plan of the cook in progress:
    * when the food is meant to hit the table, how long the meat rests, or
    * either on its own.
    *
-   * Either half alone, because that is how the planner card writes them: a tap
-   * on "Serving at" moves dinner and says nothing about the rest, and a payload
-   * carrying both every time would have the two steppers overwriting each other
-   * whenever another device had just moved the other one.
+   * Either half alone, because that is how the plan is edited: a tap on the
+   * planner card's "Serving at" moves dinner and says nothing about the rest,
+   * and the Post-Smoke rest field writes a rest and says nothing about dinner.
+   * A payload carrying both every time would have the two overwriting each
+   * other whenever another device had just moved the other one.
    *
    * On the current cook rather than an id: a plan is only ever about the
    * session that is running. Answered with the cook as it now stands — or
@@ -577,6 +598,25 @@ const asMoment = (value: string | Date | null | undefined): Date | null => {
   const moment = value instanceof Date ? value : new Date(value);
   return Number.isNaN(moment.getTime()) ? null : moment;
 };
+
+/**
+ * Read-path normalization for a cook: the moments stored on it become `Date`s,
+ * and a session with no cook set up stays nothing.
+ *
+ * The same conversion the timeline's stamps get, and for the same reason: the
+ * rest countdown subtracts the pull from the current time, and
+ * `Date.now() - '2026-08-30T17:00:00.000Z'` is `NaN` — a countdown of nothing
+ * on a card that would otherwise say the rest is over.
+ */
+const normalizeSmoke = (raw: Smoke | null | undefined): Smoke | null =>
+  raw
+    ? {
+        ...raw,
+        date: asMoment(raw.date) ?? raw.date,
+        serveAt: asMoment(raw.serveAt),
+        pullAt: asMoment(raw.pullAt),
+      }
+    : null;
 
 /**
  * Read-path normalization for a cook's timing: the stamps become `Date`s.
@@ -1088,6 +1128,10 @@ export const createApiClient = (
       const smoke = await transport.get<Smoke>(`smoke/${id}`);
       return describeCook(transport, id, smoke);
     },
+    getCurrent: async (): Promise<Smoke | null> =>
+      normalizeSmoke(await transport.get<Smoke | null>('smoke/current')),
+    stampPull: async (): Promise<Smoke | null> =>
+      normalizeSmoke(await transport.post<Smoke | null>('smoke/current/pull')),
     saveServePlan: async (plan: ServePlanWrite): Promise<Smoke | null> => {
       // Named rather than spread, and only the halves the caller actually set:
       // the backend leaves an omitted half alone, while `null` clears it, and
@@ -1096,8 +1140,7 @@ export const createApiClient = (
         ...(plan.serveAt === undefined ? {} : { serveAt: plan.serveAt }),
         ...(plan.restMinutes === undefined ? {} : { restMinutes: plan.restMinutes }),
       };
-      const saved = await transport.put<Smoke | null>('smoke/current/serve-plan', body);
-      return saved ?? null;
+      return normalizeSmoke(await transport.put<Smoke | null>('smoke/current/serve-plan', body));
     },
   },
   timeline: {

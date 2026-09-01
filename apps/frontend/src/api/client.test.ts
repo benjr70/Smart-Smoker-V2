@@ -385,6 +385,96 @@ describe('state/smoke/history client — legacy endpoint contract', () => {
   });
 });
 
+/**
+ * The cook in progress, as the Post-Smoke step reads it: the pull it was
+ * stamped with, and the one rest duration it shares with the Serve Plan.
+ */
+describe('smoke client — the cook in progress', () => {
+  const running: Smoke = {
+    preSmokeId: 'pre1',
+    tempsId: 'temps1',
+    postSmokeId: 'post1',
+    smokeProfileId: 'prof1',
+    ratingId: 'rate1',
+    date: new Date('2026-08-30T12:00:00Z'),
+    status: 0,
+  };
+
+  const backendWithCook = () =>
+    createFakeBackend({
+      state: { smokeId: 'abc123', smoking: true },
+      smoke: { records: { abc123: { ...running } } },
+    });
+
+  test('reads the running cook, with its pull stamp as moments rather than strings', async () => {
+    const backend = createFakeBackend({
+      state: { smokeId: 'abc123', smoking: true },
+      smoke: {
+        records: {
+          abc123: {
+            ...running,
+            // As JSON carries them: what a real deployment answers.
+            pullAt: '2026-08-30T17:00:00.000Z' as unknown as Date,
+            pullTemp: 203,
+            restMinutes: 45,
+          },
+        },
+      },
+    });
+
+    const cook = await createApiClient(backend).smoke.getCurrent();
+
+    expect(cook?.pullAt).toEqual(new Date('2026-08-30T17:00:00.000Z'));
+    expect(cook?.pullTemp).toBe(203);
+    expect(cook?.restMinutes).toBe(45);
+  });
+
+  test('reads no cook at all when no session is set up', async () => {
+    expect(await createApiClient(createFakeBackend()).smoke.getCurrent()).toBeNull();
+  });
+
+  test('stamps the pull of the running cook and answers it back', async () => {
+    const backend = backendWithCook();
+
+    const pulled = await createApiClient(backend).smoke.stampPull();
+
+    expect(pulled?.pullAt).toBeInstanceOf(Date);
+    expect(backend.requests).toContainEqual({
+      method: 'post',
+      path: 'smoke/current/pull',
+      body: undefined,
+    });
+  });
+
+  test('leaves a pull that was already stamped where it was', async () => {
+    const backend = backendWithCook();
+    const client = createApiClient(backend);
+
+    const first = await client.smoke.stampPull();
+    const second = await client.smoke.stampPull();
+
+    expect(second?.pullAt).toEqual(first?.pullAt);
+  });
+
+  test('stamps nothing when no cook is set up', async () => {
+    expect(await createApiClient(createFakeBackend()).smoke.stampPull()).toBeNull();
+  });
+
+  test('writes the rest the Post-Smoke field and the planner share', async () => {
+    const backend = backendWithCook();
+    const client = createApiClient(backend);
+
+    await client.smoke.saveServePlan({ restMinutes: 90 });
+
+    expect((await client.smoke.getCurrent())?.restMinutes).toBe(90);
+    expect(backend.requests).toContainEqual({
+      method: 'put',
+      path: 'smoke/current/serve-plan',
+      body: { restMinutes: 90 },
+    });
+  });
+});
+
 describe('history client — list read', () => {
   const rows: SmokeHistory[] = [
     {

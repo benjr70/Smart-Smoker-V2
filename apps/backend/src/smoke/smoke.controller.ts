@@ -47,6 +47,34 @@ export class SmokeController {
     return this.smokeService.updateServePlan(plan);
   }
 
+  /**
+   * Record that the meat of the cook in progress has come off: the moment, and
+   * what the watched probe read as it did.
+   *
+   * A POST because it records something that happened rather than storing
+   * something the client decided — the body would have nothing to carry, since
+   * both halves of the stamp are the server's to observe. Safe to repeat: the
+   * pull is stamped once and every later call answers the cook unchanged, which
+   * is what lets a step advance make this call without knowing whether an
+   * earlier one already did.
+   */
+  @Post('/current/pull')
+  StampPull(): Promise<Smoke | null> {
+    return this.smokeService.stampPull();
+  }
+
+  /**
+   * The cook in progress — its plan, its pull stamp, its links — or `null`
+   * where no session is set up.
+   *
+   * Declared before the by-id route so `current` is answered here rather than
+   * being read as an id and refused as a malformed one.
+   */
+  @Get('/current')
+  getCurrent(): Promise<Smoke | null> {
+    return this.smokeService.getCurrentSmoke();
+  }
+
   @Get('/:id')
   getById(@Param('id', ParseObjectIdPipe) id: string): Promise<Smoke> {
     return this.smokeService.getByIdOrThrow(id);

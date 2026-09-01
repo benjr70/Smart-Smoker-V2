@@ -124,6 +124,46 @@ describe('SmokeController', () => {
     });
   });
 
+  describe('StampPull', () => {
+    it('stamps the pull of the cook in progress and answers the cook', async () => {
+      const pulled = {
+        ...mockSmoke,
+        pullAt: new Date('2026-08-30T17:00:00.000Z'),
+        pullTemp: 203,
+      };
+      mockSmokeService.stampPull = jest.fn().mockResolvedValue(pulled);
+
+      expect(await controller.StampPull()).toEqual(pulled);
+      expect(mockSmokeService.stampPull).toHaveBeenCalled();
+    });
+
+    it('answers nothing when no cook is in progress', async () => {
+      mockSmokeService.stampPull = jest.fn().mockResolvedValue(null);
+
+      expect(await controller.StampPull()).toBeNull();
+    });
+  });
+
+  describe('getCurrent', () => {
+    it('answers the cook the session names', async () => {
+      mockSmokeService.getCurrentSmoke = jest.fn().mockResolvedValue(mockSmoke);
+
+      expect(await controller.getCurrent()).toEqual(mockSmoke);
+    });
+
+    /**
+     * Answered rather than refused: a screen opened with no session set up is
+     * an ordinary state of this app, not a request that went wrong — and the
+     * by-id route below must not be the one that answers "current".
+     */
+    it('answers nothing when no cook is set up', async () => {
+      mockSmokeService.getCurrentSmoke = jest.fn().mockResolvedValue(null);
+
+      expect(await controller.getCurrent()).toBeNull();
+      expect(mockSmokeService.getByIdOrThrow).not.toHaveBeenCalled();
+    });
+  });
+
   describe('CreateSmoke', () => {
     it('should persist a new smoke via the service (no self-recursion)', async () => {
       const smokeDto: SmokeDto = {

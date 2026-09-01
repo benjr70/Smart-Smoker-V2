@@ -56,7 +56,13 @@ const renderWizard = (onViewHistory?: () => void, onOpenSettings?: () => void) =
   // would be testing that safety rule rather than this shell.
   backend = createFakeBackend({
     state: { smokeId: 'test-id', smoking: true },
-    smoke: { finish: { _id: 'test-id' } as never },
+    smoke: {
+      // The cook the session names, so what the wizard writes against the cook
+      // in progress — the pull it stamps on the way to Post-Smoke — has a cook
+      // to be written onto.
+      records: { 'test-id': { _id: 'test-id' } as never },
+      finish: { _id: 'test-id' } as never,
+    },
     preSmoke: {
       current: {
         name: '',
@@ -284,6 +290,107 @@ describe('advancing through the wizard', () => {
 
     expect(await screen.findByTestId('postsmoke-rest-time-input')).toBeInTheDocument();
     expect(nextButton()).toHaveTextContent('Finish');
+  });
+
+  /**
+   * The meat comes off when the pitmaster leaves the Smoke step, so that is
+   * where the pull is stamped: no second gesture, and no field to fill in
+   * before the rest can be counted.
+   */
+  it('stamps the pull when the cook is advanced from Smoke to Post-Smoke', async () => {
+    const user = userEvent.setup();
+    renderWizard();
+    await screen.findByTestId('presmoke-name-input');
+
+    await user.click(nextButton());
+    await screen.findByTestId('smoke-step');
+    await user.click(nextButton());
+
+    await screen.findByTestId('postsmoke-rest-time-input');
+    await waitFor(() =>
+      expect(
+        backend.requests.filter(request => request.path === 'smoke/current/pull')
+      ).toHaveLength(1)
+    );
+  });
+
+  /**
+   * The header's step control is a supported way out of the Smoke step, not a
+   * shortcut around the wizard: a pitmaster who taps "Post-Smoke" with the meat
+   * in their hands has pulled it just as surely as one who pressed Next, and
+   * the rest has to count from that moment either way.
+   */
+  it('stamps the pull when Post-Smoke is reached from Smoke through the step control', async () => {
+    const user = userEvent.setup();
+    renderWizard();
+    await screen.findByTestId('presmoke-name-input');
+
+    await user.click(segment('Smoke'));
+    await screen.findByTestId('smoke-step');
+    await user.click(segment('Post-Smoke'));
+
+    await screen.findByTestId('postsmoke-rest-time-input');
+    await waitFor(() =>
+      expect(backend.store.smoke.records['test-id'].pullAt).toEqual(expect.anything())
+    );
+  });
+
+  /**
+   * Stepping back out of Smoke is not a pull: the meat is still on the smoker,
+   * and a rest counting from a step the pitmaster changed their mind about
+   * would be counting from nothing.
+   */
+  it('stamps no pull when the step control leaves Smoke for Pre-Smoke', async () => {
+    const user = userEvent.setup();
+    renderWizard();
+    await screen.findByTestId('presmoke-name-input');
+
+    await user.click(segment('Smoke'));
+    await screen.findByTestId('smoke-step');
+    await user.click(segment('Pre-Smoke'));
+    await screen.findByTestId('presmoke-name-input');
+
+    expect(backend.requests.some(request => request.path === 'smoke/current/pull')).toBe(false);
+  });
+
+  /**
+   * The pull is a moment that happened, not a state the screen is in: walking
+   * back to the Smoke step and forward again must leave the rest counting from
+   * when the meat actually came off.
+   */
+  it('leaves the pull where it was stamped when the step is left and returned to', async () => {
+    const user = userEvent.setup();
+    renderWizard();
+    await screen.findByTestId('presmoke-name-input');
+
+    await user.click(segment('Smoke'));
+    await screen.findByTestId('smoke-step');
+    await user.click(nextButton());
+    await screen.findByTestId('postsmoke-rest-time-input');
+    const stamped = backend.store.smoke.records['test-id'].pullAt;
+
+    await user.click(segment('Smoke'));
+    await screen.findByTestId('smoke-step');
+    await user.click(nextButton());
+    await screen.findByTestId('postsmoke-rest-time-input');
+
+    expect(backend.store.smoke.records['test-id'].pullAt).toEqual(stamped);
+  });
+
+  /**
+   * Steps are switchable in any order — the header's control is not a wizard
+   * gate — but only leaving the Smoke step means the meat came off. Opening
+   * Post-Smoke straight from Pre-Smoke stamps nothing.
+   */
+  it('stamps no pull for a step the cook never smoked through', async () => {
+    const user = userEvent.setup();
+    renderWizard();
+    await screen.findByTestId('presmoke-name-input');
+
+    await user.click(segment('Post-Smoke'));
+    await screen.findByTestId('postsmoke-rest-time-input');
+
+    expect(backend.requests.some(request => request.path === 'smoke/current/pull')).toBe(false);
   });
 
   it('ends every step with its primary action against the right-hand edge', async () => {
