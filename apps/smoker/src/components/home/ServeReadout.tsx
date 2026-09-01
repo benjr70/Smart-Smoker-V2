@@ -40,9 +40,8 @@ const clockTime = (moment: Date): string =>
  */
 export const serveStatusOf = (plan: CookServePlan): string => {
   const slack = plan.slackMinutes;
-  // No cushion is no trustworthy projection — the only thing that makes the
-  // verdict unknown, and the only state with no amount to say. Said as waiting
-  // rather than as a number nobody has yet.
+  // No cushion is no trustworthy projection: nothing to say an amount of. Said
+  // as waiting rather than as a number nobody has yet.
   if (slack === null) {
     return 'Gathering data';
   }
@@ -51,13 +50,20 @@ export const serveStatusOf = (plan: CookServePlan): string => {
       return `Running ${spanOf(-slack)} late`;
     case 'early':
       return `${spanOf(slack)} of cushion`;
-    default:
+    case 'ontrack':
       // On track, either way round: the amount is still said, because "on
       // schedule" with four minutes in hand and with fifty is not the same news
       // to somebody deciding whether to put another log on.
       return slack >= 0
         ? `On schedule · ${spanOf(slack)} spare`
         : `On schedule · ${spanOf(-slack)} behind`;
+    default:
+      // Unknown — which is also what a verdict this build has never heard of
+      // arrives as. A cushion is not a verdict: a backend that has just started
+      // calling a cook something new may well be flagging it *off* plan, and
+      // saying "on schedule" over the top of that is the one reading of the
+      // glass that would send somebody away from the pit. Waiting, again.
+      return 'Gathering data';
   }
 };
 
