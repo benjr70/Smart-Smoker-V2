@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.13.0](https://github.com/benjr70/Smart-Smoker-V2/compare/v1.12.0...v1.13.0) (2026-09-01)
+
+
+### Features
+
+* **agent:** /afk-resolve skill and pick-wayfinder routing ([#599](https://github.com/benjr70/Smart-Smoker-V2/issues/599)) ([5957f60](https://github.com/benjr70/Smart-Smoker-V2/commit/5957f608f41c81b2c415f249b9a9f5ae0f6f994a))
+* **agent:** dashboard fire kinds, Wayfinder tile, Maps card, docs-only badge ([#596](https://github.com/benjr70/Smart-Smoker-V2/issues/596)) ([f851e6c](https://github.com/benjr70/Smart-Smoker-V2/commit/f851e6c75a7fea8486fc9b206d537ffc4fdb71f6))
+* **agent:** docs-only merge gate and docs-merge triage reason ([#595](https://github.com/benjr70/Smart-Smoker-V2/issues/595)) ([fd315b7](https://github.com/benjr70/Smart-Smoker-V2/commit/fd315b7353ea9b6e022edb59fe2f8929a29b1492))
+* **agent:** picker reads native blockedBy and skips human-claimed issues ([#593](https://github.com/benjr70/Smart-Smoker-V2/issues/593)) ([7e92e1a](https://github.com/benjr70/Smart-Smoker-V2/commit/7e92e1ab893f15a893a0f48edac4db2c89c3c99c))
+* **agent:** repo-local to-tickets/to-spec/wayfinder forks, drop PRD skills ([#594](https://github.com/benjr70/Smart-Smoker-V2/issues/594)) ([e5f3d40](https://github.com/benjr70/Smart-Smoker-V2/commit/e5f3d40d107f4a54e353e2ac30dfb1111d1d54e7))
+* **backend:** decimated temps series endpoint ([#622](https://github.com/benjr70/Smart-Smoker-V2/issues/622)) ([8548ec7](https://github.com/benjr70/Smart-Smoker-V2/commit/8548ec766e4a5a9cbdb48efc011441cafba89168))
+* **backend:** off-schedule serve-plan push alert ([#629](https://github.com/benjr70/Smart-Smoker-V2/issues/629)) ([c53756f](https://github.com/benjr70/Smart-Smoker-V2/commit/c53756f3fdbef62463a552d35d37d74f89cbfeab))
+* **backend:** per-smoke serve plan and server-side verdict ([#624](https://github.com/benjr70/Smart-Smoker-V2/issues/624)) ([82a9db6](https://github.com/benjr70/Smart-Smoker-V2/commit/82a9db661a52f8f22ebf5d2d49aa58fd579548a9))
+* **frontend:** compare screen shell and compare data hook ([#625](https://github.com/benjr70/Smart-Smoker-V2/issues/625)) ([8bc64e8](https://github.com/benjr70/Smart-Smoker-V2/commit/8bc64e89ad1a6d840b66177218b41ba0b7176fe6))
+* **frontend:** compare step diffs and ratings deltas ([#631](https://github.com/benjr70/Smart-Smoker-V2/issues/631)) ([c4dd182](https://github.com/benjr70/Smart-Smoker-V2/commit/c4dd182d13de3e354cb45444cf87b0da341f55c9))
+* **frontend:** serve plan card on the smoke step ([#628](https://github.com/benjr70/Smart-Smoker-V2/issues/628)) ([d0c3362](https://github.com/benjr70/Smart-Smoker-V2/commit/d0c336231f46f7edccf95478890301c9f3cf2864))
+* **monorepo:** chart scrub, stamp rails and footer on compare overlay ([#633](https://github.com/benjr70/Smart-Smoker-V2/issues/633)) ([84215ea](https://github.com/benjr70/Smart-Smoker-V2/commit/84215ea4fc9c49c79410c6bff4bdc369a800680a))
+* **monorepo:** CompareChart overlay for two cooks on one elapsed axis ([#627](https://github.com/benjr70/Smart-Smoker-V2/issues/627)) ([5d29263](https://github.com/benjr70/Smart-Smoker-V2/commit/5d292635c35c3d9426e05171e07ed872a038c376))
+* **monorepo:** open-source project metadata, contributor docs and VAPID_CONTACT ([#570](https://github.com/benjr70/Smart-Smoker-V2/issues/570)) ([113376b](https://github.com/benjr70/Smart-Smoker-V2/commit/113376b3934de8d5518b6bb7e51a4505f1baddaf))
+* **monorepo:** pull stamp and Post-Smoke rest timer ([#630](https://github.com/benjr70/Smart-Smoker-V2/issues/630)) ([59519b6](https://github.com/benjr70/Smart-Smoker-V2/commit/59519b6526ae417d91be15c21cd3f40b463d72fc))
+* **monorepo:** serve-plan settings block and During-the-cook settings card ([#609](https://github.com/benjr70/Smart-Smoker-V2/issues/609)) ([690d18c](https://github.com/benjr70/Smart-Smoker-V2/commit/690d18c1f0f5443089984d3b812003b34a4aaba2))
+* **smoker:** serve status line and rest countdown on the touchscreen ([#632](https://github.com/benjr70/Smart-Smoker-V2/issues/632)) ([6d571fc](https://github.com/benjr70/Smart-Smoker-V2/commit/6d571fc492eab3b283334c32919cb1b7df43b8f8))
+
+
+### Bug Fixes
+
+* **agent:** Wayfinder tile AFK count reads wp_scan, not frontier badges ([#623](https://github.com/benjr70/Smart-Smoker-V2/issues/623)) ([4fa1a23](https://github.com/benjr70/Smart-Smoker-V2/commit/4fa1a231800020dafb070e065f8b1c2e2eb08bd4))
+
 ## [1.12.0](https://github.com/benjr70/Smart-Smoker-V2/compare/v1.11.0...v1.12.0) (2026-08-27)
 
 
