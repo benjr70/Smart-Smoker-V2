@@ -38,6 +38,17 @@ end-to-end path, demoable alone. _Avoid_: task, story, sub-issue
 **Resolve**: The Daemon closing a Decision ticket: findings recorded, ticket
 closed, Map index appended. _Avoid_: complete, finish
 
+**Agent PR**: A pull request the Daemon opened for an AFK ticket; issue-backed
+and run through review and verify rounds. _Avoid_: team PR, our PR
+
+**Bot PR**: A pull request opened by a GitHub app (Dependabot, release-please)
+with no backing issue; the Daemon may verify and land it but never reviews it as
+feature work. _Avoid_: external PR, dependency PR (as a general term)
+
+**Gate-and-merge**: The Daemon lane that lands a PR on master from a gate
+verdict alone, with no agent review round: docs-only research PRs and verified
+Dependabot PRs. _Avoid_: auto-merge (GitHub's feature), fast-track
+
 ### Product
 
 **Serve Plan**: The during-cook planner that works backwards from a serve time:
