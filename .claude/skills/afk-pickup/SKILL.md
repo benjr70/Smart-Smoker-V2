@@ -52,7 +52,7 @@ PRs. All mutations stay in the sections below. Branch on `$VERDICT`:
 | `abort`          | agent-teams env flag missing            | print the missing-flag line, `exit 1`                                                             |
 | `no-gh`          | gh unauthenticated                      | §0.5 MCP fallback (run §1.2/§1.5/§2 semantics via MCP tools)                                      |
 | `in-flight`      | `AFK:in-progress` lock held             | `echo "afk-pickup: skip — $(jq -r '.inflight' <<<"$TRIAGE") issue(s) in flight"; exit 0`          |
-| `reconcile`      | a PR needs attention (or is docs-only)  | §1.2 (fields in `.reconcile`; `.reconcile.reason` `docs-merge` takes the gate-and-merge branch)   |
+| `reconcile`      | a PR needs attention (or is docs-only)  | §1.2 (fields in `.reconcile`; reasons `docs-merge` / `dependabot` take their own branches)        |
 | `resume`         | paused issue below the resume cap       | §1.5 resume path (fields in `.paused`)                                                            |
 | `resume-cap`     | paused issue AT the cap                 | §1.5 fail path (fields in `.paused`)                                                              |
 | `pick`           | eligible Slice found, blockers closed   | §3/§4 with `N=$(jq -r '.pick.issue' <<<"$TRIAGE")`, title in `.pick.title`                        |
@@ -114,6 +114,29 @@ the docs-only PRs `docs-merge` exists for). The ticket number is derived from
 the branch, else from the PR title's `(#N)`; `.reconcile.issue` can therefore be
 `null`, and when it is, skip the issue lock and the ticket comment below (there
 is no ticket) — the PR is still worked.
+
+**Reason `dependabot` — a Bot PR, not an Agent PR.** A PR authored by the
+Dependabot app on a `dependabot/…` branch is triaged as a **Dependabot PR**: the
+verdict carries its whole classification (`security`, `major`, the head `sha`
+and the marker-derived resume state `tierA` / `tierB` / `attempts`) and its
+`issue` is always `null`, so there is no issue lock and no ticket comment. It
+ranks **below** every agent reason above — a human waiting on their own PR is
+never queued behind a bot — with security bumps before version bumps, then
+oldest, one per fire. A conflicting Bot PR comes back as reason `conflict` with
+an extra `agentCommits` flag instead — and ranks below every agent reason too,
+including agent `docs-merge` and `incomplete`: sharing the name `conflict` never
+buys a bot the agent conflict rank. The Gate-and-merge lane that acts on these
+verdicts (retitle, Tier A/B, bounded fix loop, `deps-gate`, squash-merge) lands
+in a later Slice (#656/#657). **Until it does you will never see a Bot PR here
+at all**: §0's one-call triage suppresses _both_ bot verdicts — reason
+`dependabot` and a bot PR's `conflict` — by logging the PR number on stderr and
+falling through to §1.5/§2. The suppression lives in exactly one predicate,
+`pr_triage_bot_verdict_unworkable` in `lib/pr-triage.sh`, which both the fire
+triage and the work probe ask, so #657 switches the lane on with one edit. That
+covers the conflict case deliberately: the generic conflict recipe below would
+rebase and force-push Dependabot's own branch, where the lane will nudge
+`@dependabot rebase` instead. A Bot PR nobody can work yet never blocks the
+queue behind it.
 
 `pr_triage_scan` owns the `gh pr list` call and rides out GitHub's async
 mergeability: a fresh master push leaves every open PR `UNKNOWN` for a few

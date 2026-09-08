@@ -206,6 +206,67 @@ test_reconcile_pick() {
     fi
 }
 
+# ── Test 5b: a Dependabot PR does NOT block the queue ───────────────────────
+# The PR Triage classifies Bot PRs already, but nothing here can work one yet —
+# the lane wiring lands in #657. If a `dependabot` verdict returned `reconcile`
+# the skill would be handed a PR it has no procedure for and every issue behind
+# it, including the tickets that build the lane, would be unreachable. The
+# verdict is logged and the triage falls through to the ordinary pick.
+test_dependabot_pr_does_not_block_the_pick() {
+    local dir out err
+    dir="$(make_env)"
+    jq -cn '[{number: 635, headRefName: "dependabot/npm_and_yarn/axios-1.1.2",
+              isDraft: false, mergeable: "MERGEABLE",
+              createdAt: "2026-08-01T00:00:00Z", labels: [],
+              author: {login: "app/dependabot"}, headRefOid: "sha635",
+              reviewDecision: null}]' > "${dir}/prs.out"
+    printf '%s\n' '{"comments":[],"files":[],"body":"Bumps axios.","commits":[{"messageHeadline":"Bump axios","messageBody":"Bumps axios from 1.1.0 to 1.1.2.","authors":[{"login":"dependabot[bot]"}]}]}' \
+        > "${dir}/prview.out"
+    graphql_fixture "${dir}" \
+        "$(issue_node 657 'wire the deps lane' P1 true '2026-09-01T00:00:00Z')"
+    out="$(run_triage "${dir}" 2> "${dir}/stderr.log")"
+    err="$(cat "${dir}/stderr.log")"
+    if [ "$(printf '%s' "${out}" | jq -r '.verdict')" = "pick" ] \
+        && [ "$(printf '%s' "${out}" | jq -r '.pick.issue')" = "657" ] \
+        && [ "$(printf '%s' "${out}" | jq -r '.reconcile')" = "null" ] \
+        && printf '%s' "${err}" | grep -q "dependabot PR #635"; then
+        pass "dependabot verdict falls through to the issue pick"
+    else
+        fail "dependabot verdict falls through to the issue pick" \
+            "out=${out} err=${err}"
+    fi
+}
+
+# ── Test 5c: a CONFLICTING Dependabot PR does not take the §1.2 conflict path ─
+# It comes back as reason `conflict`, but the generic recipe behind that reason
+# locks a ticket that does not exist and force-pushes a rebase onto Dependabot's
+# own branch. #651 nudges `@dependabot rebase` instead, in the lane that lands
+# in #657 — so until then a Bot PR is suppressed under BOTH its reasons.
+test_conflicting_dependabot_pr_does_not_block_the_pick() {
+    local dir out err
+    dir="$(make_env)"
+    jq -cn '[{number: 636, headRefName: "dependabot/npm_and_yarn/axios-1.1.2",
+              isDraft: false, mergeable: "CONFLICTING",
+              createdAt: "2026-08-01T00:00:00Z", labels: [],
+              author: {login: "app/dependabot"}, headRefOid: "sha636",
+              reviewDecision: null}]' > "${dir}/prs.out"
+    printf '%s\n' '{"comments":[],"files":[],"body":"Bumps axios.","commits":[{"messageHeadline":"Bump axios","messageBody":"Bumps axios from 1.1.0 to 1.1.2.","authors":[{"login":"dependabot[bot]"}]}]}' \
+        > "${dir}/prview.out"
+    graphql_fixture "${dir}" \
+        "$(issue_node 657 'wire the deps lane' P1 true '2026-09-01T00:00:00Z')"
+    out="$(run_triage "${dir}" 2> "${dir}/stderr.log")"
+    err="$(cat "${dir}/stderr.log")"
+    if [ "$(printf '%s' "${out}" | jq -r '.verdict')" = "pick" ] \
+        && [ "$(printf '%s' "${out}" | jq -r '.pick.issue')" = "657" ] \
+        && [ "$(printf '%s' "${out}" | jq -r '.reconcile')" = "null" ] \
+        && printf '%s' "${err}" | grep -q "dependabot PR #636 (conflict)"; then
+        pass "conflicting dependabot verdict falls through to the issue pick"
+    else
+        fail "conflicting dependabot verdict falls through to the issue pick" \
+            "out=${out} err=${err}"
+    fi
+}
+
 # ── Test 6: paused issue below cap → resume ──────────────────────────────────
 test_resume_below_cap() {
     local dir out
@@ -558,6 +619,8 @@ test_no_gh_on_auth_failure
 test_in_flight_lock
 test_lock_error_fails_safe
 test_reconcile_pick
+test_dependabot_pr_does_not_block_the_pick
+test_conflicting_dependabot_pr_does_not_block_the_pick
 test_resume_below_cap
 test_resume_cap
 test_pick_priority_and_blockers

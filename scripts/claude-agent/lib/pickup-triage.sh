@@ -26,6 +26,11 @@
 #     "reconcile": { "pr": N, "branch": "feat/issue-M", "issue": M,
 #                    "reason": "revise|conflict|docs-merge|incomplete",
 #                    "hadDone": <bool> } | null,
+#                    NEVER a Dependabot PR: the PR Triage can classify a Bot PR
+#                    (see pr-triage.sh) under reason "dependabot" OR "conflict",
+#                    but nothing can work either until the lane wiring lands in
+#                    #657 — §1.2 logs any verdict on a `dependabot/` branch on
+#                    stderr and falls through to the pick
 #     "paused":    { "issue": N, "pauseCount": <int>,
 #                    "action": "resume|fail" } | null,
 #     "pick":      { "issue": N, "title": "...", "priority": "P0|P1|P2",
@@ -161,6 +166,19 @@ pickup_triage() {
     # the UNKNOWN-mergeability re-list).
     local pick_json reconcile=null
     pick_json="$(PR_TRIAGE_AUTHOR="${login}" pr_triage_scan)" || pick_json=''
+    if pr_triage_bot_verdict_unworkable "${pick_json}"; then
+        # The PR Triage can already classify a Dependabot PR, but nothing here
+        # can work one until the lane lands in #657. The decision and its
+        # rationale live in pr-triage.sh's pr_triage_bot_verdict_unworkable —
+        # ONE predicate, so #657 has one place to switch on; here we only log
+        # and fall through to §1.5/§2.
+        local deps_pr deps_reason
+        deps_pr="$(printf '%s' "${pick_json}" | jq -r '.pr' 2>/dev/null || echo '?')"
+        deps_reason="$(printf '%s' "${pick_json}" | jq -r '.reason' 2>/dev/null || echo '?')"
+        echo "pickup-triage: dependabot PR #${deps_pr} (${deps_reason}) is not" \
+            "workable yet (lane wiring lands in #657) — falling through" >&2
+        pick_json=''
+    fi
     if [ -n "${pick_json}" ] && [ "$(printf '%s' "${pick_json}" | jq -r '.pr' 2>/dev/null)" != "null" ]; then
         local recon_n had_done='false'
         # The ticket number can be null (a research branch that carries none) —

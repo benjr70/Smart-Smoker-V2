@@ -626,6 +626,129 @@ want: ${want}"
 }
 
 #-------------------------------------------------------------------------------
+# Test 25: a Dependabot PR must not wake the daemon. The PR Triage classifies
+# Bot PRs, but no fire can work one until the lane is wired (#657) — a wake
+# here would burn a whole fire every five minutes on a PR the fire then skips.
+# The listing also carries the fields that verdict is built from, so the probe
+# and the fire's triage see the same PR the same way.
+#-------------------------------------------------------------------------------
+test_scan_dependabot_pr_no_reconcile() {
+    echo "TEST: a Dependabot PR does not set reconcile"
+
+    local dir; dir="$(make_env)"
+    trap "rm -rf '${dir}'" RETURN
+    cat > "${dir}/prs.out" <<'EOF'
+[{"number":635,"headRefName":"dependabot/npm_and_yarn/axios-1.1.2",
+  "isDraft":false,"mergeable":"MERGEABLE","labels":[],
+  "createdAt":"2026-08-01T00:00:00Z","author":{"login":"app/dependabot"},
+  "headRefOid":"sha635","reviewDecision":null}]
+EOF
+    cat > "${dir}/prview.out" <<'PVEOF'
+{"comments":[],"files":[],"body":"Bumps axios.",
+ "commits":[{"messageHeadline":"Bump axios",
+             "messageBody":"Bumps axios from 1.1.0 to 1.1.2.",
+             "authors":[{"login":"dependabot[bot]"}]}]}
+PVEOF
+
+    local scan
+    scan="$(GH_BIN="${dir}/gh-stub" wp_scan)"
+
+    if [ "$(printf '%s' "${scan}" | jq -r '.reconcile')" != "null" ]; then
+        fail "a dependabot verdict must not read as a reconcile" "scan=${scan}"
+        return
+    fi
+    if [ "$(printf '%s' "${scan}" | jq -r '.prSig')" != "635" ]; then
+        fail "the bot PR must still count toward the open-PR signature" \
+            "scan=${scan}"
+        return
+    fi
+    if printf '%s' "${scan}" | wp_decide "" ""; then
+        fail "a dependabot verdict must not wake the daemon" "scan=${scan}"
+        return
+    fi
+
+    pass "a Dependabot PR does not set reconcile"
+}
+
+#-------------------------------------------------------------------------------
+# Test 25b: nor does a CONFLICTING one. It comes back under reason `conflict`,
+# whose generic recipe would rebase and force-push Dependabot's own branch;
+# #651 nudges `@dependabot rebase` instead, from the lane that lands in #657.
+# Until then both bot verdicts are suppressed, keyed on the branch.
+#-------------------------------------------------------------------------------
+test_scan_conflicting_dependabot_pr_no_reconcile() {
+    echo "TEST: a conflicting Dependabot PR does not set reconcile"
+
+    local dir; dir="$(make_env)"
+    trap "rm -rf '${dir}'" RETURN
+    cat > "${dir}/prs.out" <<'EOF'
+[{"number":636,"headRefName":"dependabot/npm_and_yarn/axios-1.1.2",
+  "isDraft":false,"mergeable":"CONFLICTING","labels":[],
+  "createdAt":"2026-08-01T00:00:00Z","author":{"login":"app/dependabot"},
+  "headRefOid":"sha636","reviewDecision":null}]
+EOF
+    cat > "${dir}/prview.out" <<'PVEOF'
+{"comments":[],"files":[],"body":"Bumps axios.",
+ "commits":[{"messageHeadline":"Bump axios",
+             "messageBody":"Bumps axios from 1.1.0 to 1.1.2.",
+             "authors":[{"login":"dependabot[bot]"}]}]}
+PVEOF
+
+    local scan
+    scan="$(GH_BIN="${dir}/gh-stub" wp_scan)"
+
+    if [ "$(printf '%s' "${scan}" | jq -r '.reconcile')" != "null" ]; then
+        fail "a conflicting bot PR must not read as a reconcile" "scan=${scan}"
+        return
+    fi
+    if printf '%s' "${scan}" | wp_decide "" ""; then
+        fail "a conflicting bot PR must not wake the daemon" "scan=${scan}"
+        return
+    fi
+
+    pass "a conflicting Dependabot PR does not set reconcile"
+}
+
+#-------------------------------------------------------------------------------
+# Test 26: the probe's listing asks for the same fields as pr_triage_scan's.
+# The reconcile verdict comes from the same module, and a listing missing
+# headRefOid/reviewDecision would classify the same PR differently here than on
+# the fire — and would pay per-PR round trips it cannot use.
+#-------------------------------------------------------------------------------
+test_scan_pr_list_requests_deps_fields() {
+    echo "TEST: the probe listing requests headRefOid and reviewDecision"
+
+    local dir; dir="$(make_env)"
+    trap "rm -rf '${dir}'" RETURN
+    cat > "${dir}/gh-stub" <<EOF
+#!/usr/bin/env bash
+args="\$*"
+case "\${args}" in
+    *"pr list"*) echo "\${args}" >> "${dir}/prlist.log"; cat "${dir}/prs.out" ;;
+    *"api user"*) cat "${dir}/login.out" ;;
+    *"--label AFK:in-progress"*) cat "${dir}/locked.out" ;;
+    *"--label AFK:paused"*) cat "${dir}/paused.out" ;;
+    *"--label wayfinder:map"*) cat "${dir}/maps.out" ;;
+    *"issue list --label AFK "*) cat "${dir}/picks.out" ;;
+    *) exit 1 ;;
+esac
+EOF
+    chmod +x "${dir}/gh-stub"
+    : > "${dir}/prlist.log"
+
+    GH_BIN="${dir}/gh-stub" wp_scan > /dev/null
+
+    if ! grep -q "headRefOid" "${dir}/prlist.log" \
+        || ! grep -q "reviewDecision" "${dir}/prlist.log"; then
+        fail "the probe listing must carry the deps fields" \
+            "call: $(cat "${dir}/prlist.log")"
+        return
+    fi
+
+    pass "the probe listing requests headRefOid and reviewDecision"
+}
+
+#-------------------------------------------------------------------------------
 # Run suite
 #-------------------------------------------------------------------------------
 echo "=========================================="
@@ -656,6 +779,9 @@ test_scan_splits_slices_and_wayfinder
 test_scan_counts_open_maps
 test_scan_map_count_sets_explicit_limit
 test_scan_queue_error_reads_empty
+test_scan_dependabot_pr_no_reconcile
+test_scan_conflicting_dependabot_pr_no_reconcile
+test_scan_pr_list_requests_deps_fields
 
 echo ""
 echo "=========================================="
