@@ -97,6 +97,32 @@ GNOME/XWayland display through the Playwright MCP server, surviving reboots:
   sections, only on exact text match, never un-ticking an already-checked box —
   and emits the rewritten body. This is the mutation `/verify-pr` applies to the
   PR at the end of a round.
+- **`bot-pr-checklist.md`** — the **Bot-PR checklist** (Spec #651): the fixed
+  `## Manual verification` section every Dependabot PR gets before its Tier B
+  round. Six mini-journey items in a fixed order — stack health, the Electron
+  shell on the Smoke screen, a cook started from Electron with live probe temps,
+  the same cook live-updating on the web app over WebSocket with no reload,
+  finishing it from Electron and finding it in History/Review, and a Settings
+  toggle that survives a reload — each one action plus one observable, each
+  executable against the hermetic per-PR stack alone (no hardware, no deployed
+  environment), and none of them tolerating an uncaught console error.
+  Notifications and Compare are deliberately out. Its screenshot tour is the
+  same six shots on every Bot PR, so a maintainer can diff them by eye from one
+  bump to the next: `smoker-01-smoke-screen`, `smoker-02-smoking-live`,
+  `frontend-01-smoke-live`, `frontend-02-history`, `frontend-03-review`,
+  `frontend-04-settings`. **`/verify-pr` never injects this file** — the
+  `deps-land` lane appends the **injected unit** verbatim into the PR body and
+  `/verify-pr` then reads it back out of the body like any other checklist,
+  through `parse-checklist.sh`. The injected unit is the file's first line
+  through the `<!-- /bot-pr-checklist -->` line: the
+  `<!-- bot-pr-checklist v1 -->` marker, the heading, the intro and the six
+  boxes, so the marker the lane keys its inject-once decision on travels into
+  the body with the section (a marker left outside the appended block would read
+  as "not injected yet" on every fire and stack a second copy). Everything below
+  the closing marker is maintainer notes and is never injected. Bumping the
+  marker version invalidates stale sections already sitting in PR bodies. Every
+  box has to stay within Prettier's 80-column `proseWrap: always` reflow — a
+  wrapped item loses its tail to a continuation line the parser cannot see.
 - **`detect-ui-change.sh`** — the screenshot-tour gate. Reads the PR's changed
   paths on stdin and prints the UI surfaces to screenshot (`frontend`, `smoker`,
   or both — a shared `packages/*/src` file renders in both apps); empty output
@@ -186,6 +212,7 @@ bash scripts/verify-pr/electron-cdp-mcp-wrapper.test.sh
 bash scripts/verify-pr/provision-box.test.sh
 bash scripts/verify-pr/parse-checklist.test.sh
 bash scripts/verify-pr/tick-checklist.test.sh
+bash scripts/verify-pr/bot-pr-checklist.test.sh
 bash scripts/verify-pr/check-harness-runbook.test.sh
 ```
 
@@ -194,6 +221,23 @@ boundaries — each feeds a PR body and asserts on stdout. Covered: unchecked-on
 extraction from both verification sections (ignoring other sections and ticked
 boxes), case-insensitive/section-bounded header matching, and the ticker's
 pass-list-only / exact-match / never-un-tick / verbatim-preservation rules.
+
+`bot-pr-checklist.test.sh` guards the checked-in Bot-PR checklist through that
+same parser, since nothing else executes the file: it must yield exactly six
+`manual` items with none shipped pre-ticked; every emitted item must name an
+observable of its own (a `200`, a screen that renders, a value that updates or
+persists, a list that lists it — the blanket "no console errors" clause every
+item carries is stripped before the check, so it cannot satisfy it on its own)
+and stay hermetic; and the file must open with the v1 marker on its first line,
+close the injected block with `<!-- /bot-pr-checklist -->`, keep every box on
+one line, and carry a single `## Manual verification` heading — a second heading
+would end the section and hide the items from the round. Parsing the injected
+block alone has to yield the same six items as parsing the whole file. CI runs
+this suite (with the UI-change gate and the body injector) in
+[`pr-screenshots-tests.yml`](../../.github/workflows/pr-screenshots-tests.yml),
+path-filtered on `scripts/verify-pr/bot-pr-checklist*` and
+`scripts/verify-pr/parse-checklist*.sh`, so checklist or parser drift fails the
+PR instead of surfacing as a wrong-sized Tier B round.
 
 ## The `/verify-pr` round (slice #331)
 
