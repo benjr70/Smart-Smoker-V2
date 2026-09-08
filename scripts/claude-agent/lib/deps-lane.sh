@@ -14,12 +14,16 @@
 #   deps_lane_inject_checklist <checklist-path> < body > new-body
 #   deps_lane_marker_emit tierA|tierB|fix-attempt <sha> [N]
 #   deps_lane_marker_parse <sha> < all-comment-bodies
+#   deps_lane_rounds_left <recorded-attempts>
+#   deps_lane_commit_trailer [message]          # message may also come on stdin
 #
 # Usage (CLI, same argument order):
 #   scripts/claude-agent/lib/deps-lane.sh retitle "<title>" true
 #   scripts/claude-agent/lib/deps-lane.sh inject-checklist <path> < body
 #   scripts/claude-agent/lib/deps-lane.sh marker-emit tierA <sha>
 #   scripts/claude-agent/lib/deps-lane.sh marker-parse <sha> < bodies
+#   scripts/claude-agent/lib/deps-lane.sh rounds-left <recorded-attempts>
+#   scripts/claude-agent/lib/deps-lane.sh commit-trailer < message
 #
 # Env:
 #   DEPS_LANE_FIX_CAP   fix attempts at which the lane stops retrying (3)
@@ -311,6 +315,114 @@ deps_lane_marker_parse() {
 }
 
 #-------------------------------------------------------------------------------
+# fix budget
+#-------------------------------------------------------------------------------
+# deps_lane_rounds_left <recorded-attempts>
+#
+# Prints how many fix rounds this fire may still spend: DEPS_LANE_FIX_CAP minus
+# the attempts the markers already record, never below 0. `pr-watch --bot` asks
+# for this once, before it polls anything, so a PR already at the cap goes
+# straight to the draft + `AFK:deps-failed` path instead of paying a 45-minute CI
+# wait it has already decided to abandon.
+#
+# The floor is not cosmetic. A PR can carry MORE markers than the cap — two
+# fires racing, a re-fire after a crash, a marker pasted by hand — and a negative
+# budget read as a loop bound (`for i in $(seq 1 "$LEFT")`) or printed into a
+# verdict line would either loop zero times by luck or report "-1 rounds left".
+# Zero is the honest answer to "may I try again": no.
+#
+# A non-numeric count is refused with return 2 and nothing on stdout, exactly as
+# the marker functions refuse an empty sha. The caller substitutes this into
+# `MAX_ROUNDS=$(… rounds-left "$fixAttempts")`, and fixAttempts comes from a jq
+# read that prints `null` — or nothing — when the marker parse failed. Answering
+# an unreadable history with the FULL cap would hand the least trustworthy PR the
+# largest fix budget, which is precisely backwards.
+deps_lane_rounds_left() {
+    local recorded="${1:-}"
+
+    if ! [[ "${recorded}" =~ ^[0-9]+$ ]]; then
+        echo "deps-lane: rounds-left needs a numeric attempt count," \
+            "got: ${recorded:-<none>}" >&2
+        return 2
+    fi
+
+    local cap="${DEPS_LANE_FIX_CAP:-3}"
+    [[ "${cap}" =~ ^[0-9]+$ ]] || cap=3
+
+    local left=$((cap - recorded))
+    [ "${left}" -lt 0 ] && left=0
+    printf '%s\n' "${left}"
+    return 0
+}
+
+#-------------------------------------------------------------------------------
+# commit trailer
+#-------------------------------------------------------------------------------
+# deps_lane_commit_trailer [message] | deps_lane_commit_trailer < message
+#
+# Prints the commit message with ` [dependabot skip]` ending it, exactly once.
+#
+# Every commit the lane pushes onto a Dependabot branch must carry this marker,
+# because Dependabot stops managing a branch it believes a human has taken over:
+# no more rebases onto master, no more version bumps onto the same PR. A fix
+# round that lands without the marker therefore strands the very PR it was
+# trying to rescue — behind master, unrebasable, with only a human able to move
+# it. That is why this is a text transform with a test rather than a sentence in
+# a skill an agent re-types each fire.
+#
+# The marker goes at the END of the message (appended to the last non-empty
+# line), not on a line of its own: Dependabot scans the whole message, but
+# ending the message is the shape the acceptance criteria name and the shape a
+# `tail -1` check in review can see. Trailing blank lines are dropped and the
+# result ends with exactly one newline, so the output is safe to hand to
+# `git commit -F -`, which reproduces its input byte-for-byte including any
+# accidental blank tail.
+#
+# Idempotent: a message whose last non-empty line already ends with the marker
+# comes back with the same text and no second marker. The caller pipes every
+# message through unconditionally — across rounds it re-commits amended messages
+# — and a doubled `[dependabot skip] [dependabot skip]` in a squash subject
+# would fail the repo's conventional-commit title lint.
+#
+# An empty (or whitespace-only) message is refused with return 2 and nothing on
+# stdout: a commit whose entire subject is `[dependabot skip]` records nothing
+# about the fix, and the caller would not notice it had lost the summary.
+deps_lane_commit_trailer() {
+    local msg
+    if [ "$#" -ge 1 ]; then
+        msg="$1"
+    else
+        msg="$(cat)"
+    fi
+
+    # `$(cat)` and `$1` both keep interior newlines; only the trailing ones need
+    # normalizing, and awk below rebuilds the message line by line anyway.
+    if [ -z "${msg//[[:space:]]/}" ]; then
+        echo "deps-lane: commit-trailer needs a non-empty commit message" >&2
+        return 2
+    fi
+
+    printf '%s\n' "${msg}" | awk -v marker='[dependabot skip]' '
+        { lines[NR] = $0 }
+        END {
+            last = 0
+            for (i = 1; i <= NR; i++) if (lines[i] ~ /[^[:space:]]/) last = i
+            # Rebuild through the last non-empty line, dropping the blank tail.
+            for (i = 1; i < last; i++) print lines[i]
+            tail = lines[last]
+            # `at > 0` is load-bearing: for a line SHORTER than the marker,
+            # index() is 0 and so is the arithmetic, and the two would compare
+            # equal — a short subject would silently never get its marker.
+            at = index(tail, marker)
+            if (at > 0 && at == length(tail) - length(marker) + 1)
+                print tail
+            else
+                print tail " " marker
+        }'
+    return 0
+}
+
+#-------------------------------------------------------------------------------
 # CLI
 #-------------------------------------------------------------------------------
 # Runnable directly so a skill step is one shell line rather than a source plus a
@@ -324,8 +436,10 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
         inject-checklist) deps_lane_inject_checklist "$@" ;;
         marker-emit)      deps_lane_marker_emit "$@" ;;
         marker-parse)     deps_lane_marker_parse "$@" ;;
+        rounds-left)      deps_lane_rounds_left "$@" ;;
+        commit-trailer)   deps_lane_commit_trailer "$@" ;;
         *)
-            echo "usage: deps-lane.sh {retitle|inject-checklist|marker-emit|marker-parse} …" >&2
+            echo "usage: deps-lane.sh {retitle|inject-checklist|marker-emit|marker-parse|rounds-left|commit-trailer} …" >&2
             exit 2
             ;;
     esac

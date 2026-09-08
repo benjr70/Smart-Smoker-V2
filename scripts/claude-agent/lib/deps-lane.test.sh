@@ -550,6 +550,20 @@ test_cli_dispatch() {
         return
     fi
 
+    out="$(bash "${LIB}" rounds-left 2)"
+    if [ "${out}" != "1" ]; then
+        fail "CLI rounds-left" "got: ${out}"
+        rm -rf "$(dirname "${checklist}")"
+        return
+    fi
+
+    out="$(printf 'fix(ci): round 1\n' | bash "${LIB}" commit-trailer)"
+    if [ "${out}" != 'fix(ci): round 1 [dependabot skip]' ]; then
+        fail "CLI commit-trailer" "got: ${out}"
+        rm -rf "$(dirname "${checklist}")"
+        return
+    fi
+
     out="$(bash "${LIB}" nonsense 2>/dev/null)"; rc=$?
     if [ "${rc}" -eq 0 ]; then
         fail "an unknown subcommand must exit non-zero" "rc=${rc} out=${out}"
@@ -828,6 +842,175 @@ test_marker_parse_propagates_jq_failure() {
 }
 
 #-------------------------------------------------------------------------------
+# Test 18: rounds-left turns the recorded attempt count into the fix budget this
+#          fire may still spend (behavior 2; AC 1). pr-watch --bot asks for it
+#          once, before it polls anything: at the cap the answer must be exactly
+#          0 so the lane goes straight to the draft + AFK:deps-failed path
+#          instead of burning a CI wait it has already decided to abandon. It
+#          never goes negative — a PR that somehow carries more markers than the
+#          cap (a re-fire that raced, a hand-pasted marker) must read as "no
+#          budget", not as a negative that a `[ "$N" -gt 0 ]` caller would still
+#          treat as false but a `for` loop would count down from.
+#-------------------------------------------------------------------------------
+test_rounds_left() {
+    echo "TEST: rounds-left is the cap minus the recorded attempts, floored at 0"
+
+    local out rc
+    local -a cases=("0 3" "1 2" "2 1" "3 0" "4 0" "9 0")
+    local case_line recorded want
+    for case_line in "${cases[@]}"; do
+        recorded="${case_line%% *}"
+        want="${case_line##* }"
+        out="$(deps_lane_rounds_left "${recorded}")"; rc=$?
+        if [ "${rc}" -ne 0 ] || [ "${out}" != "${want}" ]; then
+            fail "rounds-left ${recorded} must be ${want}" "rc=${rc} got: ${out}"
+            return
+        fi
+    done
+
+    # The cap is tunable in the same env var the parser reads, so a lane run
+    # with a wider budget agrees with itself end to end.
+    out="$(DEPS_LANE_FIX_CAP=5 deps_lane_rounds_left 2)"
+    if [ "${out}" != "3" ]; then
+        fail "rounds-left honours DEPS_LANE_FIX_CAP" "got: ${out}"
+        return
+    fi
+
+    pass "rounds-left is the cap minus the recorded attempts, floored at 0"
+}
+
+#-------------------------------------------------------------------------------
+# Test 19: a non-numeric (or missing) attempt count is refused, loudly, with
+#          nothing on stdout (behavior 2; AC 1). The caller substitutes this
+#          straight into `MAX_ROUNDS=$(… rounds-left "$fixAttempts")`, and
+#          fixAttempts arrives from a jq read that prints `null` — or nothing at
+#          all — when the marker parse failed. Answering that with the full cap
+#          would hand a PR whose history could not be read the largest possible
+#          fix budget, which is precisely backwards; answering with an empty
+#          string would make the caller's `-eq 0` test a syntax error mid-lane.
+#-------------------------------------------------------------------------------
+test_rounds_left_rejects_non_numeric() {
+    echo "TEST: rounds-left refuses a non-numeric attempt count"
+
+    local out rc bad
+    for bad in 'null' '' 'two' '-1' '2.5' '3 '; do
+        out="$(deps_lane_rounds_left "${bad}" 2>/dev/null)"; rc=$?
+        if [ "${rc}" -eq 0 ]; then
+            fail "rounds-left must refuse '${bad}'" "rc=${rc} out=${out}"
+            return
+        fi
+        if [ -n "${out}" ]; then
+            fail "a refused count must print no budget" "'${bad}' gave: ${out}"
+            return
+        fi
+    done
+
+    pass "rounds-left refuses a non-numeric attempt count"
+}
+
+#-------------------------------------------------------------------------------
+# Test 20: the commit trailer appends `[dependabot skip]` once, ending the
+#          message, and preserves a multi-line body (behavior 3; AC 2). Without
+#          the marker, every fix commit the lane pushes makes Dependabot treat
+#          the branch as human-touched and stop rebasing it — the PR then rots
+#          behind master with no bot able to update it.
+#-------------------------------------------------------------------------------
+test_commit_trailer_appends_once() {
+    echo "TEST: commit-trailer appends [dependabot skip] to the end of the message"
+
+    local out
+    out="$(printf 'fix(ci): pr-watch round 1 — auto-fix failing checks\n' \
+        | deps_lane_commit_trailer)"
+    if [ "${out}" != 'fix(ci): pr-watch round 1 — auto-fix failing checks [dependabot skip]' ]; then
+        fail "a one-line message must end with the marker" "got: ${out}"
+        return
+    fi
+
+    # The argument form is the same transform as the stdin form.
+    out="$(deps_lane_commit_trailer 'fix(ci): regenerate the lockfile')"
+    if [ "${out}" != 'fix(ci): regenerate the lockfile [dependabot skip]' ]; then
+        fail "the argument form must append the marker too" "got: ${out}"
+        return
+    fi
+
+    # A body must survive intact: the implementer's summary is the only record
+    # of what the fix round actually changed.
+    local msg
+    msg="$(printf 'fix(ci): pr-watch round 2\n\nRegenerated package-lock.json with\n--legacy-peer-deps.\n' \
+        | deps_lane_commit_trailer)"
+    if [ "$(printf '%s\n' "${msg}" | head -1)" != 'fix(ci): pr-watch round 2' ]; then
+        fail "the subject line must be preserved" "got: ${msg}"
+        return
+    fi
+    if [ "$(printf '%s\n' "${msg}" | sed -n '3p')" != 'Regenerated package-lock.json with' ]; then
+        fail "the body must be preserved verbatim" "got: ${msg}"
+        return
+    fi
+    if [ "$(printf '%s\n' "${msg}" | tail -1)" != '--legacy-peer-deps. [dependabot skip]' ]; then
+        fail "the marker must end a multi-line message" "got: ${msg}"
+        return
+    fi
+
+    pass "commit-trailer appends [dependabot skip] to the end of the message"
+}
+
+#-------------------------------------------------------------------------------
+# Test 21: the trailer is idempotent, exits with exactly one trailing newline,
+#          and refuses an empty message (behavior 3; AC 2). Idempotence is what
+#          lets the caller pipe every message through unconditionally — the fix
+#          loop re-commits amended messages across rounds, and a second
+#          `[dependabot skip] [dependabot skip]` in a subject would break the
+#          repo's conventional-commit title lint on the squash.
+#-------------------------------------------------------------------------------
+test_commit_trailer_is_idempotent() {
+    echo "TEST: commit-trailer is idempotent, newline-sane and refuses empty"
+
+    local once twice rc
+    once="$(printf 'fix(ci): round 1\n' | deps_lane_commit_trailer)"
+    twice="$(printf '%s\n' "${once}" | deps_lane_commit_trailer)"
+    if [ "${twice}" != "${once}" ]; then
+        fail "applying the trailer twice must equal applying it once" \
+            "once=${once} twice=${twice}"
+        return
+    fi
+
+    # Exactly one trailing newline, whether or not the input carried one — a
+    # byte-level assertion, because `git commit -F -` reproduces the file it is
+    # given, so a message with three trailing blank lines commits three trailing
+    # blank lines. Compared with cmp for the same reason the inject no-op test
+    # is: "close enough" is not a contract.
+    local dir want
+    dir="$(mktemp -d)"
+    printf 'fix(ci): round 1 [dependabot skip]\n' > "${dir}/want"
+    printf 'fix(ci): round 1\n\n\n' | deps_lane_commit_trailer > "${dir}/got"
+    if ! cmp -s "${dir}/want" "${dir}/got"; then
+        fail "the output must end with exactly one newline" \
+            "got: $(od -c "${dir}/got" | tr '\n' ' ')"
+        rm -rf "${dir}"
+        return
+    fi
+    printf 'fix(ci): round 1' | deps_lane_commit_trailer > "${dir}/got"
+    if ! cmp -s "${dir}/want" "${dir}/got"; then
+        fail "a newline-less message must still end with one newline" \
+            "got: $(od -c "${dir}/got" | tr '\n' ' ')"
+        rm -rf "${dir}"
+        return
+    fi
+    rm -rf "${dir}"
+
+    # An empty message is a caller bug, not a message to decorate: a commit
+    # whose whole subject is `[dependabot skip]` says nothing about the fix.
+    local out
+    out="$(printf '' | deps_lane_commit_trailer 2>/dev/null)"; rc=$?
+    if [ "${rc}" -eq 0 ] || [ -n "${out}" ]; then
+        fail "an empty message must be refused with no stdout" "rc=${rc} out=${out}"
+        return
+    fi
+
+    pass "commit-trailer is idempotent, newline-sane and refuses empty"
+}
+
+#-------------------------------------------------------------------------------
 # Run suite
 #-------------------------------------------------------------------------------
 echo "=========================================="
@@ -851,6 +1034,10 @@ test_marker_parse_requires_exact_sha
 test_marker_parse_rejects_empty_sha
 test_marker_parse_propagates_jq_failure
 test_cli_dispatch
+test_rounds_left
+test_rounds_left_rejects_non_numeric
+test_commit_trailer_appends_once
+test_commit_trailer_is_idempotent
 
 echo ""
 echo "=========================================="
