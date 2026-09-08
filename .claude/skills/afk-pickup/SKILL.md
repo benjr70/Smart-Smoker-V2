@@ -123,14 +123,18 @@ and the marker-derived resume state `tierA` / `tierB` / `attempts`) and its
 ranks **below** every agent reason above — a human waiting on their own PR is
 never queued behind a bot — with security bumps before version bumps, then
 oldest, one per fire. A conflicting Bot PR comes back as reason `conflict` with
-an extra `agentCommits` flag instead. The Gate-and-merge lane that acts on these
+an extra `agentCommits` flag instead — and ranks below every agent reason too,
+including agent `docs-merge` and `incomplete`: sharing the name `conflict` never
+buys a bot the agent conflict rank. The Gate-and-merge lane that acts on these
 verdicts (retitle, Tier A/B, bounded fix loop, `deps-gate`, squash-merge) lands
 in a later Slice (#656/#657). **Until it does you will never see a Bot PR here
 at all**: §0's one-call triage suppresses _both_ bot verdicts — reason
-`dependabot` and a bot PR's `conflict`, keyed on the `dependabot/` branch — by
-logging the PR number on stderr and falling through to §1.5/§2. That covers the
-conflict case deliberately: the generic conflict recipe below would rebase and
-force-push Dependabot's own branch, where the lane will nudge
+`dependabot` and a bot PR's `conflict` — by logging the PR number on stderr and
+falling through to §1.5/§2. The suppression lives in exactly one predicate,
+`pr_triage_bot_verdict_unworkable` in `lib/pr-triage.sh`, which both the fire
+triage and the work probe ask, so #657 switches the lane on with one edit. That
+covers the conflict case deliberately: the generic conflict recipe below would
+rebase and force-push Dependabot's own branch, where the lane will nudge
 `@dependabot rebase` instead. A Bot PR nobody can work yet never blocks the
 queue behind it.
 

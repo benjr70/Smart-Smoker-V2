@@ -49,10 +49,13 @@
 #   - they only ever earn reason "conflict" or "dependabot"; the tail signals
 #     (revise / docs-merge / incomplete) describe an Agent PR's review rounds and
 #     say nothing about a bot branch, so an `AFK:revise` label on one is ignored;
-#   - reason "dependabot" ranks LAST, below every Agent-PR reason: a human
-#     waiting on their own PR is never queued behind a bot. Within the reason,
-#     security bumps come before version bumps, then oldest createdAt, one per
-#     fire;
+#   - BOTH bot reasons rank LAST, below every Agent-PR reason: a human waiting
+#     on their own PR is never queued behind a bot — including behind a
+#     CONFLICTING one, whose reason "conflict" is the Agent rank-1 name but
+#     ranks with the bot block, not with it. Inside the block a conflicting bot
+#     PR comes before a "dependabot" one (nothing can be verified on a branch
+#     that has to be rebased first); within reason "dependabot", security bumps
+#     come before version bumps, then oldest createdAt, one per fire;
 #   - a bot PR carrying `HITL` (a major bump handed to the maintainer) is
 #     invisible until GitHub's reviewDecision is APPROVED — the native approval
 #     is how a human re-admits it;
@@ -60,12 +63,9 @@
 #     for good, exactly as the other escalation labels park an Agent PR.
 # The lane that acts on a "dependabot" verdict — retitle, tier A/B, fix loop,
 # gate, merge — lands in later slices (#656/#657); this module only classifies.
-# Until the lane exists BOTH callers deliberately drop EITHER bot verdict on the
-# floor, keyed on the `dependabot/` branch (pickup-triage.sh falls through to the
-# issue pick, work-probe.sh does not wake): reason "dependabot" has no recipe
-# yet, and a bot PR under reason "conflict" would otherwise take the generic
-# recipe, which force-pushes a rebase onto a Dependabot-owned branch. A verdict
-# nobody can act on correctly must never block the queue behind it.
+# Until the lane exists both callers drop either bot verdict on the floor, via
+# the ONE predicate pr_triage_bot_verdict_unworkable below — see its header for
+# why, and for the single edit #657 makes to switch the lane on.
 #
 # Needs-attention — a filtered PR is picked when EITHER holds:
 #   - it carries the `AFK:revise` label (a human reviewed and explicitly handed
@@ -110,10 +110,6 @@
 #                      path whose ABSENCE means "every Dependabot PR is a
 #                      security update"; defaults to the repo's
 #                      .github/dependabot.yml
-#   PR_TRIAGE_DEPS_PROBE_MAX
-#                      how many open Dependabot PRs one enrich may probe,
-#                      oldest first (default 10) — the rate-limit bound
-#
 # Exit codes:
 #   0 — a PR was picked (verdict has a number)
 #   1 — nothing needs attention (verdict {"pr":null}); also for empty/malformed
@@ -156,8 +152,12 @@ PR_TRIAGE_JQ_DEFS='
     def ours: .headRefName // "" | test($ours);
     def deps_branch: (.headRefName // "") | startswith("dependabot/");
     def deps_author:
-      ((.author.login // "") | ascii_downcase)
-      | (. == "app/dependabot" or . == "dependabot[bot]" or . == "dependabot");
+      # Spec section Detection pins ONE login: the Dependabot app as a listing
+      # names it, app/dependabot. Nothing else is accepted — a user account can
+      # be renamed to dependabot or dependabot[bot], and a dependabot/... head
+      # branch is a shape anyone can push, so a wider test would hand a human
+      # account the auto-pick licence the lane grants only the app.
+      ((.author.login // "") | ascii_downcase) == "app/dependabot";
     def dependabot_pr: deps_branch and deps_author;
     def author_ok:
       if deps_branch then deps_author
@@ -287,7 +287,12 @@ _pr_triage_deps_major() {
 #                  foreign commits, so a conflicting PR with agent commits must
 #                  be rebased by the agent itself rather than nudged. Read for
 #                  every bot PR, including CONFLICTING ones, which is exactly
-#                  why they are probed at all.
+#                  why they are probed at all. UNKNOWN reads as true: `false`
+#                  sends the lane down the `@dependabot rebase` nudge, which a
+#                  branch that already carries an agent commit silently ignores
+#                  — the PR is then stranded forever. `true` costs at most an
+#                  unnecessary agent-side rebase of a branch the bot could have
+#                  rebased itself, so an unread probe defaults to true.
 #   tierA/tierB/fixAttempts — the lane's own sha-keyed markers, parsed out of
 #                  the comment bodies by lib/deps-lane.sh. Markers are keyed to
 #                  the CURRENT head sha, so a force-pushed PR reads as fresh and
@@ -331,7 +336,9 @@ _pr_triage_enrich_deps_one() {
             (any(.authors[]?;
                  ((.login // "") + " " + (.name // "") + " " + (.email // ""))
                  | ascii_downcase | test("dependabot"))) | not)' 2>/dev/null)"
-    [ "${agent_commits}" = "true" ] || [ "${agent_commits}" = "false" ] || agent_commits=false
+    # Unreadable ⇒ true (see the header): the safe direction is "assume the
+    # branch is the agent's to rebase", never "nudge a bot that will refuse".
+    [ "${agent_commits}" = "true" ] || [ "${agent_commits}" = "false" ] || agent_commits=true
 
     fields="$(jq -cn --argjson s "${security}" --argjson m "${major}" \
         --argjson a "${agent_commits}" \
@@ -432,12 +439,14 @@ pr_triage_enrich() {
     # sha), so such an item is not probed: paying a round trip for a
     # classification that can never be picked is pure API cost.
     #
-    # The probe is also BOUNDED (PR_TRIAGE_DEPS_PROBE_MAX, default 10): this
-    # repo can carry dozens of open bot PRs, only one of which any fire can
-    # work, and this sensor runs on every 5-minute work probe as well as every
-    # fire. Candidates are taken oldest-first — the queue's own tie-break — so
-    # the window is the front of the queue and drains as PRs land. An unprobed
-    # PR stays unclassified and is simply not picked.
+    # EVERY visible candidate is probed, with no cap. A cap would truncate the
+    # candidate list before the classification exists, and the ranking the Spec
+    # mandates (security before version, then oldest) can only be computed
+    # AFTER enrichment: with an oldest-first window a newer security bump would
+    # stay unclassified, hence unpickable, and an older version bump would be
+    # picked ahead of it. Cost is bounded instead by how few bot PRs survive the
+    # filters above (parked, HITL-unapproved and sha-less ones are never
+    # probed) and by the lane landing one PR per fire.
     deps_nums="$(printf '%s' "${payload}" | jq -r --arg ours "${PR_TRIAGE_OURS_RE}" \
         "${PR_TRIAGE_JQ_DEFS}"'
         def labels_of: [.labels[]?.name // empty];
@@ -452,8 +461,7 @@ pr_triage_enrich() {
           | select(($lbls | index("HITL") | not)
                or ((.reviewDecision // "") == "APPROVED")) ]
         | sort_by(.createdAt // "")
-        | .[].number' 2>/dev/null | head -n "${PR_TRIAGE_DEPS_PROBE_MAX:-10}" \
-        || echo '')"
+        | .[].number' 2>/dev/null || echo '')"
 
     for num in ${deps_nums}; do
         payload="$(printf '%s' "${payload}" | _pr_triage_enrich_deps_one "${num}")"
@@ -535,11 +543,20 @@ pr_triage_pick() {
                      elif (((.reviewDone != false) and (.verifyDone != false)) | not) then "incomplete"
                      else null end) }
           | select(.reason != null) ]
-        | sort_by([(if .reason == "revise" then 0
+        | sort_by([(if dependabot_pr then
+                      # EVERY Bot PR ranks below EVERY Agent PR, whichever
+                      # reason it earned: a human waiting on their own review is
+                      # never queued behind a bot, and a CONFLICTING Bot PR
+                      # sharing the name "conflict" must not borrow the Agent
+                      # rank-1 slot. Within the bot block a conflicting PR comes
+                      # first — nothing else can be done with the branch until
+                      # it is rebased.
+                      (if .reason == "conflict" then 4 else 5 end)
+                    elif .reason == "revise" then 0
                     elif .reason == "conflict" then 1
                     elif .reason == "docs-merge" then 2
                     elif .reason == "incomplete" then 3
-                    else 4 end),
+                    else 6 end),
                    (if .reason == "dependabot" and (.depsSecurity != true)
                     then 1 else 0 end),
                    .createdAt])
@@ -568,7 +585,11 @@ pr_triage_pick() {
               branch: .headRefName,
               issue: null,
               reason: .reason,
-              agentCommits: (.agentCommits == true) }
+              # Absent (the probe failed, or the whole view was unreadable) is
+              # NOT false: an unknown branch is treated as agent-owned so the
+              # lane rebases it itself instead of posting a nudge Dependabot
+              # would refuse. Only an explicit false says "bot commits only".
+              agentCommits: (.agentCommits != false) }
           else { pr: .number,
                  branch: .headRefName,
                  issue: issue_of,
@@ -582,4 +603,30 @@ pr_triage_pick() {
 
     printf '%s\n' "${verdict}"
     return 0
+}
+
+# pr_triage_bot_verdict_unworkable <verdict-json>: exit 0 when the verdict names
+# a PR the harness can classify but cannot yet work — today, any Dependabot PR.
+#
+# THE ONE PLACE the "keep the deps lane dark" decision lives. Both callers
+# (pickup-triage.sh §1.2, work-probe.sh) ask this predicate rather than
+# re-deriving the test, so #657 — which wires reason "dependabot" to the
+# `deps-land` skill and reason "conflict" to the `@dependabot rebase` nudge —
+# switches the lane on by making this function `return 1` unconditionally, in
+# one file, with one test to flip.
+#
+# The test is the BRANCH, not the reason, because a Bot PR comes back under two
+# reasons and BOTH are unworkable today: reason "dependabot" has no recipe at
+# all, and reason "conflict" would take the generic reconcile recipe, which
+# locks an issue that does not exist and force-pushes a rebase onto a branch
+# Dependabot owns. A verdict nobody can act on correctly must never block the
+# queue behind it — the callers fall through to ordinary work instead.
+pr_triage_bot_verdict_unworkable() {
+    local verdict="${1:-}" branch
+    [ -n "${verdict}" ] || return 1
+    branch="$(printf '%s' "${verdict}" | jq -r '.branch // ""' 2>/dev/null)" || return 1
+    case "${branch}" in
+        dependabot/*) return 0 ;;
+        *) return 1 ;;
+    esac
 }

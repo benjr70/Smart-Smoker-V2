@@ -166,22 +166,12 @@ pickup_triage() {
     # the UNKNOWN-mergeability re-list).
     local pick_json reconcile=null
     pick_json="$(PR_TRIAGE_AUTHOR="${login}" pr_triage_scan)" || pick_json=''
-    local pick_is_bot
-    pick_is_bot="$(printf '%s' "${pick_json}" \
-        | jq -r '((.branch // "") | startswith("dependabot/"))' 2>/dev/null || echo 'false')"
-    if [ "${pick_is_bot}" = "true" ]; then
+    if pr_triage_bot_verdict_unworkable "${pick_json}"; then
         # The PR Triage can already classify a Dependabot PR, but nothing here
-        # can work one: the lane (retitle, tiers, gate, merge) lands in #657.
-        # The test is the BRANCH, not the reason, because a Bot PR comes back
-        # under two reasons and BOTH are unworkable today — reason "dependabot"
-        # has no recipe at all, and reason "conflict" would send it down §1.2's
-        # generic recipe, which locks an issue that does not exist and force-
-        # pushes a rebase onto Dependabot's own branch; #651 says a conflicting
-        # Bot PR is nudged with `@dependabot rebase` instead (agent-rebased only
-        # when it already carries agent commits). Returning `reconcile` for
-        # either would deadlock the queue behind a PR nobody can finish,
-        # including the very tickets that build the lane. Fall through to
-        # §1.5/§2.
+        # can work one until the lane lands in #657. The decision and its
+        # rationale live in pr-triage.sh's pr_triage_bot_verdict_unworkable —
+        # ONE predicate, so #657 has one place to switch on; here we only log
+        # and fall through to §1.5/§2.
         local deps_pr deps_reason
         deps_pr="$(printf '%s' "${pick_json}" | jq -r '.pr' 2>/dev/null || echo '?')"
         deps_reason="$(printf '%s' "${pick_json}" | jq -r '.reason' 2>/dev/null || echo '?')"

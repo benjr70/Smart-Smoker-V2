@@ -103,16 +103,14 @@ wp_scan() {
     pick_json="$(printf '%s' "${prs}" \
         | PR_TRIAGE_AUTHOR="${author}" pr_triage_enrich \
         | PR_TRIAGE_AUTHOR="${author}" pr_triage_pick)" || true
-    # A verdict on a `dependabot/` branch is classified but not workable until
-    # the lane lands (#657), under EITHER of its reasons — pickup-triage.sh
-    # suppresses both for the same reason, and this probe must agree with it or
-    # it would burn a whole fire every five minutes waking the daemon for a PR
-    # the fire then skips. The branch is the test, so both bot verdict shapes
-    # are covered without either growing a field.
-    reconcile="$(printf '%s' "${pick_json}" \
-        | jq -r 'if ((.branch // "") | startswith("dependabot/")) then "null"
-                 else (.pr // "null") end' \
-        2>/dev/null || echo 'null')"
+    reconcile="$(printf '%s' "${pick_json}" | jq -r '.pr // "null"' 2>/dev/null || echo 'null')"
+    # A Bot PR verdict is classified but not workable until the lane lands
+    # (#657). The probe asks the SAME predicate pickup-triage.sh does — if the
+    # two ever disagreed this probe would wake the daemon every five minutes for
+    # a PR the fire then skips, burning a whole fire on nothing.
+    if pr_triage_bot_verdict_unworkable "${pick_json}"; then
+        reconcile='null'
+    fi
 
     paused="$("${gh}" issue list --label AFK:paused --state open \
         --json number --jq '(sort_by(.number) | first | .number) // "null"' \

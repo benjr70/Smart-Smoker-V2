@@ -1051,6 +1051,42 @@ test_dependabot_ranks_last_and_orders_itself() {
         fi
     done
 
+    # A CONFLICTING Bot PR earns the name "conflict", which is the Agent rank-1
+    # reason — but it must still rank with the bot block, BELOW every Agent PR,
+    # including the two reasons that rank under "conflict" for an Agent PR.
+    local bot_conflict
+    bot_conflict="$(deps_pr_json 735 "dependabot/npm_and_yarn/axios-1.1.2" "CONFLICTING" \
+        "2026-01-01T10:00:00Z" "" "sha735" | jq '. + {agentCommits: false}')"
+    for agent in revise conflict docs-merge incomplete; do
+        case "${agent}" in
+            revise)     out="$(pr_json 741 "feat/issue-700" "MERGEABLE" "2026-09-01T10:00:00Z" "AFK:revise")" ;;
+            conflict)   out="$(pr_json 741 "feat/issue-700" "CONFLICTING" "2026-09-01T10:00:00Z" "")" ;;
+            docs-merge) out="$(pr_json 741 "research/700-x" "MERGEABLE" "2026-09-01T10:00:00Z" "" \
+                            | jq '. + {docsOnly: true}')" ;;
+            incomplete) out="$(pr_json 741 "feat/issue-700" "MERGEABLE" "2026-09-01T10:00:00Z" "" \
+                            | jq '. + {reviewDone: false, verifyDone: true}')" ;;
+        esac
+        out="$(jq -s '.' <(printf '%s' "${bot_conflict}") <(printf '%s' "${out}") | pr_triage_pick)"
+        reason="$(printf '%s' "${out}" | jq -r '.reason')"
+        if [ "$(printf '%s' "${out}" | jq -r '.pr')" != "741" ] || [ "${reason}" != "${agent}" ]; then
+            fail "an agent ${agent} PR must outrank an older CONFLICTING bot PR" "out=${out}"
+            return
+        fi
+    done
+
+    # Inside the bot block, a conflicting bot PR comes first: nothing can be
+    # verified on a branch that has to be rebased before it can merge.
+    out="$(jq -s '.' \
+        <(deps_pr_json 736 "dependabot/npm_and_yarn/x-1" "MERGEABLE" "2026-01-01T10:00:00Z" "" "s736" \
+            | jq '. + {depsSecurity: true, depsMajor: false}') \
+        <(printf '%s' "${bot_conflict}") \
+        | pr_triage_pick)"
+    if [ "$(printf '%s' "${out}" | jq -r '.pr')" != "735" ] \
+        || [ "$(printf '%s' "${out}" | jq -r '.reason')" != "conflict" ]; then
+        fail "a conflicting bot PR must lead the bot block" "out=${out}"
+        return
+    fi
+
     out="$(jq -s '.' \
         <(deps_pr_json 731 "dependabot/npm_and_yarn/a-1" "MERGEABLE" "2026-01-01T10:00:00Z" "" "s731" \
             | jq '. + {depsSecurity: false, depsMajor: false}') \
@@ -1289,7 +1325,10 @@ EOF
 # with no commits) leaves the classification fields absent, and an unclassified
 # bot PR is NOT picked as `dependabot` — the lane must never run on a guessed
 # security/major verdict. A conflicting one still surfaces (that signal comes
-# from the listing), with agentCommits false: nudge the bot, never push.
+# from the listing) with agentCommits TRUE: with the commit list unread the
+# branch may already carry an agent commit, and `@dependabot rebase` on such a
+# branch is silently refused and strands the PR forever, while an unnecessary
+# agent-side rebase costs one push.
 #-------------------------------------------------------------------------------
 test_dependabot_probe_fails_safe() {
     echo "TEST: a broken Dependabot probe yields no dependabot pick"
@@ -1320,8 +1359,8 @@ EOF
     rc=$?
     if [ "${rc}" -ne 0 ] \
         || [ "$(printf '%s' "${out}" | jq -r '.reason')" != "conflict" ] \
-        || [ "$(printf '%s' "${out}" | jq -r '.agentCommits')" != "false" ]; then
-        fail "a conflicting bot PR must still surface, agentCommits false" \
+        || [ "$(printf '%s' "${out}" | jq -r '.agentCommits')" != "true" ]; then
+        fail "a conflicting bot PR must still surface, agentCommits true" \
             "rc=${rc} out=${out}"
         return
     fi
@@ -1330,44 +1369,59 @@ EOF
 }
 
 #-------------------------------------------------------------------------------
-# Test 35: the bot probe is bounded. This repo can carry dozens of open
-# Dependabot PRs at once, and both the fire's triage and the 5-minute work
-# probe run this sensor — one `gh pr view` per open bot PR would be a
-# rate-limit and latency bill paid every probe, for a queue only ONE of whose
-# PRs can be worked this fire. At most PR_TRIAGE_DEPS_PROBE_MAX of them are
-# probed, oldest first (the queue's own order); the rest stay unclassified and
-# therefore unpicked, and are reached as the front of the queue drains.
+# Test 35: every visible bot PR is enriched, so the Spec's ranking survives.
+# The classification only exists after the probe, so any cap on how many
+# candidates are probed would decide the queue before it is ordered: a newer
+# SECURITY bump would stay unclassified — hence unpickable — and an older
+# version bump would be picked ahead of it, inverting "security before version".
 #-------------------------------------------------------------------------------
-test_dependabot_probe_is_bounded() {
-    echo "TEST: the Dependabot probe is capped, oldest first"
+test_all_bot_candidates_are_probed() {
+    echo "TEST: every bot candidate is probed, so security still outranks age"
 
     local dir; dir="$(mktemp -d)"
     trap "rm -rf '${dir}'" RETURN
-    deps_gh_stub "${dir}"
+    printf 'version: 2\n' > "${dir}/dependabot.yml"
+
+    # Three old version bumps ahead of one young security bump in the queue.
+    local sec_body="Bumps axios. This is an automated security fix."
+    cat > "${dir}/gh-stub" <<EOF
+#!/usr/bin/env bash
+echo "\$*" >> "${dir}/calls"
+body="Bumps axios. Routine update."
+case "\$*" in
+    *"pr view 903"*) body='${sec_body}' ;;
+esac
+jq -cn --arg b "\${body}" '{comments: [], files: [{path: "package-lock.json"}],
+    body: \$b, commits: [{oid: "c1", messageHeadline: "Bump axios",
+    messageBody: "Bumps axios from 1.1.0 to 1.1.2.",
+    authors: [{login: "dependabot[bot]"}]}]}'
+EOF
+    chmod +x "${dir}/gh-stub"
+    : > "${dir}/calls"
 
     local out rc
     out="$(jq -s '.' \
-        <(deps_pr_json 800 "dependabot/npm_and_yarn/a-1" "MERGEABLE" "2026-03-01T10:00:00Z" "" "s800") \
-        <(deps_pr_json 801 "dependabot/npm_and_yarn/b-1" "MERGEABLE" "2026-01-01T10:00:00Z" "" "s801") \
-        <(deps_pr_json 802 "dependabot/npm_and_yarn/c-1" "MERGEABLE" "2026-02-01T10:00:00Z" "" "s802") \
-        | GH_BIN="${dir}/gh-stub" PR_TRIAGE_DEPS_PROBE_MAX=2 \
-            PR_TRIAGE_DEPENDABOT_YML="${dir}/absent.yml" pr_triage_enrich \
+        <(deps_pr_json 900 "dependabot/npm_and_yarn/a-1" "MERGEABLE" "2026-01-01T10:00:00Z" "" "s900") \
+        <(deps_pr_json 901 "dependabot/npm_and_yarn/b-1" "MERGEABLE" "2026-02-01T10:00:00Z" "" "s901") \
+        <(deps_pr_json 902 "dependabot/npm_and_yarn/c-1" "MERGEABLE" "2026-03-01T10:00:00Z" "" "s902") \
+        <(deps_pr_json 903 "dependabot/npm_and_yarn/d-1" "MERGEABLE" "2026-04-01T10:00:00Z" "" "s903") \
+        | GH_BIN="${dir}/gh-stub" PR_TRIAGE_DEPENDABOT_YML="${dir}/dependabot.yml" \
+            pr_triage_enrich \
         | pr_triage_pick)"
     rc=$?
 
-    if [ "${rc}" -ne 0 ] || [ "$(printf '%s' "${out}" | jq -r '.pr')" != "801" ]; then
-        fail "the oldest bot PR must still be the pick under the cap" \
+    if [ "${rc}" -ne 0 ] || [ "$(printf '%s' "${out}" | jq -r '.pr')" != "903" ] \
+        || [ "$(printf '%s' "${out}" | jq -r '.security')" != "true" ]; then
+        fail "the youngest SECURITY bump must beat three older version bumps" \
             "rc=${rc} out=${out}"
         return
     fi
-    if [ "$(wc -l < "${dir}/calls")" -ne 2 ] \
-        || ! grep -q "^pr view 801 " "${dir}/calls" \
-        || ! grep -q "^pr view 802 " "${dir}/calls"; then
-        fail "only the two oldest bot PRs may be probed" "calls: $(cat "${dir}/calls")"
+    if [ "$(wc -l < "${dir}/calls")" -ne 4 ]; then
+        fail "every visible bot candidate must be probed" "calls: $(cat "${dir}/calls")"
         return
     fi
 
-    pass "the Dependabot probe is capped, oldest first"
+    pass "every bot candidate is probed, so security still outranks age"
 }
 
 #-------------------------------------------------------------------------------
@@ -1484,6 +1538,36 @@ test_no_head_sha_means_no_probe() {
 }
 
 #-------------------------------------------------------------------------------
+# Test 39: the ONE predicate both callers use to keep the deps lane dark until
+# #657 wires it. It is pinned here, not in each caller, so the switch-on is a
+# single edit with a single failing test — never a hunt through two files.
+#-------------------------------------------------------------------------------
+test_bot_verdict_unworkable_predicate() {
+    echo "TEST: bot verdicts are flagged unworkable, agent verdicts are not"
+
+    local v
+    for v in '{"pr":700,"branch":"dependabot/npm_and_yarn/axios-1.1.2","issue":null,"reason":"dependabot"}' \
+             '{"pr":701,"branch":"dependabot/npm_and_yarn/axios-1.1.2","issue":null,"reason":"conflict"}'; do
+        if ! pr_triage_bot_verdict_unworkable "${v}"; then
+            fail "a bot verdict must read as unworkable" "verdict=${v}"
+            return
+        fi
+    done
+
+    for v in '{"pr":702,"branch":"feat/issue-700","issue":700,"reason":"conflict"}' \
+             '{"pr":703,"branch":"research/700-x","issue":700,"reason":"docs-merge"}' \
+             '{"pr":null}' \
+             ''; do
+        if pr_triage_bot_verdict_unworkable "${v}"; then
+            fail "a non-bot verdict must be workable" "verdict=${v}"
+            return
+        fi
+    done
+
+    pass "bot verdicts are flagged unworkable, agent verdicts are not"
+}
+
+#-------------------------------------------------------------------------------
 # Run suite
 #-------------------------------------------------------------------------------
 echo "=========================================="
@@ -1524,10 +1608,11 @@ test_deps_major_parsing
 test_conflicting_dependabot_pr_flags_agent_commits
 test_scan_picks_dependabot_pr
 test_dependabot_probe_fails_safe
-test_dependabot_probe_is_bounded
+test_all_bot_candidates_are_probed
 test_hitl_gate_guards_the_conflict_path
 test_dependabot_verdict_never_derives_an_issue
 test_no_head_sha_means_no_probe
+test_bot_verdict_unworkable_predicate
 
 echo ""
 echo "=========================================="
