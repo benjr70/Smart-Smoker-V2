@@ -1,6 +1,9 @@
-# Guards the PR screenshot-tour pieces of the /verify-pr harness: the UI-change
-# gate and the PR-body section injector (bash suites under scripts/verify-pr/),
-# plus the pure logic of the GitHub attachment uploader (scripts/pr-images/).
+# Guards the PR-body pieces of the /verify-pr harness: the UI-change gate, the
+# PR-body section injector and the fixed Bot-PR checklist (bash suites under
+# scripts/verify-pr/), plus the pure logic of the GitHub attachment uploader
+# (scripts/pr-images/). The checklist guard runs here because nothing else
+# executes that file — if its marker, heading or item count drifts, the Tier B
+# round would silently verify the wrong things on every Dependabot PR.
 #
 # These decide what lands in a human's PR description — which surfaces get a
 # screenshot tour, which caption sits under which image, and whether a re-verify
@@ -21,6 +24,8 @@ on:
       - 'scripts/verify-pr/detect-ui-change*.sh'
       - 'scripts/verify-pr/tour-viewport*.sh'
       - 'scripts/verify-pr/inject-screenshots*.sh'
+      - 'scripts/verify-pr/parse-checklist*.sh'
+      - 'scripts/verify-pr/bot-pr-checklist*'
       - '.github/workflows/pr-screenshots-tests.yml'
   push:
     branches: [master]
@@ -29,11 +34,13 @@ on:
       - 'scripts/verify-pr/detect-ui-change*.sh'
       - 'scripts/verify-pr/tour-viewport*.sh'
       - 'scripts/verify-pr/inject-screenshots*.sh'
+      - 'scripts/verify-pr/parse-checklist*.sh'
+      - 'scripts/verify-pr/bot-pr-checklist*'
       - '.github/workflows/pr-screenshots-tests.yml'
 
 jobs:
   bash-suites:
-    name: UI-change gate + body injector (bash)
+    name: UI-change gate + body injector + Bot-PR checklist (bash)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -47,6 +54,9 @@ jobs:
 
       - name: tour-viewport.sh (device-panel drift guard)
         run: bash scripts/verify-pr/tour-viewport.test.sh
+
+      - name: bot-pr-checklist.md (checklist drift guard)
+        run: bash scripts/verify-pr/bot-pr-checklist.test.sh
 
   uploader:
     name: pr-images uploader (pure logic)
