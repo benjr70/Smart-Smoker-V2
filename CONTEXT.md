@@ -45,6 +45,14 @@ and run through review and verify rounds. _Avoid_: team PR, our PR
 with no backing issue; the Daemon may verify and land it but never reviews it as
 feature work. _Avoid_: external PR, dependency PR (as a general term)
 
+**Dependabot PR**: A Bot PR opened by the Dependabot app on a `dependabot/`
+branch; the Daemon's `deps-land` lane verifies, fixes and lands it. _Avoid_:
+dependency PR, bump PR
+
+**Bot-PR checklist**: The fixed Manual-verification section injected into a Bot
+PR's body before its verify round, so every bump is exercised the same way.
+_Avoid_: dependabot checklist, verify list
+
 **Gate-and-merge**: The Daemon lane that lands a PR on master from a gate
 verdict alone, with no agent review round: docs-only research PRs and verified
 Dependabot PRs. _Avoid_: auto-merge (GitHub's feature), fast-track

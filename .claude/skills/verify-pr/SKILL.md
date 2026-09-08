@@ -28,11 +28,18 @@ human already signed off).
 ## Invocation
 
 ```
-/verify-pr <PR#>
+/verify-pr <PR#> [--force-tour]
 ```
 
-One argument: the PR number. If it is missing or not an open PR, stop with a
-clear message — do not guess.
+One required argument: the PR number. If it is missing or not an open PR, stop
+with a clear message — do not guess.
+
+`--force-tour` (optional) says: **capture the screenshot tour whatever the
+UI-change detector says**, for both surfaces. It exists for the `deps-land`
+lane: a dependency bump is usually a lockfile-only diff, which §1b reads as "no
+UI change", and a bump whose whole risk is breaking pixels or a native dep would
+then be verified with no pixels captured. Any caller may pass it; nothing else
+about the round changes.
 
 ### Callers — any caller is legitimate
 
@@ -143,8 +150,16 @@ UI_SURFACES=$(gh pr diff "$PR" --name-only | scripts/verify-pr/detect-ui-change.
 Output is one surface per line — `frontend`, `smoker`, or both (a shared package
 under `packages/*/src` renders in both apps). Empty output means no UI change:
 skip the tour entirely, and emit `screenshots: none (no UI change)` alongside
-the summary line. Non-empty means step 6 asks the verifier for a tour of exactly
-those surfaces and step 7.2 posts it.
+the summary line.
+
+**`--force-tour` overrides that decision**, and only in the permissive
+direction: with the flag, set `UI_SURFACES` to both surfaces (`frontend` and
+`smoker`) without consulting the detector, and run the tour even on a diff that
+touches no UI file at all. `screenshots: none (no UI change)` is then never a
+legal outcome — the tour is the point of the round. The flag can only add shots,
+never suppress them, so a caller passing it can never weaken a round. Non-empty
+means step 6 asks the verifier for a tour of exactly those surfaces and step 7.2
+posts it.
 
 **Each surface has a mandatory tour viewport** — neither app is a desktop app,
 so a default browser window documents a shape no user ever sees:

@@ -24,13 +24,13 @@
 #     "useMcpForProject": <bool>,       # gh token missing `project` scope
 #     "inflight": <int>,                # open AFK:in-progress count
 #     "reconcile": { "pr": N, "branch": "feat/issue-M", "issue": M,
-#                    "reason": "revise|conflict|docs-merge|incomplete",
+#                    "reason": "revise|conflict|docs-merge|incomplete|
+#                                dependabot",
 #                    "hadDone": <bool> } | null,
-#                    NEVER a Dependabot PR: the PR Triage can classify a Bot PR
-#                    (see pr-triage.sh) under reason "dependabot" OR "conflict",
-#                    but nothing can work either until the lane wiring lands in
-#                    #657 — §1.2 logs any verdict on a `dependabot/` branch on
-#                    stderr and falls through to the pick
+#                    A Dependabot PR arrives here too (see pr-triage.sh), under
+#                    reason "dependabot" or "conflict", with issue null and its
+#                    classification attached; §1.2 routes a `dependabot/` branch
+#                    to the `/deps-land` lane, not to `/pr-reconcile`
 #     "paused":    { "issue": N, "pauseCount": <int>,
 #                    "action": "resume|fail" } | null,
 #     "pick":      { "issue": N, "title": "...", "priority": "P0|P1|P2",
@@ -167,16 +167,15 @@ pickup_triage() {
     local pick_json reconcile=null
     pick_json="$(PR_TRIAGE_AUTHOR="${login}" pr_triage_scan)" || pick_json=''
     if pr_triage_bot_verdict_unworkable "${pick_json}"; then
-        # The PR Triage can already classify a Dependabot PR, but nothing here
-        # can work one until the lane lands in #657. The decision and its
-        # rationale live in pr-triage.sh's pr_triage_bot_verdict_unworkable —
-        # ONE predicate, so #657 has one place to switch on; here we only log
-        # and fall through to §1.5/§2.
+        # Suppression seam, dark since #658 wired `/deps-land`: the predicate in
+        # pr-triage.sh returns 1 for everything, so this branch never runs. It
+        # stays as the one place an emergency can darken the lane again — flip
+        # that predicate, not this caller.
         local deps_pr deps_reason
         deps_pr="$(printf '%s' "${pick_json}" | jq -r '.pr' 2>/dev/null || echo '?')"
         deps_reason="$(printf '%s' "${pick_json}" | jq -r '.reason' 2>/dev/null || echo '?')"
-        echo "pickup-triage: dependabot PR #${deps_pr} (${deps_reason}) is not" \
-            "workable yet (lane wiring lands in #657) — falling through" >&2
+        echo "pickup-triage: PR #${deps_pr} (${deps_reason}) suppressed by" \
+            "pr_triage_bot_verdict_unworkable — falling through" >&2
         pick_json=''
     fi
     if [ -n "${pick_json}" ] && [ "$(printf '%s' "${pick_json}" | jq -r '.pr' 2>/dev/null)" != "null" ]; then

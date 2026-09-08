@@ -1538,33 +1538,29 @@ test_no_head_sha_means_no_probe() {
 }
 
 #-------------------------------------------------------------------------------
-# Test 39: the ONE predicate both callers use to keep the deps lane dark until
-# #657 wires it. It is pinned here, not in each caller, so the switch-on is a
-# single edit with a single failing test — never a hunt through two files.
+# Test 39: the ONE predicate both callers used to keep the deps lane dark. #658
+# wired `/deps-land`, so it now passes EVERY verdict through — including both
+# shapes a Bot PR comes back as. Pinned here, not in each caller, so the lane
+# can never be half-on: if this predicate suppressed bot verdicts again, the
+# fire and the probe would both go blind to Dependabot in one edit.
 #-------------------------------------------------------------------------------
 test_bot_verdict_unworkable_predicate() {
-    echo "TEST: bot verdicts are flagged unworkable, agent verdicts are not"
+    echo "TEST: no verdict is suppressed — the deps lane is wired"
 
     local v
     for v in '{"pr":700,"branch":"dependabot/npm_and_yarn/axios-1.1.2","issue":null,"reason":"dependabot"}' \
-             '{"pr":701,"branch":"dependabot/npm_and_yarn/axios-1.1.2","issue":null,"reason":"conflict"}'; do
-        if ! pr_triage_bot_verdict_unworkable "${v}"; then
-            fail "a bot verdict must read as unworkable" "verdict=${v}"
-            return
-        fi
-    done
-
-    for v in '{"pr":702,"branch":"feat/issue-700","issue":700,"reason":"conflict"}' \
+             '{"pr":701,"branch":"dependabot/npm_and_yarn/axios-1.1.2","issue":null,"reason":"conflict"}' \
+             '{"pr":702,"branch":"feat/issue-700","issue":700,"reason":"conflict"}' \
              '{"pr":703,"branch":"research/700-x","issue":700,"reason":"docs-merge"}' \
              '{"pr":null}' \
              ''; do
         if pr_triage_bot_verdict_unworkable "${v}"; then
-            fail "a non-bot verdict must be workable" "verdict=${v}"
+            fail "no verdict may be flagged unworkable" "verdict=${v}"
             return
         fi
     done
 
-    pass "bot verdicts are flagged unworkable, agent verdicts are not"
+    pass "no verdict is suppressed — the deps lane is wired"
 }
 
 #-------------------------------------------------------------------------------
