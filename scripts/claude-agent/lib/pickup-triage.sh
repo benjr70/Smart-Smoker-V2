@@ -26,6 +26,11 @@
 #     "reconcile": { "pr": N, "branch": "feat/issue-M", "issue": M,
 #                    "reason": "revise|conflict|docs-merge|incomplete",
 #                    "hadDone": <bool> } | null,
+#                    NEVER a Dependabot PR: the PR Triage can classify a Bot PR
+#                    (see pr-triage.sh) under reason "dependabot" OR "conflict",
+#                    but nothing can work either until the lane wiring lands in
+#                    #657 — §1.2 logs any verdict on a `dependabot/` branch on
+#                    stderr and falls through to the pick
 #     "paused":    { "issue": N, "pauseCount": <int>,
 #                    "action": "resume|fail" } | null,
 #     "pick":      { "issue": N, "title": "...", "priority": "P0|P1|P2",
@@ -161,6 +166,29 @@ pickup_triage() {
     # the UNKNOWN-mergeability re-list).
     local pick_json reconcile=null
     pick_json="$(PR_TRIAGE_AUTHOR="${login}" pr_triage_scan)" || pick_json=''
+    local pick_is_bot
+    pick_is_bot="$(printf '%s' "${pick_json}" \
+        | jq -r '((.branch // "") | startswith("dependabot/"))' 2>/dev/null || echo 'false')"
+    if [ "${pick_is_bot}" = "true" ]; then
+        # The PR Triage can already classify a Dependabot PR, but nothing here
+        # can work one: the lane (retitle, tiers, gate, merge) lands in #657.
+        # The test is the BRANCH, not the reason, because a Bot PR comes back
+        # under two reasons and BOTH are unworkable today — reason "dependabot"
+        # has no recipe at all, and reason "conflict" would send it down §1.2's
+        # generic recipe, which locks an issue that does not exist and force-
+        # pushes a rebase onto Dependabot's own branch; #651 says a conflicting
+        # Bot PR is nudged with `@dependabot rebase` instead (agent-rebased only
+        # when it already carries agent commits). Returning `reconcile` for
+        # either would deadlock the queue behind a PR nobody can finish,
+        # including the very tickets that build the lane. Fall through to
+        # §1.5/§2.
+        local deps_pr deps_reason
+        deps_pr="$(printf '%s' "${pick_json}" | jq -r '.pr' 2>/dev/null || echo '?')"
+        deps_reason="$(printf '%s' "${pick_json}" | jq -r '.reason' 2>/dev/null || echo '?')"
+        echo "pickup-triage: dependabot PR #${deps_pr} (${deps_reason}) is not" \
+            "workable yet (lane wiring lands in #657) — falling through" >&2
+        pick_json=''
+    fi
     if [ -n "${pick_json}" ] && [ "$(printf '%s' "${pick_json}" | jq -r '.pr' 2>/dev/null)" != "null" ]; then
         local recon_n had_done='false'
         # The ticket number can be null (a research branch that carries none) —

@@ -86,8 +86,11 @@ wp_scan() {
     # signature — no extra API call for the shrink signal. A failed/malformed
     # fetch fails SAFE: the set is UNKNOWN (prSig → JSON null), never mistaken
     # for an empty set, so wp_decide can't read a flake as a whole-set shrink.
+    # The field list mirrors pr_triage_scan's: the triage below is the same
+    # module, and a listing missing headRefOid/reviewDecision cannot support a
+    # Dependabot verdict (and makes its enrichment skip the round trips).
     prs="$("${gh}" pr list --state open \
-        --json number,headRefName,isDraft,mergeable,labels,createdAt,author \
+        --json number,headRefName,isDraft,mergeable,labels,createdAt,author,headRefOid,reviewDecision \
         2>/dev/null)" || prs=''
     if [ -n "${prs}" ] && printf '%s' "${prs}" | jq -e 'type == "array"' >/dev/null 2>&1; then
         pr_sig="$(printf '%s' "${prs}" | jq -r '[.[].number] | sort | map(tostring) | join(",")')"
@@ -100,7 +103,16 @@ wp_scan() {
     pick_json="$(printf '%s' "${prs}" \
         | PR_TRIAGE_AUTHOR="${author}" pr_triage_enrich \
         | PR_TRIAGE_AUTHOR="${author}" pr_triage_pick)" || true
-    reconcile="$(printf '%s' "${pick_json}" | jq -r '.pr // "null"' 2>/dev/null || echo 'null')"
+    # A verdict on a `dependabot/` branch is classified but not workable until
+    # the lane lands (#657), under EITHER of its reasons — pickup-triage.sh
+    # suppresses both for the same reason, and this probe must agree with it or
+    # it would burn a whole fire every five minutes waking the daemon for a PR
+    # the fire then skips. The branch is the test, so both bot verdict shapes
+    # are covered without either growing a field.
+    reconcile="$(printf '%s' "${pick_json}" \
+        | jq -r 'if ((.branch // "") | startswith("dependabot/")) then "null"
+                 else (.pr // "null") end' \
+        2>/dev/null || echo 'null')"
 
     paused="$("${gh}" issue list --label AFK:paused --state open \
         --json number --jq '(sort_by(.number) | first | .number) // "null"' \
