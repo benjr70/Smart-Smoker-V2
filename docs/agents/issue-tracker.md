@@ -50,4 +50,5 @@ Used by the repo-local `/wayfinder`, `/to-spec` and `/to-tickets` forks in `.cla
 ## Smart Smoker additions
 
 - Tickets meant for the autonomous daemon carry the `AFK` label **and** must be added to GitHub Project #1 (`Smart Smoker V2`) with a `Priority` (P0/P1/P2; default P2, wayfinder research P1). Project membership is the pick signal; `/afk-pickup` skips un-projected issues.
+- **Bot PRs have no ticket.** A **Dependabot PR** (Dependabot app, `dependabot/` branch) is picked by the Daemon's PR Triage under reason `dependabot` — ranked below every agent reason, security bumps first, one per fire — and worked by the `/deps-land` skill (`.claude/skills/deps-land/`), not `/pr-reconcile`. It takes no `AFK:in-progress` lock because there is no issue to lock. A bump whose verify/fix loop exhausts is drafted with `AFK:deps-failed`; a major bump stops at `HITL` until a human approves the PR in GitHub's review UI.
 - Blocking is native issue dependencies only — no `Blocked by #N` body text is parsed. Slice bodies still carry a `## Blocked by` section, but it is an informational name mirror (`- [title](url)`) for human readers.

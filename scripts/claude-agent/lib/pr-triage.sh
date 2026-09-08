@@ -62,10 +62,10 @@
 #   - `AFK:deps-failed` (and the draft state that accompanies it) parks a bot PR
 #     for good, exactly as the other escalation labels park an Agent PR.
 # The lane that acts on a "dependabot" verdict — retitle, tier A/B, fix loop,
-# gate, merge — lands in later slices (#656/#657); this module only classifies.
-# Until the lane exists both callers drop either bot verdict on the floor, via
-# the ONE predicate pr_triage_bot_verdict_unworkable below — see its header for
-# why, and for the single edit #657 makes to switch the lane on.
+# gate, merge — is the `/deps-land` skill (#658); this module only classifies.
+# The lane is wired, so both callers now hand a bot verdict on to it; the ONE
+# predicate pr_triage_bot_verdict_unworkable below is the seam that used to
+# suppress them and now passes everything through.
 #
 # Needs-attention — a filtered PR is picked when EITHER holds:
 #   - it carries the `AFK:revise` label (a human reviewed and explicitly handed
@@ -606,27 +606,23 @@ pr_triage_pick() {
 }
 
 # pr_triage_bot_verdict_unworkable <verdict-json>: exit 0 when the verdict names
-# a PR the harness can classify but cannot yet work — today, any Dependabot PR.
+# a PR the harness can classify but cannot yet work.
 #
-# THE ONE PLACE the "keep the deps lane dark" decision lives. Both callers
+# THE ONE PLACE the "is the deps lane dark?" decision lives. Both callers
 # (pickup-triage.sh §1.2, work-probe.sh) ask this predicate rather than
-# re-deriving the test, so #657 — which wires reason "dependabot" to the
-# `deps-land` skill and reason "conflict" to the `@dependabot rebase` nudge —
-# switches the lane on by making this function `return 1` unconditionally, in
-# one file, with one test to flip.
+# re-deriving the test, so switching the lane on was one edit in one file with
+# one test to flip.
 #
-# The test is the BRANCH, not the reason, because a Bot PR comes back under two
-# reasons and BOTH are unworkable today: reason "dependabot" has no recipe at
-# all, and reason "conflict" would take the generic reconcile recipe, which
-# locks an issue that does not exist and force-pushes a rebase onto a branch
-# Dependabot owns. A verdict nobody can act on correctly must never block the
-# queue behind it — the callers fall through to ordinary work instead.
+# The lane IS on (#658): `/deps-land` owns reason "dependabot" and, for a Bot
+# PR, reason "conflict" too — the latter posts `@dependabot rebase` instead of
+# force-pushing Dependabot's own branch, which is what the generic agent
+# reconcile recipe would have done. So nothing is unworkable any more and this
+# predicate returns 1 unconditionally.
+#
+# It is kept (rather than deleted at both call sites) as the one seam a future
+# emergency can use to darken the lane again — flip the body back to a branch
+# test — without hunting through two callers for the suppression.
 pr_triage_bot_verdict_unworkable() {
-    local verdict="${1:-}" branch
-    [ -n "${verdict}" ] || return 1
-    branch="$(printf '%s' "${verdict}" | jq -r '.branch // ""' 2>/dev/null)" || return 1
-    case "${branch}" in
-        dependabot/*) return 0 ;;
-        *) return 1 ;;
-    esac
+    : "${1:-}"
+    return 1
 }

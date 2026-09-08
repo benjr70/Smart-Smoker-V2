@@ -104,10 +104,11 @@ wp_scan() {
         | PR_TRIAGE_AUTHOR="${author}" pr_triage_enrich \
         | PR_TRIAGE_AUTHOR="${author}" pr_triage_pick)" || true
     reconcile="$(printf '%s' "${pick_json}" | jq -r '.pr // "null"' 2>/dev/null || echo 'null')"
-    # A Bot PR verdict is classified but not workable until the lane lands
-    # (#657). The probe asks the SAME predicate pickup-triage.sh does — if the
-    # two ever disagreed this probe would wake the daemon every five minutes for
-    # a PR the fire then skips, burning a whole fire on nothing.
+    # The probe asks the SAME suppression predicate pickup-triage.sh does — if
+    # the two ever disagreed this probe would wake the daemon every five minutes
+    # for a PR the fire then skips, burning a whole fire on nothing. Since #658
+    # wired `/deps-land` the predicate suppresses nothing, so a Bot PR wakes the
+    # daemon exactly like an Agent PR does.
     if pr_triage_bot_verdict_unworkable "${pick_json}"; then
         reconcile='null'
     fi

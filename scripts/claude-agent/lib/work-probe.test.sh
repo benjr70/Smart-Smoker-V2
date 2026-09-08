@@ -626,14 +626,14 @@ want: ${want}"
 }
 
 #-------------------------------------------------------------------------------
-# Test 25: a Dependabot PR must not wake the daemon. The PR Triage classifies
-# Bot PRs, but no fire can work one until the lane is wired (#657) — a wake
-# here would burn a whole fire every five minutes on a PR the fire then skips.
-# The listing also carries the fields that verdict is built from, so the probe
-# and the fire's triage see the same PR the same way.
+# Test 25: a Dependabot PR wakes the daemon now that the lane is wired (#658):
+# the fire routes reason `dependabot` to `/deps-land`, so a probe that stayed
+# silent would leave every security bump unlanded until some other work woke the
+# daemon. The listing also carries the fields that verdict is built from, so the
+# probe and the fire's triage see the same PR the same way.
 #-------------------------------------------------------------------------------
-test_scan_dependabot_pr_no_reconcile() {
-    echo "TEST: a Dependabot PR does not set reconcile"
+test_scan_dependabot_pr_sets_reconcile() {
+    echo "TEST: a Dependabot PR sets reconcile and wakes the daemon"
 
     local dir; dir="$(make_env)"
     trap "rm -rf '${dir}'" RETURN
@@ -653,8 +653,8 @@ PVEOF
     local scan
     scan="$(GH_BIN="${dir}/gh-stub" wp_scan)"
 
-    if [ "$(printf '%s' "${scan}" | jq -r '.reconcile')" != "null" ]; then
-        fail "a dependabot verdict must not read as a reconcile" "scan=${scan}"
+    if [ "$(printf '%s' "${scan}" | jq -r '.reconcile')" != "635" ]; then
+        fail "a dependabot verdict must read as a reconcile" "scan=${scan}"
         return
     fi
     if [ "$(printf '%s' "${scan}" | jq -r '.prSig')" != "635" ]; then
@@ -662,22 +662,22 @@ PVEOF
             "scan=${scan}"
         return
     fi
-    if printf '%s' "${scan}" | wp_decide "" ""; then
-        fail "a dependabot verdict must not wake the daemon" "scan=${scan}"
+    if ! printf '%s' "${scan}" | wp_decide "" ""; then
+        fail "a dependabot verdict must wake the daemon" "scan=${scan}"
         return
     fi
 
-    pass "a Dependabot PR does not set reconcile"
+    pass "a Dependabot PR sets reconcile and wakes the daemon"
 }
 
 #-------------------------------------------------------------------------------
-# Test 25b: nor does a CONFLICTING one. It comes back under reason `conflict`,
-# whose generic recipe would rebase and force-push Dependabot's own branch;
-# #651 nudges `@dependabot rebase` instead, from the lane that lands in #657.
-# Until then both bot verdicts are suppressed, keyed on the branch.
+# Test 25b: so does a CONFLICTING one. It comes back under reason `conflict`,
+# and `/deps-land` owns that path for a Bot PR too — it posts `@dependabot
+# rebase` rather than force-pushing Dependabot's own branch, which is what the
+# generic agent conflict recipe would have done.
 #-------------------------------------------------------------------------------
-test_scan_conflicting_dependabot_pr_no_reconcile() {
-    echo "TEST: a conflicting Dependabot PR does not set reconcile"
+test_scan_conflicting_dependabot_pr_sets_reconcile() {
+    echo "TEST: a conflicting Dependabot PR sets reconcile"
 
     local dir; dir="$(make_env)"
     trap "rm -rf '${dir}'" RETURN
@@ -697,16 +697,16 @@ PVEOF
     local scan
     scan="$(GH_BIN="${dir}/gh-stub" wp_scan)"
 
-    if [ "$(printf '%s' "${scan}" | jq -r '.reconcile')" != "null" ]; then
-        fail "a conflicting bot PR must not read as a reconcile" "scan=${scan}"
+    if [ "$(printf '%s' "${scan}" | jq -r '.reconcile')" != "636" ]; then
+        fail "a conflicting bot PR must read as a reconcile" "scan=${scan}"
         return
     fi
-    if printf '%s' "${scan}" | wp_decide "" ""; then
-        fail "a conflicting bot PR must not wake the daemon" "scan=${scan}"
+    if ! printf '%s' "${scan}" | wp_decide "" ""; then
+        fail "a conflicting bot PR must wake the daemon" "scan=${scan}"
         return
     fi
 
-    pass "a conflicting Dependabot PR does not set reconcile"
+    pass "a conflicting Dependabot PR sets reconcile"
 }
 
 #-------------------------------------------------------------------------------
@@ -779,8 +779,8 @@ test_scan_splits_slices_and_wayfinder
 test_scan_counts_open_maps
 test_scan_map_count_sets_explicit_limit
 test_scan_queue_error_reads_empty
-test_scan_dependabot_pr_no_reconcile
-test_scan_conflicting_dependabot_pr_no_reconcile
+test_scan_dependabot_pr_sets_reconcile
+test_scan_conflicting_dependabot_pr_sets_reconcile
 test_scan_pr_list_requests_deps_fields
 
 echo ""

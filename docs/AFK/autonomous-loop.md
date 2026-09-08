@@ -13,6 +13,7 @@ systemd (agent-daemon.service, Restart=always)
        └─ agent-run      one fire: reset to master, run claude --print "/afk-pickup"
             └─ /afk-pickup      ONE unit of work per fire, in priority order:
                  1. /pr-reconcile   an open PR needs attention (conflict / AFK:revise)
+                    /deps-land      … or the picked PR is a Dependabot PR (reason `dependabot`)
                  2. resume          an AFK:paused issue (usage ran out mid-run)
                  3. new pick        next eligible `AFK` issue from Project #1
                       └─ /afk-dispatch   implementer/reviewer/verifier TDD team
@@ -185,8 +186,11 @@ The ticket number comes from the branch, else the PR title's `(#N)`, else it
 is null and the reconcile runs without an issue lock.
 
 `AFK:revise` outranks plain conflicts, which outrank `docs-merge`, which
-outranks `incomplete`; oldest first within rank. Parked PRs
-(`AFK:revise-failed` / `AFK:rebase-failed`) and drafts are skipped.
+outranks `incomplete`; oldest first within rank. Every **Dependabot PR** ranks
+below all of those, under reason `dependabot` (or `conflict` when its branch
+needs a rebase); within that block security bumps come before version bumps,
+then oldest, one per fire. Parked PRs (`AFK:revise-failed` /
+`AFK:rebase-failed` / `AFK:deps-failed`) and drafts are skipped.
 
 This gives the pipeline its ordering invariant: **outstanding agent PRs are
 finished before any new `AFK` issue is picked** — while any PR still needs
@@ -254,6 +258,32 @@ done).
 | `AFK:revise` | PR | hand-back: address the unresolved review comments — applied by a **human** review or by **`/pr-review`** (its 🤖 findings) |
 | `AFK:revise-failed` | PR | revise loop exhausted (3 rounds) or disputed; parked |
 | `AFK:rebase-failed` | PR | auto-rebase failed (conflicts unresolvable or lease refused); parked |
+| `AFK:deps-failed` | PR | Dependabot PR: verify/fix loop exhausted (3 attempts); PR is drafted and never re-picked |
+
+## The Dependabot lane (`/deps-land`)
+
+A **Dependabot PR** — authored by the Dependabot app on a `dependabot/` branch,
+with no backing issue — is picked under reason `dependabot` and goes to
+**`/deps-land`** (`.claude/skills/deps-land/`) instead of `/pr-reconcile`. One
+fire drives one bump to one terminal outcome: merged, `HITL`, `deps-failed` or
+`superseded`.
+
+Per fire, re-reading PR state before every step: retitle (`fix(deps):` for a
+security bump, so release-please cuts a patch release) → inject the **Bot-PR
+checklist** (`scripts/verify-pr/bot-pr-checklist.md`) → **Tier A**
+(`/pr-watch --bot`: every check green) → **Tier B** (one `/verify-pr` round with
+the screenshot tour forced; any FAIL *or* any deferral is a failure) → the
+**deps gate** (`lib/deps-gate.sh`), whose approving verdict afk-pickup §1.2
+merges at the same call site as `docs-merge`. Fixes are bounded at **3 attempts
+in total**, counted from sha-keyed marker comments (`lib/deps-lane.sh`) so a
+crashed fire resumes and a force-push invalidates every earlier verdict.
+
+Major bumps are verified the same way but never merged by machine: the lane
+adds `HITL` and hands off with both tier verdicts and a pointer to the tour; an
+ordinary GitHub review approval lets a later fire re-gate and land it.
+Exhaustion drafts the PR with `AFK:deps-failed`. A conflicting bot branch gets
+`@dependabot rebase`, or the rebase driver once the lane has pushed commits of
+its own.
 
 ## Testing
 
@@ -304,4 +334,5 @@ on every PR.
 - [Dispatch](dispatch.md) — `/afk-dispatch` playbook and hooks
 - [Claude Agent VM](../CI-CD/claude-agent-vm.md) — host setup
 - Skills: `.claude/skills/afk-pickup/`, `pr-watch/`, `pr-review/`,
-  `pr-reconcile/`, `afk-dispatch/`, `afk-resolve/` — the authoritative playbooks
+  `pr-reconcile/`, `deps-land/`, `afk-dispatch/`, `afk-resolve/` — the
+  authoritative playbooks

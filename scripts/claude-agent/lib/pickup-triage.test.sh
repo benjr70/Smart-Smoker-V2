@@ -206,14 +206,15 @@ test_reconcile_pick() {
     fi
 }
 
-# ── Test 5b: a Dependabot PR does NOT block the queue ───────────────────────
-# The PR Triage classifies Bot PRs already, but nothing here can work one yet —
-# the lane wiring lands in #657. If a `dependabot` verdict returned `reconcile`
-# the skill would be handed a PR it has no procedure for and every issue behind
-# it, including the tickets that build the lane, would be unreachable. The
-# verdict is logged and the triage falls through to the ordinary pick.
-test_dependabot_pr_does_not_block_the_pick() {
-    local dir out err
+# ── Test 5b: a Dependabot PR is now workable — verdict reconcile ────────────
+# The lane (`/deps-land`, #658) is wired, so a `dependabot` verdict is handed to
+# §1.2 like any other reconcile instead of being logged and dropped. The
+# reconcile payload carries the Bot PR's classification and a null issue: there
+# is no backing ticket to lock, so hadDone is false and no `gh issue view` is
+# made. A regression here (the suppression predicate returning 0 again) would
+# make every Dependabot PR invisible to the daemon.
+test_dependabot_pr_is_picked_for_reconcile() {
+    local dir out err rec
     dir="$(make_env)"
     jq -cn '[{number: 635, headRefName: "dependabot/npm_and_yarn/axios-1.1.2",
               isDraft: false, mergeable: "MERGEABLE",
@@ -226,24 +227,28 @@ test_dependabot_pr_does_not_block_the_pick() {
         "$(issue_node 657 'wire the deps lane' P1 true '2026-09-01T00:00:00Z')"
     out="$(run_triage "${dir}" 2> "${dir}/stderr.log")"
     err="$(cat "${dir}/stderr.log")"
-    if [ "$(printf '%s' "${out}" | jq -r '.verdict')" = "pick" ] \
-        && [ "$(printf '%s' "${out}" | jq -r '.pick.issue')" = "657" ] \
-        && [ "$(printf '%s' "${out}" | jq -r '.reconcile')" = "null" ] \
-        && printf '%s' "${err}" | grep -q "dependabot PR #635"; then
-        pass "dependabot verdict falls through to the issue pick"
+    rec="$(printf '%s' "${out}" | jq -c '.reconcile')"
+    if [ "$(printf '%s' "${out}" | jq -r '.verdict')" = "reconcile" ] \
+        && [ "$(printf '%s' "${rec}" | jq -r '.pr')" = "635" ] \
+        && [ "$(printf '%s' "${rec}" | jq -r '.reason')" = "dependabot" ] \
+        && [ "$(printf '%s' "${rec}" | jq -r '.issue')" = "null" ] \
+        && [ "$(printf '%s' "${rec}" | jq -r '.sha')" = "sha635" ] \
+        && [ "$(printf '%s' "${rec}" | jq -r '.hadDone')" = "false" ]; then
+        pass "dependabot verdict → verdict reconcile {pr,reason,sha}"
     else
-        fail "dependabot verdict falls through to the issue pick" \
+        fail "dependabot verdict → verdict reconcile {pr,reason,sha}" \
             "out=${out} err=${err}"
     fi
 }
 
-# ── Test 5c: a CONFLICTING Dependabot PR does not take the §1.2 conflict path ─
-# It comes back as reason `conflict`, but the generic recipe behind that reason
-# locks a ticket that does not exist and force-pushes a rebase onto Dependabot's
-# own branch. #651 nudges `@dependabot rebase` instead, in the lane that lands
-# in #657 — so until then a Bot PR is suppressed under BOTH its reasons.
-test_conflicting_dependabot_pr_does_not_block_the_pick() {
-    local dir out err
+# ── Test 5c: a CONFLICTING Dependabot PR reconciles under reason `conflict` ──
+# It comes back as reason `conflict`, and §1.2 routes it to `/deps-land` too —
+# the lane nudges `@dependabot rebase` (or drives the rebase driver when the
+# branch already carries agent commits) rather than force-pushing Dependabot's
+# own branch, which is what the generic agent conflict recipe would do. The
+# payload's `agentCommits` flag is what picks between the two.
+test_conflicting_dependabot_pr_is_picked_for_reconcile() {
+    local dir out err rec
     dir="$(make_env)"
     jq -cn '[{number: 636, headRefName: "dependabot/npm_and_yarn/axios-1.1.2",
               isDraft: false, mergeable: "CONFLICTING",
@@ -256,13 +261,15 @@ test_conflicting_dependabot_pr_does_not_block_the_pick() {
         "$(issue_node 657 'wire the deps lane' P1 true '2026-09-01T00:00:00Z')"
     out="$(run_triage "${dir}" 2> "${dir}/stderr.log")"
     err="$(cat "${dir}/stderr.log")"
-    if [ "$(printf '%s' "${out}" | jq -r '.verdict')" = "pick" ] \
-        && [ "$(printf '%s' "${out}" | jq -r '.pick.issue')" = "657" ] \
-        && [ "$(printf '%s' "${out}" | jq -r '.reconcile')" = "null" ] \
-        && printf '%s' "${err}" | grep -q "dependabot PR #636 (conflict)"; then
-        pass "conflicting dependabot verdict falls through to the issue pick"
+    rec="$(printf '%s' "${out}" | jq -c '.reconcile')"
+    if [ "$(printf '%s' "${out}" | jq -r '.verdict')" = "reconcile" ] \
+        && [ "$(printf '%s' "${rec}" | jq -r '.pr')" = "636" ] \
+        && [ "$(printf '%s' "${rec}" | jq -r '.reason')" = "conflict" ] \
+        && [ "$(printf '%s' "${rec}" | jq -r '.issue')" = "null" ] \
+        && [ "$(printf '%s' "${rec}" | jq -r '.agentCommits')" != "null" ]; then
+        pass "conflicting dependabot verdict → verdict reconcile {pr,reason}"
     else
-        fail "conflicting dependabot verdict falls through to the issue pick" \
+        fail "conflicting dependabot verdict → verdict reconcile {pr,reason}" \
             "out=${out} err=${err}"
     fi
 }
@@ -619,8 +626,8 @@ test_no_gh_on_auth_failure
 test_in_flight_lock
 test_lock_error_fails_safe
 test_reconcile_pick
-test_dependabot_pr_does_not_block_the_pick
-test_conflicting_dependabot_pr_does_not_block_the_pick
+test_dependabot_pr_is_picked_for_reconcile
+test_conflicting_dependabot_pr_is_picked_for_reconcile
 test_resume_below_cap
 test_resume_cap
 test_pick_priority_and_blockers

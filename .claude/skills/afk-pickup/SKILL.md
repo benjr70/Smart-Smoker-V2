@@ -125,18 +125,13 @@ never queued behind a bot — with security bumps before version bumps, then
 oldest, one per fire. A conflicting Bot PR comes back as reason `conflict` with
 an extra `agentCommits` flag instead — and ranks below every agent reason too,
 including agent `docs-merge` and `incomplete`: sharing the name `conflict` never
-buys a bot the agent conflict rank. The Gate-and-merge lane that acts on these
-verdicts (retitle, Tier A/B, bounded fix loop, `deps-gate`, squash-merge) lands
-in a later Slice (#656/#657). **Until it does you will never see a Bot PR here
-at all**: §0's one-call triage suppresses _both_ bot verdicts — reason
-`dependabot` and a bot PR's `conflict` — by logging the PR number on stderr and
-falling through to §1.5/§2. The suppression lives in exactly one predicate,
-`pr_triage_bot_verdict_unworkable` in `lib/pr-triage.sh`, which both the fire
-triage and the work probe ask, so #657 switches the lane on with one edit. That
-covers the conflict case deliberately: the generic conflict recipe below would
-rebase and force-push Dependabot's own branch, where the lane will nudge
-`@dependabot rebase` instead. A Bot PR nobody can work yet never blocks the
-queue behind it.
+buys a bot the agent conflict rank.
+
+Both bot verdicts are dispatched to the **`/deps-land`** lane (Slice #658), not
+to `/pr-reconcile`: the generic reconcile recipe would lock an issue that does
+not exist and force-push a rebase onto a branch Dependabot owns, where the lane
+posts `@dependabot rebase` instead. See the `deps-land` branch below for the
+dispatch itself.
 
 `pr_triage_scan` owns the `gh pr list` call and rides out GitHub's async
 mergeability: a fresh master push leaves every open PR `UNKNOWN` for a few
@@ -158,11 +153,17 @@ HAD_DONE=$(printf '%s' "$TRIAGE" | jq -r '.reconcile.hadDone')
 # When the PR both conflicts AND carries AFK:revise, pass --reason both.
 # Reason "incomplete" (bot tail never finished) passes through as-is.
 # Reason "docs-merge" does NOT go to /pr-reconcile — see the branch below.
+# Reason "dependabot" (and any reason on a dependabot/ branch) goes to
+# /deps-land — see that branch below.
 
 # Single-flight lock: reuse the issue lock so §1's skip, the daemon's pacing,
 # and agent-run's crash cleanup all keep working unchanged. HAD_DONE (whether
 # AFK:done was present) came from the triage read; restore it on exit.
-gh issue edit "$RECON_N" --remove-label AFK:done --add-label AFK:in-progress 2>/dev/null || true
+# Skipped entirely when RECON_N is null — a Bot PR (and some research PRs)
+# has no backing ticket, and "gh issue edit null" would error every fire.
+if [ "$RECON_N" != "null" ]; then
+    gh issue edit "$RECON_N" --remove-label AFK:done --add-label AFK:in-progress 2>/dev/null || true
+fi
 ```
 
 Emit the pick line (this exact shape — agent-run's crash cleanup scrapes it):
@@ -258,38 +259,124 @@ red-CI docs PR gets its fix loop instead of sitting merged-never — but only th
 refusal rows are expected in steady state; a recurring `ERROR —` line is a bug
 to file.
 
-**The deps gate (documented here; wired in #657).** A Dependabot PR has its own
-sibling gate — `scripts/claude-agent/lib/deps-gate.sh` — with the same contract
-as the docs-only gate above: it decides, never mutates, and prints one JSON
-verdict carrying the exact `.mergeCmd` (admin squash, `--match-head-commit`)
-that a single call site runs. It needs no local clone (it reads the PR through
-`gh` only):
+**Reason `dependabot` (or `conflict` on a `dependabot/…` branch) — run the
+lane.** Spawn the **`/deps-land`** skill via the `Agent` tool
+(`subagent_type: general-purpose`, `model: opus`, `run_in_background: false` —
+blocking, same rule as §6a.1) with the prompt:
+
+`"Invoke the /deps-land skill with --pr <RECON_PR> --branch <RECON_BRANCH> --sha <RECON_SHA> --reason <dependabot|conflict> [--security <true|false> --major <true|false>] [--agent-commits <true|false>], repo benjr70/Smart-Smoker-V2."`
+
+**The two bot reasons carry different verdict fields, so build the arguments per
+reason** — `pr_triage_pick` attaches `sha`/`security`/`major` to reason
+`dependabot` only, and `agentCommits` to reason `conflict` only. Reading the
+missing ones anyway would dispatch `--sha null`, and the lane's liveness check
+would end every conflict fire `superseded` before it ever posted
+`@dependabot rebase`:
+
+```bash
+if [ "$RECON_REASON" = "dependabot" ]; then
+    RECON_SHA=$(printf '%s' "$TRIAGE" | jq -r '.reconcile.sha')
+    DEPS_ARGS="--sha $RECON_SHA --security $(printf '%s' "$TRIAGE" | jq -r '.reconcile.security')"
+    DEPS_ARGS="$DEPS_ARGS --major $(printf '%s' "$TRIAGE" | jq -r '.reconcile.major')"
+else
+    # reason "conflict" on a dependabot/ branch: the verdict carries no sha and
+    # no flags. Read the sha here (one call) so the lane's liveness rule works;
+    # security/major are NOT passed — the fire ends in the lane's §1, before the
+    # retitle and the gate, which are the only steps that read them.
+    RECON_SHA=$(gh pr view "$RECON_PR" --json headRefOid -q .headRefOid)
+    DEPS_ARGS="--sha $RECON_SHA --agent-commits $(printf '%s' "$TRIAGE" | jq -r '.reconcile.agentCommits')"
+fi
+```
+
+There is **no issue lock** on this path: `.reconcile.issue` is `null` for a Bot
+PR, so skip the `gh issue edit` pair entirely (the pick line still prints, with
+`issue #null`).
+
+The lane runs the whole recipe — re-read state, retitle, inject the Bot-PR
+checklist, Tier A (`/pr-watch --bot`), Tier B (`/verify-pr --force-tour`), the
+bounded fix loop, then `scripts/claude-agent/lib/deps-gate.sh` — and returns one
+terminal `deps-land:` line plus the `deps:` report line. It **never merges**.
+
+**The merge happens here, at the same call site as `docs-merge` above** — the
+one place in the harness that can land a commit on master. The lane ran in its
+own agent, so its stdout is the only channel: on `deps-land: APPROVED …` it
+prints exactly one `merge-cmd: <gate .mergeCmd verbatim>` line, and that line is
+where the command comes from. Extract it, never retype it (it carries
+`--squash --admin --match-head-commit`, so a branch that moved between gate and
+merge fails the merge instead of landing unverified code), then rewrite the
+report line's `outcome=` to `merged <sha>`:
+
+```bash
+DEPS_OUT=$(...)                # the /deps-land agent's full terminal output
+MERGE_CMD=$(printf '%s\n' "$DEPS_OUT" | sed -n 's/^merge-cmd: //p' | tail -1)
+
+# The command is scraped from a subagent's free-form stdout and is about to be
+# eval'd with the daemon's gh admin credentials against master, so validate it
+# against the ONE shape deps-gate.sh emits before running it. Unlike the
+# docs-merge site above — which evals `.mergeCmd` straight out of the gate's own
+# JSON — this text passed through a lane that echoes pr-watch lines,
+# manual-verify lines and a `Last failure: <verbatim>` string, all of it PR- and
+# page-derived. Without this check a crafted or hallucinated `merge-cmd:` line
+# anywhere in that stream is arbitrary shell. The PR number is pinned to the one
+# we dispatched and the sha to hex, and the anchors leave no room for a shell
+# metacharacter.
+MERGE_RE="^gh pr merge ${RECON_PR} (--repo [A-Za-z0-9._-]+/[A-Za-z0-9._-]+ )?--squash --admin --match-head-commit [0-9a-f]{7,40}$"
+
+if ! printf '%s' "$DEPS_OUT" | grep -q '^deps-land: APPROVED'; then
+    :   # any other terminal line merges nothing
+elif [ -z "$MERGE_CMD" ]; then
+    :   # outcome=refused:merge-cmd-missing
+elif ! printf '%s\n' "$MERGE_CMD" | grep -Eq "$MERGE_RE"; then
+    :   # outcome=refused:merge-cmd-malformed — run NOTHING
+else
+    eval "$MERGE_CMD"
+fi
+```
+
+An `APPROVED` line with no `merge-cmd:` line is a lane bug, not a merge: report
+`outcome=refused:merge-cmd-missing` and merge nothing. A `merge-cmd:` line that
+fails `MERGE_RE` is worse than a bug — it is a malformed gate or text that
+reached the lane's stdout from the PR — so report
+`outcome=refused:merge-cmd-malformed`, log the offending line verbatim in the §7
+report, and run nothing. Never edit the line to make it match: the only
+sanctioned merge command is the gate's own `.mergeCmd`, byte-for-byte.
+
+Any other terminal line merges nothing. The lane owns its own labels (`HITL` +
+the hand-off comment on a major, draft + `AFK:deps-failed` on exhaustion,
+nothing at all on `superseded`); this section only reports.
+
+The gate itself — `scripts/claude-agent/lib/deps-gate.sh` — is the sibling of
+the docs-only gate above, with the same contract: it decides, never mutates, and
+prints one JSON verdict carrying the exact `.mergeCmd`. It needs no local clone
+(it reads the PR through `gh` only):
 `deps-gate.sh --pr <N> --head <sha> [--major true|false] [--security true|false] [--repo <owner/repo>]`,
 exit 0 approved / exit 1 refused. It approves only an open, non-draft PR
 authored by the Dependabot app on a `dependabot/` branch whose comments carry
 `tierA=green` **and** `tierB=PASS` markers for that exact sha, with every check
 green, a deps title whose PR-title lint check actually ran and passed (a
 `skipping` bucket vouches for nothing), no human review requesting changes at
-any bump size, and an `APPROVED` review if the bump is major. The gate-and-merge
-lane that calls it lands in Slice #657; until then no fire reaches a Bot PR, and
-this table is the reference for the `deps:` report line it will emit:
+any bump size, and an `APPROVED` review if the bump is major. Its refusals are
+what the lane's `outcome=` reports:
 
 | `.reason`                     | means                                                                     | lane response                                              |
 | ----------------------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| _(absent, exit 0)_            | approved                                                                  | run `.mergeCmd` verbatim                                   |
+| _(absent, exit 0)_            | approved                                                                  | this section runs `.mergeCmd` verbatim                     |
 | `not-dependabot`              | author or head branch is not the Dependabot app's                         | not a Bot PR — leave it alone                              |
-| `draft-or-closed`             | the PR is closed, merged or a draft a human parked                        | leave it alone                                             |
+| `draft-or-closed`             | the PR is closed, merged or a draft a human parked                        | outcome `superseded` — leave it alone                      |
 | `markers-stale`               | tier A/B markers absent, for another sha, or the PR moved                 | re-run the tiers on the new head                           |
 | `checks-not-green`            | a check is failing or still pending                                       | fix loop, or wait for CI                                   |
 | `checks-missing`              | the check list is EMPTY — nothing ran, nothing vouches                    | wait for CI, then re-gate                                  |
 | `title-not-deps`              | not a `fix(deps):`/`chore(deps):` title, or its lint did not run and pass | retitle, or leave to a human                               |
 | `changes-requested`           | a human reviewed the bump and requested changes                           | leave it alone — the rejection stands                      |
-| `major-unapproved`            | a major bump with no `APPROVED` review                                    | HITL: a breaking bump needs a human                        |
+| `major-unapproved`            | a major bump with no `APPROVED` review                                    | `HITL` + the hand-off comment; never merged                |
 | `checks-unreadable` / `usage` | PR state unreadable, or bad args — **the gate could not run**             | report as a harness error, never as a verdict about the PR |
 
 The last row says nothing about the PR at all, exactly like the docs gate's
 `ERROR —` row above: a recurring `checks-unreadable` or `usage` is a bug to
 file, not a bump to triage.
+
+Report per the deps block in §7, and exit — a deps fire never falls through to
+§1.5/§2.
 
 Then spawn the **`/pr-reconcile`** skill via the `Agent` tool —
 `subagent_type: general-purpose`, `model: opus`, `run_in_background: false`
@@ -963,6 +1050,21 @@ usual `reconcile:` line from the fall-through:
 docs-merge: REFUSED — checks-not-green
 reconcile: <verbatim terminal pr-reconcile: line>
 ```
+
+A **deps fire** (§1.2 picked a Dependabot PR and ran `/deps-land`) emits this
+block instead — the `deps:` line comes verbatim from the lane, except that on
+the merge path this section rewrites its `outcome=` to the sha it just merged:
+
+```
+=== /afk-pickup <ISO-8601> ===
+picked:   reconcile PR #<P> (issue #null)
+deps: PR #<N> "<title>" — security=<y/n> major=<y/n> tierA=<green|fixed(k)|failed> tierB=<6/6|k/6|skipped> outcome=<merged sha|HITL|deps-failed|superseded>
+result:   <verbatim terminal deps-land: line>
+```
+
+A gate refusal that is none of the four terminal outcomes is reported as
+`outcome=refused:<reason>` from the table in §1.2 — never dropped: a gate that
+could not run is a harness bug and must not vanish into a silent skip.
 
 A **resolve fire** (§2b picked a wayfinder Decision ticket) emits this block
 instead — the `resolve:` marker line, then `/afk-resolve`'s terminal line and,
