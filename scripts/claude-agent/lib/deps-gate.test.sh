@@ -52,12 +52,19 @@ SHA='dead0beef'
 # green check list that includes the PR-title lint.
 make_env() {
     local dir; dir="$(mktemp -d)"
+    # The stub mimics the real `gh pr checks` exit-code contract: it prints the
+    # JSON and THEN exits with whatever checks-rc says (gh exits 1 when a check
+    # failed, 8 when one is pending, 0 only when all are green). Fixtures that
+    # write a red or pending list write the matching rc, so a gate that reads
+    # the exit code instead of the payload is caught here.
     cat > "${dir}/gh-stub" <<EOF
 #!/usr/bin/env bash
 echo "\$*" >> "${dir}/gh-calls"
 case "\$*" in
     *"pr view"*)   cat "${dir}/view.json" 2>/dev/null || exit 1 ;;
-    *"pr checks"*) cat "${dir}/checks.json" 2>/dev/null || exit 1 ;;
+    *"pr checks"*)
+        cat "${dir}/checks.json" 2>/dev/null || exit 1
+        exit "\$(cat "${dir}/checks-rc" 2>/dev/null || echo 0)" ;;
     *) exit 1 ;;
 esac
 EOF
@@ -88,8 +95,9 @@ write_view() {
          | '"${edit}" -n > "${dir}/view.json"
 }
 
-write_checks() { # write_checks <dir> <json array>
+write_checks() { # write_checks <dir> <json array> [gh exit code, default 0]
     printf '%s\n' "$2" | jq -c '.' > "$1/checks.json"
+    printf '%s\n' "${3:-0}" > "$1/checks-rc"
 }
 
 run_gate() { # run_gate <dir> <args...>
@@ -279,13 +287,16 @@ test_check_state_refusals() {
     local dir; dir="$(make_env)"
     trap "rm -rf '${dir}'" RETURN
 
+    # gh exits 1 on a red list and 8 on a pending one, while still printing the
+    # JSON. Both must land on checks-not-green ("fix loop, or wait for CI"), NOT
+    # on checks-unreadable, which tells the lane to file a harness bug.
     write_checks "${dir}" '[{"name":"Conventional PR title","bucket":"pass"},
-                            {"name":"test-apps / test (backend)","bucket":"fail"}]'
-    refusal_is "${dir}" checks-not-green "a red check is refused" || return
+                            {"name":"test-apps / test (backend)","bucket":"fail"}]' 1
+    refusal_is "${dir}" checks-not-green "a red check is refused despite gh exit 1" || return
 
     write_checks "${dir}" '[{"name":"Conventional PR title","bucket":"pass"},
-                            {"name":"test-apps / test (backend)","bucket":"pending"}]'
-    refusal_is "${dir}" checks-not-green "a pending check is refused" || return
+                            {"name":"test-apps / test (backend)","bucket":"pending"}]' 8
+    refusal_is "${dir}" checks-not-green "a pending check is refused despite gh exit 8" || return
 
     write_checks "${dir}" '[]'
     refusal_is "${dir}" checks-missing "an empty check list is refused" || return
@@ -326,6 +337,21 @@ test_title_not_deps_refused() {
     write_view "${dir}"
     write_checks "${dir}" '[{"name":"test-apps / test (backend)","bucket":"pass"}]'
     refusal_is "${dir}" title-not-deps "an absent title-lint check is refused" || return
+
+    # A SKIPPED title lint vouches for exactly as much as an absent one. The
+    # check loop counts `skipping` as green for the list as a whole (a
+    # path-filtered job that had nothing to do is benign), so presence alone
+    # would let a title nothing linted through the gate.
+    write_checks "${dir}" '[{"name":"Conventional PR title","bucket":"skipping"},
+                            {"name":"test-apps / test (backend)","bucket":"pass"}]'
+    refusal_is "${dir}" title-not-deps "a skipped title-lint check is refused" || return
+
+    # A RED title lint is refused too — as checks-not-green, since the whole-list
+    # green test runs first and a failing check is a failing check. What matters
+    # is that it can never approve.
+    write_checks "${dir}" '[{"name":"Conventional PR title","bucket":"fail"},
+                            {"name":"test-apps / test (backend)","bucket":"pass"}]' 1
+    refusal_is "${dir}" checks-not-green "a red title-lint check is refused" || return
 }
 
 #-------------------------------------------------------------------------------
@@ -344,7 +370,7 @@ test_major_unapproved_refused() {
         --major true || return
 
     write_view "${dir}" '.reviewDecision = "CHANGES_REQUESTED"'
-    refusal_is "${dir}" major-unapproved "a changes-requested major bump is refused" \
+    refusal_is "${dir}" changes-requested "a changes-requested major bump is refused" \
         --major true || return
 
     write_view "${dir}" '.reviewDecision = "APPROVED"'
@@ -367,6 +393,40 @@ test_major_unapproved_refused() {
         return
     fi
     pass "an unreviewed non-major bump is approved"
+}
+
+#-------------------------------------------------------------------------------
+# Test 7b: changes-requested. A human who reviewed the bump and asked for
+# changes has rejected it — Spec #651 user story 11 says such a PR is "left
+# alone by the Daemon", and that is not scoped to major bumps. The review
+# decision is consulted at every bump size, so a rejected minor/patch bump is
+# refused rather than admin-squashed over the reviewer's objection.
+#-------------------------------------------------------------------------------
+test_changes_requested_refused() {
+    echo "TEST: a rejected bump is refused at any bump size"
+
+    local dir; dir="$(make_env)"
+    trap "rm -rf '${dir}'" RETURN
+
+    write_view "${dir}" '.reviewDecision = "CHANGES_REQUESTED"'
+    refusal_is "${dir}" changes-requested "a changes-requested non-major bump is refused" \
+        --major false || return
+
+    # ...and with --major omitted entirely (it defaults to false).
+    refusal_is "${dir}" changes-requested "a changes-requested bump is refused by default" \
+        || return
+
+    # A REVIEW_REQUIRED / COMMENTED decision is not a rejection: only an explicit
+    # CHANGES_REQUESTED blocks a non-major bump.
+    write_view "${dir}" '.reviewDecision = "REVIEW_REQUIRED"'
+    local out rc
+    out="$(run_gate "${dir}" --pr 636 --head "${SHA}")"
+    rc=$?
+    if [ "${rc}" -ne 0 ]; then
+        fail "a REVIEW_REQUIRED non-major bump is still approved" "rc=${rc} out=${out}"
+        return
+    fi
+    pass "a REVIEW_REQUIRED non-major bump is still approved"
 }
 
 #-------------------------------------------------------------------------------
@@ -401,6 +461,47 @@ test_usage_errors() {
     fi
 
     pass "bad or missing args report reason usage"
+
+    # A trailing value-less flag must REFUSE, not hang. With `shift 2` on $#=1
+    # and no `set -e` the arg loop used to spin forever, so a daemon fire whose
+    # head-sha lookup came back empty blocked instead of reporting a harness
+    # error. `timeout` is the assertion: rc 124 is the regression.
+    for args in "--pr" "--head" "--repo" "--major" "--security"; do
+        out="$(GH_BIN="${dir}/gh-stub" timeout 5 "${GATE}" --pr 636 --head "${SHA}" ${args} 2>/dev/null)"
+        rc=$?
+        if [ "${rc}" -ne 1 ] || [ "$(printf '%s' "${out}" | jq -r '.reason')" != "usage" ]; then
+            fail "a trailing \`${args}\` must refuse promptly with reason usage" \
+                "rc=${rc} out=${out}"
+            return
+        fi
+    done
+    pass "a trailing value-less flag refuses with usage instead of hanging"
+}
+
+#-------------------------------------------------------------------------------
+# Test 8b: --security is verdict-neutral, so its VALUE is not policed. The gate
+# header promises the flag never changes the verdict; refusing `--security yes`
+# with reason usage would block a mergeable bump with a harness error about a
+# flag the gate only echoes to the caller's report line. --major is the one flag
+# whose spelling is enforced, because misreading it auto-merges a breaking bump.
+#-------------------------------------------------------------------------------
+test_security_flag_is_verdict_neutral() {
+    echo "TEST: --security accepts any value and never changes the verdict"
+
+    local dir; dir="$(make_env)"
+    trap "rm -rf '${dir}'" RETURN
+
+    local out rc
+    for val in true false yes 1 ''; do
+        out="$(run_gate "${dir}" --pr 636 --head "${SHA}" --security "${val}" 2>/dev/null)"
+        rc=$?
+        if [ "${rc}" -ne 0 ] || [ "$(printf '%s' "${out}" | jq -r '.approved')" != "true" ]; then
+            fail "--security '${val}' must not change the verdict" "rc=${rc} out=${out}"
+            return
+        fi
+    done
+
+    pass "--security accepts any value and never changes the verdict"
 }
 
 #-------------------------------------------------------------------------------
@@ -475,7 +576,9 @@ test_markers_stale_refused
 test_check_state_refusals
 test_title_not_deps_refused
 test_major_unapproved_refused
+test_changes_requested_refused
 test_usage_errors
+test_security_flag_is_verdict_neutral
 test_unreadable_pr_view
 test_gate_only_reads
 

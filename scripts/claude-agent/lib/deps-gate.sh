@@ -20,10 +20,13 @@
 #   scripts/claude-agent/lib/deps-gate.sh --pr <N> --head <sha> \
 #       [--major true|false] [--security true|false] [--repo <owner/repo>]
 #
-# `--major` defaults to false. `--security` is accepted for the caller's
+# `--major` defaults to false and must be exactly true|false — misreading it
+# would auto-merge a breaking bump. `--security` is accepted for the caller's
 # convenience (its per-fire report line carries security=y/n) and NEVER changes
 # the verdict: a security bump is merged on the same evidence as any other, it
-# is only titled differently, which the title test below already covers.
+# is only titled differently, which the title test below already covers. Because
+# it cannot move the verdict, its VALUE is not validated: refusing an otherwise
+# mergeable bump over `--security yes` would be a harness error about nothing.
 #
 # Output (stdout): one compact JSON verdict, nothing else —
 #   { "approved": <bool>, "sha": "<head>",
@@ -46,8 +49,12 @@
 #     docs gate: `pass`/`skipping` are green, everything else is not);
 #   * the title starts `fix(deps):` or `chore(deps):` AND the PR-title lint
 #     check ("Conventional PR title", .github/workflows/pr-title-lint.yml) ran
-#     and is green. The title decides whether release-please cuts a patch
-#     release for a security fix, so a title nothing vouched for is refused;
+#     and PASSED (bucket `pass`, not `skipping`: the workflow is path-filtered,
+#     and a skipped lint vouches for nothing). The title decides whether
+#     release-please cuts a patch release for a security fix, so a title
+#     nothing vouched for is refused;
+#   * no human has requested changes — `reviewDecision != CHANGES_REQUESTED`,
+#     at any bump size;
 #   * the bump is not major, or `reviewDecision == APPROVED` — a breaking change
 #     needs a human.
 #
@@ -71,7 +78,8 @@
 #                            vouches for the PR (an admin merge also bypasses
 #                            branch protection's required-check list)
 #        title-not-deps    — the title is not a deps title, or the PR-title lint
-#                            check did not run on it
+#                            check did not run and pass on it
+#        changes-requested — a human reviewed the bump and requested changes
 #        major-unapproved  — a major bump without an approving review
 #        checks-unreadable — PR state or the check list could not be read
 #        usage             — bad/missing arguments (gate could not run)
@@ -114,13 +122,20 @@ refuse() { # refuse <reason> <stderr line>
     exit 1
 }
 
+# Every flag this gate takes carries a value. A trailing value-less flag is a
+# usage error, NOT a reason to spin: with $#=1 a `shift 2` fails and the loop
+# never advances, so `deps-gate.sh --pr` would hang a daemon fire forever
+# instead of refusing. Check the arity before consuming.
 while [ $# -gt 0 ]; do
+    if [ $# -lt 2 ]; then
+        refuse usage "$1 requires a value"
+    fi
     case "$1" in
-        --pr)       PR="${2:-}"; shift 2 ;;
-        --head)     HEAD_SHA="${2:-}"; shift 2 ;;
-        --repo)     REPO="${2:-}"; shift 2 ;;
-        --major)    MAJOR="${2:-}"; shift 2 ;;
-        --security) SECURITY="${2:-}"; shift 2 ;;
+        --pr)       PR="$2"; shift 2 ;;
+        --head)     HEAD_SHA="$2"; shift 2 ;;
+        --repo)     REPO="$2"; shift 2 ;;
+        --major)    MAJOR="$2"; shift 2 ;;
+        --security) SECURITY="$2"; shift 2 ;;
         *) refuse usage "unknown arg $1" ;;
     esac
 done
@@ -129,16 +144,16 @@ if [ -z "${PR}" ] || [ -z "${HEAD_SHA}" ]; then
     refuse usage '--pr and --head are required'
 fi
 
-# Both flags must be exactly true|false. Reading an unrecognised `True`/`1`/`yes`
+# --major must be exactly true|false. Reading an unrecognised `True`/`1`/`yes`
 # as "not a major bump" would hand a breaking version bump the unreviewed
 # auto-merge path — the one refusal in this file a human is meant to resolve.
-for _flag in "--major:${MAJOR}" "--security:${SECURITY}"; do
-    _name="${_flag%%:*}"
-    _val="${_flag#*:}"
-    if [ "${_val}" != "true" ] && [ "${_val}" != "false" ]; then
-        refuse usage "${_name} must be exactly true|false, got: ${_val:-<none>}"
-    fi
-done
+# --security is NOT validated: it cannot change the verdict, so refusing a
+# mergeable bump over its spelling would be a harness error about a flag this
+# gate only echoes back to the caller's report line.
+if [ "${MAJOR}" != "true" ] && [ "${MAJOR}" != "false" ]; then
+    refuse usage "--major must be exactly true|false, got: ${MAJOR:-<none>}"
+fi
+: "${SECURITY}" # accepted, deliberately unused by the verdict
 
 GH="${GH_BIN:-gh}"
 
@@ -210,8 +225,16 @@ fi
 # a red one all refuse. `skipping` is benign. Bucket vocabulary note: identical
 # to docs-only-gate.sh, and lib/ci-wait.sh applies the same GitHub vocabulary
 # from the other side (it counts `pending`/`fail`). Change one, check the others.
+#
+# `gh pr checks` EXITS NON-ZERO whenever the news is bad — 1 when a check
+# failed, 8 when one is still pending — while still printing the full JSON on
+# stdout. Discarding the payload on a non-zero exit would turn every genuinely
+# red or pending PR into `checks-unreadable`, i.e. a "harness error, file a bug"
+# for the lane, and would make `checks-not-green` unreachable outside tests. So
+# the exit code is deliberately ignored and the PAYLOAD decides: a well-formed
+# array is readable, whatever gh thought of it.
 CHECKS="$("${GH}" pr checks "${PR}" ${REPO_ARGS[@]+"${REPO_ARGS[@]}"} \
-    --json name,bucket 2>/dev/null)" || CHECKS=''
+    --json name,bucket 2>/dev/null)"
 
 if ! printf '%s' "${CHECKS}" | jq -e 'type == "array"' >/dev/null 2>&1; then
     refuse checks-unreadable "check state for PR ${PR} is unreadable"
@@ -233,16 +256,27 @@ case "${TITLE}" in
     *) refuse title-not-deps "PR ${PR} title is not a deps title: ${TITLE:-<none>}" ;;
 esac
 
-# The title lint must have actually run on this PR. Its absence from an
-# otherwise-green list is not "nothing to worry about": the workflow is
+# The title lint must have actually run on this PR AND PASSED. Its absence from
+# an otherwise-green list is not "nothing to worry about": the workflow is
 # path-filtered, and a title nobody linted is a title release-please may read
-# differently than the lane assumed.
+# differently than the lane assumed. `skipping` is the same nothing: the check
+# list above counts it as green, so only an explicit `pass` bucket on this one
+# check vouches for the title.
 TITLE_LINTED="$(printf '%s' "${CHECKS}" | jq -r --arg n "${TITLE_LINT_CHECK}" \
-    'any(.[]; (.name // "") == $n)')"
+    'any(.[]; (.name // "") == $n and (.bucket // "") == "pass")')"
 
 if [ "${TITLE_LINTED}" != "true" ]; then
     refuse title-not-deps \
-        "PR ${PR} has no ${TITLE_LINT_CHECK} check — nothing vouches for its title"
+        "PR ${PR} has no passing ${TITLE_LINT_CHECK} check — nothing vouches for its title"
+fi
+
+# A human who reviewed the bump and requested changes has rejected it, whatever
+# its size — Spec #651's user story 11 ("a Dependabot PR I reject … left alone
+# by the Daemon") is not scoped to majors. Checked before the major test so the
+# refusal names what actually happened rather than the bump's size.
+if [ "${REVIEW}" = "CHANGES_REQUESTED" ]; then
+    refuse changes-requested \
+        "PR ${PR} has a human review requesting changes"
 fi
 
 if [ "${MAJOR}" = "true" ] && [ "${REVIEW}" != "APPROVED" ]; then
