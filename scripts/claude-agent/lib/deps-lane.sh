@@ -378,11 +378,16 @@ deps_lane_rounds_left() {
 # `git commit -F -`, which reproduces its input byte-for-byte including any
 # accidental blank tail.
 #
-# Idempotent: a message whose last non-empty line already ends with the marker
-# comes back with the same text and no second marker. The caller pipes every
-# message through unconditionally — across rounds it re-commits amended messages
-# — and a doubled `[dependabot skip] [dependabot skip]` in a squash subject
-# would fail the repo's conventional-commit title lint.
+# Idempotent: a message whose last non-empty line ALREADY CONTAINS the marker —
+# at the end, followed by trailing spaces, or anywhere in the line — comes back
+# with the same text (trailing whitespace trimmed) and no second marker. The
+# caller pipes every message through unconditionally — across rounds it
+# re-commits amended messages — and a doubled
+# `[dependabot skip] [dependabot skip]` in a squash subject would fail the
+# repo's conventional-commit title lint. "Ends with the marker" is too narrow a
+# test for that job: a message round-tripped through an editor or a `gh` body
+# picks up a trailing space, and the strict check would then append a second
+# marker to a line that already had one.
 #
 # An empty (or whitespace-only) message is refused with return 2 and nothing on
 # stdout: a commit whose entire subject is `[dependabot skip]` records nothing
@@ -410,11 +415,16 @@ deps_lane_commit_trailer() {
             # Rebuild through the last non-empty line, dropping the blank tail.
             for (i = 1; i < last; i++) print lines[i]
             tail = lines[last]
-            # `at > 0` is load-bearing: for a line SHORTER than the marker,
-            # index() is 0 and so is the arithmetic, and the two would compare
-            # equal — a short subject would silently never get its marker.
-            at = index(tail, marker)
-            if (at > 0 && at == length(tail) - length(marker) + 1)
+            # Trailing whitespace is not content: trim it before deciding, so a
+            # message ending `[dependabot skip] ` is recognized as already
+            # marked instead of collecting a second marker.
+            sub(/[[:space:]]+$/, "", tail)
+            # Presence ANYWHERE in the last line is enough. Requiring the marker
+            # to sit at the very end re-marks a line that already carries one
+            # (twice, or mid-line), which is the doubling this guard exists to
+            # prevent; a message that mentions the marker mid-line is already
+            # skippable by Dependabot, which scans the whole message.
+            if (index(tail, marker) > 0)
                 print tail
             else
                 print tail " " marker

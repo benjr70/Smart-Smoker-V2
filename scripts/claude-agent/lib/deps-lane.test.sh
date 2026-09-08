@@ -998,6 +998,36 @@ test_commit_trailer_is_idempotent() {
     fi
     rm -rf "${dir}"
 
+    # Trailing whitespace after an existing marker must NOT earn a second one.
+    # A message that has been round-tripped through an editor, a `gh` body or a
+    # here-doc routinely picks up a trailing space, and the caller pipes every
+    # message through this transform on every round.
+    local spaced
+    spaced="$(printf 'fix(ci): round 1 [dependabot skip] \n' | deps_lane_commit_trailer)"
+    if [ "${spaced}" != 'fix(ci): round 1 [dependabot skip]' ]; then
+        fail "trailing whitespace after the marker must not append a second" \
+            "got: ${spaced}"
+        return
+    fi
+
+    # Same for a marker that is not the very last token of the line: it is
+    # already there, and a second copy is what breaks the squash title lint.
+    local midline
+    midline="$(deps_lane_commit_trailer 'fix(ci): keep [dependabot skip] in the subject')"
+    if [ "${midline}" != 'fix(ci): keep [dependabot skip] in the subject' ]; then
+        fail "a marker anywhere in the last line counts as present" \
+            "got: ${midline}"
+        return
+    fi
+
+    # And a doubled marker is never manufactured from one that repeats.
+    local doubled
+    doubled="$(deps_lane_commit_trailer 'fix(ci): [dependabot skip] [dependabot skip]')"
+    if [ "${doubled}" != 'fix(ci): [dependabot skip] [dependabot skip]' ]; then
+        fail "a repeated marker must not gain a third" "got: ${doubled}"
+        return
+    fi
+
     # An empty message is a caller bug, not a message to decorate: a commit
     # whose whole subject is `[dependabot skip]` says nothing about the fix.
     local out

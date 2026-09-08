@@ -93,24 +93,31 @@ else:
 
 ```bash
 HEAD_SHA=$(gh pr view "$PR_NUM" --repo "$REPO" --json headRefOid -q .headRefOid)
-# The marker key is the newest DEPENDABOT-authored commit on the branch, not the
-# current head (see "Marker keying" below); fall back to the head if unreadable.
-BOT_SHA=$(gh pr view "$PR_NUM" --repo "$REPO" --json commits \
-  -q '[.commits[] | select(any(.authors[]?;
-        ((.login // "") + " " + (.name // "") + " " + (.email // ""))
-        | ascii_downcase | test("dependabot")))] | last | .oid // ""')
-[ -n "$BOT_SHA" ] || BOT_SHA="$HEAD_SHA"
 
-MARKERS=$(gh api "repos/$REPO/issues/$PR_NUM/comments" --paginate --jq '.[].body' \
-  | scripts/claude-agent/lib/deps-lane.sh marker-parse "$BOT_SHA") || MARKERS=""
-ATTEMPTS=$(printf '%s' "$MARKERS" | jq -r '.fixAttempts // empty')
-MAX_ROUNDS=$(scripts/claude-agent/lib/deps-lane.sh rounds-left "$ATTEMPTS") \
-  || MAX_ROUNDS=""
+# Read the comments into a variable FIRST and check that read's own status.
+# Never `gh api … | deps-lane.sh marker-parse …` as one pipeline: a pipeline
+# reports only its LAST command's status, and marker-parse given a valid sha
+# and empty stdin exits 0 printing `{"fixAttempts":0,…}`. A rate-limited,
+# unauthenticated or offline `gh api` would then read as "zero attempts spent"
+# and hand the least trustworthy PR a fresh full budget — the exact
+# grind-forever case this section exists to prevent.
+COMMENTS=$(gh api "repos/$REPO/issues/$PR_NUM/comments" --paginate --jq '.[].body') \
+  || COMMENTS="__unreadable__"
+
+if [ -z "$HEAD_SHA" ] || [ "$COMMENTS" = "__unreadable__" ]; then
+  MAX_ROUNDS=""
+else
+  MARKERS=$(printf '%s\n' "$COMMENTS" \
+    | scripts/claude-agent/lib/deps-lane.sh marker-parse "$HEAD_SHA") || MARKERS=""
+  ATTEMPTS=$(printf '%s' "$MARKERS" | jq -r '.fixAttempts // empty')
+  MAX_ROUNDS=$(scripts/claude-agent/lib/deps-lane.sh rounds-left "$ATTEMPTS") \
+    || MAX_ROUNDS=""
+fi
 ```
 
-**An unreadable history is an ERROR, never a full budget.** If `marker-parse`
-exits non-zero (no sha, missing `jq`, `gh` failure) or `rounds-left` prints
-nothing — `MAX_ROUNDS` empty — stop immediately:
+**An unreadable history is an ERROR, never a full budget.** If the head sha or
+the comment read failed, or `marker-parse` exits non-zero (no sha, missing
+`jq`), or `rounds-left` prints nothing — `MAX_ROUNDS` empty — stop immediately:
 
 ```bash
 if [ -z "$MAX_ROUNDS" ]; then
@@ -130,17 +137,24 @@ CI at all** and return the bot DRAFT verdict. Three attempts are already on the
 record; paying a 45-minute CI wait to re-learn a decision already made is pure
 budget burn.
 
-**Marker keying.** Markers are keyed to the **Dependabot head sha at invocation
-start** — the newest bot-authored commit — not to whatever the current head is.
-Fix pushes append _agent_ commits, so keying on the current head would mint a
-fresh sha every round and reset the count to 0 on every fire: the cap would
-never trip. Keying on the bot sha makes the count accumulate across fires and
-still reset when it should — a Dependabot rebase or a new version push replaces
-the bot commit, and the fresh bump starts with a full budget.
-(`lib/pr-triage.sh`'s `_pr_triage_enrich_deps_one` parses markers against the
-_current_ `headRefOid`; that is deliberate there — its `fixAttempts` is an
-at-a-glance triage signal that should read fresh after any push. The cap is
-enforced here, against the bot sha, not from the triage listing.)
+**Marker keying.** Markers are keyed to the **PR head sha**, the one marker
+vocabulary the whole lane shares (Spec #651): `deps-lane.sh marker-emit` keys to
+"this exact head sha", and `lib/pr-triage.sh`'s `_pr_triage_enrich_deps_one`
+parses markers against the current `headRefOid`. Read the count against the head
+at invocation start; write each round's marker against the head the push just
+created (§5), so the next fire — which sees that push as the head — reads the
+accumulated count back. Tier B (`/verify-pr`) markers are written against the
+same key, which is what makes the cap "3 attempts total across both tiers and
+across fires" rather than 3 per tier.
+
+Our own pushes move the head, so each round re-stamps the accumulated count onto
+the new head (§5); the count therefore resets only when the head moves without
+our markers following it — a Dependabot rebase or a new version push replaces
+the branch tip, and the fresh bump correctly starts with a full budget. Keying
+instead to the newest _bot-authored_ commit would survive our pushes without
+re-stamping, but it would key on a sha no other lane component parses: triage
+would report `fixAttempts: 0` and Tier B markers would never combine with this
+loop's count.
 
 Each round:
 
@@ -299,18 +313,27 @@ MSG=$(printf 'fix(ci): pr-watch round %s — auto-fix failing checks\n\n%s\n' \
 git commit -m "$MSG"
 git push origin "$BRANCH"   # plain push, never --force
 
-# One marker per fix round, keyed to $BOT_SHA — the Dependabot head sha this
-# invocation started from (§1), never the sha the push just created.
-gh pr comment "$PR_NUM" --repo "$REPO" \
-  --body "$(scripts/claude-agent/lib/deps-lane.sh marker-emit fix-attempt \
-              "$BOT_SHA" "$((ATTEMPTS + ROUND))")"
+# One marker comment per fix round, keyed to the head sha the push just created
+# — the same key triage and Tier B use (§1 "Marker keying"). `marker-parse`
+# COUNTS markers for exactly that sha, and our push moved the sha, so the
+# comment re-stamps the whole history onto the new head: one marker per attempt
+# spent so far, earlier fires included. Anything less and the count silently
+# restarts at 1 after every push.
+HEAD_SHA=$(git rev-parse HEAD)
+BODY="pr-watch bot fix attempt $((ATTEMPTS + ROUND)) of 3 on this bump."$'\n'
+for i in $(seq 1 $((ATTEMPTS + ROUND))); do
+  BODY="$BODY$(scripts/claude-agent/lib/deps-lane.sh marker-emit fix-attempt \
+                 "$HEAD_SHA" "$i")"$'\n'
+done
+gh pr comment "$PR_NUM" --repo "$REPO" --body "$BODY"
 ```
 
 Both halves are load-bearing. Without the trailer, Dependabot treats the branch
 as human-owned and stops rebasing it — the PR then rots behind master with no
-bot able to update it. Without exactly **one marker per fix round**, the next
-fire re-reads the wrong budget: no marker and the cap never trips, two markers
-and a bump is abandoned a round early.
+bot able to update it. Without exactly **one marker comment per fix round**,
+carrying one marker per attempt spent, the next fire re-reads the wrong budget:
+too few markers and the cap never trips, too many and a bump is abandoned a
+round early.
 
 Plain `git push` (no `--force`, no `--force-with-lease`). If push is rejected
 because someone pushed concurrently to the branch, return
@@ -387,9 +410,10 @@ the failure it exists to catch.
 - **All 10 rounds pass implementer but checks stay red** — §6 fires; PR drafts.
 - **Bot PR already at the cap** — §1 finds `MAX_ROUNDS` 0 and goes straight to
   §6 without polling CI; no implementer is spawned.
-- **Bot sha unreadable** — §1 falls back to the current head sha as the marker
-  key. The cap may then restart at 3 for this fire; a duplicated budget is the
-  lesser evil against refusing to babysit a bump at all.
+- **Bot marker history unreadable** — the head sha or the comment read failed;
+  §1 exits `pr-watch: ERROR — bot marker history unreadable` before polling CI
+  or spawning anyone. There is no fallback budget: a PR whose attempts cannot be
+  counted never gets a fresh 3.
 - **`gh run view` rate-limited** — fall back to `gh api` direct calls or skip
   log bundle for that round; the implementer still gets issue + diff.
 

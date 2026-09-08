@@ -97,7 +97,7 @@ test_list_publishes_rule_table() {
     local expected id missing_ids=()
     expected=(bot-flag bot-verdict-pass bot-verdict-draft bot-label
               default-label default-verdict bot-cap fix-marker skip-trailer
-              lockfile-recipe)
+              lockfile-recipe head-sha-key no-fallback-budget)
     for id in "${expected[@]}"; do
         if ! printf '%s\n' "${listing}" | cut -f1 | grep -qx "${id}"; then
             missing_ids+=("${id}")
@@ -184,7 +184,60 @@ test_missing_bot_draft_line_fails() {
 }
 
 #-------------------------------------------------------------------------------
-# Test 5: a missing skill file is an operator error (exit 2), clearly distinct
+# Test 5: deleting ONLY the default-mode line — leaving the bot-mode line that
+#         contains it as a substring in place — still fails (AC 4). This is the
+#         mutant test 3 cannot produce: test 3 deletes every occurrence of a
+#         rule's phrase, so when the default phrase is a prefix of the bot one
+#         it removes both and the check fails for the wrong reason. The default
+#         path is what afk-pickup has always run; a bot-mode edit that silently
+#         eats its PASS verdict or its `--add-label AFK:checks-failed` command
+#         must be loud.
+#-------------------------------------------------------------------------------
+test_default_only_deletion_detected() {
+    echo "TEST: deleting only the DEFAULT line (bot line intact) still fails"
+
+    local copy out rc
+
+    # a) the default PASS verdict, while the bot PASS line survives.
+    copy="$(mktemp)"
+    grep -vF -- '- `pr-watch: PASS — all checks green at attempt <K>`' \
+        "${SKILL_FILE}" > "${copy}"
+    if ! grep -qF -- 'at attempt <K> (bot)' "${copy}"; then
+        fail "mutant a) must keep the bot PASS line" "bot line went missing too"
+        rm -f "${copy}"
+        return
+    fi
+    out="$(bash "${CHECKER}" "${copy}" 2>&1)"; rc=$?
+    rm -f "${copy}"
+    if [ "${rc}" -ne 1 ] || ! printf '%s' "${out}" | grep -q 'rule=default-verdict'; then
+        fail "a deleted default PASS verdict must fail as default-verdict" \
+            "exit ${rc}; output: ${out}"
+        return
+    fi
+    pass "deleting the default PASS verdict fails, naming default-verdict"
+
+    # b) the default §6 label command, while the bot-mode sentences that mention
+    #    AFK:checks-failed ("never apply … to a Dependabot PR") survive.
+    copy="$(mktemp)"
+    grep -v -- '--add-label AFK:checks-failed' "${SKILL_FILE}" > "${copy}"
+    if ! grep -qF -- 'AFK:checks-failed' "${copy}"; then
+        fail "mutant b) must keep the bot-mode AFK:checks-failed prose" \
+            "every mention went missing"
+        rm -f "${copy}"
+        return
+    fi
+    out="$(bash "${CHECKER}" "${copy}" 2>&1)"; rc=$?
+    rm -f "${copy}"
+    if [ "${rc}" -ne 1 ] || ! printf '%s' "${out}" | grep -q 'rule=default-label'; then
+        fail "a deleted default --add-label command must fail as default-label" \
+            "exit ${rc}; output: ${out}"
+        return
+    fi
+    pass "deleting the default --add-label command fails, naming default-label"
+}
+
+#-------------------------------------------------------------------------------
+# Test 6: a missing skill file is an operator error (exit 2), clearly distinct
 #         from a missing rule (exit 1) — otherwise a checker pointed at a moved
 #         or renamed SKILL.md would read as "the rules are gone" and a CI job
 #         would be red for the wrong reason.
@@ -220,6 +273,7 @@ test_real_skill_passes
 test_list_publishes_rule_table
 test_deletion_detected
 test_missing_bot_draft_line_fails
+test_default_only_deletion_detected
 test_missing_file_is_usage_error
 
 echo ""

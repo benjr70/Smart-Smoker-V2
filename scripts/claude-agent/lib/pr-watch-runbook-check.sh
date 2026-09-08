@@ -46,22 +46,32 @@ DEFAULT_SKILL_FILE="${REPO_ROOT}/.claude/skills/pr-watch/SKILL.md"
 # `default-label` and `default-verdict` are here for the same reason as the bot
 # rules, in the opposite direction: adding a bot mode must not disturb the path
 # afk-pickup has always taken (issue #657 AC 4).
+#
+# Those two must be phrases the BOT text cannot also satisfy, or they guard
+# nothing: the bare label `AFK:checks-failed` also appears in the bot-mode
+# sentence "never apply AFK:checks-failed to a Dependabot PR", and the default
+# PASS verdict is a prefix of the bot one (`… at attempt <K> (bot)`). So the
+# default label is pinned to §6's `--add-label` COMMAND, and the default PASS
+# verdict to its closing backtick — a character the bot line does not carry in
+# that position. Deleting only the default line now fails the check.
 rule_table() {
     printf '%s\n' \
         "bot-flag	--bot" \
         "bot-flag	dependabot/" \
         "bot-verdict-pass	pr-watch: PASS — all checks green at attempt <K> \(bot\)" \
         "bot-verdict-draft	pr-watch: DRAFT — exhausted 3 attempts, marked draft, AFK:deps-failed" \
-        "bot-label	AFK:deps-failed" \
+        "bot-label	--add-label AFK:deps-failed" \
         "bot-label	never .{0,60}AFK:checks-failed" \
-        "default-label	AFK:checks-failed" \
-        "default-verdict	pr-watch: PASS — all checks green at attempt <K>" \
+        "default-label	--add-label AFK:checks-failed" \
+        'default-verdict	pr-watch: PASS — all checks green at attempt <K>`' \
         "default-verdict	pr-watch: DRAFT — exhausted 10 rounds, marked draft, AFK:checks-failed" \
+        "head-sha-key	Markers are keyed to the .{0,4}PR head sha" \
+        "no-fallback-budget	never a full budget" \
         "bot-cap	deps-lane\.sh marker-parse" \
         "bot-cap	deps-lane\.sh rounds-left" \
         "bot-cap	MAX_ROUNDS.{0,2} is 0" \
         "fix-marker	marker-emit fix-attempt" \
-        "fix-marker	one marker per fix round" \
+        "fix-marker	one marker comment per fix round" \
         "skip-trailer	\[dependabot skip\]" \
         "skip-trailer	deps-lane\.sh commit-trailer" \
         "lockfile-recipe	npm install --legacy-peer-deps --package-lock-only --ignore-scripts"
