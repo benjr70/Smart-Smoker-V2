@@ -7,6 +7,13 @@ on:
       - 'apps/**'
       - 'packages/**'
       - 'package.json'
+      # The root lockfile decides what actually gets installed, and a Dependabot
+      # PR touches nothing else — without this entry a dependency bump would
+      # merge having run none of the apps' tests or coverage gates. `.npmrc`
+      # carries the peer-dependency policy that shapes that install, and the
+      # `repo-shape` job below guards it.
+      - 'package-lock.json'
+      - '.npmrc'
       - '.github/workflows/**'
       # For the `lint-config` job below: every eslintrc anywhere in the repo,
       # plus the suite itself. This is a deliberate superset of the suite's own

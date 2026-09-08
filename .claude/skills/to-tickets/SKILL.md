@@ -104,8 +104,8 @@ metadata on every run (and flip-flops it against any other block that spells a
 description differently). Check first, create only what is absent, always with
 an explicit `--color`.
 
-Eleven labels: `AFK`, `HITL`, `spec`, and the eight `AFK:*` run-state labels the
-daemon applies (`scripts/claude-agent/lib/`) — the `AFK` family is nine labels
+Twelve labels: `AFK`, `HITL`, `spec`, and the nine `AFK:*` run-state labels the
+daemon applies (`scripts/claude-agent/lib/`) — the `AFK` family is ten labels
 counting bare `AFK` itself.
 
 ```bash
@@ -128,6 +128,7 @@ ensure_label "AFK:revise"        "0052CC" "Human hand-back: agent must address t
 ensure_label "AFK:revise-failed" "B60205" "Agent-team PR: review comments could not be auto-resolved (revise loop exhausted)"
 ensure_label "AFK:rebase-failed" "B60205" "Agent-team PR: automatic rebase onto master failed; human rebase required"
 ensure_label "AFK:paused"        "FBCA04" "Run cut off by usage exhaustion; awaiting resume next window"
+ensure_label "AFK:deps-failed"   "B60205" "Dependabot PR: verify/fix loop exhausted; human triage required"
 ```
 
 ### 6. First pass — create the issues

@@ -82,15 +82,16 @@ ensure_label "AFK:revise"        "0052CC" "Human hand-back: agent must address t
 ensure_label "AFK:revise-failed" "B60205" "Agent-team PR: review comments could not be auto-resolved (revise loop exhausted)"
 ensure_label "AFK:rebase-failed" "B60205" "Agent-team PR: automatic rebase onto master failed; human rebase required"
 ensure_label "AFK:paused"        "FBCA04" "Run cut off by usage exhaustion; awaiting resume next window"
+ensure_label "AFK:deps-failed"   "B60205" "Dependabot PR: verify/fix loop exhausted; human triage required"
 ```
 
 `ensure_label` is idempotent and non-destructive: it creates a missing label
 with an explicit colour and leaves an existing one exactly as curated. Do
 **not** use `gh label create --force` here — it rewrites colour and description
 on every run, so this block and the `/to-tickets` §5 bootstrap would flip-flop
-the same labels' metadata back and forth. Both blocks spell these nine `AFK`
+the same labels' metadata back and forth. Both blocks spell these ten `AFK`
 labels identically; [`to-tickets`](../to-tickets/SKILL.md) §5 covers the same
-nine plus `HITL` and `spec`.
+ten plus `HITL` and `spec`.
 
 **Stale `AFK:in-progress`** — sweep before claiming new work, **only in PRD
 mode**:

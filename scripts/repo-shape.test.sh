@@ -153,6 +153,50 @@ else
 fi
 
 echo
+echo "TEST: the repo's npm peer-dependency policy is committed, not per-call-site"
+# The tree only resolves with peer edges ignored (backend pins @nestjs/core 8
+# next to @nestjs/websockets 9). Carrying `--legacy-peer-deps` on each call site
+# leaves it invisible to any tool that runs npm itself — Dependabot runs
+# `npm install --force --package-lock-only`, and without this file it ships a
+# lockfile whose dev/devOptional flags the next `npm run bootstrap` flips back.
+# npm reads a project `.npmrc`, and Dependabot copies it into its checkout.
+assert_file_exists ".npmrc" ".npmrc exists at the repo root"
+assert_matches ".npmrc" "^legacy-peer-deps=true$" \
+    ".npmrc sets legacy-peer-deps=true"
+
+echo
+echo "TEST: the unit-test workflow runs on lockfile-only pull requests"
+# A Dependabot PR touches exactly one file, the root `package-lock.json`. If the
+# path filter does not name it, every app's tests and coverage gates are skipped
+# on precisely the changes that alter what gets installed.
+assert_matches ".github/workflows/ci-tests.yml" "^ *- '(\*\*/)?package-lock\.json'" \
+    "ci-tests.yml paths filter names the root lockfile"
+assert_matches ".github/workflows/ci-tests.yml" "^ *- 'package\.json'" \
+    "ci-tests.yml paths filter names the root manifest"
+assert_matches ".github/workflows/ci-tests.yml" "^ *- '\.npmrc'" \
+    "ci-tests.yml paths filter names .npmrc so repo-shape guards it"
+
+echo
+echo "TEST: AFK:deps-failed is in every label-bootstrap list"
+# Both skills bootstrap the label set idempotently; a run-state label the daemon
+# applies but neither block creates only exists because someone made it by hand.
+DEPS_FAILED_ENSURE="ensure_label \"AFK:deps-failed\" +\"B60205\" \"Dependabot PR: verify/fix loop exhausted; human triage required\""
+assert_matches ".claude/skills/to-tickets/SKILL.md" "${DEPS_FAILED_ENSURE}" \
+    "to-tickets §5 bootstraps AFK:deps-failed with its colour and description"
+assert_matches ".claude/skills/afk-dispatch/SKILL.md" "${DEPS_FAILED_ENSURE}" \
+    "afk-dispatch §0 bootstraps AFK:deps-failed with its colour and description"
+assert_matches "docs/agents/issue-tracker.md" "AFK:deps-failed" \
+    "the issue-tracker label inventory names AFK:deps-failed"
+# `--force` rewrites colour and description on every run, so the two blocks
+# would flip-flop the same labels' metadata against each other. Anchored at the
+# start of a line so the prose that forbids it (inline code, mid-sentence) does
+# not read as the command itself.
+assert_not_matches ".claude/skills/to-tickets/SKILL.md" "^[[:space:]]*gh label create .*--force" \
+    "to-tickets §5 never creates labels with --force"
+assert_not_matches ".claude/skills/afk-dispatch/SKILL.md" "^[[:space:]]*gh label create .*--force" \
+    "afk-dispatch §0 never creates labels with --force"
+
+echo
 echo "================================"
 echo "Tests run: ${TESTS_RUN}"
 echo "Failed:    ${TESTS_FAILED}"
