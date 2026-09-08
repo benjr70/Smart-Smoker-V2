@@ -235,6 +235,37 @@ red-CI docs PR gets its fix loop instead of sitting merged-never — but only th
 refusal rows are expected in steady state; a recurring `ERROR —` line is a bug
 to file.
 
+**The deps gate (documented here; wired in #657).** A Dependabot PR has its own
+sibling gate — `scripts/claude-agent/lib/deps-gate.sh` — with the same contract
+as the docs-only gate above: it decides, never mutates, and prints one JSON
+verdict carrying the exact `.mergeCmd` (admin squash, `--match-head-commit`)
+that a single call site runs. It needs no local clone (it reads the PR through
+`gh` only):
+`deps-gate.sh --pr <N> --head <sha> [--major true|false] [--security true|false] [--repo <owner/repo>]`,
+exit 0 approved / exit 1 refused. It approves only an open, non-draft PR
+authored by the Dependabot app on a `dependabot/` branch whose comments carry
+`tierA=green` **and** `tierB=PASS` markers for that exact sha, with every check
+green, a deps title the PR-title lint passed, and a review decision if the bump
+is major. The gate-and-merge lane that calls it lands in Slice #657; until then
+no fire reaches a Bot PR, and this table is the reference for the `deps:` report
+line it will emit:
+
+| `.reason`                     | means                                                         | lane response                                              |
+| ----------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------- |
+| _(absent, exit 0)_            | approved                                                      | run `.mergeCmd` verbatim                                   |
+| `not-dependabot`              | author or head branch is not the Dependabot app's             | not a Bot PR — leave it alone                              |
+| `draft-or-closed`             | the PR is closed, merged or a draft a human parked            | leave it alone                                             |
+| `markers-stale`               | tier A/B markers absent, for another sha, or the PR moved     | re-run the tiers on the new head                           |
+| `checks-not-green`            | a check is failing or still pending                           | fix loop, or wait for CI                                   |
+| `checks-missing`              | the check list is EMPTY — nothing ran, nothing vouches        | wait for CI, then re-gate                                  |
+| `title-not-deps`              | not a `fix(deps):`/`chore(deps):` title, or unlinted          | retitle, or leave to a human                               |
+| `major-unapproved`            | a major bump with no `APPROVED` review                        | HITL: a breaking bump needs a human                        |
+| `checks-unreadable` / `usage` | PR state unreadable, or bad args — **the gate could not run** | report as a harness error, never as a verdict about the PR |
+
+The last row says nothing about the PR at all, exactly like the docs gate's
+`ERROR —` row above: a recurring `checks-unreadable` or `usage` is a bug to
+file, not a bump to triage.
+
 Then spawn the **`/pr-reconcile`** skill via the `Agent` tool —
 `subagent_type: general-purpose`, `model: opus`, `run_in_background: false`
 (blocking, same rule as §6a.1: never proceed or emit output while it is in
