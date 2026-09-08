@@ -110,6 +110,14 @@ deps_lane_retitle() {
 # newline, CRLFs or trailing blank lines survives byte-for-byte. On the append
 # path the body is separated from the unit by one blank line, and an empty body
 # yields the unit alone (no leading blank lines).
+#
+# If the body cannot be buffered — mktemp fails, or the write to the buffer
+# fails, both of which happen on this box under disk pressure — the function
+# prints NOTHING on stdout and returns 3. The caller pipes this straight into
+# `gh pr edit --body-file -`, so a buffer failure that still printed the
+# checklist would overwrite Dependabot's release notes, changelog and commit
+# list with the checklist alone, unrecoverably. Losing the body is far worse
+# than skipping an inject, so every buffer failure is loud and empty.
 deps_lane_inject_checklist() {
     local checklist="${1:-}"
 
@@ -120,22 +128,44 @@ deps_lane_inject_checklist() {
 
     # Buffer the body in a file rather than a variable: `$(cat)` strips trailing
     # newlines, and the marker-present path must be byte-identical. The buffer is
-    # removed explicitly on both exit paths rather than by a RETURN trap: a trap
+    # removed explicitly on every exit path rather than by a RETURN trap: a trap
     # set here outlives the call in the *caller's* shell (it is only
     # function-scoped under `set -o functrace`), and this lib is sourced into
     # other people's shells — leaving a stray trap behind is a worse bug than the
-    # duplicated `rm` it would save. There are exactly two paths; both clean up.
-    local body_file; body_file="$(mktemp)"
-    cat > "${body_file}"
+    # duplicated `rm` it would save.
+    local body_file
+    if ! body_file="$(mktemp)" || [ -z "${body_file}" ]; then
+        echo "deps-lane: could not create a buffer for the PR body;" \
+            "refusing to inject rather than risk discarding it" >&2
+        return 3
+    fi
+
+    # Consume stdin whatever happens, then check the write landed: a partial or
+    # failed write means the body we would echo back is not the body we were
+    # given, and echoing a truncated body is the same data loss as echoing none.
+    if ! cat > "${body_file}"; then
+        echo "deps-lane: could not buffer the PR body (write to ${body_file}" \
+            "failed); refusing to inject rather than risk discarding it" >&2
+        rm -f "${body_file}"
+        return 3
+    fi
 
     if grep -qF "${DEPS_LANE_CHECKLIST_MARKER}" "${body_file}"; then
-        cat "${body_file}"
+        if ! cat "${body_file}"; then
+            echo "deps-lane: could not read back the buffered PR body" >&2
+            rm -f "${body_file}"
+            return 3
+        fi
         rm -f "${body_file}"
         return 0
     fi
 
     if [ -s "${body_file}" ]; then
-        cat "${body_file}"
+        if ! cat "${body_file}"; then
+            echo "deps-lane: could not read back the buffered PR body" >&2
+            rm -f "${body_file}"
+            return 3
+        fi
         # Guarantee exactly one blank line between the body and the unit,
         # whether or not the body ended with a newline.
         if [ "$(tail -c 1 "${body_file}" | wc -l)" -eq 0 ]; then
@@ -218,36 +248,48 @@ deps_lane_marker_emit() {
 # attempt correctly, and it cannot be inflated by one attempt writing a large N.
 # capReached is fixAttempts >= DEPS_LANE_FIX_CAP (default 3).
 #
-# Always exits 0 with a well-formed verdict: an unreadable pile of comments must
-# not crash the lane, it must simply vouch for nothing.
+# Given a sha, always exits 0 with a well-formed verdict: an unreadable pile of
+# comments must not crash the lane, it must simply vouch for nothing.
+#
+# Two things are NOT "vouches for nothing", because both would silently disable
+# the fix cap and let the lane grind on one bot PR forever:
+#   * An empty sha — a caller whose head-sha lookup came back empty. It is
+#     refused with return 2 and no stdout, exactly as marker_emit refuses it,
+#     rather than being answered with an all-false verdict whose capReached is
+#     a lie about markers nobody looked for.
+#   * A jq that fails or is missing. Its exit status is propagated (return 4)
+#     instead of being masked, so a broken environment surfaces rather than
+#     handing the caller empty stdout that reads as false in every field.
 deps_lane_marker_parse() {
     local sha="${1:-}"
-    local bodies; bodies="$(cat)"
 
     if [ -z "${sha}" ]; then
+        # Refuse before reading stdin: there is no verdict to compute, and a
+        # caller in the CLI form would otherwise block on a tty for input that
+        # cannot change the answer.
         echo "deps-lane: marker parse requires a sha" >&2
-        sha=''
+        return 2
     fi
 
+    local bodies; bodies="$(cat)"
+
     local tier_a=false tier_b=false attempts=0
-    if [ -n "${sha}" ]; then
-        if printf '%s' "${bodies}" \
-            | grep -qF "<!-- deps-lane tierA=green sha=${sha} -->"; then
-            tier_a=true
-        fi
-        if printf '%s' "${bodies}" \
-            | grep -qF "<!-- deps-lane tierB=PASS sha=${sha} -->"; then
-            tier_b=true
-        fi
-        # grep -o counts every marker, including several on one line. The sha is
-        # interpolated into an ERE, so escape anything a caller's sha could carry
-        # that the regex engine would otherwise read as syntax.
-        local sha_re
-        sha_re="$(printf '%s' "${sha}" | sed 's/[][\\.^$*+?(){}|\/]/\\&/g')"
-        attempts="$(printf '%s' "${bodies}" \
-            | grep -oE "<!-- deps-lane fix-attempt=[0-9]+ sha=${sha_re} -->" \
-            | wc -l | tr -d ' ')"
+    if printf '%s' "${bodies}" \
+        | grep -qF "<!-- deps-lane tierA=green sha=${sha} -->"; then
+        tier_a=true
     fi
+    if printf '%s' "${bodies}" \
+        | grep -qF "<!-- deps-lane tierB=PASS sha=${sha} -->"; then
+        tier_b=true
+    fi
+    # grep -o counts every marker, including several on one line. The sha is
+    # interpolated into an ERE, so escape anything a caller's sha could carry
+    # that the regex engine would otherwise read as syntax.
+    local sha_re
+    sha_re="$(printf '%s' "${sha}" | sed 's/[][\\.^$*+?(){}|\/]/\\&/g')"
+    attempts="$(printf '%s' "${bodies}" \
+        | grep -oE "<!-- deps-lane fix-attempt=[0-9]+ sha=${sha_re} -->" \
+        | wc -l | tr -d ' ')"
     [ -n "${attempts}" ] || attempts=0
 
     local cap="${DEPS_LANE_FIX_CAP:-3}"
@@ -256,11 +298,15 @@ deps_lane_marker_parse() {
     local cap_reached=false
     [ "${attempts}" -ge "${cap}" ] && cap_reached=true
 
-    jq -cn --arg sha "${sha}" \
+    if ! jq -cn --arg sha "${sha}" \
         --argjson tierA "${tier_a}" --argjson tierB "${tier_b}" \
         --argjson fixAttempts "${attempts}" --argjson capReached "${cap_reached}" \
         '{sha: $sha, tierA: $tierA, tierB: $tierB,
-          fixAttempts: $fixAttempts, capReached: $capReached}'
+          fixAttempts: $fixAttempts, capReached: $capReached}'; then
+        echo "deps-lane: jq failed or is not installed; cannot emit a marker" \
+            "verdict for ${sha}" >&2
+        return 4
+    fi
     return 0
 }
 

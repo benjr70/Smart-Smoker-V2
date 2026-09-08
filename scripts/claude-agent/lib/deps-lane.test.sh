@@ -673,31 +673,158 @@ test_marker_parse_requires_exact_sha() {
 test_inject_leaves_no_trace() {
     echo "TEST: inject leaks neither a trap nor a temp file"
 
-    local checklist dir before after
+    local checklist dir tmphome leaked
     checklist="$(make_checklist)"
     dir="$(mktemp -d)"
     printf 'Bumps axios.\n' > "${dir}/body"
 
-    before="$(find "${TMPDIR:-/tmp}" -maxdepth 1 -name 'tmp.*' 2>/dev/null | wc -l)"
-    deps_lane_inject_checklist "${checklist}" < "${dir}/body" > /dev/null
-    deps_lane_inject_checklist "${checklist}" < "${dir}/body" > /dev/null
-    after="$(find "${TMPDIR:-/tmp}" -maxdepth 1 -name 'tmp.*' 2>/dev/null | wc -l)"
+    # Point inject's mktemp at a private TMPDIR and count what is left in THERE.
+    # Counting the shared /tmp instead would make this assertion a race: any
+    # other process on the box (another agent team, a CI step, an editor)
+    # creating a `tmp.*` file mid-test would report a leak inject did not cause.
+    tmphome="$(mktemp -d)"
+    TMPDIR="${tmphome}" deps_lane_inject_checklist "${checklist}" < "${dir}/body" > /dev/null
+    TMPDIR="${tmphome}" deps_lane_inject_checklist "${checklist}" < "${dir}/body" > /dev/null
+    leaked="$(find "${tmphome}" -mindepth 1 2>/dev/null | wc -l)"
 
-    if [ "${after}" -gt "${before}" ]; then
-        fail "inject must not leave temp files behind" "before=${before} after=${after}"
-        rm -rf "${dir}" "$(dirname "${checklist}")"
+    if [ "${leaked}" -ne 0 ]; then
+        fail "inject must not leave temp files behind" \
+            "left in TMPDIR: $(find "${tmphome}" -mindepth 1 | tr '\n' ' ')"
+        rm -rf "${dir}" "${tmphome}" "$(dirname "${checklist}")"
         return
     fi
 
     if [ -n "$(trap -p RETURN)" ]; then
         fail "inject must not leave a RETURN trap in the caller's shell" \
             "got: $(trap -p RETURN)"
-        rm -rf "${dir}" "$(dirname "${checklist}")"
+        rm -rf "${dir}" "${tmphome}" "$(dirname "${checklist}")"
         return
     fi
 
-    rm -rf "${dir}" "$(dirname "${checklist}")"
+    rm -rf "${dir}" "${tmphome}" "$(dirname "${checklist}")"
     pass "inject leaks neither a trap nor a temp file"
+}
+
+#-------------------------------------------------------------------------------
+# Test 15: when the body buffer cannot be created or written, inject prints
+#          NOTHING and fails (behavior 2; AC 2). This is the data-loss path: the
+#          lane pipes inject's stdout into `gh pr edit --body-file -`, so an
+#          inject that swallowed Dependabot's release notes and emitted only the
+#          checklist — with rc=0 — would overwrite the PR body irrecoverably.
+#          Disk pressure on this box is a recurring condition, so both halves
+#          are exercised: mktemp failing outright, and mktemp handing back a
+#          path that cannot be written.
+#-------------------------------------------------------------------------------
+test_inject_refuses_when_buffer_fails() {
+    echo "TEST: inject refuses (loudly, empty) when the body buffer fails"
+
+    local checklist out rc
+    checklist="$(make_checklist)"
+
+    # mktemp fails: a shell function shadows the external command for the
+    # sourced lib, so no real disk pressure is needed to reach the path.
+    out="$(bash -c '
+        . "$1"
+        mktemp() { return 1; }
+        printf "IMPORTANT BODY\n" | deps_lane_inject_checklist "$2"
+    ' _ "${LIB}" "${checklist}" 2>/dev/null)"; rc=$?
+
+    if [ "${rc}" -eq 0 ]; then
+        fail "a failed mktemp must exit non-zero" "rc=${rc} out=${out}"
+        rm -rf "$(dirname "${checklist}")"
+        return
+    fi
+    if [ -n "${out}" ]; then
+        fail "a failed mktemp must print nothing (the body would be lost)" \
+            "got: ${out}"
+        rm -rf "$(dirname "${checklist}")"
+        return
+    fi
+
+    # mktemp "succeeds" but the buffer is unwritable: the write fails, so the
+    # body we could echo back is not the body we were given.
+    out="$(bash -c '
+        . "$1"
+        mktemp() { echo "/nonexistent-dir-deps-lane/buffer"; }
+        printf "IMPORTANT BODY\n" | deps_lane_inject_checklist "$2"
+    ' _ "${LIB}" "${checklist}" 2>/dev/null)"; rc=$?
+
+    if [ "${rc}" -eq 0 ]; then
+        fail "an unwritable buffer must exit non-zero" "rc=${rc} out=${out}"
+        rm -rf "$(dirname "${checklist}")"
+        return
+    fi
+    if [ -n "${out}" ]; then
+        fail "an unwritable buffer must print nothing" "got: ${out}"
+        rm -rf "$(dirname "${checklist}")"
+        return
+    fi
+
+    rm -rf "$(dirname "${checklist}")"
+    pass "inject refuses (loudly, empty) when the body buffer fails"
+}
+
+#-------------------------------------------------------------------------------
+# Test 16: parse refuses an empty sha instead of answering with an all-false
+#          verdict (behavior 3; AC 3). A caller whose head-sha lookup came back
+#          empty would otherwise read capReached=false on every fire — markers
+#          nobody looked for — so DEPS_LANE_FIX_CAP would never trip and the fix
+#          loop would retry the same bot PR forever. Emit already refuses the
+#          same input; parse must agree.
+#-------------------------------------------------------------------------------
+test_marker_parse_rejects_empty_sha() {
+    echo "TEST: parse refuses an empty sha"
+
+    local out rc
+    out="$(deps_lane_marker_parse '' < /dev/null 2>/dev/null)"; rc=$?
+    if [ "${rc}" -eq 0 ]; then
+        fail "an empty sha must exit non-zero" "rc=${rc} out=${out}"
+        return
+    fi
+    if [ -n "${out}" ]; then
+        fail "an empty sha must print no verdict on stdout" "got: ${out}"
+        return
+    fi
+
+    # And with no sha argument at all, through the CLI — where the missing-sha
+    # misuse actually happens.
+    out="$(bash "${LIB}" marker-parse < /dev/null 2>/dev/null)"; rc=$?
+    if [ "${rc}" -eq 0 ] || [ -n "${out}" ]; then
+        fail "the CLI must refuse a missing sha" "rc=${rc} out=${out}"
+        return
+    fi
+
+    pass "parse refuses an empty sha"
+}
+
+#-------------------------------------------------------------------------------
+# Test 17: a failing (or missing) jq is propagated, not masked (behavior 3;
+#          AC 3). The documented contract is a well-formed verdict; empty stdout
+#          with rc=0 is not one. Downstream, `jq -r '.capReached'` on empty input
+#          prints nothing and exits 0, so every field would read as not-true and
+#          the lane would silently re-run tiers and blow past the fix cap on a
+#          runner that merely lacks jq.
+#-------------------------------------------------------------------------------
+test_marker_parse_propagates_jq_failure() {
+    echo "TEST: parse propagates a jq failure instead of printing nothing at rc=0"
+
+    local out rc
+    out="$(bash -c '
+        . "$1"
+        jq() { echo "jq: command not found" >&2; return 127; }
+        printf "" | deps_lane_marker_parse "$2"
+    ' _ "${LIB}" '1111111111111111111111111111111111111111' 2>/dev/null)"; rc=$?
+
+    if [ "${rc}" -eq 0 ]; then
+        fail "a failing jq must make parse exit non-zero" "rc=${rc} out=${out}"
+        return
+    fi
+    if [ -n "${out}" ]; then
+        fail "a failing jq must not leave a half-verdict on stdout" "got: ${out}"
+        return
+    fi
+
+    pass "parse propagates a jq failure instead of printing nothing at rc=0"
 }
 
 #-------------------------------------------------------------------------------
@@ -714,12 +841,15 @@ test_retitle_rejects_bad_security_flag
 test_inject_appends_unit_once
 test_inject_is_byte_level_noop_when_marker_present
 test_inject_leaves_no_trace
+test_inject_refuses_when_buffer_fails
 test_marker_emit_per_state
 test_marker_parse_round_trips
 test_marker_parse_without_markers
 test_marker_parse_ignores_other_shas
 test_marker_parse_counts_attempts_and_cap
 test_marker_parse_requires_exact_sha
+test_marker_parse_rejects_empty_sha
+test_marker_parse_propagates_jq_failure
 test_cli_dispatch
 
 echo ""
