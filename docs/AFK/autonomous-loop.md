@@ -276,6 +276,7 @@ on every PR.
 | `lib/thread-reconciler.sh` | unresolved-thread enum, in-thread reply, resolve |
 | `lib/review-poster.sh` | render/post marked inline review comments, agent-thread filter, done-marker |
 | `lib/rebase-driver.sh` | rebase / continue / abort / force-with-lease push |
+| `lib/deps-lane.sh` | Dependabot lane text transforms: security retitle, checklist inject, sha-keyed markers |
 
 ## Operational notes
 
