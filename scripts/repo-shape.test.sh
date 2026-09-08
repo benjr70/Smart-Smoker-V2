@@ -153,6 +153,136 @@ else
 fi
 
 echo
+echo "TEST: the repo's npm peer-dependency policy is committed, not per-call-site"
+# npm's ini parser is last-wins and tolerates spaces around `=`, so a plain
+# `grep -q '^legacy-peer-deps=true$'` both misses an appended
+# `legacy-peer-deps=false` that inverts the policy and false-fails the spaced
+# form. Compare the *effective* (last) assignment instead.
+npmrc_effective() {
+    local key="$1"
+    grep -E "^[[:space:]]*${key}[[:space:]]*=" "${REPO_ROOT}/.npmrc" 2>/dev/null |
+        tail -n 1 |
+        sed -E "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*//" |
+        tr -d '\r' |
+        sed -E 's/[[:space:]]+$//'
+}
+# The tree only resolves with peer edges ignored (backend pins @nestjs/core 8
+# next to @nestjs/websockets 9). Carrying `--legacy-peer-deps` on each call site
+# leaves it invisible to any tool that runs npm itself — Dependabot runs
+# `npm install --force --package-lock-only`, and without this file it ships a
+# lockfile whose dev/devOptional flags the next `npm run bootstrap` flips back.
+# npm reads a project `.npmrc`, and Dependabot copies it into its checkout.
+assert_file_exists ".npmrc" ".npmrc exists at the repo root"
+if [ ! -f "${REPO_ROOT}/.npmrc" ]; then
+    fail ".npmrc's effective legacy-peer-deps is true" "missing file: .npmrc"
+elif [ "$(npmrc_effective 'legacy-peer-deps')" = "true" ]; then
+    pass ".npmrc's effective legacy-peer-deps is true"
+else
+    fail ".npmrc's effective legacy-peer-deps is true" \
+        ".npmrc resolves legacy-peer-deps to '$(npmrc_effective 'legacy-peer-deps')' (npm takes the last assignment)"
+fi
+
+echo
+echo "TEST: the unit-test workflow runs on lockfile-only pull requests"
+# A Dependabot PR touches exactly one file, the root `package-lock.json`. If the
+# path filter does not name it, every app's tests and coverage gates are skipped
+# on precisely the changes that alter what gets installed.
+#
+# Scoped to the `pull_request.paths:` list rather than to the file as a whole: a
+# matching entry that has drifted into `paths-ignore:` or another workflow's
+# filter would satisfy a whole-file grep while skipping the tests all the same.
+CI_TESTS_WORKFLOW=".github/workflows/ci-tests.yml"
+pr_paths_block() {
+    awk '
+        /^  pull_request:/            { in_pr = 1; next }
+        in_pr && /^  [^ ]/            { exit }
+        in_pr && /^    paths:[ \t]*$/ { in_paths = 1; next }
+        in_paths && /^      /         { print; next }
+        in_paths                      { exit }
+    ' "${REPO_ROOT}/${CI_TESTS_WORKFLOW}"
+}
+
+assert_pr_path_entry() {
+    local pattern="$1"
+    local name="$2"
+    if [ ! -f "${REPO_ROOT}/${CI_TESTS_WORKFLOW}" ]; then
+        fail "${name}" "missing file: ${CI_TESTS_WORKFLOW}"
+        return
+    fi
+    if pr_paths_block | grep -Eq "${pattern}"; then
+        pass "${name}"
+    else
+        fail "${name}" "${CI_TESTS_WORKFLOW}'s pull_request.paths list has no entry matching /${pattern}/"
+    fi
+}
+
+assert_pr_path_entry "^[[:space:]]*- '(\*\*/)?package-lock\.json'$" \
+    "ci-tests.yml pull_request.paths names the root lockfile"
+# Either spelling covers the root manifest — `'**/package.json'` matches it as
+# well as every workspace one — so the assertion is on the coverage, not on
+# which of the two entries provides it.
+assert_pr_path_entry "^[[:space:]]*- '(\*\*/)?package\.json'$" \
+    "ci-tests.yml pull_request.paths matches the root manifest"
+assert_pr_path_entry "^[[:space:]]*- '\.npmrc'$" \
+    "ci-tests.yml pull_request.paths names .npmrc so repo-shape guards it"
+
+echo
+echo "TEST: CI proves the bootstrap leaves a lockfile alone"
+# The behaviour `.npmrc` exists for: a clean clone installs from the committed
+# lockfile with no `--legacy-peer-deps` on the command line, and the bootstrap
+# afterwards rewrites nothing. That cannot be asserted as a text fact, so what
+# is guarded here is that the job which does assert it is still wired up —
+# install.yml's bootstrap step is skipped on a cache hit and never diffs the
+# lockfile, so it is not a substitute.
+assert_matches "${CI_TESTS_WORKFLOW}" "^  lockfile-drift:$" \
+    "ci-tests.yml defines the lockfile-drift job"
+assert_matches "${CI_TESTS_WORKFLOW}" "git diff --exit-code -- package-lock\.json" \
+    "the lockfile-drift job fails on a bootstrap that rewrites the lockfile"
+
+echo
+echo "TEST: AFK:deps-failed is in every label-bootstrap list"
+# Both skills bootstrap the label set idempotently; a run-state label the daemon
+# applies but neither block creates only exists because someone made it by hand.
+# Whitespace-tolerant: both blocks column-align their arguments, and adding a
+# longer label name later re-aligns every description. That is pure formatting
+# and must not fail CI, so every gap between arguments is `[[:space:]]+`.
+DEPS_FAILED_ENSURE="ensure_label[[:space:]]+\"AFK:deps-failed\"[[:space:]]+\"B60205\"[[:space:]]+\"Dependabot PR: verify/fix loop exhausted; human triage required\""
+assert_matches ".claude/skills/to-tickets/SKILL.md" "${DEPS_FAILED_ENSURE}" \
+    "to-tickets §5 bootstraps AFK:deps-failed with its colour and description"
+assert_matches ".claude/skills/afk-dispatch/SKILL.md" "${DEPS_FAILED_ENSURE}" \
+    "afk-dispatch §0 bootstraps AFK:deps-failed with its colour and description"
+# Not a bare substring: the doc has to still present the label as one the
+# bootstrap creates for a Dependabot PR, so prose that retires it or leaves the
+# name stranded in an unrelated sentence fails here.
+assert_matches "docs/agents/issue-tracker.md" \
+    "bootstraps.*\`AFK:deps-failed\`.*Dependabot PR" \
+    "the issue-tracker label inventory documents AFK:deps-failed as bootstrapped"
+# `--force` rewrites colour and description on every run, so the two blocks
+# would flip-flop the same labels' metadata against each other. Backslash
+# continuations are joined first: grep is line-based, so a helper reflowed onto
+# two lines would otherwise slip a `--force` past a line-anchored pattern. The
+# anchor itself stays, so the prose forbidding the flag does not read as the
+# command.
+assert_no_force_label_create() {
+    local path="$1"
+    local name="$2"
+    if [ ! -f "${REPO_ROOT}/${path}" ]; then
+        fail "${name}" "missing file: ${path}"
+        return
+    fi
+    if sed -e ':a' -e '/\\$/{N; s/\\\n//; ta' -e '}' "${REPO_ROOT}/${path}" |
+        grep -Eq "^[[:space:]]*gh label create .*--force"; then
+        fail "${name}" "${path} creates labels with --force"
+    else
+        pass "${name}"
+    fi
+}
+assert_no_force_label_create ".claude/skills/to-tickets/SKILL.md" \
+    "to-tickets §5 never creates labels with --force"
+assert_no_force_label_create ".claude/skills/afk-dispatch/SKILL.md" \
+    "afk-dispatch §0 never creates labels with --force"
+
+echo
 echo "================================"
 echo "Tests run: ${TESTS_RUN}"
 echo "Failed:    ${TESTS_FAILED}"
