@@ -309,13 +309,37 @@ report line's `outcome=` to `merged <sha>`:
 ```bash
 DEPS_OUT=$(...)                # the /deps-land agent's full terminal output
 MERGE_CMD=$(printf '%s\n' "$DEPS_OUT" | sed -n 's/^merge-cmd: //p' | tail -1)
-if printf '%s' "$DEPS_OUT" | grep -q '^deps-land: APPROVED' && [ -n "$MERGE_CMD" ]; then
+
+# The command is scraped from a subagent's free-form stdout and is about to be
+# eval'd with the daemon's gh admin credentials against master, so validate it
+# against the ONE shape deps-gate.sh emits before running it. Unlike the
+# docs-merge site above — which evals `.mergeCmd` straight out of the gate's own
+# JSON — this text passed through a lane that echoes pr-watch lines,
+# manual-verify lines and a `Last failure: <verbatim>` string, all of it PR- and
+# page-derived. Without this check a crafted or hallucinated `merge-cmd:` line
+# anywhere in that stream is arbitrary shell. The PR number is pinned to the one
+# we dispatched and the sha to hex, and the anchors leave no room for a shell
+# metacharacter.
+MERGE_RE="^gh pr merge ${RECON_PR} (--repo [A-Za-z0-9._-]+/[A-Za-z0-9._-]+ )?--squash --admin --match-head-commit [0-9a-f]{7,40}$"
+
+if ! printf '%s' "$DEPS_OUT" | grep -q '^deps-land: APPROVED'; then
+    :   # any other terminal line merges nothing
+elif [ -z "$MERGE_CMD" ]; then
+    :   # outcome=refused:merge-cmd-missing
+elif ! printf '%s\n' "$MERGE_CMD" | grep -Eq "$MERGE_RE"; then
+    :   # outcome=refused:merge-cmd-malformed — run NOTHING
+else
     eval "$MERGE_CMD"
 fi
 ```
 
 An `APPROVED` line with no `merge-cmd:` line is a lane bug, not a merge: report
-`outcome=refused:merge-cmd-missing` and merge nothing.
+`outcome=refused:merge-cmd-missing` and merge nothing. A `merge-cmd:` line that
+fails `MERGE_RE` is worse than a bug — it is a malformed gate or text that
+reached the lane's stdout from the PR — so report
+`outcome=refused:merge-cmd-malformed`, log the offending line verbatim in the §7
+report, and run nothing. Never edit the line to make it match: the only
+sanctioned merge command is the gate's own `.mergeCmd`, byte-for-byte.
 
 Any other terminal line merges nothing. The lane owns its own labels (`HITL` +
 the hand-off comment on a major, draft + `AFK:deps-failed` on exhaustion,

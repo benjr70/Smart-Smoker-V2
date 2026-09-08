@@ -109,6 +109,19 @@ main() {
     fi
 
     while [ "$#" -gt 0 ]; do
+        # Every flag here takes a value, and a value-less one is a usage error,
+        # not a retry: with `set -uo pipefail` and no `set -e`, `shift 2` on a
+        # single remaining argument fails and shifts NOTHING, so the loop would
+        # re-process the same flag forever. A mistyped invocation in CI or in
+        # run-tests.sh must fail the job, never hang it.
+        case "$1" in
+            --skill | --pickup | --glossary)
+                if [ "$#" -lt 2 ]; then
+                    echo "deps-land-runbook-check: $1 requires a file path" >&2
+                    return 2
+                fi
+                ;;
+        esac
         case "$1" in
             --skill) SKILL_FILE="${2:-}"; shift 2 ;;
             --pickup) PICKUP_FILE="${2:-}"; shift 2 ;;

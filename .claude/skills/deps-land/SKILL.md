@@ -118,6 +118,18 @@ The cap is **3 attempts** in total — across Tier A and Tier B, and across ever
 fire this PR ever gets. It is counted from the markers, never from a variable in
 this fire, so a crash cannot refund an attempt.
 
+**How a sha-keyed marker can bind across fires at all**: every fix push moves
+the head, and `deps_lane_marker_parse` deliberately ignores markers for any
+other sha — so an attempt recorded against the pre-push sha would be invisible
+to the next fire, which would read `fixAttempts: 0` and hand the least fixable
+bump a full budget again, forever. The rule that prevents it is the one
+`/pr-watch` already follows (its §1 "Marker keying" and §5): **after every fix
+push, re-stamp the whole accumulated history onto the NEW head sha** — one
+`fix-attempt` marker per attempt spent so far, earlier fires included, in a
+single comment. §5 does this too, with the same helper. The count then resets
+only when the head moves without our markers following it (a Dependabot rebase
+or a new version push), which is correct: that is a different bump.
+
 ### 1. Conflict path (`--reason conflict` only)
 
 A `CONFLICTING` Bot PR cannot be verified: whatever the tiers prove is about a
@@ -161,8 +173,25 @@ cut a patch release whose changelog says a vulnerability was fixed:
 
 ```bash
 NEW_TITLE=$(deps_lane_retitle "$TITLE" "$SECURITY")
-[ "$NEW_TITLE" = "$TITLE" ] || gh pr edit "$PR" --title "$NEW_TITLE"
+RETITLE_RC=$?
+if [ "$RETITLE_RC" -ne 0 ] || [ -z "$NEW_TITLE" ]; then
+    echo "deps-land: ERROR — retitle refused the security flag (rc=$RETITLE_RC," \
+         "security='$SECURITY'); title left untouched"
+    exit 1
+elif [ "$NEW_TITLE" != "$TITLE" ]; then
+    gh pr edit "$PR" --title "$NEW_TITLE"
+fi
 ```
+
+**Check the exit status before editing anything.** `deps_lane_retitle` returns 2
+and prints NOTHING whenever the security flag is not exactly `true`/`false` —
+and `null` is exactly what afk-pickup §1.2's `jq -r '.reconcile.security'`
+yields if the triage verdict ever lacks the field. An unchecked `NEW_TITLE` is
+then empty, differs from `$TITLE`, and `gh pr edit --title ""` destroys the only
+record of which dependency moved (and fails PR Title Lint, which the gate later
+reads as `title-not-deps` — a harness bug disguised as a verdict about the
+bump). An empty title is unrecoverable; a skipped fire is not, so a refused flag
+ends the fire `ERROR` with nothing mutated.
 
 The lib owns the rule (only the exact `chore(deps):` prefix is promoted;
 Dependabot's remaining text is carried through byte-for-byte). Never retype the
@@ -175,8 +204,24 @@ Tier B verifies the boxes in the PR body, so the body must carry them:
 ```bash
 NEW_BODY=$(printf '%s' "$BODY" \
     | deps_lane_inject_checklist scripts/verify-pr/bot-pr-checklist.md)
-[ "$NEW_BODY" = "$BODY" ] || gh pr edit "$PR" --body "$NEW_BODY"
+INJECT_RC=$?
+if [ "$INJECT_RC" -ne 0 ] || [ -z "$NEW_BODY" ]; then
+    echo "deps-land: WARN — checklist inject failed (rc=$INJECT_RC);" \
+         "PR body left untouched"
+elif [ "$NEW_BODY" != "$BODY" ]; then
+    printf '%s' "$NEW_BODY" | gh pr edit "$PR" --body-file -
+fi
 ```
+
+**Check the exit status, and pipe into `--body-file -`, exactly as the lib
+documents.** `deps_lane_inject_checklist` returns 3 with NO stdout when it
+cannot buffer the body (`mktemp` or the write fails — this box hits disk
+pressure regularly). An unchecked `NEW_BODY` is then empty, differs from
+`$BODY`, and `gh pr edit --body ""` wipes Dependabot's release notes, changelog
+and commit list — the unrecoverable loss the lib's empty-and-loud guard exists
+to prevent. A failed inject is a no-op the next fire retries; a wiped body is
+gone. The `--body-file -` form is also what keeps a body containing `%`,
+backslashes or a leading `-` byte-identical.
 
 Injection is a **no-op when the `<!-- bot-pr-checklist v1 -->` marker is already
 present**, so ticked boxes survive a re-round. When Dependabot regenerates the
@@ -220,8 +265,13 @@ commits carry the `[dependabot skip]` trailer, and its exhaustion label is
   in this fire.
 
 - `pr-watch: DRAFT — exhausted 3 attempts, marked draft, AFK:deps-failed` → the
-  budget is gone and pr-watch has already parked the PR. End the fire
-  `deps-failed` (§6) with `tierA=failed`; do not re-label, do not re-draft.
+  budget is gone and pr-watch has already parked the PR: it drafted it, labeled
+  it `AFK:deps-failed` and commented. **The park has one owner and it is
+  pr-watch here.** Mutate nothing: do not re-draft (`gh pr ready --undo` errors
+  on an already-draft PR), do not re-label, do not post a second hand-off
+  comment. Emit the `deps-land: DEPS-FAILED` terminal line with `tierA=failed`
+  and end the fire — this is §6's "Tier A ran out" branch, which is deliberately
+  a no-op.
 - `pr-watch: ERROR — <reason>` → end the fire `ERROR`, touch nothing.
 
 ### 5. Tier B — one real-app round (`/verify-pr --force-tour`)
@@ -253,14 +303,33 @@ a bump nobody is going to check it later — a round must not pass by skipping.
   `deps-failed` per §6. Otherwise spawn one implementer with the failing and
   deferred items' text verbatim as the brief, commit through
   `deps_lane_commit_trailer` (so the message ends `[dependabot skip]` and
-  Dependabot leaves the branch alone), push, and record one attempt:
+  Dependabot leaves the branch alone), push, and record the attempt **against
+  the sha the push just created**, re-stamping the whole accumulated history:
 
   ```bash
-  gh pr comment "$PR" --body "$(deps_lane_marker_emit fix-attempt "$SHA" "$N")"
+  N=$((ATTEMPTS + 1))                 # $ATTEMPTS is §0's marker-read count
+  git push origin "$BRANCH"           # plain push, never --force
+  NEW_SHA=$(git rev-parse HEAD)
+  BODY_MARKERS="deps-land tier B fix attempt $N of 3 on this bump."$'\n'
+  for i in $(seq 1 "$N"); do
+      BODY_MARKERS="$BODY_MARKERS$(deps_lane_marker_emit fix-attempt "$NEW_SHA" "$i")"$'\n'
+  done
+  gh pr comment "$PR" --body "$BODY_MARKERS"
   ```
 
+  Both details are load-bearing. `N` must be a real number —
+  `deps_lane_marker_emit` returns 2 and prints nothing without a numeric third
+  argument, and `gh pr comment --body ""` then fails, leaving the attempt
+  unrecorded and the budget stuck at zero spent. And the markers must name
+  `$NEW_SHA`, not `$SHA`: the push moved the head, marker-parse ignores every
+  other sha, so an attempt stamped on the pre-push sha is invisible to the next
+  fire — the bump would be fixed-and-re-fired forever and never reach
+  `AFK:deps-failed`. Writing one marker per attempt-so-far onto the new head is
+  what carries the count across the push, exactly as `/pr-watch` §5 does; too
+  few and the cap never trips, too many and the bump is abandoned a round early.
+
   The push moves the head sha, so the fire ends there: the next fire re-verifies
-  both tiers on the new sha. That is the point of sha-keyed markers.
+  both tiers on the new sha, and reads the re-stamped count as its budget.
 
 - `manual-verify: infra-error …` (the stack never booted — zero items acted on)
   is **not** a Tier B failure and must not consume an attempt: end the fire
@@ -293,7 +362,12 @@ printf 'merge-cmd: %s\n' "$(printf '%s' "$GATE_JSON" | jq -r '.mergeCmd')"
 ```
 
 Never retype, reformat or line-wrap it, and never emit a `merge-cmd:` line on
-any other verdict — that line is the merge trigger.
+any other verdict — that line is the merge trigger. The caller validates it
+against the gate's exact shape
+(`gh pr merge <this PR> [--repo …] --squash --admin --match-head-commit <sha>`)
+before it evals anything, because this stdout also carries PR-derived text; a
+reformatted, wrapped or hand-written line is refused as `merge-cmd-malformed`
+and nothing merges.
 
 **Major bump (`.reason == major-unapproved`).** After Tier A green and Tier B
 PASS a major is never merged on machine evidence: hand it to the maintainer.
@@ -315,15 +389,28 @@ fire's triage sees the `HITL` label with `reviewDecision == APPROVED`, re-enters
 this lane, re-gates the **same sha** and merges. `Request changes` and a close
 both leave the PR alone — the human's decision stands.
 
-**Exhausted.** When either tier ran out of the 3 attempts, park the PR for good:
+**Exhausted.** When either tier ran out of the 3 attempts the PR is parked for
+good — drafted, labeled `AFK:deps-failed`, and commented — **exactly once, by
+whichever tier ran out.** Two owners would mean a `gh pr ready --undo` against
+an already-draft PR (an error) and a duplicate hand-off comment on every Tier A
+exhaustion, so pick the branch by who exhausted:
 
-```bash
-gh pr ready "$PR" --undo                       # draft — this is what stops re-picks
-gh pr edit "$PR" --add-label AFK:deps-failed
-gh pr comment "$PR" --body "deps-land: verify/fix loop exhausted after 3 attempts. Last failure: <verbatim>. Human triage required."
-```
+- **Tier A ran out** — §4 read
+  `pr-watch: DRAFT — exhausted 3 attempts, marked draft, AFK:deps-failed`.
+  pr-watch owns this park and has already done all three mutations. **Mutate
+  nothing here**: no draft flip, no label, no comment. Emit the terminal line
+  below and end the fire.
+- **Tier B ran out** — §5 found `deps_lane_rounds_left "$ATTEMPTS"` at 0 and no
+  pr-watch park happened. This lane owns the park, so do it here:
 
-The draft flip is the load-bearing half: PR Triage skips drafts, so a labeled
+  ```bash
+  gh pr ready "$PR" --undo                       # draft — this is what stops re-picks
+  gh pr edit "$PR" --add-label AFK:deps-failed
+  gh pr comment "$PR" --body "deps-land: verify/fix loop exhausted after 3 attempts. Last failure: <verbatim>. Human triage required."
+  ```
+
+Either way the fire ends `deps-land: DEPS-FAILED — <last failure>`. The draft
+flip is the load-bearing half of the park: PR Triage skips drafts, so a labeled
 but non-draft PR would be re-picked every fire forever.
 
 **Any other refusal** (`checks-not-green`, `checks-missing`, `markers-stale`,
@@ -376,7 +463,9 @@ ran Tier B the verbatim `verify:` line, before any result is emitted;
 - **Head sha moved** — same treatment. Markers are sha-keyed; the next fire
   re-verifies from scratch on the new head.
 - **Fix loop exhausted** — draft + `AFK:deps-failed` + a comment naming the last
-  failure. Triage skips drafts and that label, so the PR is never re-picked.
+  failure, applied once by whichever tier ran out (pr-watch on Tier A, this lane
+  on Tier B — §6). Triage skips drafts and that label, so the PR is never
+  re-picked.
 - **Major bump approved, then force-pushed** — the re-entry fire re-gates the
   new sha, finds the markers stale, and re-runs both tiers before merging. An
   approval never vouches for code the maintainer did not see.

@@ -247,6 +247,40 @@ test_missing_file_is_usage_error() {
 }
 
 #-------------------------------------------------------------------------------
+# Test 7: a value-less `--skill/--pickup/--glossary` exits 2 instead of hanging.
+#         The arg loop runs under `set -uo pipefail` with no `set -e`, so a
+#         `shift 2` with one argument left shifts NOTHING and the same flag is
+#         re-processed forever. A mistyped invocation in CI or in run-tests.sh
+#         must fail the job, not wedge it — so each case is run under `timeout`
+#         and a 124 (killed) is as much a failure as a wrong exit code.
+#-------------------------------------------------------------------------------
+test_valueless_flag_is_usage_error() {
+    echo "TEST: a value-less flag exits 2 rather than looping forever"
+
+    local flag out rc
+    for flag in --skill --pickup --glossary; do
+        out="$(timeout 5 bash "${CHECKER}" "${flag}" 2>&1)"
+        rc=$?
+
+        if [ "${rc}" -eq 124 ]; then
+            fail "${flag} with no value must not hang" \
+                "timed out after 5s (arg loop never terminated)"
+            continue
+        fi
+        if [ "${rc}" -ne 2 ]; then
+            fail "${flag} with no value exits 2" "exit ${rc}; output: ${out}"
+            continue
+        fi
+        if ! printf '%s' "${out}" | grep -q -- "${flag}"; then
+            fail "${flag} usage error names the flag" "output: ${out}"
+            continue
+        fi
+
+        pass "${flag} with no value exits 2, naming the flag"
+    done
+}
+
+#-------------------------------------------------------------------------------
 # Run suite
 #-------------------------------------------------------------------------------
 echo "=========================================="
@@ -259,6 +293,7 @@ test_deletion_detected
 test_missing_handoff_sentence_fails
 test_glossary_terms_checked
 test_missing_file_is_usage_error
+test_valueless_flag_is_usage_error
 
 echo ""
 echo "=========================================="
