@@ -148,6 +148,41 @@ jobs:
       - name: Run backend env template suite
         run: bash scripts/backend-env-example.test.sh
 
+  # Guards the lockfile contract the committed `.npmrc` exists to make true
+  # (#652): a clean clone installs from `package-lock.json` with no
+  # `--legacy-peer-deps` on the command line, and running the repo bootstrap
+  # afterwards rewrites nothing. Without this job the "no drift" claim rests on
+  # nobody: install.yml's bootstrap step is skipped on a cache hit and never
+  # diffs the lockfile, so a Dependabot-regenerated lockfile that the bootstrap
+  # would immediately churn merges green.
+  #
+  # Deliberately uncached — a restored `node_modules` is exactly what hides the
+  # drift this job is looking for.
+  lockfile-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.7.0'
+
+      - name: Use npm 10
+        run: npm i -g npm@10
+
+      # No `--legacy-peer-deps` here on purpose: this passes only because the
+      # committed `.npmrc` supplies it. Peer conflicts would fail with ERESOLVE.
+      - name: Clean install from the lockfile
+        run: npm ci
+
+      - name: Run the repo bootstrap
+        run: npm run bootstrap
+
+      - name: Assert the bootstrap left the lockfile untouched
+        run: git diff --exit-code -- package-lock.json
+
   # Run tests for all applications
   test-apps:
     uses: ./.github/workflows/test.yml
