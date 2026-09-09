@@ -78,3 +78,14 @@ _Avoid_: restMin, rest time (as separate values)
 
 **Wrap temp**: Global setting (Default Target Temps): probe temperature below
 which the Serve Plan shows the wrap milestone until a wrap stamp is logged.
+
+**Smoke Quality**: The feature that senses the exhaust and tells the user what
+kind of smoke the meat is getting. _Avoid_: air quality, smoke sensor (as the
+feature name)
+
+**Smoke Reading**: One timestamped sample from the exhaust sensor, stored apart
+from temperature readings. _Avoid_: air reading, sensor tick
+
+**Smoke Phase**: The label derived from Smoke Readings: `dirty` (white smoke,
+early ignition, harsh flavour), `clean` (thin blue smoke, established smoulder)
+or `unknown`. _Avoid_: smoke type, smoke colour, good/bad smoke
