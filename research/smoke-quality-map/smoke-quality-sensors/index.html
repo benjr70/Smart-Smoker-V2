@@ -1,0 +1,3774 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>A USB laser PM sensor can see dirty-vs-clean smoke, but only behind a dilution probe - Smart Smoker Docs</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#a-usb-laser-pm-sensor-can-see-dirty-vs-clean-smoke-but-only-behind-a-dilution-probe" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="Smart Smoker Docs" class="md-header__button md-logo" aria-label="Smart Smoker Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Smart Smoker Docs
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              A USB laser PM sensor can see dirty-vs-clean smoke, but only behind a dilution probe
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/benjr70/Smart-Smoker-V2" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    benjr70/Smart-Smoker-V2
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../.." class="md-tabs__link">
+          
+  
+  
+    
+  
+  Welcome
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../Frontend/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Apps
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../Packages/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Packages
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../CI-CD/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  CI/CD
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../Harness/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Harness
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../AFK/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  AFK
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../Infrastructure/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Infrastructure
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="Smart Smoker Docs" class="md-nav__button md-logo" aria-label="Smart Smoker Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Smart Smoker Docs
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/benjr70/Smart-Smoker-V2" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    benjr70/Smart-Smoker-V2
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../.." class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Welcome
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_1" id="__nav_1_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Welcome
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Documentation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Documentation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Hardware/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hardware
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../piSoftware/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pi Software
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_1_5" id="__nav_1_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Epics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Epics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Epics/pushNotifications/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Push Notifications
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Epics/googleAssistant/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Google Assistant
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Apps
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Apps
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_1" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../Frontend/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Frontend
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Frontend
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../Backend/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    BackEnd
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2_2" id="__nav_2_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    BackEnd
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Backend/backend-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Smart Smoker Backend Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../Smoker%20Frontend/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Smoker Frontend
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Smoker Frontend
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../Device%20Service/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Device Service
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Device Service
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../Packages/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Packages
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Packages
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Packages/testing-template/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing Template
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../CI-CD/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CI/CD
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    CI/CD
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../CI-CD/release-process/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release Process
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../CI-CD/github-actions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GitHub Actions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../CI-CD/test-coverage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Test Coverage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../CI-CD/dependency-management/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependency Management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../CI-CD/workflow-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workflow Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../CI-CD/deployment-infrastructure/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deployment & Infrastructure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../CI-CD/manual-version-deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Manual Deployment Runbook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../CI-CD/smoker-device/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Physical Smoker Device
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../CI-CD/claude-agent-vm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Claude Agent VM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../Harness/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Harness
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Harness
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Harness/backpressure/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backpressure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Harness/self-validation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Self-Validation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Harness/infra/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Infrastructure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../AFK/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AFK
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    AFK
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../AFK/roles/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Roles
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../AFK/dispatch/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dispatch
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../AFK/autonomous-loop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Autonomous Loop
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../Infrastructure/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Infrastructure
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Infrastructure
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/guides/getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/guides/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/guides/prod-pre-cutover-verification/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prod Pre-Cutover Verification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_5" id="__nav_7_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Implementation Plans
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Implementation Plans
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/implementation/proxmox-infrastructure-plan/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Infrastructure Plan
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/implementation/phase-3-deployment-automation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Phase 3 Deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/implementation/phase-4-testing-documentation.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Phase 4 Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_6" id="__nav_7_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Features
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Features
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_6_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_6_1" id="__nav_7_6_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Database
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_7_6_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_6_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Database
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/database/mongodb/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MongoDB
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/database/backups/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backups
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_6_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_6_2" id="__nav_7_6_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deployment
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_7_6_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_6_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Deployment
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/deployment/automation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Automation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/deployment/health-checks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Health Checks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/deployment/rollback/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rollback
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/deployment/environments/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Environments
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_6_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_6_3" id="__nav_7_6_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Infrastructure
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_7_6_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_6_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Infrastructure
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/infrastructure/terraform/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Terraform
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/infrastructure/proxmox/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Proxmox
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/infrastructure/containers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Containers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_6_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_6_4" id="__nav_7_6_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_7_6_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_6_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Configuration
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/configuration/ansible/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ansible
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/configuration/system-setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    System Setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_6_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_6_5" id="__nav_7_6_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Networking
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_7_6_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_6_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Networking
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/networking/tailscale/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tailscale
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/networking/network-config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Network Config
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_6_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_6_6" id="__nav_7_6_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_7_6_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_6_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Security
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/security/secrets-management/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Secrets Management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/security/authentication/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authentication
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_6_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_6_7" id="__nav_7_6_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operations
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_7_6_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_6_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Operations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/operations/testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/operations/disaster-recovery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Disaster Recovery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/operations/monitoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Monitoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="a-usb-laser-pm-sensor-can-see-dirty-vs-clean-smoke-but-only-behind-a-dilution-probe">A USB laser PM sensor can see dirty-vs-clean smoke, but only behind a dilution probe</h1>
+<p>Ticket: <a href="https://github.com/benjr70/Smart-Smoker-V2/issues/672">#672</a> (part of wayfinder map <a href="https://github.com/benjr70/Smart-Smoker-V2/issues/671">#671</a> — Smoke Quality — map). Researched on 2026-09-08.</p>
+<p>Sources:</p>
+<ul>
+<li>Nova Fitness, <em>Laser PM2.5 Sensor specification, product model SDS011, V1.3</em> (2015-10-09), fetched as PDF via <a href="https://cdn-reichelt.de/documents/datenblatt/X200/SDS011-DATASHEET.pdf">reichelt mirror</a> and read page-by-page.</li>
+<li>Plantower, <em>Digital universal particle concentration sensor — PMS5003 series data manual V2.3</em> (2016-06-01), fetched via <a href="https://www.aqmd.gov/docs/default-source/aq-spec/resources-page/plantower-pms5003-manual_v2-3.pdf">AQ-SPEC / South Coast AQMD</a>.</li>
+<li>Sensirion, <em>Datasheet SPS30</em>, Version 2.0 – D1, June 2023 — <a href="https://sensirion.com/media/documents/8600FF88/64A3B8D6/Sensirion_PM_Sensors_Datasheet_SPS30.pdf">https://sensirion.com/media/documents/8600FF88/64A3B8D6/Sensirion_PM_Sensors_Datasheet_SPS30.pdf</a>.</li>
+<li>Sensirion, <em>Datasheet SEN5x</em>, Version 2 – D1, March 2022 — <a href="https://sensirion.com/media/documents/6791EFA0/62A1F68F/Sensirion_Datasheet_Environmental_Node_SEN5x.pdf">https://sensirion.com/media/documents/6791EFA0/62A1F68F/Sensirion_Datasheet_Environmental_Node_SEN5x.pdf</a>.</li>
+<li>Sensirion SPS30 product page — <a href="https://sensirion.com/products/catalog/SPS30">https://sensirion.com/products/catalog/SPS30</a>.</li>
+<li>Trojanowski &amp; Fthenakis, <em>Nanoparticle emissions from residential wood combustion: a critical literature review, characterization, and recommendations</em>, BNL-211411-2019-JAAM (Brookhaven National Laboratory / DOE), <a href="https://www.osti.gov/servlets/purl/1501573">https://www.osti.gov/servlets/purl/1501573</a>.</li>
+<li>US EPA, <em>Method 5G — Determination of Particulate Matter Emissions from Wood Heaters (Dilution Tunnel Sampling Location)</em>, 8/3/2017, <a href="https://www.epa.gov/sites/default/files/2017-08/documents/method_5g.pdf">https://www.epa.gov/sites/default/files/2017-08/documents/method_5g.pdf</a> (landing page: <a href="https://www.epa.gov/emc/method-5g-particulate-matter-wood-heaters-dilution-tunnel">https://www.epa.gov/emc/method-5g-particulate-matter-wood-heaters-dilution-tunnel</a>).</li>
+<li>Linux kernel, <em>USB serial drivers</em> — <a href="https://www.kernel.org/doc/html/latest/usb/usb-serial.html">https://www.kernel.org/doc/html/latest/usb/usb-serial.html</a>.</li>
+<li>Raspberry Pi Ltd, <em>Raspberry Pi 4 Model B Datasheet</em>, Release 1.1 (2024) — <a href="https://pip-assets.raspberrypi.com/categories/545-raspberry-pi-4-model-b/documents/RP-008341-DS-1-raspberry-pi-4-datasheet.pdf">https://pip-assets.raspberrypi.com/categories/545-raspberry-pi-4-model-b/documents/RP-008341-DS-1-raspberry-pi-4-datasheet.pdf</a>.</li>
+<li>Digi International KB, <em>What is the maximum length allowable for a single USB cable?</em> — <a href="https://www.digi.com/support/knowledge-base/what-is-the-maximum-length-allowable-for-a-single">https://www.digi.com/support/knowledge-base/what-is-the-maximum-length-allowable-for-a-single</a>.</li>
+<li>npm registry probes (<code>registry.npmjs.org</code>) for <code>serialport</code>, <code>@serialport/bindings-cpp</code>, <code>sds011-client</code>, <code>sds011-wrapper</code>, <code>plantower</code>, <code>@serialpilot/driver-plantower</code>, <code>sps30</code>, <code>pms5003</code>.</li>
+<li>Adafruit product 3686 (PMS5003 kit) — <a href="https://www.adafruit.com/product/3686">https://www.adafruit.com/product/3686</a>; DigiKey/Mouser listings for SPS30 (price not verified against a live cart).</li>
+<li>Live repo probes: <code>cat apps/device-service/package.json</code>; <code>ls apps/device-service/src/serial</code>; <code>sed -n '1,80p' apps/device-service/src/serial/serial.serivce.ts</code>; <code>grep -n devices smoker.docker-compose.yml</code>.</li>
+</ul>
+<h2 id="tldr">TL;DR</h2>
+<ul>
+<li><strong>Yes, the physics is on our side.</strong> Dirty white smoke and clean thin-blue smoke differ by roughly an order of magnitude in particle mass <em>and</em> by mean particle diameter. Start-up produces the <strong>most</strong> particles and the <strong>largest</strong> mean diameter (~200–260 nm); efficient steady-state burn produces fewer and smaller particles; and organic carbon fraction goes from <strong>57 % (O₂-starved) to 14 % (O₂-rich)</strong> in the same stove (<a href="https://www.osti.gov/servlets/purl/1501573">BNL review, pp. 14–15</a>).</li>
+<li><strong>Best single discriminator: the PM2.5/PM10 mass split plus a particle-size proxy</strong>, not PM2.5 alone. A raw PM2.5 number rises with <em>any</em> smoke; the <em>shape</em> (mass concentration ÷ number concentration, i.e. mean size) is what separates "fat white particles" from "fine blue haze". Only two candidate sensors expose that shape: SPS30 (<code>Typical Particle Size</code> in µm/nm, plus number concentrations for PM0.5…PM10) and PMS5003 (six raw particle-count bins ≥0.3/0.5/1.0/2.5/5.0/10 µm per 0.1 L).</li>
+<li><strong>Shortlist (in order): 1) SPS30 + generic USB-UART, 2) PMS5003 + generic USB-UART, 3) SDS011 with its bundled CH340 dongle.</strong> SPS30 wins on outputs (number concentration + typical particle size), on a documented weekly <strong>fan auto-cleaning</strong> cycle, and on a &gt;10-year MTTF; SDS011 wins on zero-integration (ships with the USB dongle) but only gives PM2.5/PM10 mass and is rated for <strong>8 000 h</strong> laser life.</li>
+<li><strong>SEN5x / SEN54 / SEN55 is NOT a candidate.</strong> Its datasheet has exactly one comms chapter — "Operation and Communication through the I²C Interface" — and its 6-pin connector is VDD/GND/<strong>SDA</strong>/<strong>SCL</strong>/SEL/NC. There is no UART, therefore no USB-UART path without a bridge board. Ruled out by the ticket's "no soldering/HAT" constraint.</li>
+<li><strong>Every candidate dies in the plume, and the datasheets say so.</strong> SDS011: work environment <strong>–10…+50 °C, max 70 % RH</strong>. PMS5003: 0…99 % RH but the manual explicitly warns extra protection is required for "Kitchen", "Water mist condition", and sustained ≥300 µg/m³. SPS30: recommended <strong>10–40 °C, 20–80 % RH</strong>, absolute max 60 °C / 95 % RH. Smoker exhaust is hotter, wetter and tarrier than all of these — which is exactly why the prior attempt came back coated in tar.</li>
+<li><strong>The rig, not the sensor, is the deliverable.</strong> EPA Method 5G measures wood-heater PM by drawing the stack exhaust into a hood, <strong>combining it with ambient dilution air</strong>, and sampling from a single point in the tunnel with filters held at <strong>≤32 °C (90 °F)</strong>. Copy that pattern in miniature: a stainless probe in the stack, a tee that entrains ambient air, and the sensor sitting in cooled diluted gas well off the plume.</li>
+<li><strong>Integration is cheap.</strong> <code>apps/device-service</code> already ships <code>serialport ^11.0.0</code> and already opens a port by absolute path. A CH340/CP2102/FTDI dongle enumerates as <code>/dev/ttyUSB0</code> (kernel major 188), so the change is one more <code>devices:</code> entry in <code>smoker.docker-compose.yml</code> and a second <code>SerialPort</code> instance. Power is a non-issue (all three sensors ≤100 mA against ~1.1 A aggregate on Pi 4). <strong>A 10 ft cable is fine</strong> — USB 2.0 allows 5 m (16 ft 5 in) per segment.</li>
+<li><strong>No plug-and-play USB CO or VOC module exists in budget.</strong> The commodity CO parts (MQ-7 and friends) are bare analog/I²C modules needing an MCU — i.e. exactly the soldering the ticket forbids. Skip gas sensing for v1; PM is where the signal is.</li>
+</ul>
+<h2 id="1-what-actually-differs-between-white-and-blue-smoke">1. What actually differs between white and blue smoke</h2>
+<p>The map's language ("dirty white" = early ignition, "thin blue" = established smoulder) maps onto the combustion-science phases <strong>start-up / ramp-up</strong> and <strong>steady-state operation</strong>. The BNL/DOE critical review tabulates them directly (<a href="https://www.osti.gov/servlets/purl/1501573">Table 1, p. 11</a>):</p>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Characteristics (verbatim, BNL Table 1)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Start up / ramp up</td>
+<td>"Fuel was just ignited and the unit ramping up to its full output … <strong>CO concentrations tend to be high as well as PM</strong> with low to moderate O₂ values."</td>
+</tr>
+<tr>
+<td>Steady-state operation</td>
+<td>"Unit is running at full output … high burn rate of fuel, <strong>low CO, low PM</strong>, low to moderate O₂ values."</td>
+</tr>
+</tbody>
+</table>
+<p>The same review says incomplete combustion is "caused by small values of the three most important 'T's' in combustion; time, temperature and turbulence" and that a "Characteristic of incomplete combustion is also an increase in volatile hydrocarbon emissions and CO" (p. 11).</p>
+<h3 id="11-mass-the-dirty-phase-is-up-to-10-worse">1.1 Mass: the dirty phase is up to 10× worse</h3>
+<blockquote>
+<p>"the study found the period of combustion, cold start or steady state had a significant impact in terms of emission production, for some cases <strong>ten times greater emissions output (mg/MJ) were observed</strong>." — BNL review, p. 12</p>
+</blockquote>
+<p>A Swiss study cited in the same review found "emissions could be up to 100 times higher if a stove was not operated properly" (p. 12). So a plain PM mass channel already carries a large, easily-thresholded signal.</p>
+<h3 id="12-size-the-dirty-phase-makes-bigger-particles">1.2 Size: the dirty phase makes <em>bigger</em> particles</h3>
+<p>Three independent studies, summarised by BNL (pp. 14–15), agree that particle <strong>mean diameter tracks combustion phase</strong>:</p>
+<table>
+<thead>
+<tr>
+<th>Study (as cited in BNL review)</th>
+<th>Start-up</th>
+<th>Steady state</th>
+<th>Burn-out</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Bologa et al., 8 kW beech-log stove</td>
+<td>mono-modal <strong>180 nm</strong>, <strong>most particles</strong> of any phase; stack ≈100 °C</td>
+<td>mono-modal 180 nm; stack 300–330 °C</td>
+<td>bi-modal 180–200 nm <strong>and 30–40 nm</strong>; stack 160–180 °C</td>
+</tr>
+<tr>
+<td>Gaegauf et al. (diluted stack sampling)</td>
+<td>largest particles, <strong>avg 200 nm</strong></td>
+<td>avg ≈175 nm, <strong>lowest number conc. &lt;0.8 µm</strong></td>
+<td>smallest, ≈<strong>30 nm</strong>, highest number conc.</td>
+</tr>
+<tr>
+<td>Hueglin et al., 15 kW beech stove, SMPS behind a dilution sampler</td>
+<td>"greatest particle concentration and largest mean diameter (<strong>approximately 260 nm</strong>)"</td>
+<td>intermediate phase lowest concentration, mean ≈107 nm</td>
+<td>smallest mean, <strong>≈60 nm</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Hueglin et al. also gives the mechanism the map cares about:</p>
+<blockquote>
+<p>"an increase in combustion in air supply impacted the particle size distribution; thus <strong>more oxygen caused an increase in the concentration of particles with smaller diameter</strong> … <strong>organic carbon was found to be 14 % for burning conditions with increased O₂ and 57 % when there was an absence of O₂</strong>." — BNL review, p. 15</p>
+</blockquote>
+<p>That 14 %-vs-57 % organic carbon split is the physical reason white smoke is white and blue smoke is blue: the condensed-organic ("tar") fraction produces particles large enough to scatter all visible wavelengths (white), while the small, soot-dominated fine mode of an established burn preferentially scatters short wavelengths (blue).</p>
+<h3 id="13-which-metric-to-actually-compute">1.3 Which metric to actually compute</h3>
+<ul>
+<li><strong>Not</strong> PM2.5 mass alone — it is monotonic in "amount of smoke" and cannot distinguish a big clean burn from a small dirty one.</li>
+<li><strong>Best</strong>: a size proxy.</li>
+<li>On <strong>SPS30</strong>, the sensor computes it for you: <code>Typical Particle Size</code> is an explicit output field, and the datasheet defines it as "an indication on the average particle diameter in the sample aerosol … <strong>lighter aerosols will have smaller TPS values than heavier aerosols</strong>" (SPS30 datasheet §4.3, footnote 8, p. 6). Rising TPS + rising PM mass ⇒ dirty.</li>
+<li>On <strong>PMS5003</strong>, derive it from the six count bins (Data 7…Data 12 in Appendix I): the ratio of counts ≥1.0 µm to counts ≥0.3 µm is a direct coarseness index.</li>
+<li>On <strong>SDS011</strong> you only get PM2.5 and PM10 mass, so the only available shape metric is the <strong>PM10 : PM2.5 ratio</strong> — coarser and noisier, but non-zero signal.</li>
+<li><strong>Secondary</strong> (free on SPS30/PMS5003 anyway): PM10/PM2.5 ratio and the absolute mass level, for a two-feature classifier.</li>
+<li><strong>CO</strong> would be an excellent orthogonal discriminator per BNL Table 1 — but see §2.5: there is no USB-native CO module in budget.</li>
+<li><strong>Humidity</strong> is a <em>confounder</em>, not a discriminator: white smoke contains water vapour, so a sensor reading a wet plume reports inflated PM. This is another argument for dilution + cooling (§4).</li>
+</ul>
+<h2 id="2-candidate-sensors">2. Candidate sensors</h2>
+<h3 id="21-comparison-table">2.1 Comparison table</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><strong>Nova SDS011</strong></th>
+<th><strong>Plantower PMS5003</strong></th>
+<th><strong>Sensirion SPS30</strong></th>
+<th><strong>Sensirion SEN5x (SEN54/55)</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Outputs</td>
+<td>PM2.5, PM10 mass only</td>
+<td>PM1/2.5/10 mass (×2 calibrations) <strong>+ 6 count bins</strong> ≥0.3/0.5/1.0/2.5/5.0/10 µm per 0.1 L</td>
+<td>PM1/2.5/4/10 mass, <strong>number conc. PM0.5…PM10</strong>, <strong>typical particle size</strong></td>
+<td>PM1/2.5/4/10, RH, T, VOC Index, NOx Index (SEN55)</td>
+</tr>
+<tr>
+<td>Interface</td>
+<td>UART TTL 3.3 V, 9600 8N1, 1 Hz</td>
+<td>UART TTL 3.3 V, 9600 8N1</td>
+<td>UART (SHDLC) <strong>115 200</strong> 8N1 <strong>or</strong> I²C, selected by <code>SEL</code> pin</td>
+<td><strong>I²C only</strong></td>
+</tr>
+<tr>
+<td>Frame</td>
+<td>10 bytes, <code>0xAA 0xC0 … 0xAB</code>, checksum = Σ DATA1..6</td>
+<td>32 bytes, <code>0x42 0x4D</code> + length + payload + checksum</td>
+<td>SHDLC MOSI/MISO frames, <code>0x7E</code> start/stop, byte-stuffing, inverted-LSB checksum</td>
+<td>I²C commands</td>
+</tr>
+<tr>
+<td>Supply</td>
+<td>5 V (4.7–5.3 V), <strong>70 mA ±10 mA</strong>, sleep &lt;4 mA</td>
+<td>5 V typ (4.5–5.5), <strong>≤100 mA</strong>, standby ≤200 µA</td>
+<td>5 V ±10 %, <strong>measurement 45–65 mA</strong> (80 mA first 200 ms), idle ~330 µA</td>
+<td>5 V ±10 %</td>
+</tr>
+<tr>
+<td>Operating temp</td>
+<td><strong>–10 … +50 °C</strong> (storage –20…+60)</td>
+<td><strong>–10 … +60 °C</strong> (storage –40…+80)</td>
+<td>recommended <strong>10–40 °C</strong>; absolute max <strong>–10 … 60 °C</strong></td>
+<td>(not extracted — I²C rules it out regardless)</td>
+</tr>
+<tr>
+<td>Operating humidity</td>
+<td><strong>max 70 % RH</strong> (storage max 90 %)</td>
+<td>0–99 % RH</td>
+<td>recommended <strong>20–80 % RH</strong>; absolute max <strong>0–95 % RH</strong></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Life / MTTF</td>
+<td>laser diode "service life is up to <strong>8000 hours</strong>"</td>
+<td><strong>MTTF ≥ 3 years</strong></td>
+<td><strong>Lifetime &gt; 10 years</strong> @ 24 h/day (MTTF-based)</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Fan</td>
+<td>built-in</td>
+<td>built-in</td>
+<td>built-in <strong>+ automatic fan cleaning</strong> (default every 604 800 s = 1 week, configurable, or on demand)</td>
+<td>built-in</td>
+</tr>
+<tr>
+<td>Self-diagnostics</td>
+<td>none</td>
+<td>none</td>
+<td>Device Status Register: FAN-blocked bit, LASER-failure bit, fan-SPEED-out-of-range bit</td>
+<td>—</td>
+</tr>
+<tr>
+<td>USB path</td>
+<td><strong>ships with a CH340 USB-UART dongle</strong> in the common kit</td>
+<td>generic USB-UART adapter (CP2102/FTDI/CH340)</td>
+<td>generic USB-UART adapter</td>
+<td>none without a bridge</td>
+</tr>
+<tr>
+<td>Indicative price</td>
+<td>~US$35–40 with USB dongle (retail listings)</td>
+<td>US$39.95 kit (Adafruit 3686)</td>
+<td>~US$36.63 bare (DigiKey listing) — <strong>not verified live</strong>; SEK-SPS30 eval kit ~$102</td>
+<td>~US$40–50 (irrelevant)</td>
+</tr>
+</tbody>
+</table>
+<p>Every number in the SDS011 column is from the Nova datasheet "Technical Parameters" table (p. 2), "Power requirement" (p. 3), "About service life" (p. 4) and "The UART communication protocol" (p. 5). Every number in the PMS5003 column is from the Plantower manual "Technical Index" (p. 3), "Pin Definition" (p. 4) and "Appendix I: PMS5003 transport protocol-Active Mode" (p. 13). Every SPS30 number is from the Sensirion datasheet Table 1 (p. 2), §1.2, Table 2/Table 3 (p. 3), §3 (p. 4), §4.1–4.4 (pp. 5–7) and §5 (pp. 8–10).</p>
+<h3 id="22-sen5x-is-disqualified-verified">2.2 SEN5x is disqualified — verified</h3>
+<p>The SEN5x datasheet's table of contents lists exactly one communication chapter: <strong>"6 Operation and Communication through the I²C Interface"</strong> (p. 3). There is no UART chapter. Table 11 (SEN5x pin assignment, p. 13) is:</p>
+<table>
+<thead>
+<tr>
+<th>Pin</th>
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>VDD</td>
+<td>Supply voltage 5 V ±10 %</td>
+</tr>
+<tr>
+<td>2</td>
+<td>GND</td>
+<td>Ground</td>
+</tr>
+<tr>
+<td>3</td>
+<td><strong>SDA</strong></td>
+<td>Serial data input/output (LVTTL 3.3 V)</td>
+</tr>
+<tr>
+<td>4</td>
+<td><strong>SCL</strong></td>
+<td>Serial clock input (LVTTL 3.3 V)</td>
+</tr>
+<tr>
+<td>5</td>
+<td>SEL</td>
+<td>Interface select — <strong>"Connect to GND"</strong></td>
+</tr>
+<tr>
+<td>6</td>
+<td>NC</td>
+<td>Do not connect</td>
+</tr>
+</tbody>
+</table>
+<p>Contrast with SPS30 Table 4 (p. 4), where pins 2 and 3 are dual-function <code>RX/SDA</code> and <code>TX/SCL</code> and <code>SEL</code> is "<strong>Leave floating to select UART</strong>, Pull to GND to select I²C". SPS30 is a UART part; SEN5x is not. <strong>Flagged: SEN5x/SEN54/SEN55 is not a USB/UART candidate</strong> for this project.</p>
+<p>Relevant aside from the same SPS30 page: "For connection cables longer than 20 cm we recommend using the UART interface, due to its intrinsic robustness against electromagnetic interference." Our sensor is on a long lead — another point for UART.</p>
+<h3 id="23-fouling-and-contamination-behaviour">2.3 Fouling and contamination behaviour</h3>
+<ul>
+<li><strong>SPS30</strong> is the only one of the three with an <em>engineered</em> answer. §4.2 "Fan Auto Cleaning": "an automatic fan-cleaning procedure will be triggered periodically … This will accelerate the fan to maximum speed for 10 seconds in order to blow out the dust accumulated inside the fan." Default interval 604 800 s (1 week) ±3 %, settable, and <strong>reset to zero every power cycle</strong> — the datasheet explicitly warns "If the sensor is switched off, the time counter is reset to 0. Make sure to trigger a cleaning cycle at least every week if the sensor is switched off and on periodically (e.g., once per day)." For a smoker that runs a cook then powers down, that means <strong>we must issue an explicit Start Fan Cleaning (<code>0x56</code>) command after each cook</strong>, not rely on the timer. Sensirion's product page also markets "innovative contamination-resistance technology" that "enables precise measurements from the device's first operation and throughout its lifetime" — a marketing claim, not a datasheet spec, so treat it as directional only.</li>
+<li><strong>SPS30 self-diagnosis</strong> (Device Status Register, §4.4) exposes a FAN bit ("fan is switched on, but the measured fan speed is 0 RPM … The FAN-bit will <strong>not</strong> be cleared automatically"), a LASER bit and a fan-SPEED bit. That is the difference between "sensor is quietly lying to us because it's tarred up" and "sensor tells us it is tarred up". Big deal for a remote smoker.</li>
+<li><strong>PMS5003</strong> has no cleaning cycle. Its manual's "Other Attentions" section (p. 10) is an explicit warning list: "The sensor is usually used in the common indoor environment. So some protection must be added if using in the conditions as followed: a) The time of concentration ≥300 µg/m³ is longer than 50 % of the whole year or concentration ≥500 µg/m³ is longer than 20 % of the whole year. b) <strong>Kitchen</strong> c) <strong>Water mist condition such as bathroom or hot spring.</strong> d) <strong>outdoor</strong>". Smoker exhaust hits (a), (b), (c) and (d) simultaneously. The manual also says "Stable data should be got at least 30 seconds after the sensor wakeup from the sleep mode because of the fan's performance."</li>
+<li><strong>SDS011</strong> has no cleaning cycle either, and its life budget is the tightest: "The laser diode in this sensor has high quality and its service life is up to <strong>8000 hours</strong>." Nova's own mitigation is duty-cycling: "you can use the discontinuous working method to prolong the service life. For example, you can start the sensor for 30 seconds per minutes." At 8 000 h continuous that is ~333 days of 24/7; duty-cycled at 30 s/min it doubles. For a device that only runs during cooks this is not the binding constraint — tar is.</li>
+<li><strong>The real fouling risk is condensation, not dust.</strong> All three datasheets bound humidity as a <em>non-condensing</em> operating window (SDS011 "Work environment: Max 70 %", SPS30 "recommended … 20 to 80 % RH", absolute max 95 % RH). Smoker exhaust is water-saturated and laden with condensable organics; drop it below its dew point inside the optical cavity and you deposit exactly the tar film that killed the prior attempt. Dilution with dry ambient air (§4) both cools <em>and</em> lowers RH, which is the whole point.</li>
+</ul>
+<h3 id="24-linux-armv7-support-and-how-each-reaches-usb">2.4 Linux + armv7 support and how each reaches USB</h3>
+<p>None of these sensors is a USB device. They are 3.3 V TTL UARTs that reach USB through a bridge chip:</p>
+<table>
+<thead>
+<tr>
+<th>Bridge</th>
+<th>In-tree kernel driver</th>
+<th>Node</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>WCH CH340/CH341</td>
+<td><code>ch341</code> — the kernel's USB serial doc has a "Winchiphead CH341 Driver" section (it notes "the protocol was analyzed from the behaviour of the Windows driver, no datasheet is available at present")</td>
+<td><code>/dev/ttyUSB*</code></td>
+</tr>
+<tr>
+<td>Silicon Labs CP2102</td>
+<td><code>cp210x</code> (in <code>drivers/usb/serial/</code>; not individually described in the usb-serial doc page I fetched — <strong>not verified from that doc</strong>, but it is the standard in-tree driver name)</td>
+<td><code>/dev/ttyUSB*</code></td>
+</tr>
+<tr>
+<td>FTDI FT232</td>
+<td><code>ftdi_sio</code> — "FTDI Single Port Serial Driver" section in the same doc</td>
+<td><code>/dev/ttyUSB*</code></td>
+</tr>
+</tbody>
+</table>
+<p>The kernel doc pins the node naming: "The major number that the driver uses is <strong>188</strong> so to use the driver, create the following nodes: <code>mknod /dev/ttyUSB0 c 188 0</code> … " and it handles up to 256 interfaces (<code>/dev/ttyUSB0</code>–<code>/dev/ttyUSB255</code>). A CDC-ACM device would instead appear as <code>/dev/ttyACM*</code>; none of our candidates is CDC-ACM, so <strong>expect <code>/dev/ttyUSB0</code></strong>.</p>
+<p>Practical consequence: <strong>the SDS011 is the only one that is genuinely plug-and-play</strong>, because the common retail kit bundles a CH340G USB-UART adapter and the sensor's JST lead. PMS5003 and SPS30 need the builder to plug the sensor's cable into a generic USB-UART adapter — no soldering if a pre-crimped adapter cable is bought, but one more part to specify and one more connector to get wrong at 10 ft.</p>
+<p>Nothing here is architecture-specific: <code>ch341</code>, <code>cp210x</code> and <code>ftdi_sio</code> are plain in-tree kernel drivers, so armv7l Raspberry Pi OS has them already.</p>
+<h3 id="25-usb-co-voc-multi-gas-modules">2.5 USB CO / VOC / multi-gas modules</h3>
+<p>Searched for a USB-native CO module under the budget cap and found none. The commodity CO parts (MQ-7 and its module boards from Keyestudio, NCD, Botland etc.) expose <strong>analog output or I²C via an ADC121C</strong>, are specified for roughly 20–2 000 ppm, and require the host to drive a two-phase heater cycle (5 V purge / ~1.4 V measure). Every one of those is an MCU-and-wiring job, i.e. exactly the soldering/HAT work ticket #672 rules out. <strong>Recommendation: no gas sensing in v1.</strong> If CO is wanted later, the cleanest route is a second Arduino sketch on the existing microcontroller rather than a USB module — but that is a different ticket.</p>
+<p>Sensirion's VOC/NOx Index lives only on SEN54/SEN55, which is I²C-only (§2.2), so the "one module gives me PM + VOC over USB" option does not exist off the shelf.</p>
+<h2 id="3-integration-into-this-repo">3. Integration into this repo</h2>
+<h3 id="31-what-is-already-there-live-probes-2026-09-08">3.1 What is already there (live probes, 2026-09-08)</h3>
+<p><code>cat apps/device-service/package.json</code> → dependencies include <strong><code>"serialport": "^11.0.0"</code></strong>. (Registry probe: <code>serialport</code> latest is 13.0.0, published 2024-12-24; <code>@serialport/bindings-cpp</code> 13.0.1 is a <code>gypfile: true</code> N-API 8 addon, so armv7 either uses a prebuild or compiles at image build time — the existing device-service image already solves this for <code>/dev/ttyS0</code>, so a second port costs nothing new.)</p>
+<p><code>ls apps/device-service/src/serial</code> → <code>serial.module.ts</code>, <code>serial.serivce.ts</code> (sic), plus specs.</p>
+<p><code>sed -n '1,80p' apps/device-service/src/serial/serial.serivce.ts</code> shows the shape any new sensor should copy:</p>
+<div class="highlight"><pre><span></span><code><span class="k">this</span><span class="p">.</span><span class="nx">port</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">SerialPort</span><span class="p">({</span>
+<span class="w">  </span><span class="nx">path</span><span class="o">:</span><span class="w"> </span><span class="s1">'/dev/ttyS0'</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">baudRate</span><span class="o">:</span><span class="w"> </span><span class="kt">9600</span><span class="p">,</span>
+<span class="p">});</span>
+<span class="k">this</span><span class="p">.</span><span class="nx">port</span><span class="p">.</span><span class="nx">pipe</span><span class="p">(</span><span class="nx">parser</span><span class="p">);</span>
+<span class="nx">parser</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">'data'</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="nx">data</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">...</span><span class="w"> </span><span class="k">this</span><span class="p">.</span><span class="nx">dataSubject</span><span class="p">.</span><span class="nx">next</span><span class="p">(</span><span class="nx">stringData</span><span class="p">);</span><span class="w"> </span><span class="p">});</span>
+</code></pre></div>
+<p>Note it is a <code>ReadlineParser</code> over an RxJS <code>Subject</code>, hard-coded to <code>/dev/ttyS0</code>, with a <code>NODE_ENV === 'local'</code> emulator branch that fabricates temps on a 500 ms interval. A PM sensor is <strong>binary framed, not line delimited</strong>, so it needs a different parser (<code>@serialport/parser-delimiter</code> on <code>0xAA</code> / <code>0x42 0x4D</code>, or <code>parser-byte-length</code>), and the emulator branch pattern should be mirrored so local dev and CI don't need hardware.</p>
+<p><code>grep -n devices smoker.docker-compose.yml</code> → two hits (lines 31 and 99). Line 31 is the device-service block, with a comment that is directly load-bearing for this work:</p>
+<div class="highlight"><pre><span></span><code><span class="w">    </span><span class="nt">devices</span><span class="p">:</span>
+<span class="w">      </span><span class="c1"># The Arduino is wired to the Pi's GPIO UART, not USB — see</span>
+<span class="w">      </span><span class="c1"># apps/device-service/src/serial/serial.serivce.ts, which opens</span>
+<span class="w">      </span><span class="c1"># /dev/ttyS0 in production mode. Docker validates this path when it</span>
+<span class="w">      </span><span class="c1"># *creates* the container, so naming a node that does not exist breaks</span>
+<span class="w">      </span><span class="c1"># every recreate — including the ones Watchtower performs, which would</span>
+<span class="w">      </span><span class="c1"># take device_service down permanently.</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/dev/ttyS0</span>
+</code></pre></div>
+<p><strong>That warning is the single biggest integration hazard.</strong> Adding a bare <code>- /dev/ttyUSB0</code> means that if the dongle is ever unplugged, the node vanishes and <strong>every container recreate fails</strong>, including Watchtower's — bricking the smoker remotely. Mitigations, in order of preference:</p>
+<ol>
+<li>Bind-mount <code>/dev</code> and rely on <code>privileged: true</code> (already set on that service) instead of an explicit <code>devices:</code> entry, so a missing dongle degrades to a runtime open-error rather than a create-error.</li>
+<li>Or use a <code>udev</code> rule to create a stable symlink and still accept that the node must exist.</li>
+<li>At minimum, make the sensor's <code>SerialPort</code> open lazy and non-fatal, with retry — unlike the current constructor-time open, which would take the whole device-service down if the port is absent.</li>
+</ol>
+<h3 id="32-protocol-framing-cheat-sheet">3.2 Protocol framing cheat-sheet</h3>
+<ul>
+<li><strong>SDS011</strong> — 9600 8N1, 1 Hz, 10 bytes: <code>[0]=0xAA header, [1]=0xC0 commander, [2..3]=PM2.5 lo/hi, [4..5]=PM10 lo/hi, [6..7]=device ID, [8]=checksum, [9]=0xAB tail</code>. Checksum = <code>DATA1+DATA2+…+DATA6</code>. Values: <code>PM2.5 = (hi*256 + lo)/10</code> µg/m³, same for PM10.</li>
+<li><strong>PMS5003</strong> — 9600 8N1, active mode by default, 32-byte frames starting <code>0x42 0x4D</code>, then <code>frame length = 2×13 + 2</code>. Payload = PM1.0/PM2.5/PM10 (CF=1 "standard particle"), then PM1.0/PM2.5/PM10 "under atmospheric environment", then the six count bins (≥0.3, ≥0.5, ≥1.0 µm shown explicitly in Appendix I; the series continues to ≥2.5/5.0/10 µm), then checksum. Sampling: 2.3 s in stable mode, 200–800 ms when the concentration is changing fast — i.e. <strong>it speeds up exactly when the smoke turns</strong>, which is convenient for us.</li>
+<li><strong>SPS30 (UART)</strong> — 115 200 8N1, SHDLC: <code>0x7E | ADR | CMD | L | data | CHK | 0x7E</code>, with byte-stuffing (<code>0x7E→0x7D 0x5E</code>, <code>0x7D→0x7D 0x5D</code>, <code>0x11→0x7D 0x31</code>, <code>0x13→0x7D 0x33</code>) and checksum = inverted LSB of the sum. Slave address always <code>0</code>. Commands we need: <code>0x00</code> Start Measurement, <code>0x03</code> Read Measured Value, <code>0x01</code> Stop, <code>0x56</code> Start Fan Cleaning, <code>0x80</code> Read/Write Auto Cleaning Interval, <code>0xD2</code> Read Device Status Register (needs firmware ≥ v2.2). Read Measured Value returns 40 bytes of big-endian IEEE754 floats (or 20 bytes of uint16 with firmware ≥ 2.0): PM1/2.5/4/10 mass, then number conc. PM0.5/1/2.5/4/10, then typical particle size.</li>
+</ul>
+<p>Because SHDLC has escaping and a stateful request/response cycle, SPS30 is the most code to write of the three — but <code>serialport</code> v11 plus a hand-rolled ~150-line SHDLC codec is entirely tractable, and it is the only sensor that gives us the typical-particle-size discriminator for free.</p>
+<h3 id="33-node-libraries-npm-registry-probe-2026-09-08">3.3 Node libraries (npm registry probe, 2026-09-08)</h3>
+<table>
+<thead>
+<tr>
+<th>Package</th>
+<th>Latest</th>
+<th>Published</th>
+<th>Verdict</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>serialport</code></td>
+<td>13.0.0</td>
+<td>2024-12-24</td>
+<td>already a dependency at <code>^11.0.0</code> — the substrate for all of these</td>
+</tr>
+<tr>
+<td><code>sds011-client</code></td>
+<td>1.0.1</td>
+<td><strong>2018-02-11</strong></td>
+<td>superseded by the author's own wrapper; stale</td>
+</tr>
+<tr>
+<td><code>sds011-wrapper</code></td>
+<td>1.4.0</td>
+<td><strong>2021-01-01</strong></td>
+<td>most maintained SDS011 option (<a href="https://github.com/triforcely/sds011-wrapper">triforcely/sds011-wrapper</a>); still 5 years old</td>
+</tr>
+<tr>
+<td><code>nova-sds011</code></td>
+<td>0.0.2</td>
+<td>2016-04-10</td>
+<td>abandoned</td>
+</tr>
+<tr>
+<td><code>plantower</code></td>
+<td>1.1.10</td>
+<td><strong>2020-03-04</strong></td>
+<td>(<a href="https://github.com/perfectworks/node-plantower">perfectworks/node-plantower</a>) description field is literally <code>## Install</code> — low-effort package</td>
+</tr>
+<tr>
+<td><code>@serialpilot/driver-plantower</code></td>
+<td>0.1.0</td>
+<td><strong>2026-05-10</strong></td>
+<td>newest Plantower driver by a wide margin, but v0.1.0 and framework-coupled to "serialpilot"</td>
+</tr>
+<tr>
+<td><code>sps30</code> / <code>pms5003</code></td>
+<td>—</td>
+<td>—</td>
+<td><strong>do not exist</strong> on npm</td>
+</tr>
+<tr>
+<td><code>homebridge-sensirion-sps30</code></td>
+<td>2.0.1</td>
+<td>2021-03-14</td>
+<td>HomeKit plugin, not a reusable driver</td>
+</tr>
+<tr>
+<td><code>@mytosbio/sensirion-hdlc</code></td>
+<td>1.0.0</td>
+<td>2023-01-22</td>
+<td>generic Sensirion SHDLC codec — the only reusable SPS30-adjacent building block found</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Recommendation: write the frame parser in-repo rather than take a dependency.</strong> All three protocols are under ~100 lines, every candidate library is stale or v0.x, the repo already owns <code>serialport</code>, and a hand-rolled parser is directly unit-testable against a byte-array fixture (device-service enforces a 75 % coverage floor, per <code>apps/device-service/package.json</code> <code>jest.coverageThreshold</code>). This also avoids adding a dependency that would then feed the Dependabot lane.</p>
+<h3 id="34-power-and-cable-budget">3.4 Power and cable budget</h3>
+<ul>
+<li>Peak draw of the worst candidate is <strong>PMS5003 at ≤100 mA</strong>; SDS011 is 70 mA ±10 mA; SPS30 is 45–65 mA (80 mA for the first 200 ms of fan start).</li>
+<li>Raspberry Pi 4 datasheet §5.3: "The Pi4B has 2x USB2 and 2x USB3 type-A sockets. <strong>Downstream USB current is limited to approximately 1.1A in aggregate over the four sockets.</strong>" §4 adds: "The Pi4B requires a good quality USB-C power supply capable of delivering 5V at 3A. If attached downstream USB devices consume less than 500mA, a 5V, 2.5A supply may be used."</li>
+<li>100 mA against a ~1.1 A budget is ~9 %. <strong>Power is not a constraint</strong> — but note the sensor's 5 V rail comes through the USB-UART dongle, so the dongle must be one that passes bus 5 V (not a 3.3 V-only adapter).</li>
+<li><strong>Cable length</strong>: Digi's KB states the maximum single-cable length for "Full Speed (USB 1.1) and High Speed (USB 2.0) devices" is <strong>5 metres (about 16 feet)</strong>. A 10 ft (3.05 m) USB cable is comfortably inside spec. If the run ever needs to exceed 5 m, use a powered hub or an active extension rather than a longer passive cable.</li>
+</ul>
+<h2 id="4-recommendation-and-the-rig">4. Recommendation and the rig</h2>
+<h3 id="41-shortlist">4.1 Shortlist</h3>
+<ol>
+<li><strong>Sensirion SPS30 + a CP2102/FTDI USB-UART adapter (~$36 + ~$10).</strong> Pick this if we want the strongest discriminator. It is the only candidate that emits <strong>typical particle size</strong> and <strong>number concentration</strong> alongside mass, i.e. the exact "shape" feature §1.3 says we need; the only one with a <strong>commandable fan-cleaning cycle</strong> (<code>0x56</code>) we can fire after every cook; and the only one that can <strong>tell us it has been fouled</strong> (Device Status Register FAN/LASER/SPEED bits) — which matters enormously for a smoker we cannot walk over to. Costs: SHDLC parser to write, and one extra part (the USB adapter) for the builder to plug in.</li>
+<li><strong>Plantower PMS5003 kit (Adafruit 3686, $39.95) + USB-UART adapter.</strong> Pick this if we want maximum information per dollar with the simplest parser. Six raw count bins give a richer size histogram than SPS30's single TPS number, its 32-byte frame is trivial to decode, and it auto-accelerates its sample rate when concentration changes. Costs: <strong>no cleaning cycle, no health bits, MTTF only ≥3 years</strong>, and a manual that explicitly tells us not to use it in kitchens, mist or outdoors.</li>
+<li><strong>Nova SDS011 with bundled CH340 dongle (~$35–40).</strong> Pick this only if plug-and-play trumps everything: one box, one USB plug, <code>/dev/ttyUSB0</code>, a 10-byte frame, and the most mature (if stale) Node libraries. Costs: <strong>PM2.5/PM10 mass only</strong>, so the sole shape metric is the PM10:PM2.5 ratio; the tightest humidity ceiling (<strong>70 % RH</strong>); and an 8 000 h laser budget.</li>
+</ol>
+<p>If the goal is "prove the concept in one cook with minimum shipping and minimum code", ship the <strong>SDS011</strong>. If the goal is "a sensor that survives a season of cooks and self-reports when it doesn't", ship the <strong>SPS30</strong>.</p>
+<h3 id="42-flagged-none-of-these-survives-raw-exhaust-with-or-without-a-rig">4.2 Flagged: none of these survives raw exhaust, with or without a rig</h3>
+<p>State this plainly in the map. Quoting the ceilings again:</p>
+<ul>
+<li>SDS011: "Work environment: <strong>–10 ~ +50 ℃</strong>"; "Work environment: <strong>Max 70 %</strong>" RH.</li>
+<li>PMS5003: "Working Temperature Range <strong>–10~+60 ℃</strong>", "Working Humidity Range 0~99 %" — but with the "some protection must be added" warning list covering kitchens, water mist and outdoor use.</li>
+<li>SPS30: "The sensor shows best performance when operated within recommended normal temperature and humidity range of <strong>10 to 40 °C and 20 to 80 % RH</strong>"; absolute maxima <strong>60 °C / 95 % RH</strong>, and exceeding absolute maxima "may cause permanent damage".</li>
+</ul>
+<p>All three humidity figures are <strong>non-condensing</strong> windows. Smoker exhaust at the stack is hotter than 60 °C, near water-saturated, and carries condensable tars. <strong>No amount of shielding lets a sensor sit in the plume.</strong> The prior tar-coated attempt is the empirical confirmation.</p>
+<h3 id="43-the-rig-dilution-sampling-not-plume-mounting">4.3 The rig: dilution sampling, not plume mounting</h3>
+<p>The correct design is the one EPA already standardised for measuring wood-heater PM. Method 5G §2.1 (verbatim):</p>
+<blockquote>
+<p>"The exhaust from a wood heater is collected with a total collection hood, and is <strong>combined with ambient dilution air</strong>. Particulate matter is withdrawn proportionally from <strong>a single point in a sampling tunnel</strong>, and is collected on two glass fiber filters in series. <strong>The filters are maintained at a temperature of no greater than 32 °C (90 °F).</strong> The particulate mass is determined gravimetrically after the removal of uncombined water."</p>
+</blockquote>
+<p>Method 5G's own hardware notes reinforce the material choice and the cooling requirement: the probe shall be "Stainless steel (e.g., 316 or grade more corrosion resistant) or glass about 9.5 mm (3/8 in.) I.D., 0.6 m (24 in.) in length" (§6.1.1.1), and the train includes a dryer "capable of removing water from the sample gas to less than 1.5 percent moisture (volume percent) … sample gas temperature exiting the dryer is less than 20 °C (68 °F)" (§6.1.1.6).</p>
+<p>Translated to a dad-fabricable rig:</p>
+<ul>
+<li><strong>Stainless probe</strong> (3/8 in. tube) inserted a short distance into the exhaust stack — that is the only part that lives in the hot, tarry gas, and stainless is what Method 5G specifies for exactly this reason. It is also the sacrificial, cleanable part.</li>
+<li><strong>A tee immediately outside the stack</strong> that entrains ambient air, so the sampled gas is diluted and cooled toward ambient before it reaches any optics. Method 5G's ≤32 °C filter temperature is the number to aim at — comfortably inside SPS30's recommended 10–40 °C and under SDS011's 50 °C ceiling.</li>
+<li><strong>Sensor mounted well off the plume</strong>, at the far end of the diluted run, ideally in a small enclosure with the sensor's own fan doing the drawing (all three candidates are fanned, so they self-aspirate).</li>
+<li><strong>A known, fixed dilution ratio.</strong> Absolute µg/m³ becomes meaningless once diluted, but we do not need absolute values — we need <em>relative</em> change and <em>ratios</em> (PM10:PM2.5, count-bin shape, typical particle size), which survive dilution as long as the ratio is stable. Fix the geometry so it does not drift between cooks.</li>
+<li><strong>Post-cook cleaning</strong>: with SPS30, fire <code>0x56</code> Start Fan Cleaning after every cook (mandatory, because §4.2 of the datasheet says the auto-clean timer resets on power-down). With the others, plan on periodic manual removal and a compressed-air blow-out, and expect to replace the sensor annually.</li>
+<li>Plantower's own installation note applies to the enclosure design: "The best way to install is making the plane of inset and outset closely to the plane of the host. Or some shield should be placed between inset and outset in order to prevent the air flow from inner loop" — i.e. do not let the sensor recirculate its own exhaust inside the box.</li>
+</ul>
+<h3 id="44-open-questions-for-the-next-ticket">4.4 Open questions for the next ticket</h3>
+<ul>
+<li><strong>Dilution ratio and residence time</strong> are unquantified here. Method 5G's tunnel is a lab instrument; the miniature version needs an empirical calibration (does the diluted stream still show a 2–10× PM swing between white and blue phases, or does dilution bury the signal in ambient noise?). That is a bench experiment, not a literature question.</li>
+<li><strong>SPS30 street price was taken from a DigiKey listing surfaced in search results and is not verified against a live product page</strong> — confirm before ordering.</li>
+<li><strong>Whether the classifier needs a labelled dataset.</strong> The literature gives us the direction of every feature (dirty ⇒ higher mass, larger mean diameter, higher CO) but not thresholds for <em>this</em> smoker at <em>this</em> dilution. Expect the first firmware to log raw features and the thresholds to be fitted after a handful of cooks.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://www.linkedin.com/in/ben-rolf-275368a4/" target="_blank" rel="noopener" title="www.linkedin.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M416 32H31.9C14.3 32 0 46.5 0 64.3v383.4C0 465.5 14.3 480 31.9 480H416c17.6 0 32-14.5 32-32.3V64.3c0-17.8-14.4-32.3-32-32.3M135.4 416H69V202.2h66.5V416zM102.2 96a38.5 38.5 0 1 1 0 77 38.5 38.5 0 1 1 0-77m282.1 320h-66.4V312c0-24.8-.5-56.7-34.5-56.7-34.6 0-39.9 27-39.9 54.9V416h-66.4V202.2h63.7v29.2h.9c8.9-16.8 30.6-34.5 62.9-34.5 67.2 0 79.7 44.3 79.7 101.9z"/></svg>
+    </a>
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/benjr70" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.instant", "navigation.tabs", "navigation.tabs.sticky", "navigation.footer", "navigation.sections", "navigation.indexes", "toc.follow", "toc.integrate"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
