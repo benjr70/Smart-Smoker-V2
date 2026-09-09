@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.14.0](https://github.com/benjr70/Smart-Smoker-V2/compare/v1.13.0...v1.14.0) (2026-09-09)
+
+
+### Features
+
+* **agent:** add deps-gate decision gate for Dependabot PR merges ([#665](https://github.com/benjr70/Smart-Smoker-V2/issues/665)) ([022a7f7](https://github.com/benjr70/Smart-Smoker-V2/commit/022a7f7018e35724221c7eed6ef7efcc7ced8917))
+* **agent:** deps-land lane, PR Triage wiring, deps: report line and glossary ([#667](https://github.com/benjr70/Smart-Smoker-V2/issues/667)) ([2ef158f](https://github.com/benjr70/Smart-Smoker-V2/commit/2ef158fc17c48d72a20c5d4420404993d9db13f6))
+* **agent:** deps-lane text transforms for retitle, checklist inject and sha-keyed markers ([#662](https://github.com/benjr70/Smart-Smoker-V2/issues/662)) ([d96f363](https://github.com/benjr70/Smart-Smoker-V2/commit/d96f363813bdaa9784fdd0a15063e9aea3cf35d8))
+* **agent:** PR Triage detects, classifies, ranks and resumes Dependabot PRs ([#664](https://github.com/benjr70/Smart-Smoker-V2/issues/664)) ([01ef2bc](https://github.com/benjr70/Smart-Smoker-V2/commit/01ef2bc79b81aa2229ad9be38134bffc209aeed6))
+* **agent:** pr-watch --bot mode for the Dependabot CI wait and fix loop ([#666](https://github.com/benjr70/Smart-Smoker-V2/issues/666)) ([4e158ba](https://github.com/benjr70/Smart-Smoker-V2/commit/4e158ba0a92f8dd2fa3bd913a143e31d58da3a13))
+* **verify-pr:** add Bot-PR checklist file and parser guard test ([#661](https://github.com/benjr70/Smart-Smoker-V2/issues/661)) ([047b1ac](https://github.com/benjr70/Smart-Smoker-V2/commit/047b1acabe4364a6da49072b0bf804477537a6da))
+
 ## [1.13.0](https://github.com/benjr70/Smart-Smoker-V2/compare/v1.12.0...v1.13.0) (2026-09-01)
 
 
