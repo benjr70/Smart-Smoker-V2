@@ -1,0 +1,131 @@
+{
+  "commit_scopes": [
+    "backend",
+    "frontend",
+    "smoker",
+    "device-service",
+    "monorepo",
+    "packages",
+    "e2e",
+    "infra",
+    "ci",
+    "deploy",
+    "deps",
+    "scripts",
+    "verify",
+    "docs",
+    "agent"
+  ],
+  "commands": {
+    "install": "npm install --legacy-peer-deps",
+    "test": "npm test -w backend -w device-service -w frontend -w smoker -w api-transport -w smoke-session -w temperaturechart -w theme",
+    "lint": "npm run lint:fix && npm run format",
+    "lockfile_refresh": "npm install --legacy-peer-deps --package-lock-only --ignore-scripts",
+    "plan_gated_paths": [
+      "apps/backend/src/**.service.ts",
+      "apps/device-service/src/main.ts",
+      "infra/**",
+      "*docker-compose*.yml"
+    ]
+  },
+  "pick": {
+    "project": {
+      "number": 1,
+      "priority_field": "Priority",
+      "order": ["P0", "P1", "P2"]
+    }
+  },
+  "docs_research_prefix": "docs/research/",
+  "required_checks": ["Hermetic journey suite", "Conventional PR title"],
+  "verification": {
+    "hermetic": {
+      "command": "scripts/verify/provider",
+      "smoke": true
+    },
+    "deployed": {
+      "command": "scripts/verify/provider",
+      "enabled": false
+    }
+  },
+  "surfaces": {
+    "frontend": {
+      "kind": "browser",
+      "url_key": "E2E_FRONTEND_URL",
+      "viewport": "427x952",
+      "paths": [
+        "apps/frontend/src/**.tsx",
+        "apps/frontend/src/**.jsx",
+        "apps/frontend/src/**.css",
+        "apps/frontend/src/**.scss",
+        "apps/frontend/src/**.sass",
+        "apps/frontend/src/**.less",
+        "apps/frontend/src/**.html",
+        "apps/frontend/src/**.svg",
+        "apps/frontend/public/**.tsx",
+        "apps/frontend/public/**.jsx",
+        "apps/frontend/public/**.css",
+        "apps/frontend/public/**.scss",
+        "apps/frontend/public/**.sass",
+        "apps/frontend/public/**.less",
+        "apps/frontend/public/**.html",
+        "apps/frontend/public/**.svg",
+        "packages/*/src/**.tsx",
+        "packages/*/src/**.jsx",
+        "packages/*/src/**.css",
+        "packages/*/src/**.scss",
+        "packages/*/src/**.sass",
+        "packages/*/src/**.less",
+        "packages/*/src/**.html",
+        "packages/*/src/**.svg"
+      ]
+    },
+    "smoker": {
+      "kind": "electron",
+      "url_key": "E2E_SMOKER_URL",
+      "viewport": "800x480",
+      "launcher": "scripts/verify/smoker-launcher",
+      "paths": [
+        "apps/smoker/src/**.tsx",
+        "apps/smoker/src/**.jsx",
+        "apps/smoker/src/**.css",
+        "apps/smoker/src/**.scss",
+        "apps/smoker/src/**.sass",
+        "apps/smoker/src/**.less",
+        "apps/smoker/src/**.html",
+        "apps/smoker/src/**.svg",
+        "apps/smoker/public/**.tsx",
+        "apps/smoker/public/**.jsx",
+        "apps/smoker/public/**.css",
+        "apps/smoker/public/**.scss",
+        "apps/smoker/public/**.sass",
+        "apps/smoker/public/**.less",
+        "apps/smoker/public/**.html",
+        "apps/smoker/public/**.svg",
+        "packages/*/src/**.tsx",
+        "packages/*/src/**.jsx",
+        "packages/*/src/**.css",
+        "packages/*/src/**.scss",
+        "packages/*/src/**.sass",
+        "packages/*/src/**.less",
+        "packages/*/src/**.html",
+        "packages/*/src/**.svg"
+      ]
+    },
+    "backend": {
+      "kind": "api",
+      "url_key": "E2E_BACKEND_URL",
+      "paths": ["apps/backend/**"]
+    },
+    "device-service": {
+      "kind": "api",
+      "url_key": "E2E_DEVICE_URL",
+      "paths": ["apps/device-service/**"]
+    }
+  },
+  "dependabot": {
+    "enabled": true
+  },
+  "host": {
+    "docker": true
+  }
+}

@@ -1,0 +1,273 @@
+#!/usr/bin/env bash
+# provider — Smart Smoker's Environment provider for the auto-agent harness.
+#
+# The harness owns the verification round; this repo owns how its environment
+# comes up. This executable is the whole seam between them (the harness's
+# Environment provider contract, plugin/providers/CONTRACT.md in the auto-agent
+# repo), and `.auto-agent/harness.json` names it for both tiers:
+#
+#   provider up --pr <N>     boot the hermetic per-PR stack (scripts/stack-runner)
+#                            from THIS checkout, return only when it is healthy,
+#                            print the stack's KEY=value block on stdout
+#   provider down --pr <N>   tear that stack down; idempotent, always exit 0
+#   provider smoke           run scripts/smoke against the stack `up` booted,
+#                            reading the block from the environment
+#   provider status          the same block for the DEPLOYED environment
+#                            (dev-cloud + the virtual smoker), read-only
+#
+# stdout is the block (or, for `smoke`, the smoke runner's report ending in its
+# `smoke: PASS|FAIL (...)` line) and nothing else; progress goes to stderr.
+#
+# The block — the keys `.auto-agent/harness.json` declares as each Surface's
+# `url_key`, plus what the verifier needs to reach the database and to name
+# the compose project:
+#
+#   E2E_FRONTEND_URL  E2E_BACKEND_URL  E2E_DEVICE_URL  E2E_SMOKER_URL
+#   E2E_MONGO_URL  STACK_PROJECT_NAME            (the last two: `up` only)
+#
+# `up` also makes sure the smoker shell's main-process bundle is built from
+# this checkout (shell-bundle.sh): the Electron Surface's launcher runs that
+# bundle, and a round checks the PR out before it calls `up`, so the shell a
+# round drives is the PR's own.
+#
+# Exit codes (the contract's):
+#   up      0 healthy   3 a prerequisite is missing, nothing booted   4 boot failed
+#   down    0 always
+#   smoke   0 pass      1 fail      2 could not run
+#   status  0 healthy   1 unhealthy 3 a prerequisite is missing
+#   2 usage error (any subcommand)
+#
+# Env (the defaults are production; the overrides are the tests' seams):
+#   PROVIDER_STACK_CMD       the stack-runner CLI (default: npx tsx cli.ts),
+#                            run from scripts/stack-runner
+#   PROVIDER_SMOKE_CMD       the smoke runner (default: npx tsx run.ts), run
+#                            from scripts/smoke
+#   PROVIDER_BUNDLE_CMD      the shell-bundle step (default: shell-bundle.sh ensure)
+#   PROVIDER_SKIP_PREREQS    1 skips the docker/node/deps prerequisite checks
+#   PROVIDER_RESOLVE_CMD     tailnet name -> FQDN (default: scripts/smoke's
+#                            resolve-host-cli.ts through its own tsx)
+#   PROVIDER_PROBE_CMD       health probe of one URL (default: curl -fsSk)
+#   SMOKER_DEPLOYED_CLOUD_HOST   the deployed cloud's tailnet name
+#                                (default: smart-smoker-dev-cloud)
+#   SMOKER_DEPLOYED_DEVICE_HOST  the deployed device's tailnet name
+#                                (default: virtual-smoker)
+#   SMOKE_ARTIFACT_DIR       where the smoke runner writes its screenshots
+#                            (default: a fresh temp dir)
+
+set -uo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${HERE}/../.." && pwd)"
+RUNNER_DIR="${REPO_ROOT}/scripts/stack-runner"
+SMOKE_DIR="${REPO_ROOT}/scripts/smoke"
+
+# The Provider check drives a provider with PR 0 when no PR is named, and the
+# stack-runner only takes a positive number. This slot is far above any PR this
+# repo will open, so the check's stack never shares a compose project with one.
+CHECK_PR_SLOT=999000
+
+log() { echo "[provider] $*" >&2; }
+
+usage() {
+    echo "usage: provider up --pr <N> | down --pr <N> | smoke | status" >&2
+}
+
+# pr_arg <args...> : the --pr value (space or = form), mapped for the runner
+pr_arg() {
+    local pr=''
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --pr) pr="${2:-}"; shift ;;
+            --pr=*) pr="${1#--pr=}" ;;
+        esac
+        shift || true
+    done
+    case "${pr}" in
+        ''|*[!0-9]*) return 1 ;;
+    esac
+    [ "${pr}" -eq 0 ] && pr="${CHECK_PR_SLOT}"
+    printf '%s\n' "${pr}"
+}
+
+# missing_prereqs : names what this machine lacks to boot a stack, one per line
+missing_prereqs() {
+    [ "${PROVIDER_SKIP_PREREQS:-0}" = "1" ] && return 0
+    command -v docker >/dev/null 2>&1 || echo "docker"
+    command -v docker >/dev/null 2>&1 && ! docker compose version >/dev/null 2>&1 && echo "the docker compose plugin"
+    command -v node >/dev/null 2>&1 || echo "node"
+    command -v npx >/dev/null 2>&1 || echo "npx"
+    [ -d "${RUNNER_DIR}/node_modules" ] || echo "scripts/stack-runner dependencies (npm --prefix scripts/stack-runner ci)"
+    return 0
+}
+
+stack_cmd() {
+    # shellcheck disable=SC2086
+    ( cd "${RUNNER_DIR}" && ${PROVIDER_STACK_CMD:-npx tsx cli.ts} "$@" )
+}
+
+# block_lines : keep only the KEY=value lines of a stdout capture
+block_lines() { grep -E '^[A-Z][A-Z0-9_]*=' || true; }
+
+cmd_up() {
+    local pr missing
+    pr="$(pr_arg "$@")" || { usage; return 2; }
+
+    missing="$(missing_prereqs)"
+    if [ -n "${missing}" ]; then
+        log "prerequisite missing, nothing booted:"
+        printf '%s\n' "${missing}" | sed 's/^/[provider]   - /' >&2
+        return 3
+    fi
+
+    # The shell bundle first: it is the quick failure, and the stack is not
+    # worth booting for a round whose Electron Surface could not start.
+    local rc=0
+    bash -c "${PROVIDER_BUNDLE_CMD:-\"${HERE}/shell-bundle.sh\" ensure}" >&2 || rc=$?
+    case "${rc}" in
+        0) ;;
+        3) log "prerequisite missing for the smoker shell bundle, nothing booted"; return 3 ;;
+        *) log "the smoker shell bundle did not build (exit ${rc})"; return 4 ;;
+    esac
+
+    local out block
+    if ! out="$(stack_cmd up --pr "${pr}")"; then
+        log "the stack did not boot (stack-runner up --pr ${pr} failed)"
+        return 4
+    fi
+    block="$(printf '%s\n' "${out}" | block_lines)"
+    if [ -z "${block}" ]; then
+        log "the stack booted but printed no KEY=value block; tearing it down"
+        stack_cmd down --pr "${pr}" >&2 2>&1 || true
+        return 4
+    fi
+    printf '%s\n' "${block}"
+}
+
+cmd_down() {
+    local pr
+    pr="$(pr_arg "$@")" || { usage; return 2; }
+    # Nothing can be up if the runner cannot run, and `down` never fails.
+    if [ "${PROVIDER_SKIP_PREREQS:-0}" != "1" ] && [ ! -d "${RUNNER_DIR}/node_modules" ]; then
+        log "scripts/stack-runner has no dependencies installed: nothing can be up"
+        return 0
+    fi
+    if ! stack_cmd down --pr "${pr}" >&2 2>&1; then
+        log "WARN: stack-runner down --pr ${pr} reported a failure (see above)"
+    fi
+    return 0
+}
+
+cmd_smoke() {
+    if [ -z "${E2E_FRONTEND_URL:-}" ] || [ -z "${E2E_BACKEND_URL:-}" ]; then
+        log "E2E_FRONTEND_URL and E2E_BACKEND_URL are not in the environment: smoke runs after a healthy up"
+        return 2
+    fi
+    if [ "${PROVIDER_SKIP_PREREQS:-0}" != "1" ] && [ ! -d "${SMOKE_DIR}/node_modules" ]; then
+        log "scripts/smoke has no dependencies installed (npm --prefix scripts/smoke ci)"
+        return 2
+    fi
+    local artifacts="${SMOKE_ARTIFACT_DIR:-}"
+    [ -n "${artifacts}" ] || artifacts="$(mktemp -d "${TMPDIR:-/tmp}/smoker-smoke-XXXXXX")" || return 2
+
+    local -a args=(--frontend "${E2E_FRONTEND_URL}" --backend "${E2E_BACKEND_URL}" --artifacts "${artifacts}")
+    [ -n "${E2E_DEVICE_URL:-}" ] && args+=(--device "${E2E_DEVICE_URL}")
+
+    local out rc=0
+    # shellcheck disable=SC2086
+    out="$(cd "${SMOKE_DIR}" && NO_COLOR=1 ${PROVIDER_SMOKE_CMD:-npx tsx run.ts} "${args[@]}")" || rc=$?
+    # The runner colours its verdict; the contract's last line is plain text.
+    out="$(printf '%s\n' "${out}" | sed 's/\x1b\[[0-9;]*m//g')"
+    local verdict
+    verdict="$(printf '%s\n' "${out}" | grep -E '^smoke: (PASS|FAIL) ' | tail -1)"
+    printf '%s\n' "${out}" | grep -vE '^smoke: (PASS|FAIL) ' >&2 || true
+    case "${rc}" in
+        0|1)
+            if [ -z "${verdict}" ]; then
+                log "the smoke runner exited ${rc} without a smoke: verdict line"
+                return 2
+            fi
+            printf '%s\n' "${verdict}"
+            return "${rc}" ;;
+        *)
+            log "the smoke runner could not run (exit ${rc})"
+            return 2 ;;
+    esac
+}
+
+resolve_host() {
+    if [ -n "${PROVIDER_RESOLVE_CMD:-}" ]; then
+        # shellcheck disable=SC2086
+        ${PROVIDER_RESOLVE_CMD} "$1"
+        return $?
+    fi
+    "${SMOKE_DIR}/node_modules/.bin/tsx" "${SMOKE_DIR}/resolve-host-cli.ts" "$1"
+}
+
+probe() {
+    # shellcheck disable=SC2086
+    ${PROVIDER_PROBE_CMD:-curl -fsSk --max-time 10 -o /dev/null} "$1"
+}
+
+cmd_status() {
+    local cloud_host="${SMOKER_DEPLOYED_CLOUD_HOST:-smart-smoker-dev-cloud}"
+    local device_host="${SMOKER_DEPLOYED_DEVICE_HOST:-virtual-smoker}"
+
+    if [ -z "${PROVIDER_RESOLVE_CMD:-}" ]; then
+        if ! command -v tailscale >/dev/null 2>&1; then
+            log "prerequisite missing: tailscale (the deployed environment is tailnet-only)"
+            return 3
+        fi
+        if [ ! -x "${SMOKE_DIR}/node_modules/.bin/tsx" ]; then
+            log "prerequisite missing: scripts/smoke dependencies (npm --prefix scripts/smoke ci)"
+            return 3
+        fi
+    fi
+
+    # Tailscale Serve fronts the cloud (the frontend on 443, the backend on
+    # 8443) and its certificate needs the full tailnet name, so that one is
+    # resolved. The device publishes its two services over plain HTTP on its
+    # own ports, reachable by its tailnet name as it stands, which is how
+    # scripts/device-health-check.sh reaches it too.
+    local cloud
+    if ! cloud="$(resolve_host "${cloud_host}")" || [ -z "${cloud}" ]; then
+        log "cannot resolve ${cloud_host} on the tailnet"
+        return 3
+    fi
+    local frontend="https://${cloud}" backend="https://${cloud}:8443"
+    local smoker="http://${device_host}:8080" device_url="http://${device_host}:3003"
+
+    local unhealthy=0 name url
+    while IFS='|' read -r name url; do
+        if probe "${url}"; then
+            log "healthy: ${name} (${url})"
+        else
+            log "UNHEALTHY: ${name} (${url})"
+            unhealthy=1
+        fi
+    done <<EOF
+backend|${backend}/api/health
+frontend|${frontend}
+device-service|${device_url}/api/health
+smoker|${smoker}
+EOF
+    [ "${unhealthy}" -eq 0 ] || return 1
+
+    printf 'E2E_FRONTEND_URL=%s\n' "${frontend}"
+    printf 'E2E_BACKEND_URL=%s\n' "${backend}"
+    printf 'E2E_DEVICE_URL=%s\n' "${device_url}"
+    printf 'E2E_SMOKER_URL=%s\n' "${smoker}"
+}
+
+main() {
+    local sub="${1:-}"
+    shift || true
+    case "${sub}" in
+        up) cmd_up "$@" ;;
+        down) cmd_down "$@" ;;
+        smoke) cmd_smoke ;;
+        status) cmd_status ;;
+        *) usage; return 2 ;;
+    esac
+}
+
+main "$@"
