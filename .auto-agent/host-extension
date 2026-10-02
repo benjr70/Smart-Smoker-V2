@@ -71,6 +71,11 @@ fi
 # 3. The smoke runner and its browser. The browser's system libraries are the
 #    base role's (it installs Chrome and the Electron runtime), so the browser
 #    alone is fetched here: no sudo, nothing outside the Host user's cache.
+#    "Installed" means the smoke runner's own launch works, which is what the
+#    probe does: Playwright launches its headless shell, not the full Chromium
+#    build, so asking where the full build would live says a Host that smokes
+#    fine has no browser. That matters where Playwright cannot download one at
+#    all (it supports no build for a distribution newer than it knows).
 if [ -d "${ROOT}/scripts/smoke/node_modules" ]; then
     log "scripts/smoke dependencies installed — no change"
 else
@@ -78,9 +83,9 @@ else
     bash -c "${HOST_EXT_SMOKE_CMD:-npm --prefix scripts/smoke ci}" || fail "the smoke runner install failed"
 fi
 # shellcheck disable=SC2016
-default_chromium_probe='cd scripts/smoke && node -e "const fs = require(\"fs\"); const { chromium } = require(\"playwright\"); process.exit(fs.existsSync(chromium.executablePath()) ? 0 : 1)"'
+default_chromium_probe='cd scripts/smoke && node -e "const { chromium } = require(\"playwright\"); chromium.launch().then(b => b.close()).then(() => process.exit(0), () => process.exit(1))"'
 if bash -c "${HOST_EXT_CHROMIUM_PROBE:-${default_chromium_probe}}" >/dev/null 2>&1; then
-    log "the smoke runner's Chromium is installed — no change"
+    log "the smoke runner's browser launches — no change"
 else
     log "installing the smoke runner's Chromium"
     bash -c "${HOST_EXT_CHROMIUM_CMD:-cd scripts/smoke && npx playwright install chromium}" || fail "the Chromium install failed"
