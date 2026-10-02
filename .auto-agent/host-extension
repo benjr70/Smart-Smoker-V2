@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# host-extension — what a Host needs for Smart Smoker beyond the auto-agent
+# harness's base role.
+#
+# The harness's Setup runs this as the Host user, from the checkout root, after
+# its own configure step, with one argument (`setup` or `upgrade`) and no
+# secret in the environment. The base role has already brought what the
+# Harness config implies (a display, Chrome, the Electron runtime libraries,
+# Node, Docker). This adds only what is Smart Smoker's own:
+#
+#   1. the workspace install: every app's dependencies, the Electron binary
+#      the `smoker` Surface's launcher runs, and electron-forge
+#   2. the Environment provider's tooling: scripts/stack-runner's dependencies
+#   3. the smoke runner: scripts/smoke's dependencies and the Chromium it drives
+#   4. the smoker shell's main-process bundle (scripts/verify/shell-bundle.sh)
+#
+# Idempotent: every step is verify-then-act, and a second run changes nothing.
+# A non-zero exit stops Setup before the Daemon starts.
+#
+# Env (the defaults are production; the overrides are the tests' seams):
+#   HOST_EXT_ROOT             the checkout (default: this file's parent's parent)
+#   HOST_EXT_INSTALL_CMD      the workspace install
+#   HOST_EXT_RUNNER_CMD       the stack-runner install
+#   HOST_EXT_SMOKE_CMD        the smoke runner install
+#   HOST_EXT_CHROMIUM_CMD     the smoke runner's browser install
+#   HOST_EXT_CHROMIUM_PROBE   exit 0 when that browser is already there
+#   HOST_EXT_BUNDLE_CMD       the shell-bundle step
+
+set -uo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="${HOST_EXT_ROOT:-$(cd "${HERE}/.." && pwd)}"
+MODE="${1:-setup}"
+
+log() { echo "[host-extension] $*"; }
+fail() { echo "[host-extension] ERROR: $*" >&2; exit 1; }
+
+case "${MODE}" in
+    setup|upgrade) ;;
+    *) fail "usage: host-extension setup|upgrade" ;;
+esac
+
+cd "${ROOT}" || fail "cannot enter ${ROOT}"
+command -v node >/dev/null 2>&1 || fail "node is not on PATH (the units' PATH: AUTO_AGENT_UNIT_PATH in the Host env)"
+command -v npm >/dev/null 2>&1 || fail "npm is not on PATH"
+
+# 1. The workspace install. npm hoists workspace dependencies to the root
+#    unless a version conflict keeps one local, so both places count.
+have_electron() {
+    [ -x "${ROOT}/node_modules/electron/dist/electron" ] || [ -x "${ROOT}/apps/smoker/node_modules/electron/dist/electron" ]
+}
+have_forge() {
+    [ -e "${ROOT}/node_modules/.bin/electron-forge" ] || [ -e "${ROOT}/apps/smoker/node_modules/.bin/electron-forge" ]
+}
+if have_electron && have_forge; then
+    log "workspace installed (Electron and electron-forge on disk) — no change"
+else
+    log "installing the workspace"
+    bash -c "${HOST_EXT_INSTALL_CMD:-npm install --legacy-peer-deps}" || fail "the workspace install failed"
+    have_electron && have_forge || fail "the workspace install left no Electron binary or electron-forge behind"
+fi
+
+# 2. The Environment provider's tooling.
+if [ -d "${ROOT}/scripts/stack-runner/node_modules" ]; then
+    log "scripts/stack-runner dependencies installed — no change"
+else
+    log "installing scripts/stack-runner dependencies"
+    bash -c "${HOST_EXT_RUNNER_CMD:-npm --prefix scripts/stack-runner ci}" || fail "the stack-runner install failed"
+fi
+
+# 3. The smoke runner and its browser. The browser's system libraries are the
+#    base role's (it installs Chrome and the Electron runtime), so the browser
+#    alone is fetched here: no sudo, nothing outside the Host user's cache.
+if [ -d "${ROOT}/scripts/smoke/node_modules" ]; then
+    log "scripts/smoke dependencies installed — no change"
+else
+    log "installing scripts/smoke dependencies"
+    bash -c "${HOST_EXT_SMOKE_CMD:-npm --prefix scripts/smoke ci}" || fail "the smoke runner install failed"
+fi
+# shellcheck disable=SC2016
+default_chromium_probe='cd scripts/smoke && node -e "const fs = require(\"fs\"); const { chromium } = require(\"playwright\"); process.exit(fs.existsSync(chromium.executablePath()) ? 0 : 1)"'
+if bash -c "${HOST_EXT_CHROMIUM_PROBE:-${default_chromium_probe}}" >/dev/null 2>&1; then
+    log "the smoke runner's Chromium is installed — no change"
+else
+    log "installing the smoke runner's Chromium"
+    bash -c "${HOST_EXT_CHROMIUM_CMD:-cd scripts/smoke && npx playwright install chromium}" || fail "the Chromium install failed"
+fi
+
+# 4. The smoker shell bundle. The provider's `up` keeps it fresh per round;
+#    this makes sure a new Host has one before its first.
+bash -c "${HOST_EXT_BUNDLE_CMD:-scripts/verify/shell-bundle.sh ensure}" || fail "the smoker shell bundle did not build"
+
+log "done (${MODE})"

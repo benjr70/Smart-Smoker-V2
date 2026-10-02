@@ -1,0 +1,34 @@
+# Runs the suite for this repo's side of the auto-agent harness: the
+# Environment provider, the smoker launcher, the shell-bundle step
+# (scripts/verify/) and the Host extension (.auto-agent/). The harness itself
+# lives in benjr70/auto-agent and tests itself there; what is gated here is
+# only what Smart Smoker commits. Pure bash + jq: no Node install, no docker,
+# no display.
+name: Verify Harness Tests
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'scripts/verify/**'
+      - '.auto-agent/**'
+      - '.github/workflows/verify-harness-tests.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'scripts/verify/**'
+      - '.auto-agent/**'
+      - '.github/workflows/verify-harness-tests.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-harness-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run the verify suite
+        run: bash scripts/verify/verify.test.sh

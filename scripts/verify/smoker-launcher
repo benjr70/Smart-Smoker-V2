@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# smoker-launcher — opens the smoker Electron shell for a verification round.
+#
+# `.auto-agent/harness.json` names this file as the `smoker` Surface's
+# launcher. The auto-agent harness owns everything around it: it resolves the
+# Host's display, decides the sandbox mode, runs this from the checkout root
+# with the Environment provider's block exported and one argument
+# (`--remote-debugging-port=<port>`), waits for that endpoint to answer,
+# attaches its MCP server to it, and stops the app by the PID it started. So
+# all this file does is say WHAT the app is: the stack URLs mapped into the
+# shell's own environment, and Electron exec'd on apps/smoker. It execs, so the
+# PID the harness recorded is the Electron process itself.
+#
+# Usage (the harness's, not a human's):
+#   E2E_BACKEND_URL=... E2E_SMOKER_URL=... scripts/verify/smoker-launcher --remote-debugging-port=9222
+#
+# Inputs, from the provider's block:
+#   E2E_BACKEND_URL   REQUIRED — the stack's backend, mapped to
+#                     REACT_APP_CLOUD_URL and REACT_APP_CLOUD_URL_API
+#   E2E_SMOKER_URL    REQUIRED — the stack's smoker web bundle, which the thin
+#                     shell loads (exported as SMOKER_RENDERER_URL)
+#
+# There is no fallback to a dev port: a shell pointed at the wrong stack would
+# pass or fail items for the wrong build.
+#
+# Exit codes:
+#   4  a required stack URL is missing, or no Electron binary / shell bundle
+#      is on disk (the Host extension installs and builds both)
+#   otherwise Electron's own
+#
+# Env (the defaults are production; the overrides are the tests' seams):
+#   SMOKER_ELECTRON_BIN   the Electron binary (default: the workspace's)
+#   SMOKER_APP_DIR        the app Electron runs (default: apps/smoker)
+#   SMOKER_SHELL_BUNDLE   the built main-process bundle that must exist
+
+set -uo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${HERE}/../.." && pwd)"
+SMOKER_APP_DIR="${SMOKER_APP_DIR:-${REPO_ROOT}/apps/smoker}"
+SMOKER_SHELL_BUNDLE="${SMOKER_SHELL_BUNDLE:-${SMOKER_APP_DIR}/.webpack/main/index.js}"
+
+log() { echo "[smoker-launcher] $*" >&2; }
+
+if [ -z "${E2E_BACKEND_URL:-}" ]; then
+    log "ERROR: E2E_BACKEND_URL is required (the stack's backend URL, from the provider's block)"
+    exit 4
+fi
+if [ -z "${E2E_SMOKER_URL:-}" ]; then
+    log "ERROR: E2E_SMOKER_URL is required (the stack's smoker web URL, from the provider's block)"
+    exit 4
+fi
+
+# npm hoists workspace dependencies to the root unless a version conflict
+# keeps one local, so both places are looked in.
+electron="${SMOKER_ELECTRON_BIN:-}"
+if [ -z "${electron}" ]; then
+    for candidate in "${SMOKER_APP_DIR}/node_modules/electron/dist/electron" "${REPO_ROOT}/node_modules/electron/dist/electron"; do
+        [ -x "${candidate}" ] && { electron="${candidate}"; break; }
+    done
+fi
+if [ -z "${electron}" ] || [ ! -x "${electron}" ]; then
+    log "ERROR: no Electron binary on disk (run .auto-agent/host-extension, or npm install --legacy-peer-deps)"
+    exit 4
+fi
+if [ ! -f "${SMOKER_SHELL_BUNDLE}" ]; then
+    log "ERROR: the smoker shell is not built (${SMOKER_SHELL_BUNDLE}); run scripts/verify/shell-bundle.sh ensure"
+    exit 4
+fi
+
+export REACT_APP_CLOUD_URL="${E2E_BACKEND_URL}"
+export REACT_APP_CLOUD_URL_API="${E2E_BACKEND_URL}"
+export SMOKER_RENDERER_URL="${E2E_SMOKER_URL}"
+
+log "starting ${electron} ${SMOKER_APP_DIR} $*"
+exec "${electron}" "${SMOKER_APP_DIR}" "$@"
