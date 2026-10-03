@@ -20,6 +20,14 @@ module.exports = {
   devtool: 'inline-source-map',
   devServer: {
     static: './dist',
+    // Only read by `npm run start:prod`, which serves this config through the
+    // dev server. Cross-origin isolation, which Voice Fill's threaded speech
+    // model needs; the built image gets the same pair from nginx.conf.
+    // Guarded by src/crossOriginIsolation.test.ts.
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+    },
   },
   module: {
     rules: [
