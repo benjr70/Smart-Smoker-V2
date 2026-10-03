@@ -22,7 +22,10 @@ export type VoiceFillFieldType = 'string' | 'number' | 'integer' | 'stringList';
 export interface VoiceFillField {
   /** The key the value is returned under in the raw object. */
   key: string;
-  /** What the field is called on the screen and in its Review row. */
+  /**
+   * What the field is called in its Review row and in Notes: the review list's
+   * own sentence-case wording, which is not the heading the screen gives it.
+   */
   label: string;
   type: VoiceFillFieldType;
   /** What the model is told the field is for. */
@@ -39,8 +42,17 @@ export interface VoiceFillScreenDefinition {
   fields: readonly VoiceFillField[];
 }
 
-const NOTES_FIELD: VoiceFillField = {
-  key: 'notes',
+/** A field less its key, which is the name it is defined under. */
+type FieldSpec = Omit<VoiceFillField, 'key'>;
+
+/**
+ * A screen's fields, each under the key a model returns it by. The keys are
+ * kept as they are written, so a field can only ever be asked for by a key its
+ * screen has.
+ */
+const fields = <Key extends string>(specs: Record<Key, FieldSpec>): Record<Key, FieldSpec> => specs;
+
+const NOTES_FIELD: FieldSpec = {
   label: 'Notes',
   type: 'string',
   description:
@@ -50,71 +62,83 @@ const NOTES_FIELD: VoiceFillField = {
     'them with the summary and keeps every fact and number.',
 };
 
+const FIELDS = {
+  preSmoke: fields({
+    name: {
+      label: 'Name',
+      type: 'string',
+      description: 'What the cook is called, only if a name was spoken.',
+    },
+    meatType: {
+      label: 'Meat type',
+      type: 'string',
+      description: 'The cut of meat, as spoken.',
+      suggestions: MEAT_TYPES,
+    },
+    weight: {
+      label: 'Weight',
+      type: 'number',
+      description:
+        'The weight of the meat as a plain number ("twelve and a half" is 12.5). ' +
+        'Left out when a range was given.',
+    },
+    weightUnit: {
+      label: 'Unit',
+      type: 'string',
+      description: 'The unit the weight was given in, only if one was spoken.',
+      options: Object.values(WeightUnits),
+    },
+    steps: {
+      label: 'Prep steps',
+      type: 'stringList',
+      description:
+        'Each preparation step as a short phrase in sentence case, one action per step, ' +
+        'in the order spoken.',
+    },
+    notes: NOTES_FIELD,
+  }),
+  postSmoke: fields({
+    restMinutes: {
+      label: 'Rest time',
+      type: 'integer',
+      description:
+        'How long the meat rested, in minutes ("an hour and fifteen" is 75, ' +
+        '"a couple hours" is 120). Left out when the length is vague.',
+    },
+    steps: {
+      label: 'Post-smoke steps',
+      type: 'stringList',
+      description:
+        'Each step taken after the smoke as a short phrase in sentence case, one action ' +
+        'per step, in the order spoken.',
+    },
+    notes: NOTES_FIELD,
+  }),
+};
+
+/**
+ * A key a model returns a value under on a screen. Given no one screen, the
+ * keys every screen has.
+ */
+export type VoiceFillFieldKey<Screen extends VoiceFillScreen = VoiceFillScreen> =
+  keyof (typeof FIELDS)[Screen];
+
+/** The definition of the field a model returns under `key` on `screen`. */
+export const fieldOf = <Screen extends VoiceFillScreen>(
+  screen: Screen,
+  key: VoiceFillFieldKey<Screen>
+): VoiceFillField => {
+  const specs: Record<string, FieldSpec> = FIELDS[screen];
+  return { key: String(key), ...specs[String(key)] };
+};
+
+/** A screen's fields in the order they are defined, each with its key. */
+const listed = (specs: Record<string, FieldSpec>): VoiceFillField[] =>
+  Object.keys(specs).map(key => ({ key, ...specs[key] }));
+
 export const SCREEN_FIELDS: Record<VoiceFillScreen, VoiceFillScreenDefinition> = {
-  preSmoke: {
-    title: 'Pre-smoke',
-    fields: [
-      {
-        key: 'name',
-        label: 'Name',
-        type: 'string',
-        description: 'What the cook is called, only if a name was spoken.',
-      },
-      {
-        key: 'meatType',
-        label: 'Meat type',
-        type: 'string',
-        description: 'The cut of meat, as spoken.',
-        suggestions: MEAT_TYPES,
-      },
-      {
-        key: 'weight',
-        label: 'Weight',
-        type: 'number',
-        description:
-          'The weight of the meat as a plain number ("twelve and a half" is 12.5). ' +
-          'Left out when a range was given.',
-      },
-      {
-        key: 'weightUnit',
-        label: 'Unit',
-        type: 'string',
-        description: 'The unit the weight was given in, only if one was spoken.',
-        options: Object.values(WeightUnits),
-      },
-      {
-        key: 'steps',
-        label: 'Prep steps',
-        type: 'stringList',
-        description:
-          'Each preparation step as a short phrase in sentence case, one action per step, ' +
-          'in the order spoken.',
-      },
-      NOTES_FIELD,
-    ],
-  },
-  postSmoke: {
-    title: 'Post-smoke',
-    fields: [
-      {
-        key: 'restMinutes',
-        label: 'Rest time',
-        type: 'integer',
-        description:
-          'How long the meat rested, in minutes ("an hour and fifteen" is 75, ' +
-          '"a couple hours" is 120). Left out when the length is vague.',
-      },
-      {
-        key: 'steps',
-        label: 'Post-smoke steps',
-        type: 'stringList',
-        description:
-          'Each step taken after the smoke as a short phrase in sentence case, one action ' +
-          'per step, in the order spoken.',
-      },
-      NOTES_FIELD,
-    ],
-  },
+  preSmoke: { title: 'Pre-smoke', fields: listed(FIELDS.preSmoke) },
+  postSmoke: { title: 'Post-smoke', fields: listed(FIELDS.postSmoke) },
 };
 
 /** The schema of one plain value, in the subset every runtime understands. */

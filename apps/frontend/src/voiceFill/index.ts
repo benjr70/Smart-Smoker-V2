@@ -8,6 +8,7 @@
  */
 export type {
   VoiceFillField,
+  VoiceFillFieldKey,
   VoiceFillFieldType,
   VoiceFillJsonSchema,
   VoiceFillScreen,
@@ -15,7 +16,7 @@ export type {
   VoiceFillToolSchema,
   VoiceFillValueSchema,
 } from './fieldDefinition';
-export { SCREEN_FIELDS, jsonSchemaFor, toolSchemaFor } from './fieldDefinition';
+export { SCREEN_FIELDS, fieldOf, jsonSchemaFor, toolSchemaFor } from './fieldDefinition';
 export type { ReviewRow, VoiceFillScreenValues, VoiceFillWrite } from './extractionContract';
 export {
   MAX_REST_MINUTES,

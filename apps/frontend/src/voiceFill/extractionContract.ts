@@ -10,7 +10,7 @@
  */
 import type { PostSmoke, PreSmoke } from '../api/types';
 import { WeightUnits } from '../components/common/interfaces/enums';
-import { SCREEN_FIELDS, VoiceFillField, VoiceFillScreen } from './fieldDefinition';
+import { VoiceFillFieldKey, VoiceFillScreen, fieldOf } from './fieldDefinition';
 
 /** The values each fillable screen holds, in the shape that screen holds them. */
 export interface VoiceFillScreenValues {
@@ -37,6 +37,12 @@ export type ReviewRow<Values> = {
      * the whole list as it would be written; the review list shows just these.
      */
     added?: string[];
+    /**
+     * On a row whose new value was built from another row's: that row's id, and
+     * what this row writes instead should that row be left unticked — nothing,
+     * where there is nothing to build it from without it.
+     */
+    builtFrom?: { id: string; otherwise?: Values[Field] };
   };
 }[keyof Values & string];
 
@@ -48,14 +54,9 @@ const spokenText = (value: unknown): string => (typeof value === 'string' ? valu
 
 const capitalised = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
 
-/** The definition of the field a model returns under `key` on `screen`. */
-const fieldOf = (screen: VoiceFillScreen, key: string): VoiceFillField => {
-  const field = SCREEN_FIELDS[screen].fields.find(candidate => candidate.key === key);
-  if (!field) {
-    throw new Error(`Voice Fill: the ${screen} screen has no "${key}" field`);
-  }
-  return field;
-};
+/** A single plain number written as text, or nothing where the text is not one. */
+const plainNumber = (text: string): number | undefined =>
+  /^\d+(\.\d+)?$/.test(text) ? Number(text) : undefined;
 
 /**
  * A spoken pick from a suggestion list: the list's own spelling where it names
@@ -88,22 +89,33 @@ const nameFor = (spoken: string, currentName: string, meatType: string, now: Dat
 /** The heaviest cut a Ramble can fill: a weight must be over 0 and at most this. */
 export const MAX_WEIGHT = 200;
 
-/** The ways a model spells the units the screen offers. */
-const UNIT_WORDS: Record<string, WeightUnits> = {
-  lb: WeightUnits.LB,
-  lbs: WeightUnits.LB,
-  pound: WeightUnits.LB,
-  pounds: WeightUnits.LB,
-  oz: WeightUnits.OZ,
-  ounce: WeightUnits.OZ,
-  ounces: WeightUnits.OZ,
-  kg: WeightUnits.KG,
-  kgs: WeightUnits.KG,
-  kilo: WeightUnits.KG,
-  kilos: WeightUnits.KG,
-  kilogram: WeightUnits.KG,
-  kilograms: WeightUnits.KG,
-};
+/**
+ * The ways a model spells the units the screen offers. A map, not an object: a
+ * word is looked up as the model gave it, and an object would answer for every
+ * name it inherits — `constructor` is no unit.
+ */
+const UNIT_WORDS: ReadonlyMap<string, WeightUnits> = new Map([
+  ['lb', WeightUnits.LB],
+  ['lbs', WeightUnits.LB],
+  ['pound', WeightUnits.LB],
+  ['pounds', WeightUnits.LB],
+  ['oz', WeightUnits.OZ],
+  ['ounce', WeightUnits.OZ],
+  ['ounces', WeightUnits.OZ],
+  ['kg', WeightUnits.KG],
+  ['kgs', WeightUnits.KG],
+  ['kilo', WeightUnits.KG],
+  ['kilos', WeightUnits.KG],
+  ['kilogram', WeightUnits.KG],
+  ['kilograms', WeightUnits.KG],
+]);
+
+/**
+ * The unit a spoken word names, whatever its case and however it is punctuated
+ * ("lbs." is pounds), or nothing where the screen offers no such unit.
+ */
+const unitFor = (said: string): WeightUnits | undefined =>
+  UNIT_WORDS.get(said.toLowerCase().replace(/[^a-z]/g, ''));
 
 /**
  * A weight as the model gave it: the words to keep for Notes should it be
@@ -119,7 +131,7 @@ const spokenWeight = (value: unknown): { said: string; weight?: number } => {
   }
   const said = spokenText(value);
   const plain = said.replace(/^(about|around|roughly|approximately|nearly|~)\s*/i, '');
-  return /^\d+(\.\d+)?$/.test(plain) ? { said, weight: Number(plain) } : { said };
+  return { said, weight: plainNumber(plain) };
 };
 
 /**
@@ -136,9 +148,9 @@ const weightFor = (
   if (!said && !saidUnit) {
     return undefined;
   }
-  const unit = saidUnit ? UNIT_WORDS[saidUnit.toLowerCase()] : current.unit;
+  const unit = saidUnit ? unitFor(saidUnit) : current.unit;
   const weightIsUsable = !said || (weight !== undefined && weight > 0 && weight <= MAX_WEIGHT);
-  if (!weightIsUsable || (saidUnit && !unit)) {
+  if (!weightIsUsable || !unit) {
     return { leftover: [said, saidUnit].filter(Boolean).join(' ') };
   }
   return { value: { weight: weight ?? current.weight, unit } };
@@ -164,13 +176,22 @@ const withoutTrailingBlanks = (steps: readonly string[]): string[] => {
   return steps.slice(0, end);
 };
 
-/** A step as it is compared: its letters and digits, whatever their case. */
-const stepKey = (step: string): string =>
-  step
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, '')
+/**
+ * A step as it is compared: its letters and digits in any script, whatever
+ * their case, and the point inside a number — 1.5 oz is not 15 oz. A step with
+ * no letter or digit in it is compared as it was written, so it is never taken
+ * for an empty line.
+ */
+const stepKey = (step: string): string => {
+  const written = step.toLowerCase().replace(/\s+/g, ' ').trim();
+  const key = written
+    .replace(/(\d)\.(?=\d)|[^\p{L}\p{M}\p{N}\s]/gu, (_match, digit?: string) =>
+      digit === undefined ? '' : `${digit}.`
+    )
     .replace(/\s+/g, ' ')
     .trim();
+  return key || written;
+};
 
 /**
  * The step list a Ramble would write and the steps it adds to it: the spoken
@@ -231,14 +252,21 @@ export const MAX_REST_MINUTES = 24 * 60;
  * number of minutes at all.
  */
 const restTimeFor = (raw: unknown): { value: string } | { leftover: string } | undefined => {
-  if (typeof raw !== 'number') {
-    const said = spokenText(raw);
-    return said ? { leftover: said } : undefined;
+  const said = typeof raw === 'number' ? String(raw) : spokenText(raw);
+  if (!said) {
+    return undefined;
   }
-  const minutes = Math.round(raw);
-  if (!(minutes >= MIN_REST_MINUTES && minutes <= MAX_REST_MINUTES)) {
-    return { leftover: `${raw} minutes` };
+  // A model may write its numbers as text, as it may for a weight.
+  const spoken = typeof raw === 'number' ? raw : plainNumber(said);
+  if (spoken === undefined) {
+    return { leftover: said };
   }
+  // The bounds are on what was said, before it is rounded to whole minutes:
+  // half a minute is not the shortest rest.
+  if (!(spoken >= MIN_REST_MINUTES && spoken <= MAX_REST_MINUTES)) {
+    return { leftover: `${said} minutes` };
+  }
+  const minutes = Math.round(spoken);
   const pad = (part: number): string => String(part).padStart(2, '0');
   return { value: `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}` };
 };
@@ -292,8 +320,11 @@ const notesRows = (
 };
 
 /** A value that was said but cannot be written, worded for Notes. */
-const leftoverOf = (screen: VoiceFillScreen, key: string, said: string): string =>
-  `${fieldOf(screen, key).label}: ${said}.`;
+const leftoverOf = <Screen extends VoiceFillScreen>(
+  screen: Screen,
+  key: VoiceFillFieldKey<Screen>,
+  said: string
+): string => `${fieldOf(screen, key).label}: ${said}.`;
 
 const preSmokeRows = (
   raw: Record<string, unknown>,
@@ -302,7 +333,7 @@ const preSmokeRows = (
 ): ReviewRow<PreSmoke>[] => {
   const rows: ReviewRow<PreSmoke>[] = [];
   const leftovers: string[] = [];
-  const label = (key: string): string => fieldOf('preSmoke', key).label;
+  const label = (key: VoiceFillFieldKey<'preSmoke'>): string => fieldOf('preSmoke', key).label;
 
   const currentMeatType = (current.meatType ?? '').trim();
   const spokenMeatType = spokenText(raw.meatType);
@@ -310,14 +341,25 @@ const preSmokeRows = (
     ? snapped(spokenMeatType, fieldOf('preSmoke', 'meatType').suggestions)
     : currentMeatType;
 
-  const name = nameFor(spokenText(raw.name), current.name ?? '', meatType, now);
+  const spokenName = spokenText(raw.name);
+  const name = nameFor(spokenName, current.name ?? '', meatType, now);
   if (name && name !== current.name) {
+    // A name built from the meat this Ramble names stands on the meat type
+    // row. Left unticked, the meat stays what it was, and so the name is built
+    // from that — or not at all, where the screen holds no meat type.
+    const builtFromSpokenMeat = !spokenName && meatType !== currentMeatType;
     rows.push({
       id: 'name',
       field: 'name',
       label: label('name'),
       oldValue: current.name,
       newValue: name,
+      ...(builtFromSpokenMeat && {
+        builtFrom: {
+          id: 'meatType',
+          otherwise: nameFor('', current.name ?? '', currentMeatType, now) || undefined,
+        },
+      }),
     });
   }
 
@@ -422,7 +464,8 @@ export interface VoiceFillWrite<Values> {
  * The values to write for the rows left ticked, and the Undo for exactly those.
  *
  * `ticked` holds the ids of the rows to apply. A row that was unticked is in
- * neither half: it is not written, so Undo has nothing of it to restore.
+ * neither half: it is not written, so Undo has nothing of it to restore. A row
+ * built from an unticked one writes what it would have been without it.
  */
 export const fillFor = <Values>(
   rows: readonly ReviewRow<Values>[],
@@ -434,7 +477,12 @@ export const fillFor = <Values>(
   rows
     .filter(row => tickedIds.has(row.id))
     .forEach(row => {
-      write[row.field] = row.newValue;
+      const value =
+        row.builtFrom && !tickedIds.has(row.builtFrom.id) ? row.builtFrom.otherwise : row.newValue;
+      if (value === undefined) {
+        return;
+      }
+      write[row.field] = value;
       undo[row.field] = row.oldValue;
     });
   return { write, undo };

@@ -1,6 +1,21 @@
-import { SCREEN_FIELDS, VoiceFillScreen, jsonSchemaFor, toolSchemaFor } from '.';
+import { SCREEN_FIELDS, VoiceFillScreen, fieldOf, jsonSchemaFor, toolSchemaFor } from '.';
 
 const SCREENS: VoiceFillScreen[] = ['preSmoke', 'postSmoke'];
+
+describe('a field asked for by its key', () => {
+  it('is the one the screen lists under that key', () => {
+    expect(fieldOf('postSmoke', 'restMinutes')).toEqual(SCREEN_FIELDS.postSmoke.fields[0]);
+    expect(fieldOf('preSmoke', 'weightUnit')).toMatchObject({ key: 'weightUnit', label: 'Unit' });
+  });
+
+  it('cannot be asked for by a key its screen does not have', () => {
+    // Never called: the line below is here to be refused by the compiler.
+    // @ts-expect-error the pre-smoke screen has no rest field
+    const mistyped = () => fieldOf('preSmoke', 'restMinutes');
+
+    expect(mistyped).toBeInstanceOf(Function);
+  });
+});
 
 describe('the JSON Schema derived from a screen', () => {
   it('asks for every field of the post-smoke screen, each one nullable', () => {

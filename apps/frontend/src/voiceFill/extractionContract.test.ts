@@ -60,6 +60,33 @@ describe('name', () => {
     expect(row).toMatchObject({ newValue: 'Saturday Ribs' });
   });
 
+  it('builds no name on fill when the meat it was built from is left unticked', () => {
+    const rows = reviewRows('preSmoke', { meatType: 'brisket' }, emptyPreSmoke(), SATURDAY);
+
+    expect(fillFor(rows, ['name', 'meatType']).write).toEqual({
+      name: 'Saturday Brisket',
+      meatType: 'Brisket',
+    });
+    expect(fillFor(rows, ['name'])).toEqual({ write: {}, undo: {} });
+  });
+
+  it('builds the name from the meat left on screen when the spoken meat is left unticked', () => {
+    const current = emptyPreSmoke({ meatType: 'Brisket' });
+    const rows = reviewRows('preSmoke', { meatType: 'ribs' }, current, SATURDAY);
+
+    expect(fillFor(rows, ['name'])).toEqual({
+      write: { name: 'Saturday Brisket' },
+      undo: { name: '' },
+    });
+  });
+
+  it('writes a spoken name whether or not the meat type is ticked', () => {
+    const raw = { name: 'Packer', meatType: 'brisket' };
+    const rows = reviewRows('preSmoke', raw, emptyPreSmoke(), SATURDAY);
+
+    expect(fillFor(rows, ['name']).write).toEqual({ name: 'Packer' });
+  });
+
   it('proposes no row for a spoken name the field already holds', () => {
     const current = emptyPreSmoke({ name: 'Sunday brisket' });
 
@@ -112,6 +139,13 @@ describe('weight', () => {
       3,
       WeightUnits.KG,
     ],
+    [
+      'reads a unit through its punctuation',
+      { weight: 12, weightUnit: 'lbs.' },
+      WeightUnits.KG,
+      12,
+      WeightUnits.LB,
+    ],
     ['drops "about"', { weight: 'about 12' }, WeightUnits.LB, 12, WeightUnits.LB],
     ['accepts the upper bound itself', { weight: 200 }, WeightUnits.LB, 200, WeightUnits.LB],
   ])('%s', (_rule, raw, unitOnScreen, weight, unit) => {
@@ -129,6 +163,12 @@ describe('weight', () => {
     ['a weight of nothing', { weight: 0 }, 'Weight: 0.'],
     ['a weight over the upper bound', { weight: 250 }, 'Weight: 250.'],
     ['a unit the screen does not offer', { weight: 2, weightUnit: 'stone' }, 'Weight: 2 stone.'],
+    [
+      'a unit that is only a name every object has',
+      { weight: 5, weightUnit: 'constructor' },
+      'Weight: 5 constructor.',
+    ],
+    ['a unit named after a method', { weight: 5, weightUnit: 'toString' }, 'Weight: 5 toString.'],
   ])('fills nothing for %s and keeps it for Notes', (_rule, raw, leftover) => {
     const current = emptyPreSmoke({ weight: { weight: 3, unit: WeightUnits.LB } });
 
@@ -194,6 +234,40 @@ describe('steps', () => {
     expect(preSmokeRow({ steps: ['season.'] }, current, 'steps')).toBeUndefined();
   });
 
+  it('adds a step that differs from one already there only by a decimal point', () => {
+    const current = emptyPreSmoke({ steps: ['Inject 1.5 oz broth'] });
+
+    const row = preSmokeRow({ steps: ['Inject 15 oz broth'] }, current, 'steps');
+
+    expect(row).toMatchObject({
+      newValue: ['Inject 1.5 oz broth', 'Inject 15 oz broth'],
+      added: ['Inject 15 oz broth'],
+    });
+  });
+
+  it('still skips a step that differs only by the full stop it ends with after a number', () => {
+    const current = emptyPreSmoke({ steps: ['Rest until 165'] });
+
+    expect(preSmokeRow({ steps: ['rest until 165.'] }, current, 'steps')).toBeUndefined();
+  });
+
+  it.each([
+    ['in another script', 'рассол на ночь', 'Рассол на ночь'],
+    ['with no letter or digit in it', '🔥🔥', '🔥🔥'],
+  ])('adds a step %s to an untouched list', (_rule, spoken, written) => {
+    const row = preSmokeRow({ steps: [spoken] }, emptyPreSmoke({ steps: [''] }), 'steps');
+
+    expect(row).toMatchObject({ newValue: [written], added: [written] });
+  });
+
+  it('tells two steps in another script apart, and skips one said again', () => {
+    const current = emptyPreSmoke({ steps: ['Рассол на ночь'] });
+
+    const row = preSmokeRow({ steps: ['рассол на ночь!', 'натереть солью'] }, current, 'steps');
+
+    expect(row).toMatchObject({ added: ['Натереть солью'] });
+  });
+
   it('writes over the empty line an untouched list ends with', () => {
     const current = emptyPreSmoke({ steps: ['Trim', ''] });
 
@@ -218,6 +292,8 @@ describe('rest time', () => {
     ['an hour and fifteen', 75, '01:15'],
     ['the shortest rest', 1, '00:01'],
     ['the longest rest', 24 * 60, '24:00'],
+    ['minutes the model wrote as text', '75', '01:15'],
+    ['a part of a minute, to the nearest whole one', 89.6, '01:30'],
   ])('writes %s as the screen writes it', (_rule, restMinutes, restTime) => {
     const row = postSmokeRow({ restMinutes }, emptyPostSmoke({ restTime: '00:30' }), 'restTime');
 
@@ -228,6 +304,9 @@ describe('rest time', () => {
     ['no rest at all', 0, 'Rest time: 0 minutes.'],
     ['a rest longer than a day', 24 * 60 + 1, 'Rest time: 1441 minutes.'],
     ['a rest that is not a number of minutes', 'a while', 'Rest time: a while.'],
+    ['a rest under a minute that would round up to one', 0.5, 'Rest time: 0.5 minutes.'],
+    ['a rest over a day that would round down to one', 1440.4, 'Rest time: 1440.4 minutes.'],
+    ['a rest out of bounds written as text', '3000', 'Rest time: 3000 minutes.'],
   ])('fills nothing for %s and keeps it for Notes', (_rule, restMinutes, leftover) => {
     const current = emptyPostSmoke({ restTime: '00:30' });
 
