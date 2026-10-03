@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Voice Fill feasibility</title>
+    <script type="importmap">
+      {
+        "imports": {
+          "@huggingface/transformers": "/node_modules/@huggingface/transformers/dist/transformers.min.js",
+          "@huggingface/transformers-structured-output": "/node_modules/@huggingface/transformers-structured-output/dist/index.js",
+          "@mlc-ai/web-llm": "/node_modules/@mlc-ai/web-llm/lib/index.js",
+          "@litert-lm/core": "/node_modules/@litert-lm/core/dist/index.js",
+          "@litertjs/wasm-utils": "/node_modules/@litertjs/wasm-utils/dist/index.js",
+          "@moonshine-ai/moonshine-wasm": "/node_modules/@moonshine-ai/moonshine-wasm/dist/index.js"
+        }
+      }
+    </script>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font: 16px/1.4 system-ui, sans-serif; margin: 0; padding: 12px; max-width: 760px; }
+      h1 { font-size: 20px; margin: 0 0 4px; }
+      h2 { font-size: 17px; margin: 0 0 8px; }
+      section { border: 1px solid #8886; border-radius: 10px; padding: 12px; margin: 12px 0; }
+      select, button, textarea, input { font: inherit; }
+      select, textarea { width: 100%; box-sizing: border-box; }
+      button { padding: 10px 14px; border-radius: 8px; border: 1px solid #888; margin: 6px 6px 0 0; }
+      button.primary { background: #1565c0; color: #fff; border-color: #1565c0; }
+      button.rec { background: #c62828; color: #fff; border-color: #c62828; }
+      button:disabled { opacity: 0.45; }
+      pre { white-space: pre-wrap; word-break: break-word; background: #8882; padding: 8px; border-radius: 6px; font-size: 13px; margin: 8px 0 0; }
+      .script { background: #fbc02d33; padding: 10px; border-radius: 6px; font-size: 17px; }
+      .status { font-size: 14px; opacity: 0.85; margin-top: 6px; min-height: 1.4em; }
+      .big { font-size: 22px; font-weight: 600; }
+      label { display: block; margin-top: 8px; font-size: 14px; }
+      .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+      .row label { margin: 0; }
+    </style>
+  </head>
+  <body>
+    <h1>Voice Fill feasibility</h1>
+    <div class="status">Throwaway test page. One speech model + one LLM per page load; reload to switch.</div>
+
+    <section>
+      <h2>0. This phone</h2>
+      <label>Device <select id="device"><option>Galaxy Z Fold8 Ultra</option><option>Pixel 10 Pro</option><option>other</option></select></label>
+      <pre id="env">probing…</pre>
+    </section>
+
+    <section>
+      <h2>1. Speech-to-text</h2>
+      <select id="sttPick"></select>
+      <button id="sttLoad" class="primary">Load speech model</button>
+      <div class="status" id="sttStatus"></div>
+    </section>
+
+    <section>
+      <h2>2. LLM</h2>
+      <select id="llmPick"></select>
+      <button id="llmLoad" class="primary">Load LLM</button>
+      <div class="status" id="llmStatus"></div>
+    </section>
+
+    <section>
+      <h2>3. Ramble</h2>
+      <label>Screen <select id="screen"><option value="pre">Pre-smoke</option><option value="smoke">Smoke</option><option value="post">Post-smoke</option></select></label>
+      <p>Read this aloud, naturally:</p>
+      <div class="script" id="script"></div>
+      <button id="rec" class="rec">● Record</button>
+      <button id="rerun">Re-run on saved recording</button>
+      <div class="status" id="recStatus"></div>
+      <label>Transcript (editable; "Extract only" uses this text)</label>
+      <textarea id="transcript" rows="6"></textarea>
+      <button id="extract">Extract only</button>
+      <div class="big" id="total"></div>
+      <pre id="fields"></pre>
+    </section>
+
+    <section>
+      <h2>4. Verdict for this run</h2>
+      <div class="row">
+        <label>Transcript <select id="vT" style="width:auto"><option>right</option><option>minor slips</option><option>wrong</option><option>n/a</option></select></label>
+        <label>Fields <select id="vF" style="width:auto"><option>right</option><option>minor slips</option><option>wrong</option><option>n/a</option></select></label>
+      </div>
+      <label>Note <input id="vNote" style="width:100%" /></label>
+      <button id="save" class="primary">Save result</button>
+      <div class="status" id="saveStatus"></div>
+    </section>
+
+    <section>
+      <h2>Results on this phone</h2>
+      <button id="copy">Copy all</button>
+      <button id="clear">Clear</button>
+      <pre id="results"></pre>
+    </section>
+
+    <section>
+      <h2>Log</h2>
+      <pre id="log"></pre>
+    </section>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

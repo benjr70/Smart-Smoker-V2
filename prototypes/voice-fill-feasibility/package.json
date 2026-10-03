@@ -1,0 +1,15 @@
+{
+  "name": "voice-fill-feasibility",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Throwaway real-phone test page for the Voice Fill map (#691). Not part of the product.",
+  "scripts": { "start": "node serve.mjs" },
+  "dependencies": {
+    "@huggingface/transformers": "4.3.0",
+    "@huggingface/transformers-structured-output": "4.3.0",
+    "@litert-lm/core": "0.17.1",
+    "@mlc-ai/web-llm": "0.2.85",
+    "@moonshine-ai/moonshine-wasm": "0.1.5"
+  }
+}
