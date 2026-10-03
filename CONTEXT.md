@@ -78,3 +78,17 @@ _Avoid_: restMin, rest time (as separate values)
 
 **Wrap temp**: Global setting (Default Target Temps): probe temperature below
 which the Serve Plan shows the wrap milestone until a wrap stamp is logged.
+
+**Voice Fill**: The phone-web feature that fills the current smoke screen's
+fields from one spoken Ramble, after review, using models that run on the phone.
+_Avoid_: dictation, voice input, voice assistant
+
+**Ramble**: One spoken free-form recording that Voice Fill turns into field
+values. _Avoid_: utterance, command, dictation
+
+**Review row**: One change a Ramble proposes, shown ticked in the review list;
+an unticked row is not applied. _Avoid_: suggestion, diff
+
+**Model library**: The per-phone record of which speech and extraction models
+are picked, downloaded and proven to run. Never synced between devices.
+_Avoid_: model settings, model cache
