@@ -403,6 +403,18 @@ export class FrontendApp {
   }
 
   /**
+   * Assert the loaded page is cross-origin isolated.
+   *
+   * Asked of the page itself rather than inferred from response headers: the
+   * browser only grants isolation when the document carried both headers AND
+   * the origin is one it trusts (https, or localhost), and this flag is the one
+   * thing Voice Fill's threaded speech model actually depends on.
+   */
+  async expectCrossOriginIsolated(): Promise<void> {
+    expect(await this.page.evaluate(() => self.crossOriginIsolated)).toBe(true);
+  }
+
+  /**
    * Retry a wizard mutation until it sticks.
    *
    * The single defence every mutating helper shares: a step's load landing

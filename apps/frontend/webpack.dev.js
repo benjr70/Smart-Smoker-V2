@@ -19,6 +19,13 @@ module.exports = {
   devtool: 'inline-source-map',
   devServer: {
     static: './dist',
+    // Cross-origin isolation, which Voice Fill's threaded speech model needs
+    // (it is what unlocks SharedArrayBuffer). nginx.conf sends the same pair
+    // from the built image. Guarded by src/crossOriginIsolation.test.ts.
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+    },
   },
   module: {
     rules: [
