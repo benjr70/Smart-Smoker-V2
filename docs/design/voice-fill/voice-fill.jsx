@@ -4,16 +4,16 @@
    one big tap to stop, review in a sheet, undo from a toast. */
 
 const SPEECH_MODELS = [
-  { id:'device',   name:'On-device',         hint:'Uses your phone\u2019s built-in recognizer', tags:['Offline','Fastest'] },
-  { id:'whisper',  name:'Whisper Large v3',  hint:'Best with pit noise, fans and wind',       tags:['Cloud','Most accurate'] },
-  { id:'whisperS', name:'Whisper Small',     hint:'Downloads once (240 MB), runs locally',    tags:['Offline'] },
-  { id:'deepgram', name:'Deepgram Nova-3',   hint:'Streams words as you talk',                tags:['Cloud','Low latency'] },
+  { id:'device',   mb:45,   name:'On-device',         hint:'Uses your phone\u2019s built-in recognizer', tags:['Offline','Fastest'] },
+  { id:'whisper',  mb:1550, name:'Whisper Large v3',  hint:'Best with pit noise, fans and wind',       tags:['Cloud','Most accurate'] },
+  { id:'whisperS', mb:240,  name:'Whisper Small',     hint:'Downloads once (240 MB), runs locally',    tags:['Offline'] },
+  { id:'deepgram', mb:180,  name:'Deepgram Nova-3',   hint:'Streams words as you talk',                tags:['Cloud','Low latency'] },
 ];
 const LLM_MODELS = [
-  { id:'haiku',  name:'Claude Haiku 4.5',  hint:'Quick, cheap, handles most cooks',      tags:['Cloud','Fast'] },
-  { id:'sonnet', name:'Claude Sonnet 4.5', hint:'Better with long, rambling notes',      tags:['Cloud','Smartest'] },
-  { id:'gpt',    name:'GPT-4o mini',       hint:'Alternative cloud extractor',           tags:['Cloud'] },
-  { id:'local',  name:'Quick parse',       hint:'Keyword rules on the phone, no network', tags:['Offline','Basic'] },
+  { id:'haiku',  mb:820,  name:'Claude Haiku 4.5',  hint:'Quick, cheap, handles most cooks',      tags:['Cloud','Fast'] },
+  { id:'sonnet', mb:2400, name:'Claude Sonnet 4.5', hint:'Better with long, rambling notes',      tags:['Cloud','Smartest'] },
+  { id:'gpt',    mb:1100, name:'GPT-4o mini',       hint:'Alternative cloud extractor',           tags:['Cloud'] },
+  { id:'local',  mb:2,    name:'Quick parse',       hint:'Keyword rules on the phone, no network', tags:['Offline','Basic'] },
 ];
 const VOICE_DEFAULTS = { enabled:true, speech:'device', llm:'haiku', review:true, offlineFallback:true };
 
@@ -136,8 +136,14 @@ function MicGlyph({ size=26, color }) {
   );
 }
 
-function VoiceFab({ onClick, label }) {
+function VoiceFab({ onClick, label, notReady }) {
   const t = window.useTheme();
+  if (notReady) return (
+    <div role="status" style={{position:'absolute',right:16,bottom:16,zIndex:20,height:52,padding:'0 18px',borderRadius:26,
+      background:t.surface,border:`1.5px solid ${t.border}`,color:t.sub,display:'flex',alignItems:'center',gap:8,fontSize:13,fontWeight:600,boxShadow:t.shadowMd}}>
+      <MicGlyph color={t.sub} size={18}/>{notReady}
+    </div>
+  );
   return (
     <button onClick={onClick} aria-label={`Fill ${label} by voice`}
       style={{position:'absolute',right:16,bottom:16,zIndex:20,height:60,padding:'0 22px 0 18px',borderRadius:30,border:'none',
@@ -361,21 +367,107 @@ function VoiceToast({ count, onUndo, onDone }) {
   );
 }
 
+/* ── Model downloads ──
+   Finished downloads persist; in-flight ones pause when Wi-Fi drops
+   and resume when it comes back. */
+const ALL_MODELS = [...SPEECH_MODELS, ...LLM_MODELS];
+const fmtMB = mb => mb >= 1000 ? `${(mb/1000).toFixed(1)} GB` : `${Math.round(mb)} MB`;
+function useModelDownloads(initialReady) {
+  const [dl, setDl] = React.useState(()=>{
+    let ready = initialReady;
+    try { const s = JSON.parse(localStorage.getItem('smartSmoker.models')||'null'); if (Array.isArray(s)) ready = s; } catch (e) {}
+    return Object.fromEntries(ALL_MODELS.map(m=>[m.id, ready.includes(m.id)?{status:'ready',pct:100}:{status:'none',pct:0}]));
+  });
+  const [online, setOnline] = React.useState(navigator.onLine);
+  React.useEffect(()=>{ const on=()=>setOnline(true), off=()=>setOnline(false);
+    addEventListener('online',on); addEventListener('offline',off); return ()=>{removeEventListener('online',on);removeEventListener('offline',off);}; },[]);
+  const active = Object.values(dl).some(d=>d.status==='downloading');
+  React.useEffect(()=>{
+    if (!active || !online) return;
+    const iv = setInterval(()=>setDl(prev=>{
+      const next = {...prev};
+      Object.entries(prev).forEach(([id,d])=>{
+        if (d.status!=='downloading') return;
+        const mb = ALL_MODELS.find(m=>m.id===id).mb;
+        const pct = Math.min(100, d.pct + Math.max(.6, 900/mb) * (0.6+Math.random()*0.8));
+        next[id] = pct>=100 ? {status:'ready',pct:100} : {status:'downloading',pct};
+      });
+      return next;
+    }), 250);
+    return ()=>clearInterval(iv);
+  },[active, online]);
+  React.useEffect(()=>{
+    try { localStorage.setItem('smartSmoker.models', JSON.stringify(Object.keys(dl).filter(k=>dl[k].status==='ready'))); } catch (e) {}
+  },[dl]);
+  const start  = id => setDl(p=>p[id].status==='ready'?p:{...p,[id]:{status:'downloading',pct:p[id].pct||0}});
+  const cancel = id => setDl(p=>({...p,[id]:{status:'none',pct:0}}));
+  const remove = cancel;
+  return { dl, online, start, cancel, remove };
+}
+
+function ModelStatus({ model, d, online, onStart, onCancel, onRemove }) {
+  const t = window.useTheme();
+  const linkBtn = (label, onClick, color) => (
+    <button onClick={onClick} style={{height:36,padding:'0 12px',marginRight:-8,borderRadius:9,border:'none',background:'transparent',
+      color:color||t.accent,fontSize:13,fontWeight:700,fontFamily:'inherit',cursor:'pointer',flexShrink:0}}>{label}</button>
+  );
+  if (d.status==='ready') return (
+    <div style={{display:'flex',alignItems:'center',gap:8,marginTop:8,minHeight:36}}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" fill={t.ok}/><path d="M7.5 12.5l3 3 6-6.5" stroke={t.surface} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      <span style={{flex:1,fontSize:13,color:t.text,fontWeight:600}}>Ready to use <span style={{color:t.sub,fontWeight:500}}>· {fmtMB(model.mb)} on phone</span></span>
+      {linkBtn('Remove', onRemove, t.sub)}
+    </div>
+  );
+  if (d.status==='downloading') {
+    const paused = !online;
+    return (
+      <div style={{marginTop:10}}>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <span style={{flex:1,fontSize:13,fontWeight:600,color:paused?t.sub:t.text,fontVariantNumeric:'tabular-nums'}}>
+            {paused ? 'Paused — waiting for Wi-Fi' : `Downloading ${Math.floor(d.pct)}%`}
+            <span style={{color:t.sub,fontWeight:500}}> · {fmtMB(model.mb*d.pct/100)} of {fmtMB(model.mb)}</span>
+          </span>
+          {linkBtn('Cancel', onCancel, t.sub)}
+        </div>
+        <div role="progressbar" aria-valuenow={Math.floor(d.pct)} aria-valuemin="0" aria-valuemax="100" aria-label={`${model.name} download`}
+          style={{height:6,borderRadius:3,background:t.surfaceAlt,overflow:'hidden',marginTop:4}}>
+          <div style={{width:`${d.pct}%`,height:'100%',borderRadius:3,background:paused?t.sub:t.accent,transition:'width .25s linear'}}></div>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div style={{display:'flex',alignItems:'center',gap:8,marginTop:8,minHeight:36}}>
+      <span style={{flex:1,fontSize:13,color:t.sub}}>Not downloaded · {fmtMB(model.mb)}</span>
+      {linkBtn('Download', onStart)}
+    </div>
+  );
+}
+
 /* ── Settings card ── */
-function VoiceSettingsCard({ voice, onVoice }) {
+function VoiceSettingsCard({ voice, onVoice, models }) {
   const { useTheme, Card, Select } = window;
   const t = useTheme();
+  const row = (key, label, list) => {
+    const m = list.find(x=>x.id===voice[key]) || list[0];
+    return (
+      <div>
+        <Select label={label} value={m.id} onChange={x=>{ onVoice(key,x); models.start(x); }}
+          options={list.map(o=>({value:o.id,label:`${o.name}${models.dl[o.id].status==='ready'?'  ✓':''}`}))}/>
+        <ModelStatus model={m} d={models.dl[m.id]} online={models.online}
+          onStart={()=>models.start(m.id)} onCancel={()=>models.cancel(m.id)} onRemove={()=>models.remove(m.id)}/>
+      </div>
+    );
+  };
   return (
     <Card style={{padding:'16px'}}>
       <div style={{fontSize:12,fontWeight:600,color:t.sub,letterSpacing:.4,marginBottom:12}}>VOICE FILL</div>
-      <div style={{display:'flex',flexDirection:'column',gap:14}}>
-        <Select label="Speech-to-text model" value={voice.speech} onChange={x=>onVoice('speech',x)}
-          options={SPEECH_MODELS.map(m=>({value:m.id,label:m.name}))}/>
-        <Select label="Field extraction model" value={voice.llm} onChange={x=>onVoice('llm',x)}
-          options={LLM_MODELS.map(m=>({value:m.id,label:m.name}))}/>
+      <div style={{display:'flex',flexDirection:'column',gap:16}}>
+        {row('speech','Speech-to-text model',SPEECH_MODELS)}
+        {row('llm','Field extraction model',LLM_MODELS)}
       </div>
     </Card>
   );
 }
 
-Object.assign(window, { SPEECH_MODELS, LLM_MODELS, VOICE_DEFAULTS, VOICE_SCHEMAS, VoiceFab, VoiceSheet, VoiceToast, VoiceSettingsCard, useVoiceFlash, MicGlyph });
+Object.assign(window, { useModelDownloads, ALL_MODELS, fmtMB, SPEECH_MODELS, LLM_MODELS, VOICE_DEFAULTS, VOICE_SCHEMAS, VoiceFab, VoiceSheet, VoiceToast, VoiceSettingsCard, useVoiceFlash, MicGlyph });

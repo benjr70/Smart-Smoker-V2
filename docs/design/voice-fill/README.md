@@ -1,12 +1,12 @@
 # Voice Fill — design prototype assets
 
 Synced verbatim from Claude Design project `af1c6090-e069-4439-828a-4031ef84bb8e`
-on 2026-10-03 (issue [#693](https://github.com/benjr70/Smart-Smoker-V2/issues/693),
+on 2026-10-03 (issues [#698](https://github.com/benjr70/Smart-Smoker-V2/issues/698) and [#693](https://github.com/benjr70/Smart-Smoker-V2/issues/693),
 wayfinder map [#687](https://github.com/benjr70/Smart-Smoker-V2/issues/687)).
 
 | File | What it is |
 | --- | --- |
-| `voice-fill.jsx` | Prototype components for Voice Fill: the "Voice fill" button, the bottom sheet (listening, working, review, nothing-to-fill and error states), the Undo toast, the field flash hook and the settings card with the two model dropdowns. |
+| `voice-fill.jsx` | Prototype components for Voice Fill: the "Voice fill" button and its grey not-ready pill, the bottom sheet (listening, working, review, nothing-to-fill and error states), the Undo toast, the field flash hook, and the settings card with the two model dropdowns and each picked model's download status line (not downloaded, downloading with progress, ready, remove). |
 | `Smart Smoker.html` | Full host file for the mobile-web design mock, showing where the button, sheet and toast sit on the three smoke screens and where the settings card sits. Committed whole so the prototype stays runnable in context. |
 
 These are a **strong reference, not a pixel spec**: the real app's MUI/theme
@@ -18,7 +18,7 @@ text", flash on filled fields, "Filled N fields by voice · Undo" toast.
 ## Where the map overrules the prototype
 
 The prototype's logic is a fake and predates decisions on the map. Where they
-differ, the map wins (details in the resolution of #693 and #692):
+differ, the map wins (details in the resolutions of #698, #693 and #692):
 
 - The model lists (cloud models, the phone's built-in recogniser) are
   placeholders; the real entries are the on-device candidates from #691.
@@ -33,3 +33,9 @@ differ, the map wins (details in the resolution of #693 and #692):
   steps, with nothing struck through.
 - The Notes row shows the whole rewritten Notes with the old text struck
   through; an invented name is an ordinary row.
+- A fresh phone starts downloading the default pair when the app first opens;
+  the mock pretends the defaults are already there.
+- "Ready to use" is shown only after the downloaded model has been loaded once
+  as a test; a model that fails shows "Didn't work on this phone".
+- The grey not-ready pill is tappable and opens Settings.
+- "Paused — waiting for Wi-Fi" means offline; there is no cellular gate.

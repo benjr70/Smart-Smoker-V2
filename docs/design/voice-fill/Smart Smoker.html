@@ -676,7 +676,7 @@ function PostSmokeStep({ onFinish, template, pull, voiceRef, onComplete }) {
 }
 
 /* ─── SMOKE WIZARD ───────────────────────────────────── */
-function SmokeScreen({ onGoHistory, template, features, stamps, voice }) {
+function SmokeScreen({ onGoHistory, template, features, stamps, voice, models }) {
   const t = useTheme();
   const [step, setStep] = useState(0);
   const [pull, setPull] = useState(null);
@@ -686,6 +686,12 @@ function SmokeScreen({ onGoHistory, template, features, stamps, voice }) {
   const voiceRef = useRef(null);
   const STEPS = ['Pre-Smoke','Smoke','Post-Smoke'];
   const showFab = voice && voice.enabled && !finished && !sheet && !toast;
+  const notReady = (()=>{ if (!models) return null;
+    const ids = [voice.speech, voice.llm], ds = ids.map(id=>models.dl[id]);
+    if (ds.every(d=>d.status==='ready')) return null;
+    const dling = ds.filter(d=>d.status==='downloading');
+    return dling.length ? `Model downloading ${Math.floor(Math.min(...dling.map(d=>d.pct)))}%` : 'Download a voice model in Settings';
+  })();
   const openVoice = () => { const v = voiceRef.current; if (v) setSheet({ step:v.step, values:v.values }); };
   const applyVoice = (changes) => {
     const v = voiceRef.current; setSheet(null); if (!v) return;
@@ -709,7 +715,7 @@ function SmokeScreen({ onGoHistory, template, features, stamps, voice }) {
         {step===1 && <LiveSmokeStep voiceRef={voiceRef} template={template} features={features} stamps={stamps} onNext={p=>{setPull(p);setStep(2);}}/>}
         {step===2 && <PostSmokeStep voiceRef={voiceRef} template={template} pull={pull} onFinish={onGoHistory} onComplete={()=>setFinished(true)}/>}
       </div>
-      {showFab && <VoiceFab label={STEPS[step]} onClick={openVoice}/>}
+      {showFab && <VoiceFab label={STEPS[step]} onClick={openVoice} notReady={notReady}/>}
       {toast && <VoiceToast key={toast.id} count={toast.count} onDone={()=>setToast(null)} onUndo={()=>{toast.undo();setToast(null);}}/>}
       {sheet && <VoiceSheet step={sheet.step} values={sheet.values} cfg={voice} stamps={stamps} onApply={applyVoice} onClose={()=>setSheet(null)}/>}
     </div>
@@ -1222,7 +1228,7 @@ function TempRangeSlider({ min, max, lo, hi, onChange }) {
 }
 
 /* ─── SETTINGS SCREEN ───────────────────────────────── */
-function SettingsScreen({ mode, onMode, systemDark, features, onFeature, stamps, onStamps, voice, onVoice }) {
+function SettingsScreen({ mode, onMode, systemDark, features, onFeature, stamps, onStamps, voice, onVoice, models }) {
   const t = useTheme();
   const [notifs, setNotifs] = useState({tempAlert:true,smokeComplete:true,probeTarget:true});
   const [range, setRange] = useState({lo:215,hi:250});
@@ -1332,7 +1338,7 @@ function SettingsScreen({ mode, onMode, systemDark, features, onFeature, stamps,
           </div>
         )}
       </Card>
-      <VoiceSettingsCard voice={voice} onVoice={onVoice}/>
+      <VoiceSettingsCard voice={voice} onVoice={onVoice} models={models}/>
       <Card style={{padding:'4px 16px'}}>
         <StampEditor stamps={stamps} onChange={onStamps}/>
       </Card>
@@ -1532,6 +1538,7 @@ function App() {
   });
   const setVoiceOpt = (k,v) => setVoice(prev=>({...prev,[k]:v}));
   useEffect(()=>{ try { localStorage.setItem('smartSmoker.voice', JSON.stringify(voice)); } catch (e) {} },[voice]);
+  const models = useModelDownloads([VOICE_DEFAULTS.speech, VOICE_DEFAULTS.llm]);
   const [sessions, setSessions] = useState(genHistoryData);
   const patchSession = (id, patch) =>
     setSessions(prev => prev.map(i => i.id===id ? {...i, ...patch} : i));
@@ -1554,12 +1561,12 @@ function App() {
         maxWidth:480,width:'100%',margin:'0 auto',position:'relative',
         height:'100dvh',minHeight:'100dvh'}}>
         <div style={{flex:1,overflowY:'auto'}}>
-          {screen==='smoke' && <SmokeScreen key={sessionKey} template={template} features={features} stamps={stamps} voice={voice} onGoHistory={()=>{setTemplate(null);setScreen('history');}}/>}
+          {screen==='smoke' && <SmokeScreen key={sessionKey} template={template} features={features} stamps={stamps} voice={voice} models={models} onGoHistory={()=>{setTemplate(null);setScreen('history');}}/>}
           {screen==='history' && <HistoryScreen items={sessions} onPatch={patchSession} onDelete={deleteSession}
             onCookAgain={tpl=>{setTemplate(tpl);setSessionKey(k=>k+1);setScreen('smoke');}}/>}
           {screen==='stats' && <StatsScreen items={sessions}/>}
           {screen==='settings' && <SettingsScreen mode={mode} onMode={v=>setTweak('mode',v)} systemDark={systemDark}
-            features={features} onFeature={setFeature} stamps={stamps} onStamps={setStamps} voice={voice} onVoice={setVoiceOpt}/>}
+            features={features} onFeature={setFeature} stamps={stamps} onStamps={setStamps} voice={voice} onVoice={setVoiceOpt} models={models}/>}
         </div>
         <BottomNav screen={screen} setScreen={setScreen}/>
       </div>
