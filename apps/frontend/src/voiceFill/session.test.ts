@@ -1,6 +1,7 @@
 import type { PreSmoke } from '../api/types';
 import { WeightUnits } from '../components/common/interfaces/enums';
 import { createFakeExtractor, createFakeSpeech } from './fakeAdapters';
+import type { SmokeScreenValues } from './extractionContract';
 import type { ScreenBinding } from './session';
 import { PROBLEM_CAP_MS, TOAST_MS, createVoiceFillSession } from './session';
 
@@ -974,5 +975,41 @@ describe('Voice Fill session', () => {
       now: NOW,
       existingNotes: 'Old notes',
     });
+  });
+
+  test('reads a Ramble on the smoke screen against the smoke screen, not another one', async () => {
+    const target = { target: 203, enabled: false, targetSource: 'default' as const };
+    const smokeScreen: SmokeScreenValues = {
+      chamberName: '',
+      probe1Name: '',
+      probe2Name: '',
+      probe3Name: '',
+      woodType: 'Cherry',
+      notes: '',
+      probe1Target: target,
+      probe2Target: target,
+      probe3Target: target,
+      serveAt: null,
+      restMinutes: null,
+      stamps: [],
+    };
+    const session = createVoiceFillSession({
+      screen: 'smoke',
+      speech: createFakeSpeech({ transcript: 'Post oak, an hour of rest.' }),
+      // A rest is a value of the post-smoke screen too, where it is `restTime`.
+      extractor: createFakeExtractor({ raw: { woodType: 'post oak', restMinutes: 60 } }),
+      binding: { values: () => smokeScreen, apply: () => () => undefined },
+      now: () => NOW,
+    });
+    session.start();
+    await settled();
+    session.doneTalking();
+    await settled();
+
+    const state = session.getState();
+    expect(state.phase === 'review' && state.rows.map(row => row.field)).toEqual([
+      'woodType',
+      'restMinutes',
+    ]);
   });
 });

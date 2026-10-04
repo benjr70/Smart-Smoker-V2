@@ -18,17 +18,14 @@
  * class names one of them asserted on directly.
  */
 import '@testing-library/jest-dom';
-import { Experimental_CssVarsProvider as CssVarsProvider } from '@mui/material';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import fs from 'fs';
 import path from 'path';
 import React from 'react';
-import { ApiClientProvider, SnackbarProvider, createApiClient } from '../../api';
 import { createFakeBackend, FakeBackend } from '../../api/fakeBackend';
-import { DesignSurface, appTheme } from '../../theme';
-import { VoiceFillPortsProvider, createFakeExtractor, createFakeSpeech } from '../../voiceFill';
 import { WeightUnits } from '../common/interfaces/enums';
+import { renderSmokeScreen } from './renderSmokeScreen';
 import { Smoke, delay } from './smoke';
 
 jest.mock('./smokeStep/smokeStep', () => ({
@@ -50,12 +47,14 @@ jest.mock('./smokeStep/smokeStep', () => ({
 
 let backend: FakeBackend;
 
-const renderWizard = (
-  onViewHistory?: () => void,
-  onOpenSettings?: () => void,
+interface WizardOptions {
+  onViewHistory?: () => void;
+  onOpenSettings?: () => void;
   /** Whether Voice Fill's models are provided, as scripted ones: off unless asked for. */
-  voiceFill = false
-) => {
+  voiceFill?: boolean;
+}
+
+const renderWizard = ({ onViewHistory, onOpenSettings, voiceFill = false }: WizardOptions = {}) => {
   // A session already under way: both steps have a stored document, which is
   // what the save-on-leave needs — a step whose load failed deliberately writes
   // nothing back (see `useCurrentResource`), so a wizard over an empty backend
@@ -81,26 +80,14 @@ const renderWizard = (
     postSmoke: { current: { restTime: '', steps: [''], notes: '' } },
   });
 
-  const wizard = <Smoke onViewHistory={onViewHistory} onOpenSettings={onOpenSettings} />;
-  return render(
-    <CssVarsProvider theme={appTheme}>
-      <DesignSurface>
-        <ApiClientProvider client={createApiClient(backend)}>
-          <SnackbarProvider>
-            {voiceFill ? (
-              <VoiceFillPortsProvider
-                speech={createFakeSpeech({ transcript: 'Rested an hour.' })}
-                extractor={createFakeExtractor({ raw: { restMinutes: 60 } })}
-              >
-                {wizard}
-              </VoiceFillPortsProvider>
-            ) : (
-              wizard
-            )}
-          </SnackbarProvider>
-        </ApiClientProvider>
-      </DesignSurface>
-    </CssVarsProvider>
+  return renderSmokeScreen(
+    <Smoke onViewHistory={onViewHistory} onOpenSettings={onOpenSettings} />,
+    {
+      backend,
+      voiceFill: voiceFill
+        ? { transcript: 'Rested an hour.', raw: { restMinutes: 60 } }
+        : undefined,
+    }
   );
 };
 
@@ -210,7 +197,7 @@ describe('the wizard step control', () => {
     // is the only thing between that card and the shell that navigates.
     const user = userEvent.setup();
     const onOpenSettings = jest.fn();
-    renderWizard(undefined, onOpenSettings);
+    renderWizard({ onOpenSettings });
     await screen.findByTestId('presmoke-name-input');
 
     await user.click(segment('Smoke'));
@@ -469,7 +456,7 @@ describe('advancing through the wizard', () => {
    */
   it('offers Voice fill on the Post-Smoke step, and no longer once the cook is finished', async () => {
     const user = userEvent.setup();
-    renderWizard(undefined, undefined, true);
+    renderWizard({ voiceFill: true });
     await screen.findByTestId('presmoke-name-input');
 
     await user.click(segment('Post-Smoke'));
@@ -508,7 +495,7 @@ describe('advancing through the wizard', () => {
   it('sends the user to the history from the completion screen', async () => {
     const user = userEvent.setup();
     const viewHistory = jest.fn();
-    renderWizard(viewHistory);
+    renderWizard({ onViewHistory: viewHistory });
     await screen.findByTestId('presmoke-name-input');
 
     await user.click(segment('Post-Smoke'));

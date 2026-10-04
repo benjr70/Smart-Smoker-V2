@@ -5,12 +5,8 @@ import { DynamicList } from '../../common/components/DynamicList';
 import { FormField, SectionHeading } from '../../common/components/FormField';
 import { WeightUnits } from '../../common/interfaces/enums';
 import { PreSmoke } from '../../../api/types';
-import {
-  FilledFlash,
-  VOICE_FILL_BUTTON_CLEARANCE,
-  useScreenBinding,
-  useVoiceFill,
-} from '../../../voiceFill';
+import { FilledFlash, useScreenBinding, useVoiceFill } from '../../../voiceFill';
+import { StepActionRow } from '../StepActionRow';
 import { MEAT_TYPES } from './meatTypes';
 
 type PreSmokeStepProps = {
@@ -209,20 +205,7 @@ export function PreSmokeStep(props: PreSmokeStepProps) {
           />
         </FormField>
       </FilledFlash>
-      {/* The step's one action, at the foot of it and against the right-hand
-          edge, which is where the design ends every step. The Voice fill
-          button is pinned over that same corner, so where it is offered the
-          step ends with room for it underneath: scrolled to its foot, the
-          action is clear of the button. */}
-      <Grid
-        container
-        flexDirection="row-reverse"
-        sx={{
-          paddingBottom: voiceFill.offered ? `${VOICE_FILL_BUTTON_CLEARANCE + 8}px` : '8px',
-        }}
-      >
-        {props.nextButton}
-      </Grid>
+      <StepActionRow voiceFillOffered={voiceFill.offered}>{props.nextButton}</StepActionRow>
       {voiceFill.controls}
     </Grid>
   );

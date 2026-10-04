@@ -1,13 +1,10 @@
 import '@testing-library/jest-dom';
-import { Experimental_CssVarsProvider as CssVarsProvider } from '@mui/material';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
-import { ApiClientProvider, SnackbarProvider, createApiClient } from '../../../api';
 import { createFakeBackend, FakeBackend } from '../../../api/fakeBackend';
 import { PostSmoke, Smoke } from '../../../api/types';
-import { DesignSurface, appTheme } from '../../../theme';
-import { VoiceFillPortsProvider, createFakeExtractor, createFakeSpeech } from '../../../voiceFill';
 import { WeightUnits } from '../../common/interfaces/enums';
+import { renderSmokeScreen } from '../renderSmokeScreen';
 import { PostSmokeStep } from './PostSmokeStep';
 
 const seededPostSmoke: PostSmoke = {
@@ -63,27 +60,17 @@ const pulledCook = (smoke: Partial<Smoke> = {}, postSmoke: PostSmoke = seededPos
     postSmoke: { current: postSmoke },
   });
 
+const step = <PostSmokeStep nextButton={<button data-testid="next-button">Finish</button>} />;
+
 /**
  * The step as the application root mounts it, with Voice Fill's two models
  * replaced by scripted ones behind the same ports.
  */
 const renderStep = (backend: FakeBackend, raw: unknown = RAW) =>
-  render(
-    <CssVarsProvider theme={appTheme}>
-      <DesignSurface>
-        <ApiClientProvider client={createApiClient(backend)}>
-          <SnackbarProvider>
-            <VoiceFillPortsProvider
-              speech={createFakeSpeech({ transcript: TRANSCRIPT, wordIntervalMs: 1 })}
-              extractor={createFakeExtractor({ raw })}
-            >
-              <PostSmokeStep nextButton={<button data-testid="next-button">Finish</button>} />
-            </VoiceFillPortsProvider>
-          </SnackbarProvider>
-        </ApiClientProvider>
-      </DesignSurface>
-    </CssVarsProvider>
-  );
+  renderSmokeScreen(step, {
+    backend,
+    voiceFill: { transcript: TRANSCRIPT, raw, wordIntervalMs: 1 },
+  });
 
 const restTime = () => screen.getByTestId('postsmoke-rest-time-input');
 const notes = () => screen.getByTestId('postsmoke-notes-input');
@@ -112,15 +99,7 @@ const ramble = async () => {
 
 describe('Voice Fill on the post-smoke screen', () => {
   test('is not offered where no models are provided', async () => {
-    render(
-      <CssVarsProvider theme={appTheme}>
-        <DesignSurface>
-          <ApiClientProvider client={createApiClient(pulledCook())}>
-            <PostSmokeStep nextButton={<button>Finish</button>} />
-          </ApiClientProvider>
-        </DesignSurface>
-      </CssVarsProvider>
-    );
+    renderSmokeScreen(step, { backend: pulledCook() });
 
     await screen.findByDisplayValue('Bark set early.');
     expect(screen.queryByRole('button', { name: 'Voice fill' })).not.toBeInTheDocument();

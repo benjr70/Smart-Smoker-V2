@@ -1,23 +1,21 @@
-import { Grid, TextField } from '@mui/material';
+import { Grid, InputBaseComponentProps, TextField } from '@mui/material';
 import React from 'react';
 import { useCurrentResource } from '../../../api';
 import { DynamicList } from '../../common/components/DynamicList';
 import { FormField, SectionHeading } from '../../common/components/FormField';
 import { IMaskInput } from 'react-imask';
 import { PostSmoke } from '../../../api/types';
-import {
-  FilledFlash,
-  ScreenBinding,
-  VOICE_FILL_BUTTON_CLEARANCE,
-  useScreenBinding,
-  useVoiceFill,
-} from '../../../voiceFill';
+import { FilledFlash, ScreenBinding, useScreenBinding, useVoiceFill } from '../../../voiceFill';
+import { StepActionRow } from '../StepActionRow';
 import { RestTimerCard } from './RestTimerCard';
 import { useRestConditions } from './useRestConditions';
 
 type PostSmokeStepProps = {
   nextButton: JSX.Element;
 };
+
+/** A change to one of this step's text fields. */
+type FieldChangeEvent = React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>;
 
 /**
  * What this step reads of the cook itself: the pull the Smoke → Post-Smoke
@@ -139,14 +137,14 @@ export const PostSmokeStep: React.FC<PostSmokeStepProps> = ({ nextButton }) => {
     }
   }, [cookPresent, storedRest, recordRest, setCook]);
 
-  // The screen as the cook sees it, as of the latest render: what a caller
-  // that outlives a render — Voice Fill's binding, and the undo of a rest
-  // already written — reads the rest on screen from.
-  const shown = React.useRef(shownRest);
-  shown.current = shownRest;
+  // The rest on screen as of the latest render: what a caller that outlives a
+  // render — Voice Fill's binding, and the undo of a rest already written —
+  // reads the rest the cook sees from.
+  const shownRestRef = React.useRef(shownRest);
+  shownRestRef.current = shownRest;
 
   /**
-   * A rest the pitmaster set, typed or spoken: written to the cook, where the
+   * Writes a rest the pitmaster set, typed or spoken: to the cook, where the
    * planner reads it, and to this document, whose `HH:MM` is what the history
    * screens show. The one way a rest is written from this step.
    *
@@ -154,14 +152,7 @@ export const PostSmokeStep: React.FC<PostSmokeStepProps> = ({ nextButton }) => {
    * words and whether the field counts as edited, all as they were — for as
    * long as the rest it wrote is still the one on screen.
    */
-  const changeRestTime = (restTime: string): (() => void) => {
-    // The mask hands back every value it is given, this step's own included:
-    // setting the field from the store raises a change carrying exactly what
-    // was set. Only a value that differs from what is on screen is somebody
-    // setting the rest, and only that counts as the rest having been edited.
-    if (restTime === shownRest) {
-      return () => undefined;
-    }
+  const writeRest = (restTime: string): (() => void) => {
     const before = {
       edited: restEdited.current,
       restTime: postSmokeState.restTime,
@@ -173,7 +164,7 @@ export const PostSmokeStep: React.FC<PostSmokeStepProps> = ({ nextButton }) => {
     return () => {
       // A rest changed again since holds nothing of this write any more, and
       // putting back what came before it would overwrite the newer value.
-      if (shown.current !== restTime) {
+      if (shownRestRef.current !== restTime) {
         return;
       }
       restEdited.current = before.edited;
@@ -181,28 +172,43 @@ export const PostSmokeStep: React.FC<PostSmokeStepProps> = ({ nextButton }) => {
       setCook(current => ({ ...current, restMinutes: before.restMinutes }));
     };
   };
-  const setRest = React.useRef(changeRestTime);
-  setRest.current = changeRestTime;
+  // The write as of the latest render, for the binding below: it is called
+  // long after the render that made it, and must write over what is on screen
+  // by then.
+  const writeRestRef = React.useRef(writeRest);
+  writeRestRef.current = writeRest;
+
+  /** The rest field's own change: what is typed into it, and nothing else. */
+  const onRestFieldChange = (restTime: string): void => {
+    // The mask hands back every value it is given, this step's own included:
+    // setting the field from the store raises a change carrying exactly what
+    // was set. Only a value that differs from what is on screen is somebody
+    // typing, and only that counts as the rest having been edited.
+    if (restTime === shownRest) {
+      return;
+    }
+    writeRest(restTime);
+  };
 
   // What Voice Fill reads and writes this screen through. The steps and Notes
   // are the document's, written through the setter typing goes through; the
-  // rest is the cook's, so it is read as the field shows it and written the
-  // way the field writes it — a spoken rest reaches the planner exactly as a
+  // rest is the cook's, so it is read as the field shows it and written by the
+  // write the field uses — a spoken rest reaches the planner exactly as a
   // typed one does, and its undo takes it back from the planner too.
-  const record = useScreenBinding(postSmokeState, setPostSmokeState);
+  const documentBinding = useScreenBinding(postSmokeState, setPostSmokeState);
   const binding = React.useMemo<ScreenBinding<PostSmoke>>(
     () => ({
-      values: () => ({ ...record.values(), restTime: shown.current }),
+      values: () => ({ ...documentBinding.values(), restTime: shownRestRef.current }),
       apply: ({ restTime, ...stepsAndNotes }) => {
-        const undoRest = restTime === undefined ? undefined : setRest.current(restTime);
-        const undoRecord = record.apply(stepsAndNotes);
+        const undoRest = restTime === undefined ? undefined : writeRestRef.current(restTime);
+        const undoDocument = documentBinding.apply(stepsAndNotes);
         return () => {
-          undoRecord();
+          undoDocument();
           undoRest?.();
         };
       },
     }),
-    [record]
+    [documentBinding]
   );
   const voiceFill = useVoiceFill('postSmoke', binding);
 
@@ -246,11 +252,9 @@ export const PostSmokeStep: React.FC<PostSmokeStepProps> = ({ nextButton }) => {
             // What the design puts under the field: what the answer is for, rather
             // than a second telling of the format the label already gives.
             helperText="How long will you let it rest?"
-            onChange={(event: any) => changeRestTime(event.target.value)}
+            onChange={(event: FieldChangeEvent) => onRestFieldChange(event.target.value)}
             inputProps={{ 'data-testid': 'postsmoke-rest-time-input' }}
-            InputProps={{
-              inputComponent: TextMaskCustom as any,
-            }}
+            InputProps={{ inputComponent: RestTimeMaskInput }}
           />
         </FormField>
       </FilledFlash>
@@ -296,27 +300,14 @@ export const PostSmokeStep: React.FC<PostSmokeStepProps> = ({ nextButton }) => {
             helperText="Final thoughts on the cook"
             inputProps={{ 'data-testid': 'postsmoke-notes-input' }}
             value={postSmokeState.notes}
-            onChange={(event: any) =>
+            onChange={(event: FieldChangeEvent) =>
               setPostSmokeState({ ...postSmokeState, notes: event.target.value })
             }
             rows={4}
           />
         </FormField>
       </FilledFlash>
-      {/* The step's one action, at the foot of it and against the right-hand
-          edge, which is where the design ends every step. The Voice fill
-          button is pinned over that same corner, so where it is offered the
-          step ends with room for it underneath: scrolled to its foot, the
-          action is clear of the button. */}
-      <Grid
-        container
-        flexDirection="row-reverse"
-        sx={{
-          paddingBottom: voiceFill.offered ? `${VOICE_FILL_BUTTON_CLEARANCE + 8}px` : '8px',
-        }}
-      >
-        {nextButton}
-      </Grid>
+      <StepActionRow voiceFillOffered={voiceFill.offered}>{nextButton}</StepActionRow>
       {voiceFill.controls}
     </Grid>
   );
@@ -337,9 +328,17 @@ const TextMaskCustom = React.forwardRef<HTMLElement, CustomProps>(
         definitions={{
           '#': /[1-9]/,
         }}
-        onAccept={(value: any) => onChange({ target: { name: props.name, value } })}
+        onAccept={(value: string) => onChange({ target: { name: props.name, value } })}
         overwrite
       />
     );
   }
 );
+
+/**
+ * The mask as the input a Material-UI text field is built on. The field hands
+ * its input the props of a plain one, and the mask reports a change as the
+ * name and value it carries rather than as a DOM event — which is all this
+ * step reads of one — so the two are the same component under two types.
+ */
+const RestTimeMaskInput = TextMaskCustom as unknown as React.ElementType<InputBaseComponentProps>;
