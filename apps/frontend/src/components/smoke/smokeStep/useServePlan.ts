@@ -35,6 +35,12 @@ export interface UseServePlanInput {
   refresh: () => void;
 }
 
+/** The two halves of a plan as the cook stores them, each `null` where it has none. */
+export interface StoredServePlan {
+  serveAt: Date | null;
+  restMinutes: number | null;
+}
+
 export interface UseServePlanResult {
   /** Whether the planner is switched on at all. */
   enabled: boolean;
@@ -47,10 +53,12 @@ export interface UseServePlanResult {
   /** Change how long the meat rests before it is carved, in minutes. */
   setRestMinutes: (restMinutes: number | null) => Promise<boolean>;
   /**
-   * The rest this cook has stored, in minutes, or `null` for a cook with none.
-   * Rejects when there is no cook to read it from.
+   * The serve time and the rest this cook has stored, read from the cook itself
+   * once every write this screen has in flight has landed — so it answers what
+   * the cook holds after them, not between them. Each is `null` where the cook
+   * has none. Rejects when there is no cook to read them from.
    */
-  storedRest: () => Promise<number | null>;
+  stored: () => Promise<StoredServePlan>;
   /**
    * Start a plan for a cook that has none, on the pitmaster's say-so rather
    * than on an estimate: the same arithmetic the seed does, worked from now,
@@ -162,19 +170,26 @@ export function useServePlan({ plan, estimate, refresh }: UseServePlanInput): Us
    * Rejects rather than guessing when the cook cannot be read: a seed made on a
    * guess is a plan the pitmaster has to notice and undo.
    */
-  const storedRest = useCallback(async (): Promise<number | null> => {
+  const readStored = useCallback(async (): Promise<StoredServePlan> => {
     const session = await clientRef.current.state.get();
     if (!session?.smokeId) {
       throw new Error('no cook is set up to plan');
     }
     const smoke = await clientRef.current.smoke.getById(session.smokeId);
-    return smoke.restMinutes ?? null;
+    return { serveAt: smoke.serveAt ?? null, restMinutes: smoke.restMinutes ?? null };
   }, []);
 
   /** That same rest as a plan is worked from: a cook with none rests for nothing. */
   const readStoredRest = useCallback(
-    (): Promise<number> => storedRest().then(rest => rest ?? 0),
-    [storedRest]
+    (): Promise<number> => readStored().then(({ restMinutes }) => restMinutes ?? 0),
+    [readStored]
+  );
+
+  // Behind the write in flight, as the writes themselves are: a read that
+  // overtook a tap would answer the plan the tap is about to replace.
+  const stored = useCallback(
+    (): Promise<StoredServePlan> => pending.current.catch(() => undefined).then(readStored),
+    [readStored]
   );
 
   const eta = realEta(estimate);
@@ -218,7 +233,7 @@ export function useServePlan({ plan, estimate, refresh }: UseServePlanInput): Us
     enabled: enabled ?? DEFAULT_SERVE_PLAN_SETTINGS.enabled,
     setServeAt: useCallback((serveAt: Date | null) => write({ serveAt }), [write]),
     setRestMinutes: useCallback((restMinutes: number | null) => write({ restMinutes }), [write]),
-    storedRest,
+    stored,
     createPlan,
   };
 }

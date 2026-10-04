@@ -84,10 +84,17 @@ export interface RunningCook {
    * read of the settings document and one write of it, through the same path
    * {@link setTarget} takes, however many probes are changed.
    *
-   * Resolves what those probes held before the write, which is what undoing it
-   * writes back, or `null` when nothing was stored.
+   * Given `standing`, a probe is changed only where its row still holds what
+   * `standing` says of it, as the document reads at the moment of the write:
+   * how a change is taken back without taking back what was set over it since.
+   *
+   * Resolves what the probes it changed held before the write, which is what
+   * undoing it writes back, or `null` when nothing was stored.
    */
-  setTargets: (changes: ProbeTargetChanges) => Promise<ProbeTargetChanges | null>;
+  setTargets: (
+    changes: ProbeTargetChanges,
+    standing?: ProbeTargetChanges
+  ) => Promise<ProbeTargetChanges | null>;
   /**
    * Ask for the cook to be read again, now.
    *
@@ -242,7 +249,27 @@ export function useRunningCook(smoking: boolean): RunningCook {
   );
 
   const setTargets = useCallback(
-    (changes: ProbeTargetChanges) => saveRows(() => changes),
+    (changes: ProbeTargetChanges, standing?: ProbeTargetChanges) =>
+      saveRows(settings => {
+        if (!standing) {
+          return changes;
+        }
+        const still: ProbeTargetChanges = {};
+        settings.probeTarget?.probes?.forEach(row => {
+          const held = standing[row.slot];
+          const change = changes[row.slot];
+          if (
+            change &&
+            held &&
+            row.target === held.target &&
+            row.enabled === held.enabled &&
+            row.targetSource === held.targetSource
+          ) {
+            still[row.slot] = change;
+          }
+        });
+        return still;
+      }),
     [saveRows]
   );
 

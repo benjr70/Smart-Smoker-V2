@@ -47,11 +47,32 @@ const storedProbes: Partial<StoredApplicationSettings> = {
   },
 };
 
+/** The cook every backend of this suite is running, as the backend stores it. */
+const cookRecord = {
+  _id: 'smoke-1',
+  preSmokeId: 'pre-1',
+  tempsId: 'temps-1',
+  postSmokeId: 'post-1',
+  smokeProfileId: 'prof-1',
+  ratingId: 'rate-1',
+  date: new Date('2026-08-01T15:00:00.000Z'),
+  status: 0,
+};
+
 /** A running cook with a plan: dinner at 22:00, a 45-minute rest. */
 const backendWithCook = (settings: Partial<StoredApplicationSettings> = {}): FakeBackend =>
   createFakeBackend({
     state: { smokeId: 'smoke-1', smoking: true },
     appSettings: { settings: { ...storedProbes, ...settings } },
+    smoke: {
+      records: {
+        'smoke-1': {
+          ...cookRecord,
+          serveAt: new Date('2026-08-01T22:00:00.000Z'),
+          restMinutes: 45,
+        },
+      },
+    },
     timeline: {
       current: {
         ...NO_CURRENT_TIMELINE,
@@ -179,17 +200,7 @@ const backendWithUnplannedCook = (restMinutes?: number): FakeBackend =>
     appSettings: { settings: storedProbes },
     smoke: {
       records: {
-        'smoke-1': {
-          _id: 'smoke-1',
-          preSmokeId: 'pre-1',
-          tempsId: 'temps-1',
-          postSmokeId: 'post-1',
-          smokeProfileId: 'prof-1',
-          ratingId: 'rate-1',
-          date: new Date('2026-08-01T15:00:00.000Z'),
-          status: 0,
-          ...(restMinutes !== undefined && { restMinutes }),
-        },
+        'smoke-1': { ...cookRecord, ...(restMinutes !== undefined && { restMinutes }) },
       },
     },
     timeline: {
@@ -318,6 +329,27 @@ describe('Voice Fill on the smoke screen', () => {
     });
   });
 
+  test('Undo leaves a target the cook has typed over the fill’s since', async () => {
+    const { backend } = await renderStep({
+      probeTargets: [
+        { probe: 'probe one', target: 203 },
+        { probe: 'probe two', target: 198 },
+      ],
+    });
+    await rambleAndFill();
+    fireEvent.change(screen.getByTestId('completion-target-input'), { target: { value: '205' } });
+    fireEvent.blur(screen.getByTestId('completion-target-input'));
+    await settle();
+
+    await undo();
+
+    expect(await storedTargets(backend)).toEqual({
+      probe1: { target: 205, enabled: true, targetSource: 'user' },
+      probe2: { target: 203, enabled: false, targetSource: 'default' },
+      probe3: { target: 203, enabled: false, targetSource: 'default' },
+    });
+  });
+
   test('the serve time and rest rows write what the Serve Plan card’s steppers write', async () => {
     const { backend } = await renderStep({ serveInMinutes: 300, restMinutes: 60 });
 
@@ -344,6 +376,55 @@ describe('Voice Fill on the smoke screen', () => {
         .slice(2)
         .map(request => request.body)
     ).toEqual([{ serveAt: new Date('2026-08-01T22:00:00.000Z') }, { restMinutes: 45 }]);
+  });
+
+  test('Undo leaves a serve time moved since the fill, and still puts the rest back', async () => {
+    const { backend } = await renderStep({ serveInMinutes: 300, restMinutes: 60 });
+    await rambleAndFill();
+    // Moved from somewhere else — the touchscreen — after the fill landed.
+    const moved = new Date('2026-08-01T23:30:00.000Z');
+    await createApiClient(backend).smoke.saveServePlan({ serveAt: moved });
+
+    await undo();
+
+    expect(
+      writesTo(backend, 'smoke/current/serve-plan')
+        .slice(3)
+        .map(request => request.body)
+    ).toEqual([{ restMinutes: 45 }]);
+    expect(backend.store.smoke.records['smoke-1']).toMatchObject({
+      serveAt: moved,
+      restMinutes: 45,
+    });
+  });
+
+  test('Undo leaves a rest changed since the fill', async () => {
+    const { backend } = await renderStep({ restMinutes: 60 });
+    await rambleAndFill();
+    await createApiClient(backend).smoke.saveServePlan({ restMinutes: 90 });
+
+    await undo();
+
+    expect(writesTo(backend, 'smoke/current/serve-plan').map(request => request.body)).toEqual([
+      { restMinutes: 60 },
+      { restMinutes: 90 },
+    ]);
+  });
+
+  test('a rest whose previous value cannot be read is not written, and is said so', async () => {
+    const backend = backendWithUnplannedCook(30);
+    backend.injectFault({ method: 'get', path: 'smoke/smoke-1', status: 500 });
+    await renderStep({ restMinutes: 60 }, backend);
+
+    await rambleAndFill();
+
+    expect(await screen.findByText('Could not save the serve plan.')).toBeInTheDocument();
+    expect(writesTo(backend, 'smoke/current/serve-plan')).toEqual([]);
+
+    await undo();
+
+    // Nothing of the fill's was stored, so there is nothing of it to take back.
+    expect(writesTo(backend, 'smoke/current/serve-plan')).toEqual([]);
   });
 
   test('the Log now row logs one entry per stamp, and Undo removes them', async () => {

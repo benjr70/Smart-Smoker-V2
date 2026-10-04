@@ -11,6 +11,7 @@ import {
   getDefaultApiClient,
   resolveStampLabel,
   resolveStampTone,
+  useApiSnackbar,
   useCookEvents,
   useStampCatalogue,
 } from '../../../api';
@@ -144,6 +145,7 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
   // settings, plan and log the cards below are drawn from, and the same hooks
   // they write with — so a value filled from a Ramble is stored exactly as a
   // typed or tapped one is.
+  const notify = useApiSnackbar();
   const binding = useSmokeScreenBinding({
     profile: session,
     smoking: session.smoking,
@@ -152,6 +154,7 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
     plan: cook.servePlan,
     planOffered,
     servePlan,
+    notify,
     logStamp: cookLog.log,
     removeStamp: cookLog.remove,
     stamps: catalogue.stamps,

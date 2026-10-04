@@ -55,8 +55,14 @@ export interface SmokeScreenBindingInput {
   smoking: boolean;
   /** Every probe's row of the settings document, as last read. */
   probes: readonly ProbeTargetEntry[];
-  /** The probe-target write path: resolves what the changed probes held before. */
-  setTargets(changes: ProbeTargetChanges): Promise<ProbeTargetChanges | null>;
+  /**
+   * The probe-target write path: resolves what the changed probes held before.
+   * Given `standing`, it changes only the probes whose rows still hold that.
+   */
+  setTargets(
+    changes: ProbeTargetChanges,
+    standing?: ProbeTargetChanges
+  ): Promise<ProbeTargetChanges | null>;
   /** The cook's Serve Plan as the backend last judged it, or `null` for none. */
   plan: ServePlanStatus | null;
   /**
@@ -65,12 +71,14 @@ export interface SmokeScreenBindingInput {
    * sets no serve time and no rest on a screen that has nowhere to show them.
    */
   planOffered: boolean;
-  /** The Serve Plan write path, and the rest a cook with no plan has stored. */
+  /** The Serve Plan write path, and the serve time and rest the cook has stored. */
   servePlan: {
     setServeAt(serveAt: Date | null): Promise<boolean>;
     setRestMinutes(restMinutes: number | null): Promise<boolean>;
-    storedRest(): Promise<number | null>;
+    stored(): Promise<{ serveAt: Date | null; restMinutes: number | null }>;
   };
+  /** Tells the cook of something that could not be done, as the screen's hooks do. */
+  notify(message: string): void;
   /** The cook log path: logs one stamp and answers the entry stored for it. */
   logStamp(stampKey: string): Promise<CookEvent | null>;
   /** Removes one entry from the cook log. */
@@ -157,7 +165,9 @@ const fillProfile = (
 /**
  * Writes every spoken target in one save of the settings document. Undo writes
  * back what those probes' rows held when the save read them — the target, the
- * watch and the source of each — once the fill's own save has landed.
+ * watch and the source of each — once the fill's own save has landed, and only
+ * to a probe whose row still holds what the fill wrote: a target set over the
+ * fill's since is the cook's, and stays.
  */
 const fillTargets = (
   { setTargets }: SmokeScreenBindingInput,
@@ -174,42 +184,68 @@ const fillTargets = (
     return undefined;
   }
   const written = setTargets(changes);
-  return () => written.then(before => (before ? setTargets(before) : null));
+  return () => written.then(before => (before ? setTargets(before, changes) : null));
 };
 
 /**
  * Writes the serve time and the rest, each as its own stepper writes it. Undo
  * writes back what the cook held before: the plan on screen, or — for the rest
  * of a cook that has no plan yet — the rest the cook has stored, read before
- * the fill's write is sent so that it is not the fill's own.
+ * the fill's write is sent so that it is not the fill's own. A rest whose
+ * previous value cannot be read is not written at all, and the cook is told:
+ * written, it would be a change Undo could not take back.
+ *
+ * Undo reads the cook again and writes back only the half that still holds what
+ * the fill wrote, so a serve time or a rest stepped since is left as stepped.
+ * Where the cook cannot be read to tell, Undo does what it was asked.
  */
 const fillServePlan = (
-  { plan, servePlan }: SmokeScreenBindingInput,
+  { plan, servePlan, notify }: SmokeScreenBindingInput,
   write: Partial<SmokeScreenValues>
 ): Undo | undefined => {
-  const undos: Undo[] = [];
-  if (write.serveAt !== undefined) {
-    const before = plan?.serveAt ?? null;
-    const written = servePlan.setServeAt(write.serveAt);
-    undos.push(() => written.then(stored => stored && servePlan.setServeAt(before)));
+  const { serveAt, restMinutes } = write;
+  if (serveAt === undefined && restMinutes === undefined) {
+    return undefined;
   }
-  if (write.restMinutes !== undefined) {
-    const { restMinutes } = write;
-    // A rest that cannot be read is one Undo has nothing to write back to.
-    const before: Promise<{ rest: number | null } | undefined> = plan
-      ? Promise.resolve({ rest: plan.restMinutes })
-      : servePlan.storedRest().then(
-          rest => ({ rest }),
-          () => undefined
-        );
-    const written = before.then(() => servePlan.setRestMinutes(restMinutes));
-    undos.push(() =>
-      Promise.all([before, written]).then(
-        ([held, stored]) => stored && held && servePlan.setRestMinutes(held.rest)
-      )
-    );
-  }
-  return undos.length > 0 ? () => Promise.all(undos.map(undo => undo())) : undefined;
+  const serveBefore = plan?.serveAt ?? null;
+  const serveWritten =
+    serveAt === undefined ? Promise.resolve(false) : servePlan.setServeAt(serveAt);
+  const restBefore: Promise<{ rest: number | null } | undefined> =
+    restMinutes === undefined
+      ? Promise.resolve(undefined)
+      : plan
+        ? Promise.resolve({ rest: plan.restMinutes })
+        : servePlan.stored().then(
+            stored => ({ rest: stored.restMinutes }),
+            () => undefined
+          );
+  const restWritten = restBefore.then(held => {
+    if (restMinutes === undefined) {
+      return false;
+    }
+    if (!held) {
+      notify('Could not save the serve plan.');
+      return false;
+    }
+    return servePlan.setRestMinutes(restMinutes);
+  });
+  return async () => {
+    const [serveStored, restStored, held] = await Promise.all([
+      serveWritten,
+      restWritten,
+      restBefore,
+    ]);
+    if (!serveStored && !restStored) {
+      return;
+    }
+    const now = await servePlan.stored().catch(() => undefined);
+    if (serveStored && (!now || now.serveAt?.getTime() === serveAt?.getTime())) {
+      await servePlan.setServeAt(serveBefore);
+    }
+    if (restStored && held && (!now || now.restMinutes === restMinutes)) {
+      await servePlan.setRestMinutes(held.rest);
+    }
+  };
 };
 
 /**
