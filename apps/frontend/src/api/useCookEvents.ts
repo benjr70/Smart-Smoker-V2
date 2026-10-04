@@ -46,6 +46,12 @@ export interface UseCookEventsResult {
    * "Logged" or "Not logged" rather than claiming a phantom entry.
    */
   record: (stampKey: string) => Promise<boolean>;
+  /**
+   * Log one tap and answer the entry the backend stored for it, or `null` when
+   * it stored none: what a caller that may take the entry out again — by its
+   * id — needs, and {@link record} does not say.
+   */
+  log: (stampKey: string) => Promise<CookEvent | null>;
   /** Remove one mis-tapped event. Resolves whether it was removed. */
   remove: (id: string) => Promise<boolean>;
 }
@@ -96,8 +102,8 @@ export function useCookEvents(options: UseCookEventsOptions = {}): UseCookEvents
     });
   }, []);
 
-  const record = useCallback(
-    (stampKey: string): Promise<boolean> =>
+  const log = useCallback(
+    (stampKey: string): Promise<CookEvent | null> =>
       client.cookEvents
         .record(stampKey)
         .then(recorded => {
@@ -108,13 +114,18 @@ export function useCookEvents(options: UseCookEventsOptions = {}): UseCookEvents
           setEvents(log =>
             log.some(event => event._id === recorded._id) ? log : [...log, recorded]
           );
-          return true;
+          return recorded;
         })
         .catch(() => {
           notifyRef.current('Could not log that.');
-          return false;
+          return null;
         }),
     [client]
+  );
+
+  const record = useCallback(
+    (stampKey: string): Promise<boolean> => log(stampKey).then(recorded => recorded !== null),
+    [log]
   );
 
   const remove = useCallback(
@@ -133,5 +144,5 @@ export function useCookEvents(options: UseCookEventsOptions = {}): UseCookEvents
     [client]
   );
 
-  return { events, record, remove };
+  return { events, record, log, remove };
 }

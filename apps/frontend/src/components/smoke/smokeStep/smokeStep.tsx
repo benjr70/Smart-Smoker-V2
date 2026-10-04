@@ -16,6 +16,7 @@ import {
 } from '../../../api';
 import { createSessionApiPort } from '../../../api/sessionApiAdapter';
 import { useChartPalette } from '../../../theme';
+import { FilledFlash, VOICE_FILL_BUTTON_CLEARANCE, useVoiceFill } from '../../../voiceFill';
 import { chartNamesOf } from '../../common/chartNames';
 import { useChartEvents } from '../../common/chartEvents';
 import { CompletionCard } from './CompletionCard';
@@ -28,6 +29,7 @@ import { TemperatureChannel, TemperatureRow } from './TemperatureRow';
 import { useRunningCook } from './useRunningCook';
 import { useProbeTargets } from './useProbeTargets';
 import { useServePlan } from './useServePlan';
+import { useSmokeScreenBinding } from './useSmokeScreenBinding';
 import { useTemperatureSeries } from './useTemperatureSeries';
 import { WOOD_TYPES } from './woodTypes';
 
@@ -132,6 +134,29 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
     session.setNotes('');
     session.setWoodType('');
   });
+  // Whether there is a Serve Plan card to draw: absent when the planner is
+  // switched off, and absent when there is no cook to plan — but present from
+  // the start of one the backend has answered no plan for yet, saying it is
+  // gathering data rather than leaving the planner invisible for the first
+  // hours of every cook.
+  const planOffered = servePlan.enabled && (cook.servePlan !== null || cook.estimate !== null);
+  // What Voice Fill reads and writes this screen through: the same session,
+  // settings, plan and log the cards below are drawn from, and the same hooks
+  // they write with — so a value filled from a Ramble is stored exactly as a
+  // typed or tapped one is.
+  const binding = useSmokeScreenBinding({
+    profile: session,
+    smoking: session.smoking,
+    probes: cook.probes,
+    setTargets: cook.setTargets,
+    plan: cook.servePlan,
+    planOffered,
+    servePlan,
+    logStamp: cookLog.log,
+    removeStamp: cookLog.remove,
+    stamps: catalogue.stamps,
+  });
+  const voiceFill = useVoiceFill('smoke', binding);
 
   /**
    * The four readings in the order the design lists them, each paired with the
@@ -141,30 +166,36 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
    */
   const readings: {
     channel: TemperatureChannel;
+    /** The name's field, as Voice Fill knows it. */
+    field: 'chamberName' | 'probe1Name' | 'probe2Name' | 'probe3Name';
     name: string;
     placeholder: string;
     value: string;
   }[] = [
     {
       channel: 'chamber',
+      field: 'chamberName',
       name: session.chamberName,
       placeholder: 'Chamber',
       value: session.chamberTemp,
     },
     {
       channel: 'probe1',
+      field: 'probe1Name',
       name: session.probe1Name,
       placeholder: 'Probe 1',
       value: session.probeTemp1,
     },
     {
       channel: 'probe2',
+      field: 'probe2Name',
       name: session.probe2Name,
       placeholder: 'Probe 2',
       value: session.probeTemp2,
     },
     {
       channel: 'probe3',
+      field: 'probe3Name',
       name: session.probe3Name,
       placeholder: 'Probe 3',
       value: session.probeTemp3,
@@ -181,25 +212,37 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
       {/* The question the screen exists to answer, above the numbers it is
           answered from — and it answers it and nothing else: reaching the
           target moves no step and sends no message. */}
-      <CompletionCard
-        estimate={cook.estimate}
-        probe={cook.probe}
-        onTargetChange={cook.setTarget}
-        onOpenSettings={props.onOpenSettings}
-      />
-      {/* Directly under the estimate, because it is a judgement of it: the ETA
-          and what it means for dinner read as one answer. Absent when the
-          planner is switched off, and absent when there is no cook to plan —
-          but present from the start of one the backend has answered no plan
-          for yet, saying it is gathering data rather than leaving the planner
-          invisible for the first hours of every cook. */}
-      {servePlan.enabled && (cook.servePlan !== null || cook.estimate !== null) && (
-        <ServePlanCard
-          plan={cook.servePlan}
-          onServeAtChange={servePlan.setServeAt}
-          onRestChange={servePlan.setRestMinutes}
-          onCreatePlan={servePlan.createPlan}
+      {/* The card is where a probe's target is read on this screen, so it is
+          what flashes when a Ramble has set one. */}
+      <FilledFlash
+        field="probeTargets"
+        flashing={
+          voiceFill.isFlashing('probe1Target') ||
+          voiceFill.isFlashing('probe2Target') ||
+          voiceFill.isFlashing('probe3Target')
+        }
+      >
+        <CompletionCard
+          estimate={cook.estimate}
+          probe={cook.probe}
+          onTargetChange={cook.setTarget}
+          onOpenSettings={props.onOpenSettings}
         />
+      </FilledFlash>
+      {/* Directly under the estimate, because it is a judgement of it: the ETA
+          and what it means for dinner read as one answer. */}
+      {planOffered && (
+        <FilledFlash
+          field="servePlan"
+          flashing={voiceFill.isFlashing('serveAt') || voiceFill.isFlashing('restMinutes')}
+        >
+          <ServePlanCard
+            plan={cook.servePlan}
+            onServeAtChange={servePlan.setServeAt}
+            onRestChange={servePlan.setRestMinutes}
+            onCreatePlan={servePlan.createPlan}
+          />
+        </FilledFlash>
       )}
       <Card data-testid="smoke-temps-card">
         {readings.map((reading, index) => (
@@ -208,13 +251,15 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
                 the list at both ends, and a rule on top of it would read as a
                 double line. */}
             {index > 0 ? <Divider /> : null}
-            <TemperatureRow
-              channel={reading.channel}
-              name={reading.name}
-              placeholder={reading.placeholder}
-              value={reading.value}
-              onNameChange={name => session.setName(reading.channel, name)}
-            />
+            <FilledFlash field={reading.field} flashing={voiceFill.isFlashing(reading.field)}>
+              <TemperatureRow
+                channel={reading.channel}
+                name={reading.name}
+                placeholder={reading.placeholder}
+                value={reading.value}
+                onNameChange={name => session.setName(reading.channel, name)}
+              />
+            </FilledFlash>
           </React.Fragment>
         ))}
       </Card>
@@ -259,13 +304,15 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
           they caused. Only ever on this step — a stamp is something done to a
           cook that is running, so the pre-smoke and post-smoke steps offer
           none. */}
-      <EventLog
-        stamps={catalogue.stamps}
-        events={cookLog.events}
-        smoking={session.smoking}
-        onRecord={cookLog.record}
-        onRemove={cookLog.remove}
-      />
+      <FilledFlash field="stamps" flashing={voiceFill.isFlashing('stamps')}>
+        <EventLog
+          stamps={catalogue.stamps}
+          events={cookLog.events}
+          smoking={session.smoking}
+          onRecord={cookLog.record}
+          onRemove={cookLog.remove}
+        />
+      </FilledFlash>
       <Grid container justifyContent="space-around">
         {/* Two states, two appearances. Lighting a cook is what the screen is
             for, so it is offered filled in the accent; putting one out is
@@ -300,37 +347,54 @@ export function SmokeStepView(props: SmokeStepProps): JSX.Element {
             rather than Material-UI's free-text default of hiding it. A cook on
             a wood nobody listed is still recordable — which is the whole reason
             this is not a real select. */}
-        <Autocomplete
-          freeSolo
-          forcePopupIcon
-          options={WOOD_TYPES}
-          inputValue={session.woodType}
-          onInputChange={(event, newInputValue) => session.setWoodType(newInputValue)}
-          renderInput={params => (
-            <TextField
-              {...params}
-              fullWidth
-              label="Wood Type"
-              inputProps={{ ...params.inputProps, 'data-testid': 'smoke-wood-type-input' }}
-            />
-          )}
-        />
-        <TextField
+        <FilledFlash field="woodType" flashing={voiceFill.isFlashing('woodType')}>
+          <Autocomplete
+            freeSolo
+            forcePopupIcon
+            options={WOOD_TYPES}
+            inputValue={session.woodType}
+            onInputChange={(event, newInputValue) => session.setWoodType(newInputValue)}
+            renderInput={params => (
+              <TextField
+                {...params}
+                fullWidth
+                label="Wood Type"
+                inputProps={{ ...params.inputProps, 'data-testid': 'smoke-wood-type-input' }}
+              />
+            )}
+          />
+        </FilledFlash>
+        <FilledFlash
+          field="notes"
+          flashing={voiceFill.isFlashing('notes')}
           sx={{ marginTop: '14px' }}
-          fullWidth
-          id="outlined-multiline-static"
-          label="Notes"
-          placeholder="How is the cook going?"
-          multiline
-          inputProps={{ 'data-testid': 'smoke-notes-input' }}
-          value={session.notes}
-          onChange={event => session.setNotes(event.target.value)}
-          rows={4}
-        />
+        >
+          <TextField
+            fullWidth
+            id="outlined-multiline-static"
+            label="Notes"
+            placeholder="How is the cook going?"
+            multiline
+            inputProps={{ 'data-testid': 'smoke-notes-input' }}
+            value={session.notes}
+            onChange={event => session.setNotes(event.target.value)}
+            rows={4}
+          />
+        </FilledFlash>
       </Card>
-      <Grid container flexDirection="row-reverse" sx={{ paddingBottom: '8px' }}>
+      {/* The Voice fill button is pinned over the corner the step's one action
+          ends in, so where it is offered the step ends with room for it
+          underneath: scrolled to its foot, the action is clear of the button. */}
+      <Grid
+        container
+        flexDirection="row-reverse"
+        sx={{
+          paddingBottom: voiceFill.offered ? `${VOICE_FILL_BUTTON_CLEARANCE + 8}px` : '8px',
+        }}
+      >
         {props.nextButton}
       </Grid>
+      {voiceFill.controls}
     </Grid>
   );
 }

@@ -1,5 +1,6 @@
 import type { PreSmoke } from '../api/types';
 import { WeightUnits } from '../components/common/interfaces/enums';
+import { DEFAULT_STAMPS } from '../api/cookStamps';
 import { createFakeExtractor, createFakeSpeech } from './fakeAdapters';
 import type { SmokeScreenValues } from './extractionContract';
 import type { ScreenBinding } from './session';
@@ -1010,6 +1011,48 @@ describe('Voice Fill session', () => {
     expect(state.phase === 'review' && state.rows.map(row => row.field)).toEqual([
       'woodType',
       'restMinutes',
+    ]);
+  });
+
+  test('reads a Ramble on the smoke screen against the probe names and stamps its screen gives', async () => {
+    const target = { target: 203, enabled: false, targetSource: 'default' as const };
+    const smokeScreen: SmokeScreenValues = {
+      chamberName: '',
+      probe1Name: 'Flat',
+      probe2Name: 'Point',
+      probe3Name: '',
+      woodType: '',
+      notes: '',
+      probe1Target: target,
+      probe2Target: target,
+      probe3Target: target,
+      serveAt: null,
+      restMinutes: null,
+      stamps: [],
+    };
+    const context = { probeNames: ['Flat', 'Point', ''], enabledStamps: DEFAULT_STAMPS };
+    const extract = jest.fn().mockResolvedValue({
+      probeTargets: [{ probe: 'the point', target: 198 }],
+      stamps: [{ stamp: 'wrap' }],
+    });
+    const session = createVoiceFillSession({
+      screen: 'smoke',
+      speech: createFakeSpeech({ transcript: TRANSCRIPT }),
+      extractor: { load: () => Promise.resolve(), extract },
+      binding: { values: () => smokeScreen, apply: () => () => undefined, context: () => context },
+      now: () => NOW,
+    });
+    session.start();
+    await settled();
+    session.doneTalking();
+    await settled();
+
+    // The model is told what the screen gave, and its answer is read against it.
+    expect(extract).toHaveBeenCalledWith('smoke', TRANSCRIPT, { now: NOW, ...context });
+    const state = session.getState();
+    expect(state.phase === 'review' && state.rows.map(row => row.field)).toEqual([
+      'probe2Target',
+      'stamps',
     ]);
   });
 });

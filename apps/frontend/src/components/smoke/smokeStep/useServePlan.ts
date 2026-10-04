@@ -43,9 +43,14 @@ export interface UseServePlanResult {
    * stored, so a card showing the tap ahead of the backend knows whether to
    * keep showing it.
    */
-  setServeAt: (serveAt: Date) => Promise<boolean>;
+  setServeAt: (serveAt: Date | null) => Promise<boolean>;
   /** Change how long the meat rests before it is carved, in minutes. */
-  setRestMinutes: (restMinutes: number) => Promise<boolean>;
+  setRestMinutes: (restMinutes: number | null) => Promise<boolean>;
+  /**
+   * The rest this cook has stored, in minutes, or `null` for a cook with none.
+   * Rejects when there is no cook to read it from.
+   */
+  storedRest: () => Promise<number | null>;
   /**
    * Start a plan for a cook that has none, on the pitmaster's say-so rather
    * than on an estimate: the same arithmetic the seed does, worked from now,
@@ -157,14 +162,20 @@ export function useServePlan({ plan, estimate, refresh }: UseServePlanInput): Us
    * Rejects rather than guessing when the cook cannot be read: a seed made on a
    * guess is a plan the pitmaster has to notice and undo.
    */
-  const readStoredRest = useCallback(async (): Promise<number> => {
+  const storedRest = useCallback(async (): Promise<number | null> => {
     const session = await clientRef.current.state.get();
     if (!session?.smokeId) {
       throw new Error('no cook is set up to plan');
     }
     const smoke = await clientRef.current.smoke.getById(session.smokeId);
-    return smoke.restMinutes ?? 0;
+    return smoke.restMinutes ?? null;
   }, []);
+
+  /** That same rest as a plan is worked from: a cook with none rests for nothing. */
+  const readStoredRest = useCallback(
+    (): Promise<number> => storedRest().then(rest => rest ?? 0),
+    [storedRest]
+  );
 
   const eta = realEta(estimate);
 
@@ -205,8 +216,9 @@ export function useServePlan({ plan, estimate, refresh }: UseServePlanInput): Us
     // card of a cook that has a plan is not withheld for a round trip; nothing
     // is *written* on that assumption.
     enabled: enabled ?? DEFAULT_SERVE_PLAN_SETTINGS.enabled,
-    setServeAt: useCallback((serveAt: Date) => write({ serveAt }), [write]),
-    setRestMinutes: useCallback((restMinutes: number) => write({ restMinutes }), [write]),
+    setServeAt: useCallback((serveAt: Date | null) => write({ serveAt }), [write]),
+    setRestMinutes: useCallback((restMinutes: number | null) => write({ restMinutes }), [write]),
+    storedRest,
     createPlan,
   };
 }

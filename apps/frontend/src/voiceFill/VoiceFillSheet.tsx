@@ -117,12 +117,54 @@ const weightText = (value: unknown): string => {
 };
 
 /**
+ * A probe's target as a row writes it: the temperature it is cooked to, or
+ * nothing for a probe nobody is watching — its row holds a number all the same,
+ * but not one anybody is cooking to.
+ */
+const probeTargetText = (value: unknown): string => {
+  const { target, enabled }: { target?: unknown; enabled?: unknown } =
+    typeof value === 'object' && value !== null ? value : {};
+  return enabled && typeof target === 'number' ? `${target}°F` : '';
+};
+
+/** A serve time as a row writes it: the day and the time on the clock. */
+const serveAtText = (value: unknown): string =>
+  value instanceof Date
+    ? value.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })
+    : '';
+
+/** A rest as a row writes it: `45 min`, `1 h`, `1 h 15 min`. */
+const restText = (value: unknown): string => {
+  if (typeof value !== 'number') {
+    return '';
+  }
+  const hours = Math.floor(value / 60);
+  const minutes = value % 60;
+  return [hours > 0 ? `${hours} h` : '', minutes > 0 || hours === 0 ? `${minutes} min` : '']
+    .filter(Boolean)
+    .join(' ');
+};
+
+/** The stamps a row logs, each by what its button says. */
+const stampsText = (value: unknown): string =>
+  (Array.isArray(value) ? value : [])
+    .map((stamp: { label?: unknown }) => String(stamp?.label ?? ''))
+    .filter(Boolean)
+    .join(', ');
+
+/**
  * How the screen values that are not plain text are written, by the field that
  * holds them. A value is written by what its field is, never by what it looks
  * like: an object is not a weight because it is an object.
  */
 const WRITTEN_BY_FIELD: Readonly<Record<string, (value: unknown) => string>> = {
   weight: weightText,
+  probe1Target: probeTargetText,
+  probe2Target: probeTargetText,
+  probe3Target: probeTargetText,
+  serveAt: serveAtText,
+  restMinutes: restText,
+  stamps: stampsText,
 };
 
 /** A field's value as a Review row writes it; nothing for one that is empty. */

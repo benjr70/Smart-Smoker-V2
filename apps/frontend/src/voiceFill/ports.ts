@@ -5,7 +5,7 @@
  * session and the screens never know which model is picked — and a scripted
  * fake behind the same port exercises the whole flow with no model at all.
  */
-import type { VoiceFillScreen } from './fieldDefinition';
+import type { VoiceFillContext, VoiceFillScreen } from './fieldDefinition';
 
 /** Speech-to-text: turns what the microphone hears into a transcript. */
 export interface SpeechPort {
@@ -33,10 +33,12 @@ export const isMicrophoneBlocked = (error: unknown): boolean =>
   error !== null &&
   (error as { name?: unknown }).name === MICROPHONE_BLOCKED_ERROR;
 
-/** What an extractor is told besides the transcript. */
-export interface ExtractionContext {
-  /** When the Ramble was spoken. */
-  now: Date;
+/**
+ * What an extractor is told besides the transcript: when the Ramble was spoken
+ * and, on the smoke screen, the names its probes go by and the stamps its cook
+ * log offers.
+ */
+export interface ExtractionContext extends VoiceFillContext {
   /**
    * The screen's Notes, given only when they are short enough to be merged
    * with the Ramble's summary into one text.

@@ -15,6 +15,20 @@ export const SCRIPTED_RAMBLE = {
     weight: 16,
     steps: ['trimmed the fat cap', 'mustard binder'],
   },
+  /**
+   * What they make of it on the smoke screen, which has other fields to fill: a
+   * probe name, the wood, a target, the Serve Plan, a stamp and Notes — one of
+   * each kind of thing that screen writes.
+   */
+  smokeRaw: {
+    probe1Name: 'Flat',
+    woodType: 'hickory',
+    probeTargets: [{ probe: 'probe one', target: 203 }],
+    serveInMinutes: 240,
+    restMinutes: 45,
+    stamps: [{ stamp: 'wrap' }],
+    notes: 'Bark is setting nicely.',
+  },
   /** Long enough for the working state to be seen before the review list. */
   extractDelayMs: 1200,
 } as const;
@@ -57,6 +71,7 @@ export function VoiceFillModels({ children }: VoiceFillModelsProps): JSX.Element
             speech: createFakeSpeech({ transcript: SCRIPTED_RAMBLE.transcript }),
             extractor: createFakeExtractor({
               raw: SCRIPTED_RAMBLE.raw,
+              rawByScreen: { smoke: SCRIPTED_RAMBLE.smokeRaw },
               delayMs: SCRIPTED_RAMBLE.extractDelayMs,
             }),
           }

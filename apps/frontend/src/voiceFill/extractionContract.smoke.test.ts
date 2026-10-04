@@ -452,6 +452,34 @@ describe('serve time', () => {
   });
 });
 
+describe('a screen whose Serve Plan is not on offer', () => {
+  // The planner switched off, or no cook to plan: the screen has no card to
+  // write a serve time or a rest to, so what was said of them is kept in Notes.
+  const unplanned = context({ servePlanOffered: false });
+
+  it('keeps a serve time and a rest in Notes and sets neither', () => {
+    const rows = smokeRows({ serveInMinutes: 240, restMinutes: 45 }, smokeScreen(), unplanned);
+
+    expect(rows).toMatchObject([
+      { field: 'notes', newValue: 'Serve time: in 240 minutes. Rest duration: 45 minutes.' },
+    ]);
+  });
+
+  it('keeps a serve time said as a clock time as it was said', () => {
+    const raw = { serveClock: '6:30', serveTomorrow: true };
+
+    expect(smokeRows(raw, smokeScreen(), unplanned)).toMatchObject([
+      { field: 'notes', newValue: 'Serve time: 6:30 tomorrow.' },
+    ]);
+  });
+
+  it('still fills everything else the Ramble said', () => {
+    const rows = smokeRows({ woodType: 'hickory', restMinutes: 45 }, smokeScreen(), unplanned);
+
+    expect(rows.map(row => row.field)).toEqual(['woodType', 'notes']);
+  });
+});
+
 describe('cook log stamps', () => {
   const just = (...stamps: string[]) => ({ stamps: stamps.map(stamp => ({ stamp })) });
 
