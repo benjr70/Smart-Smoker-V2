@@ -98,8 +98,11 @@ class App extends React.Component<{}, { currentScreen: Screens }> {
             <SnackbarProvider>
               <Grid className="App-header">
                 {/* The models Voice Fill runs on, handed to whichever screen is
-                    up. Where none are provided no screen offers it. */}
-                <VoiceFillModels>
+                    up. Where none are provided no screen offers it. The phone's
+                    Model library is opened here too, above the screens, so a
+                    download starts and goes on whichever of them is up — and
+                    its grey pill asks this for the settings screen. */}
+                <VoiceFillModels onOpenSettings={this.settingsOnClick}>
                   <Grid>{screen}</Grid>
                 </VoiceFillModels>
                 <BottomBar

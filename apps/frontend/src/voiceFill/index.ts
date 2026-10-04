@@ -9,6 +9,11 @@
  * And the half that runs a Ramble: the two ports the models sit behind and
  * their scripted fakes, the session that takes a Ramble from the tap that
  * starts it to its Undo, and the button, sheet and toast a screen shows it in.
+ *
+ * And the half that gets the models onto the phone: the Model registry the
+ * settings card lists, the Model library that picks, downloads and proves
+ * them, the card itself, and the grey pill that stands in for the button until
+ * the picked pair is ready.
  */
 export type {
   VoiceFillField,
@@ -66,9 +71,34 @@ export type { FilledFlashProps } from './FilledFlash';
 export { FLASH_MS, FilledFlash } from './FilledFlash';
 export type { VoiceFillModelsProps } from './scriptedModels';
 export {
+  SCRIPTED_MODELS,
   SCRIPTED_MODELS_QUERY,
+  SCRIPTED_MODEL_LIBRARY_STORAGE_KEY,
   SCRIPTED_RAMBLE,
   VoiceFillModels,
   scriptedModelsAreOn,
 } from './scriptedModels';
 export { VOICE_FILL_BUTTON_CLEARANCE } from './VoiceFillControls';
+export type { ModelPair, ModelRegistry, ModelRole, VoiceFillModel } from './modelRegistry';
+export { MODEL_ROLES, REGISTERED_MODELS, createModelRegistry, formatBytes } from './modelRegistry';
+export type {
+  ConnectionPort,
+  ModelDownloader,
+  ModelLibrary,
+  ModelLibraryOptions,
+  ModelLibraryState,
+  ModelStatus,
+  PairReadiness,
+} from './modelLibrary';
+export { MODEL_LIBRARY_STORAGE_KEY, createModelLibrary, pairReadiness } from './modelLibrary';
+export type { FakeDownloaderScript } from './fakeDownloader';
+export { createFakeDownloader } from './fakeDownloader';
+export type { PhoneEnvironment } from './phoneEnvironment';
+export { browserConnection, canRunVoiceFill } from './phoneEnvironment';
+export type { ModelLibraryProviderProps, ModelLibraryView } from './ModelLibraryProvider';
+export {
+  ModelLibraryProvider,
+  useModelLibrary,
+  useSupportedModelLibrary,
+} from './ModelLibraryProvider';
+export { VoiceFillSettingsCard } from './VoiceFillSettingsCard';

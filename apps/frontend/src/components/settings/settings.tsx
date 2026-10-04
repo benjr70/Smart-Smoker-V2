@@ -1,5 +1,6 @@
 import { Card, CardContent, ScopedCssBaseline, Stack, Typography } from '@mui/material';
 import React from 'react';
+import { VoiceFillSettingsCard } from '../../voiceFill';
 import { BOTTOM_BAR_HEIGHT } from '../bottomBar/bottombar';
 import { AppearanceCard } from './appearance';
 import { AutoStopCard } from './autoStop';
@@ -51,6 +52,10 @@ export const Settings = (): JSX.Element => (
       <AppearanceCard />
       <NotificationsCard />
       <ServePlanCard />
+      {/* The phone's own choice of Voice Fill models: absent on a phone that
+          cannot run them, and nothing of it is part of the settings the cards
+          around it save to the backend. */}
+      <VoiceFillSettingsCard />
       <TargetPresetsCard />
       <StampEditorCard />
       <AutoStopCard />

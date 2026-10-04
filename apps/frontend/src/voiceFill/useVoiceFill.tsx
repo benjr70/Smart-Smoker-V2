@@ -2,14 +2,20 @@ import React, { useEffect, useMemo, useState } from 'react';
 import type { VoiceFillScreenValues } from './extractionContract';
 import type { VoiceFillScreen } from './fieldDefinition';
 import { FLASH_MS } from './FilledFlash';
+import type { PairReadiness } from './modelLibrary';
+import { pairReadiness } from './modelLibrary';
+import { useModelLibrary } from './ModelLibraryProvider';
 import type { ScreenBinding, VoiceFillSession, VoiceFillState } from './session';
 import { createVoiceFillSession } from './session';
-import { VoiceFillButton, VoiceFillToast } from './VoiceFillControls';
+import { VoiceFillButton, VoiceFillPill, VoiceFillToast } from './VoiceFillControls';
 import { useVoiceFillPorts } from './VoiceFillPortsProvider';
 import { VoiceFillSheet } from './VoiceFillSheet';
 
 export interface VoiceFill<Values> {
-  /** Whether the screen has Voice Fill at all: whether models are provided to it. */
+  /**
+   * Whether the screen has Voice Fill at all: whether models are provided to
+   * it, on a phone that can run them.
+   */
   offered: boolean;
   /**
    * The button, the sheet and the toast — whichever of them is up — for the
@@ -34,6 +40,7 @@ export interface VoiceFillOptions {
 
 const IDLE = { phase: 'idle' } as const;
 const NOTHING: readonly string[] = [];
+const READY: PairReadiness = { state: 'ready' };
 
 /**
  * Voice Fill for one screen: a session over the provided models and the
@@ -45,7 +52,12 @@ export const useVoiceFill = <Screen extends VoiceFillScreen>(
   { onChangeModel }: VoiceFillOptions = {}
 ): VoiceFill<VoiceFillScreenValues[Screen]> => {
   type Values = VoiceFillScreenValues[Screen];
-  const ports = useVoiceFillPorts();
+  const models = useModelLibrary();
+  const provided = useVoiceFillPorts();
+  // Where the application keeps a Model library, it has the say on whether the
+  // phone can run Voice Fill at all, and on whether the picked pair is ready.
+  const ports = models && models.state.supported !== true ? null : provided;
+  const readiness = models ? pairReadiness(models.library.registry, models.state) : READY;
 
   const session = useMemo<VoiceFillSession<Values> | null>(
     () => (ports ? createVoiceFillSession({ screen, binding, ...ports }) : null),
@@ -84,7 +96,21 @@ export const useVoiceFill = <Screen extends VoiceFillScreen>(
 
   const controls = session ? (
     <>
-      {state.phase === 'idle' && <VoiceFillButton onClick={session.start} />}
+      {state.phase === 'idle' &&
+        (readiness.state === 'ready' || !models ? (
+          <VoiceFillButton onClick={session.start} />
+        ) : (
+          <VoiceFillPill
+            // A download paused offline is still on its way, so the pill keeps
+            // its percent; what it waits for is said on the settings card.
+            message={
+              readiness.state === 'downloading'
+                ? `Model downloading ${readiness.percent}%`
+                : 'Download a voice model in Settings'
+            }
+            onClick={models.openSettings}
+          />
+        ))}
       <VoiceFillSheet
         screen={screen}
         state={state}

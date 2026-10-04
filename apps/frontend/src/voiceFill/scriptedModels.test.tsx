@@ -1,12 +1,37 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import React from 'react';
-import { VoiceFillModels, scriptedModelsAreOn } from './scriptedModels';
+import { useModelLibrary } from './ModelLibraryProvider';
+import { MODEL_LIBRARY_STORAGE_KEY } from './modelLibrary';
+import {
+  SCRIPTED_MODEL_LIBRARY_STORAGE_KEY,
+  VoiceFillModels,
+  scriptedModelsAreOn,
+} from './scriptedModels';
 import { useVoiceFillPorts } from './VoiceFillPortsProvider';
 
 /** Says whether a screen under the root would be offered Voice Fill. */
 function Offered(): JSX.Element {
   return <span>{useVoiceFillPorts() ? 'offered' : 'not offered'}</span>;
 }
+
+/** Says what the Model library under the root lists, if there is one. */
+function Listed(): JSX.Element {
+  const models = useModelLibrary();
+  return (
+    <span data-testid="listed">
+      {models
+        ? models.library.registry.models.map(model => model.name).join(', ')
+        : 'no Model library'}
+    </span>
+  );
+}
+
+/** Lets the Model library the root opens finish checking the phone. */
+const opened = async (): Promise<void> => {
+  await act(async () => {
+    await Promise.resolve();
+  });
+};
 
 const builtWith = (value: string | undefined): void => {
   if (value === undefined) {
@@ -24,6 +49,7 @@ describe('the scripted Voice Fill models', () => {
   afterEach(() => {
     builtWith(undefined);
     openedAt('');
+    window.localStorage.clear();
   });
 
   test('are on only in a build that allows them, on a page that asks for them', () => {
@@ -41,7 +67,7 @@ describe('the scripted Voice Fill models', () => {
     expect(scriptedModelsAreOn('?voiceFill=scripted')).toBe(false);
   });
 
-  test('are handed to the screens under the root when on', () => {
+  test('are handed to the screens under the root when on', async () => {
     builtWith('true');
     openedAt('?voiceFill=scripted');
 
@@ -50,6 +76,7 @@ describe('the scripted Voice Fill models', () => {
         <Offered />
       </VoiceFillModels>
     );
+    await opened();
 
     expect(screen.getByText('offered')).toBeInTheDocument();
   });
@@ -65,5 +92,51 @@ describe('the scripted Voice Fill models', () => {
     );
 
     expect(screen.getByText('not offered')).toBeInTheDocument();
+  });
+
+  test('come with a Model library that lists them, two to a role', async () => {
+    builtWith('true');
+    openedAt('?voiceFill=scripted');
+
+    render(
+      <VoiceFillModels>
+        <Listed />
+      </VoiceFillModels>
+    );
+    await opened();
+
+    expect(screen.getByTestId('listed')).toHaveTextContent(
+      'Scripted speech, Scripted speech B, Scripted extractor, Scripted extractor B'
+    );
+  });
+
+  test('keep their Model library’s record apart from the one a real library keeps', async () => {
+    builtWith('true');
+    openedAt('?voiceFill=scripted');
+
+    render(
+      <VoiceFillModels>
+        <Listed />
+      </VoiceFillModels>
+    );
+    await opened();
+
+    expect(window.localStorage.getItem(SCRIPTED_MODEL_LIBRARY_STORAGE_KEY)).toContain(
+      'scripted-speech'
+    );
+    expect(window.localStorage.getItem(MODEL_LIBRARY_STORAGE_KEY)).toBeNull();
+  });
+
+  test('leave the screens with no Model library when off', () => {
+    builtWith('true');
+    openedAt('');
+
+    render(
+      <VoiceFillModels>
+        <Listed />
+      </VoiceFillModels>
+    );
+
+    expect(screen.getByTestId('listed')).toHaveTextContent('no Model library');
   });
 });
