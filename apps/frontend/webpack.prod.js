@@ -3,6 +3,7 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 const Dotenv = require('dotenv-webpack');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
 var webpack = require('webpack');
+const crossOriginIsolationHeaders = require('./crossOriginIsolationHeaders');
 
 // NOTE: this was `module.exports = env = {` — an accidental assignment to an
 // undeclared global, which throws in strict mode (e.g. when the config is
@@ -20,6 +21,10 @@ module.exports = {
   devtool: 'inline-source-map',
   devServer: {
     static: './dist',
+    // Only read by `npm run start:prod`, which serves this config through the
+    // dev server; the built image gets the same pair from nginx.conf. Guarded
+    // by src/crossOriginIsolation.test.ts, which starts this dev server.
+    headers: crossOriginIsolationHeaders,
   },
   module: {
     rules: [

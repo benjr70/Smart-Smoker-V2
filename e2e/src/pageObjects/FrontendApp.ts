@@ -63,6 +63,39 @@ export type ReviewFields = {
   postSmokeNotes?: string;
 };
 
+/**
+ * What a cross-origin isolated page's responses arrive with, as Playwright
+ * reports response headers (lower-cased names).
+ */
+const ISOLATION_HEADERS = {
+  'cross-origin-opener-policy': 'same-origin',
+  'cross-origin-embedder-policy': 'require-corp',
+};
+
+/**
+ * Each kind of response the frontend's nginx produces: where to ask for it, and
+ * the status that shows the request landed on that kind rather than another.
+ *
+ * One of each because nginx drops inherited headers from any location that
+ * declares one of its own, and leaves them off error responses unless told
+ * otherwise — and neither failure shows on the document alone.
+ */
+const SERVED_RESPONSES = {
+  'the document': { path: '/', status: 200 },
+  'a static asset': { path: '/manifest.json', status: 200 },
+  'the service worker script': { path: '/sw.js', status: 200 },
+  'the SPA fallback': { path: '/a/route/only/the/app/knows', status: 200 },
+  'a proxied API response': { path: '/api/health', status: 200 },
+  'a proxied API error': { path: '/api/no-such-route', status: 404 },
+  'the proxied socket handshake': { path: '/socket.io/?EIO=4&transport=polling', status: 200 },
+} as const;
+
+/** A kind of response the frontend serves, named as a journey title reads. */
+export type ServedResponse = keyof typeof SERVED_RESPONSES;
+
+/** Every kind of response the frontend serves. */
+export const SERVED_RESPONSE_KINDS = Object.keys(SERVED_RESPONSES) as ServedResponse[];
+
 /** Test-id prefix of the pre-smoke step's prep-steps list. */
 const PRE_SMOKE_STEPS = 'presmoke-step';
 
@@ -400,6 +433,58 @@ export class FrontendApp {
     await this.page.goto('/');
     await expect(this.stepButton('Pre-Smoke')).toBeVisible();
     await this.preSmokeLoads.waitForLoadSince(landed);
+  }
+
+  /**
+   * Assert the loaded page is cross-origin isolated.
+   *
+   * Asked of the page itself rather than inferred from response headers: the
+   * browser only grants isolation when the document carried both headers AND
+   * the origin is one it trusts (https, or localhost), and this flag is the one
+   * thing Voice Fill's threaded speech model actually depends on.
+   */
+  async expectCrossOriginIsolated(): Promise<void> {
+    expect(await this.page.evaluate(() => self.crossOriginIsolated)).toBe(true);
+  }
+
+  /**
+   * Assert one kind of response the frontend serves carries both isolation
+   * headers.
+   *
+   * The status is held too: a probe that quietly started landing on the SPA
+   * fallback would still carry the headers and prove nothing about its kind.
+   */
+  async expectIsolationHeadersOn(kind: ServedResponse): Promise<void> {
+    const { path, status } = SERVED_RESPONSES[kind];
+    const response = await this.page.request.get(path);
+
+    expect(response.status(), `${kind} (GET ${path})`).toBe(status);
+    expect(response.headers(), `${kind} (GET ${path})`).toMatchObject(ISOLATION_HEADERS);
+  }
+
+  /**
+   * Assert the loaded page can install the app's service worker and bring it to
+   * `activated` — the state push subscription needs before it can be asked
+   * for. Registered the way the app's push adapter registers it.
+   *
+   * Subscribing itself is not driven: the headless test browser answers
+   * `PushManager.subscribe` with "permission denied" even once notifications
+   * are granted, on any page, isolated or not.
+   */
+  async expectServiceWorkerActivates(): Promise<void> {
+    const state = await this.page.evaluate(async () => {
+      const registration = await navigator.serviceWorker.register('/sw.js');
+      const worker = registration.installing ?? registration.waiting ?? registration.active;
+      if (!worker) return 'missing';
+      while (worker.state !== 'activated' && worker.state !== 'redundant') {
+        await new Promise(resolve =>
+          worker.addEventListener('statechange', resolve, { once: true })
+        );
+      }
+      return worker.state;
+    });
+
+    expect(state).toBe('activated');
   }
 
   /**
