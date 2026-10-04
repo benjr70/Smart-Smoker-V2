@@ -11,7 +11,13 @@
 import { CookStamp, enabledStamps } from '../api/cookStamps';
 import type { PostSmoke, PreSmoke, SmokeProfile, TargetSource } from '../api/types';
 import { WeightUnits } from '../components/common/interfaces/enums';
-import { SCREEN_FIELDS, VoiceFillFieldKey, VoiceFillScreen, fieldOf } from './fieldDefinition';
+import {
+  SCREEN_FIELDS,
+  VoiceFillFieldKey,
+  VoiceFillScreen,
+  fieldOf,
+  probeTargetLabel,
+} from './fieldDefinition';
 
 /**
  * One probe's target as the smoke screen holds it: the temperature, whether the
@@ -585,8 +591,17 @@ const numberedProbe = (said: string): Probe | undefined => {
   return told.length === 1 ? PROBE_NUMBERS.get(told[0]) : undefined;
 };
 
-/** A probe's name as it is compared: its words, less a leading "the". */
-const nameKey = (name: string): string => wordsOf(name).join(' ').replace(/^the /, '');
+/**
+ * A probe's name as it is compared: its words, less a leading "the" and a
+ * closing "probe" — "the flat probe" is the probe called Flat. A name that is
+ * nothing but those words is compared as it stands.
+ */
+const nameKey = (name: string): string => {
+  const words = wordsOf(name);
+  const named = words[0] === 'the' && words.length > 1 ? words.slice(1) : words;
+  const told = named[named.length - 1] === 'probe' && named.length > 1 ? named.slice(0, -1) : named;
+  return told.join(' ');
+};
 
 /**
  * The name each probe goes by while a Ramble is read: the one the Ramble gives
@@ -603,8 +618,20 @@ const probeNames = (
     ])
   );
 
-/** The words that open a way of saying every probe: "both", "all three". */
+/** The words that say every probe: "both" and "all", and the same said as "every" or "each". */
 const EVERY_PROBE = new Set(['both', 'all', 'every', 'each']);
+
+/** The words "both" and "all" are said among, which say nothing themselves. */
+const EVERY_FILLER = new Set(['the', 'of', 'them', 'probe', 'probes', 'meat', 'three', '3']);
+
+/**
+ * Whether something said means every probe — "both", "all three", "all of the
+ * probes" — and nothing else: "all beef ribs" is a name, and no probe's.
+ */
+const saysEveryProbe = (said: string): boolean => {
+  const told = wordsOf(said).filter(word => !EVERY_FILLER.has(word));
+  return told.length === 1 && EVERY_PROBE.has(told[0]);
+};
 
 /**
  * The probes something said points at. A spoken number wins; with none, the
@@ -626,7 +653,7 @@ const probesFor = (
   if (called.length > 0) {
     return called.length === 1 ? called : [];
   }
-  if (EVERY_PROBE.has(key.split(' ')[0])) {
+  if (saysEveryProbe(said)) {
     return namedHere.length > 0 ? namedHere : PROBES;
   }
   return [];
@@ -764,6 +791,9 @@ const serveAtFor = (
   return ahead > 0 && ahead <= MAX_SERVE_AHEAD_MINUTES * MINUTE_MS ? { value } : leftover;
 };
 
+/** The ways "just now" comes back as how long ago something was done. */
+const JUST_NOW = new Set(['', 'now', 'just', 'just now', 'right now']);
+
 /**
  * The cook log entries a Ramble adds, and the words to keep in Notes for what
  * it may not log: a stamp the cook log does not offer, and anything done a
@@ -779,7 +809,9 @@ const stampsFor = (
   const leftovers: string[] = [];
   (Array.isArray(raw) ? raw.filter(isRecord) : []).forEach(entry => {
     const said = spokenText(entry.stamp);
-    const ago = spokenText(entry.ago);
+    // However the model wrote it — a number of minutes is an offset all the same.
+    const ago = spokenNumber(entry.ago).said;
+    const justNow = JUST_NOW.has(wordsOf(ago).join(' '));
     if (!said) {
       return;
     }
@@ -790,8 +822,9 @@ const stampsFor = (
         candidate.key.toLowerCase() === said.toLowerCase() ||
         sayable(candidate.label) === sayable(said)
     );
-    if (!stamp || ago) {
-      leftovers.push(`Cook log: ${[stamp?.label ?? said, ago].filter(Boolean).join(' ')}.`);
+    if (!stamp || !justNow) {
+      const words = [stamp?.label ?? said, justNow ? '' : ago].filter(Boolean).join(' ');
+      leftovers.push(leftoverOf('smoke', 'stamps', words));
     } else {
       logged.set(stamp.key, { stampKey: stamp.key, label: stamp.label, at: context.now });
     }
@@ -852,7 +885,7 @@ const smokeRows = (
     rows.push({
       id: field,
       field,
-      label: `Probe ${probe} target`,
+      label: probeTargetLabel(probe),
       oldValue: held,
       // A spoken target is the cook's own, exactly as a typed one is: the probe
       // is watched from here on, and a session start never seeds over it.

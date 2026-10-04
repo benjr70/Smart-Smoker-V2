@@ -194,8 +194,19 @@ describe('probe targets', () => {
       ['the flat', 'probe1Target'],
       ['POINT', 'probe2Target'],
       ['the point.', 'probe2Target'],
+      ['the flat probe', 'probe1Target'],
+      ['flat probe', 'probe1Target'],
+      ['The Point probe.', 'probe2Target'],
     ])('takes "%s" by the name its probe has', (probe, field) => {
       expect(targeted(targets([probe, 195]), named)).toEqual([field]);
+    });
+
+    it('takes a probe whose own name ends in "probe" by that name, said with or without it', () => {
+      const current = smokeScreen({ probe1Name: 'Probe', probe2Name: 'Rib probe' });
+
+      expect(targeted(targets(['the probe', 195]), current)).toEqual(['probe1Target']);
+      expect(targeted(targets(['the rib', 195]), current)).toEqual(['probe2Target']);
+      expect(targeted(targets(['rib probe', 195]), current)).toEqual(['probe2Target']);
     });
 
     it('takes a probe by the name this Ramble gives it', () => {
@@ -204,14 +215,21 @@ describe('probe targets', () => {
       expect(targeted(raw, named)).toEqual(['probe2Target']);
     });
 
-    it.each(['both', 'all', 'All probes', 'both of them', 'every probe', 'all three'])(
-      'takes "%s" as every probe this Ramble names',
-      probe => {
-        const raw = { probe1Name: 'Flat', probe3Name: 'Point', ...targets([probe, 195]) };
+    it.each([
+      'both',
+      'all',
+      'All probes',
+      'both of them',
+      'every probe',
+      'each probe',
+      'all three',
+      'all of the probes',
+      'all three probes.',
+    ])('takes "%s" as every probe this Ramble names', probe => {
+      const raw = { probe1Name: 'Flat', probe3Name: 'Point', ...targets([probe, 195]) };
 
-        expect(targeted(raw, named)).toEqual(['probe1Target', 'probe3Target']);
-      }
-    );
+      expect(targeted(raw, named)).toEqual(['probe1Target', 'probe3Target']);
+    });
 
     it('counts a probe as named by this Ramble even when it already had that name', () => {
       const raw = { probe1Name: 'Flat', probe2Name: 'Point', ...targets(['both', 195]) };
@@ -231,6 +249,16 @@ describe('probe targets', () => {
       ['a name no probe has', targets(['the ribs', 195]), 'Probe target: the ribs 195.'],
       ['a number no probe has', targets(['probe four', 195]), 'Probe target: probe four 195.'],
       ['no probe at all', targets(['', 195]), 'Probe target: 195.'],
+      [
+        'a name that only opens with "all"',
+        targets(['all beef ribs', 195]),
+        'Probe target: all beef ribs 195.',
+      ],
+      [
+        'a name that only opens with "both"',
+        targets(['both briskets', 195]),
+        'Probe target: both briskets 195.',
+      ],
       [
         'a name two probes share',
         { probe1Name: 'Point', ...targets(['the point', 195]) },
@@ -452,7 +480,7 @@ describe('cook log stamps', () => {
     ['any stamp when the cook log offers none', context({ enabledStamps: undefined })],
   ])('logs nothing for %s and keeps it for Notes', (_rule, given) => {
     expect(smokeRows(just('vent'), smokeScreen(), given)).toMatchObject([
-      { id: 'notes', newValue: 'Cook log: vent.' },
+      { id: 'notes', newValue: 'Log now: vent.' },
     ]);
   });
 
@@ -460,7 +488,26 @@ describe('cook log stamps', () => {
     const raw = { stamps: [{ stamp: 'wrap', ago: 'an hour ago' }] };
 
     expect(smokeRows(raw)).toMatchObject([
-      { id: 'notes', newValue: 'Cook log: Wrapped an hour ago.' },
+      { id: 'notes', newValue: 'Log now: Wrapped an hour ago.' },
+    ]);
+  });
+
+  it.each(['just now', 'Just now.', 'right now', 'now', 'just'])(
+    'logs something said to have been done "%s"',
+    ago => {
+      expect(smokeRows({ stamps: [{ stamp: 'wrap', ago }] })).toMatchObject([
+        { id: 'stamps', newValue: [{ stampKey: 'wrap', label: 'Wrapped', at: NOW }] },
+      ]);
+    }
+  );
+
+  it.each([
+    ['a number', 60, 'Log now: Wrapped 60.'],
+    ['a number of nothing', 0, 'Log now: Wrapped 0.'],
+    ['a number the model wrote as text', '60', 'Log now: Wrapped 60.'],
+  ])('does not backdate an offset the model wrote as %s', (_rule, ago, leftover) => {
+    expect(smokeRows({ stamps: [{ stamp: 'wrap', ago }] })).toMatchObject([
+      { id: 'notes', newValue: leftover },
     ]);
   });
 
@@ -481,7 +528,7 @@ describe('cook log stamps', () => {
           { stampKey: 'lid', label: 'Lid Open', at: NOW },
         ],
       },
-      { id: 'notes', newValue: 'Cook log: Wrapped 20 minutes ago.' },
+      { id: 'notes', newValue: 'Log now: Wrapped 20 minutes ago.' },
     ]);
   });
 });
@@ -516,7 +563,7 @@ describe('notes', () => {
         id: 'notes',
         newValue:
           'Stall hit around 160. Probe target: probe one 2003. Serve time: dinner time. ' +
-          'Rest duration: a while. Cook log: Wrapped an hour ago.',
+          'Rest duration: a while. Log now: Wrapped an hour ago.',
       },
     ]);
   });

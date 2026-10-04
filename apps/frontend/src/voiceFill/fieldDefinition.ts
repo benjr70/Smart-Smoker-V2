@@ -89,6 +89,13 @@ const probeName = (probe: number): FieldSpec => ({
     `("probe ${probe} is in the flat" is "Flat").`,
 });
 
+/**
+ * What a probe's target is called: every probe's in Notes, and the one probe's
+ * in the Review row that sets it — one wording for both.
+ */
+export const probeTargetLabel = (probe?: number): string =>
+  probe === undefined ? 'Probe target' : `Probe ${probe} target`;
+
 const FIELDS = {
   preSmoke: fields({
     name: {
@@ -140,16 +147,19 @@ const FIELDS = {
       suggestions: WOOD_TYPES,
     },
     probeTargets: {
-      label: 'Probe target',
+      label: probeTargetLabel(),
       type: 'recordList',
-      description: 'Each target temperature that was set for a meat probe, one entry per target.',
+      description:
+        'Each target temperature that was set for a meat probe, one entry per probe it was ' +
+        'said of ("the flat and the point both to 203" is two entries).',
       parts: [
         {
           key: 'probe',
           type: 'string',
           description:
             'Which probe the target is for, as it was said: "probe one", "the flat", ' +
-            '"both", "all probes".',
+            '"both", "all probes". "Both" or "all" only when no probes were said by name ' +
+            'or number.',
         },
         {
           key: 'target',
