@@ -4,8 +4,8 @@
  *
  * It owns everything about getting a model onto the phone — the download that
  * starts by itself the first time the app is opened, the one a pick starts,
- * pausing while the phone is offline, picking up again when the app is
- * reopened, and the one test-load that decides whether a downloaded model is
+ * pausing while the phone is offline, going on by itself after a download
+ * breaks, picking up again when the app is reopened, and the one test-load that decides whether a downloaded model is
  * "Ready to use" or "Didn't work on this phone" — behind a downloader it is
  * handed, so none of it knows where a model's files come from.
  *
@@ -21,7 +21,10 @@ export type ModelStatus =
   | { state: 'notDownloaded' }
   /** Arriving. A model that has all arrived stays here until its test-load ends. */
   | { state: 'downloading'; receivedBytes: number }
-  /** Part-way, and waiting for the phone to be back online. */
+  /**
+   * Part-way and stopped, with what had arrived kept: waiting for the phone to
+   * be back online, or for the next try after a download that broke.
+   */
   | { state: 'paused'; receivedBytes: number }
   /** Downloaded, and loaded once on this phone to prove it runs. */
   | { state: 'ready' }
@@ -84,6 +87,12 @@ export interface ModelLibraryOptions {
    * ever reads the other's record.
    */
   storageKey?: string;
+  /**
+   * How long a download that broke with the phone still online waits before
+   * it is tried again, in ms. Each break in a row doubles the wait, up to
+   * {@link MAX_RETRY_DELAY_MS}.
+   */
+  retryDelayMs?: number;
 }
 
 export interface ModelLibrary {
@@ -95,7 +104,7 @@ export interface ModelLibrary {
    * What happens when the app is opened, on whichever screen: the phone is
    * checked, and where it can run Voice Fill the default pair starts
    * downloading if the app was never opened here before, and any download the
-   * last closing of the app cut short is picked up.
+   * last closing of the app cut short — or left broken — is picked up.
    */
   open(): Promise<void>;
   /** Stops every download where it is, to be picked up by the next `open`. */
@@ -123,12 +132,44 @@ const ALWAYS_ONLINE: ConnectionPort = {
   subscribe: () => () => undefined,
 };
 
-const NOT_DOWNLOADED: ModelStatus = { state: 'notDownloaded' };
+/** How long a download that broke waits before its first retry, in ms. */
+export const RETRY_DELAY_MS = 5_000;
 
-const isArriving = (
+/** The longest a download that keeps breaking waits between two tries, in ms. */
+export const MAX_RETRY_DELAY_MS = 60_000;
+
+/** What a model nothing is known of stands at. */
+export const NOT_DOWNLOADED: ModelStatus = { state: 'notDownloaded' };
+
+/** Whether a model is on its way to the phone: downloading, or paused part-way. */
+export const isArriving = (
   status: ModelStatus
 ): status is Extract<ModelStatus, { state: 'downloading' | 'paused' }> =>
   status.state === 'downloading' || status.state === 'paused';
+
+/**
+ * Whether the whole of a model is on the phone, taking its storage: one that
+ * is ready, and just as much one that could not be loaded here.
+ */
+export const isDownloaded = (status: ModelStatus): boolean =>
+  status.state === 'ready' || status.state === 'failed';
+
+/** How much of `sizeBytes` has arrived, as the whole percent every screen shows. */
+export const percentOf = (receivedBytes: number, sizeBytes: number): number =>
+  Math.floor((100 * receivedBytes) / sizeBytes);
+
+/** Where `model` stands on this phone; not downloaded where there is no such model. */
+export const statusOf = (
+  { statuses }: Pick<ModelLibraryState, 'statuses'>,
+  model: VoiceFillModel | undefined
+): ModelStatus => (model && statuses[model.id]) || NOT_DOWNLOADED;
+
+/** The model picked for `role`; none where no model of that role is registered. */
+export const pickedModel = (
+  registry: ModelRegistry,
+  { picked }: Pick<ModelLibraryState, 'picked'>,
+  role: ModelRole
+): VoiceFillModel | undefined => registry.find(picked[role]);
 
 const readRecord = (
   storage: Pick<Storage, 'getItem'>,
@@ -170,6 +211,7 @@ export const createModelLibrary = ({
   capabilities,
   connection = ALWAYS_ONLINE,
   storageKey = MODEL_LIBRARY_STORAGE_KEY,
+  retryDelayMs = RETRY_DELAY_MS,
 }: ModelLibraryOptions): ModelLibrary => {
   const record = readRecord(storage, storageKey);
   const pickedOr = (role: ModelRole): string | null =>
@@ -194,6 +236,10 @@ export const createModelLibrary = ({
   const proving = new Set<string>();
   /** The deletes under way: a model is not fetched again until its own has settled. */
   const deleting = new Map<string, Promise<void>>();
+  /** The downloads that broke and are waiting to be tried again. */
+  const retrying = new Map<string, ReturnType<typeof setTimeout>>();
+  /** How many times in a row each model's download has broken with nothing arriving. */
+  const breaks = new Map<string, number>();
   /** Which opening of the app is current: an answer to an earlier one is stale. */
   let opening = 0;
   let isOpen = false;
@@ -213,21 +259,30 @@ export const createModelLibrary = ({
     listeners.forEach(listener => listener());
   };
 
-  const percentOf = (status: ModelStatus, model: VoiceFillModel): number =>
-    isArriving(status) ? Math.floor((100 * status.receivedBytes) / model.sizeBytes) : -1;
+  const arrivedPercent = (status: ModelStatus, model: VoiceFillModel): number =>
+    isArriving(status) ? percentOf(status.receivedBytes, model.sizeBytes) : -1;
 
   const setStatus = (model: VoiceFillModel, next: ModelStatus): void => {
     const previous = statuses[model.id];
     statuses = { ...statuses, [model.id]: next };
     // Progress arrives far more often than it is worth writing down: the record
     // is rewritten when a model changes state or gains a whole percent.
-    if (previous.state !== next.state || percentOf(previous, model) !== percentOf(next, model)) {
+    if (
+      previous.state !== next.state ||
+      arrivedPercent(previous, model) !== arrivedPercent(next, model)
+    ) {
       persist();
     }
     emit();
   };
 
+  const forgetRetry = (id: string): void => {
+    clearTimeout(retrying.get(id));
+    retrying.delete(id);
+  };
+
   const stop = (id: string): void => {
+    forgetRetry(id);
     const controller = inFlight.get(id);
     inFlight.delete(id);
     proving.delete(id);
@@ -268,6 +323,7 @@ export const createModelLibrary = ({
         signal: controller.signal,
         onProgress: receivedBytes => {
           if (isCurrent()) {
+            breaks.delete(model.id);
             setStatus(model, {
               state: 'downloading',
               receivedBytes: Math.min(receivedBytes, model.sizeBytes),
@@ -279,17 +335,18 @@ export const createModelLibrary = ({
       if (isCurrent()) {
         inFlight.delete(model.id);
         const reached = statuses[model.id];
-        // A download that broke because the phone went offline waits for it to
-        // come back, with what had arrived kept.
-        if (!connection.isOnline() && isArriving(reached)) {
-          setStatus(model, { state: 'paused', receivedBytes: reached.receivedBytes });
-          return;
+        // A download that broke is paused, never given up: what had arrived is
+        // kept, on the phone and in the record, for the next try to go on from.
+        setStatus(model, {
+          state: 'paused',
+          receivedBytes: isArriving(reached) ? reached.receivedBytes : 0,
+        });
+        // One the phone went offline under waits for it to come back. One that
+        // broke with the phone still online — a server error, a connection
+        // gone before the browser has noticed — is tried again by itself.
+        if (connection.isOnline()) {
+          retryLater(model.id);
         }
-        // One that broke for any other reason is the user's to start again, and
-        // it starts from nothing: what had arrived is deleted, so "Not
-        // downloaded" is what the phone holds as well as what the record says.
-        setStatus(model, NOT_DOWNLOADED);
-        deleteFromPhone(model);
       }
       return;
     }
@@ -319,6 +376,7 @@ export const createModelLibrary = ({
     if (!model || inFlight.has(model.id)) {
       return;
     }
+    forgetRetry(model.id);
     const status = statuses[model.id];
     if (status.state === 'ready' || status.state === 'failed') {
       return;
@@ -332,12 +390,32 @@ export const createModelLibrary = ({
     void fetchAndProve(model);
   };
 
+  /** Tries the broken download of `id` again, after a wait that grows with each break. */
+  function retryLater(id: string): void {
+    const brokenBefore = breaks.get(id) ?? 0;
+    breaks.set(id, brokenBefore + 1);
+    forgetRetry(id);
+    retrying.set(
+      id,
+      setTimeout(
+        () => {
+          retrying.delete(id);
+          if (statuses[id].state === 'paused') {
+            begin(id);
+          }
+        },
+        Math.min(retryDelayMs * 2 ** brokenBefore, MAX_RETRY_DELAY_MS)
+      )
+    );
+  }
+
   const discard = (id: string): void => {
     const model = registry.find(id);
     if (!model || statuses[model.id].state === 'notDownloaded') {
       return;
     }
     stop(model.id);
+    breaks.delete(model.id);
     setStatus(model, NOT_DOWNLOADED);
     deleteFromPhone(model);
   };
@@ -371,7 +449,10 @@ export const createModelLibrary = ({
     opening += 1;
     const thisOpening = opening;
     // Read before anything is written: no record means the app was never
-    // opened on this phone.
+    // opened on this phone. It is the first opening that downloads by itself,
+    // not every opening that finds nothing downloaded: a model the user
+    // cancelled or removed is not fetched again until asked for, and one whose
+    // download broke is still in the record as arriving, to be picked up below.
     const isFirstOpen = readRecord(storage, storageKey) === null;
 
     let capable = false;
@@ -421,6 +502,7 @@ export const createModelLibrary = ({
     opening += 1;
     stopListening?.();
     stopListening = undefined;
+    Array.from(retrying.keys()).forEach(forgetRetry);
     Array.from(inFlight.keys()).forEach(stop);
   };
 
@@ -467,20 +549,20 @@ export const pairReadiness = (
   registry: ModelRegistry,
   { picked, statuses }: Pick<ModelLibraryState, 'picked' | 'statuses'>
 ): PairReadiness => {
-  const pair = MODEL_ROLES.map(role => registry.find(picked[role]));
-  const statusOf = (model: VoiceFillModel | undefined): ModelStatus =>
-    (model && statuses[model.id]) || NOT_DOWNLOADED;
+  const pair = MODEL_ROLES.map(role => pickedModel(registry, { picked }, role));
+  const standing = (model: VoiceFillModel | undefined): ModelStatus =>
+    statusOf({ statuses }, model);
 
-  if (pair.every(model => statusOf(model).state === 'ready')) {
+  if (pair.every(model => standing(model).state === 'ready')) {
     return { state: 'ready' };
   }
-  if (!pair.some(model => isArriving(statusOf(model)))) {
+  if (!pair.some(model => isArriving(standing(model)))) {
     return { state: 'notDownloaded' };
   }
   let total = 0;
   let onPhone = 0;
   pair.forEach(model => {
-    const status = statusOf(model);
+    const status = standing(model);
     if (!model) {
       return;
     }
@@ -491,5 +573,5 @@ export const pairReadiness = (
       onPhone += status.receivedBytes;
     }
   });
-  return { state: 'downloading', percent: Math.floor((100 * onPhone) / total) };
+  return { state: 'downloading', percent: percentOf(onPhone, total) };
 };

@@ -168,10 +168,10 @@ describe('the Voice Fill settings card', () => {
     expect(speech().getByText('Didn’t work on this phone')).toBeInTheDocument();
     expect(speech().queryByText(/Ready to use/)).not.toBeInTheDocument();
     expect(extractor().getByText('Ready to use · 1.9 GB on phone')).toBeInTheDocument();
-    // A model that does not run here is not ticked as one to pick.
+    // It is on the phone all the same, taking its storage: ticked as downloaded.
     expect(
-      within(optionsOf('Speech-to-text model')[0]).queryByRole('img', { name: 'downloaded' })
-    ).not.toBeInTheDocument();
+      within(optionsOf('Speech-to-text model')[0]).getByRole('img', { name: 'downloaded' })
+    ).toBeInTheDocument();
     fireEvent.keyDown(screen.getByRole('listbox'), { key: 'Escape' });
 
     fireEvent.click(speech().getByRole('button', { name: 'Remove Speech A' }));
@@ -255,6 +255,40 @@ describe('the Voice Fill settings card', () => {
 
     act(() => connection.set(true));
     await pass(100);
+
+    expect(speech().getByText('Downloading 40% · 63 MB of 158 MB')).toBeInTheDocument();
+  });
+
+  test('a download that breaks while online shows paused with what had arrived, and goes on', async () => {
+    const kept = createFakeDownloader({ storage: window.localStorage, chunkMs: 100, chunks: 10 });
+    let broken = false;
+    await openSettings({
+      retryDelayMs: 1000,
+      downloader: {
+        ...kept,
+        download: (model, options) => {
+          if (model.role !== 'speech' || broken) {
+            return kept.download(model, options);
+          }
+          broken = true;
+          const inner = new AbortController();
+          kept.download(model, { ...options, signal: inner.signal }).catch(() => undefined);
+          return new Promise<void>((resolve, reject) => {
+            setTimeout(() => {
+              inner.abort();
+              reject(new Error('server error'));
+            }, 350);
+          });
+        },
+      },
+    });
+
+    await pass(400);
+
+    expect(speech().getByText('Paused, waiting for Wi-Fi · 47 MB of 158 MB')).toBeInTheDocument();
+    expect(speech().getByRole('button', { name: 'Cancel Speech A' })).toBeInTheDocument();
+
+    await pass(1100);
 
     expect(speech().getByText('Downloading 40% · 63 MB of 158 MB')).toBeInTheDocument();
   });

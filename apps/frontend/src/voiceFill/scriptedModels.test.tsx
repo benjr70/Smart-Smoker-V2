@@ -6,8 +6,35 @@ import {
   SCRIPTED_MODEL_LIBRARY_STORAGE_KEY,
   VoiceFillModels,
   scriptedModelsAreOn,
+  scriptedPhoneIsCapable,
 } from './scriptedModels';
 import { useVoiceFillPorts } from './VoiceFillPortsProvider';
+
+/** What the capability check reads of the browser, and the test sets. */
+const PHONE_PARTS: [object, string][] = [
+  [window, 'crossOriginIsolated'],
+  [window.navigator, 'mediaDevices'],
+  [window.navigator, 'gpu'],
+];
+
+/** Makes the browser one that can run Voice Fill, but for what `missing` takes away. */
+const phoneIs = (missing: 'nothing' | 'microphone' | 'adapter' | 'isolation'): void => {
+  const parts = [
+    missing !== 'isolation',
+    missing === 'microphone' ? undefined : { getUserMedia: () => Promise.resolve({}) },
+    { requestAdapter: () => Promise.resolve(missing === 'adapter' ? null : {}) },
+  ];
+  PHONE_PARTS.forEach(([owner, name], part) => {
+    Object.defineProperty(owner, name, { configurable: true, value: parts[part] });
+  });
+};
+
+/** Puts the browser back as the test environment has it: able to run nothing. */
+const phoneIsAsFound = (): void => {
+  PHONE_PARTS.forEach(([owner, name]) => {
+    delete (owner as Record<string, unknown>)[name];
+  });
+};
 
 /** Says whether a screen under the root would be offered Voice Fill. */
 function Offered(): JSX.Element {
@@ -26,10 +53,18 @@ function Listed(): JSX.Element {
   );
 }
 
+/** Says whether the Model library under the root found the phone able to run Voice Fill. */
+function Supported(): JSX.Element {
+  const models = useModelLibrary();
+  return <span data-testid="supported">{String(models?.state.supported)}</span>;
+}
+
 /** Lets the Model library the root opens finish checking the phone. */
 const opened = async (): Promise<void> => {
   await act(async () => {
-    await Promise.resolve();
+    for (let turn = 0; turn < 10; turn += 1) {
+      await Promise.resolve();
+    }
   });
 };
 
@@ -46,10 +81,12 @@ const openedAt = (search: string): void => {
 };
 
 describe('the scripted Voice Fill models', () => {
+  beforeEach(() => phoneIs('nothing'));
   afterEach(() => {
     builtWith(undefined);
     openedAt('');
     window.localStorage.clear();
+    phoneIsAsFound();
   });
 
   test('are on only in a build that allows them, on a page that asks for them', () => {
@@ -125,6 +162,59 @@ describe('the scripted Voice Fill models', () => {
       'scripted-speech'
     );
     expect(window.localStorage.getItem(MODEL_LIBRARY_STORAGE_KEY)).toBeNull();
+  });
+
+  test.each<['microphone' | 'adapter' | 'isolation']>([['microphone'], ['adapter'], ['isolation']])(
+    'come with a Model library that checks the phone: with no %s it cannot run Voice Fill',
+    async missing => {
+      builtWith('true');
+      openedAt('?voiceFill=scripted');
+      phoneIs(missing);
+
+      render(
+        <VoiceFillModels>
+          <Supported />
+        </VoiceFillModels>
+      );
+      await opened();
+
+      expect(screen.getByTestId('supported')).toHaveTextContent('false');
+      // And nothing is downloaded or recorded for what the phone cannot run.
+      expect(window.localStorage.getItem(SCRIPTED_MODEL_LIBRARY_STORAGE_KEY)).toBeNull();
+    }
+  );
+
+  test('find a phone that has all three able to run Voice Fill', async () => {
+    builtWith('true');
+    openedAt('?voiceFill=scripted');
+
+    render(
+      <VoiceFillModels>
+        <Supported />
+      </VoiceFillModels>
+    );
+    await opened();
+
+    expect(screen.getByTestId('supported')).toHaveTextContent('true');
+  });
+
+  test('take the phone as able without checking only where the run says so', async () => {
+    expect(scriptedPhoneIsCapable('?voiceFill=scripted&voiceFillPhone=capable')).toBe(true);
+    expect(scriptedPhoneIsCapable('?voiceFill=scripted')).toBe(false);
+    expect(scriptedPhoneIsCapable('?voiceFillPhone=checked')).toBe(false);
+
+    builtWith('true');
+    openedAt('?voiceFill=scripted&voiceFillPhone=capable');
+    phoneIsAsFound();
+
+    render(
+      <VoiceFillModels>
+        <Supported />
+      </VoiceFillModels>
+    );
+    await opened();
+
+    expect(screen.getByTestId('supported')).toHaveTextContent('true');
   });
 
   test('leave the screens with no Model library when off', () => {

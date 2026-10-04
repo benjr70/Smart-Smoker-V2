@@ -1,6 +1,15 @@
 import { createFakeDownloader } from './fakeDownloader';
 import type { ModelLibraryOptions } from './modelLibrary';
-import { MODEL_LIBRARY_STORAGE_KEY, createModelLibrary, pairReadiness } from './modelLibrary';
+import {
+  MAX_RETRY_DELAY_MS,
+  MODEL_LIBRARY_STORAGE_KEY,
+  createModelLibrary,
+  isDownloaded,
+  pairReadiness,
+  percentOf,
+  pickedModel,
+  statusOf,
+} from './modelLibrary';
 import { createModelRegistry } from './modelRegistry';
 
 const MB = 1_000_000;
@@ -330,33 +339,175 @@ describe('the Model library', () => {
     expect(library.getState().statuses['speech-a']).toEqual({ state: 'ready' });
   });
 
-  test('a download that breaks while offline waits; one that breaks online is given up', async () => {
+  test('a download that breaks while offline waits for the connection, with nothing retried', async () => {
     const phone = createPhone();
-    let online = true;
+    const download = jest.fn(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          setTimeout(() => {
+            phone.connection.set(false);
+            reject(new Error('network'));
+          }, 100);
+        })
+    );
     const library = await phone.openApp({
-      connection: { isOnline: () => online, subscribe: () => () => undefined },
-      downloader: {
-        ...phone.downloader,
-        download: model =>
-          model.role === 'speech'
-            ? Promise.reject(new Error('network'))
-            : new Promise<void>((resolve, reject) => {
-                setTimeout(() => {
-                  online = false;
-                  reject(new Error('network'));
-                }, 100);
-              }),
-      },
+      downloader: { ...phone.downloader, download },
+      retryDelayMs: 1000,
     });
-
-    expect(library.getState().statuses['speech-a']).toEqual({ state: 'notDownloaded' });
+    library.cancel('extractor-a');
 
     await pass(100);
 
-    expect(library.getState().statuses['extractor-a']).toEqual({
-      state: 'paused',
-      receivedBytes: 0,
+    expect(library.getState().statuses['speech-a']).toEqual({ state: 'paused', receivedBytes: 0 });
+
+    // Offline, it is the connection that is waited for: no try is made.
+    await pass(60_000);
+    expect(download).toHaveBeenCalledTimes(2);
+    expect(library.getState().statuses['speech-a']).toEqual({ state: 'paused', receivedBytes: 0 });
+  });
+
+  /**
+   * A downloader whose speech download brings 30 MB and then breaks, `times`
+   * times over, with the phone still online: a server error, or a connection
+   * gone before the browser has noticed.
+   */
+  const breakingOnline = (phone: ReturnType<typeof createPhone>, times = 1) => {
+    let broken = 0;
+    const remove = jest.fn(phone.downloader.remove);
+    const download = jest.fn<
+      Promise<void>,
+      Parameters<ModelLibraryOptions['downloader']['download']>
+    >((model, options) => {
+      if (model.role !== 'speech' || broken >= times) {
+        return phone.downloader.download(model, options);
+      }
+      broken += 1;
+      const inner = new AbortController();
+      phone.downloader.download(model, { ...options, signal: inner.signal }).catch(() => {
+        // Stopped below.
+      });
+      return new Promise<void>((resolve, reject) => {
+        setTimeout(() => {
+          inner.abort();
+          reject(new Error('server error'));
+        }, 350);
+      });
     });
+    const speechDownloads = () => download.mock.calls.filter(([model]) => model.id === 'speech-a');
+    return { downloader: { ...phone.downloader, remove, download }, remove, speechDownloads };
+  };
+
+  test('a download that breaks while online keeps what had arrived and goes on by itself', async () => {
+    const phone = createPhone();
+    const { downloader, remove, speechDownloads } = breakingOnline(phone);
+    const library = await phone.openApp({ downloader, retryDelayMs: 1000 });
+
+    await pass(400);
+
+    // Paused, not given up: the 30 MB are still on the phone and in the record.
+    expect(library.getState().statuses['speech-a']).toEqual({
+      state: 'paused',
+      receivedBytes: 30 * MB,
+    });
+    expect(remove).not.toHaveBeenCalled();
+    expect(pairReadiness(registry, library.getState()).state).toBe('downloading');
+
+    // Nobody asks: it is tried again after the wait, from where it stopped.
+    await pass(1000);
+    expect(speechDownloads()).toHaveLength(2);
+    await pass(100);
+    expect(library.getState().statuses['speech-a']).toEqual({
+      state: 'downloading',
+      receivedBytes: 40 * MB,
+    });
+
+    await pass(600);
+    expect(library.getState().statuses['speech-a']).toEqual({ state: 'ready' });
+  });
+
+  test('a download that keeps breaking with nothing arriving waits longer each time', async () => {
+    const phone = createPhone();
+    const download = jest.fn(() => Promise.reject(new Error('server error')));
+    const library = await phone.openApp({
+      downloader: { ...phone.downloader, download },
+      retryDelayMs: 1000,
+    });
+    library.cancel('extractor-a');
+    const tries = () => download.mock.calls.length - 1;
+
+    expect(tries()).toBe(1);
+    expect(library.getState().statuses['speech-a']).toEqual({ state: 'paused', receivedBytes: 0 });
+
+    await pass(1000);
+    expect(tries()).toBe(2);
+    await pass(1000);
+    expect(tries()).toBe(2);
+    await pass(1000);
+    expect(tries()).toBe(3);
+
+    // And never longer than the longest wait.
+    await pass(10 * MAX_RETRY_DELAY_MS);
+    const soFar = tries();
+    await pass(MAX_RETRY_DELAY_MS);
+    expect(tries()).toBe(soFar + 1);
+  });
+
+  test('a broken download waiting for its next try can be cancelled, and is then not tried', async () => {
+    const phone = createPhone();
+    const { downloader, remove, speechDownloads } = breakingOnline(phone);
+    const library = await phone.openApp({ downloader, retryDelayMs: 1000 });
+    await pass(400);
+
+    library.cancel('speech-a');
+    await pass(5000);
+
+    expect(library.getState().statuses['speech-a']).toEqual({ state: 'notDownloaded' });
+    expect(remove).toHaveBeenCalledWith(registry.find('speech-a'));
+    expect(speechDownloads()).toHaveLength(1);
+  });
+
+  test('a broken download is picked up when the app is reopened, without waiting to be asked', async () => {
+    const phone = createPhone();
+    const { downloader, speechDownloads } = breakingOnline(phone);
+    const first = await phone.openApp({ downloader, retryDelayMs: 1000 });
+    await pass(400);
+
+    // Closed while it waits: the try that was due is not made behind its back.
+    first.close();
+    await pass(5000);
+    expect(speechDownloads()).toHaveLength(1);
+
+    // Not the first opening any more, and still nothing is ready: the download
+    // the last one left broken goes on from the 30 MB it had.
+    const reopened = await phone.openApp({ downloader, retryDelayMs: 1000 });
+    expect(reopened.getState().statuses['speech-a']).toEqual({
+      state: 'downloading',
+      receivedBytes: 30 * MB,
+    });
+
+    await pass(700);
+    expect(reopened.getState().statuses['speech-a']).toEqual({ state: 'ready' });
+  });
+
+  test('a broken download goes on at once when the phone comes back online', async () => {
+    const phone = createPhone();
+    const { downloader, speechDownloads } = breakingOnline(phone);
+    const library = await phone.openApp({ downloader, retryDelayMs: 60_000 });
+    await pass(400);
+
+    phone.connection.set(false);
+    phone.connection.set(true);
+    await pass(100);
+
+    expect(speechDownloads()).toHaveLength(2);
+    expect(library.getState().statuses['speech-a']).toEqual({
+      state: 'downloading',
+      receivedBytes: 40 * MB,
+    });
+
+    // The try that had been waiting is not made on top of this one.
+    await pass(60_000);
+    expect(speechDownloads()).toHaveLength(2);
   });
 
   test('a connection lost and found during the test-load neither pauses the model nor loads it twice', async () => {
@@ -390,49 +541,6 @@ describe('the Model library', () => {
 
     expect(library.getState().statuses['speech-a']).toEqual({ state: 'ready' });
     expect(testLoad).toHaveBeenCalledTimes(1);
-  });
-
-  test('a download given up on leaves nothing of the model on the phone', async () => {
-    const phone = createPhone();
-    const remove = jest.fn(phone.downloader.remove);
-    const breaksOnce = { broken: false };
-    const library = await phone.openApp({
-      downloader: {
-        ...phone.downloader,
-        remove,
-        // The speech model's first download brings 30 MB and then breaks, with
-        // the phone still online.
-        download: (model, options) => {
-          if (model.role !== 'speech' || breaksOnce.broken) {
-            return phone.downloader.download(model, options);
-          }
-          breaksOnce.broken = true;
-          const inner = new AbortController();
-          phone.downloader.download(model, { ...options, signal: inner.signal }).catch(() => {
-            // Stopped below.
-          });
-          return new Promise<void>((resolve, reject) => {
-            setTimeout(() => {
-              inner.abort();
-              reject(new Error('server error'));
-            }, 350);
-          });
-        },
-      },
-    });
-
-    await pass(400);
-
-    expect(library.getState().statuses['speech-a']).toEqual({ state: 'notDownloaded' });
-    expect(remove).toHaveBeenCalledWith(registry.find('speech-a'));
-
-    // Not downloaded is the truth: the next download starts from nothing.
-    library.download('speech-a');
-    await pass(100);
-    expect(library.getState().statuses['speech-a']).toEqual({
-      state: 'downloading',
-      receivedBytes: 10 * MB,
-    });
   });
 
   test('a download asked for while the model is still being deleted waits for the delete', async () => {
@@ -572,6 +680,42 @@ describe('the Model library', () => {
       receivedBytes: 0,
     });
     expect(library.getState().statuses['speech-a']).toEqual({ state: 'notDownloaded' });
+  });
+
+  describe('what a screen reads of it', () => {
+    test('the picked model of a role, and where any model stands', async () => {
+      const phone = createPhone(['speech-a']);
+      const library = await phone.openApp();
+      library.pick('extractor', 'extractor-b');
+      await pass(1000);
+      const state = library.getState();
+
+      expect(pickedModel(registry, state, 'speech')?.name).toBe('Speech A');
+      expect(pickedModel(registry, state, 'extractor')?.name).toBe('Extractor B');
+      expect(statusOf(state, registry.find('extractor-b'))).toEqual({ state: 'ready' });
+      expect(statusOf(state, registry.find('speech-b'))).toEqual({ state: 'notDownloaded' });
+      expect(statusOf(state, undefined)).toEqual({ state: 'notDownloaded' });
+    });
+
+    test('a role with no model registered has no picked model', () => {
+      const empty = createModelRegistry([]);
+
+      expect(pickedModel(empty, { picked: empty.defaultPair }, 'speech')).toBeUndefined();
+    });
+
+    test('a model is downloaded once all of it is on the phone, whether or not it runs', () => {
+      expect(isDownloaded({ state: 'ready' })).toBe(true);
+      expect(isDownloaded({ state: 'failed' })).toBe(true);
+      expect(isDownloaded({ state: 'downloading', receivedBytes: 100 * MB })).toBe(false);
+      expect(isDownloaded({ state: 'paused', receivedBytes: 1 })).toBe(false);
+      expect(isDownloaded({ state: 'notDownloaded' })).toBe(false);
+    });
+
+    test('percent is the whole percent that has arrived', () => {
+      expect(percentOf(0, 300 * MB)).toBe(0);
+      expect(percentOf(299 * MB, 300 * MB)).toBe(99);
+      expect(percentOf(300 * MB, 300 * MB)).toBe(100);
+    });
   });
 
   describe('the picked pair', () => {

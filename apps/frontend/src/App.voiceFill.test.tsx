@@ -10,6 +10,32 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import App from './App';
 
+/** What the capability check reads of the browser, and the test sets. */
+const PHONE_PARTS: [object, string][] = [
+  [window, 'crossOriginIsolated'],
+  [window.navigator, 'mediaDevices'],
+  [window.navigator, 'gpu'],
+];
+
+/** Makes the browser one that can run Voice Fill, but for what `missing` takes away. */
+const phoneIs = (missing: 'nothing' | 'microphone' | 'adapter' | 'isolation'): void => {
+  const parts = [
+    missing !== 'isolation',
+    missing === 'microphone' ? undefined : { getUserMedia: () => Promise.resolve({}) },
+    { requestAdapter: () => Promise.resolve(missing === 'adapter' ? null : {}) },
+  ];
+  PHONE_PARTS.forEach(([owner, name], part) => {
+    Object.defineProperty(owner, name, { configurable: true, value: parts[part] });
+  });
+};
+
+/** Puts the browser back as the test environment has it: able to run nothing. */
+const phoneIsAsFound = (): void => {
+  PHONE_PARTS.forEach(([owner, name]) => {
+    delete (owner as Record<string, unknown>)[name];
+  });
+};
+
 jest.mock('./components/smoke/smoke', () => ({
   Smoke: () => {
     const { pairReadiness, useModelLibrary } = jest.requireActual('./voiceFill');
@@ -19,6 +45,7 @@ jest.mock('./components/smoke/smoke', () => ({
         {models ? (
           <button onClick={models.openSettings}>
             pair {pairReadiness(models.library.registry, models.state).state}
+            {models.state.supported === false && ', phone cannot run Voice Fill'}
           </button>
         ) : (
           'no Model library'
@@ -65,10 +92,12 @@ describe('the Model library at the application root', () => {
     window.localStorage.clear();
     process.env.REACT_APP_VOICE_FILL_SCRIPTED = 'true';
     window.history.replaceState(null, '', '/?voiceFill=scripted');
+    phoneIs('nothing');
     jest.useFakeTimers();
   });
   afterEach(() => {
     jest.useRealTimers();
+    phoneIsAsFound();
     delete process.env.REACT_APP_VOICE_FILL_SCRIPTED;
     window.history.replaceState(null, '', '/');
   });
@@ -110,6 +139,22 @@ describe('the Model library at the application root', () => {
     expect(screen.getByTestId('settings-component')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Settings' })).toHaveClass('Mui-selected');
   });
+
+  test.each<['microphone' | 'adapter' | 'isolation']>([['microphone'], ['adapter'], ['isolation']])(
+    'downloads nothing on a phone with no %s, which cannot run Voice Fill',
+    async missing => {
+      phoneIs(missing);
+
+      render(<App />);
+      await pass(5000);
+
+      expect(screen.getByTestId('smoke-component')).toHaveTextContent(
+        'pair notDownloaded, phone cannot run Voice Fill'
+      );
+      expect(window.localStorage.getItem('voiceFill.scriptedModelLibrary')).toBeNull();
+      expect(window.localStorage.getItem('voiceFill.fakeDownloads')).toBeNull();
+    }
+  );
 
   test('is not there where the application has no models to run', async () => {
     window.history.replaceState(null, '', '/');

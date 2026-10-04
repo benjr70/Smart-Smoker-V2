@@ -6,7 +6,7 @@ import { createModelLibrary } from './modelLibrary';
 import { ModelLibraryProvider } from './ModelLibraryProvider';
 import type { VoiceFillModel } from './modelRegistry';
 import { createModelRegistry } from './modelRegistry';
-import { browserConnection } from './phoneEnvironment';
+import { browserConnection, canRunVoiceFill } from './phoneEnvironment';
 import type { VoiceFillPorts } from './VoiceFillPortsProvider';
 import { VoiceFillPortsProvider } from './VoiceFillPortsProvider';
 
@@ -49,20 +49,41 @@ export const SCRIPTED_MODELS: readonly VoiceFillModel[] = [
 ];
 
 /**
- * The phone's Model library over the scripted models: the real library and the
- * browser's own storage and connection, with a downloader that fetches nothing.
- *
- * The scripted models need no microphone, no WebGPU and no isolated page, so
- * this library takes the phone as able to run them. The check a real model
- * needs is `canRunVoiceFill`, which the adapter Slices hand to theirs.
- */
-/**
  * What the scripted Model library's record is kept under: not the key a
  * library over real models uses, so what a scripted run leaves on a phone is
  * never read as the state of real downloads.
  */
 export const SCRIPTED_MODEL_LIBRARY_STORAGE_KEY = 'voiceFill.scriptedModelLibrary';
 
+/** What the page's address carries to ask for the scripted models. */
+export const SCRIPTED_MODELS_QUERY = 'voiceFill=scripted';
+
+/**
+ * What the page's address carries, beside {@link SCRIPTED_MODELS_QUERY}, to
+ * have the phone taken as able to run Voice Fill without being checked.
+ */
+export const SCRIPTED_PHONE_QUERY = 'voiceFillPhone=capable';
+
+/**
+ * Whether a scripted run asked for the phone to be taken as able to run Voice
+ * Fill. The scripted models themselves need no WebGPU, so a journey driven in
+ * a browser that has none — a headless one — can say so and still be walked
+ * through. It is a part of the scripted run only: nothing reads it where the
+ * scripted models are off, and a run that does not ask is checked for real.
+ */
+export const scriptedPhoneIsCapable = (search: string = window.location.search): boolean =>
+  new URLSearchParams(search).get('voiceFillPhone') === 'capable';
+
+/**
+ * The phone's Model library over the scripted models: the real library and the
+ * browser's own storage and connection, with a downloader that fetches nothing.
+ *
+ * The phone is checked as it is for real models, with `canRunVoiceFill`: with
+ * no microphone API, no WebGPU adapter or a page that is not cross-origin
+ * isolated there is no button, no pill and no settings card, and nothing
+ * starts downloading. Only a run that says {@link SCRIPTED_PHONE_QUERY} skips
+ * the check.
+ */
 const createScriptedModelLibrary = (): ModelLibrary =>
   createModelLibrary({
     registry: createModelRegistry(SCRIPTED_MODELS),
@@ -70,11 +91,8 @@ const createScriptedModelLibrary = (): ModelLibrary =>
     storage: window.localStorage,
     storageKey: SCRIPTED_MODEL_LIBRARY_STORAGE_KEY,
     connection: browserConnection(),
-    capabilities: () => Promise.resolve(true),
+    capabilities: () => (scriptedPhoneIsCapable() ? Promise.resolve(true) : canRunVoiceFill()),
   });
-
-/** What the page's address carries to ask for the scripted models. */
-export const SCRIPTED_MODELS_QUERY = 'voiceFill=scripted';
 
 /**
  * Whether this page runs Voice Fill on the scripted models. Two things have to

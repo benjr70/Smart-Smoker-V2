@@ -11,6 +11,7 @@ import {
 } from '@mui/material';
 import React, { useEffect, useRef } from 'react';
 import type { ModelStatus } from './modelLibrary';
+import { isArriving, isDownloaded, percentOf, pickedModel, statusOf } from './modelLibrary';
 import { useSupportedModelLibrary } from './ModelLibraryProvider';
 import type { ModelRole, VoiceFillModel } from './modelRegistry';
 import { MODEL_ROLES, formatBytes } from './modelRegistry';
@@ -43,8 +44,8 @@ function ModelStatusLine({
   onRemove,
 }: ModelStatusLineProps): JSX.Element {
   const size = formatBytes(model.sizeBytes);
-  const arriving = status.state === 'downloading' || status.state === 'paused';
-  const percent = arriving ? Math.floor((100 * status.receivedBytes) / model.sizeBytes) : 0;
+  const arriving = isArriving(status);
+  const percent = arriving ? percentOf(status.receivedBytes, model.sizeBytes) : 0;
 
   let text: string;
   let action: { label: string; onClick: () => void; quiet: boolean };
@@ -133,21 +134,30 @@ export function VoiceFillSettingsCard(): JSX.Element | null {
   const models = useSupportedModelLibrary();
   const card = useRef<HTMLDivElement>(null);
   const shown = models !== null;
-  const takeCardRequest = models?.takeCardRequest;
+  const consumeCardRequest = models?.consumeCardRequest;
 
   // The grey pill opens the settings screen for this card: bring it into view.
   useEffect(() => {
-    if (shown && takeCardRequest?.()) {
+    if (shown && consumeCardRequest?.()) {
       card.current?.scrollIntoView?.({ block: 'start' });
     }
-  }, [shown, takeCardRequest]);
+  }, [shown, consumeCardRequest]);
 
   if (!models) {
     return null;
   }
   const { library, state } = models;
   const { registry } = library;
-  if (MODEL_ROLES.some(role => registry.ofRole(role).length === 0)) {
+  // Which model each dropdown shows is the library's to say: the card has no
+  // pick of its own. With no model of a role to pick there is no card.
+  const dropdowns: { role: ModelRole; model: VoiceFillModel }[] = [];
+  MODEL_ROLES.forEach(role => {
+    const model = pickedModel(registry, state, role);
+    if (model) {
+      dropdowns.push({ role, model });
+    }
+  });
+  if (dropdowns.length < MODEL_ROLES.length) {
     return null;
   }
 
@@ -158,9 +168,8 @@ export function VoiceFillSettingsCard(): JSX.Element | null {
           <Typography variant="h6" component="h2" fontWeight={700}>
             Voice fill
           </Typography>
-          {MODEL_ROLES.map(role => {
+          {dropdowns.map(({ role, model }) => {
             const listed = registry.ofRole(role);
-            const model = registry.find(state.picked[role]) ?? listed[0];
             return (
               <Box key={role} data-testid={`voice-fill-model-${role}`}>
                 <TextField
@@ -174,7 +183,9 @@ export function VoiceFillSettingsCard(): JSX.Element | null {
                   {listed.map(option => (
                     <MenuItem key={option.id} value={option.id}>
                       {option.name}
-                      {state.statuses[option.id]?.state === 'ready' && (
+                      {/* Ticked for being on the phone, whether or not it runs
+                          here: the list shows what is taking the storage. */}
+                      {isDownloaded(statusOf(state, option)) && (
                         <Box component="span" role="img" aria-label="downloaded" sx={{ ml: 1 }}>
                           ✓
                         </Box>
@@ -185,7 +196,7 @@ export function VoiceFillSettingsCard(): JSX.Element | null {
                 <ModelStatusLine
                   role={role}
                   model={model}
-                  status={state.statuses[model.id] ?? { state: 'notDownloaded' }}
+                  status={statusOf(state, model)}
                   onDownload={() => library.download(model.id)}
                   onCancel={() => library.cancel(model.id)}
                   onRemove={() => library.remove(model.id)}

@@ -74,9 +74,11 @@ export {
   SCRIPTED_MODELS,
   SCRIPTED_MODELS_QUERY,
   SCRIPTED_MODEL_LIBRARY_STORAGE_KEY,
+  SCRIPTED_PHONE_QUERY,
   SCRIPTED_RAMBLE,
   VoiceFillModels,
   scriptedModelsAreOn,
+  scriptedPhoneIsCapable,
 } from './scriptedModels';
 export { VOICE_FILL_BUTTON_CLEARANCE } from './VoiceFillControls';
 export type { ModelPair, ModelRegistry, ModelRole, VoiceFillModel } from './modelRegistry';
@@ -90,7 +92,19 @@ export type {
   ModelStatus,
   PairReadiness,
 } from './modelLibrary';
-export { MODEL_LIBRARY_STORAGE_KEY, createModelLibrary, pairReadiness } from './modelLibrary';
+export {
+  MAX_RETRY_DELAY_MS,
+  MODEL_LIBRARY_STORAGE_KEY,
+  NOT_DOWNLOADED,
+  RETRY_DELAY_MS,
+  createModelLibrary,
+  isArriving,
+  isDownloaded,
+  pairReadiness,
+  percentOf,
+  pickedModel,
+  statusOf,
+} from './modelLibrary';
 export type { FakeDownloaderScript } from './fakeDownloader';
 export { createFakeDownloader } from './fakeDownloader';
 export type { PhoneEnvironment } from './phoneEnvironment';

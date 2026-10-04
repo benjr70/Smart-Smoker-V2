@@ -8,10 +8,12 @@ export interface ModelLibraryView {
   /** Opens the settings screen at the Voice Fill card: what the grey pill does. */
   openSettings: () => void;
   /**
-   * Whether the settings screen was opened to show the Voice Fill card. Asking
-   * answers it: the card is brought into view once per request.
+   * Uses up the request to show the Voice Fill card, if the settings screen
+   * was opened with one, and says whether there was one. It is not a question
+   * to ask twice: the card is brought into view once per request, so a second
+   * call for the same request answers `false`.
    */
-  takeCardRequest: () => boolean;
+  consumeCardRequest: () => boolean;
 }
 
 const ModelLibraryContext = createContext<ModelLibraryView | null>(null);
@@ -56,7 +58,7 @@ export function ModelLibraryProvider({
         cardRequested.current = true;
         onOpenSettings?.();
       },
-      takeCardRequest: () => {
+      consumeCardRequest: () => {
         const requested = cardRequested.current;
         cardRequested.current = false;
         return requested;
