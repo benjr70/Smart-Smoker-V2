@@ -32,13 +32,15 @@ RUN npm pkg delete scripts.prepare \
 
 # ---------------------------------------------------------------------------
 # build: compile every app from source. The smoker web bundle bakes in the
-# localhost-pointing backend env before webpack runs.
+# localhost-pointing backend env before webpack runs; the frontend bundle bakes
+# in the switch that allows Voice Fill's scripted models (frontend.e2e.env).
 # ---------------------------------------------------------------------------
 FROM deps AS build
 WORKDIR /workspace
 COPY apps ./apps
 COPY packages ./packages
 COPY e2e/docker/smoker.e2e.env apps/smoker/.env.prod
+COPY e2e/docker/frontend.e2e.env apps/frontend/.env.prod
 RUN npm run build -w backend \
     && npm run build -w device-service \
     && npm run build -w frontend \

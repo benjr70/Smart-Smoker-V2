@@ -5,6 +5,10 @@
  * constrained-output schema from, and the extraction contract that turns the
  * raw object a model returns into Review rows and a ticked set of rows into the
  * values to write plus what Undo restores.
+ *
+ * And the half that runs a Ramble: the two ports the models sit behind and
+ * their scripted fakes, the session that takes a Ramble from the tap that
+ * starts it to its Undo, and the button, sheet and toast a screen shows it in.
  */
 export type {
   VoiceFillField,
@@ -40,4 +44,30 @@ export {
   fillFor,
   notesAreMerged,
   reviewRows,
+  tickedAfterToggle,
 } from './extractionContract';
+export type { ExtractionContext, ExtractorPort, SpeechPort } from './ports';
+export type { FakeExtractorScript, FakeSpeechScript } from './fakeAdapters';
+export { createFakeExtractor, createFakeSpeech } from './fakeAdapters';
+export type {
+  ScreenBinding,
+  VoiceFillSession,
+  VoiceFillSessionOptions,
+  VoiceFillState,
+} from './session';
+export { TOAST_MS, createVoiceFillSession } from './session';
+export type { VoiceFillPorts, VoiceFillPortsProviderProps } from './VoiceFillPortsProvider';
+export { VoiceFillPortsProvider, useVoiceFillPorts } from './VoiceFillPortsProvider';
+export { useScreenBinding } from './useScreenBinding';
+export type { VoiceFill } from './useVoiceFill';
+export { useVoiceFill } from './useVoiceFill';
+export type { FilledFlashProps } from './FilledFlash';
+export { FLASH_MS, FilledFlash } from './FilledFlash';
+export type { VoiceFillModelsProps } from './scriptedModels';
+export {
+  SCRIPTED_MODELS_QUERY,
+  SCRIPTED_RAMBLE,
+  VoiceFillModels,
+  scriptedModelsAreOn,
+} from './scriptedModels';
+export { VOICE_FILL_BUTTON_CLEARANCE } from './VoiceFillControls';

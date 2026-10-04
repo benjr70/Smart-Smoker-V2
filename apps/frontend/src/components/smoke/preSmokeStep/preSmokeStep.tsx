@@ -5,6 +5,12 @@ import { DynamicList } from '../../common/components/DynamicList';
 import { FormField, SectionHeading } from '../../common/components/FormField';
 import { WeightUnits } from '../../common/interfaces/enums';
 import { PreSmoke } from '../../../api/types';
+import {
+  FilledFlash,
+  VOICE_FILL_BUTTON_CLEARANCE,
+  useScreenBinding,
+  useVoiceFill,
+} from '../../../voiceFill';
 import { MEAT_TYPES } from './meatTypes';
 
 type PreSmokeStepProps = {
@@ -28,6 +34,12 @@ export function PreSmokeStep(props: PreSmokeStepProps) {
     saveErrorMessage: 'Could not save pre-smoke details.',
   });
 
+  // What Voice Fill reads and writes this screen through: the same state, and
+  // the same setter, the fields below are typed into — so a value filled from
+  // a Ramble is saved, and skipped when unchanged, exactly as a typed one is.
+  const binding = useScreenBinding(preSmokeState, setPreSmokeState);
+  const voiceFill = useVoiceFill('preSmoke', binding);
+
   return (
     // One flat column of fields down the screen, as the design draws it: the cut
     // being cooked, how it is being prepared, and anything else worth saying
@@ -40,99 +52,124 @@ export function PreSmokeStep(props: PreSmokeStepProps) {
       xs={12}
       sx={{ display: 'flex', flexDirection: 'column', gap: '14px', width: '100%' }}
     >
-      <FormField label="Name" htmlFor="presmoke-name">
-        <TextField
-          id="presmoke-name"
-          fullWidth
-          size="small"
-          placeholder="Sunday brisket"
-          value={preSmokeState.name}
-          inputProps={{ 'data-testid': 'presmoke-name-input' }}
-          onChange={(event: any) =>
-            setPreSmokeState({ ...preSmokeState, name: event.target.value })
-          }
-        />
-      </FormField>
-      <FormField label="Meat Type" htmlFor="presmoke-meat-type">
-        <Autocomplete
-          id="presmoke-meat-type"
-          fullWidth
-          size="small"
-          freeSolo
-          forcePopupIcon
-          // A select offers all of its choices whenever it is opened.
-          // Material-UI narrows a free-text picker's list to what matches the
-          // field, which on a cook already recorded as a brisket leaves
-          // "Brisket" as the only cut on offer — so changing one's mind means
-          // emptying the field first. Seven cuts are a list, not a search, so
-          // the whole list is always shown.
-          filterOptions={options => options}
-          options={MEAT_TYPES}
-          inputValue={preSmokeState.meatType}
-          onInputChange={(event, newInputValue) => {
-            setPreSmokeState({ ...preSmokeState, meatType: newInputValue });
-          }}
-          renderInput={params => (
-            <TextField
-              {...params}
-              placeholder="Brisket"
-              inputProps={{ ...params.inputProps, 'data-testid': 'presmoke-meat-type-input' }}
-            />
-          )}
-        />
-      </FormField>
-      {/* The weight and the unit it is measured in are one answer, so they
-            share a row: the number takes the room, the unit takes what it
-            needs. */}
-      <Box sx={{ display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
-        <FormField label="Weight" htmlFor="presmoke-weight" sx={{ flex: 1, minWidth: 0 }}>
+      <FilledFlash field="name" flashing={voiceFill.isFlashing('name')}>
+        <FormField label="Name" htmlFor="presmoke-name">
           <TextField
-            id="presmoke-weight"
-            type="number"
+            id="presmoke-name"
             fullWidth
             size="small"
-            placeholder="0"
-            value={preSmokeState.weight.weight ? preSmokeState.weight.weight : ''}
-            inputProps={{ 'data-testid': 'presmoke-weight-input' }}
+            placeholder="Sunday brisket"
+            value={preSmokeState.name}
+            inputProps={{ 'data-testid': 'presmoke-name-input' }}
             onChange={(event: any) =>
-              setPreSmokeState({
-                ...preSmokeState,
-                weight: { ...preSmokeState.weight, weight: event.target.value },
-              })
+              setPreSmokeState({ ...preSmokeState, name: event.target.value })
             }
           />
         </FormField>
-        <FormField label="Unit" labelId="presmoke-weight-unit-label" sx={{ width: '96px' }}>
-          <Select
-            labelId="presmoke-weight-unit-label"
+      </FilledFlash>
+      <FilledFlash field="meatType" flashing={voiceFill.isFlashing('meatType')}>
+        <FormField label="Meat Type" htmlFor="presmoke-meat-type">
+          <Autocomplete
+            id="presmoke-meat-type"
+            fullWidth
             size="small"
-            value={preSmokeState.weight.unit}
-            // The rendered display element is what a test clicks to open the
-            // unit menu; `SelectDisplayProps` is typed as plain HTML
-            // attributes, which do not admit `data-*` keys, hence the cast.
-            SelectDisplayProps={
-              {
-                'data-testid': 'presmoke-weight-unit-select',
-              } as React.HTMLAttributes<HTMLDivElement>
-            }
-            onChange={(event: any) =>
-              setPreSmokeState({
-                ...preSmokeState,
-                weight: { ...preSmokeState.weight, unit: event.target.value },
-              })
-            }
-          >
-            {Object.values(WeightUnits).map(unit => (
-              <MenuItem key={unit} value={unit} data-testid={`presmoke-weight-unit-option-${unit}`}>
-                {unit}
-              </MenuItem>
-            ))}
-          </Select>
+            freeSolo
+            forcePopupIcon
+            // A select offers all of its choices whenever it is opened.
+            // Material-UI narrows a free-text picker's list to what matches the
+            // field, which on a cook already recorded as a brisket leaves
+            // "Brisket" as the only cut on offer — so changing one's mind means
+            // emptying the field first. Seven cuts are a list, not a search, so
+            // the whole list is always shown.
+            filterOptions={options => options}
+            options={MEAT_TYPES}
+            inputValue={preSmokeState.meatType}
+            onInputChange={(event, newInputValue) => {
+              setPreSmokeState({ ...preSmokeState, meatType: newInputValue });
+            }}
+            renderInput={params => (
+              <TextField
+                {...params}
+                placeholder="Brisket"
+                inputProps={{ ...params.inputProps, 'data-testid': 'presmoke-meat-type-input' }}
+              />
+            )}
+          />
         </FormField>
+      </FilledFlash>
+      {/* The weight and the unit it is measured in are one answer, so they
+            share a row: the number takes the room, the unit takes what it
+            needs. They are one value to Voice Fill too, so a filled weight
+            flashes both. */}
+      <Box sx={{ display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
+        <FilledFlash
+          field="weight"
+          flashing={voiceFill.isFlashing('weight')}
+          sx={{ flex: 1, minWidth: 0 }}
+        >
+          <FormField label="Weight" htmlFor="presmoke-weight">
+            <TextField
+              id="presmoke-weight"
+              type="number"
+              fullWidth
+              size="small"
+              placeholder="0"
+              value={preSmokeState.weight.weight ? preSmokeState.weight.weight : ''}
+              inputProps={{ 'data-testid': 'presmoke-weight-input' }}
+              onChange={(event: any) =>
+                setPreSmokeState({
+                  ...preSmokeState,
+                  weight: { ...preSmokeState.weight, weight: event.target.value },
+                })
+              }
+            />
+          </FormField>
+        </FilledFlash>
+        <FilledFlash
+          field="weight"
+          flashing={voiceFill.isFlashing('weight')}
+          sx={{ width: '96px' }}
+        >
+          <FormField label="Unit" labelId="presmoke-weight-unit-label">
+            <Select
+              labelId="presmoke-weight-unit-label"
+              size="small"
+              value={preSmokeState.weight.unit}
+              // The rendered display element is what a test clicks to open the
+              // unit menu; `SelectDisplayProps` is typed as plain HTML
+              // attributes, which do not admit `data-*` keys, hence the cast.
+              SelectDisplayProps={
+                {
+                  'data-testid': 'presmoke-weight-unit-select',
+                } as React.HTMLAttributes<HTMLDivElement>
+              }
+              onChange={(event: any) =>
+                setPreSmokeState({
+                  ...preSmokeState,
+                  weight: { ...preSmokeState.weight, unit: event.target.value },
+                })
+              }
+            >
+              {Object.values(WeightUnits).map(unit => (
+                <MenuItem
+                  key={unit}
+                  value={unit}
+                  data-testid={`presmoke-weight-unit-option-${unit}`}
+                >
+                  {unit}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormField>
+        </FilledFlash>
       </Box>
       {/* The plan and its heading are one field of the form, spaced the way a
           label sits above its control. */}
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      <FilledFlash
+        field="steps"
+        flashing={voiceFill.isFlashing('steps')}
+        sx={{ display: 'flex', flexDirection: 'column', gap: '6px' }}
+      >
         <SectionHeading>Prep Steps</SectionHeading>
         <DynamicList
           newline={() =>
@@ -153,26 +190,38 @@ export function PreSmokeStep(props: PreSmokeStepProps) {
             })
           }
         />
-      </Box>
-      <FormField label="Notes" htmlFor="presmoke-notes">
-        <TextField
-          id="presmoke-notes"
-          fullWidth
-          placeholder="Anything worth remembering about this cut"
-          multiline
-          inputProps={{ 'data-testid': 'presmoke-notes-input' }}
-          value={preSmokeState.notes}
-          onChange={(event: any) =>
-            setPreSmokeState({ ...preSmokeState, notes: event.target.value })
-          }
-          rows={4}
-        />
-      </FormField>
+      </FilledFlash>
+      <FilledFlash field="notes" flashing={voiceFill.isFlashing('notes')}>
+        <FormField label="Notes" htmlFor="presmoke-notes">
+          <TextField
+            id="presmoke-notes"
+            fullWidth
+            placeholder="Anything worth remembering about this cut"
+            multiline
+            inputProps={{ 'data-testid': 'presmoke-notes-input' }}
+            value={preSmokeState.notes}
+            onChange={(event: any) =>
+              setPreSmokeState({ ...preSmokeState, notes: event.target.value })
+            }
+            rows={4}
+          />
+        </FormField>
+      </FilledFlash>
       {/* The step's one action, at the foot of it and against the right-hand
-          edge, which is where the design ends every step. */}
-      <Grid container flexDirection="row-reverse" sx={{ paddingBottom: '8px' }}>
+          edge, which is where the design ends every step. The Voice fill
+          button is pinned over that same corner, so where it is offered the
+          step ends with room for it underneath: scrolled to its foot, the
+          action is clear of the button. */}
+      <Grid
+        container
+        flexDirection="row-reverse"
+        sx={{
+          paddingBottom: voiceFill.offered ? `${VOICE_FILL_BUTTON_CLEARANCE + 8}px` : '8px',
+        }}
+      >
         {props.nextButton}
       </Grid>
+      {voiceFill.controls}
     </Grid>
   );
 }
