@@ -26,7 +26,8 @@ export interface VoiceFill<Values> {
 export interface VoiceFillOptions {
   /**
    * Opens the place the models are picked: where "Change model" takes a cook
-   * whose model has failed. The screen says how; Voice Fill only asks.
+   * whose model has failed. The screen says how; Voice Fill only asks. A
+   * screen that has no way there gives none, and "Change model" is not offered.
    */
   onChangeModel?: () => void;
 }
@@ -93,11 +94,14 @@ export const useVoiceFill = <Screen extends VoiceFillScreen>(
         onRetry={session.retry}
         onFixText={session.fixText}
         onRedo={session.redo}
-        onChangeModel={() => {
-          // The Ramble does not come along: its transcript goes with the sheet.
-          session.cancel();
-          onChangeModel?.();
-        }}
+        onChangeModel={
+          onChangeModel &&
+          (() => {
+            // The Ramble does not come along: its transcript goes with the sheet.
+            session.cancel();
+            onChangeModel();
+          })
+        }
         onClose={session.cancel}
       />
       {state.phase === 'applied' && <VoiceFillToast count={state.count} onUndo={session.undo} />}

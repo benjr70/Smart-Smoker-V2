@@ -650,20 +650,70 @@ describe('Voice Fill session', () => {
       session.start();
       expect(session.getState().phase).toBe('listening');
     });
+  });
 
-    test('a speech model that fails any other way closes the sheet', async () => {
+  describe('a speech model that fails', () => {
+    /** A session whose speech port goes wrong the first time `step` is asked of it. */
+    const failingOnce = (step: 'load' | 'start') => {
+      const speech = createFakeSpeech({ transcript: TRANSCRIPT, wordIntervalMs: 100 });
+      const failing = jest.fn(speech[step] as (...given: unknown[]) => Promise<void>);
+      failing.mockImplementationOnce(() => Promise.reject(new Error('no model')));
+      const extract = jest.fn(createFakeExtractor({ raw: { weight: 16 } }).extract);
+      const held = screenHolding(emptyForm);
       const session = createVoiceFillSession({
         screen: 'preSmoke',
-        speech: {
-          ...createFakeSpeech({ transcript: TRANSCRIPT }),
-          load: () => Promise.reject(new Error('no model')),
-        },
-        extractor: createFakeExtractor({ raw: {} }),
-        binding: screenHolding(emptyForm).binding,
+        speech: { ...speech, [step]: failing },
+        extractor: { load: () => Promise.resolve(), extract },
+        binding: held.binding,
         now: () => NOW,
       });
+      return { session, held, extract };
+    };
 
+    test.each(['load', 'start'] as const)(
+      'to %s is a problem the sheet stays up for, with nothing heard and nothing changed',
+      async step => {
+        const { session, held } = failingOnce(step);
+
+        session.start();
+        await settled();
+
+        expect(session.getState()).toEqual({ phase: 'problem', transcript: '' });
+        expect(held.values()).toEqual(emptyForm);
+      }
+    );
+
+    test('retry listens again, there being nothing heard to read again', async () => {
+      const { session, extract } = failingOnce('load');
       session.start();
+      await settled();
+
+      session.retry();
+      await settled();
+      expect(session.getState()).toEqual({ phase: 'listening', transcript: '' });
+      expect(extract).not.toHaveBeenCalled();
+
+      jest.advanceTimersByTime(200);
+      expect(session.getState()).toEqual({ phase: 'listening', transcript: 'Sixteen pound' });
+    });
+
+    test('the text can be typed in place of what could not be heard', async () => {
+      const { session } = failingOnce('load');
+      session.start();
+      await settled();
+
+      session.fixText('Sixteen pound brisket.');
+      await settled();
+
+      expect(session.getState().phase).toBe('review');
+    });
+
+    test('closes with nothing left listening', async () => {
+      const { session } = failingOnce('start');
+      session.start();
+      await settled();
+
+      session.cancel();
       await settled();
 
       expect(session.getState()).toEqual({ phase: 'idle' });

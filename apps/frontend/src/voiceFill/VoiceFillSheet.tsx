@@ -1,34 +1,15 @@
 import { Box, Button, CircularProgress, Drawer, TextField, Theme, Typography } from '@mui/material';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { ReviewRow } from './extractionContract';
 import type { VoiceFillScreen } from './fieldDefinition';
 import { SCREEN_FIELDS } from './fieldDefinition';
 import type { VoiceFillState } from './session';
+import { isFixable } from './session';
 import { VOICE_FILL_MAX_WIDTH, fieldCount, voiceFillCaptionSx } from './VoiceFillControls';
 import { MicIcon } from '../components/common/components/DesignIcons';
 
 /** How many of a screen's fields the hint line names. */
 const HINTED_FIELDS = 5;
-
-/** What the sheet is headed while each state is up. */
-const titleOf = <Values,>(state: VoiceFillState<Values>): string => {
-  switch (state.phase) {
-    case 'listening':
-      return 'Listening…';
-    case 'working':
-      return 'Filling in fields…';
-    case 'review':
-      return `Found ${fieldCount(state.rows.length)}`;
-    case 'nothing-to-fill':
-      return 'Nothing to fill';
-    case 'problem':
-      return 'Voice fill hit a problem';
-    case 'microphone-blocked':
-      return 'Microphone blocked';
-    default:
-      return '';
-  }
-};
 
 /** An action at the sheet's foot, at the size the state it is up in gives it. */
 const actionSx = (height: number, fontSize: string) =>
@@ -50,13 +31,81 @@ const secondaryActionSx = (theme: Theme) =>
     '&:hover': { borderWidth: '1.5px', borderColor: theme.design.border },
   }) as const;
 
+/** The main action at the sheet's foot: the one a state is up to be answered with. */
+function PrimaryAction({
+  testId,
+  onClick,
+  disabled,
+  size = 'regular',
+  children,
+}: {
+  testId: string;
+  onClick: () => void;
+  disabled?: boolean;
+  /** "Done talking" is the one a cook hits without looking: it is the larger. */
+  size?: 'regular' | 'large';
+  children: React.ReactNode;
+}): JSX.Element {
+  return (
+    <Button
+      variant="contained"
+      fullWidth
+      disabled={disabled}
+      data-testid={testId}
+      onClick={onClick}
+      sx={size === 'large' ? actionSx(64, '1.0625rem') : actionSx(56, '1rem')}
+    >
+      {children}
+    </Button>
+  );
+}
+
+/**
+ * The quieter action beside the main one. It shares the foot with it evenly,
+ * unless it carries an icon: then it is only as wide as what it says.
+ */
+function SecondaryAction({
+  testId,
+  onClick,
+  icon,
+  children,
+}: {
+  testId: string;
+  onClick: () => void;
+  icon?: React.ReactNode;
+  children: React.ReactNode;
+}): JSX.Element {
+  return (
+    <Button
+      variant="outlined"
+      fullWidth={!icon}
+      data-testid={testId}
+      onClick={onClick}
+      startIcon={icon}
+      sx={theme => ({
+        ...secondaryActionSx(theme),
+        ...(icon ? { flexShrink: 0, padding: '0 18px' } : {}),
+      })}
+    >
+      {children}
+    </Button>
+  );
+}
+
 /** The line under a state that has no rows to show: what happened, and what to do. */
-const explanationSx = (theme: Theme) =>
-  ({
-    fontSize: '0.875rem',
-    lineHeight: 1.5,
-    color: theme.design.textSecondary,
-  }) as const;
+function Explanation({ children }: { children: React.ReactNode }): JSX.Element {
+  return (
+    <Box
+      sx={theme => ({
+        fontSize: '0.875rem',
+        lineHeight: 1.5,
+        color: theme.design.textSecondary,
+      })}
+    >
+      {children}
+    </Box>
+  );
+}
 
 /** A weight as a row writes it, or nothing for one nobody has entered. */
 const weightText = (value: unknown): string => {
@@ -151,18 +200,25 @@ function QuotedTranscript({ transcript }: { transcript: string }): JSX.Element {
 
 interface FixableTranscriptProps {
   transcript: string;
+  /** The text being typed, or nothing while the transcript is only being shown. */
+  draft: string | null;
+  onDraft: (text: string) => void;
   /** Has the text read in place of the transcript that was heard. */
-  onReread: (text: string) => void;
+  onFixText: (text: string) => void;
 }
 
 /**
  * The Ramble as it was heard, and the way to put a misheard word right without
  * saying it all again: "Fix the text" opens the transcript for typing into,
- * "Re-read text" has what was typed read.
+ * "Re-read text" has what was typed read. The text being typed is the sheet's
+ * to hold, so the actions at its foot know of it.
  */
-function FixableTranscript({ transcript, onReread }: FixableTranscriptProps): JSX.Element {
-  // The text being typed, or nothing while the transcript is only being shown.
-  const [draft, setDraft] = useState<string | null>(null);
+function FixableTranscript({
+  transcript,
+  draft,
+  onDraft,
+  onFixText,
+}: FixableTranscriptProps): JSX.Element {
   const editing = draft !== null;
   return (
     <Box sx={{ marginBottom: '14px' }}>
@@ -173,7 +229,7 @@ function FixableTranscript({ transcript, onReread }: FixableTranscriptProps): JS
           autoFocus
           rows={4}
           value={draft}
-          onChange={event => setDraft(event.target.value)}
+          onChange={event => onDraft(event.target.value)}
           inputProps={{ 'aria-label': 'Transcript', 'data-testid': 'voice-fill-transcript-editor' }}
         />
       ) : (
@@ -181,15 +237,12 @@ function FixableTranscript({ transcript, onReread }: FixableTranscriptProps): JS
       )}
       <Button
         data-testid={editing ? 'voice-fill-reread' : 'voice-fill-fix-text'}
-        onClick={() => (editing ? onReread(draft) : setDraft(transcript))}
+        onClick={() => (editing ? onFixText(draft) : onDraft(transcript))}
         sx={theme => ({
-          height: 40,
+          ...actionSx(40, '0.8125rem'),
+          borderRadius: '10px',
           marginTop: '8px',
           padding: '0 14px',
-          borderRadius: '10px',
-          fontSize: '0.8125rem',
-          fontWeight: 700,
-          textTransform: 'none',
           backgroundColor: theme.design.accentTint,
           '&:hover': { backgroundColor: theme.design.accentTint },
         })}
@@ -313,6 +366,13 @@ function ReviewRowItem<Values>({
   );
 }
 
+/** What the sheet shows that is the state's own: its heading, body and actions. */
+interface SheetParts {
+  title: string;
+  body?: React.ReactNode;
+  footer?: React.ReactNode;
+}
+
 export interface VoiceFillSheetProps<Values> {
   screen: VoiceFillScreen;
   state: VoiceFillState<Values>;
@@ -325,8 +385,11 @@ export interface VoiceFillSheetProps<Values> {
   onFixText: (transcript: string) => void;
   /** Records the Ramble again from the start. */
   onRedo: () => void;
-  /** Leaves the sheet for the place the models are picked. */
-  onChangeModel: () => void;
+  /**
+   * Leaves the sheet for the place the models are picked. Where the screen has
+   * no way there, none is given and "Change model" is not offered.
+   */
+  onChangeModel?: () => void;
   onClose: () => void;
 }
 
@@ -337,7 +400,10 @@ export interface VoiceFillSheetProps<Values> {
  * Ramble proposes. And where a Ramble goes wrong, what went wrong and a way
  * on: nothing to fill, a problem with the model, a microphone that is blocked.
  *
- * It draws the session's state and reports taps; it decides nothing. A Drawer
+ * It draws the session's state and reports taps; it decides nothing but which
+ * text a tap is about: while the cook has typed a correction that has not been
+ * read, it is the correction that Retry reads, and the rows of the uncorrected
+ * text are not there to be filled from. A Drawer
  * underneath, as the confirmation sheet is, for the focus trap, the inert page
  * behind and Escape.
  */
@@ -360,6 +426,184 @@ export function VoiceFillSheet<Values>({
     .slice(0, HINTED_FIELDS)
     .map(field => field.label.toLowerCase())
     .join(', ');
+
+  // The correction being typed over the transcript, while one is.
+  const fixable = isFixable(state);
+  const [typed, setTyped] = useState<string | null>(null);
+  // A correction belongs to the transcript it was typed over: it goes when
+  // that transcript is read again, recorded again or closed.
+  useEffect(() => {
+    if (!fixable) {
+      setTyped(null);
+    }
+  }, [fixable]);
+  const draft = fixable ? typed : null;
+  /** The correction, where there is one the model has not read. */
+  const unread = fixable && draft !== null && draft !== state.transcript ? draft : null;
+
+  // Everything that differs from one state to the next, said once per state.
+  const parts = ((): SheetParts => {
+    switch (state.phase) {
+      case 'listening':
+        return {
+          title: 'Listening…',
+          body: (
+            <>
+              <Box
+                sx={theme => ({
+                  fontSize: '0.8125rem',
+                  lineHeight: 1.5,
+                  marginBottom: '12px',
+                  color: theme.design.textSecondary,
+                })}
+              >
+                Talk through it naturally — {hinted}.
+              </Box>
+              <Box
+                aria-live="polite"
+                data-testid="voice-fill-live-transcript"
+                sx={theme => ({
+                  minHeight: 120,
+                  fontSize: '1.1875rem',
+                  lineHeight: 1.5,
+                  fontWeight: 500,
+                  color: state.transcript ? theme.design.text : theme.design.textSecondary,
+                })}
+              >
+                {state.transcript || 'Start talking…'}
+              </Box>
+              <LevelBars />
+            </>
+          ),
+          footer: (
+            <PrimaryAction testId="voice-fill-done-talking" onClick={onDoneTalking} size="large">
+              Done talking
+            </PrimaryAction>
+          ),
+        };
+      case 'working':
+        return {
+          title: 'Filling in fields…',
+          body: (
+            <>
+              <QuotedTranscript transcript={state.transcript} />
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '22px 2px' }}>
+                <CircularProgress size={20} thickness={5} aria-label="Reading the Ramble" />
+                <Box
+                  component="span"
+                  sx={theme => ({ fontSize: '0.875rem', color: theme.design.textSecondary })}
+                >
+                  Reading it…
+                </Box>
+              </Box>
+            </>
+          ),
+        };
+      case 'review':
+        return {
+          title: `Found ${fieldCount(state.rows.length)}`,
+          body: (
+            <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+              {state.rows.map((row, index) => (
+                <ReviewRowItem
+                  key={row.id}
+                  row={row}
+                  first={index === 0}
+                  ticked={state.ticked.includes(row.id)}
+                  onToggle={() => onToggle(row.id)}
+                />
+              ))}
+            </Box>
+          ),
+          footer: (
+            <>
+              <SecondaryAction
+                testId="voice-fill-redo"
+                onClick={onRedo}
+                icon={<MicIcon size={18} />}
+              >
+                Redo
+              </SecondaryAction>
+              <PrimaryAction
+                testId="voice-fill-fill"
+                onClick={onFill}
+                // The rows are of the text as it was read: once it has been
+                // corrected they are not what the cook means until it is re-read.
+                disabled={state.ticked.length === 0 || unread !== null}
+              >
+                Fill {fieldCount(state.ticked.length)}
+              </PrimaryAction>
+            </>
+          ),
+        };
+      case 'nothing-to-fill':
+        return {
+          title: 'Nothing to fill',
+          body: (
+            <Explanation>
+              Didn’t catch anything that matches this screen’s fields. Try naming things directly —{' '}
+              {hinted}.
+            </Explanation>
+          ),
+          footer: (
+            <>
+              <SecondaryAction testId="voice-fill-cancel" onClick={onClose}>
+                Cancel
+              </SecondaryAction>
+              <PrimaryAction testId="voice-fill-try-again" onClick={onRedo}>
+                Try again
+              </PrimaryAction>
+            </>
+          ),
+        };
+      case 'problem':
+        return {
+          title: 'Voice fill hit a problem',
+          body: (
+            <Explanation>
+              {state.transcript ? 'Your transcript is kept.' : 'Nothing was heard.'}{' '}
+              {onChangeModel
+                ? 'Retry, or pick another model in Settings.'
+                : 'Tap Retry to try again.'}
+            </Explanation>
+          ),
+          footer: (
+            <>
+              {onChangeModel && (
+                <SecondaryAction testId="voice-fill-change-model" onClick={onChangeModel}>
+                  Change model
+                </SecondaryAction>
+              )}
+              <PrimaryAction
+                testId="voice-fill-retry"
+                // A correction not yet read is what a retry is of.
+                onClick={() => (unread === null ? onRetry() : onFixText(unread))}
+              >
+                Retry
+              </PrimaryAction>
+            </>
+          ),
+        };
+      case 'microphone-blocked':
+        return {
+          title: 'Microphone blocked',
+          body: (
+            <Explanation>
+              Allow the microphone for this site in Chrome’s site settings, then tap Voice fill
+              again.
+            </Explanation>
+          ),
+          footer: (
+            <PrimaryAction testId="voice-fill-blocked-close" onClick={onClose}>
+              Close
+            </PrimaryAction>
+          ),
+        };
+      default:
+        // Idle, or applied: the sheet is down.
+        return { title: '' };
+    }
+  })();
 
   return (
     <Drawer
@@ -413,7 +657,7 @@ export function VoiceFillSheet<Values>({
               color: theme.design.text,
             })}
           >
-            {titleOf(state)}
+            {parts.title}
           </Typography>
         </Box>
         <Box
@@ -440,181 +684,18 @@ export function VoiceFillSheet<Values>({
       </Box>
 
       <Box sx={{ flex: 1, overflowY: 'auto', padding: '14px 0 4px' }}>
-        {state.phase === 'listening' && (
-          <>
-            <Box
-              sx={theme => ({
-                fontSize: '0.8125rem',
-                lineHeight: 1.5,
-                marginBottom: '12px',
-                color: theme.design.textSecondary,
-              })}
-            >
-              Talk through it naturally — {hinted}.
-            </Box>
-            <Box
-              aria-live="polite"
-              data-testid="voice-fill-live-transcript"
-              sx={theme => ({
-                minHeight: 120,
-                fontSize: '1.1875rem',
-                lineHeight: 1.5,
-                fontWeight: 500,
-                color: state.transcript ? theme.design.text : theme.design.textSecondary,
-              })}
-            >
-              {state.transcript || 'Start talking…'}
-            </Box>
-            <LevelBars />
-          </>
+        {fixable && (
+          <FixableTranscript
+            transcript={state.transcript}
+            draft={draft}
+            onDraft={setTyped}
+            onFixText={onFixText}
+          />
         )}
-
-        {state.phase === 'working' && (
-          <>
-            <QuotedTranscript transcript={state.transcript} />
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '22px 2px' }}>
-              <CircularProgress size={20} thickness={5} aria-label="Reading the Ramble" />
-              <Box
-                component="span"
-                sx={theme => ({ fontSize: '0.875rem', color: theme.design.textSecondary })}
-              >
-                Reading it…
-              </Box>
-            </Box>
-          </>
-        )}
-
-        {(state.phase === 'review' ||
-          state.phase === 'nothing-to-fill' ||
-          state.phase === 'problem') && (
-          <FixableTranscript transcript={state.transcript} onReread={onFixText} />
-        )}
-
-        {state.phase === 'review' && (
-          <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-            {state.rows.map((row, index) => (
-              <ReviewRowItem
-                key={row.id}
-                row={row}
-                first={index === 0}
-                ticked={state.ticked.includes(row.id)}
-                onToggle={() => onToggle(row.id)}
-              />
-            ))}
-          </Box>
-        )}
-
-        {state.phase === 'nothing-to-fill' && (
-          <Box sx={explanationSx}>
-            Didn’t catch anything that matches this screen’s fields. Try naming things directly —{' '}
-            {hinted}.
-          </Box>
-        )}
-
-        {state.phase === 'problem' && (
-          <Box sx={explanationSx}>
-            Your transcript is kept. Retry, or pick another model in Settings.
-          </Box>
-        )}
-
-        {state.phase === 'microphone-blocked' && (
-          <Box sx={explanationSx}>
-            Allow the microphone for this site in Chrome’s site settings, then tap Voice fill again.
-          </Box>
-        )}
+        {parts.body}
       </Box>
 
-      <Box sx={{ display: 'flex', gap: '10px', paddingTop: '12px' }}>
-        {state.phase === 'listening' && (
-          <Button
-            variant="contained"
-            fullWidth
-            data-testid="voice-fill-done-talking"
-            onClick={onDoneTalking}
-            sx={actionSx(64, '1.0625rem')}
-          >
-            Done talking
-          </Button>
-        )}
-        {state.phase === 'review' && (
-          <>
-            <Button
-              variant="outlined"
-              data-testid="voice-fill-redo"
-              onClick={onRedo}
-              startIcon={<MicIcon size={18} />}
-              sx={theme => ({ ...secondaryActionSx(theme), flexShrink: 0, padding: '0 18px' })}
-            >
-              Redo
-            </Button>
-            <Button
-              variant="contained"
-              fullWidth
-              disabled={state.ticked.length === 0}
-              data-testid="voice-fill-fill"
-              onClick={onFill}
-              sx={actionSx(56, '1rem')}
-            >
-              Fill {fieldCount(state.ticked.length)}
-            </Button>
-          </>
-        )}
-        {state.phase === 'nothing-to-fill' && (
-          <>
-            <Button
-              variant="outlined"
-              fullWidth
-              data-testid="voice-fill-cancel"
-              onClick={onClose}
-              sx={secondaryActionSx}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="contained"
-              fullWidth
-              data-testid="voice-fill-try-again"
-              onClick={onRedo}
-              sx={actionSx(56, '1rem')}
-            >
-              Try again
-            </Button>
-          </>
-        )}
-        {state.phase === 'problem' && (
-          <>
-            <Button
-              variant="outlined"
-              fullWidth
-              data-testid="voice-fill-change-model"
-              onClick={onChangeModel}
-              sx={secondaryActionSx}
-            >
-              Change model
-            </Button>
-            <Button
-              variant="contained"
-              fullWidth
-              data-testid="voice-fill-retry"
-              onClick={onRetry}
-              sx={actionSx(56, '1rem')}
-            >
-              Retry
-            </Button>
-          </>
-        )}
-        {state.phase === 'microphone-blocked' && (
-          <Button
-            variant="contained"
-            fullWidth
-            data-testid="voice-fill-blocked-close"
-            onClick={onClose}
-            sx={actionSx(56, '1rem')}
-          >
-            Close
-          </Button>
-        )}
-      </Box>
+      <Box sx={{ display: 'flex', gap: '10px', paddingTop: '12px' }}>{parts.footer}</Box>
     </Drawer>
   );
 }

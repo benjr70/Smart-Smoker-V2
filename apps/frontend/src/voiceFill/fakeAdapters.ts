@@ -86,12 +86,13 @@ export const createFakeExtractor = ({
   failures = 0,
   rawByTranscript = {},
 }: FakeExtractorScript): ExtractorPort => {
-  let asked = 0;
+  // How many Rambles it has been asked to read so far.
+  let extractions = 0;
   return {
     load: () => Promise.resolve(),
     extract: (_screen, transcript) => {
-      asked += 1;
-      const fails = asked <= failures;
+      extractions += 1;
+      const fails = extractions <= failures;
       const found = Object.prototype.hasOwnProperty.call(rawByTranscript, transcript)
         ? rawByTranscript[transcript]
         : raw;
