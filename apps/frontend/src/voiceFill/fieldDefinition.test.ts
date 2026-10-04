@@ -1,6 +1,6 @@
 import { SCREEN_FIELDS, VoiceFillScreen, fieldOf, jsonSchemaFor, toolSchemaFor } from '.';
 
-const SCREENS: VoiceFillScreen[] = ['preSmoke', 'postSmoke'];
+const SCREENS: VoiceFillScreen[] = ['preSmoke', 'smoke', 'postSmoke'];
 
 describe('a field asked for by its key', () => {
   it('is the one the screen lists under that key', () => {
@@ -42,6 +42,84 @@ describe('the JSON Schema derived from a screen', () => {
       required: ['restMinutes', 'steps', 'notes'],
       additionalProperties: false,
     });
+  });
+});
+
+describe('the smoke screen', () => {
+  it('asks for the names, the wood, the targets, the Serve Plan, the cook log and Notes', () => {
+    expect(SCREEN_FIELDS.smoke.fields.map(field => field.key)).toEqual([
+      'chamberName',
+      'probe1Name',
+      'probe2Name',
+      'probe3Name',
+      'woodType',
+      'probeTargets',
+      'serveClock',
+      'serveTomorrow',
+      'serveInMinutes',
+      'restMinutes',
+      'stamps',
+      'notes',
+    ]);
+  });
+
+  it('asks the JSON Schema for a list of records whose every part is required and nullable', () => {
+    const { probeTargets, serveTomorrow } = jsonSchemaFor('smoke').properties;
+    const [probe, target] = fieldOf('smoke', 'probeTargets').parts ?? [];
+
+    expect(probeTargets).toEqual({
+      description: fieldOf('smoke', 'probeTargets').description,
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          probe: { description: probe.description, anyOf: [{ type: 'string' }, { type: 'null' }] },
+          target: {
+            description: target.description,
+            anyOf: [{ type: 'integer' }, { type: 'null' }],
+          },
+        },
+        required: ['probe', 'target'],
+        additionalProperties: false,
+      },
+    });
+    expect(serveTomorrow).toMatchObject({ anyOf: [{ type: 'boolean' }, { type: 'null' }] });
+  });
+
+  it('asks the tool for a list of records with nothing required and nothing nullable', () => {
+    const tool = toolSchemaFor('smoke');
+    const [stamp, ago] = fieldOf('smoke', 'stamps').parts ?? [];
+
+    expect(tool.name).toBe('fill_smoke');
+    expect(tool.parameters.properties.stamps).toEqual({
+      description: fieldOf('smoke', 'stamps').description,
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          stamp: { description: stamp.description, type: 'string' },
+          ago: { description: ago.description, type: 'string' },
+        },
+      },
+    });
+    expect(tool.parameters.properties.serveTomorrow).toMatchObject({ type: 'boolean' });
+  });
+
+  it('gives the model the wood suggestion list the screen offers', () => {
+    const suggestions = 'Hickory, Post Oak, Pecan, Cherry, Apple, Mesquite';
+
+    expect(jsonSchemaFor('smoke').properties.woodType.description).toContain(suggestions);
+    expect(toolSchemaFor('smoke').parameters.properties.woodType.description).toContain(
+      suggestions
+    );
+  });
+
+  it('cannot be asked for a field it does not have', () => {
+    // Never called: the line below is here to be refused by the compiler.
+    // @ts-expect-error the smoke screen has no step list
+    const mistyped = () => fieldOf('smoke', 'steps');
+
+    expect(mistyped).toBeInstanceOf(Function);
   });
 });
 

@@ -29,17 +29,7 @@ import { useRunningCook } from './useRunningCook';
 import { useProbeTargets } from './useProbeTargets';
 import { useServePlan } from './useServePlan';
 import { useTemperatureSeries } from './useTemperatureSeries';
-
-/**
- * The woods the picker offers, in the design's order. Mesquite joins the five
- * the app has always listed — it is one of the four or five woods anyone
- * actually smokes on, and its absence was an omission rather than a decision.
- *
- * The list is a set of suggestions, not the permitted values: the picker is
- * free-text, so a cook on grapevine or whisky-barrel oak is recorded the same
- * way as one on hickory.
- */
-const WOOD_TYPES = ['Hickory', 'Post Oak', 'Pecan', 'Cherry', 'Apple', 'Mesquite'];
+import { WOOD_TYPES } from './woodTypes';
 
 type SmokeStepProps = {
   nextButton: JSX.Element;
