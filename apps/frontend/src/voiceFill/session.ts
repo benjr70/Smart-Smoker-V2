@@ -12,9 +12,16 @@ import type { ReviewRow, VoiceFillScreenValues } from './extractionContract';
 import { fillFor, notesAreMerged, reviewRows, tickedAfterToggle } from './extractionContract';
 import type { VoiceFillScreen } from './fieldDefinition';
 import type { ExtractorPort, SpeechPort } from './ports';
+import { isMicrophoneBlocked } from './ports';
 
 /** How long the toast, and with it the offer to Undo, stays up. */
 export const TOAST_MS = 6000;
+
+/**
+ * How long a Ramble may go unread after "Done talking" — or after a retry, or
+ * a re-read — before the session stops waiting and calls it a problem.
+ */
+export const PROBLEM_CAP_MS = 30_000;
 
 /**
  * What a fillable screen gives Voice Fill: the values it holds now, and a
@@ -33,6 +40,15 @@ export type VoiceFillState<Values> =
   | { phase: 'working'; transcript: string }
   /** The changes the Ramble proposes, and the ids of the rows still ticked. */
   | { phase: 'review'; transcript: string; rows: ReviewRow<Values>[]; ticked: string[] }
+  /** The Ramble had no words in it, or none this screen has a field for. */
+  | { phase: 'nothing-to-fill'; transcript: string }
+  /**
+   * The model failed, or took longer than the cap. What was heard is kept, so
+   * it can be read again without being spoken again.
+   */
+  | { phase: 'problem'; transcript: string }
+  /** The cook has refused the page the microphone: nothing can be heard. */
+  | { phase: 'microphone-blocked' }
   /** The ticked rows are written: how many, and to which fields. */
   | { phase: 'applied'; count: number; fields: (keyof Values & string)[] };
 
@@ -44,6 +60,15 @@ export interface VoiceFillSession<Values> {
   start(): void;
   /** Ends the Ramble and has it read. */
   doneTalking(): void;
+  /** Reads the transcript a problem kept again; nothing is recorded again. */
+  retry(): void;
+  /**
+   * Reads `transcript` — the one on the sheet, as the cook has corrected it —
+   * in place of the one that was heard. Nothing is recorded again.
+   */
+  fixText(transcript: string): void;
+  /** Throws the Ramble away and listens to a new one from the start. */
+  redo(): void;
   /** Ticks or unticks a Review row. */
   toggle(rowId: string): void;
   /** Writes the ticked rows to the screen. */
@@ -73,8 +98,8 @@ const rowsFor = <Screen extends VoiceFillScreen>(
   now: Date
 ): ReviewRow<VoiceFillScreenValues[Screen]>[] =>
   (screen === 'preSmoke'
-    ? reviewRows('preSmoke', raw, current as PreSmoke, now)
-    : reviewRows('postSmoke', raw, current as PostSmoke, now)) as ReviewRow<
+    ? reviewRows('preSmoke', raw, current as PreSmoke, { now })
+    : reviewRows('postSmoke', raw, current as PostSmoke, { now })) as ReviewRow<
     VoiceFillScreenValues[Screen]
   >[];
 
@@ -117,6 +142,7 @@ export const createVoiceFillSession = <Screen extends VoiceFillScreen>({
     });
   let undoFill: (() => void) | undefined;
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
+  let capTimer: ReturnType<typeof setTimeout> | undefined;
 
   const set = (next: VoiceFillState<Values>): void => {
     state = next;
@@ -130,11 +156,132 @@ export const createVoiceFillSession = <Screen extends VoiceFillScreen>({
     }
   };
 
+  const endCap = (): void => {
+    if (capTimer !== undefined) {
+      clearTimeout(capTimer);
+      capTimer = undefined;
+    }
+  };
+
   const toIdle = (): void => {
     generation += 1;
     endToast();
+    endCap();
     undoFill = undefined;
     set({ phase: 'idle' });
+  };
+
+  /**
+   * Has the model read `transcript`, and shows what it found: the rows for
+   * review, or that there was nothing in it for this screen. A transcript with
+   * no words in it is not worth the model's time.
+   */
+  const read = (transcript: string, asked: number): Promise<void> => {
+    if (transcript.trim() === '') {
+      endCap();
+      set({ phase: 'nothing-to-fill', transcript: '' });
+      return Promise.resolve();
+    }
+    set({ phase: 'working', transcript });
+    const spokenAt = now();
+    const notes = (binding.values().notes ?? '').trim();
+    return extractor
+      .load()
+      .then(() =>
+        extractor.extract(screen, transcript, {
+          now: spokenAt,
+          ...(notes && notesAreMerged(notes) && { existingNotes: notes }),
+        })
+      )
+      .then(raw => {
+        if (asked !== generation) {
+          return;
+        }
+        endCap();
+        const rows = rowsFor(screen, raw, binding.values(), spokenAt);
+        set(
+          rows.length === 0
+            ? { phase: 'nothing-to-fill', transcript }
+            : { phase: 'review', transcript, rows, ticked: rows.map(row => row.id) }
+        );
+      });
+  };
+
+  /** Stops waiting for the model, keeping what the sheet shows of the Ramble. */
+  const toProblem = (): void => {
+    const transcript = state.phase === 'working' ? state.transcript : '';
+    // Whatever the model answers from here on is an answer to nothing.
+    generation += 1;
+    endCap();
+    set({ phase: 'problem', transcript });
+  };
+
+  /**
+   * Shows the working state over `shown`, and has the transcript `heard` gives
+   * read — for no longer than the cap, and into a problem if it cannot be.
+   */
+  const readOnce = (shown: string, heard: () => Promise<string>): void => {
+    const asked = generation;
+    set({ phase: 'working', transcript: shown });
+    endCap();
+    capTimer = setTimeout(() => {
+      if (asked === generation) {
+        toProblem();
+      }
+    }, PROBLEM_CAP_MS);
+    heard()
+      .then(transcript => (asked === generation ? read(transcript, asked) : undefined))
+      .catch(() => {
+        if (asked === generation) {
+          toProblem();
+        }
+      });
+  };
+
+  /** Has a transcript already in hand read, as a Ramble just ended is. */
+  const reread = (transcript: string): void => {
+    generation += 1;
+    readOnce(transcript, () => Promise.resolve(transcript));
+  };
+
+  /** Puts the sheet up listening, to a Ramble that starts from nothing. */
+  const listen = (): void => {
+    generation += 1;
+    const asked = generation;
+    set({ phase: 'listening', transcript: '' });
+    queued(() =>
+      speech.load().then(() => {
+        // Ended before its model was ready: there is nothing to listen to.
+        if (asked !== generation) {
+          return undefined;
+        }
+        return speech
+          .start(transcript => {
+            if (asked === generation && state.phase === 'listening') {
+              set({ phase: 'listening', transcript });
+            }
+          })
+          .then(() => {
+            // Only a port that did start is one there is anything to stop.
+            live = true;
+          });
+      })
+    ).catch(error => {
+      if (asked !== generation) {
+        return;
+      }
+      if (isMicrophoneBlocked(error)) {
+        generation += 1;
+        endCap();
+        set({ phase: 'microphone-blocked' });
+      } else {
+        // A Ramble that cannot be heard is one that fills nothing.
+        toIdle();
+      }
+    });
+    // The extractor is made ready while the cook talks; a failure to is met
+    // again, and handled, when it is asked to extract.
+    extractor.load().catch(() => undefined);
   };
 
   return {
@@ -148,75 +295,40 @@ export const createVoiceFillSession = <Screen extends VoiceFillScreen>({
     },
 
     start: () => {
-      if (state.phase !== 'idle') {
-        return;
+      if (state.phase === 'idle') {
+        listen();
       }
-      generation += 1;
-      const asked = generation;
-      set({ phase: 'listening', transcript: '' });
-      queued(() =>
-        speech.load().then(() => {
-          // Ended before its model was ready: there is nothing to listen to.
-          if (asked !== generation) {
-            return undefined;
-          }
-          live = true;
-          return speech.start(transcript => {
-            if (asked === generation && state.phase === 'listening') {
-              set({ phase: 'listening', transcript });
-            }
-          });
-        })
-      )
-        // A Ramble that cannot be heard is one that fills nothing.
-        .catch(() => {
-          if (asked === generation) {
-            toIdle();
-          }
-        });
-      // The extractor is made ready while the cook talks; a failure to is met
-      // again, and handled, when it is asked to extract.
-      extractor.load().catch(() => undefined);
     },
 
     doneTalking: () => {
       if (state.phase !== 'listening') {
         return;
       }
-      const asked = generation;
-      set({ phase: 'working', transcript: state.transcript });
       // Stopped whether or not the Ramble is still in hand by then: a sheet
       // closed while the port was starting must not leave it listening.
-      stopSpeech()
-        .then(transcript => {
-          if (asked !== generation) {
-            return undefined;
-          }
-          set({ phase: 'working', transcript });
-          const spokenAt = now();
-          const notes = (binding.values().notes ?? '').trim();
-          return extractor
-            .load()
-            .then(() =>
-              extractor.extract(screen, transcript, {
-                now: spokenAt,
-                ...(notes && notesAreMerged(notes) && { existingNotes: notes }),
-              })
-            )
-            .then(raw => {
-              if (asked !== generation) {
-                return;
-              }
-              const rows = rowsFor(screen, raw, binding.values(), spokenAt);
-              set({ phase: 'review', transcript, rows, ticked: rows.map(row => row.id) });
-            });
-        })
-        // A Ramble that cannot be read is one that fills nothing.
-        .catch(() => {
-          if (asked === generation) {
-            toIdle();
-          }
-        });
+      readOnce(state.transcript, stopSpeech);
+    },
+
+    retry: () => {
+      if (state.phase === 'problem') {
+        reread(state.transcript);
+      }
+    },
+
+    fixText: transcript => {
+      if (
+        state.phase === 'review' ||
+        state.phase === 'nothing-to-fill' ||
+        state.phase === 'problem'
+      ) {
+        reread(transcript.trim());
+      }
+    },
+
+    redo: () => {
+      if (state.phase === 'review' || state.phase === 'nothing-to-fill') {
+        listen();
+      }
     },
 
     toggle: rowId => {

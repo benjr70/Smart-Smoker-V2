@@ -2,7 +2,7 @@ import type { PreSmoke } from '../api/types';
 import { WeightUnits } from '../components/common/interfaces/enums';
 import { createFakeExtractor, createFakeSpeech } from './fakeAdapters';
 import type { ScreenBinding } from './session';
-import { TOAST_MS, createVoiceFillSession } from './session';
+import { PROBLEM_CAP_MS, TOAST_MS, createVoiceFillSession } from './session';
 
 const TRANSCRIPT = 'Sixteen pound brisket. Trimmed the fat cap.';
 // A Saturday, so the name built for a nameless cook is "Saturday Brisket".
@@ -448,6 +448,441 @@ describe('Voice Fill session', () => {
       expect(speech.calls.lastIndexOf('stop')).toBeLessThan(speech.calls.lastIndexOf('start'));
       speech.hear('Sixteen pound');
       expect(session.getState()).toEqual({ phase: 'listening', transcript: 'Sixteen pound' });
+    });
+  });
+
+  describe('a Ramble with nothing in it for this screen', () => {
+    test('an extraction with no rows is nothing to fill, with the transcript kept', async () => {
+      const { session, held } = sessionOn(emptyForm, {});
+      session.start();
+      await settled();
+      session.doneTalking();
+      await settled();
+
+      expect(session.getState()).toEqual({ phase: 'nothing-to-fill', transcript: TRANSCRIPT });
+      expect(held.values()).toEqual(emptyForm);
+    });
+
+    test('an empty transcript is nothing to fill, and the model is never asked to read it', async () => {
+      const extract = jest.fn().mockResolvedValue({ weight: 16 });
+      const session = createVoiceFillSession({
+        screen: 'preSmoke',
+        speech: createFakeSpeech({ transcript: '  ' }),
+        extractor: { load: () => Promise.resolve(), extract },
+        binding: screenHolding(emptyForm).binding,
+        now: () => NOW,
+      });
+      session.start();
+      await settled();
+      session.doneTalking();
+      await settled();
+
+      expect(session.getState()).toEqual({ phase: 'nothing-to-fill', transcript: '' });
+      expect(extract).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('a Ramble the model cannot read', () => {
+    /** A speech port that says how often it was asked to listen. */
+    const countedSpeech = () => {
+      const speech = createFakeSpeech({ transcript: TRANSCRIPT });
+      const start = jest.fn(speech.start);
+      return { port: { ...speech, start }, start };
+    };
+
+    test('an extractor failure is a problem, with the transcript kept', async () => {
+      const held = screenHolding(emptyForm);
+      const session = createVoiceFillSession({
+        screen: 'preSmoke',
+        speech: createFakeSpeech({ transcript: TRANSCRIPT }),
+        extractor: createFakeExtractor({ raw: { weight: 16 }, failures: 1 }),
+        binding: held.binding,
+        now: () => NOW,
+      });
+      session.start();
+      await settled();
+      session.doneTalking();
+      await settled();
+
+      expect(session.getState()).toEqual({ phase: 'problem', transcript: TRANSCRIPT });
+      expect(held.values()).toEqual(emptyForm);
+    });
+
+    test('retry reads the kept transcript again without recording again', async () => {
+      const speech = countedSpeech();
+      const extract = jest
+        .fn()
+        .mockRejectedValueOnce(new Error('out of memory'))
+        .mockResolvedValue({ weight: 16 });
+      const session = createVoiceFillSession({
+        screen: 'preSmoke',
+        speech: speech.port,
+        extractor: { load: () => Promise.resolve(), extract },
+        binding: screenHolding({ ...emptyForm, name: 'Mine' }).binding,
+        now: () => NOW,
+      });
+      session.start();
+      await settled();
+      session.doneTalking();
+      await settled();
+
+      session.retry();
+      expect(session.getState()).toEqual({ phase: 'working', transcript: TRANSCRIPT });
+      await settled();
+
+      expect(session.getState()).toMatchObject({
+        phase: 'review',
+        transcript: TRANSCRIPT,
+        ticked: ['weight'],
+      });
+      expect(speech.start).toHaveBeenCalledTimes(1);
+      expect(extract).toHaveBeenCalledTimes(2);
+      expect(extract.mock.calls[1][1]).toBe(TRANSCRIPT);
+    });
+
+    test('thirty seconds without an answer is a problem, and the late answer is dropped', async () => {
+      const session = createVoiceFillSession({
+        screen: 'preSmoke',
+        speech: createFakeSpeech({ transcript: TRANSCRIPT }),
+        extractor: createFakeExtractor({ raw: { weight: 16 }, delayMs: PROBLEM_CAP_MS + 5000 }),
+        binding: screenHolding(emptyForm).binding,
+        now: () => NOW,
+      });
+      session.start();
+      await settled();
+      session.doneTalking();
+      await settled();
+
+      jest.advanceTimersByTime(PROBLEM_CAP_MS - 1);
+      await settled();
+      expect(session.getState()).toEqual({ phase: 'working', transcript: TRANSCRIPT });
+
+      jest.advanceTimersByTime(1);
+      expect(session.getState()).toEqual({ phase: 'problem', transcript: TRANSCRIPT });
+
+      jest.advanceTimersByTime(5000);
+      await settled();
+      expect(session.getState()).toEqual({ phase: 'problem', transcript: TRANSCRIPT });
+    });
+
+    test('the thirty seconds are counted afresh for a retry, and not at all once it is answered', async () => {
+      const session = createVoiceFillSession({
+        screen: 'preSmoke',
+        speech: createFakeSpeech({ transcript: TRANSCRIPT }),
+        extractor: createFakeExtractor({ raw: { weight: 16 }, delayMs: 20_000, failures: 1 }),
+        binding: screenHolding(emptyForm).binding,
+        now: () => NOW,
+      });
+      session.start();
+      await settled();
+      session.doneTalking();
+      await settled();
+      jest.advanceTimersByTime(20_000);
+      await settled();
+      expect(session.getState().phase).toBe('problem');
+
+      session.retry();
+      await settled();
+      // Twenty seconds into the retry is forty since Done talking.
+      jest.advanceTimersByTime(20_000);
+      await settled();
+      expect(session.getState().phase).toBe('review');
+
+      jest.advanceTimersByTime(PROBLEM_CAP_MS);
+      expect(session.getState().phase).toBe('review');
+    });
+
+    test('a microphone that will not stop is a problem, with what was heard kept', async () => {
+      const speech = createFakeSpeech({ transcript: TRANSCRIPT, wordIntervalMs: 100 });
+      const session = createVoiceFillSession({
+        screen: 'preSmoke',
+        speech: { ...speech, stop: () => Promise.reject(new Error('recogniser died')) },
+        extractor: createFakeExtractor({ raw: { weight: 16 } }),
+        binding: screenHolding(emptyForm).binding,
+        now: () => NOW,
+      });
+      session.start();
+      await settled();
+      jest.advanceTimersByTime(200);
+      session.doneTalking();
+      await settled();
+
+      expect(session.getState()).toEqual({ phase: 'problem', transcript: 'Sixteen pound' });
+    });
+  });
+
+  describe('a microphone the cook has refused', () => {
+    const blockedSession = () => {
+      const speech = createFakeSpeech({ transcript: TRANSCRIPT, microphone: 'blocked' });
+      const stop = jest.fn(speech.stop);
+      const held = screenHolding(emptyForm);
+      const session = createVoiceFillSession({
+        screen: 'preSmoke',
+        speech: { ...speech, stop },
+        extractor: createFakeExtractor({ raw: { weight: 16 } }),
+        binding: held.binding,
+        now: () => NOW,
+      });
+      return { session, held, stop };
+    };
+
+    test('is said to be blocked, with nothing heard and nothing changed', async () => {
+      const { session, held } = blockedSession();
+
+      session.start();
+      await settled();
+
+      expect(session.getState()).toEqual({ phase: 'microphone-blocked' });
+      expect(held.values()).toEqual(emptyForm);
+    });
+
+    test('closes back to idle, ready to be asked again, with nothing left to stop', async () => {
+      const { session, stop } = blockedSession();
+      session.start();
+      await settled();
+
+      session.cancel();
+      await settled();
+
+      expect(session.getState()).toEqual({ phase: 'idle' });
+      expect(stop).not.toHaveBeenCalled();
+      // The button is still there to be tapped once the microphone is allowed.
+      session.start();
+      expect(session.getState().phase).toBe('listening');
+    });
+
+    test('a speech model that fails any other way closes the sheet', async () => {
+      const session = createVoiceFillSession({
+        screen: 'preSmoke',
+        speech: {
+          ...createFakeSpeech({ transcript: TRANSCRIPT }),
+          load: () => Promise.reject(new Error('no model')),
+        },
+        extractor: createFakeExtractor({ raw: {} }),
+        binding: screenHolding(emptyForm).binding,
+        now: () => NOW,
+      });
+
+      session.start();
+      await settled();
+
+      expect(session.getState()).toEqual({ phase: 'idle' });
+    });
+  });
+
+  describe('fixing the text', () => {
+    const FIXED = 'Sixty pound brisket. Trimmed the fat cap.';
+
+    /** A session whose model misheard the weight, and reads the fixed text right. */
+    const misheardSession = (raw: unknown, failures = 0) => {
+      const speech = createFakeSpeech({ transcript: TRANSCRIPT });
+      const start = jest.fn(speech.start);
+      const held = screenHolding({ ...emptyForm, name: 'Mine' });
+      const session = createVoiceFillSession({
+        screen: 'preSmoke',
+        speech: { ...speech, start },
+        extractor: createFakeExtractor({
+          raw,
+          failures,
+          rawByTranscript: { [FIXED]: { weight: 60 } },
+        }),
+        binding: held.binding,
+        now: () => NOW,
+      });
+      return { session, held, start };
+    };
+
+    const weightRow = (session: ReturnType<typeof misheardSession>['session']) => {
+      const state = session.getState();
+      return state.phase === 'review' ? state.rows.find(row => row.id === 'weight') : undefined;
+    };
+
+    test('in review, the edited text is read again and gives new rows, all ticked', async () => {
+      const { session, held, start } = misheardSession({ weight: 16 });
+      session.start();
+      await settled();
+      session.doneTalking();
+      await settled();
+      session.toggle('weight');
+
+      session.fixText(FIXED);
+      expect(session.getState()).toEqual({ phase: 'working', transcript: FIXED });
+      await settled();
+
+      expect(session.getState()).toMatchObject({
+        phase: 'review',
+        transcript: FIXED,
+        ticked: ['weight'],
+      });
+      expect(weightRow(session)?.newValue).toEqual({ weight: 60, unit: WeightUnits.LB });
+      // Nothing was recorded again, and nothing is written before Fill.
+      expect(start).toHaveBeenCalledTimes(1);
+      expect(held.values().weight).toEqual({ unit: WeightUnits.LB });
+    });
+
+    test('with nothing to fill, the edited text is read and gives rows', async () => {
+      const { session } = misheardSession({});
+      session.start();
+      await settled();
+      session.doneTalking();
+      await settled();
+      expect(session.getState().phase).toBe('nothing-to-fill');
+
+      session.fixText(FIXED);
+      await settled();
+
+      expect(weightRow(session)?.newValue).toEqual({ weight: 60, unit: WeightUnits.LB });
+    });
+
+    test('after a problem, the edited text is read and gives rows', async () => {
+      const { session } = misheardSession({ weight: 16 }, 1);
+      session.start();
+      await settled();
+      session.doneTalking();
+      await settled();
+      expect(session.getState().phase).toBe('problem');
+
+      session.fixText(FIXED);
+      await settled();
+
+      expect(weightRow(session)?.newValue).toEqual({ weight: 60, unit: WeightUnits.LB });
+    });
+
+    test('text edited down to nothing is nothing to fill', async () => {
+      const { session } = misheardSession({ weight: 16 });
+      session.start();
+      await settled();
+      session.doneTalking();
+      await settled();
+
+      session.fixText('   ');
+      await settled();
+
+      expect(session.getState()).toEqual({ phase: 'nothing-to-fill', transcript: '' });
+    });
+
+    test('there is no text to fix while the Ramble is still being heard', async () => {
+      const { session } = misheardSession({ weight: 16 });
+      session.start();
+      await settled();
+
+      session.fixText(FIXED);
+
+      expect(session.getState().phase).toBe('listening');
+    });
+  });
+
+  describe('recording again', () => {
+    const recordedSession = (raw: unknown) => {
+      const speech = createFakeSpeech({ transcript: TRANSCRIPT, wordIntervalMs: 100 });
+      const start = jest.fn(speech.start);
+      const held = screenHolding(emptyForm);
+      const session = createVoiceFillSession({
+        screen: 'preSmoke',
+        speech: { ...speech, start },
+        extractor: createFakeExtractor({ raw }),
+        binding: held.binding,
+        now: () => NOW,
+      });
+      return { session, held, start };
+    };
+
+    test('redo in review listens again from the start, with nothing written', async () => {
+      const { session, held, start } = recordedSession({ weight: 16 });
+      session.start();
+      await settled();
+      session.doneTalking();
+      await settled();
+      expect(session.getState().phase).toBe('review');
+
+      session.redo();
+      await settled();
+
+      expect(session.getState()).toEqual({ phase: 'listening', transcript: '' });
+      expect(start).toHaveBeenCalledTimes(2);
+      expect(held.values()).toEqual(emptyForm);
+      jest.advanceTimersByTime(100);
+      expect(session.getState()).toEqual({ phase: 'listening', transcript: 'Sixteen' });
+    });
+
+    test('try again with nothing to fill listens again from the start', async () => {
+      const { session, start } = recordedSession({});
+      session.start();
+      await settled();
+      session.doneTalking();
+      await settled();
+      expect(session.getState().phase).toBe('nothing-to-fill');
+
+      session.redo();
+      await settled();
+
+      expect(session.getState()).toEqual({ phase: 'listening', transcript: '' });
+      expect(start).toHaveBeenCalledTimes(2);
+    });
+
+    test('there is nothing to redo while the model is still reading', async () => {
+      const speech = createFakeSpeech({ transcript: TRANSCRIPT });
+      const session = createVoiceFillSession({
+        screen: 'preSmoke',
+        speech,
+        extractor: createFakeExtractor({ raw: { weight: 16 }, delayMs: 500 }),
+        binding: screenHolding(emptyForm).binding,
+        now: () => NOW,
+      });
+      session.start();
+      await settled();
+      session.doneTalking();
+      await settled();
+
+      session.redo();
+
+      expect(session.getState().phase).toBe('working');
+    });
+  });
+
+  describe('closing the sheet', () => {
+    test.each([
+      ['with nothing to fill', {}, 0, 'nothing-to-fill'],
+      ['after a problem', { weight: 16 }, 1, 'problem'],
+      ['in review', { weight: 16 }, 0, 'review'],
+    ])('%s changes nothing and keeps no transcript', async (_when, raw, failures, phase) => {
+      const held = screenHolding(emptyForm);
+      const session = createVoiceFillSession({
+        screen: 'preSmoke',
+        speech: createFakeSpeech({ transcript: TRANSCRIPT }),
+        extractor: createFakeExtractor({ raw, failures }),
+        binding: held.binding,
+        now: () => NOW,
+      });
+      session.start();
+      await settled();
+      session.doneTalking();
+      await settled();
+      expect(session.getState().phase).toBe(phase);
+
+      session.cancel();
+
+      expect(session.getState()).toEqual({ phase: 'idle' });
+      expect(held.values()).toEqual(emptyForm);
+    });
+
+    test('while the model works, the thirty seconds stop being counted', async () => {
+      const session = createVoiceFillSession({
+        screen: 'preSmoke',
+        speech: createFakeSpeech({ transcript: TRANSCRIPT }),
+        extractor: createFakeExtractor({ raw: { weight: 16 }, delayMs: 60_000 }),
+        binding: screenHolding(emptyForm).binding,
+        now: () => NOW,
+      });
+      session.start();
+      await settled();
+      session.doneTalking();
+      await settled();
+
+      session.cancel();
+      jest.advanceTimersByTime(PROBLEM_CAP_MS);
+
+      expect(session.getState()).toEqual({ phase: 'idle' });
     });
   });
 

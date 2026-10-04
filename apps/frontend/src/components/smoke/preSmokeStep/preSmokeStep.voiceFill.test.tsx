@@ -40,6 +40,14 @@ interface Script {
   wordIntervalMs?: number;
   /** How long the scripted model takes to answer, in ms. */
   delayMs?: number;
+  /** How many of the scripted model's first answers are failures. */
+  failures?: number;
+  /** What the scripted model makes of particular transcripts, in place of `raw`. */
+  rawByTranscript?: Record<string, unknown>;
+  /** Whether the cook lets the page use the microphone. */
+  microphone?: 'allowed' | 'blocked';
+  /** What the step is given to open the settings screen with. */
+  onOpenSettings?: () => void;
 }
 
 /**
@@ -57,13 +65,19 @@ const renderStep = (backend: FakeBackend, script: Script = {}) => {
               speech={createFakeSpeech({
                 transcript: script.transcript ?? TRANSCRIPT,
                 wordIntervalMs: script.wordIntervalMs ?? 1,
+                microphone: script.microphone,
               })}
               extractor={createFakeExtractor({
                 raw: script.raw ?? RAW,
                 delayMs: script.delayMs,
+                failures: script.failures,
+                rawByTranscript: script.rawByTranscript,
               })}
             >
-              <PreSmokeStep nextButton={<button data-testid="next-button">Next</button>} />
+              <PreSmokeStep
+                nextButton={<button data-testid="next-button">Next</button>}
+                onOpenSettings={script.onOpenSettings}
+              />
             </VoiceFillPortsProvider>
           </SnackbarProvider>
         </ApiClientProvider>
@@ -376,5 +390,220 @@ describe('Voice Fill on the pre-smoke screen', () => {
     await tap(screen.getByRole('button', { name: 'Voice fill' }));
     const sheet = await screen.findByRole('dialog');
     expect(within(sheet).getByText('Start talking…')).toBeInTheDocument();
+  });
+
+  describe('when the Ramble has nothing in it for this screen', () => {
+    test('a Ramble that matches no field shows Nothing to fill, with Try again and Cancel', async () => {
+      const backend = createFakeBackend({ preSmoke: { current: seededPreSmoke } });
+      renderStep(backend, { raw: {} });
+
+      await ramble();
+
+      const sheet = await screen.findByRole('dialog');
+      expect(
+        await within(sheet).findByRole('heading', { name: 'Nothing to fill' })
+      ).toBeInTheDocument();
+      expect(within(sheet).getByText(`“${TRANSCRIPT}”`)).toBeInTheDocument();
+      expect(
+        within(sheet).getByText(
+          'Didn’t catch anything that matches this screen’s fields. Try naming things directly — name, meat type, weight, unit, prep steps.'
+        )
+      ).toBeInTheDocument();
+      expect(within(sheet).getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+      expect(within(sheet).getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+      expect(within(sheet).queryByRole('checkbox')).not.toBeInTheDocument();
+    });
+
+    test('a Ramble with no words in it shows Nothing to fill', async () => {
+      const backend = createFakeBackend({ preSmoke: { current: seededPreSmoke } });
+      renderStep(backend, { transcript: ' ' });
+
+      await ramble();
+
+      expect(await screen.findByRole('heading', { name: 'Nothing to fill' })).toBeInTheDocument();
+    });
+
+    test('Try again listens again, and Cancel closes with nothing changed', async () => {
+      const backend = createFakeBackend({ preSmoke: { current: seededPreSmoke } });
+      renderStep(backend, { raw: {} });
+      await ramble();
+
+      await tap(await screen.findByRole('button', { name: 'Try again' }));
+      expect(screen.getByRole('heading', { name: 'Listening…' })).toBeInTheDocument();
+
+      await tap(screen.getByRole('button', { name: 'Done talking' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(screen.getByTestId('presmoke-meat-type-input')).toHaveValue('Ribs');
+      expect(voiceFillButton()).toBeInTheDocument();
+    });
+  });
+
+  describe('when the model fails', () => {
+    test('the sheet says Voice fill hit a problem, keeps the transcript, and offers Retry and Change model', async () => {
+      const backend = createFakeBackend({ preSmoke: { current: seededPreSmoke } });
+      renderStep(backend, { failures: 1 });
+
+      await ramble();
+
+      const sheet = await screen.findByRole('dialog');
+      expect(
+        await within(sheet).findByRole('heading', { name: 'Voice fill hit a problem' })
+      ).toBeInTheDocument();
+      expect(within(sheet).getByText(`“${TRANSCRIPT}”`)).toBeInTheDocument();
+      expect(
+        within(sheet).getByText(
+          'Your transcript is kept. Retry, or pick another model in Settings.'
+        )
+      ).toBeInTheDocument();
+      expect(within(sheet).getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+      expect(within(sheet).getByRole('button', { name: 'Change model' })).toBeInTheDocument();
+      expect(sheet).not.toHaveTextContent(/wi-fi|quick parse/i);
+    });
+
+    test('Retry reads the kept transcript again, without listening again', async () => {
+      const backend = createFakeBackend({ preSmoke: { current: seededPreSmoke } });
+      renderStep(backend, { failures: 1 });
+      await ramble();
+
+      await tap(await screen.findByRole('button', { name: 'Retry' }));
+
+      expect(await screen.findByRole('heading', { name: 'Found 3 fields' })).toBeInTheDocument();
+      expect(screen.getByText(`“${TRANSCRIPT}”`)).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Done talking' })).not.toBeInTheDocument();
+    });
+
+    test('Change model closes the sheet with nothing changed and opens the settings', async () => {
+      const backend = createFakeBackend({ preSmoke: { current: seededPreSmoke } });
+      const onOpenSettings = jest.fn();
+      renderStep(backend, { failures: 1, onOpenSettings });
+      await ramble();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Change model' }));
+
+      expect(onOpenSettings).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(screen.getByTestId('presmoke-meat-type-input')).toHaveValue('Ribs');
+    });
+  });
+
+  describe('when the microphone is refused', () => {
+    test('the sheet says Microphone blocked, how to allow it, and Close; the button stays', async () => {
+      const backend = createFakeBackend({ preSmoke: { current: seededPreSmoke } });
+      renderStep(backend, { microphone: 'blocked' });
+      await screen.findByDisplayValue('Test Smoke');
+
+      await tap(screen.getByRole('button', { name: 'Voice fill' }));
+
+      const sheet = await screen.findByRole('dialog');
+      expect(
+        await within(sheet).findByRole('heading', { name: 'Microphone blocked' })
+      ).toBeInTheDocument();
+      expect(
+        within(sheet).getByText(
+          'Allow the microphone for this site in Chrome’s site settings, then tap Voice fill again.'
+        )
+      ).toBeInTheDocument();
+      expect(within(sheet).queryByRole('button', { name: 'Done talking' })).not.toBeInTheDocument();
+
+      fireEvent.click(within(sheet).getByTestId('voice-fill-blocked-close'));
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(voiceFillButton()).toBeInTheDocument();
+      expect(screen.getByTestId('presmoke-meat-type-input')).toHaveValue('Ribs');
+    });
+  });
+
+  describe('Fix the text', () => {
+    const FIXED = 'Sixty pound brisket.';
+    const fixed = { rawByTranscript: { [FIXED]: { weight: 60 } } };
+
+    /** Opens the transcript for editing, writes `text` over it and has it re-read. */
+    const fixTheText = async (text: string) => {
+      fireEvent.click(await screen.findByRole('button', { name: 'Fix the text' }));
+      const editor = screen.getByRole('textbox', { name: 'Transcript' });
+      expect(editor).toHaveValue(TRANSCRIPT);
+      fireEvent.change(editor, { target: { value: text } });
+      await tap(screen.getByRole('button', { name: 'Re-read text' }));
+    };
+
+    test.each<[string, Script, string]>([
+      ['in review', {}, 'Found 3 fields'],
+      ['with nothing to fill', { raw: {} }, 'Nothing to fill'],
+      ['after a problem', { failures: 1 }, 'Voice fill hit a problem'],
+    ])(
+      '%s, makes the transcript editable and Re-read text gives new rows',
+      async (_, script, heading) => {
+        const backend = createFakeBackend({ preSmoke: { current: seededPreSmoke } });
+        renderStep(backend, { ...script, ...fixed });
+        await ramble();
+        await screen.findByRole('heading', { name: heading });
+        expect(screen.queryByRole('textbox', { name: 'Transcript' })).not.toBeInTheDocument();
+
+        await fixTheText(FIXED);
+
+        expect(await screen.findByRole('heading', { name: 'Found 1 field' })).toBeInTheDocument();
+        expect(within(row(/Weight/)).getByText('60 LB')).toBeInTheDocument();
+        expect(screen.getByText(`“${FIXED}”`)).toBeInTheDocument();
+        // The fixed text is read; it is not being edited any more.
+        expect(screen.queryByRole('textbox', { name: 'Transcript' })).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Fix the text' })).toBeInTheDocument();
+      }
+    );
+
+    test('the rows of the fixed text are the ones Fill writes', async () => {
+      const backend = createFakeBackend({ preSmoke: { current: seededPreSmoke } });
+      renderStep(backend, fixed);
+      await ramble();
+
+      await fixTheText(FIXED);
+      fireEvent.click(await screen.findByRole('button', { name: 'Fill 1 field' }));
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(screen.getByTestId('presmoke-weight-input')).toHaveValue(60);
+      expect(screen.getByTestId('presmoke-meat-type-input')).toHaveValue('Ribs');
+    });
+  });
+
+  test('Redo in review listens again from the start, with nothing written', async () => {
+    const backend = createFakeBackend({ preSmoke: { current: seededPreSmoke } });
+    renderStep(backend, { wordIntervalMs: 60_000 });
+    await ramble();
+    await screen.findByRole('heading', { name: 'Found 3 fields' });
+
+    await tap(screen.getByRole('button', { name: 'Redo' }));
+
+    const sheet = screen.getByRole('dialog');
+    expect(within(sheet).getByRole('heading', { name: 'Listening…' })).toBeInTheDocument();
+    expect(within(sheet).getByText('Start talking…')).toBeInTheDocument();
+    expect(screen.getByTestId('presmoke-weight-input')).toHaveValue(10);
+  });
+
+  test.each<[string, Script, string]>([
+    ['with nothing to fill', { raw: {} }, 'Nothing to fill'],
+    ['after a problem', { failures: 1 }, 'Voice fill hit a problem'],
+    ['with the microphone blocked', { microphone: 'blocked' }, 'Microphone blocked'],
+  ])('the close button %s cancels with nothing changed', async (_, script, heading) => {
+    const backend = createFakeBackend({ preSmoke: { current: seededPreSmoke } });
+    const { unmount } = renderStep(backend, script);
+    await screen.findByDisplayValue('Test Smoke');
+    await tap(screen.getByRole('button', { name: 'Voice fill' }));
+    const done = screen.queryByRole('button', { name: 'Done talking' });
+    if (done) {
+      await tap(done);
+    }
+    await screen.findByRole('heading', { name: heading });
+
+    fireEvent.click(screen.getByTestId('voice-fill-close'));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(voiceFillButton()).toBeInTheDocument();
+    unmount();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(backend.store.preSmoke.current).toEqual(seededPreSmoke);
   });
 });
