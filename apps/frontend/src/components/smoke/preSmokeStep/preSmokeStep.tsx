@@ -2,9 +2,10 @@ import { Autocomplete, Box, Grid, MenuItem, Select, TextField } from '@mui/mater
 import React from 'react';
 import { useCurrentResource } from '../../../api';
 import { DynamicList } from '../../common/components/DynamicList';
-import { FormField, SectionHeading } from '../../common/components/FormField';
+import { FormField, SectionHeading, filledFlashSx } from '../../common/components/FormField';
 import { WeightUnits } from '../../common/interfaces/enums';
 import { PreSmoke } from '../../../api/types';
+import { VOICE_FILL_BUTTON_CLEARANCE, useScreenBinding, useVoiceFill } from '../../../voiceFill';
 import { MEAT_TYPES } from './meatTypes';
 
 type PreSmokeStepProps = {
@@ -28,6 +29,12 @@ export function PreSmokeStep(props: PreSmokeStepProps) {
     saveErrorMessage: 'Could not save pre-smoke details.',
   });
 
+  // What Voice Fill reads and writes this screen through: the same state, and
+  // the same setter, the fields below are typed into — so a value filled from
+  // a Ramble is saved, and skipped when unchanged, exactly as a typed one is.
+  const binding = useScreenBinding(preSmokeState, setPreSmokeState);
+  const voiceFill = useVoiceFill('preSmoke', binding);
+
   return (
     // One flat column of fields down the screen, as the design draws it: the cut
     // being cooked, how it is being prepared, and anything else worth saying
@@ -40,7 +47,7 @@ export function PreSmokeStep(props: PreSmokeStepProps) {
       xs={12}
       sx={{ display: 'flex', flexDirection: 'column', gap: '14px', width: '100%' }}
     >
-      <FormField label="Name" htmlFor="presmoke-name">
+      <FormField label="Name" htmlFor="presmoke-name" filled={voiceFill.filled('name')}>
         <TextField
           id="presmoke-name"
           fullWidth
@@ -53,7 +60,11 @@ export function PreSmokeStep(props: PreSmokeStepProps) {
           }
         />
       </FormField>
-      <FormField label="Meat Type" htmlFor="presmoke-meat-type">
+      <FormField
+        label="Meat Type"
+        htmlFor="presmoke-meat-type"
+        filled={voiceFill.filled('meatType')}
+      >
         <Autocomplete
           id="presmoke-meat-type"
           fullWidth
@@ -83,9 +94,15 @@ export function PreSmokeStep(props: PreSmokeStepProps) {
       </FormField>
       {/* The weight and the unit it is measured in are one answer, so they
             share a row: the number takes the room, the unit takes what it
-            needs. */}
+            needs. They are one value to Voice Fill too, so a filled weight
+            flashes both. */}
       <Box sx={{ display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
-        <FormField label="Weight" htmlFor="presmoke-weight" sx={{ flex: 1, minWidth: 0 }}>
+        <FormField
+          label="Weight"
+          htmlFor="presmoke-weight"
+          sx={{ flex: 1, minWidth: 0 }}
+          filled={voiceFill.filled('weight')}
+        >
           <TextField
             id="presmoke-weight"
             type="number"
@@ -102,7 +119,12 @@ export function PreSmokeStep(props: PreSmokeStepProps) {
             }
           />
         </FormField>
-        <FormField label="Unit" labelId="presmoke-weight-unit-label" sx={{ width: '96px' }}>
+        <FormField
+          label="Unit"
+          labelId="presmoke-weight-unit-label"
+          sx={{ width: '96px' }}
+          filled={voiceFill.filled('weight')}
+        >
           <Select
             labelId="presmoke-weight-unit-label"
             size="small"
@@ -132,7 +154,13 @@ export function PreSmokeStep(props: PreSmokeStepProps) {
       </Box>
       {/* The plan and its heading are one field of the form, spaced the way a
           label sits above its control. */}
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      <Box
+        data-voice-filled={voiceFill.filled('steps')}
+        sx={[
+          { display: 'flex', flexDirection: 'column', gap: '6px' },
+          ...(voiceFill.filled('steps') ? [filledFlashSx] : []),
+        ]}
+      >
         <SectionHeading>Prep Steps</SectionHeading>
         <DynamicList
           newline={() =>
@@ -154,7 +182,7 @@ export function PreSmokeStep(props: PreSmokeStepProps) {
           }
         />
       </Box>
-      <FormField label="Notes" htmlFor="presmoke-notes">
+      <FormField label="Notes" htmlFor="presmoke-notes" filled={voiceFill.filled('notes')}>
         <TextField
           id="presmoke-notes"
           fullWidth
@@ -169,10 +197,20 @@ export function PreSmokeStep(props: PreSmokeStepProps) {
         />
       </FormField>
       {/* The step's one action, at the foot of it and against the right-hand
-          edge, which is where the design ends every step. */}
-      <Grid container flexDirection="row-reverse" sx={{ paddingBottom: '8px' }}>
+          edge, which is where the design ends every step. The Voice fill
+          button is pinned over that same corner, so where it is offered the
+          step ends with room for it underneath: scrolled to its foot, the
+          action is clear of the button. */}
+      <Grid
+        container
+        flexDirection="row-reverse"
+        sx={{
+          paddingBottom: voiceFill.offered ? `${VOICE_FILL_BUTTON_CLEARANCE + 8}px` : '8px',
+        }}
+      >
         {props.nextButton}
       </Grid>
+      {voiceFill.controls}
     </Grid>
   );
 }

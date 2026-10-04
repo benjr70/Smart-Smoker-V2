@@ -16,6 +16,30 @@ const caption = (theme: Theme) =>
     color: theme.design.textSecondary,
   }) as const;
 
+/**
+ * How long a field Voice Fill has just written stays lit, in ms: two beats of
+ * the flash below, after which whoever lit it puts it out.
+ */
+export const FILLED_FLASH_MS = 2600;
+
+/**
+ * The flash of a field Voice Fill has just written: an accent-tinted halo that
+ * beats twice, so the eye is drawn to what changed on a screen the cook was not
+ * looking at while they spoke.
+ */
+export const filledFlashSx = (theme: Theme) =>
+  ({
+    borderRadius: '10px',
+    animation: `voice-filled-flash ${FILLED_FLASH_MS / 2}ms ease-in-out 2`,
+    '@keyframes voice-filled-flash': {
+      '0%, 100%': { backgroundColor: 'transparent', boxShadow: '0 0 0 0 transparent' },
+      '50%': {
+        backgroundColor: theme.design.accentTint,
+        boxShadow: `0 0 0 6px ${theme.design.accentTint}`,
+      },
+    },
+  }) as const;
+
 export interface FormFieldProps {
   /**
    * What the field is called, in ordinary words. It is *drawn* in upper case;
@@ -37,6 +61,11 @@ export interface FormFieldProps {
   labelId?: string;
   /** Extra layout for the field as a whole, e.g. how it shares a row. */
   sx?: SxProps<Theme>;
+  /**
+   * The screen value Voice Fill has just written into this field, for as long
+   * as the field is to flash; nothing once it has stopped.
+   */
+  filled?: string;
   /** The control the label belongs to. */
   children: React.ReactNode;
 }
@@ -56,12 +85,21 @@ export interface FormFieldProps {
  * is an ordinary Material-UI field, so nothing about validation, masking or the
  * free-text pickers changes.
  */
-export function FormField({ label, htmlFor, labelId, sx, children }: FormFieldProps): JSX.Element {
+export function FormField({
+  label,
+  htmlFor,
+  labelId,
+  sx,
+  filled,
+  children,
+}: FormFieldProps): JSX.Element {
   return (
     <Box
+      data-voice-filled={filled}
       sx={[
         { display: 'flex', flexDirection: 'column', gap: '6px' },
         ...(Array.isArray(sx) ? sx : [sx]),
+        ...(filled ? [filledFlashSx] : []),
       ]}
     >
       <Box component="label" id={labelId} htmlFor={htmlFor} sx={caption}>
