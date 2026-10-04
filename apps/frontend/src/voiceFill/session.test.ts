@@ -133,6 +133,45 @@ describe('Voice Fill session', () => {
     expect(session.getState()).toEqual({ phase: 'applied', count: 1, fields: ['meatType'] });
   });
 
+  test('a name built from an unticked meat type is unticked with it, so the count is what is written', async () => {
+    const { session, held } = sessionOn(emptyForm);
+    session.start();
+    await settled();
+    session.doneTalking();
+    await settled();
+
+    session.toggle('meatType');
+
+    const review = session.getState();
+    expect(review).toMatchObject({ phase: 'review', ticked: ['weight'] });
+
+    session.fill();
+
+    expect(held.values()).toEqual({ ...emptyForm, weight: { weight: 16, unit: WeightUnits.LB } });
+    expect(session.getState()).toEqual({ phase: 'applied', count: 1, fields: ['weight'] });
+  });
+
+  test('ticking a name built from the meat type ticks the meat type too, and Fill writes both', async () => {
+    const { session, held } = sessionOn(emptyForm, { meatType: 'brisket' });
+    session.start();
+    await settled();
+    session.doneTalking();
+    await settled();
+
+    session.toggle('meatType');
+    expect(session.getState()).toMatchObject({ phase: 'review', ticked: [] });
+    session.toggle('name');
+    expect(session.getState()).toMatchObject({ phase: 'review', ticked: ['name', 'meatType'] });
+    session.fill();
+
+    expect(held.values()).toEqual({ ...emptyForm, name: 'Saturday Brisket', meatType: 'Brisket' });
+    expect(session.getState()).toEqual({
+      phase: 'applied',
+      count: 2,
+      fields: ['name', 'meatType'],
+    });
+  });
+
   test('a row unticked and ticked again is written', async () => {
     const { session, held } = sessionOn({ ...emptyForm, name: 'Mine' });
     session.start();

@@ -9,7 +9,7 @@
  */
 import type { PostSmoke, PreSmoke } from '../api/types';
 import type { ReviewRow, VoiceFillScreenValues } from './extractionContract';
-import { fillFor, notesAreMerged, reviewRows } from './extractionContract';
+import { fillFor, notesAreMerged, reviewRows, tickedAfterToggle } from './extractionContract';
 import type { VoiceFillScreen } from './fieldDefinition';
 import type { ExtractorPort, SpeechPort } from './ports';
 
@@ -89,10 +89,11 @@ export const createVoiceFillSession = <Screen extends VoiceFillScreen>({
 
   let state: VoiceFillState<Values> = { phase: 'idle' };
   const listeners = new Set<() => void>();
-  // Counts Rambles. What a port answers is only acted on while the Ramble it
-  // was asked for is still the one in hand: an answer to a cancelled one, or a
-  // word heard after it ended, changes nothing.
-  let ramble = 0;
+  // Goes up each time a Ramble is started or ended. What a port answers is
+  // only acted on while the generation it was asked in is still the current
+  // one: an answer to a cancelled Ramble, or a word heard after it ended,
+  // changes nothing.
+  let generation = 0;
   // The speech port is asked for one thing at a time, in the order the cook
   // asked: every load, start and stop waits for the one before it. A Ramble
   // ended while its model was still loading is therefore settled before the
@@ -130,7 +131,7 @@ export const createVoiceFillSession = <Screen extends VoiceFillScreen>({
   };
 
   const toIdle = (): void => {
-    ramble += 1;
+    generation += 1;
     endToast();
     undoFill = undefined;
     set({ phase: 'idle' });
@@ -150,18 +151,18 @@ export const createVoiceFillSession = <Screen extends VoiceFillScreen>({
       if (state.phase !== 'idle') {
         return;
       }
-      ramble += 1;
-      const mine = ramble;
+      generation += 1;
+      const asked = generation;
       set({ phase: 'listening', transcript: '' });
       queued(() =>
         speech.load().then(() => {
           // Ended before its model was ready: there is nothing to listen to.
-          if (mine !== ramble) {
+          if (asked !== generation) {
             return undefined;
           }
           live = true;
           return speech.start(transcript => {
-            if (mine === ramble && state.phase === 'listening') {
+            if (asked === generation && state.phase === 'listening') {
               set({ phase: 'listening', transcript });
             }
           });
@@ -169,7 +170,7 @@ export const createVoiceFillSession = <Screen extends VoiceFillScreen>({
       )
         // A Ramble that cannot be heard is one that fills nothing.
         .catch(() => {
-          if (mine === ramble) {
+          if (asked === generation) {
             toIdle();
           }
         });
@@ -182,13 +183,13 @@ export const createVoiceFillSession = <Screen extends VoiceFillScreen>({
       if (state.phase !== 'listening') {
         return;
       }
-      const mine = ramble;
+      const asked = generation;
       set({ phase: 'working', transcript: state.transcript });
       // Stopped whether or not the Ramble is still in hand by then: a sheet
       // closed while the port was starting must not leave it listening.
       stopSpeech()
         .then(transcript => {
-          if (mine !== ramble) {
+          if (asked !== generation) {
             return undefined;
           }
           set({ phase: 'working', transcript });
@@ -203,7 +204,7 @@ export const createVoiceFillSession = <Screen extends VoiceFillScreen>({
               })
             )
             .then(raw => {
-              if (mine !== ramble) {
+              if (asked !== generation) {
                 return;
               }
               const rows = rowsFor(screen, raw, binding.values(), spokenAt);
@@ -212,7 +213,7 @@ export const createVoiceFillSession = <Screen extends VoiceFillScreen>({
         })
         // A Ramble that cannot be read is one that fills nothing.
         .catch(() => {
-          if (mine === ramble) {
+          if (asked === generation) {
             toIdle();
           }
         });
@@ -222,12 +223,9 @@ export const createVoiceFillSession = <Screen extends VoiceFillScreen>({
       if (state.phase !== 'review') {
         return;
       }
-      const { rows, ticked: was } = state;
-      // Kept in the rows' own order, whatever order they were ticked in.
-      const ticked = rows
-        .map(row => row.id)
-        .filter(id => (id === rowId ? !was.includes(id) : was.includes(id)));
-      set({ ...state, ticked });
+      // Which rows a tap leaves ticked is the contract's to say: a row built
+      // from another goes with it, so what is ticked is what a fill writes.
+      set({ ...state, ticked: tickedAfterToggle(state.rows, state.ticked, rowId) });
     },
 
     fill: () => {

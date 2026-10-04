@@ -9,7 +9,7 @@
  */
 import { PostSmoke, PreSmoke } from '../api/types';
 import { WeightUnits } from '../components/common/interfaces/enums';
-import { fillFor, reviewRows } from '.';
+import { fillFor, reviewRows, tickedAfterToggle } from '.';
 
 // Saturday 3 October 2026, mid-afternoon, in whatever zone the suite runs in:
 // the invented name takes the weekday the cook's phone would show.
@@ -78,6 +78,58 @@ describe('name', () => {
       write: { name: 'Saturday Brisket' },
       undo: { name: '' },
     });
+  });
+
+  it('unticks a name with the meat it was built from, so no ticked row writes nothing', () => {
+    const rows = reviewRows(
+      'preSmoke',
+      { meatType: 'brisket', weight: 16 },
+      emptyPreSmoke(),
+      SATURDAY
+    );
+    const all = rows.map(row => row.id);
+
+    const ticked = tickedAfterToggle(rows, all, 'meatType');
+
+    expect(ticked).toEqual(['weight']);
+    expect(Object.keys(fillFor(rows, ticked).write)).toEqual(ticked);
+  });
+
+  it('ticks the meat with the name built from it', () => {
+    const rows = reviewRows(
+      'preSmoke',
+      { meatType: 'brisket', weight: 16 },
+      emptyPreSmoke(),
+      SATURDAY
+    );
+
+    expect(tickedAfterToggle(rows, ['weight'], 'name')).toEqual(['name', 'meatType', 'weight']);
+  });
+
+  it('unticks a name built from the meat by itself, leaving the meat ticked', () => {
+    const rows = reviewRows('preSmoke', { meatType: 'brisket' }, emptyPreSmoke(), SATURDAY);
+
+    expect(tickedAfterToggle(rows, ['name', 'meatType'], 'name')).toEqual(['meatType']);
+  });
+
+  it('leaves a name ticked that can be built from the meat left on screen', () => {
+    const current = emptyPreSmoke({ meatType: 'Brisket' });
+    const rows = reviewRows('preSmoke', { meatType: 'ribs' }, current, SATURDAY);
+
+    expect(tickedAfterToggle(rows, ['name', 'meatType'], 'meatType')).toEqual(['name']);
+  });
+
+  it('leaves a spoken name ticked when the meat type is unticked', () => {
+    const raw = { name: 'Packer', meatType: 'brisket' };
+    const rows = reviewRows('preSmoke', raw, emptyPreSmoke(), SATURDAY);
+
+    expect(tickedAfterToggle(rows, ['name', 'meatType'], 'meatType')).toEqual(['name']);
+  });
+
+  it('changes nothing for a tap on no row', () => {
+    const rows = reviewRows('preSmoke', { meatType: 'brisket' }, emptyPreSmoke(), SATURDAY);
+
+    expect(tickedAfterToggle(rows, ['meatType'], 'nothing')).toEqual(['meatType']);
   });
 
   it('writes a spoken name whether or not the meat type is ticked', () => {

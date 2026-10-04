@@ -4,7 +4,7 @@ import type { ReviewRow } from './extractionContract';
 import type { VoiceFillScreen } from './fieldDefinition';
 import { SCREEN_FIELDS } from './fieldDefinition';
 import type { VoiceFillState } from './session';
-import { fieldCount } from './VoiceFillControls';
+import { VOICE_FILL_MAX_WIDTH, fieldCount, voiceFillCaptionSx } from './VoiceFillControls';
 
 /** How many of a screen's fields the hint line names. */
 const HINTED_FIELDS = 5;
@@ -23,24 +23,48 @@ const titleOf = <Values,>(state: VoiceFillState<Values>): string => {
   }
 };
 
-/** A weight as a row writes it, or nothing for one nobody has entered. */
-const weightText = (value: { weight?: unknown; unit?: unknown }): string =>
-  value.weight === undefined || value.weight === null || value.weight === ''
-    ? ''
-    : `${value.weight} ${value.unit ?? ''}`.trim();
+/** The sheet's one action at its foot, at the size the state it is up in gives it. */
+const actionSx = (height: number, fontSize: string) =>
+  ({
+    height,
+    borderRadius: '14px',
+    fontSize,
+    fontWeight: 700,
+    textTransform: 'none',
+  }) as const;
 
-/** A value as a Review row writes it; nothing for one that is empty. */
-const valueText = (value: unknown): string => {
+/** A weight as a row writes it, or nothing for one nobody has entered. */
+const weightText = (value: unknown): string => {
+  const { weight, unit }: { weight?: unknown; unit?: unknown } =
+    typeof value === 'object' && value !== null ? value : {};
+  return weight === undefined || weight === null || weight === ''
+    ? ''
+    : `${weight} ${unit ?? ''}`.trim();
+};
+
+/**
+ * How the screen values that are not plain text are written, by the field that
+ * holds them. A value is written by what its field is, never by what it looks
+ * like: an object is not a weight because it is an object.
+ */
+const WRITTEN_BY_FIELD: Readonly<Record<string, (value: unknown) => string>> = {
+  weight: weightText,
+};
+
+/** A field's value as a Review row writes it; nothing for one that is empty. */
+const valueText = (field: string, value: unknown): string => {
   if (value === undefined || value === null) {
     return '';
+  }
+  if (Object.prototype.hasOwnProperty.call(WRITTEN_BY_FIELD, field)) {
+    return WRITTEN_BY_FIELD[field](value);
   }
   if (Array.isArray(value)) {
     return value.join(', ');
   }
-  if (typeof value === 'object') {
-    return weightText(value);
-  }
-  return String(value).trim();
+  // A field holding an object nobody has said how to write is still shown as
+  // what it holds: a row that proposes a change never reads as an empty one.
+  return (typeof value === 'object' ? JSON.stringify(value) : String(value)).trim();
 };
 
 /** The moving bars that say the microphone is live. */
@@ -120,7 +144,7 @@ function ReviewRowItem<Values>({
 }: ReviewRowItemProps<Values>): JSX.Element {
   // A step list is added to, never replaced: its row shows the steps this
   // Ramble adds and strikes nothing through.
-  const oldText = row.added ? '' : valueText(row.oldValue);
+  const oldText = row.added ? '' : valueText(row.field, row.oldValue);
   return (
     <Box
       component="button"
@@ -174,17 +198,7 @@ function ReviewRowItem<Values>({
         )}
       </Box>
       <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Box
-          sx={theme => ({
-            fontSize: '0.6875rem',
-            fontWeight: 700,
-            letterSpacing: '0.05em',
-            textTransform: 'uppercase',
-            color: theme.design.textSecondary,
-          })}
-        >
-          {row.label}
-        </Box>
+        <Box sx={voiceFillCaptionSx}>{row.label}</Box>
         {row.added ? (
           <Box
             component="ol"
@@ -202,7 +216,7 @@ function ReviewRowItem<Values>({
           </Box>
         ) : (
           <Box sx={{ fontSize: '1rem', fontWeight: 700, marginTop: '2px', whiteSpace: 'pre-wrap' }}>
-            {valueText(row.newValue)}
+            {valueText(row.field, row.newValue)}
           </Box>
         )}
         {oldText && (
@@ -279,7 +293,7 @@ export function VoiceFillSheet<Values>({
           backgroundImage: 'none',
           borderRadius: '22px 22px 0 0',
           padding: '12px 20px calc(18px + env(safe-area-inset-bottom))',
-          maxWidth: 480,
+          maxWidth: VOICE_FILL_MAX_WIDTH,
           maxHeight: '88dvh',
           marginX: 'auto',
         }),
@@ -298,17 +312,7 @@ export function VoiceFillSheet<Values>({
       />
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
         <Box>
-          <Box
-            sx={theme => ({
-              fontSize: '0.6875rem',
-              fontWeight: 700,
-              letterSpacing: '0.05em',
-              textTransform: 'uppercase',
-              color: theme.design.textSecondary,
-            })}
-          >
-            Voice fill · {title}
-          </Box>
+          <Box sx={voiceFillCaptionSx}>Voice fill · {title}</Box>
           <Typography
             component="h2"
             data-testid="voice-fill-title"
@@ -415,13 +419,7 @@ export function VoiceFillSheet<Values>({
             fullWidth
             data-testid="voice-fill-done-talking"
             onClick={onDoneTalking}
-            sx={{
-              height: 64,
-              borderRadius: '14px',
-              fontSize: '1.0625rem',
-              fontWeight: 700,
-              textTransform: 'none',
-            }}
+            sx={actionSx(64, '1.0625rem')}
           >
             Done talking
           </Button>
@@ -433,13 +431,7 @@ export function VoiceFillSheet<Values>({
             disabled={state.ticked.length === 0}
             data-testid="voice-fill-fill"
             onClick={onFill}
-            sx={{
-              height: 56,
-              borderRadius: '14px',
-              fontSize: '1rem',
-              fontWeight: 700,
-              textTransform: 'none',
-            }}
+            sx={actionSx(56, '1rem')}
           >
             Fill {fieldCount(state.ticked.length)}
           </Button>

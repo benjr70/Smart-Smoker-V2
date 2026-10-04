@@ -1,4 +1,4 @@
-import { Box, Button } from '@mui/material';
+import { Box, Button, Theme } from '@mui/material';
 import React from 'react';
 import { BOTTOM_BAR_HEIGHT } from '../components/bottomBar/bottombar';
 import { MicIcon } from '../components/common/components/DesignIcons';
@@ -6,11 +6,30 @@ import { MicIcon } from '../components/common/components/DesignIcons';
 /** How far the button and the toast keep from the edges they sit against. */
 const EDGE_GAP = 16;
 
+/** How tall the button is, and the toast that takes its place. */
+const CONTROL_HEIGHT = 60;
+
+/** Where the button and the toast sit: just clear of the navigation bar. */
+const ABOVE_BOTTOM_BAR = `calc(${BOTTOM_BAR_HEIGHT + EDGE_GAP}px + env(safe-area-inset-bottom))`;
+
 /**
  * The height the button covers at the foot of a screen, its gap included: what
  * a screen leaves clear under its last control so the button never sits on it.
  */
-export const VOICE_FILL_BUTTON_CLEARANCE = 60 + EDGE_GAP;
+export const VOICE_FILL_BUTTON_CLEARANCE = CONTROL_HEIGHT + EDGE_GAP;
+
+/** The widest Voice Fill draws anything: the sheet, and the toast inside it. */
+export const VOICE_FILL_MAX_WIDTH = 480;
+
+/** The small print Voice Fill names things in: a Review row's field, the sheet's screen. */
+export const voiceFillCaptionSx = (theme: Theme) =>
+  ({
+    fontSize: '0.6875rem',
+    fontWeight: 700,
+    letterSpacing: '0.05em',
+    textTransform: 'uppercase',
+    color: theme.design.textSecondary,
+  }) as const;
 
 /** `N fields`, or `1 field`. */
 export const fieldCount = (count: number): string => `${count} ${count === 1 ? 'field' : 'fields'}`;
@@ -34,9 +53,9 @@ export function VoiceFillButton({ onClick }: VoiceFillButtonProps): JSX.Element 
       sx={theme => ({
         position: 'fixed',
         right: EDGE_GAP,
-        bottom: `calc(${BOTTOM_BAR_HEIGHT + EDGE_GAP}px + env(safe-area-inset-bottom))`,
+        bottom: ABOVE_BOTTOM_BAR,
         zIndex: theme.zIndex.speedDial,
-        height: 60,
+        height: CONTROL_HEIGHT,
         padding: '0 22px 0 18px',
         borderRadius: '30px',
         fontSize: '0.9375rem',
@@ -68,11 +87,11 @@ export function VoiceFillToast({ count, onUndo }: VoiceFillToastProps): JSX.Elem
         position: 'fixed',
         left: EDGE_GAP,
         right: EDGE_GAP,
-        bottom: `calc(${BOTTOM_BAR_HEIGHT + EDGE_GAP}px + env(safe-area-inset-bottom))`,
+        bottom: ABOVE_BOTTOM_BAR,
         zIndex: theme.zIndex.snackbar,
-        maxWidth: 480 - 2 * EDGE_GAP,
+        maxWidth: VOICE_FILL_MAX_WIDTH - 2 * EDGE_GAP,
         marginX: 'auto',
-        minHeight: 60,
+        minHeight: CONTROL_HEIGHT,
         borderRadius: '16px',
         display: 'flex',
         alignItems: 'center',

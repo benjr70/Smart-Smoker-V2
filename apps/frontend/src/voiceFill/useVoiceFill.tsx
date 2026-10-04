@@ -1,15 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { FILLED_FLASH_MS } from '../components/common/components/FormField';
 import type { VoiceFillScreenValues } from './extractionContract';
 import type { VoiceFillScreen } from './fieldDefinition';
+import { FLASH_MS } from './FilledFlash';
 import type { ScreenBinding, VoiceFillSession, VoiceFillState } from './session';
 import { createVoiceFillSession } from './session';
 import { VoiceFillButton, VoiceFillToast } from './VoiceFillControls';
 import { useVoiceFillPorts } from './VoiceFillPortsProvider';
 import { VoiceFillSheet } from './VoiceFillSheet';
-
-/** How long a filled field flashes, in ms. */
-export const FLASH_MS = FILLED_FLASH_MS;
 
 export interface VoiceFill<Values> {
   /** Whether the screen has Voice Fill at all: whether models are provided to it. */
@@ -20,10 +17,10 @@ export interface VoiceFill<Values> {
    */
   controls: JSX.Element | null;
   /**
-   * `field` while it is flashing from a fill, and nothing otherwise: what a
-   * screen hands the field it draws that value in.
+   * Whether `field` is flashing from a fill: what a screen tells the
+   * `FilledFlash` it draws that value in.
    */
-  filled: (field: keyof Values & string) => (keyof Values & string) | undefined;
+  isFlashing: (field: keyof Values & string) => boolean;
 }
 
 const IDLE = { phase: 'idle' } as const;
@@ -93,6 +90,6 @@ export const useVoiceFill = <Screen extends VoiceFillScreen>(
   return {
     offered: session !== null,
     controls,
-    filled: field => (flashing.includes(field) ? field : undefined),
+    isFlashing: field => flashing.includes(field),
   };
 };

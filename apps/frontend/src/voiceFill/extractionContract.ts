@@ -452,6 +452,44 @@ export function reviewRows(
     : postSmokeRows(raw, current as PostSmoke);
 }
 
+/**
+ * The id of the row a row cannot be written without: the one its value was
+ * built from, where there is nothing to write in its place.
+ */
+const standsOn = <Values>(row: ReviewRow<Values>): string | undefined =>
+  row.builtFrom && row.builtFrom.otherwise === undefined ? row.builtFrom.id : undefined;
+
+/**
+ * The ids left ticked once the row `rowId` is tapped, in the rows' own order.
+ *
+ * A row that cannot be written without another is never left ticked alone: it
+ * is unticked with the row it stands on, and ticking it ticks that row too. So
+ * every ticked row is one {@link fillFor} writes, and the number of rows ticked
+ * is the number of fields a fill changes.
+ */
+export const tickedAfterToggle = <Values>(
+  rows: readonly ReviewRow<Values>[],
+  ticked: Iterable<string>,
+  rowId: string
+): string[] => {
+  const tapped = rows.find(row => row.id === rowId);
+  const next = new Set(ticked);
+  if (!tapped) {
+    return rows.map(row => row.id).filter(id => next.has(id));
+  }
+  if (next.has(rowId)) {
+    next.delete(rowId);
+    rows.filter(row => standsOn(row) === rowId).forEach(row => next.delete(row.id));
+  } else {
+    next.add(rowId);
+    const stoodOn = standsOn(tapped);
+    if (stoodOn !== undefined) {
+      next.add(stoodOn);
+    }
+  }
+  return rows.map(row => row.id).filter(id => next.has(id));
+};
+
 /** What filling a set of Review rows writes, and what Undo then puts back. */
 export interface VoiceFillWrite<Values> {
   /** The values to write to the screen, field by field. */

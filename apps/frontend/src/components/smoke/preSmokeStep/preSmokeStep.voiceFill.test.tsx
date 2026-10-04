@@ -232,6 +232,51 @@ describe('Voice Fill on the pre-smoke screen', () => {
     expect(screen.getByRole('button', { name: 'Fill 0 fields' })).toBeDisabled();
   });
 
+  test('a name built from the meat type goes with it, so Fill and the toast count what is written', async () => {
+    // Nothing on the screen yet: the Ramble's meat is all a name can be built from.
+    const backend = createFakeBackend({});
+    renderStep(backend);
+    await screen.findByTestId('presmoke-name-input');
+    await tap(screen.getByRole('button', { name: 'Voice fill' }));
+    await tap(await screen.findByRole('button', { name: 'Done talking' }));
+    await screen.findByRole('heading', { name: 'Found 4 fields' });
+
+    fireEvent.click(row(/Meat type/));
+
+    // The name cannot be written without the meat it was built from.
+    expect(row(/Meat type/)).not.toBeChecked();
+    expect(row(/Name/)).not.toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: 'Fill 2 fields' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByRole('status')).toHaveTextContent('Filled 2 fields by voice');
+    expect(screen.getByTestId('presmoke-name-input')).toHaveValue('');
+    expect(screen.getByTestId('presmoke-meat-type-input')).toHaveValue('');
+    expect(screen.getByTestId('presmoke-weight-input')).toHaveValue(16);
+  });
+
+  test('ticking a name built from the meat type ticks the meat type with it', async () => {
+    const backend = createFakeBackend({});
+    renderStep(backend, { raw: { meatType: 'brisket' } });
+    await screen.findByTestId('presmoke-name-input');
+    await tap(screen.getByRole('button', { name: 'Voice fill' }));
+    await tap(await screen.findByRole('button', { name: 'Done talking' }));
+    await screen.findByRole('heading', { name: 'Found 2 fields' });
+
+    fireEvent.click(row(/Meat type/));
+    expect(screen.getByRole('button', { name: 'Fill 0 fields' })).toBeDisabled();
+    fireEvent.click(row(/Name/));
+
+    expect(row(/Meat type/)).toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: 'Fill 2 fields' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByTestId('presmoke-meat-type-input')).toHaveValue('Brisket');
+    // The weekday is whichever one the suite is run on.
+    expect((screen.getByTestId('presmoke-name-input') as HTMLInputElement).value).toMatch(
+      /day Brisket$/
+    );
+  });
+
   test('Undo on the toast restores every changed value', async () => {
     const backend = createFakeBackend({ preSmoke: { current: seededPreSmoke } });
     const { unmount } = renderStep(backend);

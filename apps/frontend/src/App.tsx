@@ -11,6 +11,7 @@ import { Stats } from './components/stats/stats';
 import { DesignSurface, appTheme } from './theme';
 import { SharedAppearanceProvider } from './theme/SharedAppearance';
 import { createSocketAppearanceSubscription } from './theme/socketAppearanceSubscription';
+import { VoiceFillModels } from './voiceFill';
 
 /**
  * How this browser hears that another client changed the appearance: the
@@ -96,7 +97,11 @@ class App extends React.Component<{}, { currentScreen: Screens }> {
           <DesignSurface>
             <SnackbarProvider>
               <Grid className="App-header">
-                <Grid>{screen}</Grid>
+                {/* The models Voice Fill runs on, handed to whichever screen is
+                    up. Where none are provided no screen offers it. */}
+                <VoiceFillModels>
+                  <Grid>{screen}</Grid>
+                </VoiceFillModels>
                 <BottomBar
                   // The screen in effect lives here, so the bar is told it
                   // rather than keeping a second copy that only a tap on the

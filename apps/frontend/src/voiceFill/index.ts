@@ -30,6 +30,7 @@ export {
   fillFor,
   notesAreMerged,
   reviewRows,
+  tickedAfterToggle,
 } from './extractionContract';
 export type { ExtractionContext, ExtractorPort, SpeechPort } from './ports';
 export type { FakeExtractorScript, FakeSpeechScript } from './fakeAdapters';
@@ -45,5 +46,14 @@ export type { VoiceFillPorts, VoiceFillPortsProviderProps } from './VoiceFillPor
 export { VoiceFillPortsProvider, useVoiceFillPorts } from './VoiceFillPortsProvider';
 export { useScreenBinding } from './useScreenBinding';
 export type { VoiceFill } from './useVoiceFill';
-export { FLASH_MS, useVoiceFill } from './useVoiceFill';
+export { useVoiceFill } from './useVoiceFill';
+export type { FilledFlashProps } from './FilledFlash';
+export { FLASH_MS, FilledFlash } from './FilledFlash';
+export type { VoiceFillModelsProps } from './scriptedModels';
+export {
+  SCRIPTED_MODELS_QUERY,
+  SCRIPTED_RAMBLE,
+  VoiceFillModels,
+  scriptedModelsAreOn,
+} from './scriptedModels';
 export { VOICE_FILL_BUTTON_CLEARANCE } from './VoiceFillControls';

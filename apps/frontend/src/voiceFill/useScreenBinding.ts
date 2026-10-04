@@ -6,7 +6,8 @@ import type { ScreenBinding } from './session';
  * are read as they are at the moment of asking, and a set of changes is
  * written through the screen's own setter — the same one typing goes through,
  * so a filled value is saved exactly as a typed one is. The undo it returns
- * puts back what those fields held when they were written.
+ * puts back what those fields held when they were written, in each field that
+ * still holds what was written to it.
  *
  * The binding is one object for the life of the screen, however often the
  * screen renders.
@@ -24,12 +25,27 @@ export const useScreenBinding = <Values extends object>(
     () => ({
       values: () => latest.current,
       apply: write => {
+        const fields = Object.keys(write) as (keyof Values)[];
         const before: Partial<Values> = {};
-        (Object.keys(write) as (keyof Values)[]).forEach(field => {
+        fields.forEach(field => {
           before[field] = latest.current[field];
         });
         setter.current(current => ({ ...current, ...write }));
-        return () => setter.current(current => ({ ...current, ...before }));
+        // Undo takes back what was written, and only where it still stands. A
+        // field given another value since — by the screen's own load landing
+        // after the fill, or by the cook's hand — holds nothing of the fill's
+        // any more, and putting back what it held before would overwrite that
+        // value with one older than it.
+        return () =>
+          setter.current(current => {
+            const restored = { ...current };
+            fields.forEach(field => {
+              if (current[field] === write[field]) {
+                restored[field] = before[field] as Values[keyof Values];
+              }
+            });
+            return restored;
+          });
       },
     }),
     []
