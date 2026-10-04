@@ -8,19 +8,33 @@
  */
 export type {
   VoiceFillField,
+  VoiceFillContext,
   VoiceFillFieldKey,
   VoiceFillFieldType,
   VoiceFillJsonSchema,
+  VoiceFillPart,
+  VoiceFillRecordSchema,
   VoiceFillScreen,
   VoiceFillScreenDefinition,
   VoiceFillToolSchema,
   VoiceFillValueSchema,
 } from './fieldDefinition';
 export { SCREEN_FIELDS, fieldOf, jsonSchemaFor, toolSchemaFor } from './fieldDefinition';
-export type { ReviewRow, VoiceFillScreenValues, VoiceFillWrite } from './extractionContract';
+export type {
+  ReviewRow,
+  SmokeScreenCurrent,
+  SmokeScreenValues,
+  VoiceFillProbeTarget,
+  VoiceFillScreenValues,
+  VoiceFillStamp,
+  VoiceFillWrite,
+} from './extractionContract';
 export {
+  MAX_PROBE_TARGET,
   MAX_REST_MINUTES,
+  MAX_SERVE_AHEAD_MINUTES,
   MAX_WEIGHT,
+  MIN_PROBE_TARGET,
   MIN_REST_MINUTES,
   NOTES_MERGE_WORD_LIMIT,
   fillFor,

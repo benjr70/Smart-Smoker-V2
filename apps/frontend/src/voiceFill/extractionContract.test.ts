@@ -25,7 +25,7 @@ const emptyPreSmoke = (overrides: Partial<PreSmoke> = {}): PreSmoke => ({
 });
 
 const preSmokeRow = (raw: unknown, current: PreSmoke, field: keyof PreSmoke) =>
-  reviewRows('preSmoke', raw, current, SATURDAY).find(row => row.field === field);
+  reviewRows('preSmoke', raw, current, { now: SATURDAY }).find(row => row.field === field);
 
 describe('name', () => {
   it('overwrites the name with a spoken one', () => {
@@ -61,7 +61,9 @@ describe('name', () => {
   });
 
   it('builds no name on fill when the meat it was built from is left unticked', () => {
-    const rows = reviewRows('preSmoke', { meatType: 'brisket' }, emptyPreSmoke(), SATURDAY);
+    const rows = reviewRows('preSmoke', { meatType: 'brisket' }, emptyPreSmoke(), {
+      now: SATURDAY,
+    });
 
     expect(fillFor(rows, ['name', 'meatType']).write).toEqual({
       name: 'Saturday Brisket',
@@ -72,7 +74,7 @@ describe('name', () => {
 
   it('builds the name from the meat left on screen when the spoken meat is left unticked', () => {
     const current = emptyPreSmoke({ meatType: 'Brisket' });
-    const rows = reviewRows('preSmoke', { meatType: 'ribs' }, current, SATURDAY);
+    const rows = reviewRows('preSmoke', { meatType: 'ribs' }, current, { now: SATURDAY });
 
     expect(fillFor(rows, ['name'])).toEqual({
       write: { name: 'Saturday Brisket' },
@@ -82,7 +84,7 @@ describe('name', () => {
 
   it('writes a spoken name whether or not the meat type is ticked', () => {
     const raw = { name: 'Packer', meatType: 'brisket' };
-    const rows = reviewRows('preSmoke', raw, emptyPreSmoke(), SATURDAY);
+    const rows = reviewRows('preSmoke', raw, emptyPreSmoke(), { now: SATURDAY });
 
     expect(fillFor(rows, ['name']).write).toEqual({ name: 'Packer' });
   });
@@ -285,7 +287,7 @@ const emptyPostSmoke = (overrides: Partial<PostSmoke> = {}): PostSmoke => ({
 });
 
 const postSmokeRow = (raw: unknown, current: PostSmoke, field: keyof PostSmoke) =>
-  reviewRows('postSmoke', raw, current, SATURDAY).find(row => row.field === field);
+  reviewRows('postSmoke', raw, current, { now: SATURDAY }).find(row => row.field === field);
 
 describe('rest time', () => {
   it.each([
@@ -294,6 +296,7 @@ describe('rest time', () => {
     ['the longest rest', 24 * 60, '24:00'],
     ['minutes the model wrote as text', '75', '01:15'],
     ['a part of a minute, to the nearest whole one', 89.6, '01:30'],
+    ['"a couple hours", said in words', 'a couple hours', '02:00'],
   ])('writes %s as the screen writes it', (_rule, restMinutes, restTime) => {
     const row = postSmokeRow({ restMinutes }, emptyPostSmoke({ restTime: '00:30' }), 'restTime');
 
@@ -420,7 +423,7 @@ describe('fill and Undo', () => {
       notes: 'Dry brined overnight, from the butcher.',
     },
     current,
-    SATURDAY
+    { now: SATURDAY }
   );
 
   it('writes only the ticked rows', () => {
@@ -457,12 +460,12 @@ describe('a raw object that is not what was asked for', () => {
     ],
     ['answers with the wrong kinds of value', { name: 7, meatType: {}, steps: 'trim', notes: [] }],
   ])('proposes no rows when it %s', (_rule, raw) => {
-    expect(reviewRows('preSmoke', raw, emptyPreSmoke(), SATURDAY)).toEqual([]);
+    expect(reviewRows('preSmoke', raw, emptyPreSmoke(), { now: SATURDAY })).toEqual([]);
   });
 
   it('proposes no post-smoke rows when every field is "not said"', () => {
     const raw = { restMinutes: null, steps: [], notes: null };
 
-    expect(reviewRows('postSmoke', raw, emptyPostSmoke(), SATURDAY)).toEqual([]);
+    expect(reviewRows('postSmoke', raw, emptyPostSmoke(), { now: SATURDAY })).toEqual([]);
   });
 });

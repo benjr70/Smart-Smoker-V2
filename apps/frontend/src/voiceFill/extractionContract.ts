@@ -8,13 +8,64 @@
  * and is kept in Notes instead. Whichever model is picked therefore obeys the
  * same contract, and the contract is testable with no model at all.
  */
-import type { PostSmoke, PreSmoke } from '../api/types';
+import { enabledStamps } from '../api/cookStamps';
+import type { PostSmoke, PreSmoke, SmokeProfile, TargetSource } from '../api/types';
 import { WeightUnits } from '../components/common/interfaces/enums';
-import { VoiceFillFieldKey, VoiceFillScreen, fieldOf } from './fieldDefinition';
+import {
+  SCREEN_FIELDS,
+  VoiceFillContext,
+  VoiceFillFieldKey,
+  VoiceFillScreen,
+  fieldOf,
+  probeTargetLabel,
+} from './fieldDefinition';
+
+/**
+ * One probe's target as the smoke screen holds it: the temperature, whether the
+ * probe is being watched, and where the temperature came from. The three travel
+ * together because a spoken target changes all three, and Undo restores them.
+ */
+export interface VoiceFillProbeTarget {
+  /** The temperature, °F, this probe's meat is done at. */
+  target: number;
+  /** Whether this probe is being watched. */
+  enabled: boolean;
+  targetSource: TargetSource;
+}
+
+/** One entry a Ramble adds to the cook log. */
+export interface VoiceFillStamp {
+  /** The key of the stamp it is logged under. */
+  stampKey: string;
+  /** What that stamp's button says, for the review list. */
+  label: string;
+  /** When it was done: the time of the Ramble, never earlier. */
+  at: Date;
+}
+
+/**
+ * The values the smoke screen holds: the smoke profile's names, wood and Notes,
+ * each probe's target, the Serve Plan, and what a Ramble has logged.
+ */
+export interface SmokeScreenValues extends SmokeProfile {
+  probe1Target: VoiceFillProbeTarget;
+  probe2Target: VoiceFillProbeTarget;
+  probe3Target: VoiceFillProbeTarget;
+  /** When the food is meant to hit the table; `null` on a cook nobody planned. */
+  serveAt: Date | null;
+  /** How long the meat rests after the pull, in minutes; `null` on a cook with none. */
+  restMinutes: number | null;
+  /**
+   * The cook log entries a Ramble adds. Written, never read: Undo puts back the
+   * empty list, which is to say it takes those entries out again.
+   */
+  stamps: VoiceFillStamp[];
+}
 
 /** The values each fillable screen holds, in the shape that screen holds them. */
 export interface VoiceFillScreenValues {
   preSmoke: PreSmoke;
+  smoke: SmokeScreenValues;
   postSmoke: PostSmoke;
 }
 
@@ -54,9 +105,30 @@ const spokenText = (value: unknown): string => (typeof value === 'string' ? valu
 
 const capitalised = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
 
+/** The words of something said, whatever their case and punctuation. */
+const wordsOf = (said: string): string[] =>
+  said
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+
 /** A single plain number written as text, or nothing where the text is not one. */
 const plainNumber = (text: string): number | undefined =>
   /^\d+(\.\d+)?$/.test(text) ? Number(text) : undefined;
+
+/**
+ * A value the model was asked for as a number: the words to keep for Notes
+ * should it be rejected, and the number where it is one. A model may write its
+ * numbers as text.
+ */
+const spokenNumber = (value: unknown): { said: string; number?: number } => {
+  if (typeof value === 'number') {
+    return { said: String(value), number: value };
+  }
+  const said = spokenText(value);
+  return { said, number: plainNumber(said) };
+};
 
 /**
  * A spoken pick from a suggestion list: the list's own spelling where it names
@@ -247,17 +319,26 @@ export const MIN_REST_MINUTES = 1;
 export const MAX_REST_MINUTES = 24 * 60;
 
 /**
- * The rest a Ramble would write, in the `HH:MM` the screen's field is masked
- * to, or the words to keep in Notes where the rest is out of bounds or is not a
- * number of minutes at all.
+ * The rests said in words that are still an exact length. Anything vaguer — "a
+ * few hours", "a while" — is no length at all.
  */
-const restTimeFor = (raw: unknown): { value: string } | { leftover: string } | undefined => {
-  const said = typeof raw === 'number' ? String(raw) : spokenText(raw);
+const REST_PHRASES: ReadonlyMap<string, number> = new Map([
+  ['a couple hours', 120],
+  ['a couple of hours', 120],
+  ['half an hour', 30],
+]);
+
+/**
+ * The rest a Ramble gives, in whole minutes, or the words to keep in Notes
+ * where the rest is out of bounds or is no exact length. One rule for the one
+ * rest a cook has, whichever screen it is spoken on.
+ */
+const restMinutesFor = (raw: unknown): { minutes: number } | { leftover: string } | undefined => {
+  const { said, number } = spokenNumber(raw);
   if (!said) {
     return undefined;
   }
-  // A model may write its numbers as text, as it may for a weight.
-  const spoken = typeof raw === 'number' ? raw : plainNumber(said);
+  const spoken = number ?? REST_PHRASES.get(wordsOf(said).join(' '));
   if (spoken === undefined) {
     return { leftover: said };
   }
@@ -266,9 +347,20 @@ const restTimeFor = (raw: unknown): { value: string } | { leftover: string } | u
   if (!(spoken >= MIN_REST_MINUTES && spoken <= MAX_REST_MINUTES)) {
     return { leftover: `${said} minutes` };
   }
-  const minutes = Math.round(spoken);
+  return { minutes: Math.round(spoken) };
+};
+
+/**
+ * The rest a Ramble would write to the post-smoke screen, in the `HH:MM` its
+ * field is masked to, or the words to keep in Notes where there is no writing it.
+ */
+const restTimeFor = (raw: unknown): { value: string } | { leftover: string } | undefined => {
+  const rest = restMinutesFor(raw);
+  if (!rest || 'leftover' in rest) {
+    return rest;
+  }
   const pad = (part: number): string => String(part).padStart(2, '0');
-  return { value: `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}` };
+  return { value: `${pad(Math.floor(rest.minutes / 60))}:${pad(rest.minutes % 60)}` };
 };
 
 /** The parts of a screen every fillable screen has: a step list and Notes. */
@@ -276,7 +368,7 @@ type StepsAndNotes = Pick<PostSmoke, 'steps' | 'notes'>;
 
 /** The row for the steps a Ramble adds, where it adds any. */
 const stepsRows = (
-  screen: VoiceFillScreen,
+  screen: 'preSmoke' | 'postSmoke',
   raw: Record<string, unknown>,
   current: StepsAndNotes
 ): ReviewRow<StepsAndNotes>[] => {
@@ -297,12 +389,12 @@ const stepsRows = (
 };
 
 /** The row for what Notes become, where the Ramble leaves anything for them. */
-const notesRows = (
+const notesRows = <Notes extends string | undefined>(
   screen: VoiceFillScreen,
   raw: Record<string, unknown>,
-  current: StepsAndNotes,
+  current: { notes?: Notes },
   leftovers: readonly string[]
-): ReviewRow<StepsAndNotes>[] => {
+): ReviewRow<{ notes: Notes | string }>[] => {
   const existing = (current.notes ?? '').trim();
   const notes = notesFor(existing, spokenText(raw.notes), leftovers);
   if (notes === existing) {
@@ -313,7 +405,7 @@ const notesRows = (
       id: 'notes',
       field: 'notes',
       label: fieldOf(screen, 'notes').label,
-      oldValue: current.notes,
+      oldValue: current.notes as Notes,
       newValue: notes,
     },
   ];
@@ -325,6 +417,39 @@ const leftoverOf = <Screen extends VoiceFillScreen>(
   key: VoiceFillFieldKey<Screen>,
   said: string
 ): string => `${fieldOf(screen, key).label}: ${said}.`;
+
+/** Whatever a model returned for a field, as words for Notes. */
+const saidOf = (value: unknown): string => {
+  if (typeof value === 'number') {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map(saidOf).filter(Boolean).join(', ');
+  }
+  if (isRecord(value)) {
+    return Object.values(value).map(saidOf).filter(Boolean).join(' ');
+  }
+  return spokenText(value);
+};
+
+/**
+ * The words to keep in Notes for every value a model returned that belongs to
+ * another screen. A Ramble fills only the screen it was spoken on, and what it
+ * says of the others is neither written where nobody is looking nor dropped.
+ */
+const saidOfOtherScreens = (screen: VoiceFillScreen, raw: Record<string, unknown>): string[] => {
+  const kept = new Map<string, string>();
+  const here = new Set(SCREEN_FIELDS[screen].fields.map(field => field.key));
+  Object.values(SCREEN_FIELDS).forEach(({ fields }) =>
+    fields.forEach(field => {
+      const said = here.has(field.key) || kept.has(field.key) ? '' : saidOf(raw[field.key]);
+      if (said) {
+        kept.set(field.key, `${field.label}: ${said}.`);
+      }
+    })
+  );
+  return [...kept.values()];
+};
 
 const preSmokeRows = (
   raw: Record<string, unknown>,
@@ -389,7 +514,7 @@ const preSmokeRows = (
   return [
     ...rows,
     ...stepsRows('preSmoke', raw, current),
-    ...notesRows('preSmoke', raw, current, leftovers),
+    ...notesRows('preSmoke', raw, current, [...leftovers, ...saidOfOtherScreens('preSmoke', raw)]),
   ];
 };
 
@@ -416,40 +541,443 @@ const postSmokeRows = (
   return [
     ...rows,
     ...stepsRows('postSmoke', raw, current),
-    ...notesRows('postSmoke', raw, current, leftovers),
+    ...notesRows('postSmoke', raw, current, [
+      ...leftovers,
+      ...saidOfOtherScreens('postSmoke', raw),
+    ]),
   ];
+};
+
+/** The three meat probes, by the number each is spoken of by. */
+const PROBES = [1, 2, 3] as const;
+
+type Probe = (typeof PROBES)[number];
+
+/** The fields a Ramble names as spoken: the chamber and each probe. */
+const NAME_FIELDS = ['chamberName', 'probe1Name', 'probe2Name', 'probe3Name'] as const;
+
+/** The field a probe's target is held under. */
+const targetField = (probe: Probe): `probe${Probe}Target` => `probe${probe}Target`;
+
+/** The ways a probe's number is said. A map, for the reason the units are one. */
+const PROBE_NUMBERS: ReadonlyMap<string, Probe> = new Map([
+  ['1', 1],
+  ['one', 1],
+  ['first', 1],
+  ['2', 2],
+  ['two', 2],
+  ['second', 2],
+  ['3', 3],
+  ['three', 3],
+  ['third', 3],
+]);
+
+/** The words a probe's number is said among, which say nothing themselves. */
+const NUMBER_FILLER = new Set(['the', 'probe', 'number', 'meat']);
+
+/**
+ * The probe something said points at by its number — "probe one", "the second
+ * probe", "3" — or nothing where it is not a probe's number and nothing else.
+ */
+const numberedProbe = (said: string): Probe | undefined => {
+  const told = wordsOf(said).filter(word => !NUMBER_FILLER.has(word));
+  return told.length === 1 ? PROBE_NUMBERS.get(told[0]) : undefined;
+};
+
+/**
+ * A probe's name as it is compared: its words, less a leading "the" and a
+ * closing "probe" — "the flat probe" is the probe called Flat. A name that is
+ * nothing but those words is compared as it stands.
+ */
+const nameKey = (name: string): string => {
+  const words = wordsOf(name);
+  const named = words[0] === 'the' && words.length > 1 ? words.slice(1) : words;
+  const told = named[named.length - 1] === 'probe' && named.length > 1 ? named.slice(0, -1) : named;
+  return told.join(' ');
+};
+
+/**
+ * The name each probe goes by while a Ramble is read: the one the Ramble gives
+ * it, and otherwise the current one — the context's, which is what the model
+ * was told, or the screen's where the context carries no names.
+ */
+const probeNames = (
+  raw: Record<string, unknown>,
+  current: SmokeScreenCurrent,
+  context: VoiceFillContext
+): ReadonlyMap<Probe, string> =>
+  new Map(
+    PROBES.map(probe => [
+      probe,
+      spokenText(raw[`probe${probe}Name`]) ||
+        (context.probeNames
+          ? spokenText(context.probeNames[probe - 1])
+          : current[`probe${probe}Name`]),
+    ])
+  );
+
+/** The words that say every probe: "both" and "all", and the same said as "every" or "each". */
+const EVERY_PROBE = new Set(['both', 'all', 'every', 'each']);
+
+/** The words "both" and "all" are said among, which say nothing themselves. */
+const EVERY_FILLER = new Set(['the', 'of', 'them', 'probe', 'probes', 'meat', 'three', '3']);
+
+/**
+ * Whether something said means every probe — "both", "all three", "all of the
+ * probes" — and nothing else: "all beef ribs" is a name, and no probe's.
+ */
+const saysEveryProbe = (said: string): boolean => {
+  const told = wordsOf(said).filter(word => !EVERY_FILLER.has(word));
+  return told.length === 1 && EVERY_PROBE.has(told[0]);
+};
+
+/**
+ * The probes something said points at. A spoken number wins; with none, the
+ * probe that goes by that name — one probe, or it is anybody's guess which.
+ * "Both" and "all" are the probes this Ramble gave a name to, and every probe
+ * where it named none. Anything else points at nothing.
+ */
+const probesFor = (
+  said: string,
+  names: ReadonlyMap<Probe, string>,
+  namedHere: readonly Probe[]
+): readonly Probe[] => {
+  const numbered = numberedProbe(said);
+  if (numbered) {
+    return [numbered];
+  }
+  const key = nameKey(said);
+  const called = PROBES.filter(probe => key && nameKey(names.get(probe) ?? '') === key);
+  if (called.length > 0) {
+    return called.length === 1 ? called : [];
+  }
+  if (saysEveryProbe(said)) {
+    return namedHere.length > 0 ? namedHere : PROBES;
+  }
+  return [];
+};
+
+/** The lowest and the highest target a Ramble can set, in °F. */
+export const MIN_PROBE_TARGET = 32;
+export const MAX_PROBE_TARGET = 500;
+
+/**
+ * The target a Ramble sets for each probe it sets one for, and the words to
+ * keep in Notes for every target that could not be set: one out of bounds, not
+ * a whole number of degrees or not a temperature at all, one said of no probe
+ * the screen can tell, and the targets of a probe that was given two.
+ */
+const targetsFor = (
+  raw: Record<string, unknown>,
+  current: SmokeScreenCurrent,
+  context: VoiceFillContext
+): { targets: ReadonlyMap<Probe, number>; leftovers: string[] } => {
+  const names = probeNames(raw, current, context);
+  const namedHere = PROBES.filter(probe => spokenText(raw[`probe${probe}Name`]));
+  const said = new Map<Probe, Set<number>>();
+  const leftovers: string[] = [];
+  const keep = (words: string): void => {
+    leftovers.push(leftoverOf('smoke', 'probeTargets', words));
+  };
+  (Array.isArray(raw.probeTargets) ? raw.probeTargets.filter(isRecord) : []).forEach(entry => {
+    const { said: saidTarget, number } = spokenNumber(entry.target);
+    if (!saidTarget) {
+      return;
+    }
+    const saidProbe = spokenText(entry.probe);
+    // A target is a whole number of degrees within the bounds. A part of a
+    // degree is never rounded to one: nobody said the number it would become.
+    const target = number ?? NaN;
+    const settable =
+      Number.isInteger(target) && target >= MIN_PROBE_TARGET && target <= MAX_PROBE_TARGET;
+    const probes = settable ? probesFor(saidProbe, names, namedHere) : [];
+    if (probes.length === 0) {
+      keep([saidProbe, saidTarget].filter(Boolean).join(' '));
+    }
+    probes.forEach(probe => said.set(probe, (said.get(probe) ?? new Set<number>()).add(target)));
+  });
+  const targets = new Map<Probe, number>();
+  PROBES.forEach(probe => {
+    const [target, ...others] = said.get(probe) ?? [];
+    if (others.length > 0) {
+      // Two targets for one probe is a choice nobody made: neither is set.
+      keep(`probe ${probe} ${[target, ...others].join(' or ')}`);
+    } else if (target !== undefined) {
+      targets.set(probe, target);
+    }
+  });
+  return { targets, leftovers };
+};
+
+/**
+ * A time on the clock as it was said — "6:30", "6:30 PM", "18:30" — as its
+ * minute and every hour of the day it could mean, earliest first: two where
+ * neither AM nor PM was said of an hour both have. Nothing where what was said
+ * is no time on the clock.
+ */
+const spokenClock = (said: string): { hours: number[]; minute: number } | undefined => {
+  const match = /^(\d{1,2})(?::(\d{2}))?\s*(?:([ap])\.?\s?m\.?)?$/.exec(said.toLowerCase());
+  if (!match) {
+    return undefined;
+  }
+  const hour = Number(match[1]);
+  const minute = Number(match[2] ?? 0);
+  const half = match[3];
+  if (minute > 59 || hour > 23 || (half && (hour < 1 || hour > 12))) {
+    return undefined;
+  }
+  if (half) {
+    return { hours: [(hour % 12) + (half === 'p' ? 12 : 0)], minute };
+  }
+  // An hour only the 24-hour clock has is one hour; any other is two.
+  return { hours: hour >= 1 && hour <= 12 ? [hour % 12, (hour % 12) + 12] : [hour], minute };
+};
+
+/**
+ * The date a time on the clock means to somebody saying it at `now`: tomorrow's
+ * where they said tomorrow, and otherwise its next occurrence. Where it could
+ * be morning or evening and both are still to come that day, the evening —
+ * nobody plans dinner for dawn by leaving out "AM".
+ */
+const clockDate = (
+  clock: { hours: number[]; minute: number },
+  tomorrow: boolean,
+  now: Date
+): Date => {
+  const on = (daysAhead: number): Date[] =>
+    clock.hours.map(
+      hour =>
+        new Date(now.getFullYear(), now.getMonth(), now.getDate() + daysAhead, hour, clock.minute)
+    );
+  const sameDay = tomorrow ? on(1) : on(0).filter(date => date.getTime() > now.getTime());
+  return sameDay.length > 0 ? sameDay[sameDay.length - 1] : on(1)[0];
+};
+
+const MINUTE_MS = 60 * 1000;
+
+/** How far ahead a Ramble can set the serve time, in minutes: the next 48 hours. */
+export const MAX_SERVE_AHEAD_MINUTES = 48 * 60;
+
+/**
+ * The serve time a Ramble sets, as a date — a time on the clock, or so many
+ * minutes after the Ramble — or the words to keep in Notes where what was said
+ * pins down no time in the next 48 hours: no clock time at all, an offset out
+ * of bounds, or a clock time and an offset that are two answers.
+ */
+const serveAtFor = (
+  raw: Record<string, unknown>,
+  now: Date
+): { value: Date } | { leftover: string } | undefined => {
+  const saidClock = spokenText(raw.serveClock);
+  const tomorrow = raw.serveTomorrow === true;
+  const { said: saidOffset, number: offset } = spokenNumber(raw.serveInMinutes);
+  const said = [
+    [saidClock, tomorrow ? 'tomorrow' : ''].filter(Boolean).join(' '),
+    saidOffset && `in ${saidOffset}${offset === undefined ? '' : ' minutes'}`,
+  ].filter(Boolean);
+  if (said.length === 0) {
+    return undefined;
+  }
+  const leftover = { leftover: said.join(' or ') };
+  if (said.length > 1) {
+    return leftover;
+  }
+  const clock = spokenClock(saidClock);
+  const value = clock
+    ? clockDate(clock, tomorrow, now)
+    : new Date(now.getTime() + Math.round(offset ?? 0) * MINUTE_MS);
+  const ahead = value.getTime() - now.getTime();
+  return ahead > 0 && ahead <= MAX_SERVE_AHEAD_MINUTES * MINUTE_MS ? { value } : leftover;
+};
+
+/** The ways "just now" comes back as how long ago something was done. */
+const JUST_NOW = new Set(['', 'now', 'just', 'just now', 'right now']);
+
+/**
+ * The cook log entries a Ramble adds, and the words to keep in Notes for what
+ * it may not log: a stamp the cook log does not offer, and anything done a
+ * while ago — the log is never backdated, so that goes to Notes as it was said.
+ */
+const stampsFor = (
+  raw: unknown,
+  context: VoiceFillContext
+): { stamps: VoiceFillStamp[]; leftovers: string[] } => {
+  const offered = enabledStamps(context.enabledStamps ?? []);
+  const sayable = (text: string): string => wordsOf(text).join(' ');
+  const logged = new Map<string, VoiceFillStamp>();
+  const leftovers: string[] = [];
+  (Array.isArray(raw) ? raw.filter(isRecord) : []).forEach(entry => {
+    const said = spokenText(entry.stamp);
+    // However the model wrote it — a number of minutes is an offset all the same.
+    const ago = spokenNumber(entry.ago).said;
+    const justNow = JUST_NOW.has(wordsOf(ago).join(' '));
+    if (!said) {
+      return;
+    }
+    // By its key, or by what its button says: a stamp somebody added has a key
+    // nobody could say.
+    const stamp = offered.find(
+      candidate =>
+        candidate.key.toLowerCase() === said.toLowerCase() ||
+        sayable(candidate.label) === sayable(said)
+    );
+    if (!stamp || !justNow) {
+      const words = [stamp?.label ?? said, justNow ? '' : ago].filter(Boolean).join(' ');
+      leftovers.push(leftoverOf('smoke', 'stamps', words));
+    } else {
+      logged.set(stamp.key, { stampKey: stamp.key, label: stamp.label, at: context.now });
+    }
+  });
+  return { stamps: [...logged.values()], leftovers };
+};
+
+/**
+ * The smoke screen's values as a Ramble is read against them: everything it
+ * holds but the cook log entries, which a Ramble only ever adds.
+ */
+export type SmokeScreenCurrent = Omit<SmokeScreenValues, 'stamps'>;
+
+const smokeRows = (
+  raw: Record<string, unknown>,
+  current: SmokeScreenCurrent,
+  context: VoiceFillContext
+): ReviewRow<SmokeScreenValues>[] => {
+  const rows: ReviewRow<SmokeScreenValues>[] = [];
+  const leftovers: string[] = [];
+  const label = (key: VoiceFillFieldKey<'smoke'>): string => fieldOf('smoke', key).label;
+
+  NAME_FIELDS.forEach(field => {
+    const name = spokenText(raw[field]);
+    if (name && name !== current[field]) {
+      rows.push({
+        id: field,
+        field,
+        label: label(field),
+        oldValue: current[field],
+        newValue: name,
+      });
+    }
+  });
+
+  const spokenWood = spokenText(raw.woodType);
+  const woodType = spokenWood
+    ? snapped(spokenWood, fieldOf('smoke', 'woodType').suggestions)
+    : current.woodType;
+  if (woodType !== current.woodType) {
+    rows.push({
+      id: 'woodType',
+      field: 'woodType',
+      label: label('woodType'),
+      oldValue: current.woodType,
+      newValue: woodType,
+    });
+  }
+
+  const { targets, leftovers: unsetTargets } = targetsFor(raw, current, context);
+  leftovers.push(...unsetTargets);
+  targets.forEach((target, probe) => {
+    const field = targetField(probe);
+    const held = current[field];
+    if (held.target === target && held.enabled && held.targetSource === 'user') {
+      return;
+    }
+    rows.push({
+      id: field,
+      field,
+      label: probeTargetLabel(probe),
+      oldValue: held,
+      // A spoken target is the cook's own, exactly as a typed one is: the probe
+      // is watched from here on, and a session start never seeds over it.
+      newValue: { target, enabled: true, targetSource: 'user' },
+    });
+  });
+
+  const serveAt = serveAtFor(raw, context.now);
+  if (serveAt && 'leftover' in serveAt) {
+    leftovers.push(leftoverOf('smoke', 'serveClock', serveAt.leftover));
+  } else if (serveAt && serveAt.value.getTime() !== current.serveAt?.getTime()) {
+    rows.push({
+      id: 'serveAt',
+      field: 'serveAt',
+      label: label('serveClock'),
+      oldValue: current.serveAt,
+      newValue: serveAt.value,
+    });
+  }
+
+  const rest = restMinutesFor(raw.restMinutes);
+  if (rest && 'leftover' in rest) {
+    leftovers.push(leftoverOf('smoke', 'restMinutes', rest.leftover));
+  } else if (rest && rest.minutes !== current.restMinutes) {
+    rows.push({
+      id: 'restMinutes',
+      field: 'restMinutes',
+      label: label('restMinutes'),
+      oldValue: current.restMinutes,
+      newValue: rest.minutes,
+    });
+  }
+
+  const { stamps, leftovers: unlogged } = stampsFor(raw.stamps, context);
+  leftovers.push(...unlogged);
+  if (stamps.length > 0) {
+    rows.push({
+      id: 'stamps',
+      field: 'stamps',
+      label: label('stamps'),
+      oldValue: [],
+      newValue: stamps,
+    });
+  }
+
+  leftovers.push(...saidOfOtherScreens('smoke', raw));
+
+  return [...rows, ...notesRows('smoke', raw, current, leftovers)];
 };
 
 /**
  * The Review rows a Ramble proposes for the screen it was spoken on.
  *
  * `raw` is whatever the model returned and is trusted for nothing: a field of
- * the wrong type is treated as not said. `now` is when the Ramble was spoken.
+ * the wrong type is treated as not said. `context` carries what the Ramble is
+ * read against beside the screen's values — when it was spoken, above all: the
+ * contract never asks a clock of its own.
  */
 export function reviewRows(
   screen: 'preSmoke',
   raw: unknown,
   current: PreSmoke,
-  now: Date
+  context: VoiceFillContext
 ): ReviewRow<PreSmoke>[];
+export function reviewRows(
+  screen: 'smoke',
+  raw: unknown,
+  current: SmokeScreenCurrent,
+  context: VoiceFillContext
+): ReviewRow<SmokeScreenValues>[];
 export function reviewRows(
   screen: 'postSmoke',
   raw: unknown,
   current: PostSmoke,
-  now: Date
+  context: VoiceFillContext
 ): ReviewRow<PostSmoke>[];
 export function reviewRows(
   screen: VoiceFillScreen,
   raw: unknown,
-  current: PreSmoke | PostSmoke,
-  now: Date
-): ReviewRow<PreSmoke>[] | ReviewRow<PostSmoke>[] {
+  current: PreSmoke | SmokeScreenCurrent | PostSmoke,
+  context: VoiceFillContext
+): ReviewRow<PreSmoke>[] | ReviewRow<SmokeScreenValues>[] | ReviewRow<PostSmoke>[] {
   if (!isRecord(raw)) {
     return [];
   }
-  return screen === 'preSmoke'
-    ? preSmokeRows(raw, current as PreSmoke, now)
-    : postSmokeRows(raw, current as PostSmoke);
+  switch (screen) {
+    case 'preSmoke':
+      return preSmokeRows(raw, current as PreSmoke, context.now);
+    case 'smoke':
+      return smokeRows(raw, current as SmokeScreenCurrent, context);
+    default:
+      return postSmokeRows(raw, current as PostSmoke);
+  }
 }
 
 /** What filling a set of Review rows writes, and what Undo then puts back. */

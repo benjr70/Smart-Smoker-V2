@@ -9,14 +9,48 @@
  * a misheard value to fit it, and the extraction contract could then no longer
  * reject that value into Notes.
  */
+import { CookStamp, enabledStamps } from '../api/cookStamps';
 import { WeightUnits } from '../components/common/interfaces/enums';
 import { MEAT_TYPES } from '../components/smoke/preSmokeStep/meatTypes';
+import { WOOD_TYPES } from '../components/smoke/smokeStep/woodTypes';
 
 /** A screen a Ramble can be spoken on. */
-export type VoiceFillScreen = 'preSmoke' | 'postSmoke';
+export type VoiceFillScreen = 'preSmoke' | 'smoke' | 'postSmoke';
+
+/**
+ * What a Ramble is read against, beside the values its screen holds: what the
+ * model is told when it is asked, and what the extraction contract then checks
+ * its answer against.
+ */
+export interface VoiceFillContext {
+  /** When the Ramble was spoken. */
+  now: Date;
+  /**
+   * What each meat probe is called as the Ramble is spoken, probe 1 first; an
+   * empty name for a probe nobody named. Read on the smoke screen only.
+   */
+  probeNames?: readonly string[];
+  /** The stamps the cook log offers. Read on the smoke screen only. */
+  enabledStamps?: readonly CookStamp[];
+}
 
 /** The plain kinds of value a model is asked for. */
-export type VoiceFillFieldType = 'string' | 'number' | 'integer' | 'stringList';
+export type VoiceFillFieldType =
+  | 'string'
+  | 'number'
+  | 'integer'
+  | 'boolean'
+  | 'stringList'
+  | 'recordList';
+
+/** One plain value inside each entry of a list of records. */
+export interface VoiceFillPart {
+  /** The key the value is returned under in its entry. */
+  key: string;
+  type: 'string' | 'integer';
+  /** What the model is told the value is for. */
+  description: string;
+}
 
 /** One value a model may return for a screen. */
 export interface VoiceFillField {
@@ -34,6 +68,8 @@ export interface VoiceFillField {
   options?: readonly string[];
   /** The screen's suggestion list, for a free-text field that offers one. */
   suggestions?: readonly string[];
+  /** What each entry holds, for a list of records. */
+  parts?: readonly VoiceFillPart[];
 }
 
 export interface VoiceFillScreenDefinition {
@@ -61,6 +97,22 @@ const NOTES_FIELD: FieldSpec = {
     'range or as a choice between two. Where existing notes are given, one text that merges ' +
     'them with the summary and keeps every fact and number.',
 };
+
+/** The name of what one of the three meat probes is in. */
+const probeName = (probe: number): FieldSpec => ({
+  label: `Probe ${probe} name`,
+  type: 'string',
+  description:
+    `What probe ${probe} is in, as a short name, only if it was given one ` +
+    `("probe ${probe} is in the flat" is "Flat").`,
+});
+
+/**
+ * What a probe's target is called: every probe's in Notes, and the one probe's
+ * in the Review row that sets it — one wording for both.
+ */
+export const probeTargetLabel = (probe?: number): string =>
+  probe === undefined ? 'Probe target' : `Probe ${probe} target`;
 
 const FIELDS = {
   preSmoke: fields({
@@ -94,6 +146,93 @@ const FIELDS = {
       description:
         'Each preparation step as a short phrase in sentence case, one action per step, ' +
         'in the order spoken.',
+    },
+    notes: NOTES_FIELD,
+  }),
+  smoke: fields({
+    chamberName: {
+      label: 'Chamber name',
+      type: 'string',
+      description: 'What the chamber (pit) probe is to be called, only if it was given a name.',
+    },
+    probe1Name: probeName(1),
+    probe2Name: probeName(2),
+    probe3Name: probeName(3),
+    woodType: {
+      label: 'Wood type',
+      type: 'string',
+      description: 'The wood being burned, as spoken.',
+      suggestions: WOOD_TYPES,
+    },
+    probeTargets: {
+      label: probeTargetLabel(),
+      type: 'recordList',
+      description:
+        'Each target temperature that was set for a meat probe, one entry per probe it was ' +
+        'said of ("the flat and the point both to 203" is two entries).',
+      parts: [
+        {
+          key: 'probe',
+          type: 'string',
+          description:
+            'Which probe the target is for, as it was said: "probe one", "the flat", ' +
+            '"both", "all probes". "Both" or "all" only when no probes were said by name ' +
+            'or number.',
+        },
+        {
+          key: 'target',
+          type: 'integer',
+          description: 'The target temperature in °F ("two oh three" is 203).',
+        },
+      ],
+    },
+    serveClock: {
+      label: 'Serve time',
+      type: 'string',
+      description:
+        'The time of day the food is to be served, as a clock time, with AM or PM only if ' +
+        'it was said ("six thirty" is "6:30", "six thirty tonight" is "6:30 PM"). Left out ' +
+        'when no clock time was said ("dinner time", "Saturday").',
+    },
+    serveTomorrow: {
+      label: 'Serve time',
+      type: 'boolean',
+      description: 'True only when the serve time was said to be tomorrow.',
+    },
+    serveInMinutes: {
+      label: 'Serve time',
+      type: 'integer',
+      description:
+        'How long from now the food is to be served, in minutes, only when it was said as ' +
+        'a length of time and not as a clock time ("in four hours" is 240).',
+    },
+    restMinutes: {
+      label: 'Rest duration',
+      type: 'integer',
+      description:
+        'How long the meat is to rest after it comes off, in minutes ("forty-five minutes" ' +
+        'is 45, "a couple hours" is 120, "half an hour" is 30). Left out when the length is vague.',
+    },
+    stamps: {
+      label: 'Log now',
+      type: 'recordList',
+      description:
+        'Each thing the cook says they have done that the cook log has a stamp for, one ' +
+        'entry per thing. Things they plan to do are left out.',
+      parts: [
+        {
+          key: 'stamp',
+          type: 'string',
+          description: 'The stamp it is logged under, from the stamps given.',
+        },
+        {
+          key: 'ago',
+          type: 'string',
+          description:
+            'How long ago it was done, as it was said ("an hour ago"), only when it was not ' +
+            'done just now.',
+        },
+      ],
     },
     notes: NOTES_FIELD,
   }),
@@ -138,16 +277,76 @@ const listed = (specs: Record<string, FieldSpec>): VoiceFillField[] =>
 
 export const SCREEN_FIELDS: Record<VoiceFillScreen, VoiceFillScreenDefinition> = {
   preSmoke: { title: 'Pre-smoke', fields: listed(FIELDS.preSmoke) },
+  smoke: { title: 'Smoke', fields: listed(FIELDS.smoke) },
   postSmoke: { title: 'Post-smoke', fields: listed(FIELDS.postSmoke) },
+};
+
+/** The probes that have a name, each said with its number: `probe 1 is "Flat"`. */
+const probesTold = (names: readonly string[] = []): string =>
+  names
+    .map((name, index) => (name.trim() ? `probe ${index + 1} is "${name.trim()}"` : ''))
+    .filter(Boolean)
+    .join(', ');
+
+/** The stamps the cook log offers, each by its key and what its button says. */
+const stampsTold = (stamps: readonly CookStamp[] = []): string =>
+  enabledStamps(stamps)
+    .map(stamp => `${stamp.key} ("${stamp.label}")`)
+    .join(', ');
+
+/**
+ * A screen's fields as a model is asked for them at one Ramble: the smoke
+ * screen's told the names its probes go by and the keys of the stamps its cook
+ * log offers, where the context gives them. A model can only pick a probe by
+ * name, or a stamp by key, from a list it was shown.
+ */
+const fieldsAsked = (screen: VoiceFillScreen, context?: VoiceFillContext): VoiceFillField[] => {
+  const told: Record<string, string> =
+    screen === 'smoke' && context
+      ? {
+          'probeTargets.probe': probesTold(context.probeNames),
+          'stamps.stamp': stampsTold(context.enabledStamps),
+        }
+      : {};
+  const heading: Record<string, string> = {
+    'probeTargets.probe': 'Current probe names',
+    'stamps.stamp': 'Stamps',
+  };
+  return SCREEN_FIELDS[screen].fields.map(field => ({
+    ...field,
+    ...(field.parts && {
+      parts: field.parts.map(part => {
+        const id = `${field.key}.${part.key}`;
+        return told[id]
+          ? { ...part, description: `${part.description} ${heading[id]}: ${told[id]}.` }
+          : part;
+      }),
+    }),
+  }));
 };
 
 /** The schema of one plain value, in the subset every runtime understands. */
 export type VoiceFillValueSchema =
   | { type: 'string'; enum?: readonly string[] }
-  | { type: 'number' | 'integer' }
-  | { type: 'array'; items: { type: 'string' } };
+  | { type: 'number' | 'integer' | 'boolean' }
+  | { type: 'array'; items: { type: 'string' } | VoiceFillRecordSchema };
 
 type Described<Schema> = Schema & { description: string };
+
+/**
+ * The schema of one entry in a list of records. In a JSON Schema every part is
+ * required and nullable; as a tool parameter none is either — the same two ways
+ * of writing "not said" the fields themselves have.
+ */
+export interface VoiceFillRecordSchema {
+  type: 'object';
+  properties: Record<
+    string,
+    Described<VoiceFillValueSchema | { anyOf: [VoiceFillValueSchema, { type: 'null' }] }>
+  >;
+  required?: string[];
+  additionalProperties?: false;
+}
 
 /** A screen's fields as a JSON Schema, for runtimes that constrain output to one. */
 export interface VoiceFillJsonSchema {
@@ -170,10 +369,37 @@ export interface VoiceFillToolSchema {
   };
 }
 
-const valueSchemaOf = (field: VoiceFillField): VoiceFillValueSchema => {
+/** The two dialects a definition is written out in. */
+type Dialect = 'jsonSchema' | 'tool';
+
+/** One entry of a list of records, in the dialect it is asked for in. */
+const recordSchemaOf = (
+  parts: readonly VoiceFillPart[],
+  dialect: Dialect
+): VoiceFillRecordSchema => {
+  const properties: VoiceFillRecordSchema['properties'] = {};
+  parts.forEach(({ key, type, description }) => {
+    properties[key] =
+      dialect === 'tool'
+        ? { description, type }
+        : { description, anyOf: [{ type }, { type: 'null' }] };
+  });
+  return dialect === 'tool'
+    ? { type: 'object', properties }
+    : {
+        type: 'object',
+        properties,
+        required: parts.map(part => part.key),
+        additionalProperties: false,
+      };
+};
+
+const valueSchemaOf = (field: VoiceFillField, dialect: Dialect): VoiceFillValueSchema => {
   switch (field.type) {
     case 'stringList':
       return { type: 'array', items: { type: 'string' } };
+    case 'recordList':
+      return { type: 'array', items: recordSchemaOf(field.parts ?? [], dialect) };
     case 'string':
       return field.options ? { type: 'string', enum: field.options } : { type: 'string' };
     default:
@@ -193,12 +419,18 @@ const descriptionOf = (field: VoiceFillField): string =>
  * Every field is required and — a list aside, which is simply empty — nullable:
  * a constrained decoder fills every key it is given, so "not said" has to be a
  * value the model can write rather than a key it can leave out.
+ *
+ * Given the context of a Ramble, the smoke screen's schema carries the current
+ * probe names and the keys of the enabled stamps.
  */
-export const jsonSchemaFor = (screen: VoiceFillScreen): VoiceFillJsonSchema => {
-  const { fields } = SCREEN_FIELDS[screen];
+export const jsonSchemaFor = (
+  screen: VoiceFillScreen,
+  context?: VoiceFillContext
+): VoiceFillJsonSchema => {
+  const fields = fieldsAsked(screen, context);
   const properties: VoiceFillJsonSchema['properties'] = {};
   fields.forEach(field => {
-    const value = valueSchemaOf(field);
+    const value = valueSchemaOf(field, 'jsonSchema');
     properties[field.key] =
       value.type === 'array'
         ? { description: descriptionOf(field), ...value }
@@ -221,12 +453,22 @@ const snakeCase = (text: string): string =>
  *
  * A tool's parameter schema has no unions, so here "not said" is a parameter
  * the model leaves out: nothing is required and nothing is nullable.
+ *
+ * Given the context of a Ramble, the smoke screen's tool carries the current
+ * probe names and the keys of the enabled stamps.
  */
-export const toolSchemaFor = (screen: VoiceFillScreen): VoiceFillToolSchema => {
-  const { title, fields } = SCREEN_FIELDS[screen];
+export const toolSchemaFor = (
+  screen: VoiceFillScreen,
+  context?: VoiceFillContext
+): VoiceFillToolSchema => {
+  const { title } = SCREEN_FIELDS[screen];
+  const fields = fieldsAsked(screen, context);
   const properties: VoiceFillToolSchema['parameters']['properties'] = {};
   fields.forEach(field => {
-    properties[field.key] = { description: descriptionOf(field), ...valueSchemaOf(field) };
+    properties[field.key] = {
+      description: descriptionOf(field),
+      ...valueSchemaOf(field, 'tool'),
+    };
   });
   return {
     name: `fill_${snakeCase(screen)}`,
