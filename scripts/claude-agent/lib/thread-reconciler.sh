@@ -10,7 +10,16 @@
 #       → JSON array on stdout, one element per UNRESOLVED review thread:
 #         [ { "threadId": "<graphql node id>", "path": "<file|null>",
 #             "line": <n|null>, "commentDatabaseId": <rest id>,
-#             "body": "<first comment body>" } ]
+#             "body": "<first comment body>",
+#             "replies": [ { "author": "<login>", "body": "<reply body>",
+#                            "agent": <bool> } ],
+#             "ruling": "<body of the last reply|null>" } ]
+#         `replies` is every comment after the first, oldest first. `agent`
+#         marks the loop's own replies (pr-reconcile / pr-review bodies) — the
+#         bot and the human share one login, so the body is the only tell.
+#         `ruling` is the human's latest word: the last reply's body when a
+#         human wrote it, null when the thread has no reply or the loop spoke
+#         last. A ruling is binding on the fix round — it is never disputed.
 #         Resolved and outdated-but-resolved threads are excluded — the loop
 #         only ever works threads a human still considers open. Exit 0 even
 #         when the array is empty; non-zero only when the API call itself fails.
@@ -47,8 +56,8 @@ query($owner: String!, $name: String!, $pr: Int!) {
           isResolved
           path
           line
-          comments(first: 1) {
-            nodes { databaseId body }
+          comments(first: 50) {
+            nodes { databaseId body author { login } }
           }
         }
       }
@@ -58,13 +67,21 @@ query($owner: String!, $name: String!, $pr: Int!) {
         -F owner="${owner}" -F name="${name}" -F pr="${pr}")" || return 1
 
     printf '%s' "${resp}" | jq -c '
+        def agent: test("^\\s*(pr-reconcile:|fixed in |<!-- pr-review-bot -->)");
         [ .data.repository.pullRequest.reviewThreads.nodes[]?
           | select(.isResolved == false)
+          | ( [ .comments.nodes[1:][]?
+                | { author: (.author.login // ""),
+                    body: (.body // ""),
+                    agent: ((.body // "") | agent) } ] ) as $replies
           | { threadId: .id,
               path: .path,
               line: .line,
               commentDatabaseId: (.comments.nodes[0].databaseId),
-              body: (.comments.nodes[0].body // "") } ]'
+              body: (.comments.nodes[0].body // ""),
+              replies: $replies,
+              ruling: ( ($replies | last) as $l
+                        | if $l != null and ($l.agent | not) then $l.body else null end ) } ]'
 }
 
 # tr_reply <owner/repo> <pr> <comment_database_id> <body>

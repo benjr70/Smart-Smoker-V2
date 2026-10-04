@@ -221,6 +221,9 @@ and the review threads (no session resume). Per fire:
    each addressed thread**. All threads done → drop `AFK:revise`.
    Exhaustion/disputes → in-thread "human triage" replies +
    `AFK:revise-failed`, parked.
+   A human reply on a parked thread is its **ruling**: the next
+   `AFK:revise` fire carries it out (resolving with no code change when the
+   reply accepts the dispute) and never disputes it again.
 3. **Verification tail** — any push staled everything, so the full pr-watch +
    manual-verification tail re-runs, **re-verifying every checklist item**
    including previously ticked ones.

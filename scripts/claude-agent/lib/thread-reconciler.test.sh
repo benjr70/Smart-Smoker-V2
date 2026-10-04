@@ -208,6 +208,59 @@ test_api_failure_surfaces() {
 }
 
 #-------------------------------------------------------------------------------
+# Test 6: replies after the first comment are surfaced, and a human's last word
+# becomes the thread's ruling — the loop's own replies never do.
+#-------------------------------------------------------------------------------
+test_replies_and_ruling() {
+    echo "TEST: replies are surfaced and a human's last reply is the ruling"
+
+    local dir out
+    dir="$(make_stub)"
+    trap "rm -rf '${dir}'" RETURN
+    cat > "${dir}/response.json" <<'EOF'
+{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[
+  {"id":"RT_1","isResolved":false,"path":"a.ts","line":1,
+   "comments":{"nodes":[
+     {"databaseId":9001,"body":"<!-- pr-review-bot -->\nfinding","author":{"login":"benjr70"}},
+     {"databaseId":9002,"body":"pr-reconcile: could not auto-resolve — human triage.","author":{"login":"benjr70"}},
+     {"databaseId":9003,"body":"I agree with the dispute, please resolve this.","author":{"login":"benjr70"}}]}},
+  {"id":"RT_2","isResolved":false,"path":"b.ts","line":2,
+   "comments":{"nodes":[
+     {"databaseId":9004,"body":"rename this","author":{"login":"benjr70"}},
+     {"databaseId":9005,"body":"keep the old name","author":{"login":"benjr70"}},
+     {"databaseId":9006,"body":"pr-reconcile: could not auto-resolve — human triage.","author":{"login":"benjr70"}}]}},
+  {"id":"RT_3","isResolved":false,"path":"c.ts","line":3,
+   "comments":{"nodes":[{"databaseId":9007,"body":"no replies here","author":{"login":"benjr70"}}]}}
+]}}}}}
+EOF
+
+    # shellcheck source=/dev/null
+    out="$(GH_BIN="${dir}/gh-stub" bash -c ". '${LIB}'; tr_unresolved_threads benjr70/Smart-Smoker-V2 310")"
+
+    if [ "$(printf '%s' "${out}" | jq -r '.[0].replies | length')" != "2" ] \
+        || [ "$(printf '%s' "${out}" | jq -r '.[0].replies[0].agent')" != "true" ] \
+        || [ "$(printf '%s' "${out}" | jq -r '.[0].replies[1].agent')" != "false" ]; then
+        fail "replies must be listed oldest first with the loop's own flagged" "out=${out}"
+        return
+    fi
+    if [ "$(printf '%s' "${out}" | jq -r '.[0].ruling')" != "I agree with the dispute, please resolve this." ]; then
+        fail "a human's last reply must be the ruling" "out=${out}"
+        return
+    fi
+    if [ "$(printf '%s' "${out}" | jq -r '.[1].ruling')" != "null" ]; then
+        fail "the loop speaking last must leave no ruling" "out=${out}"
+        return
+    fi
+    if [ "$(printf '%s' "${out}" | jq -r '.[2].ruling')" != "null" ] \
+        || [ "$(printf '%s' "${out}" | jq -r '.[2].replies | length')" != "0" ]; then
+        fail "a thread with no replies has empty replies and no ruling" "out=${out}"
+        return
+    fi
+
+    pass "replies are surfaced and a human's last reply is the ruling"
+}
+
+#-------------------------------------------------------------------------------
 # Run suite
 #-------------------------------------------------------------------------------
 echo "=========================================="
@@ -219,6 +272,7 @@ test_query_targets_right_pr
 test_reply_is_in_thread
 test_resolve_fires_mutation
 test_api_failure_surfaces
+test_replies_and_ruling
 
 echo ""
 echo "=========================================="

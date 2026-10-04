@@ -138,8 +138,13 @@ rounds per fire**.
 ```bash
 . scripts/claude-agent/lib/thread-reconciler.sh
 THREADS=$(tr_unresolved_threads "benjr70/Smart-Smoker-V2" "$PR_NUM")
-# [ {threadId, path, line, commentDatabaseId, body}, ... ]
+# [ {threadId, path, line, commentDatabaseId, body, replies, ruling}, ... ]
 ```
+
+`replies` is the rest of the thread; `ruling` is the human's latest reply (null
+when there is none, or when the loop's own reply is the last word). **A ruling
+is binding**: it is the human answering the finding or an earlier dispute, so it
+is carried out, never disputed and never sent back for human triage.
 
 No unresolved threads → the label was applied without open threads; treat the PR
 body / review summary comments as the feedback source only if they contain
@@ -151,16 +156,27 @@ Round loop (`R` starts at 1, cap `REVISE_ROUNDS_MAX=3`):
    `model: opus`) covering ALL currently-unresolved threads. Prompt embeds: the
    issue title + body, the current PR diff (`git diff origin/master...HEAD`,
    capped at 2000 lines as in pr-watch §3), and every thread verbatim —
-   `threadId`, `path:line`, and comment body — plus these instructions verbatim:
+   `threadId`, `path:line`, comment body, every reply, and the `ruling` — plus
+   these instructions verbatim:
 
    > Address each review comment by changing the shipped code accordingly. Stage
    > the changes (`git add`). Do NOT commit and do NOT push — the wrapper
-   > handles that. Reply with one line per thread:
-   > `<threadId>: <what you changed>` — or, if you believe a comment is wrong or
-   > must not be applied, `<threadId>: revise-dispute — <one-line reason>` and
-   > stage nothing for it.
+   > handles that. A thread's `ruling` is the human's final word on it and
+   > overrides the original comment, the issue and the Spec: do what it says.
+   > When the ruling accepts the current behaviour (it agrees with an earlier
+   > dispute, or just says to resolve the thread), change nothing for it.
+   > Reply with one line per thread:
+   > `<threadId>: <what you changed>` — or `<threadId>: no-change — <one-line
+   > reason>` when the ruling asks for none — or, ONLY on a thread with no
+   > ruling, if you believe a comment is wrong or must not be applied,
+   > `<threadId>: revise-dispute — <one-line reason>` and stage nothing for it.
 
-2. **Commit + push** (append-only; the rebase already happened, so plain push):
+   A `revise-dispute` on a thread that has a ruling is invalid: when the ruling
+   asks for a change, re-spawn with that pointed out (it counts as a round);
+   when it does not, treat the thread as `no-change`.
+
+2. **Commit + push** (append-only; the rebase already happened, so plain push;
+   skip both when nothing is staged — an all-`no-change` round has no commit):
 
    ```bash
    git commit -m "fix(review): round $R — address review comments on PR #$PR_NUM"
@@ -175,6 +191,10 @@ Round loop (`R` starts at 1, cap `REVISE_ROUNDS_MAX=3`):
    tr_reply "benjr70/Smart-Smoker-V2" "$PR_NUM" "<commentDatabaseId>" "fixed in $SHA: <implementer's one-line summary for this thread>"
    tr_resolve "<threadId>"
    ```
+
+   A `no-change` thread is closed the same way, with
+   `"pr-reconcile: no change — per your reply, current behaviour stays."` as
+   the reply.
 
    Disputed / unaddressed threads are NOT replied to or resolved this round —
    they carry to the next round (a dispute counts as unaddressed).
@@ -321,6 +341,10 @@ park a healthy PR.
 - **Implementer disputes a review comment** — the loop never argues with a
   human's review by force; the thread stays open, and if disputes are all that
   remain, the PR parks as `AFK:revise-failed` with in-thread explanations.
+  The human answers in-thread and re-applies `AFK:revise`; that reply is the
+  thread's ruling and the next fire carries it out — "agreed, resolve it"
+  closes the thread with no code change, anything else is applied as asked. A
+  ruled thread is never parked for human triage again.
 - **`AFK:revise` applied but no unresolved threads** — drop the label; there is
   nothing machine-actionable. The human should leave inline review comments (not
   just a top-level comment) to hand work back.
