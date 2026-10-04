@@ -8,11 +8,12 @@
  * and is kept in Notes instead. Whichever model is picked therefore obeys the
  * same contract, and the contract is testable with no model at all.
  */
-import { CookStamp, enabledStamps } from '../api/cookStamps';
+import { enabledStamps } from '../api/cookStamps';
 import type { PostSmoke, PreSmoke, SmokeProfile, TargetSource } from '../api/types';
 import { WeightUnits } from '../components/common/interfaces/enums';
 import {
   SCREEN_FIELDS,
+  VoiceFillContext,
   VoiceFillFieldKey,
   VoiceFillScreen,
   fieldOf,
@@ -66,14 +67,6 @@ export interface VoiceFillScreenValues {
   preSmoke: PreSmoke;
   smoke: SmokeScreenValues;
   postSmoke: PostSmoke;
-}
-
-/** What a Ramble is read against, beside the values its screen holds. */
-export interface VoiceFillContext {
-  /** When the Ramble was spoken. */
-  now: Date;
-  /** The stamps the cook log offers. Read on the smoke screen only. */
-  enabledStamps?: readonly CookStamp[];
 }
 
 /**
@@ -605,16 +598,21 @@ const nameKey = (name: string): string => {
 
 /**
  * The name each probe goes by while a Ramble is read: the one the Ramble gives
- * it, and otherwise the one it has.
+ * it, and otherwise the current one — the context's, which is what the model
+ * was told, or the screen's where the context carries no names.
  */
 const probeNames = (
   raw: Record<string, unknown>,
-  current: SmokeScreenCurrent
+  current: SmokeScreenCurrent,
+  context: VoiceFillContext
 ): ReadonlyMap<Probe, string> =>
   new Map(
     PROBES.map(probe => [
       probe,
-      spokenText(raw[`probe${probe}Name`]) || current[`probe${probe}Name`],
+      spokenText(raw[`probe${probe}Name`]) ||
+        (context.probeNames
+          ? spokenText(context.probeNames[probe - 1])
+          : current[`probe${probe}Name`]),
     ])
   );
 
@@ -665,15 +663,16 @@ export const MAX_PROBE_TARGET = 500;
 
 /**
  * The target a Ramble sets for each probe it sets one for, and the words to
- * keep in Notes for every target that could not be set: one out of bounds or
- * not a temperature at all, one said of no probe the screen can tell, and the
- * targets of a probe that was given two.
+ * keep in Notes for every target that could not be set: one out of bounds, not
+ * a whole number of degrees or not a temperature at all, one said of no probe
+ * the screen can tell, and the targets of a probe that was given two.
  */
 const targetsFor = (
   raw: Record<string, unknown>,
-  current: SmokeScreenCurrent
+  current: SmokeScreenCurrent,
+  context: VoiceFillContext
 ): { targets: ReadonlyMap<Probe, number>; leftovers: string[] } => {
-  const names = probeNames(raw, current);
+  const names = probeNames(raw, current, context);
   const namedHere = PROBES.filter(probe => spokenText(raw[`probe${probe}Name`]));
   const said = new Map<Probe, Set<number>>();
   const leftovers: string[] = [];
@@ -686,16 +685,16 @@ const targetsFor = (
       return;
     }
     const saidProbe = spokenText(entry.probe);
-    // The bounds are on what was said, before it is rounded to whole degrees.
-    const inBounds =
-      number !== undefined && number >= MIN_PROBE_TARGET && number <= MAX_PROBE_TARGET;
-    const probes = inBounds ? probesFor(saidProbe, names, namedHere) : [];
+    // A target is a whole number of degrees within the bounds. A part of a
+    // degree is never rounded to one: nobody said the number it would become.
+    const target = number ?? NaN;
+    const settable =
+      Number.isInteger(target) && target >= MIN_PROBE_TARGET && target <= MAX_PROBE_TARGET;
+    const probes = settable ? probesFor(saidProbe, names, namedHere) : [];
     if (probes.length === 0) {
       keep([saidProbe, saidTarget].filter(Boolean).join(' '));
     }
-    probes.forEach(probe =>
-      said.set(probe, (said.get(probe) ?? new Set<number>()).add(Math.round(number ?? 0)))
-    );
+    probes.forEach(probe => said.set(probe, (said.get(probe) ?? new Set<number>()).add(target)));
   });
   const targets = new Map<Probe, number>();
   PROBES.forEach(probe => {
@@ -874,7 +873,7 @@ const smokeRows = (
     });
   }
 
-  const { targets, leftovers: unsetTargets } = targetsFor(raw, current);
+  const { targets, leftovers: unsetTargets } = targetsFor(raw, current, context);
   leftovers.push(...unsetTargets);
   targets.forEach((target, probe) => {
     const field = targetField(probe);

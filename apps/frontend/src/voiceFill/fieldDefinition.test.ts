@@ -1,3 +1,4 @@
+import { DEFAULT_STAMPS } from '../api/cookStamps';
 import { SCREEN_FIELDS, VoiceFillScreen, fieldOf, jsonSchemaFor, toolSchemaFor } from '.';
 
 const SCREENS: VoiceFillScreen[] = ['preSmoke', 'smoke', 'postSmoke'];
@@ -112,6 +113,63 @@ describe('the smoke screen', () => {
     expect(toolSchemaFor('smoke').parameters.properties.woodType.description).toContain(
       suggestions
     );
+  });
+
+  describe('asked with the context of a Ramble', () => {
+    const context = {
+      now: new Date(2026, 9, 3, 15),
+      probeNames: ['Flat', '', ' Point '],
+      enabledStamps: [
+        ...DEFAULT_STAMPS.map(stamp => ({ ...stamp, enabled: stamp.key !== 'vent' })),
+        {
+          key: 'custom-01J',
+          label: 'Flipped',
+          tone: 'amber' as const,
+          enabled: true,
+          custom: true,
+        },
+      ],
+    };
+    const [probe] = fieldOf('smoke', 'probeTargets').parts ?? [];
+    const [stamp] = fieldOf('smoke', 'stamps').parts ?? [];
+    const probesTold = 'Current probe names: probe 1 is "Flat", probe 3 is "Point".';
+    const stampsTold =
+      'Stamps: wood ("Added Wood"), wrap ("Wrapped"), spritz ("Spritzed"), lid ("Lid Open"), ' +
+      'sauce ("Sauced"), custom-01J ("Flipped").';
+
+    it('carries the current probe names and the enabled stamp keys in the JSON Schema', () => {
+      const { probeTargets, stamps } = jsonSchemaFor('smoke', context).properties;
+
+      expect(probeTargets).toMatchObject({
+        items: { properties: { probe: { description: `${probe.description} ${probesTold}` } } },
+      });
+      expect(stamps).toMatchObject({
+        items: { properties: { stamp: { description: `${stamp.description} ${stampsTold}` } } },
+      });
+    });
+
+    it('carries the same in the tool schema', () => {
+      const { probeTargets, stamps } = toolSchemaFor('smoke', context).parameters.properties;
+
+      expect(probeTargets).toMatchObject({
+        items: { properties: { probe: { description: `${probe.description} ${probesTold}` } } },
+      });
+      expect(stamps).toMatchObject({
+        items: { properties: { stamp: { description: `${stamp.description} ${stampsTold}` } } },
+      });
+    });
+
+    it('asks as it does with no context when no probe is named and no stamp is offered', () => {
+      const bare = { now: context.now, probeNames: ['', '', ''], enabledStamps: [] };
+
+      expect(jsonSchemaFor('smoke', bare)).toEqual(jsonSchemaFor('smoke'));
+      expect(toolSchemaFor('smoke', { now: context.now })).toEqual(toolSchemaFor('smoke'));
+    });
+
+    it('leaves the other screens as they are', () => {
+      expect(jsonSchemaFor('preSmoke', context)).toEqual(jsonSchemaFor('preSmoke'));
+      expect(toolSchemaFor('postSmoke', context)).toEqual(toolSchemaFor('postSmoke'));
+    });
   });
 
   it('cannot be asked for a field it does not have', () => {

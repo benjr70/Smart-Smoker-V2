@@ -8,6 +8,7 @@
  */
 export type {
   VoiceFillField,
+  VoiceFillContext,
   VoiceFillFieldKey,
   VoiceFillFieldType,
   VoiceFillJsonSchema,
@@ -23,7 +24,6 @@ export type {
   ReviewRow,
   SmokeScreenCurrent,
   SmokeScreenValues,
-  VoiceFillContext,
   VoiceFillProbeTarget,
   VoiceFillScreenValues,
   VoiceFillStamp,

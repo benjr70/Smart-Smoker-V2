@@ -127,7 +127,6 @@ describe('probe targets', () => {
     ['the lowest target', 32, 32],
     ['the highest target', 500, 500],
     ['a target the model wrote as text', '195', 195],
-    ['a part of a degree, to the nearest whole one', 194.6, 195],
   ])('takes %s', (_rule, spoken, target) => {
     expect(smokeRow(targets(['probe two', spoken]), 'probe2Target')).toMatchObject({
       newValue: { target, enabled: true, targetSource: 'user' },
@@ -140,6 +139,8 @@ describe('probe targets', () => {
     ['a misheard target', 2003, 'Probe target: probe two 2003.'],
     ['a target under the bound that would round up to it', 31.6, 'Probe target: probe two 31.6.'],
     ['a target that is not a number', 'hot', 'Probe target: probe two hot.'],
+    ['a part of a degree, never rounded to a whole one', 194.6, 'Probe target: probe two 194.6.'],
+    ['a part of a degree the model wrote as text', '194.6', 'Probe target: probe two 194.6.'],
   ])('sets nothing for %s and keeps it for Notes', (_rule, spoken, leftover) => {
     const raw = targets(['probe two', spoken]);
 
@@ -213,6 +214,36 @@ describe('probe targets', () => {
       const raw = { probe1Name: 'Point', probe2Name: 'Flat', ...targets(['the flat', 195]) };
 
       expect(targeted(raw, named)).toEqual(['probe2Target']);
+    });
+
+    it('takes a probe by the current name the context gives it', () => {
+      const given = context({ probeNames: ['Flat', 'Point', ''] });
+
+      expect(smokeRows(targets(['the point', 195]), smokeScreen(), given)).toMatchObject([
+        { id: 'probe2Target', newValue: { target: 195, enabled: true, targetSource: 'user' } },
+      ]);
+    });
+
+    it('reads the current names from the context, where it carries them, not the screen', () => {
+      const given = context({ probeNames: ['Point', 'Flat', ''] });
+
+      expect(smokeRows(targets(['the flat', 195]), named, given)).toMatchObject([
+        { id: 'probe2Target' },
+      ]);
+      expect(smokeRows(targets(['probe 1', 195]), named, given)).toMatchObject([
+        { id: 'probe1Target' },
+      ]);
+    });
+
+    it('lets a name this Ramble gives a probe win over the context’s name for it', () => {
+      const given = context({ probeNames: ['Flat', 'Point', ''] });
+      const raw = { probe3Name: 'Flat', probe1Name: 'Ribs', ...targets(['the flat', 195]) };
+
+      expect(
+        smokeRows(raw, smokeScreen(), given)
+          .map(row => row.field)
+          .filter(field => field.endsWith('Target'))
+      ).toEqual(['probe3Target']);
     });
 
     it.each([

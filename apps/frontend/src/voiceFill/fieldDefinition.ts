@@ -9,12 +9,30 @@
  * a misheard value to fit it, and the extraction contract could then no longer
  * reject that value into Notes.
  */
+import { CookStamp, enabledStamps } from '../api/cookStamps';
 import { WeightUnits } from '../components/common/interfaces/enums';
 import { MEAT_TYPES } from '../components/smoke/preSmokeStep/meatTypes';
 import { WOOD_TYPES } from '../components/smoke/smokeStep/woodTypes';
 
 /** A screen a Ramble can be spoken on. */
 export type VoiceFillScreen = 'preSmoke' | 'smoke' | 'postSmoke';
+
+/**
+ * What a Ramble is read against, beside the values its screen holds: what the
+ * model is told when it is asked, and what the extraction contract then checks
+ * its answer against.
+ */
+export interface VoiceFillContext {
+  /** When the Ramble was spoken. */
+  now: Date;
+  /**
+   * What each meat probe is called as the Ramble is spoken, probe 1 first; an
+   * empty name for a probe nobody named. Read on the smoke screen only.
+   */
+  probeNames?: readonly string[];
+  /** The stamps the cook log offers. Read on the smoke screen only. */
+  enabledStamps?: readonly CookStamp[];
+}
 
 /** The plain kinds of value a model is asked for. */
 export type VoiceFillFieldType =
@@ -263,6 +281,50 @@ export const SCREEN_FIELDS: Record<VoiceFillScreen, VoiceFillScreenDefinition> =
   postSmoke: { title: 'Post-smoke', fields: listed(FIELDS.postSmoke) },
 };
 
+/** The probes that have a name, each said with its number: `probe 1 is "Flat"`. */
+const probesTold = (names: readonly string[] = []): string =>
+  names
+    .map((name, index) => (name.trim() ? `probe ${index + 1} is "${name.trim()}"` : ''))
+    .filter(Boolean)
+    .join(', ');
+
+/** The stamps the cook log offers, each by its key and what its button says. */
+const stampsTold = (stamps: readonly CookStamp[] = []): string =>
+  enabledStamps(stamps)
+    .map(stamp => `${stamp.key} ("${stamp.label}")`)
+    .join(', ');
+
+/**
+ * A screen's fields as a model is asked for them at one Ramble: the smoke
+ * screen's told the names its probes go by and the keys of the stamps its cook
+ * log offers, where the context gives them. A model can only pick a probe by
+ * name, or a stamp by key, from a list it was shown.
+ */
+const fieldsAsked = (screen: VoiceFillScreen, context?: VoiceFillContext): VoiceFillField[] => {
+  const told: Record<string, string> =
+    screen === 'smoke' && context
+      ? {
+          'probeTargets.probe': probesTold(context.probeNames),
+          'stamps.stamp': stampsTold(context.enabledStamps),
+        }
+      : {};
+  const heading: Record<string, string> = {
+    'probeTargets.probe': 'Current probe names',
+    'stamps.stamp': 'Stamps',
+  };
+  return SCREEN_FIELDS[screen].fields.map(field => ({
+    ...field,
+    ...(field.parts && {
+      parts: field.parts.map(part => {
+        const id = `${field.key}.${part.key}`;
+        return told[id]
+          ? { ...part, description: `${part.description} ${heading[id]}: ${told[id]}.` }
+          : part;
+      }),
+    }),
+  }));
+};
+
 /** The schema of one plain value, in the subset every runtime understands. */
 export type VoiceFillValueSchema =
   | { type: 'string'; enum?: readonly string[] }
@@ -357,9 +419,15 @@ const descriptionOf = (field: VoiceFillField): string =>
  * Every field is required and — a list aside, which is simply empty — nullable:
  * a constrained decoder fills every key it is given, so "not said" has to be a
  * value the model can write rather than a key it can leave out.
+ *
+ * Given the context of a Ramble, the smoke screen's schema carries the current
+ * probe names and the keys of the enabled stamps.
  */
-export const jsonSchemaFor = (screen: VoiceFillScreen): VoiceFillJsonSchema => {
-  const { fields } = SCREEN_FIELDS[screen];
+export const jsonSchemaFor = (
+  screen: VoiceFillScreen,
+  context?: VoiceFillContext
+): VoiceFillJsonSchema => {
+  const fields = fieldsAsked(screen, context);
   const properties: VoiceFillJsonSchema['properties'] = {};
   fields.forEach(field => {
     const value = valueSchemaOf(field, 'jsonSchema');
@@ -385,9 +453,16 @@ const snakeCase = (text: string): string =>
  *
  * A tool's parameter schema has no unions, so here "not said" is a parameter
  * the model leaves out: nothing is required and nothing is nullable.
+ *
+ * Given the context of a Ramble, the smoke screen's tool carries the current
+ * probe names and the keys of the enabled stamps.
  */
-export const toolSchemaFor = (screen: VoiceFillScreen): VoiceFillToolSchema => {
-  const { title, fields } = SCREEN_FIELDS[screen];
+export const toolSchemaFor = (
+  screen: VoiceFillScreen,
+  context?: VoiceFillContext
+): VoiceFillToolSchema => {
+  const { title } = SCREEN_FIELDS[screen];
+  const fields = fieldsAsked(screen, context);
   const properties: VoiceFillToolSchema['parameters']['properties'] = {};
   fields.forEach(field => {
     properties[field.key] = {
