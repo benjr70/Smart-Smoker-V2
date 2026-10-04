@@ -27,6 +27,7 @@ import React from 'react';
 import { ApiClientProvider, SnackbarProvider, createApiClient } from '../../api';
 import { createFakeBackend, FakeBackend } from '../../api/fakeBackend';
 import { DesignSurface, appTheme } from '../../theme';
+import { VoiceFillPortsProvider, createFakeExtractor, createFakeSpeech } from '../../voiceFill';
 import { WeightUnits } from '../common/interfaces/enums';
 import { Smoke, delay } from './smoke';
 
@@ -49,7 +50,12 @@ jest.mock('./smokeStep/smokeStep', () => ({
 
 let backend: FakeBackend;
 
-const renderWizard = (onViewHistory?: () => void, onOpenSettings?: () => void) => {
+const renderWizard = (
+  onViewHistory?: () => void,
+  onOpenSettings?: () => void,
+  /** Whether Voice Fill's models are provided, as scripted ones: off unless asked for. */
+  voiceFill = false
+) => {
   // A session already under way: both steps have a stored document, which is
   // what the save-on-leave needs — a step whose load failed deliberately writes
   // nothing back (see `useCurrentResource`), so a wizard over an empty backend
@@ -75,12 +81,22 @@ const renderWizard = (onViewHistory?: () => void, onOpenSettings?: () => void) =
     postSmoke: { current: { restTime: '', steps: [''], notes: '' } },
   });
 
+  const wizard = <Smoke onViewHistory={onViewHistory} onOpenSettings={onOpenSettings} />;
   return render(
     <CssVarsProvider theme={appTheme}>
       <DesignSurface>
         <ApiClientProvider client={createApiClient(backend)}>
           <SnackbarProvider>
-            <Smoke onViewHistory={onViewHistory} onOpenSettings={onOpenSettings} />
+            {voiceFill ? (
+              <VoiceFillPortsProvider
+                speech={createFakeSpeech({ transcript: 'Rested an hour.' })}
+                extractor={createFakeExtractor({ raw: { restMinutes: 60 } })}
+              >
+                {wizard}
+              </VoiceFillPortsProvider>
+            ) : (
+              wizard
+            )}
           </SnackbarProvider>
         </ApiClientProvider>
       </DesignSurface>
@@ -444,6 +460,26 @@ describe('advancing through the wizard', () => {
     // The step it took the place of is gone: there is no session left to edit.
     expect(screen.queryByTestId('postsmoke-rest-time-input')).not.toBeInTheDocument();
     expect(screen.queryByTestId('presmoke-name-input')).not.toBeInTheDocument();
+  });
+
+  /**
+   * Voice Fill fills the cook in progress. Once the cook is finished there is
+   * nothing left for a Ramble to fill, so the button goes with the step it
+   * was offered on.
+   */
+  it('offers Voice fill on the Post-Smoke step, and no longer once the cook is finished', async () => {
+    const user = userEvent.setup();
+    renderWizard(undefined, undefined, true);
+    await screen.findByTestId('presmoke-name-input');
+
+    await user.click(segment('Post-Smoke'));
+    await screen.findByTestId('postsmoke-rest-time-input');
+    expect(screen.getByRole('button', { name: 'Voice fill' })).toBeInTheDocument();
+
+    await user.click(nextButton());
+
+    expect(await screen.findByTestId('smoke-complete')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Voice fill' })).not.toBeInTheDocument();
   });
 
   it('keeps the header and step control over the completion screen, and starts the next cook from them', async () => {

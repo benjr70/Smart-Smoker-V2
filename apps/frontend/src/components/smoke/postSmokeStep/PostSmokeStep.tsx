@@ -1,10 +1,17 @@
-import { Box, Grid, TextField } from '@mui/material';
+import { Grid, TextField } from '@mui/material';
 import React from 'react';
 import { useCurrentResource } from '../../../api';
 import { DynamicList } from '../../common/components/DynamicList';
 import { FormField, SectionHeading } from '../../common/components/FormField';
 import { IMaskInput } from 'react-imask';
 import { PostSmoke } from '../../../api/types';
+import {
+  FilledFlash,
+  ScreenBinding,
+  VOICE_FILL_BUTTON_CLEARANCE,
+  useScreenBinding,
+  useVoiceFill,
+} from '../../../voiceFill';
 import { RestTimerCard } from './RestTimerCard';
 import { useRestConditions } from './useRestConditions';
 
@@ -132,22 +139,72 @@ export const PostSmokeStep: React.FC<PostSmokeStepProps> = ({ nextButton }) => {
     }
   }, [cookPresent, storedRest, recordRest, setCook]);
 
+  // The screen as the cook sees it, as of the latest render: what a caller
+  // that outlives a render — Voice Fill's binding, and the undo of a rest
+  // already written — reads the rest on screen from.
+  const shown = React.useRef(shownRest);
+  shown.current = shownRest;
+
   /**
-   * A rest the pitmaster set: written to the cook, where the planner reads it,
-   * and to this document, whose `HH:MM` is what the history screens show.
+   * A rest the pitmaster set, typed or spoken: written to the cook, where the
+   * planner reads it, and to this document, whose `HH:MM` is what the history
+   * screens show. The one way a rest is written from this step.
+   *
+   * What it returns takes that rest back — the cook's duration, the document's
+   * words and whether the field counts as edited, all as they were — for as
+   * long as the rest it wrote is still the one on screen.
    */
-  const changeRestTime = (restTime: string): void => {
+  const changeRestTime = (restTime: string): (() => void) => {
     // The mask hands back every value it is given, this step's own included:
     // setting the field from the store raises a change carrying exactly what
     // was set. Only a value that differs from what is on screen is somebody
-    // typing, and only that counts as the rest having been edited.
+    // setting the rest, and only that counts as the rest having been edited.
     if (restTime === shownRest) {
-      return;
+      return () => undefined;
     }
+    const before = {
+      edited: restEdited.current,
+      restTime: postSmokeState.restTime,
+      restMinutes: cook.restMinutes,
+    };
     restEdited.current = true;
     setPostSmokeState(current => ({ ...current, restTime }));
     setCook(current => ({ ...current, restMinutes: minutesOfRestTime(restTime) }));
+    return () => {
+      // A rest changed again since holds nothing of this write any more, and
+      // putting back what came before it would overwrite the newer value.
+      if (shown.current !== restTime) {
+        return;
+      }
+      restEdited.current = before.edited;
+      setPostSmokeState(current => ({ ...current, restTime: before.restTime }));
+      setCook(current => ({ ...current, restMinutes: before.restMinutes }));
+    };
   };
+  const setRest = React.useRef(changeRestTime);
+  setRest.current = changeRestTime;
+
+  // What Voice Fill reads and writes this screen through. The steps and Notes
+  // are the document's, written through the setter typing goes through; the
+  // rest is the cook's, so it is read as the field shows it and written the
+  // way the field writes it — a spoken rest reaches the planner exactly as a
+  // typed one does, and its undo takes it back from the planner too.
+  const record = useScreenBinding(postSmokeState, setPostSmokeState);
+  const binding = React.useMemo<ScreenBinding<PostSmoke>>(
+    () => ({
+      values: () => ({ ...record.values(), restTime: shown.current }),
+      apply: ({ restTime, ...stepsAndNotes }) => {
+        const undoRest = restTime === undefined ? undefined : setRest.current(restTime);
+        const undoRecord = record.apply(stepsAndNotes);
+        return () => {
+          undoRecord();
+          undoRest?.();
+        };
+      },
+    }),
+    [record]
+  );
+  const voiceFill = useVoiceFill('postSmoke', binding);
 
   return (
     // The same flat column of fields the pre-smoke step is laid out in, and for
@@ -179,25 +236,31 @@ export const PostSmokeStep: React.FC<PostSmokeStepProps> = ({ nextButton }) => {
       {/* The format lives in the label, as the design writes it: the mask
           rewrites what is typed, and a field that says how it is written before
           it is typed into is not correcting anybody afterwards. */}
-      <FormField label="Rest Time (HH:MM)" htmlFor="postsmoke-rest-time">
-        <TextField
-          id="postsmoke-rest-time"
-          fullWidth
-          size="small"
-          value={shownRest}
-          // What the design puts under the field: what the answer is for, rather
-          // than a second telling of the format the label already gives.
-          helperText="How long will you let it rest?"
-          onChange={(event: any) => changeRestTime(event.target.value)}
-          inputProps={{ 'data-testid': 'postsmoke-rest-time-input' }}
-          InputProps={{
-            inputComponent: TextMaskCustom as any,
-          }}
-        />
-      </FormField>
+      <FilledFlash field="restTime" flashing={voiceFill.isFlashing('restTime')}>
+        <FormField label="Rest Time (HH:MM)" htmlFor="postsmoke-rest-time">
+          <TextField
+            id="postsmoke-rest-time"
+            fullWidth
+            size="small"
+            value={shownRest}
+            // What the design puts under the field: what the answer is for, rather
+            // than a second telling of the format the label already gives.
+            helperText="How long will you let it rest?"
+            onChange={(event: any) => changeRestTime(event.target.value)}
+            inputProps={{ 'data-testid': 'postsmoke-rest-time-input' }}
+            InputProps={{
+              inputComponent: TextMaskCustom as any,
+            }}
+          />
+        </FormField>
+      </FilledFlash>
       {/* The wrap-up plan and its heading are one field of the form, spaced the
           way a label sits above its control. */}
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      <FilledFlash
+        field="steps"
+        flashing={voiceFill.isFlashing('steps')}
+        sx={{ display: 'flex', flexDirection: 'column', gap: '6px' }}
+      >
         <SectionHeading>Post-Smoke Steps</SectionHeading>
         <DynamicList
           newline={() =>
@@ -218,31 +281,43 @@ export const PostSmokeStep: React.FC<PostSmokeStepProps> = ({ nextButton }) => {
             })
           }
         />
-      </Box>
-      <FormField label="Notes" htmlFor="postsmoke-notes">
-        <TextField
-          id="postsmoke-notes"
-          fullWidth
-          multiline
-          // A hint rather than a placeholder: a placeholder is gone the moment
-          // anything is typed, and what this says — that the field is for how
-          // the cook went, not for more of the wrap-up plan above it — is worth
-          // as much to somebody halfway through writing it as to somebody
-          // staring at an empty box.
-          helperText="Final thoughts on the cook"
-          inputProps={{ 'data-testid': 'postsmoke-notes-input' }}
-          value={postSmokeState.notes}
-          onChange={(event: any) =>
-            setPostSmokeState({ ...postSmokeState, notes: event.target.value })
-          }
-          rows={4}
-        />
-      </FormField>
+      </FilledFlash>
+      <FilledFlash field="notes" flashing={voiceFill.isFlashing('notes')}>
+        <FormField label="Notes" htmlFor="postsmoke-notes">
+          <TextField
+            id="postsmoke-notes"
+            fullWidth
+            multiline
+            // A hint rather than a placeholder: a placeholder is gone the moment
+            // anything is typed, and what this says — that the field is for how
+            // the cook went, not for more of the wrap-up plan above it — is worth
+            // as much to somebody halfway through writing it as to somebody
+            // staring at an empty box.
+            helperText="Final thoughts on the cook"
+            inputProps={{ 'data-testid': 'postsmoke-notes-input' }}
+            value={postSmokeState.notes}
+            onChange={(event: any) =>
+              setPostSmokeState({ ...postSmokeState, notes: event.target.value })
+            }
+            rows={4}
+          />
+        </FormField>
+      </FilledFlash>
       {/* The step's one action, at the foot of it and against the right-hand
-          edge, which is where the design ends every step. */}
-      <Grid container flexDirection="row-reverse" sx={{ paddingBottom: '8px' }}>
+          edge, which is where the design ends every step. The Voice fill
+          button is pinned over that same corner, so where it is offered the
+          step ends with room for it underneath: scrolled to its foot, the
+          action is clear of the button. */}
+      <Grid
+        container
+        flexDirection="row-reverse"
+        sx={{
+          paddingBottom: voiceFill.offered ? `${VOICE_FILL_BUTTON_CLEARANCE + 8}px` : '8px',
+        }}
+      >
         {nextButton}
       </Grid>
+      {voiceFill.controls}
     </Grid>
   );
 };
