@@ -461,11 +461,32 @@ describe('advancing through the wizard', () => {
 
     await user.click(segment('Post-Smoke'));
     await screen.findByTestId('postsmoke-rest-time-input');
-    expect(screen.getByRole('button', { name: 'Voice fill' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Voice fill' })).toBeInTheDocument();
 
     await user.click(nextButton());
 
     expect(await screen.findByTestId('smoke-complete')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Voice fill' })).not.toBeInTheDocument();
+  });
+
+  it('does not offer Voice fill on a Post-Smoke step reopened after the cook is finished', async () => {
+    // The step control stays over the completion screen, so the Post-Smoke
+    // step can be opened again on a session that has no cook. Nothing typed
+    // there can be saved — a post-smoke record is written onto the cook in
+    // progress, and only the Pre-Smoke step starts one — so a Ramble spoken
+    // there would be thrown away.
+    const user = userEvent.setup();
+    renderWizard({ voiceFill: true });
+    await screen.findByTestId('presmoke-name-input');
+
+    await user.click(segment('Post-Smoke'));
+    await screen.findByTestId('postsmoke-rest-time-input');
+    await user.click(nextButton());
+    await screen.findByTestId('smoke-complete');
+
+    await user.click(segment('Post-Smoke'));
+
+    expect(await screen.findByTestId('postsmoke-rest-time-input')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Voice fill' })).not.toBeInTheDocument();
   });
 

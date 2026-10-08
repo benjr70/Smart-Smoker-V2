@@ -93,7 +93,7 @@ const tap = async (element: HTMLElement) => {
 /** Taps Voice fill, lets the Ramble play, and ends it. */
 const ramble = async () => {
   await screen.findByDisplayValue('Bark set early.');
-  await tap(screen.getByRole('button', { name: 'Voice fill' }));
+  await tap(await screen.findByRole('button', { name: 'Voice fill' }));
   await tap(await screen.findByRole('button', { name: 'Done talking' }));
 };
 
@@ -109,7 +109,7 @@ describe('Voice Fill on the post-smoke screen', () => {
     renderStep(pulledCook());
     await screen.findByDisplayValue('Bark set early.');
 
-    await tap(screen.getByRole('button', { name: 'Voice fill' }));
+    await tap(await screen.findByRole('button', { name: 'Voice fill' }));
     const sheet = await screen.findByRole('dialog', { name: 'Voice fill Post-smoke' });
     expect(within(sheet).getByText(/rest time, post-smoke steps/)).toBeInTheDocument();
     await tap(within(sheet).getByRole('button', { name: 'Done talking' }));

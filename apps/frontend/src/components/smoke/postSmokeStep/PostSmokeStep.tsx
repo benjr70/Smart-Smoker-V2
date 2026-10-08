@@ -211,6 +211,11 @@ export const PostSmokeStep: React.FC<PostSmokeStepProps> = ({ nextButton }) => {
     [documentBinding]
   );
   const voiceFill = useVoiceFill('postSmoke', binding);
+  // Offered only over a cook in progress. This step writes onto the cook the
+  // session is on and cannot start one — only the Pre-Smoke step does — so on a
+  // session with none, which is what the step control reopens this step on
+  // once the cook is finished, a Ramble would fill fields nothing can save.
+  const voiceFillOffered = voiceFill.offered && cookPresent;
 
   return (
     // The same flat column of fields the pre-smoke step is laid out in, and for
@@ -307,8 +312,8 @@ export const PostSmokeStep: React.FC<PostSmokeStepProps> = ({ nextButton }) => {
           />
         </FormField>
       </FilledFlash>
-      <StepActionRow voiceFillOffered={voiceFill.offered}>{nextButton}</StepActionRow>
-      {voiceFill.controls}
+      <StepActionRow voiceFillOffered={voiceFillOffered}>{nextButton}</StepActionRow>
+      {voiceFillOffered && voiceFill.controls}
     </Grid>
   );
 };
