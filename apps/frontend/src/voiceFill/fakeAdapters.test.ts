@@ -80,20 +80,6 @@ describe('the fake extractor adapter', () => {
     });
   });
 
-  test('answers a transcript it has a raw object scripted for with that one', async () => {
-    const extractor = createFakeExtractor({
-      raw: { weight: 16 },
-      rawByTranscript: { 'Sixty pound brisket.': { weight: 60 } },
-    });
-
-    await expect(extractor.extract('preSmoke', 'Sixty pound brisket.', context)).resolves.toEqual({
-      weight: 60,
-    });
-    await expect(extractor.extract('preSmoke', 'anything else', context)).resolves.toEqual({
-      weight: 16,
-    });
-  });
-
   test('takes as long to answer as it is scripted to', async () => {
     jest.useFakeTimers();
     try {

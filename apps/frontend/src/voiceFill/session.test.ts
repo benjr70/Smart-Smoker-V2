@@ -728,14 +728,19 @@ describe('Voice Fill session', () => {
       const speech = createFakeSpeech({ transcript: TRANSCRIPT });
       const start = jest.fn(speech.start);
       const held = screenHolding({ ...emptyForm, name: 'Mine' });
+      // The scripted model answers every transcript alike; this one is told
+      // apart here, so the fixed text reads differently from the heard one.
+      const scripted = createFakeExtractor({ raw, failures });
       const session = createVoiceFillSession({
         screen: 'preSmoke',
         speech: { ...speech, start },
-        extractor: createFakeExtractor({
-          raw,
-          failures,
-          rawByTranscript: { [FIXED]: { weight: 60 } },
-        }),
+        extractor: {
+          ...scripted,
+          extract: (screen, transcript, context) =>
+            transcript === FIXED
+              ? Promise.resolve({ weight: 60 })
+              : scripted.extract(screen, transcript, context),
+        },
         binding: held.binding,
         now: () => NOW,
       });

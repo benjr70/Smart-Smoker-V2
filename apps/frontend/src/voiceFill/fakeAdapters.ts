@@ -68,12 +68,6 @@ export interface FakeExtractorScript {
   delayMs?: number;
   /** How many of the first answers are failures; `Infinity` for every one. */
   failures?: number;
-  /**
-   * Raw objects for particular transcripts: one found here by the exact text
-   * asked about is the answer in place of `raw`, so a transcript that is fixed
-   * and read again can be answered differently from the one that was heard.
-   */
-  rawByTranscript?: Readonly<Record<string, unknown>>;
 }
 
 /**
@@ -84,21 +78,17 @@ export const createFakeExtractor = ({
   raw,
   delayMs = 0,
   failures = 0,
-  rawByTranscript = {},
 }: FakeExtractorScript): ExtractorPort => {
   // How many Rambles it has been asked to read so far.
   let extractions = 0;
   return {
     load: () => Promise.resolve(),
-    extract: (_screen, transcript) => {
+    extract: () => {
       extractions += 1;
       const fails = extractions <= failures;
-      const found = Object.prototype.hasOwnProperty.call(rawByTranscript, transcript)
-        ? rawByTranscript[transcript]
-        : raw;
       return new Promise((resolve, reject) => {
         const answer = (): void =>
-          fails ? reject(new Error('The scripted model failed')) : resolve(found);
+          fails ? reject(new Error('The scripted model failed')) : resolve(raw);
         if (delayMs > 0) {
           setTimeout(answer, delayMs);
         } else {

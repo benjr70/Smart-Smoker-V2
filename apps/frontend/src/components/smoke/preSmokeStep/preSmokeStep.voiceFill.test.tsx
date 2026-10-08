@@ -56,6 +56,14 @@ interface Script {
  */
 const renderStep = (backend: FakeBackend, script: Script = {}) => {
   const client = createApiClient(backend);
+  // The scripted model answers every transcript alike; the ones a test wants
+  // read differently are told apart here, in front of it.
+  const scripted = createFakeExtractor({
+    raw: script.raw ?? RAW,
+    delayMs: script.delayMs,
+    failures: script.failures,
+  });
+  const rawByTranscript = script.rawByTranscript ?? {};
   return render(
     <CssVarsProvider theme={appTheme}>
       <DesignSurface>
@@ -67,12 +75,13 @@ const renderStep = (backend: FakeBackend, script: Script = {}) => {
                 wordIntervalMs: script.wordIntervalMs ?? 1,
                 microphone: script.microphone,
               })}
-              extractor={createFakeExtractor({
-                raw: script.raw ?? RAW,
-                delayMs: script.delayMs,
-                failures: script.failures,
-                rawByTranscript: script.rawByTranscript,
-              })}
+              extractor={{
+                ...scripted,
+                extract: (asked, transcript, context) =>
+                  Object.prototype.hasOwnProperty.call(rawByTranscript, transcript)
+                    ? Promise.resolve(rawByTranscript[transcript])
+                    : scripted.extract(asked, transcript, context),
+              }}
             >
               <PreSmokeStep
                 nextButton={<button data-testid="next-button">Next</button>}
