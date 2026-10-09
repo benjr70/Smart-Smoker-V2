@@ -156,6 +156,8 @@ interface ProbeTargetEntryDoc {
   slot: string;
   enabled: boolean;
   target: number;
+  /** Where the target came from: shipped, seeded from a preset, or the cook's own. */
+  targetSource?: string;
   /** Resolved from the active cook and served on the read only; never saved. */
   name?: string;
 }
@@ -169,9 +171,30 @@ interface ApplicationSettingsDoc {
   } | null;
 }
 
-/** Shape of `GET /api/smoke/:id` — the sub-entity ids a cascade delete needs. */
+/** A probe slot of the Probe Target Reached watch list. */
+export type ProbeSlot = 'probe1' | 'probe2' | 'probe3';
+
+/** One probe's target as it is stored: the number, the watch, and whose it is. */
+export interface StoredProbeTarget {
+  target: number;
+  enabled: boolean;
+  targetSource?: string;
+}
+
+/** The Serve Plan stored on a cook; `null` is a half nobody has set. */
+export interface StoredServePlan {
+  serveAt: Date | null;
+  restMinutes: number | null;
+}
+
+/**
+ * Shape of `GET /api/smoke/:id` — the sub-entity ids a cascade delete needs,
+ * and the Serve Plan the cook carries.
+ */
 interface SmokeDoc {
   _id: string;
+  serveAt?: string | null;
+  restMinutes?: number | null;
   preSmokeId?: string;
   smokeProfileId?: string;
   tempsId?: string;
@@ -500,6 +523,61 @@ export class BackendFixture {
     });
     await this.http.post(APP_SETTINGS_PATH, { chamber: seeded });
     return seeded;
+  }
+
+  /**
+   * Give the cook in progress a Serve Plan, through the same
+   * `PUT /api/smoke/current/serve-plan` the Serve Plan card's steppers write.
+   *
+   * Nothing is registered for cleanup: the plan lives on the cook, and the cook
+   * is a `smoke-test-*` entity `cleanup()` already deletes.
+   */
+  async seedServePlan(plan: { serveAt: Date; restMinutes: number }): Promise<void> {
+    await this.http.put(`${SMOKE_PATH}/current/serve-plan`, {
+      serveAt: plan.serveAt.toISOString(),
+      restMinutes: plan.restMinutes,
+    });
+  }
+
+  /** The Serve Plan the backend holds for the cook in progress. */
+  async servePlan(): Promise<StoredServePlan> {
+    const smokeId = await this.waitForCurrentSmoke('the journey');
+    const smoke = await this.http.get<SmokeDoc>(`${SMOKE_PATH}/${smokeId}`);
+    return {
+      serveAt: smoke.serveAt ? new Date(smoke.serveAt) : null,
+      restMinutes: smoke.restMinutes ?? null,
+    };
+  }
+
+  /** One probe's target as the backend holds it; nothing where it holds none. */
+  async probeTarget(slot: ProbeSlot): Promise<StoredProbeTarget | undefined> {
+    const settings = await this.http.get<ApplicationSettingsDoc>(APP_SETTINGS_PATH);
+    const entry = settings.probeTarget?.probes?.find(probe => probe.slot === slot);
+    return (
+      entry && { target: entry.target, enabled: entry.enabled, targetSource: entry.targetSource }
+    );
+  }
+
+  /**
+   * Have `cleanup()` put the probe watch list back as it is now, for a journey
+   * that is about to change it through the app.
+   *
+   * The watch list is global settings, not a `smoke-test-*` entity, so nothing
+   * else would reclaim what the journey writes. Only that block is posted back —
+   * the backend merges block by block — and without the probe names, which are
+   * resolved from the active cook on the read and refused on a write. A list
+   * that cannot be read is not restored: there is nothing known to restore it to.
+   */
+  async keepProbeTargets(): Promise<void> {
+    const prior = await this.http.get<ApplicationSettingsDoc>(APP_SETTINGS_PATH).catch(() => null);
+    const probeTarget = prior?.probeTarget;
+    if (!probeTarget?.probes) {
+      return;
+    }
+    const probes = probeTarget.probes.map(({ name: _name, ...stored }) => stored);
+    this.teardowns.push(async () => {
+      await this.http.post(APP_SETTINGS_PATH, { probeTarget: { ...probeTarget, probes } });
+    });
   }
 
   /**

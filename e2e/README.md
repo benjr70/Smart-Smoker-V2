@@ -58,6 +58,13 @@ npx playwright install --with-deps chromium
   specs contain journey logic only.
 - `tests/lifecycle.spec.ts` — pre-smoke → start smoke (smoker UI) → live chart
   (frontend) → post-smoke → history.
+- `src/pageObjects/VoiceFill.ts` + `tests/voice-fill.spec.ts` — Voice Fill on
+  the scripted models: fill and Undo on the pre-smoke screen, the smoke screen's
+  probe target and Serve Plan reaching the backend and being undone, and the
+  settings card's download states. A page gets the scripted models by asking for
+  them in its address (`?voiceFill=scripted&voiceFillPhone=capable`), and only
+  from a bundle built with `REACT_APP_VOICE_FILL_SCRIPTED=true` — which
+  `docker/frontend.e2e.env` carries and no published image does.
 
 ## Notes
 

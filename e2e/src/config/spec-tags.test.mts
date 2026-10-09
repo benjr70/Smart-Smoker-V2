@@ -56,6 +56,16 @@ describe('virtual-smoker spec tags (issue #321)', () => {
     );
   });
 
+  it('leaves the Voice Fill journeys untagged so only the hermetic project runs them', () => {
+    // They run on the scripted models, which only the hermetic stack's bundle
+    // is built to allow: a deployed build has no Voice Fill for them to find.
+    const voiceFill = read('voice-fill.spec.ts');
+    assert.ok(
+      !voiceFill.includes(DEPLOYED_TAG) && !voiceFill.includes(VIRTUAL_SMOKER_TAG),
+      'the Voice Fill journeys must stay hermetic-only'
+    );
+  });
+
   it('does not tag the no-temp @deployed flows as @virtual-smoker', () => {
     for (const name of [
       'history-review.spec.ts',
