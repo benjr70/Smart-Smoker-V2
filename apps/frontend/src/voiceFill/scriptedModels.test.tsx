@@ -64,6 +64,16 @@ function Listed(): JSX.Element {
   );
 }
 
+/** Says which pair the Model library under the root has picked. */
+function Picked(): JSX.Element {
+  const models = useModelLibrary();
+  return (
+    <span data-testid="picked">
+      {models ? `${models.state.picked.speech}, ${models.state.picked.extractor}` : 'no pair'}
+    </span>
+  );
+}
+
 /** Says whether the Model library under the root found the phone able to run Voice Fill. */
 function Supported(): JSX.Element {
   const models = useModelLibrary();
@@ -141,8 +151,23 @@ describe('the scripted Voice Fill models', () => {
     await opened();
 
     expect(screen.getByTestId('listed')).toHaveTextContent(
-      'Scripted speech, Scripted speech B, Scripted extractor, Scripted extractor B, Moonshine Small Streaming'
+      'Scripted speech, Scripted speech B, Scripted extractor, Scripted extractor B, Moonshine Small Streaming, Gemma 4 E2B'
     );
+  });
+
+  test('stay the pair a fresh phone gets, with the real extraction model there to be picked', async () => {
+    builtWith('true');
+    openedAt('?voiceFill=scripted');
+    phoneIs('nothing');
+
+    render(
+      <VoiceFillModels>
+        <Picked />
+      </VoiceFillModels>
+    );
+    await opened();
+
+    expect(screen.getByTestId('picked')).toHaveTextContent('scripted-speech, scripted-extractor');
   });
 
   test('keep their Model library’s record apart from the one a real library keeps', async () => {

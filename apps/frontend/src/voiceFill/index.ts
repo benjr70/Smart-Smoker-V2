@@ -16,9 +16,10 @@
  * the picked pair is ready.
  *
  * And the real models, each behind its port in a chunk of its own: Moonshine
- * Small Streaming for speech, with the downloader that fetches its files. They
- * are what every page runs on but one that asked for the scripted models; with
- * no extraction model yet, that is Voice Fill with the speech model alone.
+ * Small Streaming for speech, with the downloader that fetches its files, and
+ * Gemma 4 E2B for extraction, run by LiteRT-LM, with the downloader that
+ * fetches its file. They are what every page runs on but one that asked for
+ * the scripted models.
  */
 export type {
   VoiceFillField,
@@ -62,6 +63,8 @@ export {
   reviewRows,
   tickedAfterToggle,
 } from './extractionContract';
+export type { ExtractionRequest } from './extractionRequest';
+export { extractionRequestFor } from './extractionRequest';
 export type { ExtractionContext, ExtractorPort, SpeechPort } from './ports';
 export { MICROPHONE_BLOCKED_ERROR, isMicrophoneBlocked } from './ports';
 export type { FakeExtractorScript, FakeSpeechScript } from './fakeAdapters';
@@ -94,6 +97,7 @@ export {
 export { VOICE_FILL_BUTTON_CLEARANCE } from './VoiceFillControls';
 export type { ModelPair, ModelRegistry, ModelRole, VoiceFillModel } from './modelRegistry';
 export {
+  GEMMA_4_E2B,
   MODEL_ROLES,
   MOONSHINE_SMALL_STREAMING,
   REGISTERED_MODELS,
@@ -108,13 +112,29 @@ export type {
   ModelFileStore,
 } from './modelFiles';
 export { createCacheFileStore, fetchModelFiles } from './modelFiles';
-export { createLazySpeech, createModelDownloader, createPickedSpeech } from './modelPorts';
+export {
+  createLazyExtractor,
+  createLazySpeech,
+  createModelDownloader,
+  createPickedExtractor,
+  createPickedSpeech,
+} from './modelPorts';
 export type { MoonshineOptions } from './moonshineModel';
 export {
   MOONSHINE_CACHE,
   createMoonshineDownloader,
   createMoonshineSpeech,
 } from './moonshineModel';
+export type {
+  CachePartStorage,
+  FetchInPartsOptions,
+  FetchedPart,
+  ModelPartStore,
+  PartedFile,
+} from './modelParts';
+export { createCachePartStore, fetchInParts, hasEveryPart, wholeFile } from './modelParts';
+export type { GemmaOptions } from './gemmaModel';
+export { GEMMA_CACHE, GEMMA_FILE, createGemmaDownloader, createGemmaExtractor } from './gemmaModel';
 export type {
   ConnectionPort,
   ModelDownloader,
