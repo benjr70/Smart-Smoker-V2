@@ -538,7 +538,14 @@ export const createModelLibrary = ({
   };
 };
 
-/** Whether the picked pair can take a Ramble, and how far off it is if not. */
+/**
+ * Whether the picked pair can take a Ramble, and how far off it is if not.
+ *
+ * The pair is the picked model of every role that has one registered. A role
+ * with no model registered has nothing to wait for, so where only the speech
+ * model exists it is the whole pair; once both roles have a model, both have
+ * to be ready.
+ */
 export type PairReadiness =
   | { state: 'ready' }
   /** `percent` of the picked pair's bytes are on the phone. */
@@ -549,11 +556,16 @@ export const pairReadiness = (
   registry: ModelRegistry,
   { picked, statuses }: Pick<ModelLibraryState, 'picked' | 'statuses'>
 ): PairReadiness => {
-  const pair = MODEL_ROLES.map(role => pickedModel(registry, { picked }, role));
-  const standing = (model: VoiceFillModel | undefined): ModelStatus =>
-    statusOf({ statuses }, model);
+  const pair: VoiceFillModel[] = [];
+  MODEL_ROLES.forEach(role => {
+    const model = pickedModel(registry, { picked }, role);
+    if (model) {
+      pair.push(model);
+    }
+  });
+  const standing = (model: VoiceFillModel): ModelStatus => statusOf({ statuses }, model);
 
-  if (pair.every(model => standing(model).state === 'ready')) {
+  if (pair.length > 0 && pair.every(model => standing(model).state === 'ready')) {
     return { state: 'ready' };
   }
   if (!pair.some(model => isArriving(standing(model)))) {
@@ -563,9 +575,6 @@ export const pairReadiness = (
   let onPhone = 0;
   pair.forEach(model => {
     const status = standing(model);
-    if (!model) {
-      return;
-    }
     total += model.sizeBytes;
     if (status.state === 'ready') {
       onPhone += model.sizeBytes;

@@ -36,6 +36,16 @@ const phoneIsAsFound = (): void => {
   });
 };
 
+// The real speech model's files are not fetched here: its downloader is stood
+// in for by the scripted one, which keeps what has "arrived" on the phone.
+jest.mock('./voiceFill/moonshineModel', () => {
+  const { createFakeDownloader } = jest.requireActual('./voiceFill/fakeDownloader');
+  return {
+    ...jest.requireActual('./voiceFill/moonshineModel'),
+    createMoonshineDownloader: () => createFakeDownloader({ storage: globalThis.localStorage }),
+  };
+});
+
 jest.mock('./components/smoke/smoke', () => ({
   Smoke: () => {
     const { pairReadiness, useModelLibrary } = jest.requireActual('./voiceFill');
@@ -156,13 +166,33 @@ describe('the Model library at the application root', () => {
     }
   );
 
-  test('is not there where the application has no models to run', async () => {
+  test('is the real one where the scripted models were not asked for: the speech model downloads, and is the whole pair', async () => {
     window.history.replaceState(null, '', '/');
+
+    render(<App />);
+    await pass(0);
+
+    expect(screen.getByTestId('smoke-component')).toHaveTextContent('pair downloading');
+    expect(window.localStorage.getItem('voiceFill.modelLibrary')).toContain(
+      'moonshine-small-streaming'
+    );
+    expect(window.localStorage.getItem('voiceFill.scriptedModelLibrary')).toBeNull();
+
+    await pass(5000);
+    expect(screen.getByTestId('smoke-component')).toHaveTextContent('pair ready');
+  });
+
+  test('the real one downloads nothing on a phone that cannot run Voice Fill', async () => {
+    window.history.replaceState(null, '', '/');
+    phoneIs('adapter');
 
     render(<App />);
     await pass(5000);
 
-    expect(screen.getByTestId('smoke-component')).toHaveTextContent('no Model library');
+    expect(screen.getByTestId('smoke-component')).toHaveTextContent(
+      'pair notDownloaded, phone cannot run Voice Fill'
+    );
     expect(window.localStorage.getItem('voiceFill.modelLibrary')).toBeNull();
+    expect(window.localStorage.getItem('voiceFill.fakeDownloads')).toBeNull();
   });
 });

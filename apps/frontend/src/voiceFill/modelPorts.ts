@@ -1,11 +1,12 @@
 /**
  * What joins the Model library to the ports a Ramble runs through: the speech
- * port that hears with whichever model is picked, the port that does not load
- * its adapter's code until it is asked to, and the downloader that fetches each
- * model through the one that knows where its files are.
+ * port that hears, and the extractor port that reads, with whichever model is
+ * picked, the port that does not load its adapter's code until it is asked to,
+ * and the downloader that fetches each model through the one that knows where
+ * its files are.
  */
 import type { ModelDownloader } from './modelLibrary';
-import type { SpeechPort } from './ports';
+import type { ExtractorPort, SpeechPort } from './ports';
 
 /**
  * A speech port over an adapter that is not imported until the port is first
@@ -75,6 +76,44 @@ export const createPickedSpeech = (
         ? inUse.start(onPartial, keyTerms)
         : Promise.reject(new Error('The speech model was not loaded.')),
     stop: () => (inUse ? inUse.stop() : Promise.resolve('')),
+    unload: () => (inUse ? inUse.unload() : Promise.resolve()),
+  };
+};
+
+/**
+ * The extractor port of whichever model the Model library has picked, asked
+ * each time the port is loaded as {@link createPickedSpeech} is.
+ *
+ * Where no extraction model is registered none is picked, and the port fails
+ * to load: a Ramble that was heard cannot be read, which the session shows as
+ * a problem with what was heard kept.
+ */
+export const createPickedExtractor = (
+  picked: () => string | null,
+  adapters: Readonly<Record<string, ExtractorPort>>
+): ExtractorPort => {
+  let inUse: ExtractorPort | undefined;
+  return {
+    load: async () => {
+      const id = picked();
+      const wanted =
+        id !== null && Object.prototype.hasOwnProperty.call(adapters, id)
+          ? adapters[id]
+          : undefined;
+      if (!wanted) {
+        throw new Error('No extraction model that can be run is picked.');
+      }
+      if (inUse && inUse !== wanted) {
+        // The model picked before is not kept in memory beside the new one.
+        await inUse.unload().catch(() => undefined);
+      }
+      inUse = wanted;
+      return wanted.load();
+    },
+    extract: (screen, transcript, context) =>
+      inUse
+        ? inUse.extract(screen, transcript, context)
+        : Promise.reject(new Error('The extraction model was not loaded.')),
     unload: () => (inUse ? inUse.unload() : Promise.resolve()),
   };
 };

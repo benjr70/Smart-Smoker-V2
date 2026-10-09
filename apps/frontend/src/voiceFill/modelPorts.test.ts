@@ -1,9 +1,14 @@
-import { createFakeSpeech } from './fakeAdapters';
+import { createFakeExtractor, createFakeSpeech } from './fakeAdapters';
 import { createFakeDownloader } from './fakeDownloader';
 import type { ModelDownloader } from './modelLibrary';
-import { createLazySpeech, createModelDownloader, createPickedSpeech } from './modelPorts';
+import {
+  createLazySpeech,
+  createModelDownloader,
+  createPickedExtractor,
+  createPickedSpeech,
+} from './modelPorts';
 import type { VoiceFillModel } from './modelRegistry';
-import type { SpeechPort } from './ports';
+import type { ExtractorPort, SpeechPort } from './ports';
 
 /** A speech port that says what was asked of it. */
 const spiedSpeech = (transcript = 'Sixteen pound brisket.') => {
@@ -145,6 +150,60 @@ describe('the speech port of the picked model', () => {
     await expect(speech.start(() => undefined)).rejects.toThrow('not loaded');
     expect(await speech.stop()).toBe('');
     await speech.unload();
+    expect(first.unload).not.toHaveBeenCalled();
+  });
+});
+
+describe('the extractor port of the picked model', () => {
+  const NOW = { now: new Date('2026-10-09T12:00:00Z') };
+  const spiedExtractor = (raw: Record<string, unknown>): jest.Mocked<ExtractorPort> => {
+    const fake = createFakeExtractor({ raw });
+    return {
+      load: jest.fn(fake.load),
+      extract: jest.fn(fake.extract),
+      unload: jest.fn(fake.unload),
+    };
+  };
+
+  test('reads with the model that is picked when it is loaded', async () => {
+    const first = spiedExtractor({ weight: 16 });
+    const second = spiedExtractor({ weight: 9 });
+    let picked: string | null = 'first';
+    const extractor = createPickedExtractor(() => picked, { first, second });
+
+    await extractor.load();
+    expect(await extractor.extract('preSmoke', 'Sixteen pounds.', NOW)).toEqual({ weight: 16 });
+    expect(first.extract).toHaveBeenCalledWith('preSmoke', 'Sixteen pounds.', NOW);
+    expect(second.load).not.toHaveBeenCalled();
+
+    picked = 'second';
+    await extractor.load();
+    expect(await extractor.extract('preSmoke', 'Nine pounds.', NOW)).toEqual({ weight: 9 });
+    // The model picked before is not kept in memory beside the new one.
+    expect(first.unload).toHaveBeenCalledTimes(1);
+
+    await extractor.unload();
+    expect(second.unload).toHaveBeenCalledTimes(1);
+  });
+
+  test.each([
+    ['no extraction model is registered, so none is picked', null],
+    ['the picked model has no adapter', 'unknown'],
+    ['the picked id is not a model at all', 'toString'],
+  ])('fails to load when %s', async (_why, picked) => {
+    const extractor = createPickedExtractor(() => picked, {});
+
+    await expect(extractor.load()).rejects.toThrow('No extraction model');
+  });
+
+  test('before anything was loaded it cannot read, and has nothing to let go', async () => {
+    const first = spiedExtractor({ weight: 16 });
+    const extractor = createPickedExtractor(() => 'first', { first });
+
+    await expect(extractor.extract('preSmoke', 'Sixteen pounds.', NOW)).rejects.toThrow(
+      'not loaded'
+    );
+    await expect(extractor.unload()).resolves.toBeUndefined();
     expect(first.unload).not.toHaveBeenCalled();
   });
 });

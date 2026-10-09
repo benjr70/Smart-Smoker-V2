@@ -13,9 +13,11 @@ import { createFakeDownloader } from './fakeDownloader';
 import type { ModelLibrary, ModelLibraryOptions } from './modelLibrary';
 import { createModelLibrary } from './modelLibrary';
 import { ModelLibraryProvider } from './ModelLibraryProvider';
+import { createPickedExtractor } from './modelPorts';
 import { createModelRegistry } from './modelRegistry';
 import type { PhoneEnvironment } from './phoneEnvironment';
 import { canRunVoiceFill } from './phoneEnvironment';
+import type { ExtractorPort } from './ports';
 import { VoiceFillPortsProvider } from './VoiceFillPortsProvider';
 
 // The websocket the settings screen's stamp catalogue is announced on.
@@ -59,11 +61,19 @@ type Screen = 'smoke' | 'settings';
  * models above whichever screen is up, the pre-smoke screen, the settings
  * screen, and a root that knows how to show the second.
  */
-function AppShell({ library, start }: { library: ModelLibrary; start: Screen }): JSX.Element {
+function AppShell({
+  library,
+  start,
+  reader,
+}: {
+  library: ModelLibrary;
+  start: Screen;
+  reader: ExtractorPort;
+}): JSX.Element {
   const [shown, setShown] = useState<Screen>(start);
   return (
     <ModelLibraryProvider library={library} onOpenSettings={() => setShown('settings')}>
-      <VoiceFillPortsProvider speech={speech} extractor={extractor}>
+      <VoiceFillPortsProvider speech={speech} extractor={reader}>
         {shown === 'smoke' ? <PreSmokeStep nextButton={<button>Next</button>} /> : <Settings />}
       </VoiceFillPortsProvider>
     </ModelLibraryProvider>
@@ -83,14 +93,18 @@ const backendWithACook = () =>
     },
   });
 
-const openApp = async (library: ModelLibrary, start: Screen = 'smoke') => {
+const openApp = async (
+  library: ModelLibrary,
+  start: Screen = 'smoke',
+  reader: ExtractorPort = extractor
+) => {
   const backend = backendWithACook();
   const view = render(
     <CssVarsProvider theme={appTheme}>
       <DesignSurface>
         <ApiClientProvider client={createApiClient(backend)}>
           <SnackbarProvider>
-            <AppShell library={library} start={start} />
+            <AppShell library={library} start={start} reader={reader} />
           </SnackbarProvider>
         </ApiClientProvider>
       </DesignSurface>
@@ -215,6 +229,74 @@ describe('the Voice Fill button while the picked pair is not ready', () => {
 
     expect(JSON.stringify(backend.store)).toBe(before);
     expect(window.localStorage.getItem('voiceFill.modelLibrary')).toContain('"ready"');
+  });
+});
+
+describe('Voice Fill with a speech model and no extraction model yet', () => {
+  const speechOnly = createModelRegistry([
+    { id: 'speech-a', role: 'speech', name: 'Speech A', sizeBytes: 100 * MB },
+  ]);
+  /** The speech-only library, and the extractor port that has no model to read with. */
+  const openSpeechOnly = async (start: Screen = 'smoke') => {
+    const library = createLibrary({ registry: speechOnly });
+    const view = await openApp(
+      library,
+      start,
+      createPickedExtractor(() => library.getState().picked.extractor, {})
+    );
+    return { library, ...view };
+  };
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    jest.useFakeTimers();
+  });
+  afterEach(() => jest.useRealTimers());
+
+  test('the pill follows the speech model alone, and gives way to the button once it is ready', async () => {
+    await openSpeechOnly();
+    await screen.findByDisplayValue('Test Smoke');
+
+    expect(pill()).toHaveTextContent('Model downloading 0%');
+    expect(voiceFillButton()).not.toBeInTheDocument();
+
+    await pass(500);
+    expect(pill()).toHaveTextContent('Model downloading 50%');
+
+    await pass(500);
+    expect(pill()).not.toBeInTheDocument();
+    expect(voiceFillButton()).toBeInTheDocument();
+  });
+
+  test('the settings card has the speech dropdown and no other', async () => {
+    await openSpeechOnly('settings');
+
+    expect(card()).toBeInTheDocument();
+    expect(within(card() as HTMLElement).getAllByRole('combobox')).toHaveLength(1);
+    expect(screen.getByTestId('voice-fill-model-speech')).toBeInTheDocument();
+    expect(screen.queryByTestId('voice-fill-model-extractor')).not.toBeInTheDocument();
+  });
+
+  test('a Ramble is heard live, and Done talking ends in the problem state', async () => {
+    await openSpeechOnly();
+    await screen.findByDisplayValue('Test Smoke');
+    await pass(1000);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Voice fill' }));
+    // The model loads and the microphone opens; then the words arrive.
+    await pass(0);
+    await pass(10);
+
+    expect(screen.getByTestId('voice-fill-live-transcript')).toHaveTextContent(
+      'Sixteen pound brisket.'
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Done talking' }));
+    await pass(0);
+
+    // There is no model to read it with: said, at once, and nothing is filled.
+    expect(screen.getByTestId('voice-fill-title')).toHaveTextContent('Voice fill hit a problem');
+    expect(screen.getByDisplayValue('Test Smoke')).toBeInTheDocument();
   });
 });
 

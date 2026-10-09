@@ -64,7 +64,8 @@ export const MOONSHINE_SMALL_STREAMING: VoiceFillModel = {
 /**
  * The models the application offers: the adapter Slices add theirs here, the
  * default pair's first so that it is the pair a fresh phone gets. There is no
- * extraction model yet, and until there is one no screen offers Voice Fill.
+ * extraction model yet: until there is one, Voice Fill is offered with the
+ * speech model alone, and a Ramble is heard but cannot be read.
  */
 export const REGISTERED_MODELS: readonly VoiceFillModel[] = [MOONSHINE_SMALL_STREAMING];
 

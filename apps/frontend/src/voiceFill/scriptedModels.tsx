@@ -10,6 +10,7 @@ import { MOONSHINE_SMALL_STREAMING, createModelRegistry } from './modelRegistry'
 import { createMoonshineDownloader, createMoonshineSpeech } from './moonshineModel';
 import { browserConnection, canRunVoiceFill } from './phoneEnvironment';
 import type { SpeechPort } from './ports';
+import { createRealModelLibrary, createRealPorts } from './realModels';
 import type { VoiceFillPorts } from './VoiceFillPortsProvider';
 import { VoiceFillPortsProvider } from './VoiceFillPortsProvider';
 
@@ -97,7 +98,7 @@ export const scriptedPhoneIsCapable = (search: string = window.location.search):
  * after them, the real speech model. The scripted ones stay the pair a fresh
  * phone gets, with a downloader that fetches nothing; the real one is there to
  * be picked, and is then downloaded and run for real, so it can be heard
- * working in a build that has no real extraction model to pair it with.
+ * read by the scripted extractor, there being no real extraction model yet.
  *
  * The phone is checked as it is for real models, with `canRunVoiceFill`: with
  * no microphone API, no WebGPU adapter or a page that is not cross-origin
@@ -151,8 +152,8 @@ const createScriptedPorts = (library: ModelLibrary): VoiceFillPorts => {
  *   publish workflow writes itself, which does not carry it; the hermetic e2e
  *   stack's (`e2e/docker/frontend.e2e.env`) does.
  * - the page was opened with `?voiceFill=scripted`, so a build that allows the
- *   scripted models still shows nothing of Voice Fill to a journey that did
- *   not ask for it.
+ *   scripted models still runs the real ones for a journey that did not ask
+ *   for them.
  */
 export const scriptedModelsAreOn = (search: string = window.location.search): boolean =>
   process.env.REACT_APP_VOICE_FILL_SCRIPTED === 'true' &&
@@ -169,22 +170,28 @@ export interface VoiceFillModelsProps {
  * every screen under the application root. The library is opened here, so the
  * download a first opening of the app starts does not wait for any one screen.
  *
- * The real speech model has landed and the real extraction model has not, so
- * there is still one set to hand out: the scripted ones, with the real speech
- * model beside them, and only where {@link scriptedModelsAreOn}. Anywhere else
- * nothing is provided, and so no screen offers Voice Fill.
+ * Everywhere but where {@link scriptedModelsAreOn} it is the real models that
+ * are handed out — see `realModels.ts`. The real speech model has landed and
+ * the real extraction model has not, so that is the speech model alone: it is
+ * downloaded the first time the app is opened on a phone that can run it, the
+ * settings card shows its dropdown and no other, the button appears once it is
+ * ready, and a Ramble is heard live and then cannot be read.
+ *
+ * Where the scripted models are on, it is those, with the real speech model
+ * beside them.
  */
 export function VoiceFillModels({ onOpenSettings, children }: VoiceFillModelsProps): JSX.Element {
-  const library = useMemo(() => (scriptedModelsAreOn() ? createScriptedModelLibrary() : null), []);
-  const ports = useMemo<VoiceFillPorts | null>(
-    () => (library ? createScriptedPorts(library) : null),
-    [library]
-  );
-  return ports && library ? (
+  const { library, ports } = useMemo<{ library: ModelLibrary; ports: VoiceFillPorts }>(() => {
+    if (scriptedModelsAreOn()) {
+      const scripted = createScriptedModelLibrary();
+      return { library: scripted, ports: createScriptedPorts(scripted) };
+    }
+    const real = createRealModelLibrary();
+    return { library: real, ports: createRealPorts(real) };
+  }, []);
+  return (
     <ModelLibraryProvider library={library} onOpenSettings={onOpenSettings}>
       <VoiceFillPortsProvider {...ports}>{children}</VoiceFillPortsProvider>
     </ModelLibraryProvider>
-  ) : (
-    <>{children}</>
   );
 }

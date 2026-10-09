@@ -16,7 +16,9 @@
  * the picked pair is ready.
  *
  * And the real models, each behind its port in a chunk of its own: Moonshine
- * Small Streaming for speech, with the downloader that fetches its files.
+ * Small Streaming for speech, with the downloader that fetches its files. They
+ * are what every page runs on but one that asked for the scripted models; with
+ * no extraction model yet, that is Voice Fill with the speech model alone.
  */
 export type {
   VoiceFillField,
