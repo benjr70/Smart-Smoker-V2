@@ -82,8 +82,13 @@ export interface ScreenBinding<Values> {
 
 export type VoiceFillState<Values> =
   | { phase: 'idle' }
-  /** The sheet is up and the Ramble is being heard. */
-  | { phase: 'listening'; transcript: string }
+  /**
+   * The sheet is up for a Ramble to be heard. `gettingReady` is there, and
+   * true, from the tap until the microphone is open — while the speech model
+   * loads and the port starts — and gone once it is: nothing said before then
+   * is heard, and the sheet must not say it is listening.
+   */
+  | { phase: 'listening'; transcript: string; gettingReady?: true }
   /** The Ramble is over and the model is reading it. */
   | { phase: 'working'; transcript: string }
   /** The changes the Ramble proposes, and the ids of the rows still ticked. */
@@ -371,7 +376,10 @@ export const createVoiceFillSession = <Screen extends VoiceFillScreen>({
   const listen = (): void => {
     generation += 1;
     const askedIn = generation;
-    set({ phase: 'listening', transcript: '' });
+    // Not listening yet: the microphone is opened only once the model is
+    // loaded, and what is said until then is heard by nothing. The sheet is
+    // told so, and says so, until the port has started.
+    set({ phase: 'listening', transcript: '', gettingReady: true });
     queued(() => {
       const loaded = speech.load();
       // Speech first; the extractor is made ready behind it, while the cook
@@ -395,6 +403,10 @@ export const createVoiceFillSession = <Screen extends VoiceFillScreen>({
           .then(() => {
             // Only a port that did start is one there is anything to stop.
             live = true;
+            // The microphone is open: from here on the cook is heard.
+            if (isCurrent(askedIn) && state.phase === 'listening' && state.gettingReady) {
+              set({ phase: 'listening', transcript: state.transcript });
+            }
           });
       });
     }).catch(error => {

@@ -380,6 +380,115 @@ describe('Voice Fill session', () => {
     expect(session.getState()).toEqual({ phase: 'idle' });
   });
 
+  describe('until the microphone is open', () => {
+    /** A speech port whose load and start each wait to be let through. */
+    const waitingSpeech = () => {
+      let loaded: () => void = () => undefined;
+      let started: () => void = () => undefined;
+      let heard: (transcript: string) => void = () => undefined;
+      return {
+        loaded: () => loaded(),
+        started: () => started(),
+        hear: (transcript: string) => heard(transcript),
+        port: {
+          load: () =>
+            new Promise<void>(resolve => {
+              loaded = resolve;
+            }),
+          start: (onPartial: (transcript: string) => void) =>
+            new Promise<void>(resolve => {
+              heard = onPartial;
+              started = resolve;
+            }),
+          stop: () => Promise.resolve(TRANSCRIPT),
+          unload: () => Promise.resolve(),
+        },
+      };
+    };
+
+    const sessionWith = (speech: ReturnType<typeof waitingSpeech>) =>
+      createVoiceFillSession({
+        screen: 'preSmoke',
+        speech: speech.port,
+        extractor: createFakeExtractor({ raw: { weight: 16 } }),
+        binding: screenHolding(emptyForm).binding,
+        now: () => NOW,
+      });
+
+    test('the sheet is told nothing is heard yet while the model loads and the microphone opens', async () => {
+      const speech = waitingSpeech();
+      const session = sessionWith(speech);
+
+      session.start();
+      await settled();
+      // The model is still loading: what is said now is heard by nothing.
+      expect(session.getState()).toEqual({
+        phase: 'listening',
+        transcript: '',
+        gettingReady: true,
+      });
+
+      speech.loaded();
+      await settled();
+      // Loaded, but the microphone is not open until the port has started.
+      expect(session.getState()).toEqual({
+        phase: 'listening',
+        transcript: '',
+        gettingReady: true,
+      });
+
+      speech.started();
+      await settled();
+      expect(session.getState()).toEqual({ phase: 'listening', transcript: '' });
+
+      speech.hear('Sixteen pound');
+      expect(session.getState()).toEqual({ phase: 'listening', transcript: 'Sixteen pound' });
+    });
+
+    test('a Ramble recorded again waits for the microphone the same way', async () => {
+      const speech = waitingSpeech();
+      const session = sessionWith(speech);
+      session.start();
+      await settled();
+      speech.loaded();
+      await settled();
+      speech.started();
+      await settled();
+      session.doneTalking();
+      await settled();
+      expect(session.getState().phase).toBe('review');
+
+      session.redo();
+      await settled();
+      expect(session.getState()).toEqual({
+        phase: 'listening',
+        transcript: '',
+        gettingReady: true,
+      });
+
+      speech.loaded();
+      await settled();
+      speech.started();
+      await settled();
+      expect(session.getState()).toEqual({ phase: 'listening', transcript: '' });
+    });
+
+    test('a port that started for a Ramble since closed does not put the sheet back up', async () => {
+      const speech = waitingSpeech();
+      const session = sessionWith(speech);
+      session.start();
+      await settled();
+      speech.loaded();
+      await settled();
+
+      session.cancel();
+      speech.started();
+      await settled();
+
+      expect(session.getState()).toEqual({ phase: 'idle' });
+    });
+  });
+
   describe('restarted while the speech model is still loading', () => {
     /** A speech port whose every load waits to be let through, and says what it was asked. */
     const slowSpeech = () => {
