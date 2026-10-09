@@ -1,19 +1,11 @@
 import '@testing-library/jest-dom';
-import { Experimental_CssVarsProvider as CssVarsProvider } from '@mui/material';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
-import { ApiClientProvider, SnackbarProvider, createApiClient } from '../../../api';
 import { createFakeBackend, FakeBackend } from '../../../api/fakeBackend';
 import { PreSmoke } from '../../../api/types';
-import { DesignSurface, appTheme } from '../../../theme';
-import {
-  FLASH_MS,
-  TOAST_MS,
-  VoiceFillPortsProvider,
-  createFakeExtractor,
-  createFakeSpeech,
-} from '../../../voiceFill';
+import { FLASH_MS, TOAST_MS } from '../../../voiceFill';
 import { WeightUnits } from '../../common/interfaces/enums';
+import { renderSmokeScreen } from '../renderSmokeScreen';
 import { PreSmokeStep } from './preSmokeStep';
 
 const seededPreSmoke: PreSmoke = {
@@ -50,50 +42,30 @@ interface Script {
   onOpenSettings?: () => void;
 }
 
+const step = (onOpenSettings?: () => void) => (
+  <PreSmokeStep
+    nextButton={<button data-testid="next-button">Next</button>}
+    onOpenSettings={onOpenSettings}
+  />
+);
+
 /**
  * The step as the application root mounts it, with Voice Fill's two models
  * replaced by scripted ones behind the same ports.
  */
-const renderStep = (backend: FakeBackend, script: Script = {}) => {
-  const client = createApiClient(backend);
-  // The scripted model answers every transcript alike; the ones a test wants
-  // read differently are told apart here, in front of it.
-  const scripted = createFakeExtractor({
-    raw: script.raw ?? RAW,
-    delayMs: script.delayMs,
-    failures: script.failures,
+const renderStep = (backend: FakeBackend, script: Script = {}) =>
+  renderSmokeScreen(step(script.onOpenSettings), {
+    backend,
+    voiceFill: {
+      transcript: script.transcript ?? TRANSCRIPT,
+      raw: script.raw ?? RAW,
+      wordIntervalMs: script.wordIntervalMs ?? 1,
+      delayMs: script.delayMs,
+      failures: script.failures,
+      rawByTranscript: script.rawByTranscript,
+      microphone: script.microphone,
+    },
   });
-  const rawByTranscript = script.rawByTranscript ?? {};
-  return render(
-    <CssVarsProvider theme={appTheme}>
-      <DesignSurface>
-        <ApiClientProvider client={client}>
-          <SnackbarProvider>
-            <VoiceFillPortsProvider
-              speech={createFakeSpeech({
-                transcript: script.transcript ?? TRANSCRIPT,
-                wordIntervalMs: script.wordIntervalMs ?? 1,
-                microphone: script.microphone,
-              })}
-              extractor={{
-                ...scripted,
-                extract: (asked, transcript, context) =>
-                  Object.prototype.hasOwnProperty.call(rawByTranscript, transcript)
-                    ? Promise.resolve(rawByTranscript[transcript])
-                    : scripted.extract(asked, transcript, context),
-              }}
-            >
-              <PreSmokeStep
-                nextButton={<button data-testid="next-button">Next</button>}
-                onOpenSettings={script.onOpenSettings}
-              />
-            </VoiceFillPortsProvider>
-          </SnackbarProvider>
-        </ApiClientProvider>
-      </DesignSurface>
-    </CssVarsProvider>
-  );
-};
 
 const voiceFillButton = () => screen.queryByRole('button', { name: 'Voice fill' });
 const stepValues = () =>
@@ -122,18 +94,9 @@ const ramble = async () => {
 
 describe('Voice Fill on the pre-smoke screen', () => {
   test('is not offered where no models are provided', async () => {
-    const backend = createFakeBackend({ preSmoke: { current: seededPreSmoke } });
-    const client = createApiClient(backend);
-
-    render(
-      <CssVarsProvider theme={appTheme}>
-        <DesignSurface>
-          <ApiClientProvider client={client}>
-            <PreSmokeStep nextButton={<button>Next</button>} />
-          </ApiClientProvider>
-        </DesignSurface>
-      </CssVarsProvider>
-    );
+    renderSmokeScreen(step(), {
+      backend: createFakeBackend({ preSmoke: { current: seededPreSmoke } }),
+    });
 
     await screen.findByDisplayValue('Test Smoke');
     expect(voiceFillButton()).not.toBeInTheDocument();

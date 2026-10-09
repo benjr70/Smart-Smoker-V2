@@ -18,16 +18,14 @@
  * class names one of them asserted on directly.
  */
 import '@testing-library/jest-dom';
-import { Experimental_CssVarsProvider as CssVarsProvider } from '@mui/material';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import fs from 'fs';
 import path from 'path';
 import React from 'react';
-import { ApiClientProvider, SnackbarProvider, createApiClient } from '../../api';
 import { createFakeBackend, FakeBackend } from '../../api/fakeBackend';
-import { DesignSurface, appTheme } from '../../theme';
 import { WeightUnits } from '../common/interfaces/enums';
+import { renderSmokeScreen } from './renderSmokeScreen';
 import { Smoke, delay } from './smoke';
 
 jest.mock('./smokeStep/smokeStep', () => ({
@@ -49,7 +47,14 @@ jest.mock('./smokeStep/smokeStep', () => ({
 
 let backend: FakeBackend;
 
-const renderWizard = (onViewHistory?: () => void, onOpenSettings?: () => void) => {
+interface WizardOptions {
+  onViewHistory?: () => void;
+  onOpenSettings?: () => void;
+  /** Whether Voice Fill's models are provided, as scripted ones: off unless asked for. */
+  voiceFill?: boolean;
+}
+
+const renderWizard = ({ onViewHistory, onOpenSettings, voiceFill = false }: WizardOptions = {}) => {
   // A session already under way: both steps have a stored document, which is
   // what the save-on-leave needs — a step whose load failed deliberately writes
   // nothing back (see `useCurrentResource`), so a wizard over an empty backend
@@ -75,16 +80,14 @@ const renderWizard = (onViewHistory?: () => void, onOpenSettings?: () => void) =
     postSmoke: { current: { restTime: '', steps: [''], notes: '' } },
   });
 
-  return render(
-    <CssVarsProvider theme={appTheme}>
-      <DesignSurface>
-        <ApiClientProvider client={createApiClient(backend)}>
-          <SnackbarProvider>
-            <Smoke onViewHistory={onViewHistory} onOpenSettings={onOpenSettings} />
-          </SnackbarProvider>
-        </ApiClientProvider>
-      </DesignSurface>
-    </CssVarsProvider>
+  return renderSmokeScreen(
+    <Smoke onViewHistory={onViewHistory} onOpenSettings={onOpenSettings} />,
+    {
+      backend,
+      voiceFill: voiceFill
+        ? { transcript: 'Rested an hour.', raw: { restMinutes: 60 } }
+        : undefined,
+    }
   );
 };
 
@@ -194,7 +197,7 @@ describe('the wizard step control', () => {
     // is the only thing between that card and the shell that navigates.
     const user = userEvent.setup();
     const onOpenSettings = jest.fn();
-    renderWizard(undefined, onOpenSettings);
+    renderWizard({ onOpenSettings });
     await screen.findByTestId('presmoke-name-input');
 
     await user.click(segment('Smoke'));
@@ -446,6 +449,47 @@ describe('advancing through the wizard', () => {
     expect(screen.queryByTestId('presmoke-name-input')).not.toBeInTheDocument();
   });
 
+  /**
+   * Voice Fill fills the cook in progress. Once the cook is finished there is
+   * nothing left for a Ramble to fill, so the button goes with the step it
+   * was offered on.
+   */
+  it('offers Voice fill on the Post-Smoke step, and no longer once the cook is finished', async () => {
+    const user = userEvent.setup();
+    renderWizard({ voiceFill: true });
+    await screen.findByTestId('presmoke-name-input');
+
+    await user.click(segment('Post-Smoke'));
+    await screen.findByTestId('postsmoke-rest-time-input');
+    expect(await screen.findByRole('button', { name: 'Voice fill' })).toBeInTheDocument();
+
+    await user.click(nextButton());
+
+    expect(await screen.findByTestId('smoke-complete')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Voice fill' })).not.toBeInTheDocument();
+  });
+
+  it('does not offer Voice fill on a Post-Smoke step reopened after the cook is finished', async () => {
+    // The step control stays over the completion screen, so the Post-Smoke
+    // step can be opened again on a session that has no cook. Nothing typed
+    // there can be saved — a post-smoke record is written onto the cook in
+    // progress, and only the Pre-Smoke step starts one — so a Ramble spoken
+    // there would be thrown away.
+    const user = userEvent.setup();
+    renderWizard({ voiceFill: true });
+    await screen.findByTestId('presmoke-name-input');
+
+    await user.click(segment('Post-Smoke'));
+    await screen.findByTestId('postsmoke-rest-time-input');
+    await user.click(nextButton());
+    await screen.findByTestId('smoke-complete');
+
+    await user.click(segment('Post-Smoke'));
+
+    expect(await screen.findByTestId('postsmoke-rest-time-input')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Voice fill' })).not.toBeInTheDocument();
+  });
+
   it('keeps the header and step control over the completion screen, and starts the next cook from them', async () => {
     // The completion screen takes the place of the step, not of the wizard. It
     // has to: the Smoke tab is already the screen in effect, so tapping it again
@@ -472,7 +516,7 @@ describe('advancing through the wizard', () => {
   it('sends the user to the history from the completion screen', async () => {
     const user = userEvent.setup();
     const viewHistory = jest.fn();
-    renderWizard(viewHistory);
+    renderWizard({ onViewHistory: viewHistory });
     await screen.findByTestId('presmoke-name-input');
 
     await user.click(segment('Post-Smoke'));

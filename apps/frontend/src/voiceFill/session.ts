@@ -8,7 +8,7 @@
  * sheet is up for and in none of the others, so it is gone when the sheet is.
  */
 import type { PostSmoke, PreSmoke } from '../api/types';
-import type { ReviewRow, VoiceFillScreenValues } from './extractionContract';
+import type { ReviewRow, SmokeScreenValues, VoiceFillScreenValues } from './extractionContract';
 import { fillFor, notesAreMerged, reviewRows, tickedAfterToggle } from './extractionContract';
 import type { VoiceFillScreen } from './fieldDefinition';
 import type { ExtractorPort, SpeechPort } from './ports';
@@ -110,18 +110,37 @@ export interface VoiceFillSessionOptions<Screen extends VoiceFillScreen> {
   now?: () => Date;
 }
 
-/** The contract's rows for whichever screen the session is on. */
+/**
+ * The contract's rows for whichever screen the session is on: every screen is
+ * named, so one added to {@link VoiceFillScreen} fails to compile here rather
+ * than being read as another screen's values.
+ */
 const rowsFor = <Screen extends VoiceFillScreen>(
   screen: Screen,
   raw: unknown,
   current: VoiceFillScreenValues[Screen],
   now: Date
-): ReviewRow<VoiceFillScreenValues[Screen]>[] =>
-  (screen === 'preSmoke'
-    ? reviewRows('preSmoke', raw, current as PreSmoke, { now })
-    : reviewRows('postSmoke', raw, current as PostSmoke, { now })) as ReviewRow<
-    VoiceFillScreenValues[Screen]
-  >[];
+): ReviewRow<VoiceFillScreenValues[Screen]>[] => {
+  const on: VoiceFillScreen = screen;
+  const rows = ():
+    | ReviewRow<PreSmoke>[]
+    | ReviewRow<SmokeScreenValues>[]
+    | ReviewRow<PostSmoke>[] => {
+    switch (on) {
+      case 'preSmoke':
+        return reviewRows('preSmoke', raw, current as PreSmoke, { now });
+      case 'smoke':
+        return reviewRows('smoke', raw, current as SmokeScreenValues, { now });
+      case 'postSmoke':
+        return reviewRows('postSmoke', raw, current as PostSmoke, { now });
+      default: {
+        const unnamed: never = on;
+        return unnamed;
+      }
+    }
+  };
+  return rows() as ReviewRow<VoiceFillScreenValues[Screen]>[];
+};
 
 export const createVoiceFillSession = <Screen extends VoiceFillScreen>({
   screen,
