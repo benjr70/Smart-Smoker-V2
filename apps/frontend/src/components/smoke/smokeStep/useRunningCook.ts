@@ -29,6 +29,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   CompletionEstimate,
   NotificationSettings,
+  ProbeTargetEntry,
   ServePlanStatus,
   useApiClient,
   useApiSnackbar,
@@ -37,6 +38,15 @@ import { WatchedProbe } from './CompletionCard';
 
 /** How often the running cook is re-read while the screen is open. */
 export const RUNNING_COOK_REFRESH_MS = 60_000;
+
+/**
+ * What a probe's row says about its target: the temperature, whether the probe
+ * is watched, and where the temperature came from.
+ */
+export type ProbeTargetChange = Pick<ProbeTargetEntry, 'target' | 'enabled' | 'targetSource'>;
+
+/** A change to some probes' targets, each under the slot of the probe it is for. */
+export type ProbeTargetChanges = Record<string, ProbeTargetChange>;
 
 export interface RunningCook {
   /** When the backend stamped the start of this cook, or `null` when none. */
@@ -65,6 +75,27 @@ export interface RunningCook {
    */
   setTarget: (target: number) => Promise<boolean>;
   /**
+   * Every probe's row of the settings document, as it was last read: what each
+   * is cooked to, whether it is watched, and where its target came from.
+   */
+  probes: ProbeTargetEntry[];
+  /**
+   * Set the target, the watch and the source of several probes at once — one
+   * read of the settings document and one write of it, through the same path
+   * {@link setTarget} takes, however many probes are changed.
+   *
+   * Given `standing`, a probe is changed only where its row still holds what
+   * `standing` says of it, as the document reads at the moment of the write:
+   * how a change is taken back without taking back what was set over it since.
+   *
+   * Resolves what the probes it changed held before the write, which is what
+   * undoing it writes back, or `null` when nothing was stored.
+   */
+  setTargets: (
+    changes: ProbeTargetChanges,
+    standing?: ProbeTargetChanges
+  ) => Promise<ProbeTargetChanges | null>;
+  /**
    * Ask for the cook to be read again, now.
    *
    * The estimate and the plan are the backend's, so a client that changes
@@ -91,6 +122,7 @@ export function useRunningCook(smoking: boolean): RunningCook {
   const [startedAt, setStartedAt] = useState<Date | null>(null);
   const [estimate, setEstimate] = useState<CompletionEstimate | null>(null);
   const [probe, setProbe] = useState<WatchedProbe | null>(null);
+  const [probes, setProbes] = useState<ProbeTargetEntry[]>([]);
   const [servePlan, setServePlan] = useState<ServePlanStatus | null>(null);
   // Bumped by an edit, which is how a write asks for the read that follows it
   // without the read effect having to know what was written.
@@ -140,6 +172,7 @@ export function useRunningCook(smoking: boolean): RunningCook {
         // better is known.
         if (watched.read) {
           setProbe(primaryWatchedProbe(watched.settings));
+          setProbes(watched.settings?.probeTarget?.probes ?? []);
         }
       });
     };
@@ -154,50 +187,93 @@ export function useRunningCook(smoking: boolean): RunningCook {
     // and on the refresh above for everything that happens away from here.
   }, [smoking, revision, client]);
 
-  const setTarget = useCallback(
-    (target: number): Promise<boolean> =>
+  /**
+   * The one way this screen writes a probe's row: the settings document is read,
+   * the rows `changesFor` names are replaced in it, and it is written whole.
+   * Resolves what those rows held before, or `null` when there was nothing to
+   * change and so nothing was written.
+   */
+  const saveRows = useCallback(
+    (
+      changesFor: (settings: NotificationSettings) => Record<string, Partial<ProbeTargetChange>>
+    ): Promise<ProbeTargetChanges | null> =>
       clientRef.current.notifications
         .getSettings()
         .then(settings => {
-          const watched = primaryWatchedProbe(settings);
-          if (!settings || !watched) {
-            // Nothing is being watched, so there is no probe whose target this
-            // could be. The card offers no editor in that state.
-            return false;
+          const rows = settings?.probeTarget?.probes ?? [];
+          const changes = settings ? changesFor(settings) : {};
+          const changed = rows.filter(row => changes[row.slot] !== undefined);
+          if (!settings || changed.length === 0) {
+            return null;
           }
+          const before: ProbeTargetChanges = {};
+          changed.forEach(({ slot, target, enabled, targetSource }) => {
+            before[slot] = { target, enabled, targetSource };
+          });
           return clientRef.current.notifications
             .saveSettings({
               ...settings,
               probeTarget: {
                 ...settings.probeTarget,
-                probes: settings.probeTarget.probes.map(row =>
-                  // A temperature somebody typed is theirs: the backend seeds
-                  // targets from the meat being cooked, but only over ones
-                  // nobody chose, and the number alone cannot tell the two
-                  // apart.
-                  row.slot === watched.slot
-                    ? { ...row, target, targetSource: 'user' as const }
-                    : row
-                ),
+                probes: rows.map(row => ({ ...row, ...changes[row.slot] })),
               },
             })
             .then(() => {
               // The estimate is taken to the target that was just changed, so
               // the answer on screen is out of date the instant the write lands.
               setRevision(current => current + 1);
-              return true;
+              return before;
             });
         })
         .catch(() => {
           notifyRef.current('Could not save the target temperature.');
-          return false;
+          return null;
         }),
     // `notify` and the client are read through refs, so this identity is stable
     // and the card is never re-rendered by a new callback.
     []
   );
 
+  const setTarget = useCallback(
+    (target: number): Promise<boolean> =>
+      saveRows(settings => {
+        // Nothing being watched means there is no probe whose target this could
+        // be. The card offers no editor in that state.
+        const watched = primaryWatchedProbe(settings);
+        // A temperature somebody typed is theirs: the backend seeds targets
+        // from the meat being cooked, but only over ones nobody chose, and the
+        // number alone cannot tell the two apart.
+        return watched ? { [watched.slot]: { target, targetSource: 'user' } } : {};
+      }).then(before => before !== null),
+    [saveRows]
+  );
+
+  const setTargets = useCallback(
+    (changes: ProbeTargetChanges, standing?: ProbeTargetChanges) =>
+      saveRows(settings => {
+        if (!standing) {
+          return changes;
+        }
+        const still: ProbeTargetChanges = {};
+        settings.probeTarget?.probes?.forEach(row => {
+          const held = standing[row.slot];
+          const change = changes[row.slot];
+          if (
+            change &&
+            held &&
+            row.target === held.target &&
+            row.enabled === held.enabled &&
+            row.targetSource === held.targetSource
+          ) {
+            still[row.slot] = change;
+          }
+        });
+        return still;
+      }),
+    [saveRows]
+  );
+
   const refresh = useCallback(() => setRevision(current => current + 1), []);
 
-  return { startedAt, estimate, probe, servePlan, setTarget, refresh };
+  return { startedAt, estimate, probe, servePlan, setTarget, probes, setTargets, refresh };
 }

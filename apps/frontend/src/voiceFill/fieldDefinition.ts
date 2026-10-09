@@ -32,6 +32,12 @@ export interface VoiceFillContext {
   probeNames?: readonly string[];
   /** The stamps the cook log offers. Read on the smoke screen only. */
   enabledStamps?: readonly CookStamp[];
+  /**
+   * Whether the screen has a Serve Plan to write: `false` where the planner is
+   * switched off or there is no cook to plan, and a serve time or a rest said
+   * there is kept in Notes. Read on the smoke screen only.
+   */
+  servePlanOffered?: boolean;
 }
 
 /** The plain kinds of value a model is asked for. */

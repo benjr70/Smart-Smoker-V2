@@ -80,6 +80,15 @@ describe('the fake extractor adapter', () => {
     });
   });
 
+  test('answers a Ramble on a screen scripted its own answer with that one', async () => {
+    const raw = { weight: 16 };
+    const smoke = { woodType: 'hickory' };
+    const extractor = createFakeExtractor({ raw, rawByScreen: { smoke } });
+
+    await expect(extractor.extract('smoke', 'anything', context)).resolves.toBe(smoke);
+    await expect(extractor.extract('preSmoke', 'anything', context)).resolves.toBe(raw);
+  });
+
   test('takes as long to answer as it is scripted to', async () => {
     jest.useFakeTimers();
     try {

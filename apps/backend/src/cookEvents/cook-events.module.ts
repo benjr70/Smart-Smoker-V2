@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { StateModule } from '../State/state.module';
 import { AppSettingsModule } from '../appSettings/app-settings.module';
+import { CommonModule } from '../common/common.module';
 import { TempModule } from '../temps/temps.module';
 import { EventsModule } from '../websocket/events.module';
 import { CookEventsController } from './cook-events.controller';
@@ -28,6 +29,9 @@ import { CookEventsService } from './cook-events.service';
     // against it.
     AppSettingsModule,
     TempModule,
+    // The cook in progress itself, for when it started: a stamp that says when
+    // it was done may not say a moment before its own cook.
+    CommonModule,
     EventsModule,
   ],
   controllers: [CookEventsController],

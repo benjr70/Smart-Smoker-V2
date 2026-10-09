@@ -1260,6 +1260,29 @@ const seedFullSmoke = () =>
   });
 
 describe('smoke client — the serve plan of the cook in progress', () => {
+  test('a cook read by id carries its serve time and its pull as moments, not as the strings JSON sends', async () => {
+    const backend = seedFullSmoke();
+    // As `GET smoke/:id` answers them: JSON has no date type.
+    Object.assign(backend.store.smoke.records['smoke-1'], {
+      serveAt: '2026-08-01T22:00:00.000Z',
+      pullAt: '2026-08-01T21:15:00.000Z',
+      restMinutes: 45,
+    });
+
+    const smoke = await createApiClient(backend).smoke.getById('smoke-1');
+
+    expect(smoke.serveAt).toEqual(new Date('2026-08-01T22:00:00.000Z'));
+    expect(smoke.serveAt).toBeInstanceOf(Date);
+    expect(smoke.pullAt).toBeInstanceOf(Date);
+    expect(smoke.restMinutes).toBe(45);
+  });
+
+  test('a cook that cannot be found by id is still an error', async () => {
+    const backend = seedFullSmoke();
+
+    await expect(createApiClient(backend).smoke.getById('nobody')).rejects.toBeInstanceOf(ApiError);
+  });
+
   test('moving dinner writes the serve time alone, on the current cook', async () => {
     const backend = seedFullSmoke();
     backend.store.state = { smokeId: 'smoke-1', smoking: true };

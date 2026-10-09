@@ -10,7 +10,7 @@
 import type { PostSmoke, PreSmoke } from '../api/types';
 import type { ReviewRow, SmokeScreenValues, VoiceFillScreenValues } from './extractionContract';
 import { fillFor, notesAreMerged, reviewRows, tickedAfterToggle } from './extractionContract';
-import type { VoiceFillScreen } from './fieldDefinition';
+import type { VoiceFillContext, VoiceFillScreen } from './fieldDefinition';
 import type { ExtractorPort, SpeechPort } from './ports';
 import { isMicrophoneBlocked } from './ports';
 
@@ -30,6 +30,12 @@ export const PROBLEM_CAP_MS = 30_000;
 export interface ScreenBinding<Values> {
   values(): Values;
   apply(write: Partial<Values>): () => void;
+  /**
+   * What a Ramble on this screen is read against beside its values, as it
+   * stands at the moment of asking: the names its probes go by and the stamps
+   * its cook log offers. A screen that has neither has no need of it.
+   */
+  context?(): Omit<VoiceFillContext, 'now'>;
 }
 
 export type VoiceFillState<Values> =
@@ -119,7 +125,7 @@ const rowsFor = <Screen extends VoiceFillScreen>(
   screen: Screen,
   raw: unknown,
   current: VoiceFillScreenValues[Screen],
-  now: Date
+  context: VoiceFillContext
 ): ReviewRow<VoiceFillScreenValues[Screen]>[] => {
   const on: VoiceFillScreen = screen;
   const rows = ():
@@ -128,11 +134,11 @@ const rowsFor = <Screen extends VoiceFillScreen>(
     | ReviewRow<PostSmoke>[] => {
     switch (on) {
       case 'preSmoke':
-        return reviewRows('preSmoke', raw, current as PreSmoke, { now });
+        return reviewRows('preSmoke', raw, current as PreSmoke, context);
       case 'smoke':
-        return reviewRows('smoke', raw, current as SmokeScreenValues, { now });
+        return reviewRows('smoke', raw, current as SmokeScreenValues, context);
       case 'postSmoke':
-        return reviewRows('postSmoke', raw, current as PostSmoke, { now });
+        return reviewRows('postSmoke', raw, current as PostSmoke, context);
       default: {
         const unnamed: never = on;
         return unnamed;
@@ -254,13 +260,16 @@ export const createVoiceFillSession = <Screen extends VoiceFillScreen>({
           return undefined;
         }
         set({ phase: 'working', transcript });
-        const spokenAt = now();
+        // What the Ramble is read against is what the screen held as it was
+        // spoken: the model is told it, and its answer is checked against
+        // that same telling.
+        const spoken: VoiceFillContext = { ...binding.context?.(), now: now() };
         const notes = (binding.values().notes ?? '').trim();
         return extractor
           .load()
           .then(() =>
             extractor.extract(screen, transcript, {
-              now: spokenAt,
+              ...spoken,
               ...(notes && notesAreMerged(notes) && { existingNotes: notes }),
             })
           )
@@ -269,7 +278,7 @@ export const createVoiceFillSession = <Screen extends VoiceFillScreen>({
               return;
             }
             endCap();
-            const rows = rowsFor(screen, raw, binding.values(), spokenAt);
+            const rows = rowsFor(screen, raw, binding.values(), spoken);
             set(
               rows.length === 0
                 ? { phase: 'nothing-to-fill', transcript }

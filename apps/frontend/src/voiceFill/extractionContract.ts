@@ -767,7 +767,7 @@ export const MAX_SERVE_AHEAD_MINUTES = 48 * 60;
 const serveAtFor = (
   raw: Record<string, unknown>,
   now: Date
-): { value: Date } | { leftover: string } | undefined => {
+): { value: Date; said: string } | { leftover: string } | undefined => {
   const saidClock = spokenText(raw.serveClock);
   const tomorrow = raw.serveTomorrow === true;
   const { said: saidOffset, number: offset } = spokenNumber(raw.serveInMinutes);
@@ -787,7 +787,9 @@ const serveAtFor = (
     ? clockDate(clock, tomorrow, now)
     : new Date(now.getTime() + Math.round(offset ?? 0) * MINUTE_MS);
   const ahead = value.getTime() - now.getTime();
-  return ahead > 0 && ahead <= MAX_SERVE_AHEAD_MINUTES * MINUTE_MS ? { value } : leftover;
+  return ahead > 0 && ahead <= MAX_SERVE_AHEAD_MINUTES * MINUTE_MS
+    ? { value, said: leftover.leftover }
+    : leftover;
 };
 
 /** The ways "just now" comes back as how long ago something was done. */
@@ -892,9 +894,16 @@ const smokeRows = (
     });
   });
 
+  // A screen with no Serve Plan on offer has no serve time and no rest to
+  // write: what was said of either is kept in Notes, as anything is that the
+  // screen it was spoken on has no field for.
+  const planned = context.servePlanOffered !== false;
+
   const serveAt = serveAtFor(raw, context.now);
   if (serveAt && 'leftover' in serveAt) {
     leftovers.push(leftoverOf('smoke', 'serveClock', serveAt.leftover));
+  } else if (serveAt && !planned) {
+    leftovers.push(leftoverOf('smoke', 'serveClock', serveAt.said));
   } else if (serveAt && serveAt.value.getTime() !== current.serveAt?.getTime()) {
     rows.push({
       id: 'serveAt',
@@ -908,6 +917,8 @@ const smokeRows = (
   const rest = restMinutesFor(raw.restMinutes);
   if (rest && 'leftover' in rest) {
     leftovers.push(leftoverOf('smoke', 'restMinutes', rest.leftover));
+  } else if (rest && !planned) {
+    leftovers.push(leftoverOf('smoke', 'restMinutes', `${rest.minutes} minutes`));
   } else if (rest && rest.minutes !== current.restMinutes) {
     rows.push({
       id: 'restMinutes',

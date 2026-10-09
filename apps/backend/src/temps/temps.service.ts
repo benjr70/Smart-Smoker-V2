@@ -135,6 +135,40 @@ export class TempsService extends BaseService<TempDocument> {
   }
 
   /**
+   * The reading of the current smoke that says what the pit was doing at `at`:
+   * the newest one taken at or before it, or `undefined` when no smoke is
+   * active or the cook has taken no reading at all.
+   *
+   * A moment earlier than every reading falls back to the first one taken after
+   * it. That happens at the very start of a cook, or when the smoker's clock
+   * runs ahead of the server's, and in both the pit a moment later is closer to
+   * the truth than no pit at all. Readings stored without a date cannot be
+   * placed either side of a moment and are never the answer.
+   */
+  async getCurrentTempAt(at: Date): Promise<Temp | undefined> {
+    return this.currentSmoke.readCurrent<Temp | undefined>(
+      'tempsId',
+      async (tempsId) => {
+        const [before] = await this.model
+          .find({ tempsId, date: { $lte: at } })
+          .sort({ date: -1 })
+          .limit(1)
+          .exec();
+        if (before) {
+          return before;
+        }
+        const [after] = await this.model
+          .find({ tempsId, date: { $gte: at } })
+          .sort({ date: 1 })
+          .limit(1)
+          .exec();
+        return after;
+      },
+      undefined,
+    );
+  }
+
+  /**
    * A stored smoke's readings, oldest first, for the same reason as above —
    * and bounded to the cook they belong to.
    *

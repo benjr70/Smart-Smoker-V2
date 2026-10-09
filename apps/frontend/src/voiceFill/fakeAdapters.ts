@@ -1,10 +1,11 @@
 /**
  * Scripted stand-ins for the two models, behind the same ports the real
  * adapters sit behind: a speech adapter that plays a transcript word by word
- * and an extractor that returns one raw object, whatever it is asked. Either
- * can be scripted to go wrong: a refused microphone, a model that fails or
- * takes too long.
+ * and an extractor that returns one raw object, whatever it is asked — or one per
+ * screen it is asked on. Either can be scripted to go wrong: a refused
+ * microphone, a model that fails or takes too long.
  */
+import type { VoiceFillScreen } from './fieldDefinition';
 import type { ExtractorPort, SpeechPort } from './ports';
 import { MICROPHONE_BLOCKED_ERROR } from './ports';
 
@@ -64,6 +65,11 @@ export const createFakeSpeech = ({
 export interface FakeExtractorScript {
   /** The raw object returned for every Ramble. */
   raw: unknown;
+  /**
+   * The raw object returned for a Ramble spoken on one screen, where that
+   * screen is scripted an answer of its own.
+   */
+  rawByScreen?: Partial<Record<VoiceFillScreen, unknown>>;
   /** How long the answer takes, in ms. */
   delayMs?: number;
   /** How many of the first answers are failures; `Infinity` for every one. */
@@ -71,11 +77,13 @@ export interface FakeExtractorScript {
 }
 
 /**
- * An extractor that answers every Ramble with its scripted raw object, as late
- * as it is scripted to, after failing as often as it is scripted to.
+ * An extractor that answers every Ramble with its scripted raw object — the one
+ * scripted for the screen it is asked on, where there is one — as late as it is
+ * scripted to, after failing as often as it is scripted to.
  */
 export const createFakeExtractor = ({
   raw,
+  rawByScreen = {},
   delayMs = 0,
   failures = 0,
 }: FakeExtractorScript): ExtractorPort => {
@@ -83,12 +91,13 @@ export const createFakeExtractor = ({
   let extractions = 0;
   return {
     load: () => Promise.resolve(),
-    extract: () => {
+    extract: screen => {
       extractions += 1;
       const fails = extractions <= failures;
+      const scripted = screen in rawByScreen ? rawByScreen[screen] : raw;
       return new Promise((resolve, reject) => {
         const answer = (): void =>
-          fails ? reject(new Error('The scripted model failed')) : resolve(raw);
+          fails ? reject(new Error('The scripted model failed')) : resolve(scripted);
         if (delayMs > 0) {
           setTimeout(answer, delayMs);
         } else {

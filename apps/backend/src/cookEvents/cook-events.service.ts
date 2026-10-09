@@ -14,6 +14,7 @@ import {
   defaultStamps,
   findStamp,
 } from '../appSettings/stamp-catalogue';
+import { CurrentSmokeService } from '../common/current-smoke.service';
 import { Temp } from '../temps/temps.schema';
 import { TempsService } from '../temps/temps.service';
 import { EventsGateway } from '../websocket/events.gateway';
@@ -34,13 +35,35 @@ const snapshotReading = (value: string | number | undefined): number | null => {
 };
 
 /**
+ * How far a caller's clock may disagree with the server's and still be
+ * believed. A moment this far ahead of the server is taken as now, and one this
+ * far before the cook's start as the start; anything further out is refused.
+ * Two minutes is far more than two NTP-synced clocks differ by and far less
+ * than would let a stamp be dated meaningfully into the future.
+ */
+export const COOK_EVENT_CLOCK_SKEW_MS = 2 * 60 * 1000;
+
+/**
+ * How far back a stamp may say it was done.
+ *
+ * The only caller that dates a stamp is Voice Fill, which logs it at the time
+ * of the Ramble: the gap is the time the review list was left open, which is
+ * minutes. Half an hour covers a cook who walked to the pit and back before
+ * tapping Fill, and stops well short of making this a way to rewrite the log.
+ */
+export const COOK_EVENT_MAX_BACKDATE_MS = 30 * 60 * 1000;
+
+/**
  * The cook log: what the pitmaster did, when, and what the pit was doing when
  * they did it.
  *
- * The service owns two decisions the clients must not make. The moment is the
- * server's clock, because the smoker touchscreen and a phone disagree about
- * what time it is and a log ordered by their clocks would reorder itself. The
- * temperatures are read here too, from the newest stored reading, because a
+ * The service owns two decisions the clients must not make. The moment of a tap
+ * is the server's clock, because the smoker touchscreen and a phone disagree
+ * about what time it is and a log ordered by their clocks would reorder itself.
+ * The one exception is a stamp that says when it was done — one spoken some
+ * minutes before it was logged — and that moment is believed only inside the
+ * window {@link CookEventsService.record} holds it to. The temperatures are
+ * read here too, from the stored reading for the entry's moment, because a
  * client sends only which button was pressed — anything it sent about the pit
  * would be whatever its own screen last happened to receive.
  *
@@ -55,6 +78,7 @@ export class CookEventsService extends BaseService<CookEventDocument> {
     private readonly state: StateService,
     private readonly settings: AppSettingsService,
     private readonly temps: TempsService,
+    private readonly currentSmoke: CurrentSmokeService,
     private readonly events: EventsGateway,
   ) {
     super(model, 'CookEvent');
@@ -67,8 +91,13 @@ export class CookEventsService extends BaseService<CookEventDocument> {
    * against is a conflict with the state of the session (409), which is what
    * the clients tell apart to say "not logged" rather than "nothing is
    * cooking".
+   *
+   * Given no `at`, the entry is stamped by the server's clock with the newest
+   * reading. Given one, it carries that moment and the reading for it — if the
+   * moment is one a stamp may be dated to (see {@link momentOf}); one that is
+   * not is the caller's mistake too (400).
    */
-  async record(stampKey: string): Promise<CookEvent> {
+  async record(stampKey: string, at?: Date): Promise<CookEvent> {
     const stamp = findStamp(stampKey, await this.catalogue());
     // A stamp nobody offers and one the user switched off are refused alike:
     // both mean the tap could only have come from a client showing buttons the
@@ -81,13 +110,14 @@ export class CookEventsService extends BaseService<CookEventDocument> {
     if (!smokeId) {
       throw new ConflictException('No smoke is in progress');
     }
-    const reading = await this.latestReading();
+    const moment = at === undefined ? undefined : await this.momentOf(at);
+    const reading = await this.readingAt(moment);
     const recorded = await this.create({
       smokeId,
       stampKey: stamp.key,
       label: stamp.label,
       tone: stamp.tone,
-      at: new Date(),
+      at: moment ?? new Date(),
       chamberTemp: snapshotReading(reading?.ChamberTemp),
       probe1Temp: snapshotReading(reading?.MeatTemp),
       probe2Temp: snapshotReading(reading?.Meat2Temp),
@@ -147,15 +177,65 @@ export class CookEventsService extends BaseService<CookEventDocument> {
   }
 
   /**
-   * The newest reading of the cook, or `undefined` when it has taken none —
-   * and `undefined` too when the reading could not be read at all. A tap that
-   * reached the backend is logged: temperatures nobody could fetch make the
-   * entry less informative, while failing the tap makes the pitmaster stand at
-   * a hot smoker pressing a button that does nothing.
+   * The moment an entry is stored under, for a caller that said when it was
+   * done — or a 400 when that moment is not one a stamp may be dated to.
+   *
+   * The window is from {@link COOK_EVENT_MAX_BACKDATE_MS} ago — or the cook's
+   * start, if that is later — up to now. Either end forgives a caller whose
+   * clock is off by up to {@link COOK_EVENT_CLOCK_SKEW_MS}, by storing the end
+   * itself: no entry is ever dated after the server's own clock or before its
+   * own cook, so the log's order stays one the server can vouch for.
    */
-  private async latestReading(): Promise<Temp | undefined> {
+  private async momentOf(at: Date): Promise<Date> {
+    const now = Date.now();
+    const given = at.getTime();
+    if (given > now + COOK_EVENT_CLOCK_SKEW_MS) {
+      throw new BadRequestException('A stamp cannot be dated in the future');
+    }
+    if (given < now - COOK_EVENT_MAX_BACKDATE_MS) {
+      throw new BadRequestException('A stamp cannot be dated that far back');
+    }
+    const startedAt = (await this.cookStartedAt())?.getTime();
+    if (
+      startedAt !== undefined &&
+      given < startedAt - COOK_EVENT_CLOCK_SKEW_MS
+    ) {
+      throw new BadRequestException(
+        'A stamp cannot be dated before its cook started',
+      );
+    }
+    return new Date(Math.min(now, Math.max(given, startedAt ?? given)));
+  }
+
+  /**
+   * When the cook in progress started, or `undefined` when it carries no start
+   * — and `undefined` too when the cook could not be read. The window alone
+   * still bounds the moment then, and a stamp is not lost to an unrelated
+   * failure.
+   */
+  private async cookStartedAt(): Promise<Date | undefined> {
     try {
-      return await this.temps.getLatestCurrentTemp();
+      const startedAt = (await this.currentSmoke.currentSmoke())?.startedAt;
+      return startedAt ? new Date(startedAt) : undefined;
+    } catch (err) {
+      this.logFailure('could not read when the cook started', err);
+      return undefined;
+    }
+  }
+
+  /**
+   * The reading an entry carries: the newest of the cook for a tap, the one
+   * for `moment` for a stamp that says when it was done — or `undefined` when
+   * the cook has taken none, and `undefined` too when the reading could not be
+   * read at all. A tap that reached the backend is logged: temperatures nobody
+   * could fetch make the entry less informative, while failing the tap makes
+   * the pitmaster stand at a hot smoker pressing a button that does nothing.
+   */
+  private async readingAt(moment?: Date): Promise<Temp | undefined> {
+    try {
+      return moment
+        ? await this.temps.getCurrentTempAt(moment)
+        : await this.temps.getLatestCurrentTemp();
     } catch (err) {
       this.logFailure('could not read the pit for a cook event', err);
       return undefined;
