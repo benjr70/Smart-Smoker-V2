@@ -9,6 +9,9 @@ const EDGE_GAP = 16;
 /** How tall the button is, and the toast that takes its place. */
 const CONTROL_HEIGHT = 60;
 
+/** How tall the grey pill is: it stands in for the button without its weight. */
+const PILL_HEIGHT = 52;
+
 /** Where the button and the toast sit: just clear of the navigation bar. */
 const ABOVE_BOTTOM_BAR = `calc(${BOTTOM_BAR_HEIGHT + EDGE_GAP}px + env(safe-area-inset-bottom))`;
 
@@ -64,6 +67,51 @@ export function VoiceFillButton({ onClick }: VoiceFillButtonProps): JSX.Element 
       })}
     >
       Voice fill
+    </Button>
+  );
+}
+
+export interface VoiceFillPillProps {
+  /** Why Voice Fill cannot be used yet: how far the download is, or that there is none. */
+  message: string;
+  /** Opens Settings at the Voice Fill card. */
+  onClick: () => void;
+}
+
+/**
+ * What stands in the button's place while the picked pair is not ready: a grey
+ * pill that says why, and takes a tap to the settings card where it is fixed.
+ */
+export function VoiceFillPill({ message, onClick }: VoiceFillPillProps): JSX.Element {
+  return (
+    <Button
+      variant="outlined"
+      onClick={onClick}
+      data-testid="voice-fill-pill"
+      startIcon={<MicIcon size={18} />}
+      sx={theme => ({
+        position: 'fixed',
+        right: EDGE_GAP,
+        bottom: ABOVE_BOTTOM_BAR,
+        zIndex: theme.zIndex.speedDial,
+        height: PILL_HEIGHT,
+        padding: '0 18px',
+        borderRadius: `${PILL_HEIGHT / 2}px`,
+        fontSize: '0.8125rem',
+        fontWeight: 600,
+        fontVariantNumeric: 'tabular-nums',
+        textTransform: 'none',
+        color: theme.design.textSecondary,
+        backgroundColor: theme.design.surface,
+        border: `1.5px solid ${theme.design.border}`,
+        boxShadow: theme.shadows[3],
+        '&:hover': {
+          backgroundColor: theme.design.surface,
+          border: `1.5px solid ${theme.design.border}`,
+        },
+      })}
+    >
+      {message}
     </Button>
   );
 }
