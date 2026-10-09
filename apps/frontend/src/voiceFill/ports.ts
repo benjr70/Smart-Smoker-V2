@@ -14,11 +14,24 @@ export interface SpeechPort {
   /**
    * Starts listening. `onPartial` is given the transcript so far — the whole of
    * it, not the words since the last call — each time more is heard.
+   *
+   * Rejects when it cannot listen. A microphone the cook has refused is told
+   * apart from every other failure by {@link isMicrophoneBlocked}: an adapter
+   * lets the browser's own refusal through as it is.
    */
   start(onPartial: (transcript: string) => void): Promise<void>;
   /** Stops listening and gives the final transcript of the Ramble. */
   stop(): Promise<string>;
 }
+
+/** What a browser names the error it refuses a microphone with. */
+export const MICROPHONE_BLOCKED_ERROR = 'NotAllowedError';
+
+/** Whether `error` is the microphone being refused, and not a model failing. */
+export const isMicrophoneBlocked = (error: unknown): boolean =>
+  typeof error === 'object' &&
+  error !== null &&
+  (error as { name?: unknown }).name === MICROPHONE_BLOCKED_ERROR;
 
 /** What an extractor is told besides the transcript. */
 export interface ExtractionContext {

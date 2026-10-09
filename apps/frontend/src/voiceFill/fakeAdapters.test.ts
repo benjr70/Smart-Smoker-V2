@@ -43,6 +43,19 @@ describe('the fake speech adapter', () => {
 
     expect(partials).toEqual(['one']);
   });
+
+  test('refuses to listen when its microphone is scripted as blocked, the way a browser refuses', async () => {
+    const speech = createFakeSpeech({ transcript: 'one two three', microphone: 'blocked' });
+    const partials: string[] = [];
+
+    await speech.load();
+    await expect(speech.start(partial => partials.push(partial))).rejects.toMatchObject({
+      name: 'NotAllowedError',
+    });
+
+    jest.advanceTimersByTime(1000);
+    expect(partials).toEqual([]);
+  });
 });
 
 describe('the fake extractor adapter', () => {
@@ -56,6 +69,15 @@ describe('the fake extractor adapter', () => {
 
     await expect(extractor.extract('preSmoke', 'anything', context)).resolves.toBe(raw);
     await expect(extractor.extract('postSmoke', 'anything else', context)).resolves.toBe(raw);
+  });
+
+  test('fails as many of its first answers as it is scripted to, then answers', async () => {
+    const extractor = createFakeExtractor({ raw: { weight: 16 }, failures: 1 });
+
+    await expect(extractor.extract('preSmoke', 'anything', context)).rejects.toThrow();
+    await expect(extractor.extract('preSmoke', 'anything', context)).resolves.toEqual({
+      weight: 16,
+    });
   });
 
   test('takes as long to answer as it is scripted to', async () => {

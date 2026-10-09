@@ -47,6 +47,7 @@ export {
   tickedAfterToggle,
 } from './extractionContract';
 export type { ExtractionContext, ExtractorPort, SpeechPort } from './ports';
+export { MICROPHONE_BLOCKED_ERROR, isMicrophoneBlocked } from './ports';
 export type { FakeExtractorScript, FakeSpeechScript } from './fakeAdapters';
 export { createFakeExtractor, createFakeSpeech } from './fakeAdapters';
 export type {
@@ -55,11 +56,11 @@ export type {
   VoiceFillSessionOptions,
   VoiceFillState,
 } from './session';
-export { TOAST_MS, createVoiceFillSession } from './session';
+export { PROBLEM_CAP_MS, TOAST_MS, createVoiceFillSession } from './session';
 export type { VoiceFillPorts, VoiceFillPortsProviderProps } from './VoiceFillPortsProvider';
 export { VoiceFillPortsProvider, useVoiceFillPorts } from './VoiceFillPortsProvider';
 export { useScreenBinding } from './useScreenBinding';
-export type { VoiceFill } from './useVoiceFill';
+export type { VoiceFill, VoiceFillOptions } from './useVoiceFill';
 export { useVoiceFill } from './useVoiceFill';
 export type { FilledFlashProps } from './FilledFlash';
 export { FLASH_MS, FilledFlash } from './FilledFlash';

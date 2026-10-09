@@ -23,6 +23,15 @@ export interface VoiceFill<Values> {
   isFlashing: (field: keyof Values & string) => boolean;
 }
 
+export interface VoiceFillOptions {
+  /**
+   * Opens the place the models are picked: where "Change model" takes a cook
+   * whose model has failed. The screen says how; Voice Fill only asks. A
+   * screen that has no way there gives none, and "Change model" is not offered.
+   */
+  onChangeModel?: () => void;
+}
+
 const IDLE = { phase: 'idle' } as const;
 const NOTHING: readonly string[] = [];
 
@@ -32,7 +41,8 @@ const NOTHING: readonly string[] = [];
  */
 export const useVoiceFill = <Screen extends VoiceFillScreen>(
   screen: Screen,
-  binding: ScreenBinding<VoiceFillScreenValues[Screen]>
+  binding: ScreenBinding<VoiceFillScreenValues[Screen]>,
+  { onChangeModel }: VoiceFillOptions = {}
 ): VoiceFill<VoiceFillScreenValues[Screen]> => {
   type Values = VoiceFillScreenValues[Screen];
   const ports = useVoiceFillPorts();
@@ -81,6 +91,17 @@ export const useVoiceFill = <Screen extends VoiceFillScreen>(
         onDoneTalking={session.doneTalking}
         onToggle={session.toggle}
         onFill={session.fill}
+        onRetry={session.retry}
+        onFixText={session.fixText}
+        onRedo={session.redo}
+        onChangeModel={
+          onChangeModel &&
+          (() => {
+            // The Ramble does not come along: its transcript goes with the sheet.
+            session.cancel();
+            onChangeModel();
+          })
+        }
         onClose={session.cancel}
       />
       {state.phase === 'applied' && <VoiceFillToast count={state.count} onUndo={session.undo} />}

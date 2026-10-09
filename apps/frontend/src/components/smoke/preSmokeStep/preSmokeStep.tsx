@@ -15,6 +15,8 @@ import { MEAT_TYPES } from './meatTypes';
 
 type PreSmokeStepProps = {
   nextButton: JSX.Element;
+  /** Opens the settings screen: where Voice Fill sends a cook to change its model. */
+  onOpenSettings?: () => void;
 };
 
 export function PreSmokeStep(props: PreSmokeStepProps) {
@@ -38,7 +40,7 @@ export function PreSmokeStep(props: PreSmokeStepProps) {
   // the same setter, the fields below are typed into — so a value filled from
   // a Ramble is saved, and skipped when unchanged, exactly as a typed one is.
   const binding = useScreenBinding(preSmokeState, setPreSmokeState);
-  const voiceFill = useVoiceFill('preSmoke', binding);
+  const voiceFill = useVoiceFill('preSmoke', binding, { onChangeModel: props.onOpenSettings });
 
   return (
     // One flat column of fields down the screen, as the design draws it: the cut

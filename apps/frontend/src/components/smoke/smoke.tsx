@@ -43,8 +43,9 @@ export interface SmokeProps {
   onViewHistory?: () => void;
   /**
    * Where the smoke step's completion card sends a cook who is watching no
-   * probe. Asked for the same reason as the history: the wizard does not know
-   * how this application navigates.
+   * probe, and where Voice Fill sends one to change its model. Asked for the
+   * same reason as the history: the wizard does not know how this application
+   * navigates.
    */
   onOpenSettings?: () => void;
 }
@@ -189,7 +190,7 @@ export function Smoke({ onViewHistory, onOpenSettings }: SmokeProps = {}): JSX.E
   } else {
     switch (activeStep) {
       case 0:
-        step = <PreSmokeStep nextButton={nextButton} />;
+        step = <PreSmokeStep nextButton={nextButton} onOpenSettings={onOpenSettings} />;
         break;
       case 1:
         step = <SmokeStep nextButton={nextButton} onOpenSettings={onOpenSettings} />;
