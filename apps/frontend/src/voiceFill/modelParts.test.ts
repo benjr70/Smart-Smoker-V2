@@ -261,8 +261,15 @@ describe('a part store kept in the browser’s Cache API', () => {
             const part = kept.get(url);
             return Promise.resolve(part && { blob: () => Promise.resolve(part) });
           },
-          put: async (url, response) => {
-            kept.set(url, await drained(response.body as ReadableStream<Uint8Array>));
+          put: (url, response) => {
+            // A browser's cache drops a body that is still arriving once it is
+            // some megabytes long; a body that is already whole, it keeps.
+            const body = (response as unknown as { body: unknown }).body;
+            if (!(body instanceof NodeBlob)) {
+              return Promise.reject(new Error('Cache.put() encountered a network error'));
+            }
+            kept.set(url, body as unknown as Blob);
+            return Promise.resolve();
           },
           delete: url => Promise.resolve(kept.delete(url)),
         });
@@ -293,6 +300,18 @@ describe('a part store kept in the browser’s Cache API', () => {
     expect([...(opened.get('voiceFill.test')?.keys() ?? [])]).toEqual(['part-0']);
     expect(await store.has('part-0')).toBe(true);
     expect(await bytesOf(await store.get('part-0'))).toEqual([0, 1, 2, 3]);
+  });
+
+  it('gives the cache a part only once all of it has arrived, as one blob', async () => {
+    const { storage, opened } = createCaches();
+    const store = createCachePartStore('voiceFill.test', () => storage);
+
+    await store.put('part-0', streamOf([BYTES.slice(0, 2), BYTES.slice(2, 3), BYTES.slice(3, 4)]));
+
+    const kept = opened.get('voiceFill.test')?.get('part-0');
+    expect(kept).toBeInstanceOf(NodeBlob);
+    expect(kept?.size).toBe(4);
+    expect(await bytesOf(kept)).toEqual([0, 1, 2, 3]);
   });
 
   it('keeps nothing of a part that broke off', async () => {

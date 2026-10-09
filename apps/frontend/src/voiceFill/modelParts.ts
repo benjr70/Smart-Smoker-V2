@@ -3,11 +3,12 @@
  * its host a range at a time, and each range is kept as a part of its own, in
  * a store on the phone.
  *
- * A file of two gigabytes cannot be held in memory to be kept, so each part is
- * written to the store as it arrives and never held whole. And it cannot be
- * started again from nothing each time a download breaks, so the parts that
- * had arrived stay: the next download goes on from the part it broke in. A
- * load reads the parts back as one file, with no network.
+ * A file of two gigabytes cannot be held in memory to be kept, so it is kept a
+ * part at a time: one part is all of it that is ever in memory, and only until
+ * the store has it. And it cannot be started again from nothing each time a
+ * download breaks, so the parts that had arrived stay: the next download goes
+ * on from the part it broke in. A load reads the parts back as one file, with
+ * no network.
  *
  * Nothing here knows which model the file is of, or what runs it.
  */
@@ -20,7 +21,10 @@ export interface PartedFile {
   size: number;
 }
 
-/** How many bytes a part is: all but the last, which is what is left. */
+/**
+ * How many bytes a part is: all but the last, which is what is left. It is
+ * also how much of the file is in memory at once while it downloads.
+ */
 export const PART_BYTES = 32 * 1024 * 1024;
 
 /** How many more bytes have to arrive before progress is told again. */
@@ -30,8 +34,9 @@ export const PROGRESS_STEP_BYTES = 1024 * 1024;
 export interface ModelPartStore {
   has(key: string): Promise<boolean>;
   /**
-   * Keeps everything `body` gives under `key`, as it arrives. Resolves once it
-   * is all kept; rejects, keeping nothing under `key`, if `body` breaks off.
+   * Keeps everything `body` gives under `key`, reading it as it arrives.
+   * Resolves once it is all kept; rejects, keeping nothing under `key`, if
+   * `body` breaks off.
    */
   put(key: string, body: ReadableStream<Uint8Array>): Promise<void>;
   /** The part kept under `key`; nothing where none is. */
@@ -181,6 +186,19 @@ export const wholeFile = async (
   return new Blob(parts);
 };
 
+/** Everything `body` gives, as one blob; rejects as `body` does if it breaks off. */
+const wholePart = async (body: ReadableStream<Uint8Array>): Promise<Blob> => {
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      return new Blob(chunks);
+    }
+    chunks.push(value);
+  }
+};
+
 /** The parts of the browser's Cache API a part store is kept in. */
 export interface CachePartStorage {
   open(name: string): Promise<{
@@ -213,8 +231,13 @@ export const createCachePartStore = (
   };
   return {
     has: async key => storage() !== undefined && (await (await cache()).match(key)) !== undefined,
-    // The cache takes the part as it arrives, and keeps it only if it all does.
-    put: async (key, body) => (await cache()).put(key, new Response(body)),
+    // The cache is given the part whole, once all of it has arrived. Given a
+    // body that is still arriving, Chrome's cache drops it with a network
+    // error some ten megabytes in, and nothing of the model is ever kept.
+    put: async (key, body) => {
+      const opened = await cache();
+      await opened.put(key, new Response(await wholePart(body)));
+    },
     get: async key => {
       if (!storage()) {
         return undefined;
