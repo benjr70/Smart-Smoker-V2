@@ -134,6 +134,23 @@ describe('useCookEvents', () => {
     expect(backend.requests.some(r => r.method === 'post' && r.path === 'cook-events')).toBe(true);
   });
 
+  it('logs a stamp at the moment it is told, and a tap at none', async () => {
+    const socket = fakeSubscription();
+    const backend = lit();
+    const { result } = renderCookEvents(backend, socket.port);
+    await waitFor(() => expect(result.current.events).toHaveLength(1));
+    const spoken = new Date('2026-08-25T12:30:00.000Z');
+
+    await act(async () => {
+      expect((await result.current.log('wrap', spoken))?.at).toEqual(spoken);
+      expect(await result.current.record('spritz')).toBe(true);
+    });
+
+    expect(
+      backend.requests.filter(r => r.method === 'post' && r.path === 'cook-events').map(r => r.body)
+    ).toEqual([{ stampKey: 'wrap', at: spoken.toISOString() }, { stampKey: 'spritz' }]);
+  });
+
   it('reports a tap that could not be logged, and records nothing', async () => {
     const socket = fakeSubscription();
     const backend = createFakeBackend({ state: { smokeId: '', smoking: false } });

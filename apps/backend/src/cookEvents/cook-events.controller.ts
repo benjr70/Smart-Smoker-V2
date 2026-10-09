@@ -24,16 +24,19 @@ export class CookEventsController {
 
   /**
    * Log one tap against the cook in progress, at the server's clock and with
-   * the pit as the readings last reported it.
+   * the pit as the readings last reported it — or, for a stamp that says when
+   * it was done, at that moment and with the pit as it was then.
    */
   @Post()
   @ApiOkResponse({ type: CookEvent })
   @ApiBadRequestResponse({
-    description: 'The stamp key is not in the catalogue.',
+    description:
+      'The stamp key is not in the catalogue, or the moment given is outside ' +
+      'the window a stamp may be dated in.',
   })
   @ApiConflictResponse({ description: 'No smoke is in progress.' })
   record(@Body() dto: RecordCookEventDto): Promise<CookEvent> {
-    return this.cookEvents.record(dto.stampKey);
+    return this.cookEvents.record(dto.stampKey, dto.at);
   }
 
   /**

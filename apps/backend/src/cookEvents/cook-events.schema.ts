@@ -39,8 +39,15 @@ export class CookEvent {
   @Prop()
   tone: StampTone;
 
-  /** The server's clock. Never the caller's — kiosks drift. */
-  @ApiProperty({ description: 'When it was logged, by the server clock.' })
+  /**
+   * The server's clock for a tap. A stamp logged after the fact carries the
+   * moment its caller gave, once the service has held it to its window.
+   */
+  @ApiProperty({
+    description:
+      'When it was done: the server clock for a tap, the moment given for a ' +
+      'stamp logged after the fact.',
+  })
   @Prop({ required: true })
   at: Date;
 

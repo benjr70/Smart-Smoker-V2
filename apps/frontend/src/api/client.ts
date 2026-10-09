@@ -464,13 +464,17 @@ export interface CookEventsResource {
   /**
    * POST `cook-events` — log one tap against the cook in progress.
    *
-   * The stamp key is the whole request: the moment and the four temperatures
-   * are the backend's to decide, from its own clock and the newest stored
-   * reading. Rejects with the typed {@link ApiError} — 409 when no cook is set
-   * up, 400 for a stamp the backend does not know — so a client can tell "not
-   * logged" from "nothing is cooking".
+   * For a tap the stamp key is the whole request: the moment and the four
+   * temperatures are the backend's to decide, from its own clock and the newest
+   * stored reading. A stamp logged after it was done — one spoken to Voice
+   * Fill — says when with `at`, and the backend stores that moment and the
+   * reading for it, if the moment is recent enough for it to believe.
+   *
+   * Rejects with the typed {@link ApiError} — 409 when no cook is set up, 400
+   * for a stamp the backend does not know or a moment it will not date a stamp
+   * to — so a client can tell "not logged" from "nothing is cooking".
    */
-  record(stampKey: string): Promise<CookEvent>;
+  record(stampKey: string, at?: Date): Promise<CookEvent>;
   /** GET `cook-events/current` — the in-progress cook's log, oldest first. */
   listCurrent(): Promise<CookEvent[]>;
   /** GET `cook-events/smoke/:smokeId` — a stored cook's log, oldest first. */
@@ -1197,9 +1201,9 @@ export const createApiClient = (
     },
   },
   cookEvents: {
-    record: (stampKey: string) =>
+    record: (stampKey: string, at?: Date) =>
       transport
-        .post<WireCookEvent>('cook-events', { stampKey })
+        .post<WireCookEvent>('cook-events', { stampKey, ...(at && { at: at.toISOString() }) })
         .then(event => cookEventsFromWire([event])[0]),
     listCurrent: () =>
       transport.get<WireCookEvent[]>('cook-events/current').then(cookEventsFromWire),

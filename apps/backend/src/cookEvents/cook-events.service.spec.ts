@@ -4,9 +4,14 @@ import { getModelToken } from '@nestjs/mongoose';
 import { StateService } from '../State/state.service';
 import { AppSettingsService } from '../appSettings/app-settings.service';
 import { CookStamp, defaultStamps } from '../appSettings/stamp-catalogue';
+import { CurrentSmokeService } from '../common/current-smoke.service';
 import { TempsService } from '../temps/temps.service';
 import { EventsGateway } from '../websocket/events.gateway';
-import { CookEventsService } from './cook-events.service';
+import {
+  COOK_EVENT_CLOCK_SKEW_MS,
+  COOK_EVENT_MAX_BACKDATE_MS,
+  CookEventsService,
+} from './cook-events.service';
 import { FakeDoc, fakeCollection } from './testing/fake-collection';
 
 describe('CookEventsService', () => {
@@ -16,9 +21,13 @@ describe('CookEventsService', () => {
   let latestReading: FakeDoc | undefined;
   let catalogue: CookStamp[];
   let broadcast: jest.Mock;
+  let readingAt: jest.Mock;
+  let currentSmoke: jest.Mock;
 
   const build = async (): Promise<CookEventsService> => {
     broadcast = jest.fn();
+    readingAt = jest.fn(async () => undefined);
+    currentSmoke = jest.fn(async () => ({}));
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CookEventsService,
@@ -29,7 +38,14 @@ describe('CookEventsService', () => {
         { provide: StateService, useValue: { GetState: async () => state } },
         {
           provide: TempsService,
-          useValue: { getLatestCurrentTemp: async () => latestReading },
+          useValue: {
+            getLatestCurrentTemp: async () => latestReading,
+            getCurrentTempAt: (at: Date) => readingAt(at),
+          },
+        },
+        {
+          provide: CurrentSmokeService,
+          useValue: { currentSmoke: () => currentSmoke() },
         },
         {
           provide: AppSettingsService,
@@ -210,5 +226,124 @@ describe('CookEventsService', () => {
       BadRequestException,
     );
     expect(stored).toHaveLength(0);
+  });
+
+  /**
+   * A stamp logged by voice was done when it was spoken of, not when the review
+   * list was finally filled: the caller may say when, within a narrow window.
+   */
+  describe('a stamp that says when it was done', () => {
+    const minutesAgo = (minutes: number): Date =>
+      new Date(Date.now() - minutes * 60 * 1000);
+
+    it('reads no past moment for a tap that names none', async () => {
+      await service.record('wrap');
+
+      expect(readingAt).not.toHaveBeenCalled();
+      expect(currentSmoke).not.toHaveBeenCalled();
+    });
+
+    it('stores the moment it was given and the pit as it was then', async () => {
+      const spoken = minutesAgo(2);
+      readingAt.mockResolvedValue({
+        ChamberTemp: '236',
+        MeatTemp: '160',
+        Meat2Temp: '155',
+        Meat3Temp: '',
+        date: minutesAgo(2.1),
+      });
+
+      const recorded = await service.record('wrap', spoken);
+
+      expect(recorded.at).toEqual(spoken);
+      expect(readingAt).toHaveBeenCalledWith(spoken);
+      // The pit two minutes ago, not the newest reading.
+      expect(recorded.chamberTemp).toBe(236);
+      expect(recorded.probe1Temp).toBe(160);
+      expect(recorded.probe2Temp).toBe(155);
+      expect(recorded.probe3Temp).toBeNull();
+      expect((await service.listCurrent())[0].at).toEqual(spoken);
+    });
+
+    it('stores the moment with no readings when the pit cannot be read for it', async () => {
+      readingAt.mockRejectedValue(new Error('mongo is away'));
+
+      const recorded = await service.record('wrap', minutesAgo(1));
+
+      expect(recorded.chamberTemp).toBeNull();
+      expect(await service.listCurrent()).toHaveLength(1);
+    });
+
+    it('takes a moment a little ahead of its own clock as now', async () => {
+      const before = Date.now();
+      const ahead = new Date(before + COOK_EVENT_CLOCK_SKEW_MS / 2);
+
+      const recorded = await service.record('wrap', ahead);
+
+      expect(recorded.at.getTime()).toBeGreaterThanOrEqual(before);
+      expect(recorded.at.getTime()).toBeLessThanOrEqual(Date.now());
+    });
+
+    it('refuses a moment that has not happened yet', async () => {
+      const future = new Date(Date.now() + COOK_EVENT_CLOCK_SKEW_MS + 60_000);
+
+      await expect(service.record('wrap', future)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(stored).toHaveLength(0);
+    });
+
+    it('refuses a moment further back than a Ramble waits to be filled', async () => {
+      const longAgo = new Date(
+        Date.now() - COOK_EVENT_MAX_BACKDATE_MS - 60_000,
+      );
+
+      await expect(service.record('wrap', longAgo)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(stored).toHaveLength(0);
+    });
+
+    it('accepts a moment just inside that window', async () => {
+      const inside = new Date(Date.now() - COOK_EVENT_MAX_BACKDATE_MS + 60_000);
+
+      expect((await service.record('wrap', inside)).at).toEqual(inside);
+    });
+
+    it('refuses a moment from before the cook was started', async () => {
+      currentSmoke.mockResolvedValue({ startedAt: minutesAgo(5) });
+
+      await expect(
+        service.record('wrap', minutesAgo(10)),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(stored).toHaveLength(0);
+    });
+
+    it('takes a moment a little before the start as the start', async () => {
+      const startedAt = minutesAgo(5);
+      currentSmoke.mockResolvedValue({ startedAt });
+
+      const recorded = await service.record(
+        'wrap',
+        new Date(startedAt.getTime() - COOK_EVENT_CLOCK_SKEW_MS / 2),
+      );
+
+      expect(recorded.at).toEqual(startedAt);
+    });
+
+    it('holds a cook whose start cannot be read to the window alone', async () => {
+      currentSmoke.mockRejectedValue(new Error('mongo is away'));
+      const spoken = minutesAgo(3);
+
+      expect((await service.record('wrap', spoken)).at).toEqual(spoken);
+    });
+
+    it('still answers no cook before it answers a bad moment', async () => {
+      state = { smokeId: '', smoking: false };
+
+      await expect(
+        service.record('wrap', new Date('2020-01-01T00:00:00.000Z')),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
   });
 });

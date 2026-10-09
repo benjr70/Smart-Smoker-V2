@@ -79,8 +79,11 @@ export interface SmokeScreenBindingInput {
   };
   /** Tells the cook of something that could not be done, as the screen's hooks do. */
   notify(message: string): void;
-  /** The cook log path: logs one stamp and answers the entry stored for it. */
-  logStamp(stampKey: string): Promise<CookEvent | null>;
+  /**
+   * The cook log path: logs one stamp as done at `at` and answers the entry
+   * stored for it.
+   */
+  logStamp(stampKey: string, at: Date): Promise<CookEvent | null>;
   /** Removes one entry from the cook log. */
   removeStamp(id: string): Promise<boolean>;
   /** The stamp catalogue, whole, as the cook log's buttons are drawn from it. */
@@ -249,9 +252,11 @@ const fillServePlan = (
 };
 
 /**
- * Logs each stamp, one after another in the order they were said, at the moment
- * of the fill — the moment and the readings of an entry are the backend's, as
- * they are for a tapped one. Undo removes every entry the fill logged.
+ * Logs each stamp, one after another in the order they were said, at the time
+ * of the Ramble rather than of the fill: the review list may have stood open
+ * for minutes, and the thing was done when it was spoken of. The readings of an
+ * entry are still the backend's, read for that moment. Undo removes every entry
+ * the fill logged.
  */
 const fillStamps = (
   { logStamp, removeStamp }: SmokeScreenBindingInput,
@@ -264,7 +269,7 @@ const fillStamps = (
   const logged = stamps.reduce<Promise<CookEvent[]>>(
     (log, stamp) =>
       log.then(entries =>
-        logStamp(stamp.stampKey).then(entry => (entry ? [...entries, entry] : entries))
+        logStamp(stamp.stampKey, stamp.at).then(entry => (entry ? [...entries, entry] : entries))
       ),
     Promise.resolve([])
   );

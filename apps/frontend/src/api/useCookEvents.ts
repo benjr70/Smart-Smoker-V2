@@ -9,8 +9,9 @@
  * client had just deleted.
  *
  * A tap is applied from the backend's own answer rather than optimistically:
- * the moment and the four temperatures are the server's, so an entry invented
- * here would show a time and a pit that no reload agrees with.
+ * the moment and the four temperatures are the server's — or, for a stamp that
+ * says when it was done, the server's reading of that moment — so an entry
+ * invented here would show a time and a pit that no reload agrees with.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useApiClient } from './ApiClientProvider';
@@ -50,8 +51,11 @@ export interface UseCookEventsResult {
    * Log one tap and answer the entry the backend stored for it, or `null` when
    * it stored none: what a caller that may take the entry out again — by its
    * id — needs, and {@link record} does not say.
+   *
+   * Given `at`, the stamp is logged as done then rather than now: what a stamp
+   * spoken some minutes before it is logged needs, and a tap never does.
    */
-  log: (stampKey: string) => Promise<CookEvent | null>;
+  log: (stampKey: string, at?: Date) => Promise<CookEvent | null>;
   /** Remove one mis-tapped event. Resolves whether it was removed. */
   remove: (id: string) => Promise<boolean>;
 }
@@ -103,9 +107,9 @@ export function useCookEvents(options: UseCookEventsOptions = {}): UseCookEvents
   }, []);
 
   const log = useCallback(
-    (stampKey: string): Promise<CookEvent | null> =>
+    (stampKey: string, at?: Date): Promise<CookEvent | null> =>
       client.cookEvents
-        .record(stampKey)
+        .record(stampKey, at)
         .then(recorded => {
           supersededRef.current = true;
           // Appended from the backend's answer. The announcement that follows

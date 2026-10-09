@@ -314,6 +314,79 @@ describe('TempsService', () => {
     });
   });
 
+  describe('getCurrentTempAt', () => {
+    // A cook event dated a few minutes back carries the pit as it was then.
+    const series: Temp[] = [
+      {
+        ...mockTempRows[0],
+        ChamberTemp: '210',
+        date: new Date('2026-08-02T10:00:00Z'),
+      },
+      {
+        ...mockTempRows[0],
+        ChamberTemp: '250',
+        date: new Date('2026-08-02T12:00:00Z'),
+      },
+      {
+        ...mockTempRows[0],
+        ChamberTemp: '230',
+        date: new Date('2026-08-02T11:00:00Z'),
+      },
+    ];
+
+    beforeEach(() => {
+      model.find = filteringFind(series);
+      currentSmoke.readCurrent.mockImplementation((key, load) =>
+        load('temps-group-1'),
+      );
+    });
+
+    it('returns the newest reading taken at or before the moment', async () => {
+      const result = await service.getCurrentTempAt(
+        new Date('2026-08-02T11:30:00Z'),
+      );
+
+      expect(result?.ChamberTemp).toBe('230');
+      expect(model.find).toHaveBeenCalledWith(
+        expect.objectContaining({ tempsId: 'temps-group-1' }),
+      );
+    });
+
+    it('returns a reading taken at exactly the moment', async () => {
+      const result = await service.getCurrentTempAt(
+        new Date('2026-08-02T12:00:00Z'),
+      );
+
+      expect(result?.ChamberTemp).toBe('250');
+    });
+
+    it('falls back to the first reading after a moment that precedes them all', async () => {
+      const result = await service.getCurrentTempAt(
+        new Date('2026-08-02T09:00:00Z'),
+      );
+
+      expect(result?.ChamberTemp).toBe('210');
+    });
+
+    it('returns nothing for a cook with no readings', async () => {
+      model.find = filteringFind([]);
+
+      expect(
+        await service.getCurrentTempAt(new Date('2026-08-02T11:30:00Z')),
+      ).toBeUndefined();
+    });
+
+    it('returns nothing when no smoke is active', async () => {
+      currentSmoke.readCurrent.mockImplementation(
+        (key, load, fallback) => fallback,
+      );
+
+      expect(
+        await service.getCurrentTempAt(new Date('2026-08-02T11:30:00Z')),
+      ).toBeUndefined();
+    });
+  });
+
   describe('GetTempID', () => {
     it('returns the current smoke tempsId group', async () => {
       currentSmoke.readCurrent.mockImplementation((key, load) =>

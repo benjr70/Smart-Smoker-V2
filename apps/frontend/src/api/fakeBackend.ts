@@ -423,6 +423,9 @@ const EMPTY_BODY = null;
 /** A stored event's moment, however the seed wrote it. */
 const moment = (event: StoredCookEvent): number => new Date(event.at).getTime();
 
+/** A stored reading's moment, however the seed wrote it. */
+const readingMoment = (reading: StoredTempData): number => new Date(reading.date).getTime();
+
 /** The id the fake gives the session a pre-smoke save creates. */
 const NEXT_SMOKE_ID = 'smoke-next';
 
@@ -1091,7 +1094,7 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
         return log();
       }
       if (method === 'post' && id === undefined) {
-        const stampKey = (body as { stampKey?: string })?.stampKey;
+        const { stampKey, at } = (body ?? {}) as { stampKey?: string; at?: string };
         // Resolved against the stored catalogue, as the backend resolves it:
         // the label and colour recorded are the ones the stamp carries now, so
         // a rename saved a moment ago is what the next tap is logged under.
@@ -1106,7 +1109,17 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
         if (!store.state?.smokeId) {
           throw new ApiError({ status: 409, path, method });
         }
-        const latest = store.temps.current[store.temps.current.length - 1];
+        // A stamp that says when it was done carries the pit as it was then:
+        // the newest reading at or before that moment, or the first after it.
+        // The window the backend holds such a moment to is not mirrored: it is
+        // measured against the real clock, and the cooks seeded here are not.
+        const said = at === undefined ? undefined : new Date(at).getTime();
+        const readings = store.temps.current;
+        const latest =
+          said === undefined
+            ? readings[readings.length - 1]
+            : ([...readings].reverse().find(reading => readingMoment(reading) <= said) ??
+              readings.find(reading => readingMoment(reading) > said));
         store.cookEventsRecorded += 1;
         const recorded: StoredCookEvent = {
           _id: `cook-event-${store.cookEventsRecorded}`,
@@ -1114,8 +1127,9 @@ export const createFakeBackend = (seed: FakeBackendSeed = {}): FakeBackend => {
           stampKey: stamp.key,
           label: stamp.label,
           tone: stamp.tone,
-          // The server's clock, as the backend stamps it.
-          at: new Date().toISOString(),
+          // The moment the caller gave, or the server's clock for a tap, as
+          // the backend stamps it.
+          at: at ?? new Date().toISOString(),
           chamberTemp: latest === undefined ? null : Number(latest.ChamberTemp),
           probe1Temp: latest === undefined ? null : Number(latest.MeatTemp),
           probe2Temp: latest === undefined ? null : Number(latest.Meat2Temp),

@@ -21,6 +21,67 @@ describe('cook events client — endpoint contract', () => {
     ]);
   });
 
+  test('a stamp that says when it was done sends that moment, and a tap sends none', async () => {
+    const backend = createFakeBackend({
+      state: { smokeId: 'smoke-1', smoking: true },
+      temps: {
+        current: [
+          {
+            ChamberTemp: '230',
+            MeatTemp: '150',
+            Meat2Temp: '0',
+            Meat3Temp: '0',
+            date: '2026-08-25T12:00:00.000Z',
+          },
+          {
+            ChamberTemp: '250',
+            MeatTemp: '160',
+            Meat2Temp: '0',
+            Meat3Temp: '0',
+            date: '2026-08-25T12:10:00.000Z',
+          },
+        ],
+      },
+    });
+    const client = createApiClient(backend);
+    const spoken = new Date('2026-08-25T12:05:00.000Z');
+
+    const dated = await client.cookEvents.record('wrap', spoken);
+    const tapped = await client.cookEvents.record('wood');
+
+    expect(backend.requests.map(r => r.body)).toEqual([
+      { stampKey: 'wrap', at: '2026-08-25T12:05:00.000Z' },
+      { stampKey: 'wood' },
+    ]);
+    // The moment given, and the pit as it was then rather than as it is now.
+    expect(dated.at).toEqual(spoken);
+    expect(dated.chamberTemp).toBe(230);
+    expect(tapped.at).not.toEqual(spoken);
+    expect(tapped.chamberTemp).toBe(250);
+  });
+
+  test('a stamp dated before the first reading carries the first one after it', async () => {
+    const backend = createFakeBackend({
+      state: { smokeId: 'smoke-1', smoking: true },
+      temps: {
+        current: [
+          {
+            ChamberTemp: '230',
+            MeatTemp: '150',
+            Meat2Temp: '0',
+            Meat3Temp: '0',
+            date: '2026-08-25T12:00:00.000Z',
+          },
+        ],
+      },
+    });
+    const client = createApiClient(backend);
+
+    const dated = await client.cookEvents.record('wrap', new Date('2026-08-25T11:59:00.000Z'));
+
+    expect(dated.chamberTemp).toBe(230);
+  });
+
   test('reads the logged moment back as a date, whatever JSON made of it', async () => {
     const backend = createFakeBackend({
       cookEvents: {

@@ -31,7 +31,15 @@ describe('CookEventsController', () => {
     expect(await controller.record({ stampKey: 'wood' })).toEqual({
       stampKey: 'wood',
     });
-    expect(service.record).toHaveBeenCalledWith('wood');
+    expect(service.record).toHaveBeenCalledWith('wood', undefined);
+  });
+
+  it('passes on the moment a spoken stamp says it was done', async () => {
+    const at = new Date('2026-08-25T12:00:00.000Z');
+
+    await controller.record({ stampKey: 'wrap', at });
+
+    expect(service.record).toHaveBeenCalledWith('wrap', at);
   });
 
   it('serves the current cook log', async () => {
@@ -80,14 +88,29 @@ describe('RecordCookEventDto validation', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('rejects anything the client tried to stamp the event with itself', async () => {
-    // The moment and the temperatures are the server's to decide; a client
-    // that sent its own is refused rather than quietly ignored.
-    await expect(
-      pipe.transform(
-        { stampKey: 'wood', at: '2020-01-01T00:00:00.000Z' },
+  it('accepts the moment a spoken stamp was done, as a date', async () => {
+    expect(
+      await pipe.transform(
+        { stampKey: 'wrap', at: '2026-08-25T12:00:00.000Z' },
         metadata,
       ),
+    ).toEqual({
+      stampKey: 'wrap',
+      at: new Date('2026-08-25T12:00:00.000Z'),
+    });
+  });
+
+  it('rejects a moment that is not one', async () => {
+    await expect(
+      pipe.transform({ stampKey: 'wrap', at: 'just now' }, metadata),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rejects anything else the client tried to stamp the event with itself', async () => {
+    // The temperatures are the server's to read; a client that sent its own is
+    // refused rather than quietly ignored.
+    await expect(
+      pipe.transform({ stampKey: 'wood', chamberTemp: 250 }, metadata),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

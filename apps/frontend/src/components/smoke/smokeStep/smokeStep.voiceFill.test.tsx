@@ -459,15 +459,19 @@ describe('Voice Fill on the smoke screen', () => {
     expect(writesTo(backend, 'smoke/current/serve-plan')).toEqual([]);
   });
 
-  test('the Log now row logs one entry per stamp, and Undo removes them', async () => {
+  test('the Log now row logs one entry per stamp at the time of the Ramble, and Undo removes them', async () => {
     const { backend } = await renderStep({ stamps: [{ stamp: 'wrap' }, { stamp: 'spritz' }] });
 
     await rambleAndFill();
 
+    // When it was spoken, not when Fill was tapped: the review list may have
+    // been open for minutes in between.
     expect(writesTo(backend, 'cook-events').map(request => request.body)).toEqual([
-      { stampKey: 'wrap' },
-      { stampKey: 'spritz' },
+      { stampKey: 'wrap', at: SPOKEN_AT.toISOString() },
+      { stampKey: 'spritz', at: SPOKEN_AT.toISOString() },
     ]);
+    const log = await createApiClient(backend).cookEvents.listCurrent();
+    expect(log.map(event => event.at)).toEqual([SPOKEN_AT, SPOKEN_AT]);
     expect(screen.getAllByTestId('cook-event-row')).toHaveLength(2);
     expect(screen.getByTestId('voice-fill-toast')).toHaveTextContent('Filled 1 field by voice');
 
@@ -475,6 +479,16 @@ describe('Voice Fill on the smoke screen', () => {
 
     expect(screen.queryByTestId('cook-event-row')).not.toBeInTheDocument();
     expect(await createApiClient(backend).cookEvents.listCurrent()).toEqual([]);
+  });
+
+  test('a stamp tapped on the same screen still says nothing of when it was done', async () => {
+    const { backend } = await renderStep({ woodType: 'hickory' });
+
+    await tap(screen.getByTestId('cook-stamp-wrap'));
+
+    expect(writesTo(backend, 'cook-events').map(request => request.body)).toEqual([
+      { stampKey: 'wrap' },
+    ]);
   });
 
   test('an unticked row is not written', async () => {
