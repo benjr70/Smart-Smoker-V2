@@ -41,6 +41,11 @@ export interface LiteRtEngine {
 
 /** As much of LiteRT-LM as the extractor drives. */
 export interface LiteRtRuntime {
+  /**
+   * Fetches the runtime's own code, where the page does not hold it yet.
+   * Rejects where it cannot be reached; the next call tries again.
+   */
+  fetchRuntime(): Promise<void>;
   /** Loads the model whose file is `model`. */
   createEngine(model: Blob): Promise<LiteRtEngine>;
 }
@@ -137,6 +142,12 @@ export interface LiteRtModel {
    * keeps nothing of a model it is given, so the adapter keeps it; and the
    * browser is asked to keep what is downloaded, since without that it may
    * evict the model whenever the phone runs short of storage.
+   *
+   * The runtime's own code is fetched with it, and a model whose runtime could
+   * not be reached has not arrived: the download breaks and is tried again,
+   * with the file kept. That leaves the test-load nothing to fetch, so a phone
+   * that drops offline as the file completes is not told the model does not
+   * run on it.
    */
   download(
     file: PartedFile,
@@ -155,7 +166,7 @@ export const createLiteRtModel = (runtime: LiteRtRuntime): LiteRtModel => {
   return {
     download: (file, store, options) => {
       navigator.storage?.persist?.().catch(() => undefined);
-      return fetchInParts(file, { store, ...options });
+      return fetchInParts(file, { store, ...options }).then(() => runtime.fetchRuntime());
     },
     testLoad: async (file, store) => {
       const extractor = createExtractor(file, store);

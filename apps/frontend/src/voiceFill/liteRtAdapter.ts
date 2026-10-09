@@ -12,7 +12,7 @@
  * to run it on. It is proven on a real phone.
  */
 import type { ConversationConfig } from '@litert-lm/core';
-import { Engine } from '@litert-lm/core';
+import { Engine, getOrLoadGlobalLiteRtLm } from '@litert-lm/core';
 import { createLiteRtModel } from './liteRtExtractor';
 
 /**
@@ -23,6 +23,9 @@ import { createLiteRtModel } from './liteRtExtractor';
 const MAX_TOKENS = 4096;
 
 export const { download, testLoad, createExtractor } = createLiteRtModel({
+  // The same load `Engine.create` starts where nothing has: from the path the
+  // package fetches its runtime from by default, and held by the page after.
+  fetchRuntime: () => getOrLoadGlobalLiteRtLm().then(() => undefined),
   createEngine: async model => {
     const engine = await Engine.create({
       model,

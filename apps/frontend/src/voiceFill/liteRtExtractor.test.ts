@@ -24,8 +24,13 @@ const runtimeAnswering = (reply: unknown) => {
     messages: [] as string[],
     conversationsEnded: 0,
     enginesReleased: 0,
+    runtimeFetches: 0,
   };
   const runtime: LiteRtRuntime = {
+    fetchRuntime: () => {
+      asked.runtimeFetches += 1;
+      return Promise.resolve();
+    },
     createEngine: model => {
       asked.engines.push(model);
       return Promise.resolve({
@@ -229,6 +234,7 @@ describe('a model run by LiteRT-LM', () => {
 
   it('did not work on this phone when the runtime cannot load it', async () => {
     const runtime: LiteRtRuntime = {
+      fetchRuntime: () => Promise.resolve(),
       createEngine: () => Promise.reject(new Error('No WebGPU adapter')),
     };
 
@@ -280,6 +286,55 @@ describe('a model run by LiteRT-LM', () => {
       expect(persist).toHaveBeenCalledTimes(1);
       expect(put).not.toHaveBeenCalled();
       expect(onProgress).toHaveBeenLastCalledWith(FILE.size);
+    });
+
+    it('has not arrived until the runtime that loads it has been fetched too', async () => {
+      const { runtime, asked } = runtimeAnswering(undefined);
+      let fetched: () => void = () => undefined;
+      runtime.fetchRuntime = () => {
+        asked.runtimeFetches += 1;
+        return new Promise<void>(resolve => {
+          fetched = resolve;
+        });
+      };
+      const arrived = jest.fn();
+
+      const downloading = createLiteRtModel(runtime)
+        .download(FILE, storeHolding(MODEL).store, {
+          onProgress: jest.fn(),
+          signal: new AbortController().signal,
+        })
+        .then(arrived);
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      // Every part of the file is on the phone, and the download is not over.
+      expect(asked.runtimeFetches).toBe(1);
+      expect(arrived).not.toHaveBeenCalled();
+
+      fetched();
+      await downloading;
+      expect(arrived).toHaveBeenCalledTimes(1);
+    });
+
+    it('breaks, to be tried again, when the runtime cannot be reached', async () => {
+      // The phone went offline as the last part arrived: the test-load that
+      // would follow could only fail, and says nothing of whether the model
+      // runs on this phone. So it is the download that has not finished.
+      const { runtime, asked } = runtimeAnswering(undefined);
+      runtime.fetchRuntime = () => Promise.reject(new TypeError('Failed to fetch'));
+      const { store } = storeHolding(MODEL);
+      const options = { onProgress: jest.fn(), signal: new AbortController().signal };
+
+      await expect(createLiteRtModel(runtime).download(FILE, store, options)).rejects.toThrow(
+        'Failed to fetch'
+      );
+      expect(asked.engines).toHaveLength(0);
+
+      // The next try finds the file on the phone and has only the runtime to fetch.
+      runtime.fetchRuntime = () => Promise.resolve();
+      await expect(
+        createLiteRtModel(runtime).download(FILE, store, options)
+      ).resolves.toBeUndefined();
     });
 
     it('goes on where the browser will not promise to keep it, or cannot be asked', async () => {
