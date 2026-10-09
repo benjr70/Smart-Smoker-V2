@@ -22,9 +22,9 @@ export type ModelRole = 'speech' | 'extractor';
 const MODELS_READY_TIMEOUT_MS = 30_000;
 
 /**
- * Page object for Voice Fill: the button a screen offers, the sheet a Ramble is
- * taken through, the toast a fill leaves, and the card in Settings the models
- * are picked on.
+ * Page object for Voice Fill: the button a screen offers and the grey pill that
+ * stands in for it, the sheet a Ramble is taken through, the flash and the toast
+ * a fill leaves, and the card in Settings the models are picked on.
  *
  * It drives whichever screen is up — the button, the sheet and the toast are
  * the same on every screen that has them — so a journey pairs it with the
@@ -52,6 +52,118 @@ export class VoiceFill {
   private get toast(): Locator {
     return this.page.getByTestId('voice-fill-toast');
   }
+
+  private get pill(): Locator {
+    return this.page.getByTestId('voice-fill-pill');
+  }
+
+  // --- The grey pill ---------------------------------------------------------
+
+  /**
+   * Record everything the grey pill says on this page from its next load on,
+   * and answer with a way to read it back. Call it before the app is opened.
+   *
+   * The pill stands in the button's place while the picked pair downloads, and
+   * a first opening of the app starts that download as the page loads — over in
+   * about a second on the scripted downloader. So the pill is recorded from
+   * before the app is on the page rather than looked for once it is: every
+   * percent it showed is there to be asserted on, however briefly it was up.
+   */
+  async recordPill(): Promise<() => Promise<string[]>> {
+    await this.page.addInitScript(key => {
+      const said: string[] = [];
+      (window as unknown as Record<string, string[]>)[key] = said;
+      const note = (): void => {
+        const text = document.querySelector('[data-testid="voice-fill-pill"]')?.textContent ?? '';
+        if (text && said[said.length - 1] !== text) {
+          said.push(text);
+        }
+      };
+      new MutationObserver(note).observe(document, {
+        subtree: true,
+        childList: true,
+        characterData: true,
+      });
+    }, PILL_RECORDING_KEY);
+    return () =>
+      this.page.evaluate(
+        key => (window as unknown as Record<string, string[]>)[key] ?? [],
+        PILL_RECORDING_KEY
+      );
+  }
+
+  /**
+   * Assert the Voice fill button is up: the picked pair is on the phone, and
+   * the grey pill that stood in for the button has gone.
+   */
+  async expectButton(): Promise<void> {
+    await expect(this.button).toBeVisible({ timeout: MODELS_READY_TIMEOUT_MS });
+    await expect(this.pill).toHaveCount(0);
+  }
+
+  /**
+   * Assert the grey pill stands where the Voice fill button would, saying
+   * `message` — so there is no button to start a Ramble with.
+   */
+  async expectPill(message: string | RegExp): Promise<void> {
+    await expect(this.pill).toBeVisible();
+    await expect(this.pill).toHaveText(message);
+    await expect(this.button).toHaveCount(0);
+  }
+
+  /** Tap the grey pill, which opens Settings with the Voice Fill card in view. */
+  async openSettingsFromPill(): Promise<void> {
+    await this.pill.click();
+    await expect(this.settingsCard).toBeInViewport();
+  }
+
+  // --- The flash ---------------------------------------------------------------
+
+  private get flashing(): Locator {
+    return this.page.locator('[data-voice-filled]');
+  }
+
+  /**
+   * Start recording which fields flash from here on, and answer with a way to
+   * read them back, sorted by name.
+   *
+   * A flash is put out a couple of seconds after the fill, so on a slow runner
+   * a look taken after the fill could land when it is already over. Recorded in
+   * the page from before the fill, every field that flashed is there to be
+   * asserted on, whenever it is asked for.
+   */
+  async recordFlashes(): Promise<() => Promise<string[]>> {
+    await this.page.evaluate(key => {
+      const flashed: string[] = [];
+      (window as unknown as Record<string, string[]>)[key] = flashed;
+      const note = (): void => {
+        document.querySelectorAll('[data-voice-filled]').forEach(element => {
+          const field = element.getAttribute('data-voice-filled');
+          if (field && !flashed.includes(field)) {
+            flashed.push(field);
+          }
+        });
+      };
+      new MutationObserver(note).observe(document.body, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        attributeFilter: ['data-voice-filled'],
+      });
+    }, FLASH_RECORDING_KEY);
+    return () =>
+      this.page.evaluate(
+        key => [...((window as unknown as Record<string, string[]>)[key] ?? [])].sort(),
+        FLASH_RECORDING_KEY
+      );
+  }
+
+  /** Assert no field is flashing: an Undo puts the flash out at once. */
+  async expectNothingFlashing(): Promise<void> {
+    await expect(this.flashing).toHaveCount(0);
+  }
+
+  // --- The sheet and the toast -------------------------------------------------
 
   /**
    * Speak a Ramble: tap Voice fill, let the sheet hear something, and tap Done
@@ -199,6 +311,12 @@ export class VoiceFill {
 
 /** `N fields`, or `1 field` — as the sheet and the toast count them. */
 const fieldCount = (count: number): string => `${count} ${count === 1 ? 'field' : 'fields'}`;
+
+/** Where what the grey pill said is kept on the page. */
+const PILL_RECORDING_KEY = '__voiceFillPillSaid';
+
+/** Where the fields that flashed are kept on the page. */
+const FLASH_RECORDING_KEY = '__voiceFillFlashed';
 
 /** Where a role's recorded status line is kept on the page. */
 const recordingKey = (role: ModelRole): string => `__voiceFillStatus_${role}`;

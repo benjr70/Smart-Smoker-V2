@@ -27,6 +27,9 @@ import { VoiceFill } from '../src/pageObjects/VoiceFill';
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
 
+/** How long a write the app sends without waiting on it may take to be stored. */
+const BACKEND_WRITE_TIMEOUT_MS = 15_000;
+
 /**
  * The pre-smoke screen writes nothing until it is left, so what a fill and its
  * Undo did is read off the form: three rows are proposed, one is unticked, and
@@ -56,7 +59,10 @@ test('voice fill: a Ramble on the pre-smoke screen fills the ticked rows, and Un
     await voiceFill.expectReview(['meatType', 'weight', 'steps']);
 
     await voiceFill.untick('weight');
+    const flashed = await voiceFill.recordFlashes();
     await voiceFill.fill(2);
+    // The fields that were written flash, and the one left alone does not.
+    await expect.poll(flashed).toEqual(['meatType', 'steps']);
     await frontend.expectPreSmokeShows({
       ...typed,
       meatType: 'Brisket',
@@ -64,6 +70,7 @@ test('voice fill: a Ramble on the pre-smoke screen fills the ticked rows, and Un
     });
 
     await voiceFill.undo();
+    await voiceFill.expectNothingFlashing();
     await frontend.expectPreSmokeShows(typed);
 
     await frontend.leavePreSmokeStep();
@@ -113,21 +120,34 @@ test('voice fill: a Ramble on the smoke screen writes a probe target and the Ser
       'notes',
     ]);
     const spokenBy = Date.now();
+    const flashed = await voiceFill.recordFlashes();
     await voiceFill.fill(7);
+    // Each field flashes where this screen reads it: a probe's target on the
+    // estimate card, and both halves of the Serve Plan on its card.
+    await expect
+      .poll(flashed)
+      .toEqual(['notes', 'probe1Name', 'probeTargets', 'servePlan', 'stamps', 'woodType']);
 
-    expect(await fixture.probeTarget('probe1')).toEqual({
-      target: 203,
-      enabled: true,
-      targetSource: 'user',
-    });
-    const planned = await fixture.servePlan();
-    expect(planned.restMinutes).toBe(45);
-    expect(planned.serveAt?.getTime()).toBeGreaterThanOrEqual(spokenFrom + 4 * HOUR_MS - MINUTE_MS);
-    expect(planned.serveAt?.getTime()).toBeLessThanOrEqual(spokenBy + 4 * HOUR_MS + MINUTE_MS);
+    // The toast is up before any of these writes has been answered — the fill
+    // sends them and does not wait — so the backend is asked until it has them,
+    // as it is after Undo.
+    await expect
+      .poll(() => fixture.probeTarget('probe1'))
+      .toEqual({ target: 203, enabled: true, targetSource: 'user' });
+    // The plan's two halves are two writes, so it is read until both are in.
+    await expect(async () => {
+      const planned = await fixture.servePlan();
+      expect(planned.restMinutes).toBe(45);
+      expect(planned.serveAt?.getTime()).toBeGreaterThanOrEqual(
+        spokenFrom + 4 * HOUR_MS - MINUTE_MS
+      );
+      expect(planned.serveAt?.getTime()).toBeLessThanOrEqual(spokenBy + 4 * HOUR_MS + MINUTE_MS);
+    }).toPass({ timeout: BACKEND_WRITE_TIMEOUT_MS });
     await frontend.expectServePlanRest('45m');
     await frontend.expectCookLogEntry('Wrapped');
 
     await voiceFill.undo();
+    await voiceFill.expectNothingFlashing();
 
     await expect.poll(() => fixture.probeTarget('probe1')).toEqual(targetBefore);
     await expect.poll(() => fixture.servePlan()).toEqual(planBefore);
@@ -143,17 +163,26 @@ test('voice fill: a Ramble on the smoke screen writes a probe target and the Ser
 /**
  * The Model library is the phone's own — kept in the browser, not the backend —
  * so this journey seeds nothing and leaves nothing behind.
+ *
+ * The grey pill is the other face of the same library: it stands in for the
+ * Voice fill button on a screen for as long as the picked pair is not on the
+ * phone, so it is followed here — through the first download, and back again
+ * once a picked model has been removed.
  */
-test('voice fill: Settings shows the card, a picked model downloads to Ready, and Remove takes it off the phone', async ({
+test('voice fill: Settings shows the card, a picked model downloads to Ready, and Remove takes it off the phone, with the grey pill standing in for the button meanwhile', async ({
   page,
 }) => {
   const frontend = new FrontendApp(page);
   const voiceFill = new VoiceFill(page);
 
+  // A first opening of the app starts the default pair downloading by itself,
+  // and until it is on the phone the screen has the pill where its button goes.
+  const pillSaid = await voiceFill.recordPill();
   await frontend.goto({ scriptedVoiceFill: true });
-  await frontend.openSettings();
+  await voiceFill.expectButton();
+  expect((await pillSaid()).some(message => /^Model downloading \d+%$/.test(message))).toBe(true);
 
-  // A first opening of the app starts the default pair downloading by itself.
+  await frontend.openSettings();
   await voiceFill.expectSettingsCard();
   await voiceFill.expectPickedModel('speech', 'Scripted speech');
   await voiceFill.expectModelStatus('speech', /^Ready to use · 158 MB on phone$/);
@@ -168,5 +197,12 @@ test('voice fill: Settings shows the card, a picked model downloads to Ready, an
   expect(said.some(status => /^Downloading \d+% · .+ of 64 MB$/.test(status))).toBe(true);
 
   await voiceFill.removeModel('Scripted speech B');
+  await voiceFill.expectModelStatus('speech', /^Not downloaded · 64 MB$/);
+
+  // The picked speech model is off the phone again, so a screen is back to the
+  // pill — which says where that is put right, and takes a tap there.
+  await frontend.leaveSettings();
+  await voiceFill.expectPill('Download a voice model in Settings');
+  await voiceFill.openSettingsFromPill();
   await voiceFill.expectModelStatus('speech', /^Not downloaded · 64 MB$/);
 });
