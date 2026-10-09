@@ -1101,7 +1101,13 @@ export const createApiClient = (
     },
   },
   smoke: {
-    getById: (id: string) => transport.get<Smoke>(`smoke/${id}`),
+    // Normalized as the current cook is: read by id it comes over the same
+    // JSON, and a serve time left as the string it arrived as is a `Date` only
+    // to the compiler — the first `getTime()` asked of it throws.
+    getById: async (id: string): Promise<Smoke> => {
+      const raw = await transport.get<Smoke>(`smoke/${id}`);
+      return normalizeSmoke(raw) ?? raw;
+    },
     getAll: () => transport.get<Smoke[]>('smoke/all'),
     finish: () => transport.post<Smoke>('smoke/finish'),
     deleteCascade: async (id: string) => {

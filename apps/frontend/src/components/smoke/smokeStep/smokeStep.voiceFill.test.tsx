@@ -4,7 +4,7 @@ import React from 'react';
 import { SessionConfig } from 'smoke-session/src';
 import { SmokeSessionProvider } from 'smoke-session/src/react';
 import { FakeCloudSocket, FakeSessionApi, SteppingClock } from 'smoke-session/src/testing';
-import { ApiClientProvider, SnackbarProvider, createApiClient } from '../../../api';
+import { ApiClientProvider, SnackbarProvider, TransportPort, createApiClient } from '../../../api';
 import {
   createFakeBackend,
   FakeBackend,
@@ -102,6 +102,23 @@ interface Rendered {
   backend: FakeBackend;
 }
 
+/** What JSON makes of an answer: every moment in it a string, as HTTP carries it. */
+const asJson = <T,>(answer: T): T =>
+  answer === undefined ? answer : (JSON.parse(JSON.stringify(answer)) as T);
+
+/**
+ * The same backend as the deployed one answers it: over JSON, which has no date
+ * type. The in-memory backend hands a stored `Date` back as a `Date`, which no
+ * request over HTTP ever does — so what the client makes of a moment is only
+ * exercised through this.
+ */
+const overTheWire = (backend: FakeBackend): TransportPort => ({
+  get: <T,>(path: string) => backend.get<T>(path).then(asJson),
+  post: <T,>(path: string, body?: unknown) => backend.post<T>(path, body).then(asJson),
+  put: <T,>(path: string, body?: unknown) => backend.put<T>(path, body).then(asJson),
+  delete: <T,>(path: string) => backend.delete<T>(path).then(asJson),
+});
+
 /**
  * The step under a live session, a client over the in-memory backend, and —
  * where a raw object is given — Voice Fill's two models replaced by scripted
@@ -110,7 +127,8 @@ interface Rendered {
 const renderStep = async (
   raw: unknown | undefined,
   backend: FakeBackend = backendWithCook(),
-  smoking = true
+  smoking = true,
+  transport: TransportPort = backend
 ): Promise<Rendered> => {
   const api = new FakeSessionApi();
   api.seedSmoking(smoking).seedProfile({
@@ -137,7 +155,7 @@ const renderStep = async (
     </SmokeSessionProvider>
   );
   render(
-    <ApiClientProvider client={createApiClient(backend)}>
+    <ApiClientProvider client={createApiClient(transport)}>
       <SnackbarProvider>
         <DesignSurface>
           {raw === undefined ? (
@@ -367,6 +385,20 @@ describe('Voice Fill on the smoke screen', () => {
 
   test('Undo writes the previous serve time and rest back', async () => {
     const { backend } = await renderStep({ serveInMinutes: 300, restMinutes: 60 });
+    await rambleAndFill();
+
+    await undo();
+
+    expect(
+      writesTo(backend, 'smoke/current/serve-plan')
+        .slice(2)
+        .map(request => request.body)
+    ).toEqual([{ serveAt: new Date('2026-08-01T22:00:00.000Z') }, { restMinutes: 45 }]);
+  });
+
+  test('Undo writes the previous serve time and rest back to a backend answering in JSON', async () => {
+    const backend = backendWithCook();
+    await renderStep({ serveInMinutes: 300, restMinutes: 60 }, backend, true, overTheWire(backend));
     await rambleAndFill();
 
     await undo();
