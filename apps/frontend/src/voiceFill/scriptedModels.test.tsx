@@ -143,7 +143,7 @@ describe('the scripted Voice Fill models', () => {
     await opened();
 
     expect(screen.getByTestId('listed')).toHaveTextContent(
-      'Scripted speech, Scripted speech B, Scripted extractor, Scripted extractor B'
+      'Scripted speech, Scripted speech B, Scripted extractor, Scripted extractor B, Moonshine Small Streaming'
     );
   });
 

@@ -4,7 +4,7 @@ import { DEFAULT_STAMPS } from '../api/cookStamps';
 import { createFakeExtractor, createFakeSpeech } from './fakeAdapters';
 import type { SmokeScreenValues } from './extractionContract';
 import type { ScreenBinding } from './session';
-import { PROBLEM_CAP_MS, TOAST_MS, createVoiceFillSession } from './session';
+import { PROBLEM_CAP_MS, RELEASE_MS, TOAST_MS, createVoiceFillSession } from './session';
 
 const TRANSCRIPT = 'Sixteen pound brisket. Trimmed the fat cap.';
 // A Saturday, so the name built for a nameless cook is "Saturday Brisket".
@@ -282,6 +282,7 @@ describe('Voice Fill session', () => {
           calls.push('stop');
           return Promise.resolve(TRANSCRIPT);
         },
+        unload: () => Promise.resolve(),
       },
       extractor: createFakeExtractor({ raw: { weight: 16 } }),
       binding: held.binding,
@@ -322,6 +323,7 @@ describe('Voice Fill session', () => {
           calls.push('stop');
           return Promise.resolve(TRANSCRIPT);
         },
+        unload: () => Promise.resolve(),
       },
       extractor: createFakeExtractor({ raw: { weight: 16 } }),
       binding: held.binding,
@@ -361,6 +363,7 @@ describe('Voice Fill session', () => {
           calls.push('stop');
           return Promise.resolve('');
         },
+        unload: () => Promise.resolve(),
       },
       extractor: createFakeExtractor({ raw: {} }),
       binding: held.binding,
@@ -408,6 +411,7 @@ describe('Voice Fill session', () => {
             calls.push('stop');
             return Promise.resolve(TRANSCRIPT);
           },
+          unload: () => Promise.resolve(),
         },
       };
     };
@@ -470,7 +474,7 @@ describe('Voice Fill session', () => {
       const session = createVoiceFillSession({
         screen: 'preSmoke',
         speech: createFakeSpeech({ transcript: '  ' }),
-        extractor: { load: () => Promise.resolve(), extract },
+        extractor: { load: () => Promise.resolve(), unload: () => Promise.resolve(), extract },
         binding: screenHolding(emptyForm).binding,
         now: () => NOW,
       });
@@ -519,7 +523,7 @@ describe('Voice Fill session', () => {
       const session = createVoiceFillSession({
         screen: 'preSmoke',
         speech: speech.port,
-        extractor: { load: () => Promise.resolve(), extract },
+        extractor: { load: () => Promise.resolve(), unload: () => Promise.resolve(), extract },
         binding: screenHolding({ ...emptyForm, name: 'Mine' }).binding,
         now: () => NOW,
       });
@@ -665,7 +669,7 @@ describe('Voice Fill session', () => {
       const session = createVoiceFillSession({
         screen: 'preSmoke',
         speech: { ...speech, [step]: failing },
-        extractor: { load: () => Promise.resolve(), extract },
+        extractor: { load: () => Promise.resolve(), unload: () => Promise.resolve(), extract },
         binding: held.binding,
         now: () => NOW,
       });
@@ -963,7 +967,7 @@ describe('Voice Fill session', () => {
     const session = createVoiceFillSession({
       screen: 'preSmoke',
       speech: createFakeSpeech({ transcript: TRANSCRIPT }),
-      extractor: { load: () => Promise.resolve(), extract },
+      extractor: { load: () => Promise.resolve(), unload: () => Promise.resolve(), extract },
       binding: held.binding,
       now: () => NOW,
     });
@@ -1038,7 +1042,7 @@ describe('Voice Fill session', () => {
     const session = createVoiceFillSession({
       screen: 'smoke',
       speech: createFakeSpeech({ transcript: TRANSCRIPT }),
-      extractor: { load: () => Promise.resolve(), extract },
+      extractor: { load: () => Promise.resolve(), unload: () => Promise.resolve(), extract },
       binding: { values: () => smokeScreen, apply: () => () => undefined, context: () => context },
       now: () => NOW,
     });
@@ -1054,5 +1058,222 @@ describe('Voice Fill session', () => {
       'probe2Target',
       'stamps',
     ]);
+  });
+
+  describe('the models, loaded on the tap and let go after the sheet closes', () => {
+    /** The two scripted models, saying what was asked of them and in what order. */
+    const countedModels = () => {
+      const calls: string[] = [];
+      const fakeSpeech = createFakeSpeech({ transcript: TRANSCRIPT, wordIntervalMs: 100 });
+      const fakeExtractor = createFakeExtractor({ raw: { meatType: 'brisket', weight: 16 } });
+      const said =
+        <Asked extends unknown[], Answer>(call: string, ask: (...asked: Asked) => Answer) =>
+        (...asked: Asked): Answer => {
+          calls.push(call);
+          return ask(...asked);
+        };
+      return {
+        calls,
+        speech: {
+          ...fakeSpeech,
+          load: said('speech.load', fakeSpeech.load),
+          unload: said('speech.unload', fakeSpeech.unload),
+        },
+        extractor: {
+          ...fakeExtractor,
+          load: said('extractor.load', fakeExtractor.load),
+          unload: said('extractor.unload', fakeExtractor.unload),
+        },
+      };
+    };
+
+    const sessionOver = (models: ReturnType<typeof countedModels>) =>
+      createVoiceFillSession({
+        screen: 'preSmoke',
+        speech: models.speech,
+        extractor: models.extractor,
+        binding: screenHolding(emptyForm).binding,
+        now: () => NOW,
+      });
+
+    test('nothing is loaded until the button is tapped, and then speech first', async () => {
+      const models = countedModels();
+      const session = sessionOver(models);
+      await settled();
+      expect(models.calls).toEqual([]);
+
+      session.start();
+      await settled();
+
+      expect(models.calls).toEqual(['speech.load', 'extractor.load']);
+    });
+
+    test('both models are let go two minutes after the sheet closes on a fill', async () => {
+      const models = countedModels();
+      const session = sessionOver(models);
+      session.start();
+      await settled();
+      session.doneTalking();
+      await settled();
+      session.fill();
+      expect(session.getState().phase).toBe('applied');
+
+      jest.advanceTimersByTime(RELEASE_MS - 1);
+      await settled();
+      expect(models.calls).not.toContain('speech.unload');
+      expect(models.calls).not.toContain('extractor.unload');
+
+      jest.advanceTimersByTime(1);
+      await settled();
+      expect(models.calls.filter(call => call.endsWith('unload')).sort()).toEqual([
+        'extractor.unload',
+        'speech.unload',
+      ]);
+    });
+
+    test('they are let go two minutes after the sheet is closed with nothing filled', async () => {
+      const models = countedModels();
+      const session = sessionOver(models);
+      session.start();
+      await settled();
+      session.cancel();
+      await settled();
+
+      jest.advanceTimersByTime(RELEASE_MS);
+      await settled();
+
+      expect(models.calls).toContain('speech.unload');
+      expect(models.calls).toContain('extractor.unload');
+    });
+
+    test('they are kept for as long as the sheet is up', async () => {
+      const models = countedModels();
+      const session = sessionOver(models);
+      session.start();
+      await settled();
+      session.doneTalking();
+      await settled();
+      expect(session.getState().phase).toBe('review');
+
+      jest.advanceTimersByTime(RELEASE_MS * 3);
+      await settled();
+
+      expect(models.calls.filter(call => call.endsWith('unload'))).toEqual([]);
+    });
+
+    test('a Ramble started inside the two minutes keeps them, and the two minutes start again', async () => {
+      const models = countedModels();
+      const session = sessionOver(models);
+      session.start();
+      await settled();
+      session.cancel();
+      await settled();
+
+      jest.advanceTimersByTime(RELEASE_MS - 1000);
+      session.start();
+      await settled();
+      jest.advanceTimersByTime(RELEASE_MS);
+      await settled();
+      expect(models.calls.filter(call => call.endsWith('unload'))).toEqual([]);
+
+      session.cancel();
+      await settled();
+      jest.advanceTimersByTime(RELEASE_MS - 1);
+      await settled();
+      expect(models.calls.filter(call => call.endsWith('unload'))).toEqual([]);
+      jest.advanceTimersByTime(1);
+      await settled();
+      expect(models.calls.filter(call => call.endsWith('unload'))).toHaveLength(2);
+    });
+
+    test('a Ramble on another screen inside the two minutes keeps the models they share', async () => {
+      const models = countedModels();
+      const left = sessionOver(models);
+      left.start();
+      await settled();
+      left.cancel();
+      await settled();
+
+      jest.advanceTimersByTime(RELEASE_MS - 1000);
+      const next = sessionOver(models);
+      next.start();
+      await settled();
+      jest.advanceTimersByTime(RELEASE_MS);
+      await settled();
+
+      expect(next.getState().phase).toBe('listening');
+      expect(models.calls.filter(call => call.endsWith('unload'))).toEqual([]);
+    });
+
+    test('models that were let go are loaded again on the next tap', async () => {
+      const models = countedModels();
+      const session = sessionOver(models);
+      session.start();
+      await settled();
+      session.cancel();
+      await settled();
+      jest.advanceTimersByTime(RELEASE_MS);
+      await settled();
+      models.calls.length = 0;
+
+      session.start();
+      await settled();
+
+      expect(models.calls.sort()).toEqual(['extractor.load', 'speech.load']);
+    });
+
+    test('a model that cannot be let go leaves the session as it was', async () => {
+      const models = countedModels();
+      const session = createVoiceFillSession({
+        screen: 'preSmoke',
+        speech: { ...models.speech, unload: () => Promise.reject(new Error('stuck')) },
+        extractor: { ...models.extractor, unload: () => Promise.reject(new Error('stuck')) },
+        binding: screenHolding(emptyForm).binding,
+        now: () => NOW,
+      });
+      session.start();
+      await settled();
+      session.cancel();
+      await settled();
+
+      jest.advanceTimersByTime(RELEASE_MS);
+      await settled();
+
+      expect(session.getState()).toEqual({ phase: 'idle' });
+    });
+  });
+
+  describe('key terms', () => {
+    const heardWith = async (
+      screen: 'preSmoke' | 'smoke',
+      context?: () => { probeNames?: readonly string[] }
+    ) => {
+      const speech = createFakeSpeech({ transcript: TRANSCRIPT });
+      const start = jest.fn(speech.start);
+      const session = createVoiceFillSession({
+        screen,
+        speech: { ...speech, start },
+        extractor: createFakeExtractor({ raw: {} }),
+        binding: { ...screenHolding(emptyForm).binding, context } as never,
+        now: () => NOW,
+      });
+      session.start();
+      await settled();
+      return start.mock.calls[0][1];
+    };
+
+    test('the pre-smoke screen listens for its meat suggestions', async () => {
+      const terms = await heardWith('preSmoke');
+
+      expect(terms).toEqual(expect.arrayContaining(['Brisket']));
+    });
+
+    test('the smoke screen listens for its wood suggestions and the names its probes go by', async () => {
+      const terms = await heardWith('smoke', () => ({ probeNames: ['Flat', '', ' Point '] }));
+
+      expect(terms).toEqual(expect.arrayContaining(['Hickory', 'Flat', 'Point']));
+      expect(terms).not.toContain('');
+      expect(terms).not.toContain('Brisket');
+    });
   });
 });

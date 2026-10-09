@@ -74,6 +74,14 @@ module.exports = {
       // installed for this app. Guarded by src/api/axiosBundlePin.test.ts.
       axios: path.dirname(require.resolve('axios/package.json')),
     },
+    fallback: {
+      // Voice Fill's speech binding (@moonshine-ai/moonshine-wasm) is one
+      // Emscripten module for the browser and for Node. Its Node branches
+      // import these two built-ins, behind a check that is never true in a
+      // browser; there is nothing to bundle for them.
+      module: false,
+      worker_threads: false,
+    },
   },
   plugins: [
     new HtmlWebpackPlugin({

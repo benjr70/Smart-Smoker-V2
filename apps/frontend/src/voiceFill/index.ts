@@ -14,6 +14,9 @@
  * settings card lists, the Model library that picks, downloads and proves
  * them, the card itself, and the grey pill that stands in for the button until
  * the picked pair is ready.
+ *
+ * And the real models, each behind its port in a chunk of its own: Moonshine
+ * Small Streaming for speech, with the downloader that fetches its files.
  */
 export type {
   VoiceFillField,
@@ -28,7 +31,13 @@ export type {
   VoiceFillToolSchema,
   VoiceFillValueSchema,
 } from './fieldDefinition';
-export { SCREEN_FIELDS, fieldOf, jsonSchemaFor, toolSchemaFor } from './fieldDefinition';
+export {
+  SCREEN_FIELDS,
+  fieldOf,
+  jsonSchemaFor,
+  keyTermsFor,
+  toolSchemaFor,
+} from './fieldDefinition';
 export type {
   ReviewRow,
   SmokeScreenCurrent,
@@ -61,7 +70,7 @@ export type {
   VoiceFillSessionOptions,
   VoiceFillState,
 } from './session';
-export { PROBLEM_CAP_MS, TOAST_MS, createVoiceFillSession } from './session';
+export { PROBLEM_CAP_MS, RELEASE_MS, TOAST_MS, createVoiceFillSession } from './session';
 export type { VoiceFillPorts, VoiceFillPortsProviderProps } from './VoiceFillPortsProvider';
 export { VoiceFillPortsProvider, useVoiceFillPorts } from './VoiceFillPortsProvider';
 export { useScreenBinding } from './useScreenBinding';
@@ -82,7 +91,28 @@ export {
 } from './scriptedModels';
 export { VOICE_FILL_BUTTON_CLEARANCE } from './VoiceFillControls';
 export type { ModelPair, ModelRegistry, ModelRole, VoiceFillModel } from './modelRegistry';
-export { MODEL_ROLES, REGISTERED_MODELS, createModelRegistry, formatBytes } from './modelRegistry';
+export {
+  MODEL_ROLES,
+  MOONSHINE_SMALL_STREAMING,
+  REGISTERED_MODELS,
+  createModelRegistry,
+  formatBytes,
+} from './modelRegistry';
+export type {
+  CacheStorageLike,
+  FetchModelFilesOptions,
+  FetchedFile,
+  ModelFile,
+  ModelFileStore,
+} from './modelFiles';
+export { createCacheFileStore, fetchModelFiles } from './modelFiles';
+export { createLazySpeech, createModelDownloader, createPickedSpeech } from './modelPorts';
+export type { MoonshineOptions } from './moonshineModel';
+export {
+  MOONSHINE_CACHE,
+  createMoonshineDownloader,
+  createMoonshineSpeech,
+} from './moonshineModel';
 export type {
   ConnectionPort,
   ModelDownloader,

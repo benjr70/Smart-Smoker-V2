@@ -59,6 +59,10 @@ export const createFakeSpeech = ({
       halt();
       return Promise.resolve(transcript);
     },
+    unload: () => {
+      halt();
+      return Promise.resolve();
+    },
   };
 };
 
@@ -91,6 +95,7 @@ export const createFakeExtractor = ({
   let extractions = 0;
   return {
     load: () => Promise.resolve(),
+    unload: () => Promise.resolve(),
     extract: screen => {
       extractions += 1;
       const fails = extractions <= failures;
