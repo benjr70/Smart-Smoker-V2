@@ -157,6 +157,7 @@ export {
   pickedModel,
   statusOf,
 } from './modelLibrary';
+export { createRealModelLibrary, createRealPorts } from './realModels';
 export type { FakeDownloaderScript } from './fakeDownloader';
 export { createFakeDownloader } from './fakeDownloader';
 export type { PhoneEnvironment } from './phoneEnvironment';

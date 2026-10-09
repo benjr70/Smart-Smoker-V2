@@ -82,6 +82,17 @@ jest.mock('./components/stats/stats', () => ({
   Stats: () => <div data-testid="stats-component" />,
 }));
 
+/**
+ * The real extraction model's adapter, which needs the LiteRT-LM runtime and a
+ * GPU: here its download reports a first part and stays open.
+ */
+const mockAdapter = {
+  download: jest.fn(),
+  testLoad: jest.fn(),
+  createExtractor: jest.fn(),
+};
+jest.mock('./voiceFill/liteRtAdapter', () => mockAdapter);
+
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
 
@@ -98,6 +109,14 @@ const pass = async (ms: number): Promise<void> => {
 describe('the Model library at the application root', () => {
   beforeEach(() => {
     mockFetch.mockClear();
+    mockAdapter.download
+      .mockReset()
+      .mockImplementation(
+        (_file: unknown, _store: unknown, options: { onProgress: (received: number) => void }) => {
+          options.onProgress(1_000_000);
+          return new Promise<void>(() => undefined);
+        }
+      );
     mockFetch.mockResolvedValue({ ok: true, json: async () => ({}) });
     window.localStorage.clear();
     process.env.REACT_APP_VOICE_FILL_SCRIPTED = 'true';
@@ -166,18 +185,36 @@ describe('the Model library at the application root', () => {
     }
   );
 
-  test('is the real one where the scripted models were not asked for: the speech model downloads, and is the whole pair', async () => {
+  test('is the real one where the scripted models were not asked for: the registered pair downloads, each model through its own downloader', async () => {
     window.history.replaceState(null, '', '/');
+    // The real extraction model's file arrives when the test lets it.
+    let arrive: () => void = () => undefined;
+    mockAdapter.download.mockImplementation(
+      (_file: unknown, _store: unknown, options: { onProgress: (received: number) => void }) => {
+        options.onProgress(1_000_000);
+        return new Promise<void>(resolve => {
+          arrive = resolve;
+        });
+      }
+    );
+    mockAdapter.testLoad.mockReset().mockResolvedValue(true);
 
     render(<App />);
     await pass(0);
 
     expect(screen.getByTestId('smoke-component')).toHaveTextContent('pair downloading');
+    expect(mockAdapter.download).toHaveBeenCalledTimes(1);
     expect(window.localStorage.getItem('voiceFill.modelLibrary')).toContain(
       'moonshine-small-streaming'
     );
+    expect(window.localStorage.getItem('voiceFill.modelLibrary')).toContain('gemma-4-e2b-litert');
     expect(window.localStorage.getItem('voiceFill.scriptedModelLibrary')).toBeNull();
 
+    // The speech model alone is not the pair: it waits on the extraction model.
+    await pass(5000);
+    expect(screen.getByTestId('smoke-component')).toHaveTextContent('pair downloading');
+
+    arrive();
     await pass(5000);
     expect(screen.getByTestId('smoke-component')).toHaveTextContent('pair ready');
   });
@@ -192,6 +229,7 @@ describe('the Model library at the application root', () => {
     expect(screen.getByTestId('smoke-component')).toHaveTextContent(
       'pair notDownloaded, phone cannot run Voice Fill'
     );
+    expect(mockAdapter.download).not.toHaveBeenCalled();
     expect(window.localStorage.getItem('voiceFill.modelLibrary')).toBeNull();
     expect(window.localStorage.getItem('voiceFill.fakeDownloads')).toBeNull();
   });

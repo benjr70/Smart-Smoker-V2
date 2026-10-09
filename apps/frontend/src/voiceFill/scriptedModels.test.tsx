@@ -1,7 +1,9 @@
 import { act, render, screen } from '@testing-library/react';
 import React from 'react';
+import { GEMMA_FILE } from './gemmaModel';
 import { useModelLibrary } from './ModelLibraryProvider';
 import { MODEL_LIBRARY_STORAGE_KEY, pairReadiness } from './modelLibrary';
+import type { ExtractorPort } from './ports';
 import {
   SCRIPTED_MODEL_LIBRARY_STORAGE_KEY,
   VoiceFillModels,
@@ -20,6 +22,17 @@ jest.mock('./moonshineModel', () => {
     createMoonshineDownloader: () => createFakeDownloader({ storage: globalThis.localStorage }),
   };
 });
+
+/**
+ * The real extraction model's adapter, which needs the LiteRT-LM runtime and a
+ * GPU: here it fetches nothing, and says what it was asked for.
+ */
+const mockAdapter = {
+  download: jest.fn(),
+  testLoad: jest.fn(),
+  createExtractor: jest.fn(),
+};
+jest.mock('./liteRtAdapter', () => mockAdapter);
 
 /** What the capability check reads of the browser, and the test sets. */
 const PHONE_PARTS: [object, string][] = [
@@ -262,6 +275,9 @@ describe('the real Voice Fill models, where the scripted ones are off', () => {
   beforeEach(() => {
     ports = null;
     phoneIs('nothing');
+    mockAdapter.download.mockReset().mockResolvedValue(undefined);
+    mockAdapter.testLoad.mockReset().mockResolvedValue(true);
+    mockAdapter.createExtractor.mockReset();
   });
   afterEach(() => {
     builtWith(undefined);
@@ -274,7 +290,7 @@ describe('the real Voice Fill models, where the scripted ones are off', () => {
     ['a production build', undefined, ''],
     ['a production build asked for the scripted models', undefined, '?voiceFill=scripted'],
     ['a build that allows the scripted models, on a page that did not ask', 'true', ''],
-  ])('are handed to the screens in %s: the speech model alone', async (_, built, search) => {
+  ])('are handed to the screens in %s: the registered pair', async (_, built, search) => {
     builtWith(built);
     openedAt(search);
 
@@ -288,11 +304,13 @@ describe('the real Voice Fill models, where the scripted ones are off', () => {
     await opened();
 
     expect(screen.getByText('offered')).toBeInTheDocument();
-    expect(screen.getByTestId('listed')).toHaveTextContent(/^Moonshine Small Streaming$/);
+    expect(screen.getByTestId('listed')).toHaveTextContent(
+      /^Moonshine Small Streaming, Gemma 4 E2B$/
+    );
     expect(screen.getByTestId('supported')).toHaveTextContent('true');
   });
 
-  test('download the speech model the first time the app is opened, and are ready with it', async () => {
+  test('download the registered pair the first time the app is opened, and are ready with it', async () => {
     jest.useFakeTimers();
     try {
       render(
@@ -306,6 +324,9 @@ describe('the real Voice Fill models, where the scripted ones are off', () => {
       expect(window.localStorage.getItem(MODEL_LIBRARY_STORAGE_KEY)).toContain(
         'moonshine-small-streaming'
       );
+      expect(window.localStorage.getItem(MODEL_LIBRARY_STORAGE_KEY)).toContain(
+        'gemma-4-e2b-litert'
+      );
       // Not under the key a scripted run keeps its record under.
       expect(window.localStorage.getItem(SCRIPTED_MODEL_LIBRARY_STORAGE_KEY)).toBeNull();
 
@@ -316,14 +337,23 @@ describe('the real Voice Fill models, where the scripted ones are off', () => {
         }
       });
 
-      // With no extraction model registered, the speech model is the whole pair.
-      expect(screen.getByTestId('readiness')).toHaveTextContent('ready');
+      // Each through its own downloader: the extraction model's is its adapter's.
+      expect(mockAdapter.download).toHaveBeenCalledTimes(1);
+      expect(mockAdapter.testLoad).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId('readiness')).toHaveTextContent(/^ready$/);
     } finally {
       jest.useRealTimers();
     }
   });
 
-  test('have no extraction model: a Ramble cannot be read, and that is a failure, not a hang', async () => {
+  test('read a Ramble with the real extraction model, through its adapter', async () => {
+    const gemma: ExtractorPort = {
+      load: jest.fn(() => Promise.resolve()),
+      extract: jest.fn(() => Promise.resolve({ meatType: 'brisket' })),
+      unload: jest.fn(() => Promise.resolve()),
+    };
+    mockAdapter.createExtractor.mockReturnValue(gemma);
+
     render(
       <VoiceFillModels>
         <Ports />
@@ -331,10 +361,11 @@ describe('the real Voice Fill models, where the scripted ones are off', () => {
     );
     await opened();
 
-    await expect(ports?.extractor.load()).rejects.toThrow('No extraction model');
+    await ports?.extractor.load();
+    expect(mockAdapter.createExtractor.mock.calls[0][0]).toBe(GEMMA_FILE);
     await expect(
       ports?.extractor.extract('preSmoke', 'Sixteen pound brisket.', { now: new Date() })
-    ).rejects.toThrow('not loaded');
+    ).resolves.toEqual({ meatType: 'brisket' });
     await expect(ports?.extractor.unload()).resolves.toBeUndefined();
   });
 

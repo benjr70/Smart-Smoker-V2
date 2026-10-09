@@ -74,7 +74,8 @@ export const GEMMA_4_E2B: VoiceFillModel = {
 
 /**
  * The models the application offers: the adapter Slices add theirs here, the
- * default pair's first so that it is the pair a fresh phone gets.
+ * default pair's first so that it is the pair a fresh phone gets. They are what
+ * the Model library of every production build lists (see `realModels.ts`).
  * Both models of the default pair are registered: a Ramble is heard by the
  * speech model and read by the extraction model.
  */

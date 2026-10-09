@@ -157,8 +157,9 @@ const createScriptedPorts = (library: ModelLibrary): VoiceFillPorts => {
 };
 
 /**
- * Whether this page runs Voice Fill on the scripted models. Two things have to
- * be true, and a production build can only ever have the second:
+ * Whether this page runs Voice Fill on the scripted models, and not on the
+ * registered ones every other page gets. Two things have to be true, and a
+ * production build can only ever have the second:
  *
  * - the bundle was built with `REACT_APP_VOICE_FILL_SCRIPTED=true` in the env
  *   file webpack bakes in. The published images are built from an env file the
@@ -184,11 +185,11 @@ export interface VoiceFillModelsProps {
  * download a first opening of the app starts does not wait for any one screen.
  *
  * Everywhere but where {@link scriptedModelsAreOn} it is the real models that
- * are handed out — see `realModels.ts`. The real speech model has landed and
- * the real extraction model has not, so that is the speech model alone: it is
- * downloaded the first time the app is opened on a phone that can run it, the
- * settings card shows its dropdown and no other, the button appears once it is
- * ready, and a Ramble is heard live and then cannot be read.
+ * are handed out — see `realModels.ts`: the real speech model and the real
+ * extraction model. Both are downloaded the first time the app is opened on a
+ * phone that can run them, the settings card shows a dropdown for each, the
+ * button appears once the pair is ready, and a Ramble is heard live and then
+ * read.
  *
  * Where the scripted models are on, it is those, with the real speech model
  * and the real extraction model beside them.
