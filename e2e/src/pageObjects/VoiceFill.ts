@@ -250,11 +250,19 @@ export class VoiceFill {
     await expect(this.settingsCard.getByRole('combobox')).toHaveCount(2);
   }
 
-  /** Assert which model a role's dropdown shows as picked. */
+  /**
+   * Assert which model a role's dropdown shows as picked.
+   *
+   * The dropdown ticks a model that is on the phone, and shows the picked one
+   * with its tick. Whether it is ticked changes under a journey — a pick starts
+   * a download, a Remove takes it back — and is the status line's to assert
+   * (`expectModelStatus`). So the name is matched whole, with or without the
+   * tick after it: `Scripted speech` is still not `Scripted speech B`.
+   */
   async expectPickedModel(role: ModelRole, name: string): Promise<void> {
     await expect(
       this.page.getByTestId(`voice-fill-model-${role}`).getByRole('combobox')
-    ).toHaveText(name);
+    ).toHaveText(new RegExp(`^\\s*${escapeRegExp(name)}\\s*${DOWNLOADED_TICK}?\\s*$`));
   }
 
   /** Assert what a role's status line says of its picked model. */
@@ -311,6 +319,12 @@ export class VoiceFill {
 
 /** `N fields`, or `1 field` — as the sheet and the toast count them. */
 const fieldCount = (count: number): string => `${count} ${count === 1 ? 'field' : 'fields'}`;
+
+/** The mark the dropdown puts after a model that is on the phone. */
+const DOWNLOADED_TICK = '✓';
+
+/** `text` as a pattern that matches it letter for letter. */
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** Where what the grey pill said is kept on the page. */
 const PILL_RECORDING_KEY = '__voiceFillPillSaid';
