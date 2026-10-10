@@ -123,8 +123,9 @@ function ModelStatusLine({
  * The Voice Fill card of the settings screen: which speech model and which
  * extraction model this phone uses, and where each stands on it.
  *
- * Two dropdowns and a status line under each — nothing else; there is no
- * switch for Voice Fill and none for the review. What it shows and changes is
+ * Two dropdowns and a status line under each — one for each role that has a
+ * model to pick — and nothing else; there is no switch for Voice Fill and none
+ * for the review. What it shows and changes is
  * the phone's Model library, never the application settings the backend
  * shares between devices.
  *

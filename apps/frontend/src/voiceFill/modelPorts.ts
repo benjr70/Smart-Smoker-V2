@@ -44,6 +44,42 @@ export const createLazySpeech = (adapter: () => Promise<SpeechPort>): SpeechPort
 };
 
 /**
+ * An extractor port over an adapter that is not imported until the port is
+ * first asked to load or to extract: what keeps a model's runtime in a chunk
+ * of its own, fetched only by a cook who taps the button with that model
+ * picked.
+ */
+export const createLazyExtractor = (adapter: () => Promise<ExtractorPort>): ExtractorPort => {
+  let imported: Promise<ExtractorPort> | undefined;
+  const port = (): Promise<ExtractorPort> => {
+    if (!imported) {
+      const importing = adapter();
+      imported = importing;
+      // An import that failed — the phone was offline — is tried again.
+      importing.catch(() => {
+        if (imported === importing) {
+          imported = undefined;
+        }
+      });
+    }
+    return imported;
+  };
+  return {
+    load: () => port().then(extractor => extractor.load()),
+    extract: (screen, transcript, context) =>
+      port().then(extractor => extractor.extract(screen, transcript, context)),
+    // An adapter that was never imported has loaded nothing.
+    unload: () =>
+      imported
+        ? imported.then(
+            extractor => extractor.unload(),
+            () => undefined
+          )
+        : Promise.resolve(),
+  };
+};
+
+/**
  * The speech port of whichever model the Model library has picked: `picked`
  * is asked each time the port is loaded, so the next Ramble after a change of
  * model in Settings is heard by the new one. The model a Ramble started with
@@ -84,9 +120,9 @@ export const createPickedSpeech = (
  * The extractor port of whichever model the Model library has picked, asked
  * each time the port is loaded as {@link createPickedSpeech} is.
  *
- * Where no extraction model is registered none is picked, and the port fails
- * to load: a Ramble that was heard cannot be read, which the session shows as
- * a problem with what was heard kept.
+ * Where the picked extraction model has no adapter the port fails to load: a
+ * Ramble that was heard cannot be read, which the session shows as a problem
+ * with what was heard kept.
  */
 export const createPickedExtractor = (
   picked: () => string | null,
