@@ -1,0 +1,336 @@
+import { expect, Locator, Page } from '@playwright/test';
+
+/**
+ * What a page's address carries to be given Voice Fill on the scripted models.
+ *
+ * `voiceFill=scripted` asks for them — and is only answered by a bundle built
+ * to allow them, which the hermetic stack's is and a published image never is.
+ * `voiceFillPhone=capable` has the phone taken as able to run Voice Fill: the
+ * scripted models need no WebGPU, and the headless browser these journeys run
+ * in has no adapter to offer.
+ */
+export const SCRIPTED_VOICE_FILL_QUERY = 'voiceFill=scripted&voiceFillPhone=capable';
+
+/** The two models a phone picks: the one that hears, and the one that reads. */
+export type ModelRole = 'speech' | 'extractor';
+
+/**
+ * How long the Voice fill button may take to show. It stands behind a grey
+ * pill until the picked pair of models is on the phone, and a first opening of
+ * the app starts that download by itself — scripted, so it takes seconds.
+ */
+const MODELS_READY_TIMEOUT_MS = 30_000;
+
+/**
+ * Page object for Voice Fill: the button a screen offers and the grey pill that
+ * stands in for it, the sheet a Ramble is taken through, the flash and the toast
+ * a fill leaves, and the card in Settings the models are picked on.
+ *
+ * It drives whichever screen is up — the button, the sheet and the toast are
+ * the same on every screen that has them — so a journey pairs it with the
+ * `FrontendApp` that gets it there.
+ */
+export class VoiceFill {
+  constructor(private readonly page: Page) {}
+
+  private get button(): Locator {
+    return this.page.getByTestId('voice-fill-button');
+  }
+
+  private get sheet(): Locator {
+    return this.page.getByTestId('voice-fill-sheet');
+  }
+
+  private get rows(): Locator {
+    return this.sheet.locator('[data-testid^="voice-fill-row-"]');
+  }
+
+  private row(id: string): Locator {
+    return this.page.getByTestId(`voice-fill-row-${id}`);
+  }
+
+  private get toast(): Locator {
+    return this.page.getByTestId('voice-fill-toast');
+  }
+
+  private get pill(): Locator {
+    return this.page.getByTestId('voice-fill-pill');
+  }
+
+  // --- The grey pill ---------------------------------------------------------
+
+  /**
+   * Record everything the grey pill says on this page from its next load on,
+   * and answer with a way to read it back. Call it before the app is opened.
+   *
+   * The pill stands in the button's place while the picked pair downloads, and
+   * a first opening of the app starts that download as the page loads — over in
+   * about a second on the scripted downloader. So the pill is recorded from
+   * before the app is on the page rather than looked for once it is: every
+   * percent it showed is there to be asserted on, however briefly it was up.
+   */
+  async recordPill(): Promise<() => Promise<string[]>> {
+    await this.page.addInitScript(key => {
+      const said: string[] = [];
+      (window as unknown as Record<string, string[]>)[key] = said;
+      const note = (): void => {
+        const text = document.querySelector('[data-testid="voice-fill-pill"]')?.textContent ?? '';
+        if (text && said[said.length - 1] !== text) {
+          said.push(text);
+        }
+      };
+      new MutationObserver(note).observe(document, {
+        subtree: true,
+        childList: true,
+        characterData: true,
+      });
+    }, PILL_RECORDING_KEY);
+    return () =>
+      this.page.evaluate(
+        key => (window as unknown as Record<string, string[]>)[key] ?? [],
+        PILL_RECORDING_KEY
+      );
+  }
+
+  /**
+   * Assert the Voice fill button is up: the picked pair is on the phone, and
+   * the grey pill that stood in for the button has gone.
+   */
+  async expectButton(): Promise<void> {
+    await expect(this.button).toBeVisible({ timeout: MODELS_READY_TIMEOUT_MS });
+    await expect(this.pill).toHaveCount(0);
+  }
+
+  /**
+   * Assert the grey pill stands where the Voice fill button would, saying
+   * `message` — so there is no button to start a Ramble with.
+   */
+  async expectPill(message: string | RegExp): Promise<void> {
+    await expect(this.pill).toBeVisible();
+    await expect(this.pill).toHaveText(message);
+    await expect(this.button).toHaveCount(0);
+  }
+
+  /** Tap the grey pill, which opens Settings with the Voice Fill card in view. */
+  async openSettingsFromPill(): Promise<void> {
+    await this.pill.click();
+    await expect(this.settingsCard).toBeInViewport();
+  }
+
+  // --- The flash ---------------------------------------------------------------
+
+  private get flashing(): Locator {
+    return this.page.locator('[data-voice-filled]');
+  }
+
+  /**
+   * Start recording which fields flash from here on, and answer with a way to
+   * read them back, sorted by name.
+   *
+   * A flash is put out a couple of seconds after the fill, so on a slow runner
+   * a look taken after the fill could land when it is already over. Recorded in
+   * the page from before the fill, every field that flashed is there to be
+   * asserted on, whenever it is asked for.
+   */
+  async recordFlashes(): Promise<() => Promise<string[]>> {
+    await this.page.evaluate(key => {
+      const flashed: string[] = [];
+      (window as unknown as Record<string, string[]>)[key] = flashed;
+      const note = (): void => {
+        document.querySelectorAll('[data-voice-filled]').forEach(element => {
+          const field = element.getAttribute('data-voice-filled');
+          if (field && !flashed.includes(field)) {
+            flashed.push(field);
+          }
+        });
+      };
+      new MutationObserver(note).observe(document.body, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        attributeFilter: ['data-voice-filled'],
+      });
+    }, FLASH_RECORDING_KEY);
+    return () =>
+      this.page.evaluate(
+        key => [...((window as unknown as Record<string, string[]>)[key] ?? [])].sort(),
+        FLASH_RECORDING_KEY
+      );
+  }
+
+  /** Assert no field is flashing: an Undo puts the flash out at once. */
+  async expectNothingFlashing(): Promise<void> {
+    await expect(this.flashing).toHaveCount(0);
+  }
+
+  // --- The sheet and the toast -------------------------------------------------
+
+  /**
+   * Speak a Ramble: tap Voice fill, let the sheet hear something, and tap Done
+   * talking. Returns once the sheet has moved on from listening.
+   *
+   * The words arriving are waited for because they are what "listening" means
+   * to a cook — a sheet that opened and heard nothing would otherwise be tapped
+   * through just the same.
+   */
+  async ramble(): Promise<void> {
+    await expect(this.button).toBeVisible({ timeout: MODELS_READY_TIMEOUT_MS });
+    await this.button.click();
+    await expect(this.sheet).toBeVisible();
+    await expect(this.page.getByTestId('voice-fill-live-transcript')).not.toHaveText(
+      'Start talking…'
+    );
+    await this.page.getByTestId('voice-fill-done-talking').click();
+  }
+
+  /**
+   * Assert the review list proposes exactly these rows, in this order, every
+   * one of them ticked — which is how a Ramble's rows arrive.
+   */
+  async expectReview(rowIds: readonly string[]): Promise<void> {
+    await expect(this.page.getByTestId('voice-fill-title')).toHaveText(
+      `Found ${fieldCount(rowIds.length)}`
+    );
+    await expect
+      .poll(() =>
+        this.rows.evaluateAll(rows =>
+          rows.map(row => (row.getAttribute('data-testid') ?? '').replace('voice-fill-row-', ''))
+        )
+      )
+      .toEqual(rowIds);
+    for (const id of rowIds) {
+      await expect(this.row(id)).toHaveAttribute('aria-checked', 'true');
+    }
+  }
+
+  /** Assert a review row proposes `text` — the value it would write, as the cook reads it. */
+  async expectRowProposes(id: string, text: string | RegExp): Promise<void> {
+    await expect(this.row(id)).toContainText(text);
+  }
+
+  /** Untick a review row, so the fill leaves its field alone. */
+  async untick(id: string): Promise<void> {
+    await this.row(id).click();
+    await expect(this.row(id)).toHaveAttribute('aria-checked', 'false');
+  }
+
+  /**
+   * Fill from the ticked rows, and wait for the toast that says how many fields
+   * were written. `count` is asserted on the button before the tap as well as on
+   * the toast after it, so a row that was ticked but not written shows up as the
+   * disagreement between the two.
+   */
+  async fill(count: number): Promise<void> {
+    const fill = this.page.getByTestId('voice-fill-fill');
+    await expect(fill).toHaveText(`Fill ${fieldCount(count)}`);
+    await fill.click();
+    await expect(this.sheet).toBeHidden();
+    await expect(this.toast).toContainText(`Filled ${fieldCount(count)} by voice`);
+  }
+
+  /** Take the fill back from its toast. */
+  async undo(): Promise<void> {
+    await this.page.getByTestId('voice-fill-undo').click();
+    await expect(this.toast).toBeHidden();
+  }
+
+  // --- The settings card ---------------------------------------------------
+
+  private get settingsCard(): Locator {
+    return this.page.getByTestId('settings-voice-fill-card');
+  }
+
+  private modelStatus(role: ModelRole): Locator {
+    return this.page.getByTestId(`voice-fill-model-status-${role}`).getByRole('status');
+  }
+
+  /** Assert Settings shows the Voice Fill card, with a dropdown for each model. */
+  async expectSettingsCard(): Promise<void> {
+    await expect(this.settingsCard).toBeVisible();
+    await expect(this.settingsCard.getByRole('combobox')).toHaveCount(2);
+  }
+
+  /**
+   * Assert which model a role's dropdown shows as picked.
+   *
+   * The dropdown ticks a model that is on the phone, and shows the picked one
+   * with its tick. Whether it is ticked changes under a journey — a pick starts
+   * a download, a Remove takes it back — and is the status line's to assert
+   * (`expectModelStatus`). So the name is matched whole, with or without the
+   * tick after it: `Scripted speech` is still not `Scripted speech B`.
+   */
+  async expectPickedModel(role: ModelRole, name: string): Promise<void> {
+    await expect(
+      this.page.getByTestId(`voice-fill-model-${role}`).getByRole('combobox')
+    ).toHaveText(new RegExp(`^\\s*${escapeRegExp(name)}\\s*${DOWNLOADED_TICK}?\\s*$`));
+  }
+
+  /** Assert what a role's status line says of its picked model. */
+  async expectModelStatus(role: ModelRole, status: RegExp): Promise<void> {
+    await expect(this.modelStatus(role)).toHaveText(status, { timeout: MODELS_READY_TIMEOUT_MS });
+  }
+
+  /**
+   * Start recording everything a role's status line says from here on, and
+   * answer with a way to read it back.
+   *
+   * A download is over in well under a second on the scripted downloader, so
+   * "it said Downloading before it said Ready" cannot be asked by looking at
+   * the line now and then — the look would have to land inside that second.
+   * Recorded in the page, every state the line passed through is there to be
+   * asserted on afterwards, however briefly it was shown.
+   */
+  async recordModelStatus(role: ModelRole): Promise<() => Promise<string[]>> {
+    const line = this.page.getByTestId(`voice-fill-model-status-${role}`);
+    await line.evaluate((element, key) => {
+      const said: string[] = [];
+      (window as unknown as Record<string, string[]>)[key] = said;
+      const note = (): void => {
+        const text = element.querySelector('[role="status"]')?.textContent ?? '';
+        if (text && said[said.length - 1] !== text) {
+          said.push(text);
+        }
+      };
+      new MutationObserver(note).observe(element, {
+        subtree: true,
+        childList: true,
+        characterData: true,
+      });
+    }, recordingKey(role));
+    return () =>
+      this.page.evaluate(
+        key => (window as unknown as Record<string, string[]>)[key] ?? [],
+        recordingKey(role)
+      );
+  }
+
+  /** Pick a model from a role's dropdown, which starts its download. */
+  async pickModel(role: ModelRole, name: string): Promise<void> {
+    await this.page.getByTestId(`voice-fill-model-${role}`).getByRole('combobox').click();
+    await this.page.getByRole('option', { name }).click();
+    await this.expectPickedModel(role, name);
+  }
+
+  /** Remove a downloaded model from the phone, by the button its status line carries. */
+  async removeModel(name: string): Promise<void> {
+    await this.settingsCard.getByRole('button', { name: `Remove ${name}` }).click();
+  }
+}
+
+/** `N fields`, or `1 field` — as the sheet and the toast count them. */
+const fieldCount = (count: number): string => `${count} ${count === 1 ? 'field' : 'fields'}`;
+
+/** The mark the dropdown puts after a model that is on the phone. */
+const DOWNLOADED_TICK = '✓';
+
+/** `text` as a pattern that matches it letter for letter. */
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** Where what the grey pill said is kept on the page. */
+const PILL_RECORDING_KEY = '__voiceFillPillSaid';
+
+/** Where the fields that flashed are kept on the page. */
+const FLASH_RECORDING_KEY = '__voiceFillFlashed';
+
+/** Where a role's recorded status line is kept on the page. */
+const recordingKey = (role: ModelRole): string => `__voiceFillStatus_${role}`;
