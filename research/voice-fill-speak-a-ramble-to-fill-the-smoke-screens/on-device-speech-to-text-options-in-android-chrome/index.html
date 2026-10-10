@@ -1,0 +1,3959 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Chrome on Android has no on-device Web Speech mode; a shipped Moonshine or Whisper model is the only local route - Smart Smoker Docs</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#chrome-on-android-has-no-on-device-web-speech-mode-a-shipped-moonshine-or-whisper-model-is-the-only-local-route" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="Smart Smoker Docs" class="md-header__button md-logo" aria-label="Smart Smoker Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Smart Smoker Docs
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Chrome on Android has no on-device Web Speech mode; a shipped Moonshine or Whisper model is the only local route
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/benjr70/Smart-Smoker-V2" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    benjr70/Smart-Smoker-V2
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../.." class="md-tabs__link">
+          
+  
+  
+    
+  
+  Welcome
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../Frontend/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Apps
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../Packages/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Packages
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../CI-CD/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  CI/CD
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../Harness/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Harness
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../AFK/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  AFK
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../Infrastructure/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Infrastructure
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="Smart Smoker Docs" class="md-nav__button md-logo" aria-label="Smart Smoker Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Smart Smoker Docs
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/benjr70/Smart-Smoker-V2" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    benjr70/Smart-Smoker-V2
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../.." class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Welcome
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_1" id="__nav_1_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Welcome
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Documentation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Documentation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Hardware/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hardware
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../piSoftware/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pi Software
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_1_5" id="__nav_1_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Epics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Epics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Epics/pushNotifications/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Push Notifications
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Epics/googleAssistant/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Google Assistant
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Apps
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Apps
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_1" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../Frontend/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Frontend
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Frontend
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../Backend/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    BackEnd
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2_2" id="__nav_2_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    BackEnd
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Backend/backend-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Smart Smoker Backend Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../Smoker%20Frontend/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Smoker Frontend
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Smoker Frontend
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../Device%20Service/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Device Service
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Device Service
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../Packages/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Packages
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Packages
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Packages/testing-template/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing Template
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../CI-CD/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CI/CD
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    CI/CD
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../CI-CD/release-process/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release Process
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../CI-CD/github-actions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GitHub Actions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../CI-CD/test-coverage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Test Coverage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../CI-CD/dependency-management/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependency Management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../CI-CD/workflow-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workflow Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../CI-CD/deployment-infrastructure/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deployment & Infrastructure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../CI-CD/manual-version-deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Manual Deployment Runbook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../CI-CD/smoker-device/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Physical Smoker Device
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../CI-CD/claude-agent-vm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Claude Agent VM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../Harness/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Harness
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Harness
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Harness/backpressure/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backpressure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Harness/self-validation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Self-Validation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Harness/infra/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Infrastructure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../AFK/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AFK
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    AFK
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../AFK/roles/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Roles
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../AFK/dispatch/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dispatch
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../AFK/autonomous-loop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Autonomous Loop
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../Infrastructure/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Infrastructure
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Infrastructure
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/guides/getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/guides/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/guides/prod-pre-cutover-verification/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prod Pre-Cutover Verification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_5" id="__nav_7_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Implementation Plans
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Implementation Plans
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/implementation/proxmox-infrastructure-plan/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Infrastructure Plan
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/implementation/phase-3-deployment-automation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Phase 3 Deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/implementation/phase-4-testing-documentation.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Phase 4 Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_6" id="__nav_7_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Features
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Features
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_6_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_6_1" id="__nav_7_6_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Database
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_7_6_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_6_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Database
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/database/mongodb/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MongoDB
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/database/backups/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backups
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_6_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_6_2" id="__nav_7_6_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deployment
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_7_6_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_6_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Deployment
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/deployment/automation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Automation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/deployment/health-checks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Health Checks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/deployment/rollback/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rollback
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/deployment/environments/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Environments
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_6_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_6_3" id="__nav_7_6_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Infrastructure
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_7_6_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_6_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Infrastructure
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/infrastructure/terraform/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Terraform
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/infrastructure/proxmox/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Proxmox
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/infrastructure/containers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Containers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_6_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_6_4" id="__nav_7_6_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_7_6_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_6_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Configuration
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/configuration/ansible/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ansible
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/configuration/system-setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    System Setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_6_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_6_5" id="__nav_7_6_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Networking
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_7_6_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_6_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Networking
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/networking/tailscale/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tailscale
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/networking/network-config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Network Config
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_6_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_6_6" id="__nav_7_6_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_7_6_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_6_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Security
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/security/secrets-management/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Secrets Management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/security/authentication/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authentication
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_6_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_6_7" id="__nav_7_6_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operations
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_7_6_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_6_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Operations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/operations/testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/operations/disaster-recovery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Disaster Recovery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/operations/monitoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Monitoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="chrome-on-android-has-no-on-device-web-speech-mode-a-shipped-moonshine-or-whisper-model-is-the-only-local-route">Chrome on Android has no on-device Web Speech mode; a shipped Moonshine or Whisper model is the only local route</h1>
+<p>Ticket: <a href="https://github.com/benjr70/Smart-Smoker-V2/issues/689">#689</a> (part of
+wayfinder map
+<a href="https://github.com/benjr70/Smart-Smoker-V2/issues/687">#687</a> — Voice Fill:
+speak a Ramble to fill the smoke screens). Researched on 2026-10-02.</p>
+<p>Sources: the Web Speech API draft (webaudio.github.io, dated 2026-09-18);
+Chromium <code>main</code> source read on 2026-10-02 (<code>SpeechRecognitionImpl.java</code>,
+<code>speech_recognition_manager_impl.cc</code>, <code>on_device_speech_recognition_impl.cc</code>,
+<code>speech_recognition.cc</code>, <code>speech_recognition.idl</code>,
+<code>runtime_enabled_features.json5</code>, <code>media_switches.cc</code>); Chrome Platform Status
+API; MDN and <code>mdn/browser-compat-data</code>; the Android <code>SpeechRecognizer</code>
+reference; Chrome's Prompt API and WebGPU docs; the gpuweb Implementation
+Status wiki; the transformers.js docs and source; the ONNX Runtime Web docs; the
+Hugging Face model API; the Moonshine repo, docs, npm package and CDN; the
+whisper.cpp and openai/whisper repos. Live probes (commands and output) are
+reproduced in <a href="#live-probes">Live probes</a>.</p>
+<h2 id="tldr">TL;DR</h2>
+<ul>
+<li><strong>Browser-provided recognition cannot meet the on-device constraint on
+  Android.</strong> The on-device Web Speech API (<code>processLocally</code>, <code>available()</code>,
+  <code>install()</code>) is desktop-only: Chrome Platform Status lists desktop 139 and no
+  Android milestone, MDN's compat data marks all three <code>false</code> for Chrome
+  Android, and Chromium <code>main</code> hard-codes <code>available()</code> to <code>"unavailable"</code> and
+  <code>install()</code> to <code>false</code> under <code>IS_ANDROID</code>.</li>
+<li><strong>Plain <code>SpeechRecognition</code> on Android hands the audio to a Google system
+  app.</strong> Chrome binds Android's <code>SpeechRecognizer</code> to
+  <code>com.google.android.tts</code> (Android 12+) and passes only language, continuous
+  and interim flags. Android documents that API as "likely to stream audio to
+  remote servers". The page cannot request local processing and gets no signal
+  about where recognition ran, so it cannot verify it either.</li>
+<li><strong>Chrome's built-in Gemini Nano audio input is not available on Android</strong>
+  (Prompt API docs, updated 2026-08-26), so it is not a route either.</li>
+<li><strong>Shipping a model is therefore the only route</strong>, and it fits the size budget
+  easily: every credible English model is 45 to 400 MB, against a 2 GB budget
+  shared with the LLM.</li>
+<li><strong>The 15-second bar is the hard one, and no primary source measures any of
+  these models on a Pixel 10 Pro or a Snapdragon 8 Elite Gen 5 in Chrome.</strong> The
+  only documented in-browser figure is whisper.cpp's "x2 or x3 real-time" for
+  tiny and base on a desktop CPU, which would spend 40 to 60 seconds on a
+  two-minute Ramble if run after the recording ends. Transcribing while the
+  user is still speaking removes most of that cost from the budget; that is
+  what the streaming models are built for.</li>
+<li><strong>Shortlist to try on the phones</strong>: (1) Moonshine Small Streaming through
+  <code>@moonshine-ai/moonshine-wasm</code>; (2) Whisper <code>base.en</code> through transformers.js
+  on WebGPU with a WASM fallback; (3) Moonshine Base through transformers.js.</li>
+<li><strong>Cooking vocabulary</strong>: nothing published measures it. The only biasing
+  mechanism available to a page on Android is Moonshine's key-terms list
+  (streaming models only). Web Speech <code>phrases</code> is desktop-only and the
+  transformers.js speech pipeline exposes no prompt option.</li>
+<li><strong>Unconfirmed, needs a device</strong>: real-time factor of each candidate on both
+  phones; whether WebGPU is actually exposed on the Pixel 10 Pro; how each
+  model writes spoken numbers and cook terms; whether Google's system
+  recogniser happens to run offline on these phones.</li>
+</ul>
+<h2 id="route-1-browser-provided-recognition">Route 1: browser-provided recognition</h2>
+<h3 id="what-the-standard-offers">What the standard offers</h3>
+<p>The Web Speech API draft (Draft Community Group Report, 18 September 2026)
+defines an on-device mode
+(<a href="https://webaudio.github.io/web-speech-api/">spec</a>):</p>
+<ul>
+<li><code>SpeechRecognition.processLocally</code>: when <code>true</code> it "indicates a requirement
+  that the speech recognition process MUST be performed locally on the user's
+  device"; when <code>false</code>, "the user agent can choose between local and remote
+  processing".</li>
+<li><code>SpeechRecognition.available({ langs, processLocally })</code> resolves to
+  <code>"unavailable"</code>, <code>"downloadable"</code>, <code>"downloading"</code> or <code>"available"</code>. It is
+  gated behind the <code>on-device-speech-recognition</code> permissions policy (default
+  allowlist <code>self</code>).</li>
+<li><code>SpeechRecognition.install({ langs })</code> downloads a language pack and resolves
+  to a boolean.</li>
+<li><code>SpeechRecognition.phrases</code> (<code>SpeechRecognitionPhrase(phrase, boost)</code>, boost
+  0.0 to 10.0) biases recognition toward listed phrases; an engine that cannot
+  do it raises <code>phrases-not-supported</code>.</li>
+<li>A <code>start()</code> with <code>processLocally = true</code> and no installed pack fails with
+  <code>language-not-supported</code>
+  (<a href="https://developer.mozilla.org/en-US/docs/Web/API/Web_Speech_API/Using_the_Web_Speech_API">MDN, Using the Web Speech API</a>,
+  last modified 2026-08-31).</li>
+</ul>
+<p>This is how a page would request and detect local recognition: check
+<code>available()</code>, call <code>install()</code> if <code>"downloadable"</code>, set <code>processLocally = true</code>,
+and treat a <code>language-not-supported</code> error as "not local, do not proceed".</p>
+<h3 id="where-chrome-implements-it-desktop-only">Where Chrome implements it: desktop only</h3>
+<table>
+<thead>
+<tr>
+<th>Evidence</th>
+<th>Finding</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Chrome Platform Status, feature <a href="https://chromestatus.com/feature/6090916291674112">6090916291674112</a> "On-device Web Speech API" (API read 2026-10-02)</td>
+<td><code>desktop: 139</code>, <code>android: null</code>, <code>webview: null</code>. Summary: lets "websites ... ensure that neither audio nor transcribed speech are sent to a third-party service".</td>
+</tr>
+<tr>
+<td>Chrome Platform Status, <a href="https://chromestatus.com/feature/5225615177023488">5225615177023488</a> "Web Speech API contextual biasing"</td>
+<td><code>desktop: 142</code>, <code>android: null</code>.</td>
+</tr>
+<tr>
+<td>Chrome Platform Status, <a href="https://chromestatus.com/feature/5136859632107520">5136859632107520</a> "On-Device Recognition Quality"</td>
+<td><code>desktop: 150</code>, <code>android: null</code>.</td>
+</tr>
+<tr>
+<td><a href="https://github.com/mdn/browser-compat-data/blob/main/api/SpeechRecognition.json"><code>mdn/browser-compat-data</code> <code>api/SpeechRecognition.json</code></a> (last commit 2026-09-22)</td>
+<td><code>available_static</code>, <code>install_static</code>, <code>processLocally</code>: Chrome 139, Chrome Android <code>false</code>. <code>phrases</code>: Chrome 142, Chrome Android <code>false</code>. <code>start(audioTrack)</code>: Chrome 135, Chrome Android <code>false</code>.</td>
+</tr>
+<tr>
+<td>Chromium <a href="https://github.com/chromium/chromium/blob/main/chrome/browser/speech/on_device_speech_recognition_impl.cc"><code>chrome/browser/speech/on_device_speech_recognition_impl.cc</code></a> (last commit 2026-09-18)</td>
+<td><code>Available()</code> under <code>#if BUILDFLAG(IS_ANDROID)</code> runs the callback with <code>AvailabilityStatus::kUnavailable</code>; <code>Install()</code> runs it with <code>false</code>. No other Android branch.</td>
+</tr>
+<tr>
+<td>Chromium <a href="https://github.com/chromium/chromium/blob/main/content/browser/speech/speech_recognition_manager_impl.cc"><code>content/browser/speech/speech_recognition_manager_impl.cc</code></a> (last commit 2026-09-29)</td>
+<td><code>UseOnDeviceSpeechRecognition()</code> returns <code>false</code> on Android and Fuchsia. The on-device engines (SODA, Gemini Nano, the small expert model) are included only when <code>!IS_ANDROID</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>The JavaScript surface does exist on Android: <code>OnDeviceWebSpeechAvailable</code> and
+<code>InstallOnDeviceSpeechRecognition</code> are <code>status: "stable"</code> on every platform in
+<a href="https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/platform/runtime_enabled_features.json5"><code>runtime_enabled_features.json5</code></a>,
+so <code>'available' in SpeechRecognition</code> is not a usable test. The answer is in
+the resolved value. Reading
+<a href="https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/modules/speech/speech_recognition.cc"><code>speech_recognition.cc</code></a>
+(last commit 2026-09-22), <code>start()</code> with <code>processLocally = true</code> and a <code>lang</code>
+set first asks the browser for on-device availability and fires
+<code>language-not-supported</code> unless the status is <code>available</code>. On Android that
+status is always <code>unavailable</code>, so the call fails closed.</p>
+<p>One trap in that same function: the availability check is skipped when <code>lang</code>
+is unset (<code>if (process_locally_ &amp;&amp; lang_)</code>), and the code falls through to the
+ordinary start path. On Android the ordinary path is the system recogniser
+described below. A page relying on <code>processLocally</code> as a guard must always set
+<code>lang</code>.</p>
+<p>These are readings of Chromium <code>main</code>. The current Android stable is
+154.0.8037.94 (chromiumdash, 2026-10-02); the branch that shipped it was not
+read separately. <strong>Unconfirmed on the devices</strong>: the actual value of
+<code>await SpeechRecognition.available({ langs: ['en-US'], processLocally: true })</code>
+on the two phones. It takes one line in the remote DevTools console and is
+worth running once, because the map prefers a browser-provided model whenever
+one exists.</p>
+<h3 id="what-plain-speechrecognition-does-on-android">What plain <code>SpeechRecognition</code> does on Android</h3>
+<p>Chrome on Android does not run a recogniser of its own. Per
+<a href="https://github.com/chromium/chromium/blob/main/content/public/android/java/src/org/chromium/content/browser/SpeechRecognitionImpl.java"><code>SpeechRecognitionImpl.java</code></a>
+(last commit 2026-07-01):</p>
+<ul>
+<li>It looks up a <code>RecognitionService</code> from a Google package: on Android 12 and
+  later <code>com.google.android.tts</code>, on older versions
+  <code>com.google.android.googlequicksearchbox</code>.</li>
+<li>It creates the recogniser with
+  <code>SpeechRecognizer.createSpeechRecognizer(context, provider)</code>. It never calls
+  <code>createOnDeviceSpeechRecognizer</code>.</li>
+<li><code>startRecognition</code> sets exactly three extras: <code>DICTATION_MODE</code> (continuous),
+  <code>EXTRA_LANGUAGE</code> and <code>EXTRA_PARTIAL_RESULTS</code>. There is no
+  <code>EXTRA_PREFER_OFFLINE</code>, and <code>processLocally</code> is not passed across the JNI
+  boundary
+  (<a href="https://github.com/chromium/chromium/blob/main/content/browser/speech/speech_recognizer_impl_android.cc"><code>speech_recognizer_impl_android.cc</code></a>
+  forwards language, continuous and interim results only).</li>
+</ul>
+<p>Android's own documentation for that API says: "The implementation of this API
+is likely to stream audio to remote servers to perform speech recognition"
+(<a href="https://developer.android.com/reference/android/speech/SpeechRecognizer"><code>SpeechRecognizer</code> reference</a>).
+MDN repeats the consequence for Chrome: "using Speech Recognition on a web page
+involves a server-based recognition engine. Your audio is sent to a web service
+for recognition processing, so it won't work offline"
+(<a href="https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition">MDN <code>SpeechRecognition</code></a>,
+last modified 2026-08-19).</p>
+<p>So, answering the ticket's four sub-questions for Chrome on Android:</p>
+<table>
+<thead>
+<tr>
+<th>Question</th>
+<th>Answer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>When does audio leave the device?</td>
+<td>Whenever Google's system recognition service decides to. Chrome hands it the microphone session and expresses no preference.</td>
+</tr>
+<tr>
+<td>Is there an on-device mode?</td>
+<td>Not one a page can select. The spec's mode is not implemented on Android.</td>
+</tr>
+<tr>
+<td>How is it requested and detected?</td>
+<td><code>processLocally = true</code> plus <code>available()</code>; on Android both report that it is not available.</td>
+</tr>
+<tr>
+<td>Can a page verify recognition stayed local?</td>
+<td>No. The result events carry no provenance, and the only guarantee in the platform is the <code>processLocally</code> requirement, which Android cannot satisfy.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Unconfirmed</strong>: whether <code>com.google.android.tts</code> recognises fully offline on a
+Pixel 10 Pro or a Galaxy Fold 8 Ultra when an offline English pack is
+installed. No primary source states it, and even if it does the page could
+neither require nor prove it, so it does not satisfy a hard on-device
+constraint. Two further limits apply to this path regardless: recognition is
+ended when the page is not visible ("On Android, background speech recognition
+is not permitted", <code>speech_recognition_manager_impl.cc</code>), and contextual
+biasing is unavailable.</p>
+<h3 id="chromes-built-in-model-is-not-a-substitute">Chrome's built-in model is not a substitute</h3>
+<p>The Prompt API accepts audio input and Chrome's docs name transcription as a
+use, but "Chrome for Android, iOS, and ChromeOS on non-Chromebook Plus devices
+are not yet supported by the APIs which use foundation models"
+(<a href="https://developer.chrome.com/docs/ai/prompt-api">Prompt API</a>, updated
+2026-08-26).</p>
+<h2 id="route-2-models-we-ship">Route 2: models we ship</h2>
+<h3 id="what-the-phones-give-a-page-to-run-on">What the phones give a page to run on</h3>
+<table>
+<thead>
+<tr>
+<th>Capability</th>
+<th>Documented fact</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>WebGPU on Qualcomm (Galaxy Fold 8 Ultra)</td>
+<td>Enabled by default since Chrome 121 on Android 12+ for ARM, Qualcomm and Intel GPUs.</td>
+<td><a href="https://github.com/gpuweb/gpuweb/wiki/Implementation-Status">gpuweb Implementation Status</a> (edited 2026-10-02); <a href="https://developer.chrome.com/docs/web-platform/webgpu/overview">Chrome WebGPU overview</a></td>
+</tr>
+<tr>
+<td>WebGPU on Imagination (Pixel 10 Pro)</td>
+<td>"Imagination, Android 16+: 139".</td>
+<td>gpuweb Implementation Status</td>
+</tr>
+<tr>
+<td>ONNX Runtime Web WebGPU provider</td>
+<td>"available out-of-box in latest versions of Chrome and Edge on Windows, macOS, Android and ChromeOS".</td>
+<td><a href="https://onnxruntime.ai/docs/tutorials/web/ep-webgpu.html">ORT WebGPU EP</a></td>
+</tr>
+<tr>
+<td>Threaded WASM</td>
+<td>"Only when the browser supports WebAssembly multi-threading and <code>crossOriginIsolated</code> mode is enabled, multi-threading will be enabled."</td>
+<td><a href="https://onnxruntime.ai/docs/tutorials/web/env-flags-and-session-options.html">ORT env flags</a></td>
+</tr>
+</tbody>
+</table>
+<p>Device facts that are <strong>not</strong> confirmed from a first-party page: that the
+Pixel 10 Pro's GPU is an Imagination PowerVR part (press coverage says Tensor
+G5 with a PowerVR DXT-48-1536; Google's spec page did not load in this
+session). Samsung's product page confirms "Snapdragon 8 Elite Gen 5 for Galaxy"
+for the
+<a href="https://www.samsung.com/us/smartphones/galaxy-z-fold8-ultra/">Galaxy Z Fold8 Ultra</a>.
+Neither matters for the decision: <code>navigator.gpu.requestAdapter()</code> on each
+phone is the real test, and every candidate below has a CPU path.</p>
+<p>Cross-origin isolation is the repo-facing consequence. Threaded WASM needs
+<code>Cross-Origin-Opener-Policy: same-origin</code> and
+<code>Cross-Origin-Embedder-Policy: require-corp</code> on the frontend's responses.
+Whether those headers are safe for <code>apps/frontend</code> is the subject of sibling
+ticket <a href="https://github.com/benjr70/Smart-Smoker-V2/issues/690">Model delivery, storage and caching in the browser</a>.</p>
+<h3 id="candidates">Candidates</h3>
+<p>Sizes are bytes on the wire for the files a browser would fetch, from the
+Hugging Face API or a <code>HEAD</code> against the model CDN on 2026-10-02.</p>
+<table>
+<thead>
+<tr>
+<th>Candidate</th>
+<th>Runtime</th>
+<th>Download</th>
+<th>Accuracy (published)</th>
+<th>Licence</th>
+<th>Backend</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Moonshine Tiny Streaming (34 M params)</td>
+<td><code>@moonshine-ai/moonshine-wasm</code> 0.1.5</td>
+<td>43 to 74 MB</td>
+<td>12.00% WER (Open ASR Leaderboard average)</td>
+<td>MIT</td>
+<td>WASM, CPU</td>
+</tr>
+<tr>
+<td>Moonshine Small Streaming (123 M)</td>
+<td>same</td>
+<td>136 to 214 MB</td>
+<td>7.84%</td>
+<td>MIT</td>
+<td>WASM, CPU</td>
+</tr>
+<tr>
+<td>Moonshine Medium Streaming (245 M)</td>
+<td>same</td>
+<td>257 to 397 MB</td>
+<td>6.65%</td>
+<td>MIT</td>
+<td>WASM, CPU</td>
+</tr>
+<tr>
+<td>Moonshine Tiny (26 M), <code>onnx-community/moonshine-tiny-ONNX</code></td>
+<td>transformers.js 4.3.0</td>
+<td>27 MB (q8) to 104 MB (fp32)</td>
+<td>12.66%</td>
+<td>MIT</td>
+<td>WebGPU or WASM</td>
+</tr>
+<tr>
+<td>Moonshine Base (58 M), <code>onnx-community/moonshine-base-ONNX</code></td>
+<td>same</td>
+<td>60 MB (q8) to 236 MB (fp32)</td>
+<td>10.07%</td>
+<td>MIT</td>
+<td>WebGPU or WASM</td>
+</tr>
+<tr>
+<td>Whisper <code>tiny.en</code> (39 M), <code>onnx-community/whisper-tiny.en</code></td>
+<td>same</td>
+<td>39 MB (q8) to 145 MB (fp32)</td>
+<td>8.44% (LibriSpeech test-clean only)</td>
+<td>MIT (weights and code), Apache-2.0 (transformers.js)</td>
+<td>WebGPU or WASM</td>
+</tr>
+<tr>
+<td>Whisper <code>base.en</code> (74 M), <code>onnx-community/whisper-base.en</code></td>
+<td>same</td>
+<td>73 MB (q8) to 278 MB (fp32)</td>
+<td>not in model metadata</td>
+<td>same</td>
+<td>WebGPU or WASM</td>
+</tr>
+<tr>
+<td>Whisper <code>small.en</code> (244 M), <code>onnx-community/whisper-small.en</code></td>
+<td>same</td>
+<td>238 MB (q8) to 923 MB (fp32)</td>
+<td>not in model metadata</td>
+<td>same</td>
+<td>WebGPU or WASM</td>
+</tr>
+<tr>
+<td>Whisper tiny/base/small via whisper.cpp <code>whisper.wasm</code></td>
+<td>whisper.cpp (ggml)</td>
+<td>75 / 142 / 466 MiB</td>
+<td>as Whisper</td>
+<td>MIT</td>
+<td>WASM, CPU only</td>
+</tr>
+</tbody>
+</table>
+<p>Notes on the table:</p>
+<ul>
+<li>Moonshine streaming download ranges: the lower figure excludes the
+  <code>decoder_kv_with_attention.ort</code> file, matching the file list Moonshine's own
+  download docs show for Medium Streaming
+  (<a href="https://github.com/moonshine-ai/moonshine/blob/main/docs/using/downloading-models.md">downloading-models.md</a>);
+  the upper figure is every file in the catalogue for that model. Which set the
+  browser binding fetches is <strong>unconfirmed</strong>; its <code>onProgress</code> callback reports
+  <code>bytes.total</code>, so the first load on a phone settles it.</li>
+<li>Moonshine WER and parameter counts are from
+  <a href="https://moonshine-voice.readthedocs.io/en/latest/models/available-models/">Available Models</a>,
+  which notes they are measured "on the floating-point reference" and that
+  "Quantized English scores are a little higher, especially at Tiny". The
+  browser binding ships the quantized files.</li>
+<li>Whisper WER is the only figure present in the Hugging Face model-index for
+  <a href="https://huggingface.co/openai/whisper-tiny.en"><code>openai/whisper-tiny.en</code></a>. It
+  is a different benchmark from the Moonshine column, so the two are <strong>not
+  comparable</strong> row to row.</li>
+<li>transformers.js lets the encoder and decoder use different precisions because
+  "encoder-decoder models, like Whisper ... are extremely sensitive to
+  quantization settings: especially of the encoder"
+  (<a href="https://huggingface.co/docs/transformers.js/guides/dtypes">dtypes guide</a>).
+  A full-precision encoder with a 4-bit decoder for <code>base.en</code> is 78.6 + 117.9 =
+  197 MB.</li>
+<li>Licences: <code>openai/whisper</code> MIT, <code>ggml-org/whisper.cpp</code> MIT,
+  <code>@huggingface/transformers</code> Apache-2.0, <code>onnxruntime-web</code> MIT (GitHub and npm
+  registry metadata); Moonshine code and English models MIT ("The models are
+  MIT by default too ... the only exceptions are the legacy non-streaming
+  models for languages other than English",
+  <a href="https://github.com/moonshine-ai/moonshine">Moonshine README</a>).</li>
+</ul>
+<p>Every row fits the size bar with at least 1.6 GB left for the LLM.</p>
+<h3 id="speed-relative-to-real-time">Speed relative to real time</h3>
+<p>Documented:</p>
+<ul>
+<li>whisper.cpp in the browser: "you should be able to achieve x2 or x3 real-time
+  for the <code>tiny</code> and <code>base</code> models on a modern CPU and browser"; models "up to
+  size <code>small</code> inclusive"; "The maximum length of the audio is limited to 120
+  seconds"; greedy sampling only
+  (<a href="https://github.com/ggml-org/whisper.cpp/tree/master/examples/whisper.wasm">whisper.wasm README</a>).</li>
+<li>Moonshine Tiny needs about a fifth of Whisper <code>tiny.en</code>'s compute on a
+  10-second segment ("a 5x reduction in compute requirements ... while
+  incurring no increase in word error rates",
+  <a href="https://arxiv.org/abs/2410.15608">arXiv 2410.15608</a>).</li>
+<li>Moonshine's streaming models are "Optimized for live streaming, with low
+  latency by doing work while the user is still talking"
+  (<a href="https://github.com/moonshine-ai/moonshine">Moonshine README</a>); the v2 paper
+  describes the encoder as giving "bounded, low-latency inference"
+  (<a href="https://arxiv.org/abs/2602.12241">arXiv 2602.12241</a>).</li>
+<li>OpenAI's relative speeds between Whisper sizes on a GPU: tiny ~10x, base ~7x,
+  small ~4x of large
+  (<a href="https://github.com/openai/whisper">openai/whisper</a>). That orders the sizes;
+  it says nothing about a phone.</li>
+</ul>
+<p><strong>Not documented anywhere found</strong>: a real-time factor for any of these models
+in Chrome on a Pixel 10 Pro, a Snapdragon 8 Elite Gen 5, or any other Android
+phone, on WebGPU or WASM. Every per-device speed in this area is something to
+measure.</p>
+<p>What the documented numbers imply for the 15-second bar (inference, not a
+measurement): a two-minute Ramble transcribed after the recording stops at 2x
+to 3x real time takes 40 to 60 seconds, which fails the bar before the LLM
+starts. Either the recogniser must run at roughly 15x real time or better in
+batch, or it must transcribe during the recording so that only the last few
+seconds remain when the Ramble ends. The second option makes the bar depend on
+keeping pace with speech (anything above 1x real time), which is a far easier
+target on a phone CPU.</p>
+<h3 id="webgpu-versus-wasm">WebGPU versus WASM</h3>
+<ul>
+<li>In transformers.js WebGPU is opt-in with <code>device: 'webgpu'</code>, and its guide's
+  speech example uses
+  <code>onnx-community/whisper-tiny.en</code>
+  (<a href="https://huggingface.co/docs/transformers.js/guides/webgpu">WebGPU guide</a>).
+  The guide calls WebGPU experimental and expects some models to fail there
+  that run in WASM.</li>
+<li><code>@moonshine-ai/moonshine-wasm</code> is CPU-only WASM, built on its own cut-down
+  ONNX Runtime. "The default build enables SIMD + multithreading ... which
+  needs <code>SharedArrayBuffer</code>", so the page must be cross-origin isolated;
+  otherwise a single-threaded build has to be compiled from source
+  (<a href="https://www.npmjs.com/package/@moonshine-ai/moonshine-wasm">npm README</a>,
+  0.1.5 published 2026-08-24).</li>
+<li>whisper.cpp's browser build is CPU-only and requires WASM SIMD.</li>
+<li>ONNX Runtime Web's proxy worker "cannot work with WebGPU", so WebGPU inference
+  has to be placed in a Web Worker by the application to keep the UI thread
+  free
+  (<a href="https://onnxruntime.ai/docs/tutorials/web/env-flags-and-session-options.html">ORT env flags</a>).</li>
+</ul>
+<p>A GPU path also competes with the LLM for the same GPU and memory if the LLM
+runs on WebGPU; a CPU-only recogniser does not. That interaction is
+<strong>unconfirmed</strong> and belongs to the real-phone run.</p>
+<h3 id="capturing-audio-and-feeding-it-to-the-model">Capturing audio and feeding it to the model</h3>
+<ul>
+<li>Capture with <code>navigator.mediaDevices.getUserMedia({ audio: true })</code>. Both
+  environments are secure contexts (map Notes), which <code>getUserMedia</code> requires
+  (<a href="https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia">MDN</a>).</li>
+<li>The models take 16 kHz mono float PCM. <code>new AudioContext({ sampleRate: 16000 })</code>
+  is allowed (the option accepts 8,000 to 96,000 Hz,
+  <a href="https://developer.mozilla.org/en-US/docs/Web/API/AudioContext/AudioContext">MDN <code>AudioContext()</code></a>)
+  and makes the context deliver 16 kHz samples.</li>
+<li>transformers.js resamples only when given a URL. Its <code>prepareAudios</code> passes a
+  <code>Float32Array</code> straight through
+  (<a href="https://github.com/huggingface/transformers.js/blob/main/packages/transformers/src/pipelines/_base.js"><code>_base.js</code></a>),
+  so the caller must supply 16 kHz mono samples itself.</li>
+<li>Whisper works on 30-second windows ("a sliding 30-second window",
+  <a href="https://github.com/openai/whisper">openai/whisper</a>). In transformers.js that
+  is <code>chunk_length_s: 30, stride_length_s: 5</code>; the default is no chunking
+  (<a href="https://huggingface.co/docs/transformers.js/api/pipelines">pipelines API</a>).
+  A one-to-two-minute Ramble is three to five windows.</li>
+<li>The transformers.js Moonshine path does <strong>no</strong> chunking. <code>_call_moonshine</code>
+  feeds the whole clip in one pass and caps output at six tokens per second of
+  audio
+  (<a href="https://github.com/huggingface/transformers.js/blob/main/packages/transformers/src/pipelines/automatic-speech-recognition.js"><code>automatic-speech-recognition.js</code></a>,
+  last commit 2026-09-07). The model card warns that hallucination and
+  repetition "may be worse for short audio segments, or segments where parts of
+  words are cut off"
+  (<a href="https://huggingface.co/UsefulSensors/moonshine-base"><code>UsefulSensors/moonshine-base</code></a>).
+  Using the non-streaming Moonshine models on a two-minute Ramble therefore
+  needs our own splitting at pauses. How a single two-minute pass behaves is
+  <strong>unconfirmed</strong>.</li>
+<li><code>@moonshine-ai/moonshine-wasm</code> owns the whole capture path: <code>MicTranscriber</code>
+  opens the microphone (a voice-activity detector is the one model embedded in
+  the <code>.wasm</code>) and emits <code>onText</code> (partial) and <code>onLine</code> (final) callbacks. A buffer API
+  exists too: <code>transcriber.transcribe(float32Pcm, { sampleRate: 16000 })</code>.
+  Models are fetched from <code>https://download.moonshine.ai</code> on first <code>load()</code> and
+  kept in Cache Storage (<code>moonshine-models-v1</code>); <code>Transcriber.loadFromUrls</code>
+  takes other URLs.</li>
+</ul>
+<h2 id="cooking-vocabulary">Cooking vocabulary</h2>
+<p>No primary source measures any of these models on meat cuts, wood names, or
+spoken temperatures and weights. What the sources do establish:</p>
+<ul>
+<li><strong>Biasing toward known terms exists in one candidate only.</strong> Moonshine's
+  streaming models accept a key-terms list (<code>setKeyterms([...])</code>, or
+  <code>keyterms</code> at load). The default boost "removes about a quarter of the errors
+  on the words you listed for at most a quarter of a point on everything else";
+  "A hundred terms ... cost half a point, a thousand cost a point". It works
+  "on words the model can already spell" and cannot create "a spelling the
+  tokenizer cannot produce". "Only the streaming architectures support any of
+  this; the older Tiny and Base models raise an error"
+  (<a href="https://moonshine-voice.readthedocs.io/en/latest/models/domain-customization/">Domain Customization</a>).
+  The app's existing suggestion lists (meat types, wood types, probe names) are
+  a ready-made key-terms list of well under a hundred entries.</li>
+<li><strong>Web Speech <code>phrases</code></strong> would do the same job but is desktop-only (above).</li>
+<li><strong>transformers.js</strong> documents no prompt or vocabulary option for the speech
+  pipeline: its parameters are <code>return_timestamps</code>, <code>chunk_length_s</code>,
+  <code>stride_length_s</code>, <code>language</code>, <code>task</code>, <code>force_full_sequences</code>
+  (<a href="https://huggingface.co/docs/transformers.js/api/pipelines">pipelines API</a>).</li>
+<li><strong>whisper.cpp's browser example</strong> exposes no prompt either (probe below).</li>
+<li><strong>Numbers</strong>: whether "two twenty-five" comes back as <code>225</code>, <code>two twenty five</code>
+  or <code>2:25</code>, and whether "twelve and a half pounds" keeps its fraction, is
+  <strong>unconfirmed</strong> for every candidate. The extraction contract (sibling ticket
+  <a href="https://github.com/benjr70/Smart-Smoker-V2/issues/692">Per-screen extraction contract</a>)
+  should assume both spelled-out and digit forms reach the LLM.</li>
+<li>The map already routes out-of-list values to "kept as spoken" and unsure
+  values to Notes, which bounds the damage of a misheard wood or cut.</li>
+</ul>
+<p>Phrases worth putting in the phone test Rambles because they are the likely
+failure cases: brisket, pork butt, spatchcock, tri-tip, burnt ends; hickory,
+mesquite, pecan, post oak; "two twenty-five", "one ninety-five internal", "two
+oh three"; "twelve and a half pounds"; "rest for forty-five minutes".</p>
+<h2 id="ranked-shortlist-for-the-real-phones">Ranked shortlist for the real phones</h2>
+<ol>
+<li><strong>Moonshine Small Streaming via <code>@moonshine-ai/moonshine-wasm</code>.</strong></li>
+<li>Documented: MIT; 136 to 214 MB; 7.84% leaderboard WER (float); transcribes
+     while the user speaks; key-terms biasing; CPU-only, so no WebGPU
+     dependence and no GPU contention with the LLM; own VAD and microphone
+     handling; models served from a public CDN with <code>accept-ranges: bytes</code>.</li>
+<li>Costs: needs cross-origin isolation for the threaded build; the package is
+     young (0.1.5, 2026-08-24); model host is the vendor's CDN, not Hugging
+     Face.</li>
+<li>Needs a device: that it keeps pace with speech on both phones; exact
+     download size; quantized accuracy on cook terms with and without key
+     terms; behaviour over a full two minutes. Step down to Tiny Streaming if
+     it cannot keep up, up to Medium Streaming if it has headroom.</li>
+<li><strong>Whisper <code>base.en</code> via transformers.js 4.x on WebGPU, WASM fallback.</strong></li>
+<li>Documented: MIT weights, Apache-2.0 runtime; 73 to 278 MB depending on
+     precision; first-class transformers.js support with 30-second chunking;
+     WebGPU is on by default in Chrome on Android for Qualcomm GPUs and, from
+     Chrome 139 on Android 16, Imagination GPUs; files on Hugging Face. If the LLM also runs on transformers.js this adds no second
+     runtime.</li>
+<li>Costs: no vocabulary biasing; batch by design, so it must either be fast
+     enough after the fact or be driven window by window during recording by
+     our own code.</li>
+<li>Needs a device: real-time factor on WebGPU and on WASM; whether WebGPU
+     initialises on the Pixel 10 Pro; whether <code>small.en</code> (238 to 923 MB) is
+     fast enough to be worth its accuracy.</li>
+<li><strong>Moonshine Base via transformers.js (<code>onnx-community/moonshine-base-ONNX</code>).</strong></li>
+<li>Documented: MIT; 60 to 236 MB; same runtime as candidate 2, so trying it
+     is a model-id change; compute scales with clip length rather than a fixed
+     30-second window.</li>
+<li>Costs: no chunking in the pipeline, no key-terms support on the
+     non-streaming models.</li>
+<li>Needs a device: speed; behaviour on a single long clip versus clips split
+     at pauses.</li>
+</ol>
+<p>Not shortlisted: <strong>whisper.cpp WASM</strong> (CPU-only, its one documented speed
+figure fails the 15-second bar for a two-minute Ramble, and its example caps
+audio at 120 seconds, the top of our range); <strong>Web Speech API</strong> (cannot be held
+on-device on Android); <strong>Prompt API audio</strong> (not on Android).</p>
+<p>One cheap check belongs beside the shortlist rather than in it: run
+<code>SpeechRecognition.available({ langs: ['en-US'], processLocally: true })</code> on
+both phones. Source says it resolves <code>"unavailable"</code>. If a phone ever reports
+otherwise, the browser-provided route reopens and, per the map, would be
+preferred.</p>
+<h2 id="live-probes">Live probes</h2>
+<p>Run on 2026-10-02.</p>
+<p>Chrome Platform Status:</p>
+<div class="highlight"><pre><span></span><code>$ curl -s "https://chromestatus.com/api/v0/features?q=on-device%20web%20speech" | sed "1s/^)]}'//" | jq -r '.features[] | "\(.id) | \(.name) | desktop=\(.browsers.chrome.desktop) android=\(.browsers.chrome.android)"'
+4785284026859520 | Web Speech API: Unspoken Punctuation | desktop=151 android=null
+5136859632107520 | Web Speech API: On-Device Recognition Quality | desktop=150 android=null
+5225615177023488 | Web Speech API contextual biasing | desktop=142 android=null
+6090916291674112 | On-device Web Speech API | desktop=139 android=null
+</code></pre></div>
+<p>MDN compat data (<code>api/SpeechRecognition.json</code>):</p>
+<div class="highlight"><pre><span></span><code>available_static: chrome={"version_added":"139"} chrome_android={"version_added":false}
+install_static:   chrome={"version_added":"139"} chrome_android={"version_added":false}
+processLocally:   chrome={"version_added":"139"} chrome_android={"version_added":false}
+phrases:          chrome={"version_added":"142"} chrome_android={"version_added":false}
+</code></pre></div>
+<p>Chromium <code>chrome/browser/speech/on_device_speech_recognition_impl.cc</code>:</p>
+<div class="highlight"><pre><span></span><code>void OnDeviceSpeechRecognitionImpl::Available(...) {
+#if BUILDFLAG(IS_ANDROID)
+  std::move(callback).Run(media::mojom::AvailabilityStatus::kUnavailable);
+#else
+...
+void OnDeviceSpeechRecognitionImpl::Install(...) {
+#if BUILDFLAG(IS_ANDROID)
+  std::move(callback).Run(false);
+#else
+</code></pre></div>
+<p>Chromium <code>content/browser/speech/speech_recognition_manager_impl.cc</code>:</p>
+<div class="highlight"><pre><span></span><code>bool SpeechRecognitionManagerImpl::UseOnDeviceSpeechRecognition(
+    const SpeechRecognitionSessionConfig&amp; config) {
+#if !BUILDFLAG(IS_FUCHSIA) &amp;&amp; !BUILDFLAG(IS_ANDROID)
+  return config.on_device &amp;&amp;
+         (config.on_device_available || !config.allow_cloud_fallback);
+#else
+  return false;
+#endif
+}
+</code></pre></div>
+<p>Chromium <code>SpeechRecognitionImpl.java</code>:</p>
+<div class="highlight"><pre><span></span><code>private static final String AGSA_PACKAGE_NAME = "com.google.android.googlequicksearchbox";
+private static final String SSBG_PACKAGE_NAME = "com.google.android.tts";
+...
+mIntent.putExtra("android.speech.extra.DICTATION_MODE", continuous);
+mIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, language);
+mIntent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, interimResults);
+</code></pre></div>
+<p>Chrome Android stable (<code>chromiumdash.appspot.com/fetch_releases?channel=Stable&amp;platform=Android&amp;num=1</code>):
+<code>154.0.8037.94</code>, 2026-10-02.</p>
+<p>Hugging Face ONNX file sizes
+(<code>curl -s https://huggingface.co/api/models/&lt;repo&gt;/tree/main/onnx</code>), encoder +
+merged decoder, MB:</p>
+<div class="highlight"><pre><span></span><code>whisper-tiny.en    fp32 31.4 + 113.1   fp16 15.8 + 56.8    q8  9.7 + 29.3    q4  8.6 + 82.7
+whisper-base.en    fp32 78.6 + 198.9   fp16 39.4 + 99.9    q8 22.1 + 51.2    q4 17.9 + 117.9
+whisper-small.en   fp32 336.5 + 586.8  fp16 168.4 + 294.3  q8 88.0 + 149.5   q4 63.1 + 222.3
+moonshine-tiny     fp32 29.5 + 74.6    fp16 14.8 + 72.7    q8  7.6 + 19.3    q4 10.2 + 42.6
+moonshine-base     fp32 77.1 + 158.5   fp16 38.6 + 153.2   q8 19.6 + 40.5    q4 23.6 + 69.4
+</code></pre></div>
+<p>Moonshine CDN (<code>curl -sIL &lt;url&gt;</code> for each English file listed in
+<code>core/moonshine-model-file-metadata.generated.cpp</code>, <code>content-length</code> summed),
+MB:</p>
+<div class="highlight"><pre><span></span><code>tiny-streaming-en    encoder 7.3   decoder_kv 31.1   decoder_kv_with_attention 31.0   other 4.7    all files 74.1
+small-streaming-en   encoder 42.1  decoder_kv 78.1   decoder_kv_with_attention 78.0   other 15.4   all files 213.7
+medium-streaming-en  encoder 90.3  decoder_kv 140.2  decoder_kv_with_attention 140.0  other 26.1   all files 396.7
+tiny-en (quantized)  all files 70.6
+base-en (quantized)  all files 238.4
+response headers: accept-ranges: bytes; cache-control: public, max-age=2592000; server: cloudflare
+</code></pre></div>
+<p>npm registry: <code>@moonshine-ai/moonshine-wasm</code> 0.1.5 (MIT, 2026-08-24, 13.7 MB
+unpacked); <code>@huggingface/transformers</code> 4.3.0 (Apache-2.0, depends on
+<code>onnxruntime-web</code> 1.31.0-dev.20260914); <code>onnxruntime-web</code> 1.30.0 (MIT).</p>
+<p>whisper.cpp browser binding has no prompt parameter:</p>
+<div class="highlight"><pre><span></span><code>$ curl -s https://raw.githubusercontent.com/ggml-org/whisper.cpp/master/examples/whisper.wasm/emscripten.cpp | grep -n -iE "prompt|greedy"
+67:        struct whisper_full_params params = whisper_full_default_params(whisper_sampling_strategy::WHISPER_SAMPLING_GREEDY);
+</code></pre></div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://www.linkedin.com/in/ben-rolf-275368a4/" target="_blank" rel="noopener" title="www.linkedin.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M416 32H31.9C14.3 32 0 46.5 0 64.3v383.4C0 465.5 14.3 480 31.9 480H416c17.6 0 32-14.5 32-32.3V64.3c0-17.8-14.4-32.3-32-32.3M135.4 416H69V202.2h66.5V416zM102.2 96a38.5 38.5 0 1 1 0 77 38.5 38.5 0 1 1 0-77m282.1 320h-66.4V312c0-24.8-.5-56.7-34.5-56.7-34.6 0-39.9 27-39.9 54.9V416h-66.4V202.2h63.7v29.2h.9c8.9-16.8 30.6-34.5 62.9-34.5 67.2 0 79.7 44.3 79.7 101.9z"/></svg>
+    </a>
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/benjr70" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.instant", "navigation.tabs", "navigation.tabs.sticky", "navigation.footer", "navigation.sections", "navigation.indexes", "toc.follow", "toc.integrate"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
