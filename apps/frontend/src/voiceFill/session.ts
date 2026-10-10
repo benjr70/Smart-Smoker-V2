@@ -11,6 +11,7 @@ import type { PostSmoke, PreSmoke } from '../api/types';
 import type { ReviewRow, SmokeScreenValues, VoiceFillScreenValues } from './extractionContract';
 import { fillFor, notesAreMerged, reviewRows, tickedAfterToggle } from './extractionContract';
 import type { VoiceFillContext, VoiceFillScreen } from './fieldDefinition';
+import { keyTermsFor } from './fieldDefinition';
 import type { ExtractorPort, SpeechPort } from './ports';
 import { isMicrophoneBlocked } from './ports';
 
@@ -22,6 +23,47 @@ export const TOAST_MS = 6000;
  * a re-read — before the session stops waiting and calls it a problem.
  */
 export const PROBLEM_CAP_MS = 30_000;
+
+/**
+ * How long the models are kept after the sheet closes before they are let go:
+ * long enough that a second Ramble does not wait for them again, short enough
+ * that the phone is not held hot by a cook who has gone back to watching
+ * temperatures.
+ */
+export const RELEASE_MS = 120_000;
+
+/** A model that can be let go: either of the two ports. */
+type Releasable = Pick<SpeechPort, 'unload'>;
+
+/**
+ * The models waiting to be let go, each with the clock it is waiting on. The
+ * clock is kept by model and not by session because the screens share their
+ * models: a Ramble started on the next screen has to stop the clock the screen
+ * before it started, or its model would be let go under it.
+ */
+const releases = new WeakMap<Releasable, ReturnType<typeof setTimeout>>();
+
+/** Stops the clock on `model`, if one is running: it is wanted again. */
+const keep = (model: Releasable): void => {
+  clearTimeout(releases.get(model));
+  releases.delete(model);
+};
+
+/** Starts the clock on `model` afresh: `release` it once {@link RELEASE_MS} have gone by. */
+const releaseLater = (model: Releasable, release: () => void): void => {
+  keep(model);
+  releases.set(
+    model,
+    setTimeout(() => {
+      releases.delete(model);
+      release();
+    }, RELEASE_MS)
+  );
+};
+
+/** The phases the sheet is up in: every one but idle and the toast's. */
+const sheetIsUp = (phase: VoiceFillState<unknown>['phase']): boolean =>
+  phase !== 'idle' && phase !== 'applied';
 
 /**
  * What a fillable screen gives Voice Fill: the values it holds now, and a
@@ -40,8 +82,13 @@ export interface ScreenBinding<Values> {
 
 export type VoiceFillState<Values> =
   | { phase: 'idle' }
-  /** The sheet is up and the Ramble is being heard. */
-  | { phase: 'listening'; transcript: string }
+  /**
+   * The sheet is up for a Ramble to be heard. `gettingReady` is there, and
+   * true, from the tap until the microphone is open — while the speech model
+   * loads and the port starts — and gone once it is: nothing said before then
+   * is heard, and the sheet must not say it is listening.
+   */
+  | { phase: 'listening'; transcript: string; gettingReady?: true }
   /** The Ramble is over and the model is reading it. */
   | { phase: 'working'; transcript: string }
   /** The changes the Ramble proposes, and the ids of the rows still ticked. */
@@ -191,8 +238,31 @@ export const createVoiceFillSession = <Screen extends VoiceFillScreen>({
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
   let capTimer: ReturnType<typeof setTimeout> | undefined;
 
+  // A model that will not be let go is no concern of the Ramble's. The speech
+  // port is let go after whatever it is still being asked, so never from under
+  // a stop that has not settled.
+  const releaseSpeech = (): void => {
+    queued(() => {
+      live = false;
+      return speech.unload();
+    }).catch(() => undefined);
+  };
+  const releaseExtractor = (): void => {
+    extractor.unload().catch(() => undefined);
+  };
+
   const set = (next: VoiceFillState<Values>): void => {
+    const wasUp = sheetIsUp(state.phase);
     state = next;
+    // The models are wanted for as long as the sheet is up, and for two
+    // minutes after it closes.
+    if (sheetIsUp(next.phase)) {
+      keep(speech);
+      keep(extractor);
+    } else if (wasUp) {
+      releaseLater(speech, releaseSpeech);
+      releaseLater(extractor, releaseExtractor);
+    }
     listeners.forEach(listener => listener());
   };
 
@@ -306,25 +376,40 @@ export const createVoiceFillSession = <Screen extends VoiceFillScreen>({
   const listen = (): void => {
     generation += 1;
     const askedIn = generation;
-    set({ phase: 'listening', transcript: '' });
-    queued(() =>
-      speech.load().then(() => {
+    // Not listening yet: the microphone is opened only once the model is
+    // loaded, and what is said until then is heard by nothing. The sheet is
+    // told so, and says so, until the port has started.
+    set({ phase: 'listening', transcript: '', gettingReady: true });
+    queued(() => {
+      const loaded = speech.load();
+      // Speech first; the extractor is made ready behind it, while the cook
+      // talks. A failure to is met again, and handled, when it is asked to
+      // extract.
+      extractor.load().catch(() => undefined);
+      return loaded.then(() => {
         // Ended before its model was ready: there is nothing to listen to.
         if (!isCurrent(askedIn)) {
           return undefined;
         }
         return speech
-          .start(transcript => {
-            if (isCurrent(askedIn) && state.phase === 'listening') {
-              set({ phase: 'listening', transcript });
-            }
-          })
+          .start(
+            transcript => {
+              if (isCurrent(askedIn) && state.phase === 'listening') {
+                set({ phase: 'listening', transcript });
+              }
+            },
+            keyTermsFor(screen, binding.context?.())
+          )
           .then(() => {
             // Only a port that did start is one there is anything to stop.
             live = true;
+            // The microphone is open: from here on the cook is heard.
+            if (isCurrent(askedIn) && state.phase === 'listening' && state.gettingReady) {
+              set({ phase: 'listening', transcript: state.transcript });
+            }
           });
-      })
-    ).catch(error => {
+      });
+    }).catch(error => {
       if (!isCurrent(askedIn)) {
         return;
       }
@@ -338,9 +423,6 @@ export const createVoiceFillSession = <Screen extends VoiceFillScreen>({
         toProblem('');
       }
     });
-    // The extractor is made ready while the cook talks; a failure to is met
-    // again, and handled, when it is asked to extract.
-    extractor.load().catch(() => undefined);
   };
 
   return {

@@ -95,7 +95,7 @@ function ModelStatusLine({
         <Button
           size="small"
           onClick={action.onClick}
-          // The card has two of each of these: each says which model it is for.
+          // The card can have two of each of these: each says which model it is for.
           aria-label={`${action.label} ${model.name}`}
           sx={theme => ({
             flexShrink: 0,
@@ -128,7 +128,11 @@ function ModelStatusLine({
  * the phone's Model library, never the application settings the backend
  * shares between devices.
  *
- * It is absent on a phone that cannot run Voice Fill.
+ * A role with no model registered has no dropdown: while there is a speech
+ * model and no extraction model, the card is the speech dropdown alone.
+ *
+ * It is absent on a phone that cannot run Voice Fill, and where there is no
+ * model of either role to pick.
  */
 export function VoiceFillSettingsCard(): JSX.Element | null {
   const models = useSupportedModelLibrary();
@@ -149,7 +153,8 @@ export function VoiceFillSettingsCard(): JSX.Element | null {
   const { library, state } = models;
   const { registry } = library;
   // Which model each dropdown shows is the library's to say: the card has no
-  // pick of its own. With no model of a role to pick there is no card.
+  // pick of its own. A role with no model to pick has no dropdown, and with no
+  // dropdown at all there is no card.
   const dropdowns: { role: ModelRole; model: VoiceFillModel }[] = [];
   MODEL_ROLES.forEach(role => {
     const model = pickedModel(registry, state, role);
@@ -157,7 +162,7 @@ export function VoiceFillSettingsCard(): JSX.Element | null {
       dropdowns.push({ role, model });
     }
   });
-  if (dropdowns.length < MODEL_ROLES.length) {
+  if (dropdowns.length === 0) {
     return null;
   }
 

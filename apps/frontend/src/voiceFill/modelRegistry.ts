@@ -50,10 +50,24 @@ export const createModelRegistry = (models: readonly VoiceFillModel[]): ModelReg
 };
 
 /**
- * The models the application offers. None yet: the adapter Slices add theirs
- * here, the default pair's first so that it is the pair a fresh phone gets.
+ * Moonshine Small Streaming: the speech model a fresh phone gets. It writes the
+ * Ramble out while the cook is still talking, on the CPU through WebAssembly.
+ * Its size is the sum of the files its publisher lists for it.
  */
-export const REGISTERED_MODELS: readonly VoiceFillModel[] = [];
+export const MOONSHINE_SMALL_STREAMING: VoiceFillModel = {
+  id: 'moonshine-small-streaming',
+  role: 'speech',
+  name: 'Moonshine Small Streaming',
+  sizeBytes: 165_489_086,
+};
+
+/**
+ * The models the application offers: the adapter Slices add theirs here, the
+ * default pair's first so that it is the pair a fresh phone gets. There is no
+ * extraction model yet: until there is one, Voice Fill is offered with the
+ * speech model alone, and a Ramble is heard but cannot be read.
+ */
+export const REGISTERED_MODELS: readonly VoiceFillModel[] = [MOONSHINE_SMALL_STREAMING];
 
 /** `158 MB`, `1.9 GB`: a model's size, or how much of it has arrived. */
 export const formatBytes = (bytes: number): string => {

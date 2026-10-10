@@ -331,6 +331,35 @@ const fieldsAsked = (screen: VoiceFillScreen, context?: VoiceFillContext): Voice
   }));
 };
 
+/**
+ * The key terms of a Ramble spoken on `screen`: the words a speech model is
+ * asked to lean towards. They are the entries of the screen's suggestion lists
+ * and, where it has probes, the names they go by as the Ramble is spoken — the
+ * words the extraction contract goes on to match what was heard against.
+ *
+ * Each term is given once, as it is written where it came from: a model that
+ * leans towards a term writes it the way it was asked for.
+ */
+export const keyTermsFor = (
+  screen: VoiceFillScreen,
+  context?: Pick<VoiceFillContext, 'probeNames'>
+): string[] => {
+  const terms: string[] = [];
+  const given = new Set<string>();
+  const add = (term: string): void => {
+    const cleaned = term.trim();
+    if (cleaned !== '' && !given.has(cleaned.toLowerCase())) {
+      given.add(cleaned.toLowerCase());
+      terms.push(cleaned);
+    }
+  };
+  SCREEN_FIELDS[screen].fields.forEach(field => field.suggestions?.forEach(add));
+  if (screen === 'smoke') {
+    context?.probeNames?.forEach(add);
+  }
+  return terms;
+};
+
 /** The schema of one plain value, in the subset every runtime understands. */
 export type VoiceFillValueSchema =
   | { type: 'string'; enum?: readonly string[] }

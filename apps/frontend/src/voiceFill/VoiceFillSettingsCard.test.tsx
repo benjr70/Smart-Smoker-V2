@@ -300,12 +300,29 @@ describe('the Voice Fill settings card', () => {
     expect(screen.queryByText('Voice fill')).not.toBeInTheDocument();
   });
 
-  test('is absent until there is a model of each kind to pick', async () => {
+  test('shows the speech dropdown alone while there is no extraction model to pick', async () => {
     await openSettings({
       registry: createModelRegistry([
         { id: 'speech-a', role: 'speech', name: 'Speech A', sizeBytes: 158 * MB },
       ]),
     });
+
+    expect(screen.getByTestId('settings-voice-fill-card')).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Speech-to-text model' })).toHaveTextContent(
+      'Speech A'
+    );
+    // No empty dropdown stands in for the role that has no model.
+    expect(screen.getAllByRole('combobox')).toHaveLength(1);
+    expect(screen.queryByTestId('voice-fill-model-extractor')).not.toBeInTheDocument();
+    expect(screen.queryByText('Field extraction model')).not.toBeInTheDocument();
+
+    await pass(1000);
+
+    expect(speech().getByText('Ready to use · 158 MB on phone')).toBeInTheDocument();
+  });
+
+  test('is absent where there is no model of either kind to pick', async () => {
+    await openSettings({ registry: createModelRegistry([]) });
 
     expect(screen.queryByTestId('settings-voice-fill-card')).not.toBeInTheDocument();
   });

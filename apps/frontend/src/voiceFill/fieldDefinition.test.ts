@@ -1,5 +1,14 @@
 import { DEFAULT_STAMPS } from '../api/cookStamps';
-import { SCREEN_FIELDS, VoiceFillScreen, fieldOf, jsonSchemaFor, toolSchemaFor } from '.';
+import { MEAT_TYPES } from '../components/smoke/preSmokeStep/meatTypes';
+import { WOOD_TYPES } from '../components/smoke/smokeStep/woodTypes';
+import {
+  SCREEN_FIELDS,
+  VoiceFillScreen,
+  fieldOf,
+  jsonSchemaFor,
+  keyTermsFor,
+  toolSchemaFor,
+} from '.';
 
 const SCREENS: VoiceFillScreen[] = ['preSmoke', 'smoke', 'postSmoke'];
 
@@ -219,5 +228,39 @@ describe('both schemas', () => {
     expect(toolSchemaFor('preSmoke').parameters.properties.meatType.description).toContain(
       suggestions
     );
+  });
+});
+
+describe('the key terms of a Ramble', () => {
+  it('are the meat suggestions on the pre-smoke screen', () => {
+    expect(keyTermsFor('preSmoke')).toEqual([...MEAT_TYPES]);
+  });
+
+  it('are the wood suggestions and the probes’ names on the smoke screen', () => {
+    expect(keyTermsFor('smoke', { probeNames: ['Flat', 'Point', 'Pork butt'] })).toEqual([
+      ...WOOD_TYPES,
+      'Flat',
+      'Point',
+      'Pork butt',
+    ]);
+  });
+
+  it('leave out a probe nobody named, and give a name two probes share once', () => {
+    expect(keyTermsFor('smoke', { probeNames: ['Flat', '', '  ', ' flat '] })).toEqual([
+      ...WOOD_TYPES,
+      'Flat',
+    ]);
+  });
+
+  it('are the wood suggestions alone where the smoke screen names no probes', () => {
+    expect(keyTermsFor('smoke')).toEqual([...WOOD_TYPES]);
+  });
+
+  it('do not take probe names on a screen that has no probes', () => {
+    expect(keyTermsFor('preSmoke', { probeNames: ['Flat'] })).toEqual([...MEAT_TYPES]);
+  });
+
+  it('are none on the post-smoke screen, which suggests nothing', () => {
+    expect(keyTermsFor('postSmoke')).toEqual([]);
   });
 });

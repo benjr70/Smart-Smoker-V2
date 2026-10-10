@@ -763,6 +763,27 @@ describe('the Model library', () => {
       expect(pairReadiness(registry, library.getState())).toEqual({ state: 'notDownloaded' });
     });
 
+    test('is the one model where only one role has a model registered', () => {
+      const speechOnly = createModelRegistry([
+        { id: 'speech-a', role: 'speech', name: 'Speech A', sizeBytes: 100 * MB },
+      ]);
+      const picked = speechOnly.defaultPair;
+
+      expect(picked).toEqual({ speech: 'speech-a', extractor: null });
+      expect(
+        pairReadiness(speechOnly, {
+          picked,
+          statuses: { 'speech-a': { state: 'downloading', receivedBytes: 25 * MB } },
+        })
+      ).toEqual({ state: 'downloading', percent: 25 });
+      expect(
+        pairReadiness(speechOnly, { picked, statuses: { 'speech-a': { state: 'ready' } } })
+      ).toEqual({ state: 'ready' });
+      expect(
+        pairReadiness(speechOnly, { picked, statuses: { 'speech-a': { state: 'failed' } } })
+      ).toEqual({ state: 'notDownloaded' });
+    });
+
     test('is not downloaded where no model is registered', () => {
       const empty = createModelRegistry([]);
 

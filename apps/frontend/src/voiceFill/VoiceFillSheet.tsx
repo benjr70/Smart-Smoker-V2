@@ -437,7 +437,8 @@ export interface VoiceFillSheetProps<Values> {
 
 /**
  * The Voice Fill sheet: what the cook watches from the tap that starts a
- * Ramble to the tap that fills from it. Listening, it shows their words
+ * Ramble to the tap that fills from it. Until the microphone is open it says
+ * it is getting ready, and not that it listens. Listening, it shows their words
  * arriving; working, the transcript and a spinner; in review, the rows the
  * Ramble proposes. And where a Ramble goes wrong, what went wrong and a way
  * on: nothing to fill, a problem with the model, a microphone that is blocked.
@@ -487,6 +488,39 @@ export function VoiceFillSheet<Values>({
   const parts = ((): SheetParts => {
     switch (state.phase) {
       case 'listening':
+        if (state.gettingReady) {
+          // The microphone is not open yet: to say "Listening" here would have
+          // the cook speak words that nothing hears.
+          return {
+            title: 'Getting ready…',
+            body: (
+              <Box
+                aria-live="polite"
+                data-testid="voice-fill-getting-ready"
+                sx={{ display: 'flex', alignItems: 'center', gap: '10px', minHeight: 120 }}
+              >
+                <CircularProgress size={20} thickness={5} aria-label="Getting ready to listen" />
+                <Box
+                  component="span"
+                  sx={theme => ({ fontSize: '0.875rem', color: theme.design.textSecondary })}
+                >
+                  Hold on — start talking when this says Listening.
+                </Box>
+              </Box>
+            ),
+            footer: (
+              <PrimaryAction
+                testId="voice-fill-done-talking"
+                onClick={onDoneTalking}
+                size="large"
+                // There is nothing said to be done with until the cook is heard.
+                disabled
+              >
+                Done talking
+              </PrimaryAction>
+            ),
+          };
+        }
         return {
           title: 'Listening…',
           body: (

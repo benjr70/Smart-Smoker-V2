@@ -15,13 +15,23 @@ export interface SpeechPort {
    * Starts listening. `onPartial` is given the transcript so far — the whole of
    * it, not the words since the last call — each time more is heard.
    *
+   * `keyTerms` are the words this Ramble is likely to hold that a model would
+   * otherwise be unlikely to write: the screen's suggestion lists and the names
+   * its probes go by. A model that can lean towards them does; one that cannot
+   * ignores them.
+   *
    * Rejects when it cannot listen. A microphone the cook has refused is told
    * apart from every other failure by {@link isMicrophoneBlocked}: an adapter
    * lets the browser's own refusal through as it is.
    */
-  start(onPartial: (transcript: string) => void): Promise<void>;
+  start(onPartial: (transcript: string) => void, keyTerms?: readonly string[]): Promise<void>;
   /** Stops listening and gives the final transcript of the Ramble. */
   stop(): Promise<string>;
+  /**
+   * Lets the model go, and the memory it holds with it. Safe to call when it is
+   * not loaded; `load` makes it ready again.
+   */
+  unload(): Promise<void>;
 }
 
 /** What a browser names the error it refuses a microphone with. */
@@ -60,4 +70,9 @@ export interface ExtractorPort {
     transcript: string,
     context: ExtractionContext
   ): Promise<unknown>;
+  /**
+   * Lets the model go, and the memory it holds with it. Safe to call when it is
+   * not loaded; `load` makes it ready again.
+   */
+  unload(): Promise<void>;
 }
