@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.14.0](https://github.com/benjr70/Smart-Smoker-V2/compare/v1.13.0...v1.14.0) (2026-10-10)
+
+
+### Features
+
+* **agent:** add deps-gate decision gate for Dependabot PR merges ([#665](https://github.com/benjr70/Smart-Smoker-V2/issues/665)) ([022a7f7](https://github.com/benjr70/Smart-Smoker-V2/commit/022a7f7018e35724221c7eed6ef7efcc7ced8917))
+* **agent:** deps-land lane, PR Triage wiring, deps: report line and glossary ([#667](https://github.com/benjr70/Smart-Smoker-V2/issues/667)) ([2ef158f](https://github.com/benjr70/Smart-Smoker-V2/commit/2ef158fc17c48d72a20c5d4420404993d9db13f6))
+* **agent:** deps-lane text transforms for retitle, checklist inject and sha-keyed markers ([#662](https://github.com/benjr70/Smart-Smoker-V2/issues/662)) ([d96f363](https://github.com/benjr70/Smart-Smoker-V2/commit/d96f363813bdaa9784fdd0a15063e9aea3cf35d8))
+* **agent:** PR Triage detects, classifies, ranks and resumes Dependabot PRs ([#664](https://github.com/benjr70/Smart-Smoker-V2/issues/664)) ([01ef2bc](https://github.com/benjr70/Smart-Smoker-V2/commit/01ef2bc79b81aa2229ad9be38134bffc209aeed6))
+* **agent:** pr-watch --bot mode for the Dependabot CI wait and fix loop ([#666](https://github.com/benjr70/Smart-Smoker-V2/issues/666)) ([4e158ba](https://github.com/benjr70/Smart-Smoker-V2/commit/4e158ba0a92f8dd2fa3bd913a143e31d58da3a13))
+* **frontend:** add Moonshine speech adapter for Voice Fill ([#724](https://github.com/benjr70/Smart-Smoker-V2/issues/724)) ([c15bce9](https://github.com/benjr70/Smart-Smoker-V2/commit/c15bce995bc992cdfaaae125868270162bb1c9c5))
+* **frontend:** add nothing-to-fill, problem, microphone-blocked and fix-the-text states to the Voice Fill sheet ([#720](https://github.com/benjr70/Smart-Smoker-V2/issues/720)) ([bb5be80](https://github.com/benjr70/Smart-Smoker-V2/commit/bb5be8070ef26bd56676a751c96eb1d8a73373ec))
+* **frontend:** add Voice Fill extraction contract for pre-smoke and post-smoke ([#716](https://github.com/benjr70/Smart-Smoker-V2/issues/716)) ([27bf668](https://github.com/benjr70/Smart-Smoker-V2/commit/27bf668169970603fbaf1866f05d1e036196f156))
+* **frontend:** add Voice Fill extraction contract for the smoke screen ([#717](https://github.com/benjr70/Smart-Smoker-V2/issues/717)) ([6fa2474](https://github.com/benjr70/Smart-Smoker-V2/commit/6fa24740c0abd1b6ffa16bfef95030f6c43677cb))
+* **frontend:** add Voice Fill model library, settings card and not-ready pill ([#723](https://github.com/benjr70/Smart-Smoker-V2/issues/723)) ([e307b5f](https://github.com/benjr70/Smart-Smoker-V2/commit/e307b5fa1d74fb83c4148498f32dc4288a19cc0b))
+* **frontend:** add Voice Fill to the post-smoke screen ([#721](https://github.com/benjr70/Smart-Smoker-V2/issues/721)) ([45b726e](https://github.com/benjr70/Smart-Smoker-V2/commit/45b726e5ab04442cb097dacab94874486a3a2fa2))
+* **frontend:** add Voice Fill to the smoke screen ([#722](https://github.com/benjr70/Smart-Smoker-V2/issues/722)) ([e0f7093](https://github.com/benjr70/Smart-Smoker-V2/commit/e0f709366732e87a623fe331bfee3dc68170c2ba))
+* **frontend:** add Voice Fill tracer on the pre-smoke screen with fake models ([#718](https://github.com/benjr70/Smart-Smoker-V2/issues/718)) ([da2f71c](https://github.com/benjr70/Smart-Smoker-V2/commit/da2f71c1ad3f818ccc07de036b4b7ec9a54b10e0))
+* **frontend:** send cross-origin isolation headers from nginx and the dev server ([#715](https://github.com/benjr70/Smart-Smoker-V2/issues/715)) ([c841caa](https://github.com/benjr70/Smart-Smoker-V2/commit/c841caa29b6af7aeea12afe8861bbca4bfd644f7))
+* **verify-pr:** add Bot-PR checklist file and parser guard test ([#661](https://github.com/benjr70/Smart-Smoker-V2/issues/661)) ([047b1ac](https://github.com/benjr70/Smart-Smoker-V2/commit/047b1acabe4364a6da49072b0bf804477537a6da))
+
+
+### Bug Fixes
+
+* **agent:** the Host extension probes the smoke browser by launching it ([#686](https://github.com/benjr70/Smart-Smoker-V2/issues/686)) ([2e4e7ad](https://github.com/benjr70/Smart-Smoker-V2/commit/2e4e7add6ad5c237c054afebb80bc572e55cd40c))
+
 ## [1.13.0](https://github.com/benjr70/Smart-Smoker-V2/compare/v1.12.0...v1.13.0) (2026-09-01)
 
 
