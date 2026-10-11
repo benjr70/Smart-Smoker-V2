@@ -9,6 +9,10 @@
  * registered has had its first opening, so the extraction model is not
  * downloaded by itself there: it is asked for on the settings card.
  *
+ * The models after the default pair — the ones Transformers.js runs — are the
+ * alternatives the dropdowns offer. None of them is downloaded until a cook
+ * picks it.
+ *
  * Nothing of a model's runtime is reached from here but through its lazy
  * import, so a phone that downloads no model fetches no runtime either.
  */
@@ -24,6 +28,11 @@ import {
 } from './modelRegistry';
 import { createMoonshineDownloader, createMoonshineSpeech } from './moonshineModel';
 import { browserConnection, canRunVoiceFill } from './phoneEnvironment';
+import {
+  createTransformersDownloaders,
+  createTransformersExtractorPorts,
+  createTransformersSpeechPorts,
+} from './transformersModels';
 import type { VoiceFillPorts } from './VoiceFillPortsProvider';
 
 /**
@@ -51,6 +60,7 @@ export const createRealModelLibrary = (): ModelLibrary =>
       {
         [MOONSHINE_SMALL_STREAMING.id]: createMoonshineDownloader(),
         [GEMMA_4_E2B.id]: createGemmaDownloader(),
+        ...createTransformersDownloaders(),
       },
       NO_DOWNLOADER
     ),
@@ -66,8 +76,10 @@ export const createRealModelLibrary = (): ModelLibrary =>
 export const createRealPorts = (library: ModelLibrary): VoiceFillPorts => ({
   speech: createPickedSpeech(() => library.getState().picked.speech, {
     [MOONSHINE_SMALL_STREAMING.id]: createMoonshineSpeech(),
+    ...createTransformersSpeechPorts(),
   }),
   extractor: createPickedExtractor(() => library.getState().picked.extractor, {
     [GEMMA_4_E2B.id]: createGemmaExtractor(),
+    ...createTransformersExtractorPorts(),
   }),
 });

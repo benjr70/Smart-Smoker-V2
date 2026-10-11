@@ -73,15 +73,64 @@ export const GEMMA_4_E2B: VoiceFillModel = {
 };
 
 /**
+ * The models Transformers.js runs, on the phone's GPU: further choices for both
+ * dropdowns, through one runtime. Each is several files in a repository on
+ * Hugging Face, and its size is the sum of the ones its runtime asks for.
+ *
+ * The two speech models hear a Ramble all at once: nothing is written while
+ * the cook talks, and the whole of it is transcribed when they are done.
+ */
+export const WHISPER_BASE_EN: VoiceFillModel = {
+  id: 'whisper-base-en-transformers',
+  role: 'speech',
+  name: 'Whisper base.en',
+  sizeBytes: 208_760_882,
+};
+
+export const MOONSHINE_BASE: VoiceFillModel = {
+  id: 'moonshine-base-transformers',
+  role: 'speech',
+  name: 'Moonshine Base',
+  sizeBytes: 250_928_812,
+};
+
+export const QWEN_3_5_2B: VoiceFillModel = {
+  id: 'qwen3.5-2b-transformers',
+  role: 'extractor',
+  name: 'Qwen3.5-2B',
+  sizeBytes: 1_404_075_458,
+};
+
+export const QWEN_3_1_7B: VoiceFillModel = {
+  id: 'qwen3-1.7b-transformers',
+  role: 'extractor',
+  name: 'Qwen3-1.7B',
+  sizeBytes: 1_435_197_660,
+};
+
+export const QWEN_3_5_0_8B: VoiceFillModel = {
+  id: 'qwen3.5-0.8b-transformers',
+  role: 'extractor',
+  name: 'Qwen3.5-0.8B',
+  sizeBytes: 603_944_942,
+};
+
+/**
  * The models the application offers: the adapter Slices add theirs here, the
  * default pair's first so that it is the pair a fresh phone gets. They are what
  * the Model library of every production build lists (see `realModels.ts`).
  * Both models of the default pair are registered: a Ramble is heard by the
- * speech model and read by the extraction model.
+ * speech model and read by the extraction model. The models after them are the
+ * alternatives a cook can pick instead.
  */
 export const REGISTERED_MODELS: readonly VoiceFillModel[] = [
   MOONSHINE_SMALL_STREAMING,
   GEMMA_4_E2B,
+  WHISPER_BASE_EN,
+  MOONSHINE_BASE,
+  QWEN_3_5_2B,
+  QWEN_3_1_7B,
+  QWEN_3_5_0_8B,
 ];
 
 /** `158 MB`, `1.9 GB`: a model's size, or how much of it has arrived. */
