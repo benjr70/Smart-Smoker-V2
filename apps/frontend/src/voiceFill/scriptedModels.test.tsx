@@ -306,7 +306,7 @@ describe('the real Voice Fill models, where the scripted ones are off', () => {
     expect(screen.getByText('offered')).toBeInTheDocument();
     // The registered pair first, then the alternatives a cook can pick instead.
     expect(screen.getByTestId('listed')).toHaveTextContent(
-      /^Moonshine Small Streaming, Gemma 4 E2B, Whisper base\.en, Moonshine Base, Qwen3\.5-2B, Qwen3-1\.7B, Qwen3\.5-0\.8B$/
+      /^Moonshine Small Streaming, Gemma 4 E2B, Whisper base\.en, Moonshine Base, Qwen3\.5-2B, Qwen3-1\.7B, Qwen3\.5-0\.8B, Qwen3 1\.7B \(WebLLM\), Qwen3\.5 2B \(WebLLM\), Qwen3\.5 0\.8B \(WebLLM\)$/
     );
     expect(screen.getByTestId('supported')).toHaveTextContent('true');
   });

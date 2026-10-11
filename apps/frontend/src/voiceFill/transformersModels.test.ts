@@ -100,7 +100,7 @@ describe('the Transformers.js models in the Model registry', () => {
   });
 
   it('are listed in the extraction dropdown after the model a fresh phone gets, with their sizes', () => {
-    expect(registry.ofRole('extractor').slice(1)).toEqual([
+    expect(registry.ofRole('extractor').slice(1, 4)).toEqual([
       {
         id: 'qwen3.5-2b-transformers',
         role: 'extractor',
@@ -123,7 +123,7 @@ describe('the Transformers.js models in the Model registry', () => {
     expect(
       registry
         .ofRole('extractor')
-        .slice(1)
+        .slice(1, 4)
         .map(model => formatBytes(model.sizeBytes))
     ).toEqual(['1.4 GB', '1.4 GB', '604 MB']);
   });

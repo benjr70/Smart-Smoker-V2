@@ -10,7 +10,8 @@
  * whole Ramble.
  *
  * A model that answers with one JSON object instead is asked the same, with the
- * screen's fields as the JSON Schema its answer is held to in the tool's place.
+ * screen's fields as the JSON Schema its answer is held to in the tool's place:
+ * see {@link jsonExtractionRequestFor}.
  *
  * Nothing here knows which runtime asks: an adapter hands these three to its
  * model in whatever shape that model takes them.
@@ -71,6 +72,11 @@ const timeTold = (now: Date): string => {
 /** A text the model is given whole, fenced off from what it is told about it. */
 const quoted = (text: string): string => `"""\n${text.trim()}\n"""`;
 
+/** What every model is told of a Ramble, however it answers. */
+const RULES =
+  'Never invent a value. Keep names as they were spoken. Whatever was said that fits no ' +
+  'other field goes into notes, as clean sentences and not as a copy of the words spoken.';
+
 /** This Ramble, as every model is given it. */
 const rambleTold = (transcript: string, context: ExtractionContext): string => {
   const notes = context.existingNotes?.trim();
@@ -93,9 +99,7 @@ export const extractionRequestFor = (
     system:
       `You fill in the ${title} screen of a barbecue smoking log from what the cook said ` +
       `aloud. Answer by calling ${tool.name} exactly once and say nothing else. Give only ` +
-      'the fields the cook mentioned and leave out every other one. Never invent a value. ' +
-      'Keep names as they were spoken. Whatever was said that fits no other field goes ' +
-      'into notes, as clean sentences and not as a copy of the words spoken.',
+      `the fields the cook mentioned and leave out every other one. ${RULES}`,
     user: rambleTold(transcript, context),
     tool,
   };
@@ -103,8 +107,13 @@ export const extractionRequestFor = (
 
 /**
  * What a model that answers with one JSON object is asked for a Ramble spoken
- * on `screen`. The schema is told to the model as well as held to: what holds
- * its answer to the schema reads none of the descriptions a field is known by.
+ * on `screen`.
+ *
+ * The schema is given twice over: to the runtime, which holds the answer to it,
+ * and to the model in words. What holds the answer to the schema reads none of
+ * the descriptions a field is known by, and a model that is held to JSON it was
+ * never told to write can fill its answer with blank space until it runs out of
+ * room.
  */
 export const jsonExtractionRequestFor = (
   screen: VoiceFillScreen,
@@ -119,9 +128,7 @@ export const jsonExtractionRequestFor = (
       'aloud. Answer with one JSON object that matches this JSON Schema and say nothing ' +
       `else:\n${JSON.stringify(schema)}\n` +
       'Give null for every field the cook did not mention, and an empty list for a list ' +
-      'nothing was said of. Never invent a value. Keep names as they were spoken. Whatever ' +
-      'was said that fits no other field goes into notes, as clean sentences and not as a ' +
-      'copy of the words spoken.',
+      `nothing was said of. ${RULES}`,
     user: rambleTold(transcript, context),
     schema,
   };

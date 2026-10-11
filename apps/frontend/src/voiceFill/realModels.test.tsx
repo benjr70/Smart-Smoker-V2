@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom';
 import { Experimental_CssVarsProvider as CssVarsProvider } from '@mui/material';
-import { act, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import React from 'react';
 import { DesignSurface, appTheme } from '../theme';
 import { GEMMA_FILE } from './gemmaModel';
@@ -32,6 +32,36 @@ const mockTransformers = {
   createExtractor: jest.fn(),
 };
 jest.mock('./transformersAdapter', () => mockTransformers);
+
+/**
+ * WebLLM, which needs a GPU too: here a runtime that runs no model, under
+ * everything the adapter does with it. It says how often it was reached, and
+ * the test says whether a model initialises on it.
+ */
+const mockWebLlm = {
+  fetched: 0,
+  initialises: true,
+  onPhone: new Set<string>(),
+  loads: [] as string[],
+};
+jest.mock('./webLlmAdapter', () => {
+  const { createWebLlmModel } = jest.requireActual('./webLlmExtractor');
+  mockWebLlm.fetched += 1;
+  return createWebLlmModel({
+    createEngine: async (modelId: string, options?: { onProgress?: (part: number) => void }) => {
+      mockWebLlm.loads.push(modelId);
+      // WebLLM fetches a model as it loads it, and keeps what it fetched.
+      options?.onProgress?.(1);
+      mockWebLlm.onPhone.add(modelId);
+      if (!mockWebLlm.initialises) {
+        throw new Error('The WebGPU device was lost while loading the model.');
+      }
+      return { complete: () => Promise.resolve('{}'), unload: () => Promise.resolve() };
+    },
+    has: (modelId: string) => Promise.resolve(mockWebLlm.onPhone.has(modelId)),
+    remove: (modelId: string) => Promise.resolve(void mockWebLlm.onPhone.delete(modelId)),
+  });
+});
 
 // The real speech model's files are not fetched here: its downloader is stood
 // in for by the scripted one, which keeps what has "arrived" on the phone.
@@ -113,9 +143,9 @@ const openApp = async (children: React.ReactNode): Promise<void> => {
   await opened();
 };
 
-/** The default pair first, then the models Transformers.js runs. */
+/** The default pair first, then the models Transformers.js runs, then WebLLM's. */
 const EVERY_MODEL =
-  /^Moonshine Small Streaming, Gemma 4 E2B, Whisper base\.en, Moonshine Base, Qwen3\.5-2B, Qwen3-1\.7B, Qwen3\.5-0\.8B$/;
+  /^Moonshine Small Streaming, Gemma 4 E2B, Whisper base\.en, Moonshine Base, Qwen3\.5-2B, Qwen3-1\.7B, Qwen3\.5-0\.8B, Qwen3 1\.7B \(WebLLM\), Qwen3\.5 2B \(WebLLM\), Qwen3\.5 0\.8B \(WebLLM\)$/;
 
 const extractor = () => within(screen.getByTestId('voice-fill-model-extractor'));
 
@@ -138,6 +168,9 @@ describe('the Voice Fill models of a production build', () => {
     mockAdapter.testLoad.mockReset().mockResolvedValue(true);
     mockAdapter.createExtractor.mockReset();
     Object.values(mockTransformers).forEach(asked => asked.mockReset());
+    mockWebLlm.initialises = true;
+    mockWebLlm.onPhone.clear();
+    mockWebLlm.loads = [];
   });
   afterEach(() => {
     window.localStorage.clear();
@@ -180,6 +213,67 @@ describe('the Voice Fill models of a production build', () => {
 
     expect(mockAdapter.testLoad).toHaveBeenCalledTimes(1);
     expect(extractor().getByText('Ready to use · 2.0 GB on phone')).toBeInTheDocument();
+  });
+
+  describe('with the models WebLLM runs', () => {
+    /** Opens the extraction dropdown and gives what it offers. */
+    const offered = (): HTMLElement[] => {
+      fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Field extraction model' }));
+      return within(screen.getByRole('listbox')).getAllByRole('option');
+    };
+
+    /** Picks the extraction model the dropdown lists as `name`. */
+    const pick = async (name: string): Promise<void> => {
+      const option = offered().find(listed => listed.textContent?.includes(name));
+      fireEvent.click(option as HTMLElement);
+      await opened();
+    };
+
+    test('list them in the extraction dropdown, after the model a fresh phone gets and the ones Transformers.js runs', async () => {
+      await openApp(<VoiceFillSettingsCard />);
+
+      expect(offered().map(option => option.textContent)).toEqual([
+        'Gemma 4 E2B',
+        'Qwen3.5-2B',
+        'Qwen3-1.7B',
+        'Qwen3.5-0.8B',
+        'Qwen3 1.7B (WebLLM)',
+        'Qwen3.5 2B (WebLLM)',
+        'Qwen3.5 0.8B (WebLLM)',
+      ]);
+    });
+
+    test('reach for WebLLM only once one of its models is picked', async () => {
+      await openApp(<VoiceFillSettingsCard />);
+      arrive();
+      await opened();
+
+      expect(mockWebLlm.fetched).toBe(0);
+
+      await pick('Qwen3 1.7B');
+
+      expect(mockWebLlm.fetched).toBe(1);
+      expect(mockWebLlm.loads).toContain('Qwen3-1.7B-q4f16_1-MLC');
+    });
+
+    test('have a picked one fetched and proven by WebLLM: “Ready to use”, with its size', async () => {
+      await openApp(<VoiceFillSettingsCard />);
+
+      await pick('Qwen3.5 0.8B');
+
+      expect(extractor().getByText('Ready to use · 444 MB on phone')).toBeInTheDocument();
+    });
+
+    test('report one that fails to initialise as “Didn’t work on this phone”', async () => {
+      mockWebLlm.initialises = false;
+      await openApp(<VoiceFillSettingsCard />);
+
+      await pick('Qwen3 1.7B');
+
+      expect(extractor().getByText('Didn’t work on this phone')).toBeInTheDocument();
+      // Not a download that broke: it is not being tried again.
+      expect(extractor().queryByText(/Downloading|Paused|Retrying/)).not.toBeInTheDocument();
+    });
   });
 
   test('keep their Model library’s record where a real library keeps it', async () => {
