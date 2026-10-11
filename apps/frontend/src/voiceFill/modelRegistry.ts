@@ -62,12 +62,27 @@ export const MOONSHINE_SMALL_STREAMING: VoiceFillModel = {
 };
 
 /**
- * The models the application offers: the adapter Slices add theirs here, the
- * default pair's first so that it is the pair a fresh phone gets. There is no
- * extraction model yet: until there is one, Voice Fill is offered with the
- * speech model alone, and a Ramble is heard but cannot be read.
+ * Gemma 4 E2B, run by LiteRT-LM JS on the phone's GPU: the extraction model a
+ * fresh phone gets. Its size is that of the one file its publisher hosts.
  */
-export const REGISTERED_MODELS: readonly VoiceFillModel[] = [MOONSHINE_SMALL_STREAMING];
+export const GEMMA_4_E2B: VoiceFillModel = {
+  id: 'gemma-4-e2b-litert',
+  role: 'extractor',
+  name: 'Gemma 4 E2B',
+  sizeBytes: 2_008_432_640,
+};
+
+/**
+ * The models the application offers: the adapter Slices add theirs here, the
+ * default pair's first so that it is the pair a fresh phone gets. They are what
+ * the Model library of every production build lists (see `realModels.ts`).
+ * Both models of the default pair are registered: a Ramble is heard by the
+ * speech model and read by the extraction model.
+ */
+export const REGISTERED_MODELS: readonly VoiceFillModel[] = [
+  MOONSHINE_SMALL_STREAMING,
+  GEMMA_4_E2B,
+];
 
 /** `158 MB`, `1.9 GB`: a model's size, or how much of it has arrived. */
 export const formatBytes = (bytes: number): string => {

@@ -2,47 +2,72 @@
  * The real models Voice Fill runs on, and the phone's Model library of them:
  * what every page is handed but one that asked for the scripted models.
  *
- * The speech model has landed and the extraction model has not. Until it has,
- * Voice Fill is offered with speech alone: Moonshine downloads the first time
- * the app is opened on a phone that can run it, and a Ramble is heard, live,
- * and then cannot be read — the sheet says Voice Fill hit a problem. A phone
- * that opened the app in that time has had its first opening, so the
- * extraction model is not downloaded by itself when it is registered: it is
- * asked for on the settings card.
+ * Both models of the default pair have landed: Moonshine Small Streaming hears
+ * a Ramble and Gemma 4 E2B reads it. Both download the first time the app is
+ * opened on a phone that can run them, each through the downloader of its own
+ * adapter. A phone that opened the app while the speech model was the only one
+ * registered has had its first opening, so the extraction model is not
+ * downloaded by itself there: it is asked for on the settings card.
+ *
+ * Nothing of a model's runtime is reached from here but through its lazy
+ * import, so a phone that downloads no model fetches no runtime either.
  */
-import type { ModelLibrary } from './modelLibrary';
+import { createGemmaDownloader, createGemmaExtractor } from './gemmaModel';
+import type { ModelDownloader, ModelLibrary } from './modelLibrary';
 import { createModelLibrary } from './modelLibrary';
-import { createPickedExtractor, createPickedSpeech } from './modelPorts';
-import { MOONSHINE_SMALL_STREAMING, REGISTERED_MODELS, createModelRegistry } from './modelRegistry';
+import { createModelDownloader, createPickedExtractor, createPickedSpeech } from './modelPorts';
+import {
+  GEMMA_4_E2B,
+  MOONSHINE_SMALL_STREAMING,
+  REGISTERED_MODELS,
+  createModelRegistry,
+} from './modelRegistry';
 import { createMoonshineDownloader, createMoonshineSpeech } from './moonshineModel';
 import { browserConnection, canRunVoiceFill } from './phoneEnvironment';
 import type { VoiceFillPorts } from './VoiceFillPortsProvider';
 
 /**
+ * What a registered model with no downloader of its own is fetched through:
+ * nothing. Every adapter Slice lists its downloader beside its model, so this
+ * is reached only by a model registered without one, which then never arrives.
+ */
+const NO_DOWNLOADER: ModelDownloader = {
+  download: () => Promise.reject(new Error('This model has no downloader.')),
+  testLoad: () => Promise.resolve(false),
+  has: () => Promise.resolve(false),
+  remove: () => Promise.resolve(),
+};
+
+/**
  * The phone's Model library over the registered models, in the browser's own
- * storage. The phone is checked with `canRunVoiceFill`: where it cannot run
- * Voice Fill there is no button, no pill and no settings card, and nothing is
- * downloaded.
+ * storage, each model fetched and proven by the downloader of its own adapter.
+ * The phone is checked with `canRunVoiceFill`: where it cannot run Voice Fill
+ * there is no button, no pill and no settings card, and nothing is downloaded.
  */
 export const createRealModelLibrary = (): ModelLibrary =>
   createModelLibrary({
     registry: createModelRegistry(REGISTERED_MODELS),
-    // The one registered model is Moonshine's: its downloader is the library's.
-    // The extraction model brings its own, and `createModelDownloader` with it.
-    downloader: createMoonshineDownloader(),
+    downloader: createModelDownloader(
+      {
+        [MOONSHINE_SMALL_STREAMING.id]: createMoonshineDownloader(),
+        [GEMMA_4_E2B.id]: createGemmaDownloader(),
+      },
+      NO_DOWNLOADER
+    ),
     storage: window.localStorage,
     connection: browserConnection(),
     capabilities: () => canRunVoiceFill(),
   });
 
 /**
- * The two ports over whichever models `library` has picked. No extraction
- * model has an adapter yet, so the extractor port has none to pick from and
- * fails to load.
+ * The two ports over whichever models `library` has picked: a Ramble is heard
+ * by the picked speech model and read by the picked extraction model.
  */
 export const createRealPorts = (library: ModelLibrary): VoiceFillPorts => ({
   speech: createPickedSpeech(() => library.getState().picked.speech, {
     [MOONSHINE_SMALL_STREAMING.id]: createMoonshineSpeech(),
   }),
-  extractor: createPickedExtractor(() => library.getState().picked.extractor, {}),
+  extractor: createPickedExtractor(() => library.getState().picked.extractor, {
+    [GEMMA_4_E2B.id]: createGemmaExtractor(),
+  }),
 });
