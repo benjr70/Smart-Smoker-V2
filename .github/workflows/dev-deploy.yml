@@ -467,6 +467,27 @@ jobs:
       - name: Install workspace dependencies
         run: npm ci --legacy-peer-deps
 
+      # The runner's 18G rootfs had 4.4G free after the deploy job, which is
+      # less than the Playwright image needs to unpack: every run from
+      # 2026-10-09 died in the pull with "no space left on device", exit 125.
+      # Reclaim what this job can without sudo before pulling: every unused
+      # image (the deploy job's prunes keep anything under 24h old), the npm
+      # cache `npm ci` just filled, and the host browser downloads left by the
+      # deploy job's smoke script. The usage report is there so the next
+      # shortfall names its cause.
+      - name: Free runner disk before the image pull
+        run: |
+          echo "Runner disk before cleanup:"
+          df -h /
+          docker system df || true
+          du -xsh "$HOME"/.npm "$HOME"/.cache "$(dirname "$RUNNER_WORKSPACE")" 2>/dev/null || true
+          docker system prune -af || true
+          docker builder prune -af || true
+          npm cache clean --force || true
+          rm -rf "$HOME/.cache/ms-playwright" || true
+          echo "Runner disk after cleanup:"
+          df -h /
+
       # The self-hosted runner has no passwordless sudo, so
       # `playwright install --with-deps` cannot install browser system
       # libraries on the host. Run the journeys inside the official Playwright
@@ -578,6 +599,27 @@ jobs:
 
       - name: Install workspace dependencies
         run: npm ci --legacy-peer-deps
+
+      # The runner's 18G rootfs had 4.4G free after the deploy job, which is
+      # less than the Playwright image needs to unpack: every run from
+      # 2026-10-09 died in the pull with "no space left on device", exit 125.
+      # Reclaim what this job can without sudo before pulling: every unused
+      # image (the deploy job's prunes keep anything under 24h old), the npm
+      # cache `npm ci` just filled, and the host browser downloads left by the
+      # deploy job's smoke script. The usage report is there so the next
+      # shortfall names its cause.
+      - name: Free runner disk before the image pull
+        run: |
+          echo "Runner disk before cleanup:"
+          df -h /
+          docker system df || true
+          du -xsh "$HOME"/.npm "$HOME"/.cache "$(dirname "$RUNNER_WORKSPACE")" 2>/dev/null || true
+          docker system prune -af || true
+          docker builder prune -af || true
+          npm cache clean --force || true
+          rm -rf "$HOME/.cache/ms-playwright" || true
+          echo "Runner disk after cleanup:"
+          df -h /
 
       # The smoker bundle's temp relay is hardcoded to the on-device address
       # (io('http://127.0.0.1:3003') in the smoker app) because on a real
