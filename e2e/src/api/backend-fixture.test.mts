@@ -874,3 +874,94 @@ describe('BackendFixture.sweep', () => {
     assert.equal(posts.length, 0, 'must not touch settings that hold only real rules');
   });
 });
+
+describe('BackendFixture.seedServePlan', () => {
+  it('PUTs the plan onto the cook in progress, the way the Serve Plan card does', async () => {
+    const serveAt = new Date('2026-08-01T22:00:00.000Z');
+
+    await fixture.seedServePlan({ serveAt, restMinutes: 30 });
+
+    assert.deepEqual(http.puts, [
+      {
+        path: '/api/smoke/current/serve-plan',
+        body: { serveAt: '2026-08-01T22:00:00.000Z', restMinutes: 30 },
+      },
+    ]);
+  });
+});
+
+describe('BackendFixture.servePlan', () => {
+  it('reads the plan stored on the current cook', async () => {
+    http.getResponses['/api/state'] = { smokeId: 'smoke-1', smoking: true };
+    http.getResponses['/api/smoke/smoke-1'] = {
+      _id: 'smoke-1',
+      serveAt: '2026-08-01T22:00:00.000Z',
+      restMinutes: 30,
+    };
+
+    assert.deepEqual(await fixture.servePlan(), {
+      serveAt: new Date('2026-08-01T22:00:00.000Z'),
+      restMinutes: 30,
+    });
+  });
+
+  it('reads a cook nobody planned as having neither half', async () => {
+    http.getResponses['/api/state'] = { smokeId: 'smoke-1', smoking: true };
+    http.getResponses['/api/smoke/smoke-1'] = { _id: 'smoke-1' };
+
+    assert.deepEqual(await fixture.servePlan(), { serveAt: null, restMinutes: null });
+  });
+});
+
+describe('BackendFixture probe targets', () => {
+  const stored = {
+    enabled: true,
+    probes: [
+      // `name` is resolved from the active cook and served on the read only.
+      { slot: 'probe1', enabled: true, target: 195, targetSource: 'preset', name: 'Flat' },
+      { slot: 'probe2', enabled: false, target: 203, targetSource: 'default', name: 'Probe 2' },
+    ],
+  };
+
+  it('reads one probe’s stored target, watch and provenance', async () => {
+    http.getResponses['/api/appSettings'] = { probeTarget: stored };
+
+    assert.deepEqual(await fixture.probeTarget('probe1'), {
+      target: 195,
+      enabled: true,
+      targetSource: 'preset',
+    });
+  });
+
+  it('puts the watch list back as it found it on cleanup, without the read-only names', async () => {
+    http.getResponses['/api/appSettings'] = { probeTarget: stored };
+
+    await fixture.keepProbeTargets();
+    assert.equal(http.posts.length, 0, 'keeping the watch list writes nothing by itself');
+    await fixture.cleanup();
+
+    assert.deepEqual(
+      http.posts.filter(p => p.path === '/api/appSettings').map(p => p.body),
+      [
+        {
+          probeTarget: {
+            enabled: true,
+            probes: [
+              { slot: 'probe1', enabled: true, target: 195, targetSource: 'preset' },
+              { slot: 'probe2', enabled: false, target: 203, targetSource: 'default' },
+            ],
+          },
+        },
+      ]
+    );
+  });
+
+  it('restores nothing where the watch list could not be read', async () => {
+    http.failGetTimes['/api/appSettings'] = Infinity;
+
+    await fixture.keepProbeTargets();
+    await fixture.cleanup();
+
+    assert.equal(http.posts.filter(p => p.path === '/api/appSettings').length, 0);
+  });
+});

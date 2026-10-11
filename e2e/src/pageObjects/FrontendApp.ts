@@ -4,6 +4,7 @@ import { expect, Locator, Page, Request } from '@playwright/test';
 // which is erased before a resolver ever sees it. The unit test beside this
 // module is run by `node --test` instead, which wants the extension.
 import { isTemperature, temperatureOf } from './readouts';
+import { SCRIPTED_VOICE_FILL_QUERY } from './VoiceFill';
 
 /** The weight units the pre-smoke wizard offers; LB is the form's default. */
 export type WeightUnit = 'LB' | 'OZ' | 'KG';
@@ -428,9 +429,14 @@ export class FrontendApp {
     await expect(this.page.getByRole('alert')).toHaveCount(0);
   }
 
-  async goto(): Promise<void> {
+  /**
+   * Open the app. `scriptedVoiceFill` opens it with Voice Fill on the scripted
+   * models, which the page has to ask for in its address: every journey that
+   * does not ask sees the app with no Voice Fill at all.
+   */
+  async goto({ scriptedVoiceFill = false }: { scriptedVoiceFill?: boolean } = {}): Promise<void> {
     const landed = this.preSmokeLoads.mark();
-    await this.page.goto('/');
+    await this.page.goto(scriptedVoiceFill ? `/?${SCRIPTED_VOICE_FILL_QUERY}` : '/');
     await expect(this.stepButton('Pre-Smoke')).toBeVisible();
     await this.preSmokeLoads.waitForLoadSince(landed);
   }
@@ -1029,6 +1035,14 @@ export class FrontendApp {
   /** Assert nothing is logged against the cook any more. */
   async expectCookLogEmpty(): Promise<void> {
     await expect(this.cookLog.getByTestId('cook-event-row')).toHaveCount(0);
+  }
+
+  /**
+   * Assert how long the Serve Plan card says the meat rests — the card's own
+   * reading of the plan the backend answered with, in the words a cook reads.
+   */
+  async expectServePlanRest(span: string): Promise<void> {
+    await expect(this.page.getByTestId('serve-plan-rest')).toHaveText(span);
   }
 
   private get chart(): Locator {
