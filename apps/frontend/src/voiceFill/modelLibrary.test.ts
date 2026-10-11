@@ -591,6 +591,39 @@ describe('the Model library', () => {
     expect(phone.storage.getItem(MODEL_LIBRARY_STORAGE_KEY)).toBeNull();
   });
 
+  test('a model the downloader could not look for at the opening is looked for when it is picked', async () => {
+    const phone = createPhone();
+    const first = await phone.openApp();
+    first.pick('speech', 'speech-b');
+    await pass(1000);
+    first.pick('speech', 'speech-a');
+    first.close();
+    await phone.downloader.remove(registry.find('speech-b')!);
+    // A downloader that only says of the picked model whether it is still there.
+    let picked = 'speech-a';
+    const asked: string[] = [];
+    const downloader = {
+      ...phone.downloader,
+      has: (model: (typeof registry.models)[number]) => {
+        asked.push(model.id);
+        return model.id === picked || model.role !== 'speech'
+          ? phone.downloader.has(model)
+          : Promise.reject(new Error('Not picked.'));
+      },
+    };
+
+    const library = await phone.openApp({ downloader });
+
+    expect(library.getState().statuses['speech-b']).toEqual({ state: 'ready' });
+
+    picked = 'speech-b';
+    library.pick('speech', 'speech-b');
+    await settle();
+
+    expect(asked.filter(id => id === 'speech-b')).toHaveLength(2);
+    expect(library.getState().statuses['speech-b']).toEqual({ state: 'notDownloaded' });
+  });
+
   test('a model the browser evicted reads not downloaded again', async () => {
     const phone = createPhone();
     const first = await phone.openApp();

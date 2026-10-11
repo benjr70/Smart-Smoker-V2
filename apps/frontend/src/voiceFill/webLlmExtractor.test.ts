@@ -112,11 +112,20 @@ describe('the WebLLM extractor', () => {
     expect(messages[0].content).toContain(held.schema);
   });
 
+  it('reads past the empty thinking block WebLLM opens the answer of a model told not to think with', async () => {
+    const raw = { meatType: 'brisket', notes: 'Said <think> and </think> aloud.' };
+    const { extractor } = extractorOn({ reply: `<think>\n\n</think>\n\n${JSON.stringify(raw)}` });
+
+    await expect(extractor.extract('preSmoke', TRANSCRIPT, context)).resolves.toEqual(raw);
+  });
+
   it.each([
     ['plain text', 'A sixteen pound brisket.'],
     ['JSON cut short', '{"meatType": "brisket"'],
     ['a list', '[{"meatType": "brisket"}]'],
     ['nothing', ''],
+    ['a thinking block and nothing after it', '<think>\n\n</think>\n\n'],
+    ['a thinking block that is not what it opens with', '{"weight": 16}<think>\n\n</think>'],
   ])('fails on an answer that is %s', async (_what, reply) => {
     const { extractor } = extractorOn({ reply });
 
@@ -213,13 +222,124 @@ describe('a model WebLLM runs', () => {
       expect(phone.released).toBe(1);
     });
 
-    it('says how many of its listed bytes are on the phone, and never fewer than before', async () => {
+    it('says how many of its listed bytes are on the phone, as more of them arrive', async () => {
       // WebLLM counts up as it fetches, then again from nothing as it loads.
       const { progress, downloading } = download({ progress: [0, 0.25, 1, 0.1, 1] });
 
       await downloading;
 
-      expect(progress).toEqual([0, 250 * MB, 1000 * MB, 1000 * MB, 1000 * MB]);
+      expect(progress).toEqual([250 * MB, 1000 * MB]);
+    });
+
+    describe('when it is picked up again after it broke', () => {
+      /** A phone on which each try of the download counts as `tries` says, and then breaks. */
+      const breaking = (tries: readonly (readonly number[])[]) => {
+        let tried = 0;
+        const phone = { holds: false, removed: 0 };
+        const model = createWebLlmModel({
+          createEngine: async (_modelId, options) => {
+            const counted = tries[tried] ?? [];
+            tried += 1;
+            counted.forEach(fraction => options?.onProgress?.(fraction));
+            throw new Error('Failed to fetch.');
+          },
+          has: () => Promise.resolve(phone.holds),
+          remove: () => {
+            phone.removed += 1;
+            return Promise.resolve();
+          },
+        });
+        /** What one try tells the Model library before it breaks. */
+        const attempt = async (): Promise<number[]> => {
+          const progress: number[] = [];
+          await expect(
+            model.download(MODEL_ID, 1000 * MB, {
+              signal: new AbortController().signal,
+              onProgress: receivedBytes => progress.push(receivedBytes),
+            })
+          ).rejects.toThrow('Failed to fetch.');
+          return progress;
+        };
+        return { model, phone, attempt };
+      };
+
+      it('says nothing while WebLLM counts again, from nothing, what the phone already holds', async () => {
+        // The second try: WebLLM starts at 0 and counts the kept shards before it fetches more.
+        const { attempt } = breaking([
+          [0, 0.3, 0.6],
+          [0, 0.3, 0.6, 0.8],
+        ]);
+
+        await expect(attempt()).resolves.toEqual([300 * MB, 600 * MB]);
+        await expect(attempt()).resolves.toEqual([800 * MB]);
+      });
+
+      it('says nothing at all on a try that brought nothing new', async () => {
+        const { attempt } = breaking([
+          [0, 0.3, 0.6],
+          [0, 0.3, 0.6],
+          [0, 0.3, 0.6],
+        ]);
+
+        await attempt();
+
+        // Nothing the Model library could take for a download that is getting on.
+        await expect(attempt()).resolves.toEqual([]);
+        await expect(attempt()).resolves.toEqual([]);
+      });
+
+      it('counts from nothing again once the model was removed', async () => {
+        const { model, attempt } = breaking([
+          [0, 0.6],
+          [0, 0.2],
+        ]);
+        await attempt();
+
+        await model.remove(MODEL_ID);
+
+        await expect(attempt()).resolves.toEqual([200 * MB]);
+      });
+    });
+
+    it('counts from nothing again once it had all arrived, should the browser evict it', async () => {
+      const { runtime, phone } = runtimeOn({ onPhone: false, progress: [0, 0.5, 1] });
+      const model = createWebLlmModel(runtime);
+      const told = async (): Promise<number[]> => {
+        const progress: number[] = [];
+        await model.download(MODEL_ID, 1000 * MB, {
+          signal: new AbortController().signal,
+          onProgress: receivedBytes => progress.push(receivedBytes),
+        });
+        return progress;
+      };
+      await told();
+      phone.holds = false;
+
+      await expect(told()).resolves.toEqual([500 * MB, 1000 * MB]);
+    });
+
+    it('says nothing more once it was stopped', async () => {
+      const stopping = new AbortController();
+      const progress: number[] = [];
+      const model = createWebLlmModel({
+        createEngine: async (_modelId, options) => {
+          options?.onProgress?.(0.25);
+          stopping.abort();
+          options?.onProgress?.(0.5);
+          throw new Error('Stopped.');
+        },
+        has: () => Promise.resolve(false),
+        remove: () => Promise.resolve(),
+      });
+
+      await expect(
+        model.download(MODEL_ID, 1000 * MB, {
+          signal: stopping.signal,
+          onProgress: receivedBytes => progress.push(receivedBytes),
+        })
+      ).rejects.toThrow('Stopped.');
+
+      expect(progress).toEqual([250 * MB]);
     });
 
     it('breaks, to be picked up again, when the load fails with the model still part-way', async () => {

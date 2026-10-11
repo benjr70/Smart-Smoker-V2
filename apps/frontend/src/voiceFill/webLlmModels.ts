@@ -4,10 +4,12 @@
  * ports that reach for the rest only when asked.
  *
  * The rest — the adapter and the WebLLM runtime it drives — is in a chunk of
- * its own, fetched only for a model of WebLLM's that was picked: by its
+ * its own, fetched only for a model of WebLLM's that is picked: by its
  * download or its test-load, by the first Ramble read with it, and — since it
- * is WebLLM that keeps a model's files — by asking whether the model is still
- * on the phone, or removing it. A phone that never picked one fetches nothing.
+ * is WebLLM that keeps a model's files — by asking whether the picked model is
+ * still on the phone. A phone whose picked model is not one of WebLLM's
+ * fetches nothing, whatever it downloaded before: only removing a model of
+ * WebLLM's reaches for the chunk then, to have WebLLM delete it.
  */
 import type { ModelDownloader } from './modelLibrary';
 import { createLazyExtractor } from './modelPorts';
@@ -38,19 +40,28 @@ export interface WebLlmOptions {
   adapter?: () => Promise<WebLlmAdapter>;
 }
 
+export interface WebLlmDownloaderOptions extends WebLlmOptions {
+  /**
+   * Whether the model the Model library records under `id` is the picked
+   * extraction model. Where nothing says, every model is taken as picked.
+   */
+  isPicked?: (id: string) => boolean;
+}
+
 /**
  * For each of WebLLM's models, what has WebLLM fetch it, proves it loads, and
  * says whether it is still on the phone.
  *
- * Whether it is still there is WebLLM's to say. Where WebLLM cannot be reached
- * to be asked — the phone is offline — nothing is answered, and the model's
- * status stays as it was; where it cannot read what it keeps, the model is not
- * there.
+ * Whether it is still there is WebLLM's to say, and WebLLM is not fetched to
+ * say it of a model that is not picked: nothing is answered, and the model's
+ * status stays as it was until it is picked and asked after again. Nothing is
+ * answered either where WebLLM cannot be reached to be asked — the phone is
+ * offline; where it cannot read what it keeps, the model is not there.
  */
-export const createWebLlmDownloaders = ({ adapter = importAdapter }: WebLlmOptions = {}): Record<
-  string,
-  ModelDownloader
-> =>
+export const createWebLlmDownloaders = ({
+  adapter = importAdapter,
+  isPicked = () => true,
+}: WebLlmDownloaderOptions = {}): Record<string, ModelDownloader> =>
   Object.fromEntries(
     Object.entries(WEB_LLM_MODEL_IDS).map(([id, modelId]): [string, ModelDownloader] => [
       id,
@@ -58,7 +69,10 @@ export const createWebLlmDownloaders = ({ adapter = importAdapter }: WebLlmOptio
         download: (model, options) =>
           adapter().then(webLlm => webLlm.download(modelId, model.sizeBytes, options)),
         testLoad: () => adapter().then(webLlm => webLlm.testLoad(modelId)),
-        has: () => adapter().then(webLlm => webLlm.has(modelId).catch(() => false)),
+        has: () =>
+          isPicked(id)
+            ? adapter().then(webLlm => webLlm.has(modelId).catch(() => false))
+            : Promise.reject(new Error('WebLLM is not fetched for a model that is not picked.')),
         remove: () => adapter().then(webLlm => webLlm.remove(modelId)),
       },
     ])

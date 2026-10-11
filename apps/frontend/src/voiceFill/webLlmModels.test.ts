@@ -92,6 +92,24 @@ describe('the downloader of a model WebLLM runs', () => {
     expect(adapter.remove).toHaveBeenCalledWith('Qwen3-1.7B-q4f16_1-MLC');
   });
 
+  it('does not fetch WebLLM to look for a model that is not the picked one: it cannot say', async () => {
+    const { adapter, fetched } = chunk();
+    const downloaders = createWebLlmDownloaders({
+      adapter: fetched,
+      isPicked: id => id === 'qwen3.5-2b-webllm',
+    });
+
+    // Not `false`: a model that is not picked has not gone from the phone.
+    await expect(downloaders[QWEN].has(qwen)).rejects.toThrow('not picked');
+    expect(fetched).not.toHaveBeenCalled();
+
+    await expect(
+      downloaders['qwen3.5-2b-webllm'].has(registry.find('qwen3.5-2b-webllm')!)
+    ).resolves.toBe(true);
+    expect(fetched).toHaveBeenCalledTimes(1);
+    expect(adapter.has).toHaveBeenCalledWith('Qwen3.5-2B-q4f16_1-MLC');
+  });
+
   it('takes what WebLLM cannot read as a model that is not there', async () => {
     const { adapter, fetched } = chunk();
     adapter.has.mockRejectedValue(new Error('The cache cannot be opened.'));

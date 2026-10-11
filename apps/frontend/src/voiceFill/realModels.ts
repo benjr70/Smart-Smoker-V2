@@ -54,15 +54,18 @@ const NO_DOWNLOADER: ModelDownloader = {
  * The phone is checked with `canRunVoiceFill`: where it cannot run Voice Fill
  * there is no button, no pill and no settings card, and nothing is downloaded.
  */
-export const createRealModelLibrary = (): ModelLibrary =>
-  createModelLibrary({
+export const createRealModelLibrary = (): ModelLibrary => {
+  const library: ModelLibrary = createModelLibrary({
     registry: createModelRegistry(REGISTERED_MODELS),
     downloader: createModelDownloader(
       {
         [MOONSHINE_SMALL_STREAMING.id]: createMoonshineDownloader(),
         [GEMMA_4_E2B.id]: createGemmaDownloader(),
         ...createTransformersDownloaders(),
-        ...createWebLlmDownloaders(),
+        // WebLLM's runtime is not fetched to look after a model that is not picked.
+        ...createWebLlmDownloaders({
+          isPicked: id => library.getState().picked.extractor === id,
+        }),
       },
       NO_DOWNLOADER
     ),
@@ -70,6 +73,8 @@ export const createRealModelLibrary = (): ModelLibrary =>
     connection: browserConnection(),
     capabilities: () => canRunVoiceFill(),
   });
+  return library;
+};
 
 /**
  * The two ports over whichever models `library` has picked: a Ramble is heard

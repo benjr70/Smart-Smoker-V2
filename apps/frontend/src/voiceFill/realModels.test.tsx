@@ -43,6 +43,8 @@ const mockWebLlm = {
   initialises: true,
   onPhone: new Set<string>(),
   loads: [] as string[],
+  /** The models it was asked whether the phone still holds. */
+  lookedFor: [] as string[],
 };
 jest.mock('./webLlmAdapter', () => {
   const { createWebLlmModel } = jest.requireActual('./webLlmExtractor');
@@ -58,7 +60,10 @@ jest.mock('./webLlmAdapter', () => {
       }
       return { complete: () => Promise.resolve('{}'), unload: () => Promise.resolve() };
     },
-    has: (modelId: string) => Promise.resolve(mockWebLlm.onPhone.has(modelId)),
+    has: (modelId: string) => {
+      mockWebLlm.lookedFor.push(modelId);
+      return Promise.resolve(mockWebLlm.onPhone.has(modelId));
+    },
     remove: (modelId: string) => Promise.resolve(void mockWebLlm.onPhone.delete(modelId)),
   });
 });
@@ -171,6 +176,7 @@ describe('the Voice Fill models of a production build', () => {
     mockWebLlm.initialises = true;
     mockWebLlm.onPhone.clear();
     mockWebLlm.loads = [];
+    mockWebLlm.lookedFor = [];
   });
   afterEach(() => {
     window.localStorage.clear();
@@ -254,6 +260,65 @@ describe('the Voice Fill models of a production build', () => {
 
       expect(mockWebLlm.fetched).toBe(1);
       expect(mockWebLlm.loads).toContain('Qwen3-1.7B-q4f16_1-MLC');
+    });
+
+    describe('on a phone that downloaded one and went back to Gemma 4 E2B', () => {
+      beforeEach(() => {
+        window.localStorage.setItem(
+          MODEL_LIBRARY_STORAGE_KEY,
+          JSON.stringify({
+            picked: { speech: 'moonshine-small-streaming', extractor: 'gemma-4-e2b-litert' },
+            statuses: {
+              'gemma-4-e2b-litert': { state: 'notDownloaded' },
+              'qwen3-1.7b-webllm': { state: 'ready' },
+            },
+          })
+        );
+      });
+
+      test('do not reach for WebLLM when the app is opened: the picked model is not one of its own', async () => {
+        const reached = jest.fn();
+        jest.doMock('./webLlmAdapter', () => {
+          reached();
+          return jest.requireMock('./webLlmAdapter');
+        });
+        let createLibrary!: typeof createRealModelLibrary;
+        jest.isolateModules(() => {
+          ({ createRealModelLibrary: createLibrary } = jest.requireActual('./realModels'));
+        });
+        const library = createLibrary();
+
+        await act(async () => {
+          await library.open();
+        });
+        await opened();
+        library.close();
+
+        expect(library.getState().statuses['qwen3-1.7b-webllm']).toEqual({ state: 'ready' });
+        expect(reached).not.toHaveBeenCalled();
+        expect(mockWebLlm.lookedFor).toEqual([]);
+      });
+
+      test('ask WebLLM whether the model is still on the phone once it is picked again', async () => {
+        await openApp(<VoiceFillSettingsCard />);
+
+        expect(mockWebLlm.lookedFor).toEqual([]);
+
+        // The browser evicted it since.
+        await pick('Qwen3 1.7B');
+
+        expect(mockWebLlm.lookedFor).toEqual(['Qwen3-1.7B-q4f16_1-MLC']);
+        expect(extractor().queryByText(/Ready to use/)).not.toBeInTheDocument();
+      });
+
+      test('keep it “Ready to use” when it is picked again and is still on the phone', async () => {
+        mockWebLlm.onPhone.add('Qwen3-1.7B-q4f16_1-MLC');
+        await openApp(<VoiceFillSettingsCard />);
+
+        await pick('Qwen3 1.7B');
+
+        expect(extractor().getByText('Ready to use · 986 MB on phone')).toBeInTheDocument();
+      });
     });
 
     test('have a picked one fetched and proven by WebLLM: “Ready to use”, with its size', async () => {

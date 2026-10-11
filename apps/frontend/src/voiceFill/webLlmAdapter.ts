@@ -71,7 +71,9 @@ export const { download, testLoad, has, remove, createExtractor } = createWebLlm
             temperature: 0,
             max_tokens: MAX_ANSWER_TOKENS,
             // Qwen3 thinks aloud before it answers unless told not to, and
-            // there is neither the time nor the room for it.
+            // there is neither the time nor the room for it. The reply then
+            // opens with the empty block it would have thought in, which
+            // the extractor reads past.
             extra_body: { enable_thinking: false },
           });
           return reply.choices[0]?.message.content ?? '';

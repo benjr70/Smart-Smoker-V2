@@ -68,16 +68,23 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
 /**
- * The object `reply` is the JSON of.
+ * The block a model thinks aloud in, where a reply opens with one. WebLLM
+ * opens the reply of a model it told not to think with that block, empty, and
+ * gives it back as part of what the model wrote.
+ */
+const THINKING_BLOCK = /^\s*<think>[\s\S]*?<\/think>/;
+
+/**
+ * The object `reply` is the JSON of, past the thinking block it may open with.
  *
- * Throws unless the reply is exactly that. A reply that is anything else —
- * plain text, JSON cut short, a list — is a model that did not do what it was
- * asked, and nothing of it is used.
+ * Throws unless the rest of the reply is exactly that. A reply that is
+ * anything else — plain text, JSON cut short, a list — is a model that did not
+ * do what it was asked, and nothing of it is used.
  */
 export const jsonObject = (reply: string): Record<string, unknown> => {
   let answered: unknown;
   try {
-    answered = JSON.parse(reply);
+    answered = JSON.parse(reply.replace(THINKING_BLOCK, ''));
   } catch {
     throw new Error('The model did not answer in JSON.');
   }
@@ -146,7 +153,9 @@ export interface WebLlmModel {
   /**
    * Has WebLLM fetch what the phone does not yet hold of the model, and asks
    * the browser to keep it. `sizeBytes` is what the model is listed as, which
-   * the progress is told in.
+   * the progress is told in. Progress is told only as more of the model
+   * arrives than any earlier try had reached: WebLLM counts again from nothing
+   * each time it is asked, through what the phone already holds.
    *
    * WebLLM fetches a model only by loading it, so a model that fails to
    * initialise fails here first. That is not a download that broke, and must
@@ -177,26 +186,38 @@ export const createWebLlmModel = (runtime: WebLlmRuntime): WebLlmModel => {
     error instanceof CannotRunHereError
       ? Promise.resolve(true)
       : runtime.has(modelId).catch(() => false);
+  /**
+   * How much of each model its downloads have said is on the phone, from 0 to
+   * 1, until the model is whole or is removed. WebLLM counts from nothing on
+   * every try — through what the phone already holds, then what it fetches,
+   * then again as it loads — so a count is passed on only once it is past
+   * this: a try that brought nothing new says nothing.
+   */
+  const reached = new Map<string, number>();
   return {
     download: async (modelId, sizeBytes, { onProgress, signal }) => {
       navigator.storage?.persist?.().catch(() => undefined);
-      // WebLLM counts what it fetches and then what it loads: only ever forward here.
-      let reached = 0;
       let engine: WebLlmEngine;
       try {
         engine = await runtime.createEngine(modelId, {
           signal,
           onProgress: fraction => {
-            reached = Math.max(reached, fraction);
-            onProgress(Math.round(reached * sizeBytes));
+            // A load that was stopped has nothing more to say.
+            if (signal.aborted || !(fraction > (reached.get(modelId) ?? 0))) {
+              return;
+            }
+            reached.set(modelId, fraction);
+            onProgress(Math.round(fraction * sizeBytes));
           },
         });
       } catch (error) {
         if (signal.aborted || !(await downloadIsOver(error, modelId))) {
           throw error;
         }
+        reached.delete(modelId);
         return;
       }
+      reached.delete(modelId);
       await engine.unload().catch(() => undefined);
     },
     testLoad: async modelId => {
@@ -211,7 +232,10 @@ export const createWebLlmModel = (runtime: WebLlmRuntime): WebLlmModel => {
       }
     },
     has: modelId => runtime.has(modelId),
-    remove: modelId => runtime.remove(modelId),
+    remove: modelId => {
+      reached.delete(modelId);
+      return runtime.remove(modelId);
+    },
     createExtractor,
   };
 };
