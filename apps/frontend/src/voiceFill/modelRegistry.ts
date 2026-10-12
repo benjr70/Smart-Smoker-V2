@@ -116,6 +116,32 @@ export const QWEN_3_5_0_8B: VoiceFillModel = {
 };
 
 /**
+ * The models WebLLM runs on the phone's GPU, each the build its publisher
+ * lists for the browser. A size is what WebLLM fetches of the model: its
+ * weights, its tokenizer, its configuration and the compiled code that runs it.
+ */
+export const QWEN3_1_7B: VoiceFillModel = {
+  id: 'qwen3-1.7b-webllm',
+  role: 'extractor',
+  name: 'Qwen3 1.7B (WebLLM)',
+  sizeBytes: 985_947_479,
+};
+
+export const QWEN3_5_2B: VoiceFillModel = {
+  id: 'qwen3.5-2b-webllm',
+  role: 'extractor',
+  name: 'Qwen3.5 2B (WebLLM)',
+  sizeBytes: 1_079_474_163,
+};
+
+export const QWEN3_5_0_8B: VoiceFillModel = {
+  id: 'qwen3.5-0.8b-webllm',
+  role: 'extractor',
+  name: 'Qwen3.5 0.8B (WebLLM)',
+  sizeBytes: 444_074_373,
+};
+
+/**
  * The models the application offers: the adapter Slices add theirs here, the
  * default pair's first so that it is the pair a fresh phone gets. They are what
  * the Model library of every production build lists (see `realModels.ts`).
@@ -131,6 +157,9 @@ export const REGISTERED_MODELS: readonly VoiceFillModel[] = [
   QWEN_3_5_2B,
   QWEN_3_1_7B,
   QWEN_3_5_0_8B,
+  QWEN3_1_7B,
+  QWEN3_5_2B,
+  QWEN3_5_0_8B,
 ];
 
 /** `158 MB`, `1.9 GB`: a model's size, or how much of it has arrived. */

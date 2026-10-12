@@ -9,9 +9,9 @@
  * registered has had its first opening, so the extraction model is not
  * downloaded by itself there: it is asked for on the settings card.
  *
- * The models after the default pair — the ones Transformers.js runs — are the
- * alternatives the dropdowns offer. None of them is downloaded until a cook
- * picks it.
+ * The models after the default pair — the ones Transformers.js runs, and the
+ * further extraction models WebLLM runs — are the alternatives the dropdowns
+ * offer. None of them is downloaded until a cook picks it.
  *
  * Nothing of a model's runtime is reached from here but through its lazy
  * import, so a phone that downloads no model fetches no runtime either.
@@ -33,6 +33,7 @@ import {
   createTransformersExtractorPorts,
   createTransformersSpeechPorts,
 } from './transformersModels';
+import { createWebLlmDownloaders, createWebLlmExtractors } from './webLlmModels';
 import type { VoiceFillPorts } from './VoiceFillPortsProvider';
 
 /**
@@ -53,14 +54,18 @@ const NO_DOWNLOADER: ModelDownloader = {
  * The phone is checked with `canRunVoiceFill`: where it cannot run Voice Fill
  * there is no button, no pill and no settings card, and nothing is downloaded.
  */
-export const createRealModelLibrary = (): ModelLibrary =>
-  createModelLibrary({
+export const createRealModelLibrary = (): ModelLibrary => {
+  const library: ModelLibrary = createModelLibrary({
     registry: createModelRegistry(REGISTERED_MODELS),
     downloader: createModelDownloader(
       {
         [MOONSHINE_SMALL_STREAMING.id]: createMoonshineDownloader(),
         [GEMMA_4_E2B.id]: createGemmaDownloader(),
         ...createTransformersDownloaders(),
+        // WebLLM's runtime is not fetched to look after a model that is not picked.
+        ...createWebLlmDownloaders({
+          isPicked: id => library.getState().picked.extractor === id,
+        }),
       },
       NO_DOWNLOADER
     ),
@@ -68,6 +73,8 @@ export const createRealModelLibrary = (): ModelLibrary =>
     connection: browserConnection(),
     capabilities: () => canRunVoiceFill(),
   });
+  return library;
+};
 
 /**
  * The two ports over whichever models `library` has picked: a Ramble is heard
@@ -81,5 +88,6 @@ export const createRealPorts = (library: ModelLibrary): VoiceFillPorts => ({
   extractor: createPickedExtractor(() => library.getState().picked.extractor, {
     [GEMMA_4_E2B.id]: createGemmaExtractor(),
     ...createTransformersExtractorPorts(),
+    ...createWebLlmExtractors(),
   }),
 });

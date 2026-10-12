@@ -146,4 +146,21 @@ describe('what a model that answers in JSON is asked for a Ramble', () => {
       extractionRequestFor('postSmoke', TRANSCRIPT, asked).user
     );
   });
+
+  it('is the same Ramble, with the screen’s fields as a JSON Schema in place of a tool', () => {
+    const request = jsonExtractionRequestFor('smoke', TRANSCRIPT, context);
+
+    expect(request.user).toBe(extractionRequestFor('smoke', TRANSCRIPT, context).user);
+    expect(request.schema).toEqual(jsonSchemaFor('smoke', context));
+    expect(request.system).not.toContain('fill_smoke');
+  });
+
+  it('is told to answer with JSON that follows that schema, and is shown it', () => {
+    const { system, schema } = jsonExtractionRequestFor('preSmoke', TRANSCRIPT, context);
+
+    expect(system).toContain('one JSON object');
+    expect(system).toContain(JSON.stringify(schema));
+    // Every key is asked for, so what was not said has to have a value to take.
+    expect(system).toContain('null');
+  });
 });

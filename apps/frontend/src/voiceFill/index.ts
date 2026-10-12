@@ -19,7 +19,8 @@
  * Small Streaming for speech, with the downloader that fetches its files, and
  * Gemma 4 E2B for extraction, run by LiteRT-LM, with the downloader that
  * fetches its file. They are what every page runs on but one that asked for
- * the scripted models.
+ * the scripted models. Beside them, to be picked: the extraction models WebLLM
+ * runs, in a chunk of their runtime's own.
  */
 export type {
   VoiceFillField,
@@ -100,6 +101,9 @@ export {
   GEMMA_4_E2B,
   MODEL_ROLES,
   MOONSHINE_SMALL_STREAMING,
+  QWEN3_1_7B,
+  QWEN3_5_0_8B,
+  QWEN3_5_2B,
   REGISTERED_MODELS,
   createModelRegistry,
   formatBytes,
@@ -135,6 +139,8 @@ export type {
 export { createCachePartStore, fetchInParts, hasEveryPart, wholeFile } from './modelParts';
 export type { GemmaOptions } from './gemmaModel';
 export { GEMMA_CACHE, GEMMA_FILE, createGemmaDownloader, createGemmaExtractor } from './gemmaModel';
+export type { WebLlmOptions } from './webLlmModels';
+export { WEB_LLM_MODEL_IDS, createWebLlmDownloaders, createWebLlmExtractors } from './webLlmModels';
 export type {
   ConnectionPort,
   ModelDownloader,

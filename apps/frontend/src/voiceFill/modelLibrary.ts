@@ -390,6 +390,27 @@ export const createModelLibrary = ({
     void fetchAndProve(model);
   };
 
+  /**
+   * Asks whether a model that had all arrived is still on the phone: what the
+   * browser evicted since is simply not downloaded any more. A downloader that
+   * cannot say leaves the model as it was.
+   */
+  const forgetIfEvicted = (model: VoiceFillModel): void => {
+    const status = statuses[model.id];
+    if (status.state !== 'ready' && status.state !== 'failed') {
+      return;
+    }
+    const thisOpening = opening;
+    downloader.has(model).then(
+      held => {
+        if (!held && thisOpening === opening && statuses[model.id] === status) {
+          setStatus(model, NOT_DOWNLOADED);
+        }
+      },
+      () => undefined
+    );
+  };
+
   /** Tries the broken download of `id` again, after a wait that grows with each break. */
   function retryLater(id: string): void {
     const brokenBefore = breaks.get(id) ?? 0;
@@ -480,16 +501,8 @@ export const createModelLibrary = ({
       const status = statuses[model.id];
       if (isArriving(status)) {
         begin(model.id);
-      } else if (status.state !== 'notDownloaded') {
-        // What the browser evicted since is simply not downloaded any more.
-        downloader.has(model).then(
-          held => {
-            if (!held && thisOpening === opening && statuses[model.id] === status) {
-              setStatus(model, NOT_DOWNLOADED);
-            }
-          },
-          () => undefined
-        );
+      } else {
+        forgetIfEvicted(model);
       }
     });
   };
@@ -526,6 +539,11 @@ export const createModelLibrary = ({
       persist();
       emit();
       begin(model.id);
+      // A downloader may not have been able to say, at the opening, whether a
+      // model that was not picked then was still on the phone.
+      if (isOpen && supported) {
+        forgetIfEvicted(model);
+      }
     },
     download: begin,
     cancel: id => {
