@@ -6,7 +6,8 @@ import { DesignSurface, appTheme } from '../theme';
 import { GEMMA_FILE } from './gemmaModel';
 import { MODEL_LIBRARY_STORAGE_KEY } from './modelLibrary';
 import { useModelLibrary } from './ModelLibraryProvider';
-import type { ExtractorPort } from './ports';
+import { QWEN_3_1_7B, QWEN_3_5_0_8B, WHISPER_BASE_EN } from './modelRegistry';
+import type { ExtractorPort, SpeechPort } from './ports';
 import { createRealModelLibrary, createRealPorts } from './realModels';
 import { SCRIPTED_MODEL_LIBRARY_STORAGE_KEY, VoiceFillModels } from './scriptedModels';
 import { useVoiceFillPorts } from './VoiceFillPortsProvider';
@@ -22,6 +23,15 @@ const mockAdapter = {
   createExtractor: jest.fn(),
 };
 jest.mock('./liteRtAdapter', () => mockAdapter);
+
+/** The Transformers.js adapter's chunk, likewise: it runs nothing here. */
+const mockTransformers = {
+  download: jest.fn(),
+  testLoad: jest.fn(),
+  createSpeech: jest.fn(),
+  createExtractor: jest.fn(),
+};
+jest.mock('./transformersAdapter', () => mockTransformers);
 
 // The real speech model's files are not fetched here: its downloader is stood
 // in for by the scripted one, which keeps what has "arrived" on the phone.
@@ -103,6 +113,10 @@ const openApp = async (children: React.ReactNode): Promise<void> => {
   await opened();
 };
 
+/** The default pair first, then the models Transformers.js runs. */
+const EVERY_MODEL =
+  /^Moonshine Small Streaming, Gemma 4 E2B, Whisper base\.en, Moonshine Base, Qwen3\.5-2B, Qwen3-1\.7B, Qwen3\.5-0\.8B$/;
+
 const extractor = () => within(screen.getByTestId('voice-fill-model-extractor'));
 
 describe('the Voice Fill models of a production build', () => {
@@ -123,6 +137,7 @@ describe('the Voice Fill models of a production build', () => {
     );
     mockAdapter.testLoad.mockReset().mockResolvedValue(true);
     mockAdapter.createExtractor.mockReset();
+    Object.values(mockTransformers).forEach(asked => asked.mockReset());
   });
   afterEach(() => {
     window.localStorage.clear();
@@ -132,9 +147,7 @@ describe('the Voice Fill models of a production build', () => {
   test('come with a Model library of the registered models: Gemma 4 E2B is the extraction model a fresh phone gets, beside the speech model', async () => {
     await openApp(<Library />);
 
-    expect(screen.getByTestId('listed')).toHaveTextContent(
-      /^Moonshine Small Streaming, Gemma 4 E2B$/
-    );
+    expect(screen.getByTestId('listed')).toHaveTextContent(EVERY_MODEL);
     expect(screen.getByTestId('picked')).toHaveTextContent(
       'moonshine-small-streaming, gemma-4-e2b-litert'
     );
@@ -181,9 +194,7 @@ describe('the Voice Fill models of a production build', () => {
 
     await openApp(<Library />);
 
-    expect(screen.getByTestId('listed')).toHaveTextContent(
-      /^Moonshine Small Streaming, Gemma 4 E2B$/
-    );
+    expect(screen.getByTestId('listed')).toHaveTextContent(EVERY_MODEL);
   });
 
   test('show nothing, and fetch nothing, on a phone that cannot run Voice Fill', async () => {
@@ -223,5 +234,72 @@ describe('the Voice Fill models of a production build', () => {
     await expect(
       ports.extractor.extract('preSmoke', 'Brisket.', { now: new Date(2026, 9, 9, 12, 0) })
     ).resolves.toEqual({ meatType: 'brisket' });
+  });
+
+  test('download none of the Transformers.js models until a cook picks one', async () => {
+    await openApp(<VoiceFillSettingsCard />);
+
+    expect(mockTransformers.download).not.toHaveBeenCalled();
+  });
+
+  test('fetch a picked Transformers.js model through its own downloader, into the Model library', async () => {
+    mockTransformers.download.mockImplementation(
+      (_model: unknown, _store: unknown, options: { onProgress: (received: number) => void }) => {
+        options.onProgress(QWEN_3_5_0_8B.sizeBytes / 2);
+        return new Promise<void>(() => undefined);
+      }
+    );
+    const library = createRealModelLibrary();
+    await library.open();
+
+    library.download(QWEN_3_5_0_8B.id);
+    await opened();
+
+    expect(mockTransformers.download).toHaveBeenCalledTimes(1);
+    expect(mockTransformers.download.mock.calls[0][0]).toMatchObject({
+      model: QWEN_3_5_0_8B,
+      repo: 'onnx-community/Qwen3.5-0.8B-ONNX',
+    });
+    expect(library.getState().statuses[QWEN_3_5_0_8B.id]).toEqual({
+      state: 'downloading',
+      receivedBytes: QWEN_3_5_0_8B.sizeBytes / 2,
+    });
+    library.close();
+  });
+
+  test('hear and read a Ramble with the Transformers.js models, once they are the ones picked', async () => {
+    const whisper: SpeechPort = {
+      load: jest.fn(() => Promise.resolve()),
+      start: jest.fn(() => Promise.resolve()),
+      stop: jest.fn(() => Promise.resolve('Brisket.')),
+      unload: jest.fn(() => Promise.resolve()),
+    };
+    const qwen: ExtractorPort = {
+      load: jest.fn(() => Promise.resolve()),
+      extract: jest.fn(() => Promise.resolve({ meatType: 'brisket' })),
+      unload: jest.fn(() => Promise.resolve()),
+    };
+    mockTransformers.createSpeech.mockReturnValue(whisper);
+    mockTransformers.createExtractor.mockReturnValue(qwen);
+    const library = createRealModelLibrary();
+    library.pick('speech', WHISPER_BASE_EN.id);
+    library.pick('extractor', QWEN_3_1_7B.id);
+
+    const ports = createRealPorts(library);
+    await ports.speech.load();
+    await ports.speech.start(jest.fn());
+    await ports.extractor.load();
+
+    expect(mockTransformers.createSpeech.mock.calls[0][0]).toMatchObject({
+      model: WHISPER_BASE_EN,
+    });
+    expect(mockTransformers.createExtractor.mock.calls[0][0]).toMatchObject({
+      model: QWEN_3_1_7B,
+    });
+    await expect(ports.speech.stop()).resolves.toBe('Brisket.');
+    await expect(
+      ports.extractor.extract('preSmoke', 'Brisket.', { now: new Date(2026, 9, 9, 12, 0) })
+    ).resolves.toEqual({ meatType: 'brisket' });
+    expect(mockAdapter.createExtractor).not.toHaveBeenCalled();
   });
 });

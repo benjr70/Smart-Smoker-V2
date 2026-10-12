@@ -27,7 +27,11 @@ COPY apps/smoker/package.json apps/smoker/package.json
 COPY packages/TemperatureChart/package.json packages/TemperatureChart/package.json
 # Drop the husky `prepare` hook (devDependency binary, absent focus here) so
 # `npm ci` doesn't exit 127 on the lifecycle script.
-RUN npm pkg delete scripts.prepare \
+#
+# npm's download cache lives in a cache mount, not in this layer: it is as big
+# as node_modules itself and nothing downstream reads it.
+RUN --mount=type=cache,target=/root/.npm \
+    npm pkg delete scripts.prepare \
     && npm ci --legacy-peer-deps
 
 # ---------------------------------------------------------------------------
@@ -47,11 +51,23 @@ RUN npm run build -w backend \
     && npm run build -w smoker
 
 # ---------------------------------------------------------------------------
+# node-runtime: the hoisted workspace node_modules, copied ONCE. Both Node
+# services start from this stage, so the multi-GB tree is one layer in the
+# build cache and one layer in the image store instead of a copy per service —
+# a second copy is what tipped a small Host into ENOSPC mid-boot.
+# ---------------------------------------------------------------------------
+FROM node:20-bookworm-slim AS node-runtime
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=build /workspace/node_modules /node_modules
+
+# ---------------------------------------------------------------------------
 # backend runtime (NestJS API + websocket gateway)
 # ---------------------------------------------------------------------------
-FROM node:20-bookworm-slim AS backend
+FROM node-runtime AS backend
 WORKDIR /apps/backend
-COPY --from=build /workspace/node_modules /node_modules
 COPY --from=build /workspace/apps/backend/package.json ./package.json
 COPY --from=build /workspace/apps/backend/dist ./dist
 COPY --from=build /workspace/apps/backend/healthcheck.js ./healthcheck.js
@@ -66,13 +82,8 @@ CMD ["node", "dist/main"]
 # device-service runtime (serial/emulator bridge + websocket gateway).
 # NODE_ENV=local enables the synthetic temperature emulator (every 500ms).
 # ---------------------------------------------------------------------------
-FROM node:20-bookworm-slim AS device-service
-ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
-    && rm -rf /var/lib/apt/lists/*
+FROM node-runtime AS device-service
 WORKDIR /apps/device-service
-COPY --from=build /workspace/node_modules /node_modules
 COPY --from=build /workspace/apps/device-service/package.json ./package.json
 COPY --from=build /workspace/apps/device-service/dist ./dist
 ENV NODE_ENV=local

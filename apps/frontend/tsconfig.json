@@ -16,7 +16,12 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": false,
-    "jsx": "react"
+    "jsx": "react",
+    "baseUrl": ".",
+    "paths": {
+      "@huggingface/transformers": ["src/voiceFill/transformersRuntime"],
+      "@huggingface/transformers-structured-output": ["src/voiceFill/transformersRuntime"]
+    }
   },
   "include": ["src"]
 }

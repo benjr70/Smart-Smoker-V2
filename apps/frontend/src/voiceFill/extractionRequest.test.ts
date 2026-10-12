@@ -1,6 +1,6 @@
 import { DEFAULT_STAMPS } from '../api/cookStamps';
-import { extractionRequestFor } from './extractionRequest';
-import { SCREEN_FIELDS, toolSchemaFor } from './fieldDefinition';
+import { extractionRequestFor, jsonExtractionRequestFor } from './extractionRequest';
+import { SCREEN_FIELDS, jsonSchemaFor, toolSchemaFor } from './fieldDefinition';
 import type { ExtractionContext } from './ports';
 
 const TRANSCRIPT = 'Sixteen pound brisket. Trimmed the fat cap.';
@@ -98,5 +98,52 @@ describe('what the model is asked for a Ramble', () => {
 
     expect(at(new Date(2026, 0, 4, 0, 7))).toContain('Sunday, January 4, 2026 at 12:07 AM');
     expect(at(new Date(2026, 0, 4, 12, 0))).toContain('Sunday, January 4, 2026 at 12:00 PM');
+  });
+});
+
+describe('what a model that answers in JSON is asked for a Ramble', () => {
+  it.each(['preSmoke', 'smoke', 'postSmoke'] as const)(
+    'is held to the JSON Schema derived from the %s screen’s field definition',
+    screen => {
+      const request = jsonExtractionRequestFor(screen, TRANSCRIPT, context);
+
+      expect(request.schema).toEqual(jsonSchemaFor(screen, context));
+      expect(Object.keys(request.schema.properties)).toEqual(
+        SCREEN_FIELDS[screen].fields.map(field => field.key)
+      );
+      // A constrained decoder writes every key: each is required, none is extra.
+      expect(request.schema.required).toEqual(SCREEN_FIELDS[screen].fields.map(field => field.key));
+      expect(request.schema.additionalProperties).toBe(false);
+    }
+  );
+
+  it('tells the model the schema it is held to, and to answer with nothing but JSON', () => {
+    const request = jsonExtractionRequestFor('smoke', TRANSCRIPT, context);
+
+    expect(request.system).toContain(JSON.stringify(request.schema));
+    expect(request.system).toContain('one JSON object');
+    expect(request.system).not.toContain('fill_smoke');
+    expect(request.system).toContain(WOOD_SUGGESTIONS);
+    expect(request.system).not.toContain(MEAT_SUGGESTIONS);
+  });
+
+  it('carries the smoke screen’s probe names and only the stamps its cook log offers', () => {
+    const request = jsonExtractionRequestFor('smoke', TRANSCRIPT, {
+      ...context,
+      enabledStamps: DEFAULT_STAMPS.map(stamp => ({ ...stamp, enabled: stamp.key !== 'vent' })),
+    });
+    const asked = JSON.stringify(request.schema).replace(/\\"/g, '"');
+
+    expect(asked).toContain(PROBE_NAMES);
+    expect(asked).toContain(STAMP_NAMES);
+    expect(asked).not.toContain('Vent');
+  });
+
+  it('gives the Ramble as every model is given it: the time, the Notes to merge, the words', () => {
+    const asked = { ...context, existingNotes: 'Bark set early.' };
+
+    expect(jsonExtractionRequestFor('postSmoke', TRANSCRIPT, asked).user).toBe(
+      extractionRequestFor('postSmoke', TRANSCRIPT, asked).user
+    );
   });
 });
