@@ -12,7 +12,14 @@
         { "type": "json", "path": "apps/device-service/package.json", "jsonpath": "$.version" },
         { "type": "json", "path": "packages/TemperatureChart/package.json", "jsonpath": "$.version" },
         { "type": "json", "path": "apps/frontend/package.json", "jsonpath": "$.dependencies.temperaturechart" },
-        { "type": "json", "path": "apps/smoker/package.json", "jsonpath": "$.dependencies.temperaturechart" }
+        { "type": "json", "path": "apps/smoker/package.json", "jsonpath": "$.dependencies.temperaturechart" },
+        { "type": "json", "path": "package-lock.json", "jsonpath": "$.packages['apps/backend'].version" },
+        { "type": "json", "path": "package-lock.json", "jsonpath": "$.packages['apps/frontend'].version" },
+        { "type": "json", "path": "package-lock.json", "jsonpath": "$.packages['apps/smoker'].version" },
+        { "type": "json", "path": "package-lock.json", "jsonpath": "$.packages['apps/device-service'].version" },
+        { "type": "json", "path": "package-lock.json", "jsonpath": "$.packages['packages/TemperatureChart'].version" },
+        { "type": "json", "path": "package-lock.json", "jsonpath": "$.packages['apps/frontend'].dependencies.temperaturechart" },
+        { "type": "json", "path": "package-lock.json", "jsonpath": "$.packages['apps/smoker'].dependencies.temperaturechart" }
       ]
     }
   }
