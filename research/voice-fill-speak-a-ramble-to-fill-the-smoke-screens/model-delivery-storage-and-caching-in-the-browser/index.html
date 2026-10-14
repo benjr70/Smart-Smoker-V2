@@ -1,0 +1,3992 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Voice Fill models: pull from Hugging Face, keep in the Cache API, ask for persistence, add isolation headers only if the runtime needs threads - Smart Smoker Docs</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#voice-fill-models-pull-from-hugging-face-keep-in-the-cache-api-ask-for-persistence-add-isolation-headers-only-if-the-runtime-needs-threads" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="Smart Smoker Docs" class="md-header__button md-logo" aria-label="Smart Smoker Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Smart Smoker Docs
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Voice Fill models: pull from Hugging Face, keep in the Cache API, ask for persistence, add isolation headers only if the runtime needs threads
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/benjr70/Smart-Smoker-V2" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    benjr70/Smart-Smoker-V2
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../.." class="md-tabs__link">
+          
+  
+  
+    
+  
+  Welcome
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../Frontend/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Apps
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../Packages/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Packages
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../CI-CD/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  CI/CD
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../Harness/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Harness
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../AFK/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  AFK
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../Infrastructure/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Infrastructure
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="Smart Smoker Docs" class="md-nav__button md-logo" aria-label="Smart Smoker Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Smart Smoker Docs
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/benjr70/Smart-Smoker-V2" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    benjr70/Smart-Smoker-V2
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../.." class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Welcome
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_1" id="__nav_1_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Welcome
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Documentation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Documentation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Hardware/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hardware
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../piSoftware/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pi Software
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_1_5" id="__nav_1_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Epics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Epics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Epics/pushNotifications/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Push Notifications
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Epics/googleAssistant/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Google Assistant
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Apps
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Apps
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_1" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../Frontend/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Frontend
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Frontend
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../Backend/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    BackEnd
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2_2" id="__nav_2_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    BackEnd
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Backend/backend-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Smart Smoker Backend Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../Smoker%20Frontend/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Smoker Frontend
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Smoker Frontend
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../Device%20Service/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Device Service
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Device Service
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../Packages/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Packages
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Packages
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Packages/testing-template/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing Template
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../CI-CD/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CI/CD
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    CI/CD
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../CI-CD/release-process/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release Process
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../CI-CD/github-actions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GitHub Actions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../CI-CD/test-coverage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Test Coverage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../CI-CD/dependency-management/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependency Management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../CI-CD/workflow-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workflow Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../CI-CD/deployment-infrastructure/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deployment & Infrastructure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../CI-CD/manual-version-deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Manual Deployment Runbook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../CI-CD/smoker-device/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Physical Smoker Device
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../CI-CD/claude-agent-vm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Claude Agent VM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../Harness/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Harness
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Harness
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Harness/backpressure/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backpressure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Harness/self-validation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Self-Validation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Harness/infra/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Infrastructure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../AFK/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AFK
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    AFK
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../AFK/roles/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Roles
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../AFK/dispatch/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dispatch
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../AFK/autonomous-loop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Autonomous Loop
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../Infrastructure/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Infrastructure
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Infrastructure
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/guides/getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/guides/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/guides/prod-pre-cutover-verification/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prod Pre-Cutover Verification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_5" id="__nav_7_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Implementation Plans
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Implementation Plans
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/implementation/proxmox-infrastructure-plan/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Infrastructure Plan
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/implementation/phase-3-deployment-automation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Phase 3 Deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/implementation/phase-4-testing-documentation.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Phase 4 Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_6" id="__nav_7_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Features
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Features
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_6_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_6_1" id="__nav_7_6_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Database
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_7_6_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_6_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Database
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/database/mongodb/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MongoDB
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/database/backups/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backups
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_6_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_6_2" id="__nav_7_6_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deployment
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_7_6_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_6_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Deployment
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/deployment/automation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Automation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/deployment/health-checks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Health Checks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/deployment/rollback/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rollback
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/deployment/environments/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Environments
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_6_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_6_3" id="__nav_7_6_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Infrastructure
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_7_6_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_6_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Infrastructure
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/infrastructure/terraform/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Terraform
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/infrastructure/proxmox/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Proxmox
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/infrastructure/containers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Containers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_6_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_6_4" id="__nav_7_6_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_7_6_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_6_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Configuration
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/configuration/ansible/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ansible
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/configuration/system-setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    System Setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_6_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_6_5" id="__nav_7_6_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Networking
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_7_6_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_6_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Networking
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/networking/tailscale/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tailscale
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/networking/network-config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Network Config
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_6_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_6_6" id="__nav_7_6_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_7_6_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_6_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Security
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/security/secrets-management/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Secrets Management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/security/authentication/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authentication
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_6_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_6_7" id="__nav_7_6_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operations
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_7_6_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_6_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Operations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/operations/testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/operations/disaster-recovery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Disaster Recovery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Infrastructure/features/operations/monitoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Monitoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="voice-fill-models-pull-from-hugging-face-keep-in-the-cache-api-ask-for-persistence-add-isolation-headers-only-if-the-runtime-needs-threads">Voice Fill models: pull from Hugging Face, keep in the Cache API, ask for persistence, add isolation headers only if the runtime needs threads</h1>
+<p>Ticket: <a href="https://github.com/benjr70/Smart-Smoker-V2/issues/690">#690</a> (part of
+wayfinder map
+<a href="https://github.com/benjr70/Smart-Smoker-V2/issues/687">#687</a> — Voice Fill:
+speak a Ramble to fill the smoke screens). Researched on 2026-10-02.</p>
+<p>Sources: live <code>curl</code> probes against <code>huggingface.co</code>, its CDN,
+<code>cdn.jsdelivr.net</code>, <code>raw.githubusercontent.com</code> and the production frontend
+(commands and output in <a href="#live-probes">Live probes</a>); Hugging Face Hub docs
+(rate limits, storage limits) and Terms of Service; Chrome for Developers
+"Cache AI models in the browser"; web.dev "Storage for the web", "Persistent
+storage" and "Making your website cross-origin isolated"; MDN (storage quotas
+and eviction, <code>StorageManager.persist()</code>, OPFS, <code>Cache.put()</code>,
+<code>NetworkInformation.type</code>, COEP header, Background Fetch API) and
+<code>mdn/browser-compat-data</code>; Chromium source (<code>quota_settings.cc</code>,
+<code>quota_features.cc</code>, <code>persistent_storage_permission_context.cc</code>,
+<code>important_sites_util.cc</code>); the WICG Network Information draft; runtime docs and
+source for transformers.js, ONNX Runtime Web, WebLLM, MediaPipe LLM Inference
+and whisper.cpp; nginx <code>ngx_http_headers_module</code> docs; Tailscale Funnel docs;
+the Public Suffix List; and this repo's <code>apps/frontend/nginx.conf</code>,
+<code>apps/frontend/public/sw.js</code>, <code>apps/frontend/public/index.html</code>,
+<code>apps/frontend/src/push/browserPushAdapter.ts</code>, <code>apps/frontend/webpack.*.js</code>,
+<code>.github/workflows/publish.yml</code> and the Tailscale host vars. Every URL is listed
+in <a href="#source-list">Source list</a>. All pages were read on 2026-10-02.</p>
+<p>Anything marked <strong>Unconfirmed</strong> could not be established from a primary source
+and needs the real-phone run
+(<a href="https://github.com/benjr70/Smart-Smoker-V2/issues/691">#691</a>) or a further
+look.</p>
+<h2 id="tldr">TL;DR</h2>
+<ul>
+<li><strong>Hosting works as the map wants it.</strong> A browser can pull model files straight
+  from Hugging Face with no server of ours in the path: <code>/resolve/</code> URLs answer
+  cross-origin requests with CORS headers, redirect to a CDN that sends
+  <code>Access-Control-Allow-Origin: *</code>, and honour <code>Range</code>. Anonymous use is rate
+  limited to 3,000 <code>/resolve/</code> requests per 5 minutes per IP, far above what one
+  phone needs. The Terms of Service give no uptime promise and say nothing
+  explicit for or against this kind of use.</li>
+<li><strong>Gated repos are the catch.</strong> A gated model answers an anonymous browser with
+  <code>401 GatedRepo</code>. The Gemma repos probed are gated, so a model that needs a
+  licence click-through cannot be pulled "straight from the host" without
+  shipping a token in the bundle. Pick ungated repos.</li>
+<li><strong>Store in the Cache API.</strong> It is what Chrome's storage team recommends for
+  models, and it is the default cache of both transformers.js and WebLLM, so the
+  recommended path needs no storage code of our own. OPFS is the fallback when a
+  runtime hands us raw bytes to keep (MediaPipe) or when we want resumable
+  partial downloads, which the Cache API cannot hold (<code>Cache.put()</code> rejects 206
+  responses).</li>
+<li><strong>Quota is not the constraint; eviction is.</strong> Chrome lets one origin use up to
+  60% of the disk, and grants zero quota only when the device is nearly full.
+  Eviction is all-or-nothing per origin, least recently used first. A 2 GB model
+  can vanish, and it takes the rest of the origin's stored data with it.</li>
+<li><strong><code>navigator.storage.persist()</code> is worth calling and will very likely be
+  granted here.</strong> Chrome decides silently: granted if the site is installed, or
+  is among its top "important sites", a list that counts notification
+  permission, home-screen install, bookmarks and engagement. This app already
+  asks for notification permission and is installable. Granted persistence stops
+  eviction under storage pressure; it does not stop the user clearing site data.</li>
+<li><strong>Wi-Fi detection is available on the target browsers but is not a
+  standard.</strong> <code>navigator.connection.type</code> returns <code>"wifi"</code> or <code>"cellular"</code> in
+  Chrome on Android (since Chrome 38) and Samsung Internet. It is experimental,
+  absent in Firefox and Safari, and on desktop Chrome only works on ChromeOS.
+  Treat anything other than a definite <code>"wifi"</code> as "ask the user".
+  <strong>Unconfirmed</strong>: whether a phone tethered to another phone's hotspot reports
+  <code>"wifi"</code> (the draft only says the value is the connection type in use).</li>
+<li><strong>This repo needs no change for delivery or storage.</strong> <code>nginx.conf</code> and
+  <code>sw.js</code> can stay as they are. Cross-origin isolation headers (COOP/COEP) are
+  needed only if the chosen runtime runs multi-threaded WebAssembly. If they are
+  added, nothing the frontend loads today breaks, because the frontend loads
+  nothing cross-origin, and the model and runtime downloads are CORS requests,
+  which COEP does not block.</li>
+<li><strong>Unconfirmed, for the real phones:</strong> that a single multi-hundred-megabyte
+  <code>Cache.put()</code> completes within memory limits on Android Chrome, and how long
+  the download takes there.</li>
+</ul>
+<h2 id="1-hosting-pulling-from-hugging-face-in-the-browser">1. Hosting: pulling from Hugging Face in the browser</h2>
+<h3 id="cors-and-range-requests">CORS and range requests</h3>
+<p>Probed live (P1 to P6). A <code>/resolve/</code> URL for a large file on an ungated repo:</p>
+<ul>
+<li>answers <code>302</code> with <code>access-control-allow-origin</code> echoing the requesting
+  origin, <code>accept-ranges: bytes</code>, and the file size and hash exposed to script
+  through <code>access-control-expose-headers</code> (<code>X-Linked-Size</code>, <code>X-Linked-ETag</code>,
+  <code>ETag</code>, <code>Content-Range</code>, <code>Accept-Ranges</code>);</li>
+<li>redirects to <code>us.aws.cdn.hf.co</code> (served through CloudFront), which answers a
+  <code>Range</code> request with <code>206</code>, <code>content-range</code>, and
+  <code>access-control-allow-origin: *</code>. It also answers with <code>*</code> when the <code>Origin</code>
+  header is <code>null</code>, which is what a browser sends after a cross-origin redirect
+  of a CORS request;</li>
+<li>passes a CORS preflight for the <code>Range</code> header on both hops (P3, P6).</li>
+</ul>
+<p>Small files (<code>config.json</code> and the like) redirect to a same-host
+<code>/api/resolve-cache/...</code> path instead (P4). The redirect responses carry
+<code>cache-control: no-store</code>, so the browser's HTTP cache will not keep them; reuse
+has to come from storage the page controls (section 2).</p>
+<p>The CDN response carries no <code>Cross-Origin-Resource-Policy</code> header (P5). That
+matters only for <code>no-cors</code> loads under COEP; <code>fetch()</code> in CORS mode is
+unaffected (section 4).</p>
+<h3 id="rate-limits">Rate limits</h3>
+<p>The Hub's rate-limit page (values "in September '25") counts <code>/resolve/</code> URLs in
+their own "Resolvers" bucket: <strong>3,000 requests per 5-minute fixed window per IP
+for anonymous users</strong>, 5,000 for a free logged-in user. Exceeding it returns
+<code>429</code>. The live probes show the same policy in the response headers:
+<code>ratelimit-policy: "fixed window";"resolvers";q=3000;w=300</code>. The page notes the
+anonymous and free numbers are "subject to change over time depending on
+platform health".</p>
+<p>A model is a few dozen files at most, so one phone's first-run download is two
+orders of magnitude below the limit. The limit is per IP, so it is the home
+network's public address that is counted, not this project's server.</p>
+<h3 id="terms">Terms</h3>
+<p>The Terms of Service (effective 2022-09-15) do not mention hotlinking, CDNs or
+third-party apps downloading public files. What they do say: the Services are
+provided "as is" and "as available" with no promise that they will be
+"uninterrupted or available at any time", and Hugging Face may "suspend or
+terminate your access to the Services anytime with or without cause". The
+rate-limit page describes <code>/resolve/</code> as "the URLs that are constructed by open
+source libraries ... or AI applications ... to download model/dataset files from
+HF", which is the use in question.</p>
+<p>So: permitted by silence and by the documented purpose of the endpoint, with no
+availability guarantee. A missing model on first run has to be a handled
+failure, not an assumption. The per-model licence (a separate matter from the
+host's terms) is covered by the LLM and speech-to-text tickets.</p>
+<h3 id="gated-repos">Gated repos</h3>
+<p>Probes P7 and P8: <code>google/gemma-3-1b-it</code> and <code>litert-community/Gemma3-1B-IT</code>
+both answer an anonymous request with <code>401</code> and <code>x-error-code: GatedRepo</code>
+("You must have access to it and be authenticated to access it"). An end user's
+browser has no Hugging Face session and the bundle must not carry a token, so a
+gated model cannot be delivered the way the map requires. Each shortlisted model
+repo needs an anonymous <code>curl -I</code> on its weight files before it is accepted.</p>
+<h3 id="what-the-candidate-runtimes-do-by-default">What the candidate runtimes do by default</h3>
+<table>
+<thead>
+<tr>
+<th>Runtime</th>
+<th>Where it fetches from by default</th>
+<th>Where it caches by default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>transformers.js (<code>@huggingface/transformers</code>)</td>
+<td><code>https://huggingface.co/</code> + <code>{model}/resolve/{revision}/</code>, revision <code>main</code> unless set (<code>env.js</code>, <code>hub.js</code>). ONNX Runtime wasm from <code>https://cdn.jsdelivr.net/npm/onnxruntime-web@&lt;version&gt;/dist/</code> (<code>backends/onnx.js</code>)</td>
+<td>Cache API, cache name <code>transformers-cache</code>, including the wasm binaries (<code>useBrowserCache</code>, <code>useWasmCache</code>, <code>cacheKey</code>)</td>
+</tr>
+<tr>
+<td>WebLLM (<code>@mlc-ai/web-llm</code>)</td>
+<td>Weights from <code>https://huggingface.co/mlc-ai/...</code>; compiled model libraries from <code>https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/</code> (<code>config.ts</code>)</td>
+<td>Cache API. <code>cacheBackend</code> can be set to <code>indexeddb</code>, <code>opfs</code> or <code>cross-origin</code>; the source notes "the Cache API is the most well-tested in WebLLM as of now"</td>
+</tr>
+<tr>
+<td>MediaPipe LLM Inference (<code>@mediapipe/tasks-genai</code>)</td>
+<td>Nowhere: the guide has the developer download the model and "store the model within your project directory", then pass <code>modelAssetPath</code>. Wasm from <code>cdn.jsdelivr.net</code></td>
+<td>None documented. The page would have to fetch and store the file itself</td>
+</tr>
+<tr>
+<td>whisper.cpp WASM example</td>
+<td>A <code>fetch()</code> of a URL the page supplies (<code>examples/helpers.js</code>)</td>
+<td>IndexedDB (<code>examples/helpers.js</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>Two consequences. transformers.js and WebLLM already do what the map asks, with
+no code of ours, and both pin nothing by default: transformers.js follows
+<code>main</code>, so a repo owner's push changes what users download. Passing a commit
+hash as <code>revision</code> fixes the bytes. MediaPipe's documented path is to self-host,
+which the map rules out; using it would mean pointing <code>modelAssetPath</code> at a
+Hugging Face URL of an ungated repo and writing the cache ourselves.</p>
+<p>jsdelivr and <code>raw.githubusercontent.com</code> both answer with
+<code>access-control-allow-origin: *</code> and
+<code>cross-origin-resource-policy: cross-origin</code> (P11, P12).</p>
+<h2 id="2-storage-in-chrome-on-android">2. Storage in Chrome on Android</h2>
+<h3 id="which-mechanism">Which mechanism</h3>
+<p>Chrome's own guidance ("Cache AI models in the browser", last updated
+2024-06-12): "the Chrome storage team recommends the Cache API for optimal
+performance", and "The OPFS and the IndexedDB APIs need to serialize the data
+before it can be stored. IndexedDB also needs to deserialize the data when it's
+retrieved, making it the worst place to store large models."</p>
+<table>
+<thead>
+<tr>
+<th>Mechanism</th>
+<th>For</th>
+<th>Against</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Cache API</td>
+<td>Chrome's recommendation; default in transformers.js and WebLLM; stores the <code>Response</code> as is</td>
+<td><code>Cache.put()</code> rejects <code>206</code> responses (MDN), so a partially downloaded file cannot be kept and resumed</td>
+</tr>
+<tr>
+<td>OPFS</td>
+<td>Streamed, incremental writes through <code>createWritable()</code>; in-place writes; fast synchronous handles in a dedicated worker (MDN)</td>
+<td>No runtime uses it by default; our own code to write, verify and hand the bytes over. WebLLM supports it as an option</td>
+</tr>
+<tr>
+<td>IndexedDB</td>
+<td>Works everywhere</td>
+<td>Slowest for large blobs per Chrome's guidance</td>
+</tr>
+</tbody>
+</table>
+<p>All three draw on the same per-origin quota and are evicted together (MDN: "all
+of its data, not parts of it, is deleted at the same time"). The choice does not
+change how much can be stored or how long it survives.</p>
+<h3 id="quota">Quota</h3>
+<ul>
+<li>An origin can store up to <strong>60% of total disk size</strong> in Chrome, in both
+  best-effort and persistent modes (MDN; web.dev). Chromium source agrees: the
+  pool is 80% of the disk (<code>kPoolSizeRatio</code> 0.8) and one storage key may use 75%
+  of the pool (<code>kDefaultPerStorageKeyRatio</code> 0.75).</li>
+<li><code>navigator.storage.estimate()</code> in Chrome reports that 60% figure regardless of
+  free space (web.dev: Chrome "will always report 60% of the actual disk size"),
+  so a large reported quota does not prove 2 GB will fit.</li>
+<li>Chromium keeps a reserve free: if less than <code>min(2 GB, 10% of disk)</code> is free,
+  "Chrome will grant 0 quota to origins"; below <code>min(1 GB, 1% of disk)</code> "data
+  will be aggressively evicted" (<code>quota_settings.cc</code>, <code>quota_features.cc</code>).</li>
+<li>Writes over quota fail with <code>QuotaExceededError</code> and must be caught (web.dev).</li>
+<li>Incognito is much smaller (a fraction of system memory in the source). Voice
+  Fill should not offer the download there. <strong>Unconfirmed</strong>: a reliable way to
+  detect incognito other than a small reported quota.</li>
+</ul>
+<p>On the target phones (256 GB class storage) 2 GB is well inside quota. The
+practical check before prompting is free space, which the page cannot read
+directly: attempt the download, catch <code>QuotaExceededError</code>, and report it.</p>
+<h3 id="eviction">Eviction</h3>
+<p>Chromium-based browsers "begin to evict data when the browser runs out of space,
+clearing all site data from the least recently used origin first, then the next,
+until the browser is no longer over the limit" (web.dev). Best-effort data lasts
+"as long as the origin is below its quota, the device has enough storage space,
+and the user doesn't choose to delete the data" (MDN). There is no time-based
+eviction in Chrome; the seven-day rule on MDN is Safari's.</p>
+<p>Because eviction is per origin and total, losing the model also loses the
+origin's other stored data, such as the cached colour-scheme choice that
+<code>apps/frontend/public/index.html</code> reads from <code>localStorage</code>. That is harmless
+here, but it means the app must check for the model on every use and treat "not
+there" as a normal state that leads back to the download prompt.</p>
+<h3 id="what-navigatorstoragepersist-guarantees">What <code>navigator.storage.persist()</code> guarantees</h3>
+<ul>
+<li>Granted: "Storage will not be cleared except by explicit user action" (MDN).
+  Persistent data "is only evicted, or deleted, if the user chooses to" (MDN).</li>
+<li>Not covered: the user clearing site data in Chrome, or clearing Chrome's data
+  from Android settings. web.dev notes manual clearing is far more common than
+  automatic eviction.</li>
+<li>Chrome shows no prompt: "Chrome, and most other Chromium-based browsers
+  automatically handle the permission request" (web.dev, 2020).</li>
+<li>How Chrome decides (<code>persistent_storage_permission_context.cc</code>): denied if the
+  request is not from the top-level origin or cookies are session-only or
+  blocked; <strong>granted if the site's registrable domain belongs to an installed
+  app</strong>; otherwise granted if that domain is among the top 10 "important sites".
+  <code>important_sites_util.cc</code> builds that list from site engagement (medium or
+  higher), <strong>notification permission</strong>, bookmarks, and home-screen install.</li>
+<li>It needs a secure context (MDN). Prod and dev-cloud are HTTPS.</li>
+</ul>
+<p>For this app: it already requests notification permission
+(<code>browserPushAdapter.ts</code>) and has a manifest with <code>display: standalone</code>, so a
+user who has allowed notifications or installed the app should be granted
+persistence. <code>ts.net</code> is on the Public Suffix List, so the registrable domain is
+the tailnet's (<code>tail74646.ts.net</code>), shared by prod and dev-cloud; a grant earned
+by one host name counts for the other. <strong>Unconfirmed</strong> on the real phones: that
+<code>persist()</code> returns <code>true</code> on the customer's Pixel. The call returns a boolean,
+so the app can record the answer and show it.</p>
+<h2 id="3-telling-wi-fi-from-cellular">3. Telling Wi-Fi from cellular</h2>
+<p><code>navigator.connection.type</code> returns the connection type in use; the enum
+includes <code>"wifi"</code>, <code>"cellular"</code>, <code>"ethernet"</code>, <code>"none"</code>, <code>"unknown"</code> and
+<code>"other"</code> (MDN; WICG draft).</p>
+<p>Support, from <code>mdn/browser-compat-data</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Browser</th>
+<th><code>NetworkInformation.type</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Chrome on Android</td>
+<td>Yes, since 38</td>
+</tr>
+<tr>
+<td>Samsung Internet</td>
+<td>Yes (mirrors Chrome on Android)</td>
+</tr>
+<tr>
+<td>Android WebView</td>
+<td>Yes, since 50</td>
+</tr>
+<tr>
+<td>Chrome desktop</td>
+<td>Partial: "Only supported on ChromeOS"</td>
+</tr>
+<tr>
+<td>Firefox</td>
+<td>Removed in 99 (Android); never on desktop</td>
+</tr>
+<tr>
+<td>Safari</td>
+<td>No</td>
+</tr>
+</tbody>
+</table>
+<p>MDN flags the property "Experimental" and "Limited availability", and the spec
+is a WICG draft, not a standard. For the two target phones it is present and
+gives the answer the map needs. <code>navigator.connection</code> also fires a <code>change</code>
+event (Chrome on Android since 38), so the page can stop a download that started
+on Wi-Fi when the phone drops to cellular, and <code>saveData</code> reports the user's
+Data Saver preference.</p>
+<p>Limits:</p>
+<ul>
+<li>The value describes the connection type, not whether it is metered.
+  <strong>Unconfirmed</strong>: a phone on another phone's hotspot most likely reports
+  <code>"wifi"</code>; no primary source states it either way.</li>
+<li>On a desktop browser (used during development and by the hermetic e2e suite)
+  <code>type</code> is undefined. The code must treat a missing or non-<code>"wifi"</code> value as
+  "unknown" and ask the user to confirm, not block and not assume.</li>
+</ul>
+<p>So "reliably" is: yes on Chrome for Android for the Wi-Fi/cellular distinction;
+no for metered Wi-Fi. The prompt should state the download size in every case,
+which makes the user the final check.</p>
+<h2 id="4-this-repo">4. This repo</h2>
+<h3 id="what-is-there-today">What is there today</h3>
+<ul>
+<li><code>apps/frontend/nginx.conf</code>: one <code>server</code> on port 3000, static files with an
+  SPA fallback, <code>/api/</code> and <code>/socket.io/</code> proxied to the backend. No
+  <code>add_header</code> anywhere. Probe P10 confirms production sends no COOP, COEP or
+  CORP headers.</li>
+<li>TLS is terminated in front by Tailscale Funnel (prod) or Serve (dev-cloud),
+  port 443 to container port 80/3000
+  (<code>infra/proxmox/ansible/inventory/host_vars/*.yml</code>). P10 shows nginx's own
+  <code>server:</code> and <code>etag</code> headers reaching the client, so response headers set in
+  nginx pass through.</li>
+<li><code>apps/frontend/public/sw.js</code>: <code>install</code>, <code>activate</code>, <code>push</code> and
+  <code>notificationclick</code> handlers only. There is no <code>fetch</code> handler, so the worker
+  does not sit in the path of any download. It is registered from
+  <code>browserPushAdapter.ts</code> only when the user subscribes to notifications.</li>
+<li><code>apps/frontend/public/manifest.json</code>: installable, <code>display: standalone</code>.</li>
+<li>What the frontend loads cross-origin: <strong>nothing</strong>. The API base URL is
+  <code>/api/</code> (<code>.github/workflows/publish.yml</code> writes <code>REACT_APP_CLOUD_URL=/api/</code>),
+  Socket.IO connects to <code>io('')</code> (same origin), the font is self-hosted through
+  <code>@fontsource</code> and emitted by webpack, and a grep of <code>apps/frontend/src</code>,
+  <code>apps/frontend/public</code> and <code>packages/*/src</code> finds no absolute <code>http(s)</code> asset
+  URL, <code>&lt;iframe&gt;</code>, <code>window.open</code>, <code>.opener</code>, <code>postMessage</code>, <code>new Worker</code> or
+  <code>SharedArrayBuffer</code>.</li>
+</ul>
+<h3 id="does-delivery-or-storage-need-a-repo-change">Does delivery or storage need a repo change?</h3>
+<p>No. Model files come from another origin by <code>fetch()</code>, are stored by the runtime
+in the Cache API, and never pass through nginx or the service worker. Serving
+them from this box would be a poor idea in any case: Tailscale's docs say
+"Traffic sent over a Funnel is subject to non-configurable bandwidth limits".</p>
+<p>Do not add a <code>fetch</code> handler to <code>sw.js</code> to cache models. The runtimes cache from
+the page, and a handler would put the push worker in the path of every request
+the app makes.</p>
+<h3 id="are-coopcoep-needed">Are COOP/COEP needed?</h3>
+<p>Only for multi-threaded WebAssembly. ONNX Runtime Web: "Only when the browser
+supports WebAssembly multi-threading and <code>crossOriginIsolated</code> mode is enabled,
+multi-threading will be enabled"; without it the wasm backend runs on one
+thread. Cross-origin isolation needs both <code>Cross-Origin-Opener-Policy:
+same-origin</code> and <code>Cross-Origin-Embedder-Policy: require-corp</code> (or
+<code>credentialless</code>) on the document (MDN; web.dev).</p>
+<ul>
+<li>A WebGPU route (transformers.js on WebGPU, WebLLM, MediaPipe) is not
+  documented as needing isolation. <strong>Unconfirmed</strong> that every WebGPU path is
+  fast enough without wasm threads for the parts that still run on the CPU; that
+  is for the speech-to-text and LLM tickets and the phone run.</li>
+<li>A wasm route (transformers.js on the wasm backend, whisper.cpp) needs the
+  headers to get more than one thread.</li>
+</ul>
+<p>So the headers are a consequence of the stack pick, not of delivery.</p>
+<h3 id="if-the-headers-are-added-what-breaks">If the headers are added, what breaks?</h3>
+<p>Nothing that exists today, on the evidence above:</p>
+<ul>
+<li><strong>COEP <code>require-corp</code></strong> blocks cross-origin <code>no-cors</code> loads that lack a CORP
+  header. The frontend has none. "Requests in <code>cors</code> mode won't be blocked by
+  COEP but must still be permitted by CORS" (MDN), and <code>fetch()</code> to Hugging Face
+  is a CORS request that the host permits (P1 to P6). The runtime's wasm from
+  jsdelivr and WebLLM's libraries from GitHub are served with both CORS and
+  <code>cross-origin-resource-policy: cross-origin</code> (P11, P12).</li>
+<li><strong>COOP <code>same-origin</code></strong> cuts the link between the page and cross-origin windows
+  it opens or is opened by (web.dev). The frontend opens no windows and uses no
+  <code>window.opener</code>.</li>
+<li><strong>Same-origin traffic</strong> (<code>/api/</code>, <code>/socket.io/</code>, the bundle, fonts, <code>sw.js</code>,
+  <code>manifest.json</code>) is not subject to COEP. Push notifications are unaffected.</li>
+<li><strong>Workers</strong>: a worker script must be same-origin (web.dev), which a bundled
+  worker is.</li>
+</ul>
+<p>Things to get right when adding them:</p>
+<ul>
+<li>nginx <code>add_header</code> at <code>server</code> level is inherited by a <code>location</code> "if and only
+  if there are no <code>add_header</code> directives defined on the current level" (nginx
+  docs). None of the three locations has one today, so two lines at <code>server</code>
+  level cover everything; anyone who later adds an <code>add_header</code> inside a
+  <code>location</code> silently drops both headers there.</li>
+<li>Without <code>always</code>, <code>add_header</code> applies only to 2xx/3xx responses (nginx docs).</li>
+<li><code>webpack.dev.js</code> (<code>devServer</code>) would need the same two headers, or threaded
+  wasm will work in production and not locally.</li>
+<li>Future cross-origin embeds (an image, a map tile, an analytics script) would
+  be blocked unless served with CORS or CORP. <code>credentialless</code> loosens this for
+  <code>no-cors</code> loads and is supported in Chrome on Android, but not Safari
+  (<code>browser-compat-data</code>).</li>
+<li>The Electron smoker app has its own nginx config (<code>apps/smoker/nginx.conf</code>)
+  and is out of scope for Voice Fill; it is not affected.</li>
+</ul>
+<p><strong>Unconfirmed</strong>: the effect of isolation on the hermetic e2e suite and on the
+<code>/verify-pr</code> browser. Nothing in the reading suggests a problem, but it has not
+been run.</p>
+<h3 id="a-side-observation">A side observation</h3>
+<p>Probe P10 shows production serving a 978-byte <code>sw.js</code> last modified 2026-09-02,
+smaller than the file on master. That is most likely the deployed release
+trailing master, and it does not affect these findings; it is noted only because
+the ticket asks about that file.</p>
+<h2 id="5-recommended-approach">5. Recommended approach</h2>
+<ol>
+<li><strong>Host</strong>: fetch model files from ungated Hugging Face repos through the
+   runtime's own loader, with the revision pinned to a commit hash. Leave the
+   runtime's wasm on its default CDN (the version is already pinned in the URL).
+   Before accepting any model, run an anonymous <code>curl -I</code> on its weight files
+   and reject it if the answer is <code>401</code>.</li>
+<li><strong>Store</strong>: let the runtime keep the files in the Cache API (its default).
+   Call <code>navigator.storage.persist()</code> when the user accepts the download prompt
+   and record the result. Check for the model on every Voice Fill use and treat
+   "missing" as the trigger for the prompt again. Catch <code>QuotaExceededError</code>.
+   Fall back to OPFS only if the chosen runtime takes raw bytes from us, or if
+   the phone run shows that an interrupted download restarting from zero is
+   unacceptable.</li>
+<li><strong>Network</strong>: prompt with the total size. If <code>navigator.connection.type</code> is
+   <code>"wifi"</code>, offer the download; if <code>"cellular"</code>, say so and do not start; if
+   absent or anything else, ask the user to confirm they are on Wi-Fi. Abort on
+   a <code>change</code> to <code>"cellular"</code>.</li>
+<li><strong>Headers</strong>: add COOP/COEP only if the stack pick uses threaded wasm. If so,
+   two <code>add_header ... always;</code> lines at <code>server</code> level in <code>nginx.conf</code> and the
+   same in <code>webpack.dev.js</code>.</li>
+<li><strong>Service worker</strong>: leave <code>sw.js</code> alone. The Background Fetch API (Chrome 74
+   and later, experimental, needs a service worker) could carry the download
+   past a closed tab, but it would mean new handlers in the push worker and
+   moving files into the runtime's cache by hand. Not recommended for a first
+   version.</li>
+</ol>
+<h3 id="repo-files-this-would-touch">Repo files this would touch</h3>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Change</th>
+<th>When</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>apps/frontend/package.json</code></td>
+<td>add the runtime dependency</td>
+<td>always</td>
+</tr>
+<tr>
+<td>new module under <code>apps/frontend/src/</code> (one port in the style of <code>src/push/</code>)</td>
+<td>model presence check, persist request, connection check, download with progress, quota and network failure handling</td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>apps/frontend/src/components/smoke/</code> (the three wizard steps)</td>
+<td>button, prompt and progress UI that call the module</td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>apps/frontend/nginx.conf</code></td>
+<td>two <code>add_header</code> lines at <code>server</code> level</td>
+<td>only with threaded wasm</td>
+</tr>
+<tr>
+<td><code>apps/frontend/webpack.dev.js</code></td>
+<td><code>devServer.headers</code> with the same two headers</td>
+<td>only with threaded wasm</td>
+</tr>
+<tr>
+<td><code>apps/frontend/webpack.prod.js</code></td>
+<td>a rule or copy step for wasm or worker assets</td>
+<td>only if the runtime's wasm is self-hosted instead of left on its CDN</td>
+</tr>
+<tr>
+<td><code>apps/frontend/public/sw.js</code>, <code>apps/frontend/src/push/browserPushAdapter.ts</code>, <code>apps/frontend/public/manifest.json</code></td>
+<td>none</td>
+<td>never, unless Background Fetch is adopted later</td>
+</tr>
+<tr>
+<td><code>CONTEXT.md</code></td>
+<td>Voice Fill vocabulary, with the Spec</td>
+<td>always</td>
+</tr>
+</tbody>
+</table>
+<h2 id="live-probes">Live probes</h2>
+<p>Run on 2026-10-02 (22:04 UTC) from the agent box. Output trimmed to the headers
+that matter.</p>
+<p><strong>P1</strong> <code>curl -sI -H 'Origin: https://smokecloud.tail74646.ts.net' https://huggingface.co/onnx-community/whisper-base/resolve/main/onnx/encoder_model.onnx</code></p>
+<div class="highlight"><pre><span></span><code>HTTP/2 302
+location: https://us.aws.cdn.hf.co/xet-bridge-us/...
+ratelimit: "resolvers";r=2999;t=124
+ratelimit-policy: "fixed window";"resolvers";q=3000;w=300
+access-control-allow-origin: https://smokecloud.tail74646.ts.net
+access-control-expose-headers: X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash
+accept-ranges: bytes
+x-linked-size: 82468078
+cache-control: no-store
+</code></pre></div>
+<p><strong>P2</strong> the same URL with <code>-L -H 'Range: bytes=0-1023'</code>, final hop:</p>
+<div class="highlight"><pre><span></span><code>HTTP/2 206
+content-type: application/octet-stream
+accept-ranges: bytes
+content-length: 1024
+content-range: bytes 0-1023/82468078
+access-control-allow-origin: *
+access-control-expose-headers: *
+via: 1.1 ...cloudfront.net (CloudFront)      (on the 302 hop)
+</code></pre></div>
+<p><strong>P3</strong> <code>curl -X OPTIONS</code> on the hub URL with
+<code>Access-Control-Request-Method: GET</code> and <code>Access-Control-Request-Headers: range</code>:</p>
+<div class="highlight"><pre><span></span><code>HTTP/2 200
+access-control-allow-origin: https://smokecloud.tail74646.ts.net
+access-control-allow-headers: range
+access-control-allow-methods: GET
+</code></pre></div>
+<p><strong>P4</strong> <code>curl -sI</code> on <code>.../whisper-base/resolve/main/config.json</code>: <code>HTTP/2 307</code>,
+<code>location: /api/resolve-cache/models/onnx-community/whisper-base/&lt;commit&gt;/config.json...</code>,
+same CORS headers as P1.</p>
+<p><strong>P5</strong> the CDN URL from P1 with <code>-H 'Origin: null' -H 'Range: bytes=1000-1999'</code>,
+all headers:</p>
+<div class="highlight"><pre><span></span><code>HTTP/2 206
+content-type: application/octet-stream
+accept-ranges: bytes
+content-disposition: inline; filename*=UTF-8''encoder_model.onnx; filename="encoder_model.onnx";
+etag: "2a37684e..."
+access-control-allow-headers: Content-Range, Content-Type, Content-Disposition, ETag
+access-control-expose-headers: *
+content-length: 1000
+content-range: bytes 1000-1999/82468078
+vary: origin, access-control-request-method, access-control-request-headers
+access-control-allow-origin: *
+x-hf-cdn-pop: aws-us-east-1
+</code></pre></div>
+<p>No <code>cross-origin-resource-policy</code> header.</p>
+<p><strong>P6</strong> <code>curl -X OPTIONS</code> on the CDN URL with <code>Origin: null</code> and a <code>range</code>
+preflight: <code>HTTP/2 200</code>, <code>access-control-allow-origin: *</code>,
+<code>access-control-allow-headers: *</code>, <code>access-control-allow-methods: *</code>.</p>
+<p><strong>P7</strong> <code>curl -sI https://huggingface.co/google/gemma-3-1b-it/resolve/main/config.json</code></p>
+<div class="highlight"><pre><span></span><code>HTTP/2 401
+x-error-code: GatedRepo
+x-error-message: Access to model google/gemma-3-1b-it is restricted. You must have access to it and be authenticated to access it. Please log in.
+</code></pre></div>
+<p><strong>P8</strong> <code>curl -sI https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main/gemma3-1b-it-int4.task</code>:
+<code>HTTP/2 401</code>, <code>x-error-code: GatedRepo</code>.</p>
+<p><strong>P9</strong> <code>curl -sI https://huggingface.co/mlc-ai/Qwen2.5-1.5B-Instruct-q4f16_1-MLC/resolve/main/mlc-chat-config.json</code>:
+<code>HTTP/2 307</code>, CORS headers as P1 (ungated).</p>
+<p><strong>P10</strong> <code>curl -sI https://smokecloud.tail74646.ts.net/</code> and <code>/sw.js</code>:</p>
+<div class="highlight"><pre><span></span><code>HTTP/2 200
+accept-ranges: bytes
+content-type: text/html
+etag: "6a976800-a43"
+last-modified: Wed, 02 Sep 2026 00:04:16 GMT
+server: nginx/1.31.4
+content-length: 2627
+</code></pre></div>
+<p><code>/sw.js</code>: <code>200</code>, <code>content-type: application/javascript</code>, <code>content-length: 978</code>.
+No COOP, COEP or CORP header on either.</p>
+<p><strong>P11</strong> <code>curl -sI https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort-wasm-simd-threaded.wasm</code>:
+<code>HTTP/2 200</code>, <code>content-type: application/wasm</code>,
+<code>access-control-allow-origin: *</code>, <code>cross-origin-resource-policy: cross-origin</code>.</p>
+<p><strong>P12</strong> <code>curl -sI https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/README.md</code>:
+<code>HTTP/2 200</code>, <code>access-control-allow-origin: *</code>,
+<code>cross-origin-resource-policy: cross-origin</code>.</p>
+<p><strong>Repo greps</strong> (in the worktree at <code>2e4e7add</code>), each returning no match outside
+tests:</p>
+<div class="highlight"><pre><span></span><code>grep -rnE "window\.open|&lt;iframe|&lt;webview|postMessage|\.opener|target=\"_blank\"|new Worker|SharedArrayBuffer" apps/frontend/src packages/*/src
+grep -rnE "src=\"http|href=\"http|url\(http" apps/frontend/src apps/frontend/public packages/*/src
+grep -n "fetch" apps/frontend/public/sw.js
+</code></pre></div>
+<h2 id="source-list">Source list</h2>
+<p>Hosting:</p>
+<ul>
+<li>Hub rate limits: <a href="https://huggingface.co/docs/hub/rate-limits">https://huggingface.co/docs/hub/rate-limits</a></li>
+<li>Hub storage limits (files "are served to the users using CloudFront"):
+  <a href="https://huggingface.co/docs/hub/storage-limits">https://huggingface.co/docs/hub/storage-limits</a></li>
+<li>Hugging Face Terms of Service (effective 2022-09-15):
+  <a href="https://huggingface.co/terms-of-service">https://huggingface.co/terms-of-service</a></li>
+<li>transformers.js <code>env</code> reference:
+  <a href="https://huggingface.co/docs/transformers.js/api/env">https://huggingface.co/docs/transformers.js/api/env</a></li>
+<li>transformers.js source, <code>packages/transformers/src/env.js</code>, <code>utils/hub.js</code>,
+  <code>backends/onnx.js</code> on <code>main</code>: <a href="https://github.com/huggingface/transformers.js">https://github.com/huggingface/transformers.js</a></li>
+<li>WebLLM advanced usage:
+  <a href="https://webllm.mlc.ai/docs/user/advanced_usage.html">https://webllm.mlc.ai/docs/user/advanced_usage.html</a>; source <code>src/config.ts</code>
+  on <code>main</code>: <a href="https://github.com/mlc-ai/web-llm">https://github.com/mlc-ai/web-llm</a></li>
+<li>MediaPipe LLM Inference guide for Web (updated 2026-06-12):
+  <a href="https://developers.google.com/edge/mediapipe/solutions/genai/llm_inference/web_js">https://developers.google.com/edge/mediapipe/solutions/genai/llm_inference/web_js</a></li>
+<li>whisper.cpp <code>examples/helpers.js</code> and <code>examples/whisper.wasm/README.md</code> on
+  <code>master</code>: <a href="https://github.com/ggml-org/whisper.cpp">https://github.com/ggml-org/whisper.cpp</a></li>
+<li>Tailscale Funnel (updated 2026-01-20): <a href="https://tailscale.com/kb/1223/funnel">https://tailscale.com/kb/1223/funnel</a></li>
+</ul>
+<p>Storage:</p>
+<ul>
+<li>Cache AI models in the browser (updated 2024-06-12):
+  <a href="https://developer.chrome.com/docs/ai/cache-models">https://developer.chrome.com/docs/ai/cache-models</a></li>
+<li>Storage for the web (updated 2024-09-23):
+  <a href="https://web.dev/articles/storage-for-the-web">https://web.dev/articles/storage-for-the-web</a></li>
+<li>Persistent storage (updated 2020-05-12):
+  <a href="https://web.dev/articles/persistent-storage">https://web.dev/articles/persistent-storage</a></li>
+<li>MDN, Storage quotas and eviction criteria (modified 2026-01-05):
+  <a href="https://developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria">https://developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria</a></li>
+<li>MDN, <code>StorageManager.persist()</code> (modified 2024-07-26):
+  <a href="https://developer.mozilla.org/en-US/docs/Web/API/StorageManager/persist">https://developer.mozilla.org/en-US/docs/Web/API/StorageManager/persist</a></li>
+<li>MDN, Origin private file system (modified 2025-07-14):
+  <a href="https://developer.mozilla.org/en-US/docs/Web/API/File_System_API/Origin_private_file_system">https://developer.mozilla.org/en-US/docs/Web/API/File_System_API/Origin_private_file_system</a></li>
+<li>MDN, <code>Cache.put()</code> (modified 2025-06-24):
+  <a href="https://developer.mozilla.org/en-US/docs/Web/API/Cache/put">https://developer.mozilla.org/en-US/docs/Web/API/Cache/put</a></li>
+<li>Chromium <code>storage/browser/quota/quota_settings.cc</code> and <code>quota_features.cc</code> on
+  <code>main</code>: <a href="https://github.com/chromium/chromium/tree/main/storage/browser/quota">https://github.com/chromium/chromium/tree/main/storage/browser/quota</a></li>
+<li>Chromium <code>chrome/browser/storage/persistent_storage_permission_context.cc</code>:
+  <a href="https://chromium.googlesource.com/chromium/src/+/main/chrome/browser/storage/persistent_storage_permission_context.cc">https://chromium.googlesource.com/chromium/src/+/main/chrome/browser/storage/persistent_storage_permission_context.cc</a></li>
+<li>Chromium <code>chrome/browser/engagement/important_sites_util.cc</code> and <code>.h</code>:
+  <a href="https://chromium.googlesource.com/chromium/src/+/main/chrome/browser/engagement/important_sites_util.cc">https://chromium.googlesource.com/chromium/src/+/main/chrome/browser/engagement/important_sites_util.cc</a></li>
+<li>Public Suffix List (<code>ts.net</code> entry, Tailscale Inc.):
+  <a href="https://publicsuffix.org/list/public_suffix_list.dat">https://publicsuffix.org/list/public_suffix_list.dat</a></li>
+</ul>
+<p>Network awareness:</p>
+<ul>
+<li>MDN, <code>NetworkInformation.type</code> (modified 2024-03-24):
+  <a href="https://developer.mozilla.org/en-US/docs/Web/API/NetworkInformation/type">https://developer.mozilla.org/en-US/docs/Web/API/NetworkInformation/type</a></li>
+<li>WICG Network Information draft: <a href="https://wicg.github.io/netinfo/">https://wicg.github.io/netinfo/</a></li>
+<li><code>mdn/browser-compat-data</code>, <code>api/NetworkInformation.json</code>,
+  <code>api/BackgroundFetchManager.json</code>, <code>api/StorageManager.json</code>,
+  <code>http/headers/Cross-Origin-Embedder-Policy.json</code> on <code>main</code>:
+  <a href="https://github.com/mdn/browser-compat-data">https://github.com/mdn/browser-compat-data</a></li>
+</ul>
+<p>Cross-origin isolation and this repo:</p>
+<ul>
+<li>MDN, <code>Cross-Origin-Embedder-Policy</code> (modified 2026-09-04):
+  <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cross-Origin-Embedder-Policy">https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cross-Origin-Embedder-Policy</a></li>
+<li>Making your website "cross-origin isolated" using COOP and COEP (updated
+  2022-06-21): <a href="https://web.dev/articles/coop-coep">https://web.dev/articles/coop-coep</a></li>
+<li>ONNX Runtime Web, env flags and session options:
+  <a href="https://onnxruntime.ai/docs/tutorials/web/env-flags-and-session-options.html">https://onnxruntime.ai/docs/tutorials/web/env-flags-and-session-options.html</a></li>
+<li>nginx <code>ngx_http_headers_module</code> (<code>add_header</code>):
+  <a href="https://nginx.org/en/docs/http/ngx_http_headers_module.html">https://nginx.org/en/docs/http/ngx_http_headers_module.html</a></li>
+<li>MDN, Background Fetch API (modified 2026-09-12):
+  <a href="https://developer.mozilla.org/en-US/docs/Web/API/Background_Fetch_API">https://developer.mozilla.org/en-US/docs/Web/API/Background_Fetch_API</a></li>
+<li>Repo files read: <code>apps/frontend/nginx.conf</code>, <code>apps/frontend/public/sw.js</code>,
+  <code>apps/frontend/public/manifest.json</code>, <code>apps/frontend/public/index.html</code>,
+  <code>apps/frontend/src/push/browserPushAdapter.ts</code>,
+  <code>apps/frontend/webpack.prod.js</code>, <code>apps/frontend/webpack.dev.js</code>,
+  <code>apps/frontend/Dockerfile</code>, <code>cloud.docker-compose.yml</code>,
+  <code>.github/workflows/publish.yml</code>,
+  <code>infra/proxmox/ansible/inventory/host_vars/smart-smoker-cloud-prod.yml</code> and
+  <code>smart-smoker-dev-cloud.yml</code>.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://www.linkedin.com/in/ben-rolf-275368a4/" target="_blank" rel="noopener" title="www.linkedin.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M416 32H31.9C14.3 32 0 46.5 0 64.3v383.4C0 465.5 14.3 480 31.9 480H416c17.6 0 32-14.5 32-32.3V64.3c0-17.8-14.4-32.3-32-32.3M135.4 416H69V202.2h66.5V416zM102.2 96a38.5 38.5 0 1 1 0 77 38.5 38.5 0 1 1 0-77m282.1 320h-66.4V312c0-24.8-.5-56.7-34.5-56.7-34.6 0-39.9 27-39.9 54.9V416h-66.4V202.2h63.7v29.2h.9c8.9-16.8 30.6-34.5 62.9-34.5 67.2 0 79.7 44.3 79.7 101.9z"/></svg>
+    </a>
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/benjr70" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.instant", "navigation.tabs", "navigation.tabs.sticky", "navigation.footer", "navigation.sections", "navigation.indexes", "toc.follow", "toc.integrate"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
