@@ -59,6 +59,10 @@ Dependabot PRs. _Avoid_: auto-merge (GitHub's feature), fast-track
 
 ### Product
 
+**Active Cook**: The one cook the smoker is currently attached to, if any:
+started from Pre-Smoke, switched on and off, and ended or cleared. When there is
+none the smoker is idle. _Avoid_: current smoke, session, cook in progress
+
 **Serve Plan**: The during-cook planner that works backwards from a serve time:
 serve time minus rest duration gives the pull-by time, compared against the ETA.
 _Avoid_: schedule, timeline
@@ -90,5 +94,5 @@ values. _Avoid_: utterance, command, dictation
 an unticked row is not applied. _Avoid_: suggestion, diff
 
 **Model library**: The per-phone record of which speech and extraction models
-are picked, downloaded and proven to run. Never synced between devices.
-_Avoid_: model settings, model cache
+are picked, downloaded and proven to run. Never synced between devices. _Avoid_:
+model settings, model cache
