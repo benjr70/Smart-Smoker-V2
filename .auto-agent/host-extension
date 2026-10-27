@@ -2,9 +2,11 @@
 # host-extension — what a Host needs for Smart Smoker beyond the auto-agent
 # harness's base role.
 #
-# The harness's Setup runs this as the Host user, from the checkout root, after
-# its own configure step, with one argument (`setup` or `upgrade`) and no
-# secret in the environment. The base role has already brought what the
+# The Go Daemon runs this as the Harness config's `workspace.prepare`, in its
+# own clone, after resetting it (keeping `workspace.keep`), with `upgrade` and
+# no secret in the environment. The bash harness's Setup ran it as the Host
+# user, from the checkout root, after its own configure step, with one
+# argument (`setup` or `upgrade`). The base role has already brought what the
 # Harness config implies (a display, Chrome, the Electron runtime libraries,
 # Node, Docker). This adds only what is Smart Smoker's own:
 #

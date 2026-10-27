@@ -127,5 +127,9 @@
   },
   "host": {
     "docker": true
+  },
+  "workspace": {
+    "keep": ["node_modules/", "apps/smoker/.webpack/"],
+    "prepare": ".auto-agent/host-extension upgrade"
   }
 }
