@@ -1,0 +1,1536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Smart Smoker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;width:100%;overscroll-behavior:none;}
+  #root{min-height:100%;width:100%;}
+  body{font-family:'Plus Jakarta Sans',sans-serif;-webkit-font-smoothing:antialiased;}
+  input,textarea,select{font-family:inherit;}
+  ::-webkit-scrollbar{width:4px;}
+  ::-webkit-scrollbar-thumb{background:rgba(0,0,0,.15);border-radius:2px;}
+  input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;}
+  input[type=search]::-webkit-search-cancel-button{-webkit-appearance:none;}
+  [data-chiprow]::-webkit-scrollbar{display:none;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+  @keyframes sheetUp{from{transform:translateY(100%)}to{transform:none}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="temp-chart-core.js"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="stats-screen.jsx"></script>
+<script type="text/babel" src="cook-live.jsx"></script>
+<script type="text/babel" src="cook-review.jsx"></script>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback, createContext, useContext } = React;
+
+/* ─── THEME ─────────────────────────────────────────── */
+const mk = (p, dark) => ({
+  bg:p.bg, surface:p.surface, surfaceAlt:p.alt, border:p.border,
+  text:p.text, sub:p.sub, accent:p.accent, accentBg:p.accent+'1F',
+  navBg:p.nav||p.surface, navBorder:p.border,
+  inputBg:dark?p.alt:p.bg, inputBorder:p.inputBorder||p.border,
+  chip:p.alt, chipActive:p.accent, chipActiveText:p.onAccent||(dark?p.bg:'#FFFFFF'),
+  onAccent:p.onAccent||(dark?p.bg:'#FFFFFF'),
+  tag:p.alt, tagText:p.sub,
+  danger:p.danger, dangerBg:p.danger+'1A',
+  shadow:dark?'0 2px 12px rgba(0,0,0,.35)':p.shadow,
+  shadowMd:dark?'0 4px 24px rgba(0,0,0,.45)':p.shadowMd,
+  ok:p.ok, probes:p.probes, isDark:!!dark,
+});
+
+const PALETTES = {
+  slate: { name:'Slate',
+    light: mk({bg:'#F4F6F9',surface:'#FFFFFF',alt:'#EAEEF3',border:'#DCE3EB',inputBorder:'#CBD5E1',text:'#0E1726',sub:'#54657E',accent:'#2563EB',danger:'#DC2626',ok:'#059669',
+      shadow:'0 1px 3px rgba(14,23,38,.06),0 4px 16px rgba(14,23,38,.05)',shadowMd:'0 4px 24px rgba(14,23,38,.10)',
+      probes:{chamber:'#F59E0B',p1:'#059669',p2:'#2563EB',p3:'#9333EA'}}),
+    dark: mk({bg:'#0A1020',surface:'#131B2C',alt:'#1C2637',border:'#28323F',inputBorder:'#37424F',nav:'#0F1626',text:'#E7EDF6',sub:'#8496AE',accent:'#5B92FF',danger:'#F26D5E',ok:'#34D399',
+      probes:{chamber:'#FBBF24',p1:'#34D399',p2:'#60A5FA',p3:'#C084FC'}}, true) },
+
+  carbon: { name:'Carbon',
+    light: mk({bg:'#F6F6F5',surface:'#FFFFFF',alt:'#ECECEA',border:'#E2E2DF',inputBorder:'#D2D2CE',text:'#121212',sub:'#6B6B68',accent:'#DA4A2E',danger:'#B91C1C',ok:'#3F7D46',
+      shadow:'0 1px 3px rgba(0,0,0,.05),0 4px 16px rgba(0,0,0,.04)',shadowMd:'0 4px 24px rgba(0,0,0,.09)',
+      probes:{chamber:'#DA4A2E',p1:'#3F7D46',p2:'#2A6FB8',p3:'#7C5AC8'}}),
+    dark: mk({bg:'#0C0C0C',surface:'#161616',alt:'#202020',border:'#2C2C2C',inputBorder:'#3A3A3A',nav:'#111111',text:'#F0EFED',sub:'#8E8E8A',accent:'#FF6247',danger:'#F0503C',ok:'#4EA85C',
+      probes:{chamber:'#FF6247',p1:'#5BC46E',p2:'#4E9BE8',p3:'#A585F0'}}, true) },
+
+  sage: { name:'Sage',
+    light: mk({bg:'#F1F5F0',surface:'#FFFFFF',alt:'#E5EDE2',border:'#D7E1D3',inputBorder:'#C4D2C0',text:'#141F18',sub:'#506355',accent:'#0F7A5F',danger:'#B94A3C',ok:'#0F7A5F',
+      shadow:'0 1px 3px rgba(20,31,24,.06),0 4px 16px rgba(20,31,24,.05)',shadowMd:'0 4px 24px rgba(20,31,24,.10)',
+      probes:{chamber:'#C2703B',p1:'#0F7A5F',p2:'#37749E',p3:'#7A5AAE'}}),
+    dark: mk({bg:'#0B120E',surface:'#141D17',alt:'#1D2820',border:'#2A362D',inputBorder:'#38473B',nav:'#0F1712',text:'#E7EFE8',sub:'#82947F',accent:'#2FB78F',danger:'#E0705E',ok:'#2FB78F',
+      probes:{chamber:'#E08D4F',p1:'#3ECCA0',p2:'#5BA3D4',p3:'#A187DE'}}, true) },
+
+  ember: { name:'Ember',
+    light: mk({bg:'#F8F4EE',surface:'#FFFFFF',alt:'#F1EBE0',border:'#E6DCCD',inputBorder:'#D6CABA',text:'#1A120A',sub:'#786047',accent:'#C05C1A',danger:'#C0392B',ok:'#2D9D6E',
+      shadow:'0 1px 3px rgba(26,18,10,.06),0 4px 16px rgba(26,18,10,.05)',shadowMd:'0 4px 24px rgba(26,18,10,.10)',
+      probes:{chamber:'#C05C1A',p1:'#2D9D6E',p2:'#3B82F6',p3:'#8B5CF6'}}),
+    dark: mk({bg:'#131110',surface:'#1E1A16',alt:'#282118',border:'#332B20',inputBorder:'#413526',nav:'#181410',text:'#F2ECE2',sub:'#9A8672',accent:'#E07535',danger:'#E05C4A',ok:'#3FBF8A',
+      probes:{chamber:'#E07535',p1:'#3FBF8A',p2:'#5B9CF8',p3:'#A78BFA'}}, true) },
+};
+
+const ThemeCtx = createContext(PALETTES.slate.light);
+const useTheme = () => useContext(ThemeCtx);
+
+/* ─── MOCK DATA ───────────────────────────────────────── */
+function genHistoryData() {
+  return [
+    { id:'1', name:'Sunday Brisket', meat:'Brisket', weight:'14', unit:'lb', wood:'Post Oak',
+      date:'Apr 20, 2026', started:'4:15 AM', finished:'6:45 PM', duration:'14h 30m',
+      probes:{chamber:'Chamber',p1:'Brisket Flat',p2:'Brisket Point',p3:'Grate Level'},
+      target:203, peak:{ch:248,p1:203},
+      prepSteps:['Trim fat cap to ¼"','Apply mustard binder','Coat with 50/50 salt & pepper','Rest uncovered in fridge 12h'],
+      preNotes:'Prime grade packer from the butcher on 5th. Trimmed 2 lb of fat.',
+      smokeNotes:'Stalled at 165°F for nearly 3 hours. Wrapped in butcher paper at 170°F.',
+      restTime:'01:00', postSteps:['Rest in faux cambro 1 hour','Slice against the grain','Separate point for burnt ends'],
+      postNotes:'Sliced pencil-thick. Point went to burnt ends with sauce.',
+      ratings:{smokeFlavor:9,seasoning:9.5,tenderness:9.5,overallTaste:9.2},
+      ratingNotes:'Best cook yet. Perfect bark, jiggly point, clean smoke ring.' },
+
+    { id:'2', name:'Baby Back Ribs', meat:'Ribs', weight:'5', unit:'lb', wood:'Apple',
+      date:'Apr 13, 2026', started:'10:30 AM', finished:'4:15 PM', duration:'5h 45m',
+      probes:{chamber:'Chamber',p1:'Rack 1',p2:'Rack 2',p3:'Grate Level'},
+      target:198, peak:{ch:262,p1:198},
+      prepSteps:['Remove membrane','Yellow mustard binder','Sweet rub, heavy'],
+      preNotes:'Two racks from Costco. Membrane came off clean.',
+      smokeNotes:'3-2-1 method. Spritzed with apple juice every 45 min.',
+      restTime:'00:20', postSteps:['Rest 20 min tented','Sauce and set over direct heat','Cut between bones'],
+      postNotes:'Set the sauce for 8 minutes — got a nice tacky glaze.',
+      ratings:{smokeFlavor:8,seasoning:8.5,tenderness:9,overallTaste:8.5},
+      ratingNotes:'Fell off the bone — maybe a touch too tender for competition.' },
+
+    { id:'3', name:'Easter Turkey', meat:'Turkey', weight:'18', unit:'lb', wood:'Pecan',
+      date:'Apr 5, 2026', started:'8:00 AM', finished:'2:20 PM', duration:'6h 20m',
+      probes:{chamber:'Chamber',p1:'Breast',p2:'Thigh',p3:'Grate Level'},
+      target:165, peak:{ch:326,p1:167},
+      prepSteps:['Dry brine 24h','Spatchcock','Compound butter under skin','Truss legs'],
+      preNotes:'Fresh bird, not frozen. Dry brined with kosher salt and baking powder for crisp skin.',
+      smokeNotes:'Ran hot at 325°F for crisp skin. Rotated once at the halfway mark.',
+      restTime:'00:30', postSteps:['Rest 30 min','Carve breast and legs separately','Save drippings for gravy'],
+      postNotes:'Skin stayed crisp through resting. Drippings made excellent gravy.',
+      ratings:{smokeFlavor:8.5,seasoning:9,tenderness:8.5,overallTaste:8.8},
+      ratingNotes:'Brined overnight, great smoke ring on the thigh. Breast just barely juicy.' },
+
+    { id:'4', name:'Pork Shoulder', meat:'Pork Shoulder', weight:'10', unit:'lb', wood:'Hickory',
+      date:'Mar 29, 2026', started:'5:00 AM', finished:'4:10 PM', duration:'11h 10m',
+      probes:{chamber:'Chamber',p1:'Shoulder',p2:'—',p3:'Grate Level'},
+      target:203, peak:{ch:255,p1:204},
+      prepSteps:['Score fat cap','Mustard binder','Heavy pork rub','Inject with apple cider'],
+      preNotes:'Bone-in butt. Injected the night before.',
+      smokeNotes:'Wrapped in foil with a splash of cider at 165°F. Bone pulled clean.',
+      restTime:'01:30', postSteps:['Rest wrapped 90 min','Pull by hand','Toss with finishing vinegar sauce'],
+      postNotes:'Pulled beautifully — bone slid right out.',
+      ratings:{smokeFlavor:9,seasoning:8.5,tenderness:9.5,overallTaste:9,},
+      ratingNotes:'Money muscle was outstanding. Bark could have been a little firmer.' },
+
+    { id:'5', name:'Chuck Roast', meat:'Beef Chuck', weight:'4', unit:'lb', wood:'Cherry',
+      date:'Mar 15, 2026', started:'9:00 AM', finished:'6:00 PM', duration:'9h 00m',
+      probes:{chamber:'Chamber',p1:'Chuck',p2:'—',p3:'Grate Level'},
+      target:207, peak:{ch:240,p1:210},
+      prepSteps:['Trim silver skin','SPG rub','Rest 1h at room temp'],
+      preNotes:'Cheap cut experiment — poor man\u2019s brisket.',
+      smokeNotes:'Chamber ran cool for the first two hours. Wrapped at 170°F.',
+      restTime:'00:45', postSteps:['Rest 45 min','Cube for burnt ends'],
+      postNotes:'Cubed and sauced, back on for 30 minutes.',
+      ratings:{smokeFlavor:8,seasoning:7.5,tenderness:7.5,overallTaste:7.8},
+      ratingNotes:'Good but slightly overdone — went past 207 and dried at the edges.' },
+  ];
+}
+
+function genTempData() {
+  const pts = [];
+  let ch=225, p1=72, p2=68, p3=64;
+  for (let i=40; i>=0; i--) {
+    ch += (Math.random()-.42)*5; ch=Math.max(215,Math.min(240,ch));
+    p1 += Math.random()*2.1;
+    p2 += Math.random()*1.8;
+    p3 += Math.random()*1.5;
+    pts.push({ t: Date.now()-i*3*60*1000, ch:Math.round(ch), p1:Math.round(p1), p2:Math.round(p2), p3:Math.round(p3) });
+  }
+  return pts;
+}
+
+/* ─── SVG TEMP CHART ─────────────────────────────────── */
+function TempChart({ data, names, compact, target, events, stamps }) {
+  const t = useTheme();
+  const W = compact ? 340 : 360, H = compact ? 160 : 200;
+  const PAD = { l:44, r:12, t:12, b:28 };
+  const dW = W - PAD.l - PAD.r, dH = H - PAD.t - PAD.b;
+
+  if (!data || data.length < 2) return null;
+
+  const vals = data.flatMap(d=>[d.ch,d.p1,d.p2,d.p3]);
+  if (target) vals.push(target);
+  // round tick values via the same d3 progression the shared chart package uses
+  const yMin = Math.floor((Math.min(...vals)-15)/25)*25;
+  const yMax = Math.ceil((Math.max(...vals)+15)/25)*25;
+  const tMin = data[0].t, tMax = data[data.length-1].t;
+
+  const px = (t) => PAD.l + ((t-tMin)/(tMax-tMin||1))*dW;
+  const py = (v) => PAD.t + (1-(v-yMin)/(yMax-yMin))*dH;
+
+  const line = (key) => data.map((d,i)=>`${i===0?'M':'L'}${px(d.t).toFixed(1)},${py(d[key]).toFixed(1)}`).join(' ');
+  const ticksY = niceTicks(yMin, yMax, 4);
+  const ticksX = [0, Math.floor(data.length/2), data.length-1].map(i=>data[i]);
+
+  const probeLines = [
+    {key:'ch', color:t.probes.chamber, name: names.chamber},
+    {key:'p1', color:t.probes.p1, name: names.p1},
+    {key:'p2', color:t.probes.p2, name: names.p2},
+    {key:'p3', color:t.probes.p3, name: names.p3},
+  ];
+
+  return (
+    <div style={{width:'100%',overflowX:'auto'}}>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{display:'block'}}>
+        {/* Grid lines */}
+        {ticksY.map(v=>(
+          <line key={v} x1={PAD.l} y1={py(v)} x2={PAD.l+dW} y2={py(v)}
+            stroke={t.border} strokeWidth="1" strokeDasharray="3,3"/>
+        ))}
+        {/* Y labels */}
+        {ticksY.map(v=>(
+          <text key={v} x={PAD.l-6} y={py(v)+4} textAnchor="end" fontSize="9"
+            fontFamily="Plus Jakarta Sans" fill={t.sub}>{v}°</text>
+        ))}
+        {/* X labels */}
+        {ticksX.map((d,i)=>(
+          <text key={i} x={px(d.t)} y={H-6} textAnchor="middle" fontSize="9"
+            fontFamily="Plus Jakarta Sans" fill={t.sub}>
+            {new Date(d.t).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}
+          </text>
+        ))}
+        {/* Target line */}
+        {target && (
+          <g>
+            <line x1={PAD.l} y1={py(target)} x2={PAD.l+dW} y2={py(target)}
+              stroke={t.probes.p1} strokeWidth="1.5" strokeDasharray="5,4" opacity=".6"/>
+            <text x={PAD.l+dW} y={py(target)-5} textAnchor="end" fontSize="9" fontWeight="600"
+              fontFamily="Plus Jakarta Sans" fill={t.probes.p1} opacity=".85">TARGET {target}°</text>
+          </g>
+        )}
+        {/* Lines */}
+        {probeLines.map(({key,color})=>(
+          <path key={key} d={key==='ch'
+              ? cardinalPath(data.map(d=>[px(d.t),py(d[key])]))   /* chamber is curveCardinal in the source */
+              : linearPath(data.map(d=>[px(d.t),py(d[key])]))}
+            fill="none" stroke={color} strokeWidth="2"
+            strokeLinejoin="round" strokeLinecap="round"/>
+        ))}
+        {/* Latest dots */}
+        {probeLines.map(({key,color})=>{
+          const last = data[data.length-1];
+          return <circle key={key} cx={px(last.t)} cy={py(last[key])} r="3" fill={color}/>;
+        })}
+        {/* Cook-log event markers */}
+        {(events||[]).filter(e=>e.t>=tMin).map(e=>{
+          const s = findStamp(stamps, e.type);
+          const c = toneColor(t, s.tone), x = px(Math.min(e.t, tMax));
+          return (
+            <g key={e.id}>
+              <line x1={x} y1={PAD.t+9} x2={x} y2={PAD.t+dH} stroke={c} strokeWidth="1.2" strokeDasharray="2,3" opacity=".7"/>
+              <circle cx={x} cy={PAD.t+5} r="6" fill={c}/>
+              <text x={x} y={PAD.t+8.2} textAnchor="middle" fontSize="7.5" fontWeight="800"
+                fontFamily="Plus Jakarta Sans" fill={t.surface}>{stampShort(s.label)}</text>
+            </g>
+          );
+        })}
+      </svg>
+      {/* Legend */}
+      <div style={{display:'flex',flexWrap:'wrap',gap:'8px 16px',paddingLeft:PAD.l,marginTop:2}}>
+        {probeLines.map(({key,color,name})=>(
+          <div key={key} style={{display:'flex',alignItems:'center',gap:5}}>
+            <div style={{width:10,height:10,borderRadius:'50%',background:color,flexShrink:0}}></div>
+            <span style={{fontSize:11,color:t.sub,fontWeight:500}}>{name}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ─── SHARED COMPONENTS ─────────────────────────────── */
+function Card({ children, style, ...rest }) {
+  const t = useTheme();
+  return <div {...rest} style={{background:t.surface,borderRadius:16,boxShadow:t.shadow,overflow:'hidden',...style}}>{children}</div>;
+}
+
+function Input({ label, value, onChange, type='text', multiline, rows=3, hint, style }) {
+  const t = useTheme();
+  const base = {
+    width:'100%', background:t.inputBg, border:`1.5px solid ${t.inputBorder}`,
+    borderRadius:10, padding:'12px 14px', fontSize:15, color:t.text,
+    outline:'none', fontFamily:'inherit', transition:'border .15s',
+    resize: multiline ? 'none' : undefined,
+  };
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:5,...style}}>
+      {label && <label style={{fontSize:12,fontWeight:600,color:t.sub,letterSpacing:.4}}>{label.toUpperCase()}</label>}
+      {multiline
+        ? <textarea value={value} onChange={e=>onChange(e.target.value)} rows={rows} style={base}/>
+        : <input type={type} value={value} onChange={e=>onChange(e.target.value)} style={base}/>
+      }
+      {hint && <span style={{fontSize:11,color:t.sub}}>{hint}</span>}
+    </div>
+  );
+}
+
+function Btn({ children, onClick, variant='primary', size='md', style }) {
+  const t = useTheme();
+  const [hov, setHov] = useState(false);
+  const styles = {
+    primary: { background: t.accent, filter: hov ? (t.isDark?'brightness(1.12)':'brightness(.9)') : 'none', color:t.onAccent },
+    secondary: { background: hov ? t.surfaceAlt : t.accentBg, color: t.accent },
+    ghost: { background: hov ? t.surfaceAlt : 'transparent', color: t.text, border:`1.5px solid ${t.border}` },
+    danger: { background: hov ? t.danger : t.dangerBg, color: hov?(t.isDark?t.bg:'#fff'):t.danger },
+  };
+  const sz = { sm:{padding:'7px 14px',fontSize:13}, md:{padding:'11px 20px',fontSize:14}, lg:{padding:'14px 24px',fontSize:16} };
+  return (
+    <button onClick={onClick} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
+      style={{cursor:'pointer',border:'none',borderRadius:10,fontFamily:'inherit',fontWeight:600,
+        transition:'all .15s',...sz[size],...styles[variant],...style}}>
+      {children}
+    </button>
+  );
+}
+
+function StepTabs({ steps, active, onChange }) {
+  const t = useTheme();
+  return (
+    <div style={{display:'flex',gap:4,background:t.surfaceAlt,padding:4,borderRadius:12}}>
+      {steps.map((s,i)=>(
+        <button key={i} onClick={()=>onChange(i)} style={{
+          flex:1, padding:'8px 4px', fontSize:12, fontWeight:600, fontFamily:'inherit',
+          border:'none', borderRadius:9, cursor:'pointer', transition:'all .2s',
+          background: active===i ? t.surface : 'transparent',
+          color: active===i ? t.accent : t.sub,
+          boxShadow: active===i ? t.shadow : 'none',
+        }}>{s}</button>
+      ))}
+    </div>
+  );
+}
+
+function TempRow({ label, value, color, editable, onLabelChange, last }) {
+  const t = useTheme();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(label);
+  return (
+    <div style={{display:'flex',alignItems:'center',padding:'12px 0',borderBottom:last?'none':`1px solid ${t.border}`}}>
+      <div style={{width:6,height:6,borderRadius:'50%',background:color,marginRight:10,flexShrink:0}}></div>
+      {editable && editing
+        ? <input autoFocus value={draft} onChange={e=>setDraft(e.target.value)}
+            onBlur={()=>{onLabelChange(draft);setEditing(false);}}
+            onKeyDown={e=>e.key==='Enter'&&e.target.blur()}
+            style={{flex:1,background:'transparent',border:'none',outline:'none',fontSize:15,
+              fontWeight:600,color:color,fontFamily:'inherit'}}/>
+        : <span onClick={()=>editable&&setEditing(true)}
+            style={{flex:1,fontSize:15,fontWeight:600,color:color,
+              cursor:editable?'text':'default',userSelect:'none'}}>{label}</span>
+      }
+      <span style={{fontSize:22,fontWeight:800,color:t.text,letterSpacing:-1,minWidth:64,textAlign:'right'}}>{value}°</span>
+      <span style={{fontSize:13,color:t.sub,marginLeft:2,alignSelf:'flex-end',marginBottom:3}}>F</span>
+    </div>
+  );
+}
+
+function DynamicList({ label, items, onChange }) {
+  const t = useTheme();
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:4}}>
+      {label && <label style={{fontSize:12,fontWeight:600,color:t.sub,letterSpacing:.4}}>{label.toUpperCase()}</label>}
+      {items.map((item,i)=>(
+        <div key={i} style={{display:'flex',gap:8,alignItems:'center'}}>
+          <span style={{fontSize:13,color:t.sub,minWidth:18,textAlign:'right'}}>{i+1}.</span>
+          <input value={item} onChange={e=>{const n=[...items];n[i]=e.target.value;onChange(n);}}
+            style={{flex:1,background:t.inputBg,border:`1.5px solid ${t.inputBorder}`,borderRadius:8,
+              padding:'9px 12px',fontSize:14,color:t.text,fontFamily:'inherit',outline:'none'}}/>
+          <button onClick={()=>onChange(items.filter((_,j)=>j!==i))}
+            style={{background:t.dangerBg,border:'none',borderRadius:7,width:30,height:30,cursor:'pointer',
+              color:t.danger,fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
+        </div>
+      ))}
+      <button onClick={()=>onChange([...items,''])}
+        style={{alignSelf:'flex-start',background:t.accentBg,border:'none',borderRadius:8,padding:'7px 14px',
+          fontSize:12,fontWeight:600,color:t.accent,cursor:'pointer',fontFamily:'inherit',marginTop:2}}>
+        + Add Step
+      </button>
+    </div>
+  );
+}
+
+function Select({ label, value, onChange, options }) {
+  const t = useTheme();
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:5}}>
+      {label && <label style={{fontSize:12,fontWeight:600,color:t.sub,letterSpacing:.4}}>{label.toUpperCase()}</label>}
+      <select value={value} onChange={e=>onChange(e.target.value)}
+        style={{background:t.inputBg,border:`1.5px solid ${t.inputBorder}`,borderRadius:10,
+          padding:'12px 14px',fontSize:15,color:t.text,fontFamily:'inherit',outline:'none',
+          appearance:'none',backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M0 0l6 8 6-8z' fill='%23999'/%3E%3C/svg%3E")`,
+          backgroundRepeat:'no-repeat',backgroundPosition:'right 14px center'}}>
+        {options.map(o=><option key={o.value||o} value={o.value||o}>{o.label||o}</option>)}
+      </select>
+    </div>
+  );
+}
+
+/* ─── PRE-SMOKE SCREEN ──────────────────────────────── */
+function PreSmokeStep({ onNext, template }) {
+  const t = useTheme();
+  const [state, setState] = useState(()=>template
+    ? {name:template.name,meat:template.meat,weight:template.weight,unit:template.unit,steps:[...template.steps],notes:template.notes||''}
+    : {name:'Sunday Brisket',meat:'Brisket',weight:'14',unit:'lb',steps:['Trim fat cap to ¼"','Apply mustard binder','Apply rub generously'],notes:'Let rest in fridge overnight.'});
+  const G = (extra) => ({display:'flex',flexDirection:'column',gap:14,...extra});
+  return (
+    <div style={{padding:'16px 16px 24px',display:'flex',flexDirection:'column',gap:14}}>
+      <Input label="Session Name" value={state.name} onChange={v=>setState({...state,name:v})}/>
+      <Select label="Meat Type" value={state.meat} onChange={v=>setState({...state,meat:v})}
+        options={['Brisket','Ribs','Pork Shoulder','Turkey','Chicken','Chuck Roast','Other']}/>
+      <div style={{display:'grid',gridTemplateColumns:'1fr auto',gap:10}}>
+        <Input label="Weight" value={state.weight} onChange={v=>setState({...state,weight:v})} type="number"/>
+        <Select label="Unit" value={state.unit} onChange={v=>setState({...state,unit:v})} options={['lb','oz','kg']}/>
+      </div>
+      <DynamicList label="Prep Steps" items={state.steps} onChange={steps=>setState({...state,steps})}/>
+      <Input label="Notes" value={state.notes} onChange={v=>setState({...state,notes:v})} multiline rows={3}/>
+      <div style={{display:'flex',justifyContent:'flex-end',paddingTop:4}}>
+        <Btn onClick={onNext}>Next: Smoke →</Btn>
+      </div>
+    </div>
+  );
+}
+
+/* ─── ETA / COMPLETION ESTIMATE ─────────────────────── */
+const SAMPLE_MIN = 3; // temps are logged every 3 minutes
+
+function estimate({ data, target, smoking }) {
+  const n = Math.min(10, data.length - 1);
+  if (n < 2) return { state:'warming' };
+  const cur = data[data.length-1].p1;
+  const prev = data[data.length-1-n].p1;
+  const hours = (n * SAMPLE_MIN) / 60;
+  const rate = (cur - prev) / hours; // °F per hour
+  if (cur >= target) return { state:'done', cur, rate };
+  if (!smoking) return { state:'paused', cur, rate };
+  if (rate < 1.5) return { state:'stalled', cur, rate };
+  const hoursLeft = (target - cur) / rate;
+  return { state:'ok', cur, rate, hoursLeft, eta: new Date(Date.now() + hoursLeft*3600*1000) };
+}
+
+function CompletionCard({ data, target, onTarget, smoking, probeName }) {
+  const t = useTheme();
+  const e = estimate({ data, target, smoking });
+  const start = data[0].p1;
+  const pct = Math.max(0, Math.min(100, ((e.cur - start) / (target - start)) * 100));
+
+  const fmtDur = h => {
+    const m = Math.round(h*60);
+    return m < 60 ? `${m}m` : `${Math.floor(m/60)}h ${String(m%60).padStart(2,'0')}m`;
+  };
+  const headline = {
+    ok: e.eta && e.eta.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}),
+    done: 'Ready now',
+    stalled: 'Holding',
+    paused: 'Paused',
+    warming: 'Calculating',
+  }[e.state];
+  const detail = {
+    ok: e.hoursLeft ? `~${fmtDur(e.hoursLeft)} remaining` : '',
+    done: `${probeName} reached ${target}\u00b0F`,
+    stalled: 'Temp plateaued — the stall is normal',
+    paused: 'Resume smoking to estimate',
+    warming: 'Gathering temperature data',
+  }[e.state];
+  const tone = e.state==='done' ? t.ok : e.state==='ok' ? t.text : t.sub;
+
+  return (
+    <Card style={{padding:'14px 16px 16px',marginBottom:12}}>
+      <div>
+        <div style={{fontSize:11,fontWeight:600,color:t.sub,letterSpacing:.5,marginBottom:4}}>ESTIMATED COMPLETION</div>
+        <div style={{fontSize:28,fontWeight:800,color:tone,letterSpacing:-.9,lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{headline}</div>
+        <div style={{fontSize:13,color:t.sub,marginTop:3}}>{detail}</div>
+      </div>
+      {/* Target temp */}
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,
+        marginTop:14,paddingTop:14,borderTop:`1px solid ${t.border}`}}>
+        <div style={{fontSize:13,fontWeight:600,color:t.sub}}>Target temp</div>
+        <div style={{display:'flex',alignItems:'center',gap:6}}>
+          {[['\u2212',-1],['+',1]].map(([g,d])=>(
+            <button key={g} onClick={()=>onTarget(Math.max(100,Math.min(300,target+d)))} aria-label={d<0?'Decrease target':'Increase target'}
+              style={{order:d<0?0:2,width:44,height:44,border:`1.5px solid ${t.inputBorder}`,background:t.inputBg,
+                borderRadius:11,cursor:'pointer',color:t.text,fontSize:19,fontWeight:600,fontFamily:'inherit',
+                display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1,padding:0}}>{g}</button>
+          ))}
+          <div style={{order:1,display:'flex',alignItems:'baseline',gap:2,background:t.inputBg,
+            border:`1.5px solid ${t.inputBorder}`,borderRadius:11,height:44,padding:'0 12px'}}>
+            <input type="number" value={target} onChange={ev=>onTarget(Math.max(100,Math.min(300,+ev.target.value||0)))}
+              style={{width:52,height:42,background:'transparent',border:'none',outline:'none',fontSize:19,fontWeight:700,
+                color:t.text,fontFamily:'inherit',textAlign:'right'}}/>
+            <span style={{fontSize:13,color:t.sub}}>°F</span>
+          </div>
+        </div>
+      </div>
+      {/* Progress */}
+      <div style={{marginTop:14}}>
+        <div style={{height:8,borderRadius:4,background:t.surfaceAlt,overflow:'hidden'}}>
+          <div style={{width:`${pct}%`,height:'100%',borderRadius:4,
+            background:e.state==='done'?t.ok:t.probes.p1,transition:'width .6s ease'}}></div>
+        </div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6}}>
+          <span style={{fontSize:12,color:t.sub}}>
+            <strong style={{color:t.text,fontWeight:700}}>{Math.round(e.cur)}°</strong> {probeName}
+          </span>
+          <span style={{fontSize:11,color:t.sub,fontWeight:600}}>
+            {e.rate!=null && e.rate>0 ? `+${e.rate.toFixed(1)}°/hr` : '—'}
+          </span>
+          <span style={{fontSize:12,color:t.sub}}>{target}° target</span>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/* ─── LIVE SMOKE SCREEN ──────────────────────────────── */
+const nextQuarterHour = (msAhead) => {
+  const d = new Date(Date.now() + msAhead);
+  d.setMinutes(Math.ceil(d.getMinutes()/15)*15, 0, 0);
+  return d.getTime();
+};
+
+function LiveSmokeStep({ onNext, template, onPull, features, stamps }) {
+  const t = useTheme();
+  const [smoking, setSmoking] = useState(true);
+  const [names, setNames] = useState({chamber:'Chamber',p1:template?template.meat:'Brisket',p2:'Probe 2',p3:'Probe 3'});
+  const [target, setTarget] = useState(template ? template.target : 203);
+  const [wood, setWood] = useState(template ? template.wood : 'Post Oak');
+  const [notes, setNotes] = useState('');
+  const [data, setData] = useState(genTempData);
+  const [elapsed, setElapsed] = useState(2*60*60+15*60); // 2h15m in seconds
+  const [events, setEvents] = useState([]);
+  const [serveAt, setServeAt] = useState(null);
+  const [restMin, setRestMin] = useState(60);
+  const band = { lo:215, hi:245 };
+
+  const addEvent = (type) => setEvents(prev=>[...prev, {
+    id: `${type}-${Date.now()}`, type, t: Date.now(),
+    ch: data[data.length-1].ch, p1: data[data.length-1].p1,
+  }]);
+  const removeEvent = (id) => setEvents(prev=>prev.filter(e=>e.id!==id));
+
+  useEffect(()=>{
+    if (!smoking) return;
+    const iv = setInterval(()=>{
+      setData(prev=>{
+        const last = prev[prev.length-1];
+        const ch = Math.max(215,Math.min(242,last.ch+(Math.random()-.42)*4));
+        // keep floats so sub-degree climb accumulates; rounded only for display
+        const p1 = Math.min(target,last.p1+(Math.random()*0.55));
+        const p2 = Math.min(203,last.p2+(Math.random()*0.45));
+        const p3 = Math.min(203,last.p3+(Math.random()*0.4));
+        return [...prev.slice(-59),{t:Date.now(),ch,p1,p2,p3}];
+      });
+      setElapsed(e=>e+3);
+    },3000);
+    return ()=>clearInterval(iv);
+  },[smoking,target]);
+
+  const last = data[data.length-1];
+  const est = estimate({ data, target, smoking });
+  const readyAt = est.eta ? est.eta.getTime() : null;
+  // seed the serve target off the first real estimate: ready + rest + a little cushion
+  useEffect(()=>{
+    if (serveAt == null && readyAt) {
+      const d = new Date(readyAt + restMin*60*1000 + 30*60*1000);
+      d.setMinutes(Math.ceil(d.getMinutes()/15)*15, 0, 0);
+      setServeAt(d.getTime());
+    }
+  },[readyAt, serveAt, restMin]);
+  const fmtTime = s => `${String(Math.floor(s/3600)).padStart(2,'0')}:${String(Math.floor((s%3600)/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+
+  return (
+    <div style={{padding:'0 16px 24px',display:'flex',flexDirection:'column',gap:0}}>
+      {/* Status bar */}
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 0',marginBottom:4}}>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <div style={{width:8,height:8,borderRadius:'50%',background:smoking?t.ok:t.sub,
+            boxShadow:smoking?`0 0 0 3px ${t.ok}33`:undefined,animation:smoking?'pulse 2s infinite':undefined}}></div>
+          <span style={{fontSize:13,fontWeight:600,color:smoking?t.ok:t.sub}}>{smoking?'Smoking':'Paused'}</span>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:6}}>
+          <span style={{fontSize:13,color:t.sub}}>Elapsed</span>
+          <span style={{fontSize:14,fontWeight:700,color:t.text,fontVariantNumeric:'tabular-nums'}}>{fmtTime(elapsed)}</span>
+        </div>
+      </div>
+      {/* Estimated completion */}
+      <CompletionCard data={data} target={target} onTarget={setTarget} smoking={smoking} probeName={names.p1}/>
+      {/* Backwards plan from serve time */}
+      {serveAt && (!features || features.servePlan) && <ServePlanCard serveAt={serveAt} onServeAt={setServeAt} restMin={restMin} onRestMin={setRestMin}
+        readyAt={readyAt} cur={last.p1} wrapLogged={events.some(e=>e.type==='wrap')}
+        driftAlert={!features || features.driftAlert} driftMin={features ? features.driftMin : 30}/>}
+      {/* Fire quality */}
+      <FireQualityCard data={data} band={band} events={events} onLogWood={()=>addEvent('wood')}/>
+      {/* Temp rows */}
+      <Card style={{padding:'4px 16px',marginBottom:12}}>
+        <TempRow label={names.chamber} value={Math.round(last.ch)} color={t.probes.chamber} editable onLabelChange={v=>setNames({...names,chamber:v})}/>
+        <TempRow label={names.p1} value={Math.round(last.p1)} color={t.probes.p1} editable onLabelChange={v=>setNames({...names,p1:v})}/>
+        <TempRow label={names.p2} value={Math.round(last.p2)} color={t.probes.p2} editable onLabelChange={v=>setNames({...names,p2:v})}/>
+        <TempRow label={names.p3} value={Math.round(last.p3)} color={t.probes.p3} editable onLabelChange={v=>setNames({...names,p3:v})} last/>
+      </Card>
+      {/* Chart */}
+      <Card style={{padding:'16px 12px 12px',marginBottom:12}}>
+        <div style={{fontSize:12,fontWeight:600,color:t.sub,letterSpacing:.4,marginBottom:8,paddingLeft:4}}>TEMPERATURE HISTORY</div>
+        <TempChart data={data} names={names} target={target} events={events} stamps={stamps}/>
+      </Card>
+      {/* Cook log */}
+      <EventLog events={events} onAdd={addEvent} onRemove={removeEvent} stamps={stamps}/>
+      {/* Controls */}
+      <div style={{display:'flex',gap:10,marginBottom:14}}>
+        <Btn onClick={()=>setSmoking(s=>!s)} variant={smoking?'danger':'primary'} style={{flex:1}}>
+          {smoking?'⏸ Stop Smoking':'▶ Start Smoking'}
+        </Btn>
+      </div>
+      <Select label="Wood Type" value={wood} onChange={setWood}
+        options={['Post Oak','Hickory','Pecan','Apple','Cherry','Mesquite']}/>
+      <div style={{height:10}}/>
+      <Input label="Notes" value={notes} onChange={setNotes} multiline rows={3}/>
+      <div style={{display:'flex',justifyContent:'flex-end',paddingTop:8}}>
+        <Btn onClick={()=>onNext({pullTemp:Math.round(last.p1),restMin,weightLb:template?+template.weight:14})}>Next: Post-Smoke →</Btn>
+      </div>
+      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
+    </div>
+  );
+}
+
+/* ─── POST-SMOKE SCREEN ─────────────────────────────── */
+function PostSmokeStep({ onFinish, template, pull }) {
+  const t = useTheme();
+  const [state, setState] = useState({
+    restTime: template ? template.restTime : '00:45',
+    steps: template ? [...template.postSteps] : ['Wrap in butcher paper','Let rest on counter'],
+    notes:'',
+  });
+  const [done, setDone] = useState(false);
+  const [pullAt] = useState(()=>Date.now());
+
+  if (done) return (
+    <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'48px 24px',gap:20,textAlign:'center'}}>
+      <div style={{fontSize:48}}>🥩</div>
+      <div style={{fontSize:22,fontWeight:800,color:t.text}}>Smoke Complete!</div>
+      <div style={{fontSize:15,color:t.sub}}>Your session has been saved to history.</div>
+      <Btn onClick={onFinish} size="lg">View History</Btn>
+    </div>
+  );
+
+  return (
+    <div style={{padding:'16px 16px 24px',display:'flex',flexDirection:'column',gap:14}}>
+      <HoldTimerCard pullTemp={pull?pull.pullTemp:203} pullAt={pullAt}
+        restMin={(()=>{const [h,m]=state.restTime.split(':').map(Number);return (h||0)*60+(m||0);})()}
+        weightLb={pull?pull.weightLb:14}/>
+      <Input label="Rest Time (HH:MM)" value={state.restTime} onChange={v=>setState({...state,restTime:v})} hint="How long will you let it rest?"/>
+      <DynamicList label="Post Steps" items={state.steps} onChange={steps=>setState({...state,steps})}/>
+      <Input label="Notes" value={state.notes} onChange={v=>setState({...state,notes:v})} multiline rows={3} hint="Final thoughts on the cook"/>
+      <div style={{display:'flex',justifyContent:'flex-end',paddingTop:4}}>
+        <Btn onClick={()=>setDone(true)} size="md">🏁 Finish Smoke</Btn>
+      </div>
+    </div>
+  );
+}
+
+/* ─── SMOKE WIZARD ───────────────────────────────────── */
+function SmokeScreen({ onGoHistory, template, features, stamps }) {
+  const t = useTheme();
+  const [step, setStep] = useState(0);
+  const [pull, setPull] = useState(null);
+  const STEPS = ['Pre-Smoke','Smoke','Post-Smoke'];
+  return (
+    <div style={{display:'flex',flexDirection:'column',height:'100%'}}>
+      <div style={{padding:'16px 16px 12px',background:t.surface,borderBottom:`1px solid ${t.border}`,boxShadow:t.shadow,position:'sticky',top:0,zIndex:10}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+          <div>
+            <div style={{fontSize:11,fontWeight:600,color:t.sub,letterSpacing:.6}}>SMART SMOKER</div>
+            <div style={{fontSize:20,fontWeight:800,color:t.text}}>{template ? 'Cooking Again' : 'New Session'}</div>
+          </div>
+          <div style={{width:40,height:40,borderRadius:12,background:t.accentBg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20}}>🔥</div>
+        </div>
+        <StepTabs steps={STEPS} active={step} onChange={setStep}/>
+      </div>
+      <div style={{flex:1,overflowY:'auto'}}>
+        {step===0 && <PreSmokeStep template={template} onNext={()=>setStep(1)}/>}
+        {step===1 && <LiveSmokeStep template={template} features={features} stamps={stamps} onNext={p=>{setPull(p);setStep(2);}}/>}
+        {step===2 && <PostSmokeStep template={template} pull={pull} onFinish={onGoHistory}/>}
+      </div>
+    </div>
+  );
+}
+
+/* ─── HISTORY SCREEN ─────────────────────────────────── */
+function Chip({ label, active, onClick }) {
+  const t = useTheme();
+  return (
+    <button onClick={onClick} aria-pressed={active}
+      style={{flexShrink:0,height:36,padding:'0 14px',borderRadius:18,cursor:'pointer',fontFamily:'inherit',
+        fontSize:13,fontWeight:600,whiteSpace:'nowrap',transition:'all .15s',
+        background:active?t.chipActive:t.chip, color:active?t.chipActiveText:t.sub,
+        border:`1.5px solid ${active?t.chipActive:t.border}`}}>
+      {label}
+    </button>
+  );
+}
+
+function StarRating({ value, max=10 }) {
+  const t = useTheme();
+  return (
+    <div style={{display:'flex',alignItems:'center',gap:6}}>
+      <div style={{display:'flex',gap:2}}>
+        {Array.from({length:5},(_,i)=>{
+          const filled = (value/max)*5 > i+.5;
+          const half = (value/max)*5 > i && !filled;
+          return <span key={i} style={{fontSize:14,color: filled||half ? t.accent : t.border}}>{filled?'★':half?'½★':'☆'}</span>;
+        })}
+      </div>
+      <span style={{fontSize:13,fontWeight:700,color:t.text}}>{value.toFixed(1)}</span>
+      <span style={{fontSize:11,color:t.sub}}>/ 10</span>
+    </div>
+  );
+}
+
+function DetailSection({ step, title, accent, children }) {
+  const t = useTheme();
+  return (
+    <Card style={{padding:'16px'}}>
+      <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:14}}>
+        <div style={{width:22,height:22,borderRadius:7,background:(accent||t.accent)+'26',color:accent||t.accent,
+          display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800,flexShrink:0}}>{step}</div>
+        <div style={{fontSize:12,fontWeight:700,color:t.text,letterSpacing:.5}}>{title}</div>
+      </div>
+      {children}
+    </Card>
+  );
+}
+
+function FieldGrid({ fields }) {
+  const t = useTheme();
+  return (
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'14px 12px'}}>
+      {fields.map(([k,v])=>(
+        <div key={k}>
+          <div style={{fontSize:10,fontWeight:700,color:t.sub,letterSpacing:.5,marginBottom:3}}>{k.toUpperCase()}</div>
+          <div style={{fontSize:15,fontWeight:600,color:t.text,textWrap:'pretty'}}>{v}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function StepList({ label, steps }) {
+  const t = useTheme();
+  if (!steps || !steps.length) return null;
+  return (
+    <div style={{marginTop:16}}>
+      <div style={{fontSize:10,fontWeight:700,color:t.sub,letterSpacing:.5,marginBottom:8}}>{label}</div>
+      <div style={{display:'flex',flexDirection:'column',gap:7}}>
+        {steps.map((s,i)=>(
+          <div key={i} style={{display:'flex',gap:9,alignItems:'baseline'}}>
+            <span style={{fontSize:11,fontWeight:700,color:t.sub,minWidth:13,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{i+1}.</span>
+            <span style={{fontSize:14,color:t.text,lineHeight:1.45,textWrap:'pretty'}}>{s}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function NoteBlock({ label, text }) {
+  const t = useTheme();
+  if (!text) return null;
+  return (
+    <div style={{marginTop:16}}>
+      <div style={{fontSize:10,fontWeight:700,color:t.sub,letterSpacing:.5,marginBottom:6}}>{label}</div>
+      <div style={{fontSize:14,color:t.text,lineHeight:1.6,background:t.surfaceAlt,borderRadius:10,
+        padding:'11px 13px',textWrap:'pretty'}}>{text}</div>
+    </div>
+  );
+}
+
+function RatingInput({ label, value, onChange }) {
+  const t = useTheme();
+  const ref = React.useRef(null);
+  const setFromX = (clientX) => {
+    const r = ref.current.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
+    onChange(Math.max(0.5, Math.round(pct * 20) / 2)); // half-step, matching MUI precision
+  };
+  return (
+    <div style={{padding:'10px 0'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:8}}>
+        <span style={{fontSize:14,color:t.text,fontWeight:500}}>{label}</span>
+        <span style={{fontSize:15,fontWeight:800,color:t.text,fontVariantNumeric:'tabular-nums'}}>
+          {value}<span style={{fontSize:11,fontWeight:600,color:t.sub}}> / 10</span>
+        </span>
+      </div>
+      <div ref={ref} role="slider" aria-label={label} aria-valuenow={value} aria-valuemin="0.5" aria-valuemax="10"
+        onPointerDown={e=>{setFromX(e.clientX);try{e.currentTarget.setPointerCapture(e.pointerId);}catch(err){}}}
+        onPointerMove={e=>{if(e.currentTarget.hasPointerCapture&&e.currentTarget.hasPointerCapture(e.pointerId))setFromX(e.clientX);}}
+        onKeyDown={e=>{
+          if(e.key==='ArrowRight'){e.preventDefault();onChange(Math.min(10,value+0.5));}
+          if(e.key==='ArrowLeft'){e.preventDefault();onChange(Math.max(0.5,value-0.5));}
+        }}
+        tabIndex={0}
+        style={{display:'flex',gap:3,height:34,cursor:'pointer',touchAction:'none',outline:'none'}}>
+        {Array.from({length:10},(_,i)=>{
+          const fill = Math.max(0, Math.min(1, value - i)); // 0, partial, or 1
+          return (
+            <div key={i} style={{flex:1,borderRadius:5,overflow:'hidden',position:'relative',
+              background:t.surfaceAlt,border:fill>=1?'none':`1px solid ${t.border}`}}>
+              {fill>0 && <div style={{position:'absolute',inset:0,right:'auto',
+                width:`${fill*100}%`,background:t.accent,transition:'width .12s'}}></div>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const fmtRest = (s) => {
+  const [hh,mm] = s.split(':').map(Number);
+  return [hh?`${hh}h`:null, mm?`${mm}m`:null].filter(Boolean).join(' ') || '—';
+};
+
+function ConfirmDelete({ item, onCancel, onConfirm }) {
+  const t = useTheme();
+  useEffect(()=>{
+    const onKey = e => { if (e.key === 'Escape') onCancel(); };
+    window.addEventListener('keydown', onKey);
+    return ()=>window.removeEventListener('keydown', onKey);
+  },[onCancel]);
+
+  return (
+    <div onClick={onCancel} role="dialog" aria-modal="true"
+      style={{position:'fixed',inset:0,zIndex:60,background:'rgba(0,0,0,.5)',
+        display:'flex',alignItems:'flex-end',justifyContent:'center',animation:'fadeIn .15s ease'}}>
+      <div onClick={e=>e.stopPropagation()}
+        style={{width:'100%',maxWidth:480,background:t.surface,borderRadius:'20px 20px 0 0',
+          padding:'22px 20px calc(22px + env(safe-area-inset-bottom))',boxShadow:t.shadowMd,
+          animation:'sheetUp .22s cubic-bezier(.2,.8,.2,1)'}}>
+        <div style={{width:38,height:4,borderRadius:2,background:t.border,margin:'0 auto 18px'}}></div>
+        <div style={{fontSize:18,fontWeight:800,color:t.text,marginBottom:6}}>Delete this smoke?</div>
+        <div style={{fontSize:14,color:t.sub,lineHeight:1.55,marginBottom:20,textWrap:'pretty'}}>
+          <strong style={{color:t.text,fontWeight:700}}>{item.name}</strong> from {item.date} will be removed,
+          along with its temperature log, notes, and ratings. This can't be undone.
+        </div>
+        <div style={{display:'flex',flexDirection:'column',gap:9}}>
+          <button onClick={onConfirm}
+            style={{height:50,borderRadius:12,border:'none',cursor:'pointer',fontFamily:'inherit',
+              fontSize:15,fontWeight:700,background:t.danger,color:t.isDark?t.bg:'#fff'}}>Delete smoke</button>
+          <button onClick={onCancel}
+            style={{height:50,borderRadius:12,cursor:'pointer',fontFamily:'inherit',fontSize:15,fontWeight:600,
+              border:`1.5px solid ${t.border}`,background:'transparent',color:t.text}}>Keep it</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HistoryDetail({ item, onBack, onChange, onDelete, onCookAgain, onCompare }) {
+  const t = useTheme();
+  const [hist] = useState(genTempData);
+  const [saved, setSaved] = useState(false);
+  const names = item.probes;
+  const r = item.ratings;
+
+  // ratings auto-save the way the app already persists them on change
+  const setRating = (key, val) => {
+    const next = {...r, [key]: val};
+    onChange({ ratings: next });
+    setSaved(true);
+  };
+  useEffect(()=>{
+    if (!saved) return;
+    const to = setTimeout(()=>setSaved(false), 1800);
+    return ()=>clearTimeout(to);
+  },[saved, r]);
+
+  return (
+    <div style={{padding:'0 16px 32px',display:'flex',flexDirection:'column',gap:12}}>
+      <button onClick={onBack} style={{alignSelf:'flex-start',background:'none',border:'none',cursor:'pointer',
+        display:'flex',alignItems:'center',gap:6,color:t.accent,fontFamily:'inherit',fontWeight:600,fontSize:14,padding:'12px 0'}}>
+        ← Back
+      </button>
+
+      {/* Header */}
+      <div style={{marginBottom:2}}>
+        <div style={{fontSize:24,fontWeight:800,color:t.text,letterSpacing:-.5}}>{item.name}</div>
+        <div style={{fontSize:14,color:t.sub,marginTop:3}}>{item.date} · {item.started} – {item.finished}</div>
+        <div style={{marginTop:10}}><StarRating value={r.overallTaste}/></div>
+      </div>
+
+      {/* 1 — Pre-Smoke */}
+      <DetailSection step="1" title="PRE-SMOKE" accent={t.probes.p2}>
+        <FieldGrid fields={[
+          ['Session name', item.name],
+          ['Meat type', item.meat],
+          ['Weight', `${item.weight} ${item.unit}`],
+          ['Wood type', item.wood],
+        ]}/>
+        <StepList label="PREP STEPS" steps={item.prepSteps}/>
+        <NoteBlock label="PRE-SMOKE NOTES" text={item.preNotes}/>
+      </DetailSection>
+
+      {/* 2 — Smoke */}
+      <DetailSection step="2" title="SMOKE" accent={t.probes.chamber}>
+        <FieldGrid fields={[
+          ['Cook time', item.duration],
+          ['Target temp', `${item.target}°F`],
+          ['Peak chamber', `${item.peak.ch}°F`],
+          ['Peak meat', `${item.peak.p1}°F`],
+        ]}/>
+        <div style={{marginTop:16}}>
+          <div style={{fontSize:10,fontWeight:700,color:t.sub,letterSpacing:.5,marginBottom:8}}>PROBES</div>
+          <div style={{display:'flex',flexDirection:'column',gap:6}}>
+            {[['chamber',names.chamber],['p1',names.p1],['p2',names.p2],['p3',names.p3]].map(([k,label])=>(
+              <div key={k} style={{display:'flex',alignItems:'center',gap:8}}>
+                <div style={{width:8,height:8,borderRadius:'50%',background:t.probes[k],flexShrink:0}}></div>
+                <span style={{fontSize:14,color:label==='—'?t.sub:t.text}}>{label==='—'?'Not used':label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{marginTop:16}}>
+          <div style={{fontSize:10,fontWeight:700,color:t.sub,letterSpacing:.5,marginBottom:6}}>TEMPERATURE LOG</div>
+          <TempChart data={hist} names={names} target={item.target}/>
+        </div>
+        <NoteBlock label="SMOKE NOTES" text={item.smokeNotes}/>
+      </DetailSection>
+
+      {/* 3 — Post-Smoke */}
+      <DetailSection step="3" title="POST-SMOKE" accent={t.probes.p1}>
+        <FieldGrid fields={[['Rest time', fmtRest(item.restTime)]]}/>
+        <StepList label="POST STEPS" steps={item.postSteps}/>
+        <NoteBlock label="POST-SMOKE NOTES" text={item.postNotes}/>
+      </DetailSection>
+
+      {/* Ratings — user-editable */}
+      <DetailSection step="★" title="RATINGS" accent={t.probes.p3}>
+        <div style={{fontSize:12,color:t.sub,marginTop:-4,marginBottom:6,lineHeight:1.5}}>
+          Tap or drag a bar to score this cook.
+        </div>
+        {[['Smoke Flavor','smokeFlavor'],['Seasoning','seasoning'],['Tenderness','tenderness'],['Overall Taste','overallTaste']].map(([label,key],i)=>(
+          <div key={key} style={{borderTop:i===0?'none':`1px solid ${t.border}`}}>
+            <RatingInput label={label} value={r[key]} onChange={v=>setRating(key,v)}/>
+          </div>
+        ))}
+        <div style={{marginTop:16}}>
+          <Input label="Review Notes" value={item.ratingNotes} multiline rows={4}
+            onChange={v=>onChange({ratingNotes:v})}/>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:6,marginTop:12,minHeight:16}}>
+          {saved && (
+            <>
+              <span style={{color:t.ok,fontSize:12,fontWeight:700}}>✓</span>
+              <span style={{fontSize:12,color:t.sub}}>Ratings saved</span>
+            </>
+          )}
+        </div>
+      </DetailSection>
+
+      <div style={{display:'flex',gap:10,marginTop:4}}>
+        <Btn onClick={onCookAgain} size="lg" style={{flex:1.4}}>Cook this again</Btn>
+        <Btn variant="ghost" onClick={onCompare} size="lg" style={{flex:1}}>Compare</Btn>
+      </div>
+      <Btn variant="danger" onClick={onDelete} style={{marginTop:4}}>Delete this smoke</Btn>
+    </div>
+  );
+}
+
+function HistoryScreen({ items, onPatch, onDelete, onCookAgain }) {
+  const t = useTheme();
+  const [selectedId, setSelectedId] = useState(null);
+  const [confirmId, setConfirmId] = useState(null);
+  const [againId, setAgainId] = useState(null);
+  const [compareId, setCompareId] = useState(null);
+  const pending = items.find(i=>i.id===confirmId);
+  const again = items.find(i=>i.id===againId);
+  const [query, setQuery] = useState('');
+  const [meats, setMeats] = useState([]);
+  const selected = items.find(i=>i.id===selectedId);
+
+  if (compareId) return (
+    <CompareScreen items={items} initialId={compareId} onBack={()=>setCompareId(null)}/>
+  );
+
+  if (selected) return (
+    <>
+      <HistoryDetail item={selected} onBack={()=>setSelectedId(null)}
+        onChange={patch=>onPatch(selected.id, patch)}
+        onCookAgain={()=>setAgainId(selected.id)}
+        onCompare={()=>setCompareId(selected.id)}
+        onDelete={()=>setConfirmId(selected.id)}/>
+      {again && (
+        <CookAgainSheet item={again} onCancel={()=>setAgainId(null)}
+          onStart={tpl=>{setAgainId(null);onCookAgain(tpl);}}/>
+      )}
+      {pending && (
+        <ConfirmDelete item={pending} onCancel={()=>setConfirmId(null)}
+          onConfirm={()=>{onDelete(pending.id);setConfirmId(null);setSelectedId(null);}}/>
+      )}
+    </>
+  );
+
+  const meatTypes = [...new Set(items.map(i=>i.meat))];
+  const q = query.trim().toLowerCase();
+  const shown = items.filter(i=>{
+    if (meats.length && !meats.includes(i.meat)) return false;
+    if (!q) return true;
+    return [i.name,i.meat,i.wood,i.preNotes,i.smokeNotes,i.postNotes,i.ratingNotes]
+      .filter(Boolean).some(f=>f.toLowerCase().includes(q));
+  });
+  const filtering = !!q || meats.length > 0;
+
+  const toggleMeat = (m) =>
+    setMeats(prev => prev.includes(m) ? prev.filter(x=>x!==m) : [...prev, m]);
+
+  return (
+    <div style={{display:'flex',flexDirection:'column'}}>
+      {/* Sticky header: title, search, filter chips */}
+      <div style={{position:'sticky',top:0,zIndex:10,background:t.bg,
+        padding:'16px 16px 12px',borderBottom:`1px solid ${t.border}`}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+          <div>
+            <div style={{fontSize:11,fontWeight:600,color:t.sub,letterSpacing:.6}}>SMART SMOKER</div>
+            <div style={{fontSize:20,fontWeight:800,color:t.text}}>History</div>
+          </div>
+          <span style={{fontSize:13,color:t.sub}}>
+            {filtering ? `${shown.length} of ${items.length}` : `${items.length} sessions`}
+          </span>
+        </div>
+
+        {items.length>1 && (
+          <Btn variant="secondary" size="sm" onClick={()=>setCompareId(items[0].id)}
+            style={{alignSelf:'flex-start',height:40,marginBottom:10}}>Compare two cooks</Btn>
+        )}
+
+        {/* Search */}
+        <div style={{position:'relative',marginBottom:10}}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"
+            style={{position:'absolute',left:13,top:'50%',transform:'translateY(-50%)',pointerEvents:'none'}}>
+            <circle cx="11" cy="11" r="7" stroke={t.sub} strokeWidth="2"/>
+            <path d="M16.5 16.5L21 21" stroke={t.sub} strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+          <input value={query} onChange={e=>setQuery(e.target.value)} type="search"
+            placeholder="Search sessions, wood, notes…" aria-label="Search smoke history"
+            style={{width:'100%',height:44,background:t.inputBg,border:`1.5px solid ${t.inputBorder}`,
+              borderRadius:11,padding:'0 38px 0 37px',fontSize:15,color:t.text,
+              fontFamily:'inherit',outline:'none',appearance:'none'}}/>
+          {query && (
+            <button onClick={()=>setQuery('')} aria-label="Clear search"
+              style={{position:'absolute',right:6,top:'50%',transform:'translateY(-50%)',width:32,height:32,
+                border:'none',background:'transparent',color:t.sub,fontSize:17,cursor:'pointer',
+                display:'flex',alignItems:'center',justifyContent:'center',borderRadius:8}}>×</button>
+          )}
+        </div>
+
+        {/* Filter chips */}
+        <div data-chiprow style={{display:'flex',gap:7,overflowX:'auto',margin:'0 -16px',padding:'0 16px 2px',
+          scrollbarWidth:'none'}}>
+          <Chip label="All" active={meats.length===0} onClick={()=>setMeats([])}/>
+          {meatTypes.map(m=>(
+            <Chip key={m} label={m} active={meats.includes(m)} onClick={()=>toggleMeat(m)}/>
+          ))}
+        </div>
+      </div>
+
+      {/* List */}
+      <div style={{padding:'12px 16px 16px',display:'flex',flexDirection:'column',gap:12}}>
+        {shown.length === 0 ? (
+          <div style={{textAlign:'center',padding:'48px 24px',display:'flex',flexDirection:'column',gap:8,alignItems:'center'}}>
+            <div style={{fontSize:15,fontWeight:700,color:t.text}}>
+              {items.length===0 ? 'No smokes logged yet' : 'No sessions found'}
+            </div>
+            <div style={{fontSize:14,color:t.sub,lineHeight:1.5,maxWidth:250}}>
+              {items.length===0
+                ? 'Finish a smoke and it will show up here.'
+                : 'Try a different search or clear your filters.'}
+            </div>
+            {items.length>0 && (
+              <Btn variant="secondary" size="sm" style={{marginTop:6}}
+                onClick={()=>{setQuery('');setMeats([]);}}>Clear filters</Btn>
+            )}
+          </div>
+        ) : shown.map(item=>(
+          <Card key={item.id} style={{padding:'16px',cursor:'pointer'}} onClick={()=>setSelectedId(item.id)}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
+              <div>
+                <div style={{fontSize:16,fontWeight:700,color:t.text}}>{item.name}</div>
+                <div style={{fontSize:13,color:t.sub,marginTop:2}}>{item.weight} {item.unit} {item.meat} · {item.wood} wood</div>
+              </div>
+              <div style={{fontSize:12,color:t.sub,whiteSpace:'nowrap',marginLeft:12,marginTop:2}}>{item.date}</div>
+            </div>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+              <StarRating value={item.ratings.overallTaste}/>
+              <div style={{display:'flex',alignItems:'center',gap:6}}>
+                <span style={{fontSize:11,background:t.tag,color:t.tagText,padding:'3px 8px',borderRadius:6,fontWeight:500}}>{item.duration}</span>
+                <button onClick={e=>{e.stopPropagation();setConfirmId(item.id);}}
+                  aria-label={`Delete ${item.name}`}
+                  style={{width:44,height:44,marginRight:-10,border:'none',background:'transparent',cursor:'pointer',
+                    borderRadius:11,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
+                    <path d="M4 7h16M9.5 7V5.5A1.5 1.5 0 0111 4h2a1.5 1.5 0 011.5 1.5V7M6.5 7l.8 12.1A1.5 1.5 0 008.8 20.5h6.4a1.5 1.5 0 001.5-1.4L17.5 7M10.5 11v5.5M13.5 11v5.5"
+                      stroke={t.sub} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </Card>
+        ))}
+      </div>
+      {pending && (
+        <ConfirmDelete item={pending} onCancel={()=>setConfirmId(null)}
+          onConfirm={()=>{onDelete(pending.id);setConfirmId(null);}}/>
+      )}
+    </div>
+  );
+}
+
+function TempRangeSlider({ min, max, lo, hi, onChange }) {
+  const t = useTheme();
+  const ref = React.useRef(null);
+  const activeRef = React.useRef(null);
+  const pos = (v) => ((v - min) / (max - min)) * 100;
+
+  const valueAt = (clientX) => {
+    const r = ref.current.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
+    return Math.round(min + pct * (max - min));
+  };
+  const apply = (clientX) => {
+    const v = valueAt(clientX);
+    const which = activeRef.current || (Math.abs(v - lo) <= Math.abs(v - hi) ? 'lo' : 'hi');
+    activeRef.current = which;
+    if (which === 'lo') onChange(Math.min(v, hi - 5), hi);
+    else onChange(lo, Math.max(v, lo + 5));
+  };
+
+  const Thumb = ({ value, side }) => (
+    <div role="slider" aria-label={side==='lo'?'Minimum chamber temperature':'Maximum chamber temperature'}
+      aria-valuenow={value} aria-valuemin={min} aria-valuemax={max} tabIndex={0}
+      onKeyDown={e=>{
+        const d = e.key==='ArrowRight' ? 1 : e.key==='ArrowLeft' ? -1 : 0;
+        if(!d) return; e.preventDefault();
+        if(side==='lo') onChange(Math.max(min,Math.min(value+d,hi-5)), hi);
+        else onChange(lo, Math.min(max,Math.max(value+d,lo+5)));
+      }}
+      style={{position:'absolute',left:`${pos(value)}%`,top:'50%',transform:'translate(-50%,-50%)',
+        width:28,height:28,borderRadius:'50%',background:t.surface,border:`3px solid ${t.accent}`,
+        boxShadow:t.shadow,cursor:'grab',touchAction:'none',outline:'none',zIndex:2}}></div>
+  );
+
+  return (
+    <div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:14}}>
+        <div style={{fontSize:13,color:t.sub,fontWeight:500}}>Acceptable chamber range</div>
+        <div style={{fontSize:15,fontWeight:800,color:t.text,fontVariantNumeric:'tabular-nums'}}>{lo}° – {hi}°F</div>
+      </div>
+      <div ref={ref} style={{position:'relative',height:28,touchAction:'none'}}
+        onPointerDown={e=>{apply(e.clientX);try{e.currentTarget.setPointerCapture(e.pointerId);}catch(err){}}}
+        onPointerMove={e=>{if(e.currentTarget.hasPointerCapture&&e.currentTarget.hasPointerCapture(e.pointerId))apply(e.clientX);}}
+        onPointerUp={()=>{activeRef.current=null;}}
+        onPointerCancel={()=>{activeRef.current=null;}}>
+        <div style={{position:'absolute',left:0,right:0,top:'50%',transform:'translateY(-50%)',
+          height:6,borderRadius:3,background:t.surfaceAlt,border:`1px solid ${t.border}`}}></div>
+        <div style={{position:'absolute',left:`${pos(lo)}%`,width:`${pos(hi)-pos(lo)}%`,top:'50%',
+          transform:'translateY(-50%)',height:6,borderRadius:3,background:t.accent}}></div>
+        <Thumb value={lo} side="lo"/>
+        <Thumb value={hi} side="hi"/>
+      </div>
+      <div style={{display:'flex',justifyContent:'space-between',marginTop:4}}>
+        <span style={{fontSize:11,color:t.sub}}>{min}°</span>
+        <span style={{fontSize:11,color:t.sub}}>{max}°</span>
+      </div>
+      {/* numeric entry */}
+      <div style={{display:'flex',gap:10,marginTop:14}}>
+        {[['Min',lo,'lo'],['Max',hi,'hi']].map(([label,val,side])=>(
+          <div key={side} style={{flex:'1 1 0',minWidth:0,display:'flex',flexDirection:'column',gap:5}}>
+            <label style={{fontSize:10,fontWeight:700,color:t.sub,letterSpacing:.5}}>{label.toUpperCase()} °F</label>
+            <input type="number" value={val}
+              onChange={e=>{
+                const v = +e.target.value || 0;
+                if (side==='lo') onChange(Math.max(min,Math.min(v,hi-5)), hi);
+                else onChange(lo, Math.min(max,Math.max(v,lo+5)));
+              }}
+              style={{width:'100%',minWidth:0,boxSizing:'border-box',height:44,background:t.inputBg,
+                border:`1.5px solid ${t.inputBorder}`,borderRadius:11,padding:'0 12px',fontSize:16,fontWeight:700,
+                color:t.text,fontFamily:'inherit',outline:'none',textAlign:'center'}}/>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ─── SETTINGS SCREEN ───────────────────────────────── */
+function SettingsScreen({ mode, onMode, systemDark, features, onFeature, stamps, onStamps }) {
+  const t = useTheme();
+  const [notifs, setNotifs] = useState({tempAlert:true,smokeComplete:true,probeTarget:true});
+  const [range, setRange] = useState({lo:215,hi:250});
+  const [probes, setProbes] = useState([
+    { key:'p1', name:'Probe 1', on:true,  target:203 },
+    { key:'p2', name:'Probe 2', on:true,  target:203 },
+    { key:'p3', name:'Probe 3', on:false, target:195 },
+  ]);
+  const setProbe = (key, patch) =>
+    setProbes(prev => prev.map(p => p.key===key ? {...p, ...patch} : p));
+  const watched = probes.filter(p=>p.on);
+  const [targets, setTargets] = useState({brisket:'203',pork:'195',poultry:'165'});
+
+  const Toggle = ({label, on, onChange, hint, last}) => (
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 0',borderBottom:last?'none':`1px solid ${t.border}`}}>
+      <div>
+        <div style={{fontSize:15,color:t.text,fontWeight:500}}>{label}</div>
+        {hint && <div style={{fontSize:12,color:t.sub,marginTop:2}}>{hint}</div>}
+      </div>
+      <div onClick={()=>onChange(!on)} style={{width:44,height:26,borderRadius:13,cursor:'pointer',
+        background:on?t.accent:t.border,transition:'background .2s',position:'relative',flexShrink:0}}>
+        <div style={{position:'absolute',top:3,left:on?21:3,width:20,height:20,borderRadius:'50%',
+          background:'#fff',transition:'left .2s',boxShadow:'0 1px 4px rgba(0,0,0,.2)'}}></div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{padding:'16px',display:'flex',flexDirection:'column',gap:12}}>
+      <div style={{marginBottom:4}}>
+        <div style={{fontSize:11,fontWeight:600,color:t.sub,letterSpacing:.6}}>SMART SMOKER</div>
+        <div style={{fontSize:20,fontWeight:800,color:t.text}}>Settings</div>
+      </div>
+      {/* Appearance */}
+      <Card style={{padding:'16px'}}>
+        <div style={{fontSize:12,fontWeight:600,color:t.sub,letterSpacing:.4,marginBottom:12}}>APPEARANCE</div>
+        <div style={{display:'flex',gap:4,background:t.surfaceAlt,padding:4,borderRadius:12}}>
+          {[
+            {v:'light', label:'Light', icon:(c)=>(
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="4.2" stroke={c} strokeWidth="1.9"/>
+                <path d="M12 3v2m0 14v2M3 12h2m14 0h2M5.6 5.6l1.4 1.4m10 10l1.4 1.4m0-12.8l-1.4 1.4m-10 10L5.6 18.4"
+                  stroke={c} strokeWidth="1.9" strokeLinecap="round"/>
+              </svg>)},
+            {v:'dark', label:'Dark', icon:(c)=>(
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
+                <path d="M20 14.5A8.5 8.5 0 019.5 4a8.5 8.5 0 1010.5 10.5z" stroke={c} strokeWidth="1.9" strokeLinejoin="round"/>
+              </svg>)},
+            {v:'system', label:'Auto', icon:(c)=>(
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
+                <rect x="3" y="4.5" width="18" height="12" rx="2" stroke={c} strokeWidth="1.9"/>
+                <path d="M8.5 20h7" stroke={c} strokeWidth="1.9" strokeLinecap="round"/>
+              </svg>)},
+          ].map(opt=>{
+            const on = mode === opt.v;
+            const c = on ? t.accent : t.sub;
+            return (
+              <button key={opt.v} onClick={()=>onMode(opt.v)} aria-pressed={on}
+                style={{flex:1,height:56,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
+                  gap:5,border:'none',borderRadius:9,cursor:'pointer',fontFamily:'inherit',transition:'all .18s',
+                  background:on?t.surface:'transparent',boxShadow:on?t.shadow:'none'}}>
+                {opt.icon(c)}
+                <span style={{fontSize:12,fontWeight:on?700:600,color:c}}>{opt.label}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div style={{fontSize:12,color:t.sub,marginTop:11,lineHeight:1.5}}>
+          {mode==='system'
+            ? `Following your device — currently ${systemDark ? 'dark' : 'light'}.`
+            : `Always ${mode}, regardless of your device setting.`}
+        </div>
+      </Card>
+      <Card style={{padding:'4px 16px'}}>
+        <div style={{fontSize:12,fontWeight:600,color:t.sub,letterSpacing:.4,padding:'14px 0 10px'}}>DURING THE COOK</div>
+        <Toggle label="Serve Plan" hint="Work backwards from your serve time"
+          on={features.servePlan} onChange={v=>onFeature('servePlan',v)} last={!features.servePlan}/>
+        {features.servePlan && (
+          <div style={{animation:'fadeIn .18s ease'}}>
+            <Toggle label="Off-schedule alert" hint="Notify me when the cook drifts off plan"
+              on={features.driftAlert} onChange={v=>onFeature('driftAlert',v)} last={!features.driftAlert}/>
+            {features.driftAlert && (
+              <div style={{padding:'14px 0 18px',animation:'fadeIn .18s ease'}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:600,color:t.text}}>Tolerance</div>
+                    <div style={{fontSize:12,color:t.sub,marginTop:2}}>How far off before it alerts</div>
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
+                    <button onClick={()=>onFeature('driftMin',Math.max(15,features.driftMin-15))} aria-label="Decrease tolerance"
+                      style={{width:44,height:44,border:`1.5px solid ${t.inputBorder}`,background:t.inputBg,borderRadius:11,
+                        cursor:'pointer',color:t.text,fontSize:19,fontWeight:600,fontFamily:'inherit',lineHeight:1,padding:0}}>−</button>
+                    <div style={{minWidth:74,textAlign:'center',fontSize:17,fontWeight:700,color:t.text,fontVariantNumeric:'tabular-nums'}}>
+                      {fmtMins(features.driftMin)}
+                    </div>
+                    <button onClick={()=>onFeature('driftMin',Math.min(180,features.driftMin+15))} aria-label="Increase tolerance"
+                      style={{width:44,height:44,border:`1.5px solid ${t.inputBorder}`,background:t.inputBg,borderRadius:11,
+                        cursor:'pointer',color:t.text,fontSize:19,fontWeight:600,fontFamily:'inherit',lineHeight:1,padding:0}}>+</button>
+                  </div>
+                </div>
+                <div style={{fontSize:12,color:t.sub,marginTop:14,lineHeight:1.5}}>
+                  You'll be notified if the cook runs more than <strong style={{color:t.text,fontWeight:700}}>{fmtMins(features.driftMin)}</strong> behind
+                  or finishes more than <strong style={{color:t.text,fontWeight:700}}>{fmtMins(features.driftMin)}</strong> early.
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </Card>
+      <Card style={{padding:'4px 16px'}}>
+        <StampEditor stamps={stamps} onChange={onStamps}/>
+      </Card>
+      <Card style={{padding:'4px 16px'}}>
+        <div style={{fontSize:12,fontWeight:600,color:t.sub,letterSpacing:.4,padding:'14px 0 10px'}}>NOTIFICATIONS</div>
+        <Toggle label="Temperature Alert" hint="Alert when chamber goes out of range" on={notifs.tempAlert} onChange={v=>setNotifs({...notifs,tempAlert:v})}/>
+        {notifs.tempAlert && (
+          <div style={{padding:'14px 0 18px',borderBottom:`1px solid ${t.border}`,
+            opacity:1,animation:'fadeIn .18s ease'}}>
+            <TempRangeSlider min={150} max={350} lo={range.lo} hi={range.hi}
+              onChange={(lo,hi)=>setRange({lo,hi})}/>
+            <div style={{fontSize:12,color:t.sub,marginTop:14,lineHeight:1.5}}>
+              You'll be notified if the chamber drops below <strong style={{color:t.text,fontWeight:700}}>{range.lo}°F</strong> or
+              climbs above <strong style={{color:t.text,fontWeight:700}}>{range.hi}°F</strong>.
+            </div>
+          </div>
+        )}
+        <Toggle label="Probe Target Reached" hint="Alert when meat hits target temp" on={notifs.probeTarget} onChange={v=>setNotifs({...notifs,probeTarget:v})}/>
+        {notifs.probeTarget && (
+          <div style={{padding:'14px 0 18px',borderBottom:`1px solid ${t.border}`,animation:'fadeIn .18s ease'}}>
+            <div style={{fontSize:11,fontWeight:700,color:t.sub,letterSpacing:.5,marginBottom:10}}>WATCHED PROBES</div>
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              {probes.map(p=>{
+                const isPrimary = watched.length>0 && watched[0].key===p.key;
+                return (
+                  <div key={p.key} style={{display:'flex',alignItems:'center',gap:10,
+                    background:p.on?t.surfaceAlt:'transparent',border:`1.5px solid ${p.on?'transparent':t.border}`,
+                    borderRadius:12,padding:'8px 10px 8px 8px',transition:'background .15s'}}>
+                    {/* enable */}
+                    <button onClick={()=>setProbe(p.key,{on:!p.on})} aria-pressed={p.on}
+                      aria-label={`${p.on?'Stop watching':'Watch'} ${p.name}`}
+                      style={{width:44,height:44,flexShrink:0,border:'none',background:'transparent',cursor:'pointer',
+                        display:'flex',alignItems:'center',justifyContent:'center',borderRadius:10,padding:0}}>
+                      <div style={{width:22,height:22,borderRadius:7,display:'flex',alignItems:'center',justifyContent:'center',
+                        background:p.on?t.probes[p.key]:'transparent',
+                        border:p.on?'none':`1.8px solid ${t.inputBorder}`,transition:'all .15s'}}>
+                        {p.on && (
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                            <path d="M5 12.5l4.5 4.5L19 7.5" stroke={t.isDark?t.bg:'#fff'} strokeWidth="3"
+                              strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        )}
+                      </div>
+                    </button>
+                    {/* name */}
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:'flex',alignItems:'center',gap:6}}>
+                        <span style={{fontSize:14,fontWeight:600,color:p.on?t.text:t.sub}}>{p.name}</span>
+                        {isPrimary && (
+                          <span style={{fontSize:9,fontWeight:800,letterSpacing:.5,color:t.accent,
+                            background:t.accentBg,borderRadius:5,padding:'2px 5px'}}>ETA</span>
+                        )}
+                      </div>
+                      <div style={{fontSize:11,color:t.sub,marginTop:1}}>
+                        {p.on ? (isPrimary ? 'Drives the completion estimate' : 'Alert only') : 'Not watched'}
+                      </div>
+                    </div>
+                    {/* target temp */}
+                    <div style={{display:'flex',alignItems:'center',gap:2,flexShrink:0,opacity:p.on?1:.45,
+                      background:t.inputBg,border:`1.5px solid ${t.inputBorder}`,borderRadius:10,height:44,padding:'0 10px'}}>
+                      <input type="number" value={p.target} disabled={!p.on}
+                        onChange={e=>setProbe(p.key,{target:Math.max(100,Math.min(300,+e.target.value||0))})}
+                        aria-label={`${p.name} target temperature`}
+                        style={{width:42,background:'transparent',border:'none',outline:'none',fontSize:16,fontWeight:700,
+                          color:t.text,fontFamily:'inherit',textAlign:'right'}}/>
+                      <span style={{fontSize:12,color:t.sub}}>°F</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{fontSize:12,color:t.sub,marginTop:12,lineHeight:1.5}}>
+              {watched.length === 0
+                ? 'Select at least one probe to receive target alerts.'
+                : <>Alerting on <strong style={{color:t.text,fontWeight:700}}>{watched.map(p=>p.name).join(' and ')}</strong>. Probe names carry over from the active smoke.</>}
+            </div>
+          </div>
+        )}
+        <Toggle label="Smoke Complete" hint="Alert when session is finished" on={notifs.smokeComplete} onChange={v=>setNotifs({...notifs,smokeComplete:v})} last/>
+      </Card>
+      <Card style={{padding:'16px'}}>
+        <div style={{fontSize:12,fontWeight:600,color:t.sub,letterSpacing:.4,marginBottom:4}}>DEFAULT TARGET TEMPS (°F)</div>
+        <div style={{fontSize:12,color:t.sub,marginBottom:14,lineHeight:1.5}}>
+          Presets used to seed a probe's target when you start a smoke. Per-probe targets above always win.
+        </div>
+        <div style={{display:'flex',flexDirection:'column',gap:10}}>
+          {[['Brisket / Beef','brisket'],['Pork','pork'],['Poultry','poultry']].map(([label,key])=>(
+            <div key={key} style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+              <span style={{fontSize:14,color:t.text}}>{label}</span>
+              <input value={targets[key]} onChange={e=>setTargets({...targets,[key]:e.target.value})} type="number"
+                style={{width:72,textAlign:'center',background:t.inputBg,border:`1.5px solid ${t.inputBorder}`,
+                  borderRadius:8,padding:'7px',fontSize:14,fontWeight:600,color:t.text,fontFamily:'inherit',outline:'none'}}/>
+            </div>
+          ))}
+        </div>
+      </Card>
+      <Card style={{padding:'16px'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <span style={{fontSize:14,color:t.sub}}>Version</span>
+          <span style={{fontSize:14,fontWeight:600,color:t.text}}>2.4.1</span>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+/* ─── BOTTOM NAV ─────────────────────────────────────── */
+function BottomNav({ screen, setScreen }) {
+  const t = useTheme();
+  const tabs = [
+    { id:'smoke', label:'Smoke', icon: (active) => (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <path d="M12 3c-1.5 2-3 4-3 6.5A3 3 0 0012 12.5a3 3 0 003-3C15 7 13.5 5 12 3z" fill={active?t.accent:t.sub} opacity=".9"/>
+        <rect x="4" y="14" width="16" height="7" rx="3" stroke={active?t.accent:t.sub} strokeWidth="1.7" fill="none"/>
+        <path d="M7 14v-1.5a1 1 0 011-1h8a1 1 0 011 1V14" stroke={active?t.accent:t.sub} strokeWidth="1.5"/>
+      </svg>
+    )},
+    { id:'history', label:'History', icon: (active) => (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 7h3m-3 4h3m-3-8h3" stroke={active?t.accent:t.sub} strokeWidth="1.7" strokeLinecap="round"/>
+      </svg>
+    )},
+    { id:'stats', label:'Stats', icon: (active) => (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <path d="M4 20V10m5 10V5m5 15v-7m5 7V8" stroke={active?t.accent:t.sub} strokeWidth="2.2" strokeLinecap="round"/>
+      </svg>
+    )},
+    { id:'settings', label:'Settings', icon: (active) => (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="12" r="3" stroke={active?t.accent:t.sub} strokeWidth="1.7"/>
+        <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" stroke={active?t.accent:t.sub} strokeWidth="1.7"/>
+      </svg>
+    )},
+  ];
+  return (
+    <div style={{display:'flex',background:t.navBg,borderTop:`1px solid ${t.navBorder}`,height:64,flexShrink:0,
+      paddingBottom:'env(safe-area-inset-bottom)',boxSizing:'content-box',
+      boxShadow:`0 -2px 12px rgba(0,0,0,${t.isDark?.15:.06})`}}>
+      {tabs.map(tab=>{
+        const active = screen===tab.id;
+        return (
+          <button key={tab.id} onClick={()=>setScreen(tab.id)} style={{
+            flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
+            gap:3,background:'none',border:'none',cursor:'pointer',fontFamily:'inherit',
+            transition:'opacity .15s',
+          }}>
+            {tab.icon(active)}
+            <span style={{fontSize:10,fontWeight:active?700:500,color:active?t.accent:t.sub,letterSpacing:.3}}>{tab.label.toUpperCase()}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ─── MAIN APP ───────────────────────────────────────── */
+function useSystemDark() {
+  const mq = () => window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
+  const [dark, setDark] = useState(()=>{ const m = mq(); return m ? m.matches : false; });
+  useEffect(()=>{
+    const m = mq();
+    if (!m) return;
+    const on = e => setDark(e.matches);
+    m.addEventListener ? m.addEventListener('change', on) : m.addListener(on);
+    return () => m.removeEventListener ? m.removeEventListener('change', on) : m.removeListener(on);
+  },[]);
+  return dark;
+}
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "mode": "dark",
+  "density": "compact",
+  "palette": "carbon"
+}/*EDITMODE-END*/;
+
+function App() {
+  const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const [screen, setScreen] = useState('smoke');
+  const [template, setTemplate] = useState(null);
+  const [sessionKey, setSessionKey] = useState(0);
+  const [features, setFeatures] = useState({servePlan:true, driftAlert:true, driftMin:30});
+  const setFeature = (k,v) => setFeatures(prev=>({...prev,[k]:v}));
+  const [stamps, setStamps] = useState(()=>{
+    try {
+      const raw = localStorage.getItem('smartSmoker.stamps');
+      const list = raw && JSON.parse(raw);
+      if (Array.isArray(list) && list.length) return list;
+    } catch (e) {}
+    return DEFAULT_STAMPS.map(s=>({...s}));
+  });
+  // the pit display mirrors this list, so publish every change
+  useEffect(()=>{
+    try { localStorage.setItem('smartSmoker.stamps', JSON.stringify(stamps)); } catch (e) {}
+  },[stamps]);
+  const [sessions, setSessions] = useState(genHistoryData);
+  const patchSession = (id, patch) =>
+    setSessions(prev => prev.map(i => i.id===id ? {...i, ...patch} : i));
+  const deleteSession = (id) => setSessions(prev => prev.filter(i => i.id !== id));
+  const pal = PALETTES[tweaks.palette] || PALETTES.slate;
+  const systemDark = useSystemDark();
+  const mode = tweaks.mode || 'system';
+  const isDark = mode === 'system' ? systemDark : mode === 'dark';
+  const theme = isDark ? pal.dark : pal.light;
+
+  useEffect(()=>{
+    document.documentElement.style.background = theme.bg;
+    document.body.style.background = theme.bg;
+    document.documentElement.style.colorScheme = theme.isDark ? 'dark' : 'light';
+  },[theme]);
+
+  return (
+    <ThemeCtx.Provider value={theme}>
+      <div style={{background:theme.bg,display:'flex',flexDirection:'column',
+        maxWidth:480,width:'100%',margin:'0 auto',position:'relative',
+        height:'100dvh',minHeight:'100dvh'}}>
+        <div style={{flex:1,overflowY:'auto'}}>
+          {screen==='smoke' && <SmokeScreen key={sessionKey} template={template} features={features} stamps={stamps} onGoHistory={()=>{setTemplate(null);setScreen('history');}}/>}
+          {screen==='history' && <HistoryScreen items={sessions} onPatch={patchSession} onDelete={deleteSession}
+            onCookAgain={tpl=>{setTemplate(tpl);setSessionKey(k=>k+1);setScreen('smoke');}}/>}
+          {screen==='stats' && <StatsScreen items={sessions}/>}
+          {screen==='settings' && <SettingsScreen mode={mode} onMode={v=>setTweak('mode',v)} systemDark={systemDark}
+            features={features} onFeature={setFeature} stamps={stamps} onStamps={setStamps}/>}
+        </div>
+        <BottomNav screen={screen} setScreen={setScreen}/>
+      </div>
+      <TweaksPanel>
+        <TweakSection label="Appearance"/>
+        <TweakSelect label="Color theme" value={tweaks.palette}
+          options={Object.keys(PALETTES).map(k=>({value:k,label:PALETTES[k].name}))}
+          onChange={v=>setTweak('palette',v)}/>
+        <TweakRadio label="Appearance" value={mode} options={['light','dark','system']} onChange={v=>setTweak('mode',v)}/>
+        <TweakSection label="Layout Density"/>
+        <TweakRadio label="Density" value={tweaks.density} options={['airy','compact']} onChange={v=>setTweak('density',v)}/>
+      </TweaksPanel>
+    </ThemeCtx.Provider>
+  );
+}
+
+Object.assign(window, { useTheme, ThemeCtx, Card, Btn, Input, Select, Chip, StarRating, TempChart, fmtRest, estimate });
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App/>);
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+# Images on the root README that are still generated placeholder cards rather
+# than real captures.
+#
+# One filename per line, comments and blank lines ignored. Every file listed
+# here must be referenced from README.md with alt text that starts with
+# "Placeholder"; every README image *not* listed here must not claim to be one.
+# scripts/readme.test.sh enforces both directions, so replacing a placeholder
+# is a two-step edit: drop the "Placeholder — " prefix in README.md and delete
+# the filename from this list.
+#
+# Currently empty: every image on the README is a real capture.
