@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { Types } from 'mongoose';
+import { StatsService } from '../stats/stats.service';
 import { TempSeriesBackfillService } from './temp-series-backfill.service';
 
 const lean = <T>(value: T) => ({
@@ -40,6 +41,7 @@ describe('TempSeriesBackfillService', () => {
   let service: TempSeriesBackfillService;
   let model: any;
   let smokes: ReturnType<typeof cookStore>;
+  let stats: { markDirty: jest.Mock };
 
   const orphan = () => ({ _id: new Types.ObjectId() });
 
@@ -49,12 +51,14 @@ describe('TempSeriesBackfillService', () => {
       bulkWrite: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
     };
     smokes = cookStore([]);
+    stats = { markDirty: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TempSeriesBackfillService,
         { provide: getModelToken('Temp'), useValue: model },
         { provide: getModelToken('Smoke'), useValue: smokes },
+        { provide: StatsService, useValue: stats },
       ],
     }).compile();
 
@@ -170,6 +174,28 @@ describe('TempSeriesBackfillService', () => {
       await service.stampOrphanHeads();
 
       expect(smokes.updateMany).not.toHaveBeenCalled();
+    });
+
+    /**
+     * Dropping the stamp is only half of it: the statistics are served from a
+     * stored aggregate, and the guard behind it counts completed cooks — a
+     * repair changes no count, so nothing would ever ask the cooks again.
+     */
+    it('declares the statistics stale after a repair', async () => {
+      const head = orphan();
+      model.find.mockImplementation(() => lean([head]));
+      model.bulkWrite.mockResolvedValue({ modifiedCount: 1 });
+
+      await service.stampOrphanHeads();
+
+      expect(stats.markDirty).toHaveBeenCalledTimes(1);
+    });
+
+    /** A boot that repairs nothing leaves the stored statistics alone. */
+    it('leaves the statistics alone when it finds no orphan', async () => {
+      await service.stampOrphanHeads();
+
+      expect(stats.markDirty).not.toHaveBeenCalled();
     });
   });
 

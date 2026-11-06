@@ -3,6 +3,8 @@ import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model, Types } from 'mongoose';
 
 import { SmokeDocument } from '../smoke/smoke.schema';
+import { markStatsStale } from '../stats/mark-stats-stale';
+import { StatsService } from '../stats/stats.service';
 import { TempDocument } from './temps.schema';
 
 /**
@@ -79,6 +81,14 @@ export class TempSeriesBackfillService implements OnModuleInit {
     // series missing a reading can be derived again. Its model rather than
     // `SmokeService`, for the reason the module gives.
     @InjectModel('Smoke') private readonly smokeModel: Model<SmokeDocument>,
+    /**
+     * The statistics, to be told the archive they were derived from has
+     * changed. Their stored aggregate is guarded by a count of completed
+     * cooks, and a repair moves no count: without being told, the numbers
+     * taken from the repaired cooks would stand until something unrelated
+     * happened to a cook.
+     */
+    private readonly stats: StatsService,
   ) {}
 
   /**
@@ -168,5 +178,6 @@ export class TempSeriesBackfillService implements OnModuleInit {
         { $unset: { peakChamber: '', peakChamberScanned: '' } },
       )
       .exec();
+    await markStatsStale(this.stats, 'temperature-series repair');
   }
 }

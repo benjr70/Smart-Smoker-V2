@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { CommonModule } from '../common/common.module';
 import { SmokeSchema } from '../smoke/smoke.schema';
+import { StatsModule } from '../stats/stats.module';
 import { TempSeriesBackfillService } from './temp-series-backfill.service';
 import { TempsController } from './temps.controller';
 import { TempSchema } from './temps.schema';
@@ -26,6 +27,12 @@ import { TempsService } from './temps.service';
     // file had finished evaluating. The walk starts from the Active Cook now,
     // which imports nothing, so the loop is gone.
     CommonModule,
+    // Repairing a cook's series changes what the statistics were derived from,
+    // so the boot repair declares them stale. Imported plainly rather than
+    // forward-referenced: this module is not in its dependency chain — the
+    // statistics own their collections directly and reach no feature module
+    // but the timeline's, which owns its own.
+    StatsModule,
   ],
   controllers: [TempsController],
   // The backfill is a provider nobody injects: it runs once at boot, repairing
