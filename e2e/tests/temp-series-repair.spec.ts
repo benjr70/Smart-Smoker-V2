@@ -59,23 +59,39 @@ const PLANT_LEGACY_COOK = `
   print(head.toString() + ' ' + cook.insertedId.toString());
 `;
 
-const forget = (seriesId: string, cookId: string) => `
-  db.temps.deleteMany({ $or: [{ _id: ObjectId('${seriesId}') }, { tempsId: '${seriesId}' }] });
-  db.smokes.deleteOne({ _id: ObjectId('${cookId}') });
+/**
+ * Takes every planted cook back out, by the day they are all dated to rather
+ * than by the ids one of them printed.
+ *
+ * Run before the plant as well as after it: a planting that fails halfway
+ * leaves a cook nobody holds the ids of, and a cook with no pre-smoke in the
+ * archive is poison to the journeys that read the cook list — the same reason
+ * `BackendFixture` sweeps before it seeds. Says how many it removed, so the
+ * spec can tell a clean start from a dirty one.
+ */
+const SWEEP_PLANTED = `
+  const planted = { $gte: new Date('2026-01-02T00:00:00Z'), $lt: new Date('2026-01-03T00:00:00Z') };
+  const cooks = db.smokes.deleteMany({ date: planted });
+  const readings = db.temps.deleteMany({ date: planted });
   // db.stats is mongosh's own command, so the collection is asked by name.
   db.getCollection('stats').updateOne({}, { $set: { dirty: true } });
-  print('forgotten');
+  print(cooks.deletedCount + ' ' + readings.deletedCount);
 `;
+
+/**
+ * The peak this cook is stamped with, and whether it has been searched for —
+ * read from the store because it is the cook's own record, where
+ * `GET /stats` serves one number for the whole archive and some other
+ * journey's cook may be the hotter one.
+ */
+const peakStampOf = (cookId: string) =>
+  `const cook = db.smokes.findOne({ _id: ObjectId('${cookId}') }); print(cook.peakChamber + ' ' + cook.peakChamberScanned);`;
 
 const seriesOf = (seriesId: string) =>
   `print(db.temps.find({ tempsId: '${seriesId}' }).sort({ date: 1 }).toArray().map(r => r.ChamberTemp).join(','));`;
 
 interface StoredReading {
   ChamberTemp: string;
-}
-
-interface Records {
-  records: { hottestChamber: { value: number } | null };
 }
 
 interface Timeline {
@@ -113,6 +129,8 @@ test('temp series repair: a legacy cook reads back whole, and twice over', async
   // Counted rather than assumed to be none: a retry of this spec runs against
   // a backend whose log already carries what the attempt before it said.
   const repairsAlreadyAnnounced = backendLogLines(REPAIR_LOG).length;
+  // Nothing of an earlier attempt's is left to be mistaken for this one's.
+  mongoEval(SWEEP_PLANTED);
   const [seriesId, cookId] = mongoEval(PLANT_LEGACY_COOK).split(' ');
   expect(seriesId, 'the legacy cook must have been planted').toMatch(/^[a-f0-9]{24}$/);
 
@@ -121,8 +139,11 @@ test('temp series repair: a legacy cook reads back whole, and twice over', async
     // and absent from every read of its series.
     const before = await backend.get<StoredReading[]>(`/api/temps/${seriesId}`);
     expect(before.map(reading => reading.ChamberTemp)).toEqual(LEGACY_TAIL_CHAMBERS.map(String));
-    const staleRecords = await backend.get<Records>('/api/stats');
-    expect(staleRecords.records.hottestChamber?.value).not.toBe(LEGACY_HEAD_CHAMBER);
+    // And the cook is stamped with the peak of the two that could be read, a
+    // stamp nothing re-derives: the statistics are served from a stored
+    // aggregate whose guard counts completed cooks, and a repair moves none.
+    await backend.get<unknown>('/api/stats');
+    expect(mongoEval(peakStampOf(cookId))).toBe(`${STALE_PEAK} true`);
     // The cook carries no start stamp, so its beginning is derived from the
     // series on every read — and without its first reading it reads as having
     // begun a minute after it did.
@@ -148,11 +169,11 @@ test('temp series repair: a legacy cook reads back whole, and twice over', async
     expect(timeline.startedAt).toBe(HEAD_AT);
     expect(timeline.peakChamber).toBe(LEGACY_HEAD_CHAMBER);
 
-    // And what was derived once and stored is derived again: the cook's
-    // stamped peak was the hottest of the two readings that could be read, and
-    // the statistics served it until the repair said the archive had changed.
-    const records = await backend.get<Records>('/api/stats');
-    expect(records.records.hottestChamber?.value).toBe(LEGACY_HEAD_CHAMBER);
+    // And the stamp derived without it is derived again: the repair forgot it
+    // and said the archive had changed, so this read re-scans the whole series
+    // and writes the peak the cook actually ran at.
+    await backend.get<unknown>('/api/stats');
+    expect(mongoEval(peakStampOf(cookId))).toBe(`${LEGACY_HEAD_CHAMBER} true`);
 
     // Running it twice changes nothing: the second boot finds no orphan, so it
     // stamps nothing, says nothing, and leaves the repaired series alone.
@@ -162,9 +183,9 @@ test('temp series repair: a legacy cook reads back whole, and twice over', async
     expect(mongoEval(seriesOf(seriesId))).toBe(
       [LEGACY_HEAD_CHAMBER, ...LEGACY_TAIL_CHAMBERS].join(',')
     );
-    const after = await backend.get<Records>('/api/stats');
-    expect(after.records.hottestChamber?.value).toBe(LEGACY_HEAD_CHAMBER);
+    await backend.get<unknown>('/api/stats');
+    expect(mongoEval(peakStampOf(cookId))).toBe(`${LEGACY_HEAD_CHAMBER} true`);
   } finally {
-    mongoEval(forget(seriesId, cookId));
+    mongoEval(SWEEP_PLANTED);
   }
 });

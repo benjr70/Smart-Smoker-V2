@@ -25,10 +25,18 @@ const MONGO_CONTAINER = 'e2e-mongo';
 const BACKEND_CONTAINER = 'e2e-backend';
 const DATABASE = 'smartsmoker';
 
+/**
+ * Room for the whole of a service's log. The default is a megabyte, and a
+ * backend that has served a suite has said more than that — which comes back
+ * as `ENOBUFS` rather than as truncation, so the size has to be asked for.
+ */
+const LOG_BUFFER_BYTES = 64 * 1024 * 1024;
+
 const runDocker: Shell = (file, args) =>
   execFileSync(file, args, {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
+    maxBuffer: LOG_BUFFER_BYTES,
   });
 
 /**
