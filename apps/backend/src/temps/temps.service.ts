@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { FilterQuery, Model } from 'mongoose';
+import { FilterQuery, Model, Types } from 'mongoose';
 import { BaseService } from '../common/base.service';
 import { CurrentSmokeService } from '../common/current-smoke.service';
 import { SmokeDocument } from '../smoke/smoke.schema';
@@ -79,8 +79,22 @@ export class TempsService extends BaseService<TempDocument> {
         return this.create(tempDto);
       },
       create: async () => {
-        const temp = await this.create(tempDto);
-        return { result: temp, childId: temp['_id'].toString() };
+        // A series is named after its own first reading, so that reading's id
+        // is the series id — and it is minted here, before the row is written,
+        // so the row can be written carrying it. Stamped on itself, the first
+        // reading is a member of the series it names, and every read that asks
+        // the store for a cook's readings by `tempsId` — the live chart, the
+        // stored series, the timeline's readings, the edge and peak scans —
+        // counts it. Written without it, as it was until this, it is an orphan
+        // no such read can see: one lost reading per cook (issue #755).
+        const _id = new Types.ObjectId();
+        const tempsId = _id.toString();
+        const temp = await this.create({
+          ...tempDto,
+          _id,
+          tempsId,
+        } as Partial<TempDocument>);
+        return { result: temp, childId: tempsId };
       },
     });
   }
