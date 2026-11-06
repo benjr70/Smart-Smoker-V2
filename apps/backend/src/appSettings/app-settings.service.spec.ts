@@ -1,6 +1,11 @@
 import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
-import { StateService } from '../State/state.service';
+import { idleCook } from '../activeCook/active-cook';
+import { ActiveCookService } from '../activeCook/active-cook.service';
+import {
+  attachedCook,
+  fakeActiveCook,
+} from '../activeCook/testing/fake-active-cook';
 import { SmokeProfileService } from '../smokeProfile/smokeProfile.service';
 import { EventsGateway } from '../websocket/events.gateway';
 import {
@@ -42,11 +47,9 @@ const untouched = { targetSource: 'default', leadMinutes: null } as const;
  * each slot, which is what these two answer.
  */
 const createCook = () => ({
-  state: {
-    GetState: jest
-      .fn()
-      .mockResolvedValue({ smokeId: 'smoke-1', smoking: true }),
-  },
+  activeCook: fakeActiveCook(
+    attachedCook({ _id: 'smoke-1', smokeProfileId: 'profile-1' }, true),
+  ),
   profile: {
     getCurrentSmokeProfile: jest.fn().mockResolvedValue({
       chamberName: 'Chamber',
@@ -160,7 +163,7 @@ const createService = async (
         provide: getModelToken(ApplicationSettings.name),
         useValue: settings,
       },
-      { provide: StateService, useValue: cookNames.state },
+      { provide: ActiveCookService, useValue: cookNames.activeCook },
       { provide: SmokeProfileService, useValue: cookNames.profile },
       { provide: EventsGateway, useValue: clients },
     ],
@@ -366,10 +369,7 @@ describe('AppSettingsService', () => {
     // which are not the labels this feature shows.
     it('shows generic slot labels when no session is active', async () => {
       const cookNames = createCook();
-      cookNames.state.GetState.mockResolvedValue({
-        smokeId: '',
-        smoking: false,
-      });
+      cookNames.activeCook.attach(idleCook());
       cookNames.profile.getCurrentSmokeProfile.mockResolvedValue({
         probe1Name: 'Brisket Flat',
         probe2Name: 'Pork Butt',

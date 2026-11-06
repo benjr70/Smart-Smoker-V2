@@ -20,7 +20,8 @@ import {
 } from './probe-names';
 import { SmokeProfile } from '../smokeProfile/smokeProfile.schema';
 import { SmokeProfileService } from '../smokeProfile/smokeProfile.service';
-import { StateService } from '../State/state.service';
+import { isActive } from '../activeCook/active-cook';
+import { ActiveCookService } from '../activeCook/active-cook.service';
 
 /**
  * The one field of the deleted freeform rule schema: an array of rules, none of
@@ -33,7 +34,12 @@ export class AppSettingsService {
   constructor(
     @InjectModel(ApplicationSettings.name)
     private appSettingsModel: Model<ApplicationSettingsDocument>,
-    private stateService: StateService,
+    /**
+     * Which cook the smoker is attached to, so a probe row is named as that
+     * cook named its probes. Was this service's own read of the stored state,
+     * walked to the profile by a second read that could land on another cook.
+     */
+    private readonly activeCook: ActiveCookService,
     private smokeProfileService: SmokeProfileService,
     private readonly events: EventsGateway,
   ) {}
@@ -67,13 +73,18 @@ export class AppSettingsService {
     return withResolvedProbeNames(settings, resolveProbeNames(profile));
   }
 
-  /** The smoke profile of the session set up right now, if there is one. */
+  /**
+   * The smoke profile of the Active Cook, if there is one.
+   *
+   * The cook is resolved once and handed down, so the profile read cannot land
+   * on a different cook than the one this answer says it is about.
+   */
   private async currentSmokeProfile(): Promise<SmokeProfile | null> {
-    const session = await this.stateService.GetState();
-    if (!session?.smokeId) {
+    const cook = await this.activeCook.resolve();
+    if (!isActive(cook)) {
       return null;
     }
-    return this.smokeProfileService.getCurrentSmokeProfile();
+    return this.smokeProfileService.getCurrentSmokeProfile(cook);
   }
 
   /**

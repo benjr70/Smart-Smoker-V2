@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { SmokeProfileModule } from '../smokeProfile/smokeProfile.module';
-import { StateModule } from '../State/state.module';
+import { ActiveCookModule } from '../activeCook/active-cook.module';
 import { EventsModule } from '../websocket/events.module';
 import { AppSettingsController } from './app-settings.controller';
 import {
@@ -12,10 +12,11 @@ import { AppSettingsService } from './app-settings.service';
 
 @Module({
   imports: [
-    // Probe rows are named as the active cook named them, which is the session
+    // Probe rows are named as the Active Cook named them, which is the cook
     // and its smoke profile to answer. No cycle: nothing in the profile's own
-    // dependency chain (smoke, ratings, common, state) knows about settings.
-    StateModule,
+    // dependency chain (smoke, ratings, common) knows about settings, and the
+    // Active Cook imports no feature module at all.
+    ActiveCookModule,
     SmokeProfileModule,
     // The websocket gateway the application already runs: a written appearance
     // reaches the clients that are open on it.
