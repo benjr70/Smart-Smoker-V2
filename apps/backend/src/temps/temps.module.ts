@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { CommonModule } from '../common/common.module';
 import { SmokeSchema } from '../smoke/smoke.schema';
+import { TempSeriesBackfillService } from './temp-series-backfill.service';
 import { TempsController } from './temps.controller';
 import { TempSchema } from './temps.schema';
 import { TempsService } from './temps.service';
@@ -29,7 +30,10 @@ import { TempsService } from './temps.service';
     forwardRef(() => CommonModule),
   ],
   controllers: [TempsController],
-  providers: [TempsService],
+  // The backfill is a provider nobody injects: it runs once at boot, repairing
+  // the first readings this module's own write used to orphan, and is reached
+  // only through the module lifecycle. See `TempSeriesBackfillService`.
+  providers: [TempsService, TempSeriesBackfillService],
   exports: [TempsService],
 })
 export class TempModule {}
