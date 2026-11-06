@@ -90,6 +90,59 @@ export const backendLogLines = (needle: string, shell: Shell = runDocker): strin
     .filter(line => line.includes(needle));
 
 /**
+ * The one day every planted legacy cook is dated to.
+ *
+ * Planted rows cannot be named, so they cannot carry the `smoke-test-` prefix
+ * the fixture's hygiene net is built on (see `api/test-entity.ts`): a cook is
+ * recognised through its pre-smoke's name, and the rows a repair has to be
+ * proved against are written straight into the store. A reserved day is the
+ * substitute — nothing else in the suite is dated to it, so everything dated
+ * within it is this suite's to remove, and the removal needs no ids.
+ */
+const PLANTED_DAY = {
+  from: '2026-01-02T00:00:00Z',
+  to: '2026-01-03T00:00:00Z',
+};
+
+/** Where a planting spec dates its rows, for the spec to build them from. */
+export const PLANTED_AT = PLANTED_DAY.from;
+
+const SWEEP_PLANTED = `
+  const planted = { $gte: new Date('${PLANTED_DAY.from}'), $lt: new Date('${PLANTED_DAY.to}') };
+  const cooks = db.smokes.find({ date: planted }).toArray();
+  cooks.forEach(cook => {
+    if (cook.preSmokeId) { db.presmokes.deleteOne({ _id: ObjectId(cook.preSmokeId) }); }
+  });
+  db.smokes.deleteMany({ date: planted });
+  const readings = db.temps.deleteMany({ date: planted });
+  // db.stats is mongosh's own command, so the collection is asked by name.
+  db.getCollection('stats').updateOne({}, { $set: { dirty: true } });
+  print(cooks.length + ' ' + readings.deletedCount);
+`;
+
+/**
+ * Takes every planted legacy cook back out — the cook, the pre-smoke it links
+ * and its readings — and tells the statistics the archive changed. Answers how
+ * many cooks and readings went, so a caller can tell a clean start from a
+ * dirty one.
+ *
+ * Run by the suite's global setup as well as by the spec that plants, because
+ * a spec killed between its plant and its own cleanup leaves a cook behind,
+ * and a cook the other journeys read in the cook list but whose pre-smoke they
+ * cannot resolve poisons them. Reclaiming by the day rather than by ids is
+ * what makes that recoverable without the ids the killed process was holding.
+ *
+ * A no-op where there is no hermetic store: every other target is a real
+ * archive, which this may not touch.
+ */
+export const sweepPlantedCooks = (shell: Shell = runDocker): string => {
+  if (!hermeticStoreReady(shell)) {
+    return '0 0';
+  }
+  return mongoEval(SWEEP_PLANTED, shell);
+};
+
+/**
  * Restarts the backend and waits until it answers again — one boot, which is
  * what runs anything the backend does at boot.
  */

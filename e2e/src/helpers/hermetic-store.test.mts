@@ -1,13 +1,19 @@
 import { strict as assert } from 'node:assert';
 import { describe, it } from 'node:test';
-import { backendLogLines, hermeticStoreReady, mongoEval, type Shell } from './hermetic-store.ts';
+import {
+  backendLogLines,
+  hermeticStoreReady,
+  mongoEval,
+  sweepPlantedCooks,
+  type Shell,
+} from './hermetic-store.ts';
 
 /** Records what was asked of docker, and answers with a canned reply. */
-const shellThat = (reply: string | (() => string)) => {
+const shellThat = (reply: string | ((args: string[]) => string)) => {
   const calls: { file: string; args: string[] }[] = [];
   const shell: Shell = (file, args) => {
     calls.push({ file, args });
-    return typeof reply === 'function' ? reply() : reply;
+    return typeof reply === 'function' ? reply(args) : reply;
   };
   return { shell, calls };
 };
@@ -37,19 +43,51 @@ describe('hermeticStoreReady', () => {
 });
 
 describe('mongoEval', () => {
-  it('runs the script against the stack database and answers with its output', () => {
-    const { shell, calls } = shellThat('  3\n');
+  it('answers with the store output, trimmed of the shell newline', () => {
+    const { shell } = shellThat('  3\n');
 
     assert.equal(mongoEval('db.temps.countDocuments({})', shell), '3');
-    assert.deepEqual(calls[0].args, [
-      'exec',
-      'e2e-mongo',
-      'mongosh',
-      'smartsmoker',
-      '--quiet',
-      '--eval',
-      'db.temps.countDocuments({})',
-    ]);
+  });
+
+  it('runs the script the caller gave it, against the stack database', () => {
+    const { shell, calls } = shellThat('');
+
+    mongoEval('db.temps.countDocuments({})', shell);
+
+    assert.equal(calls[0].args.at(-1), 'db.temps.countDocuments({})');
+    assert.ok(calls[0].args.includes('smartsmoker'));
+  });
+});
+
+describe('sweepPlantedCooks', () => {
+  /**
+   * The guarantee that matters: every target but the composed stack is a real
+   * archive, and the sweep deletes by date rather than by a `smoke-test-` name
+   * — so it must not reach a store it does not own. Nothing is run at all,
+   * rather than run against whatever `docker` happens to resolve to.
+   */
+  it('runs nothing where there is no hermetic store to sweep', () => {
+    const { shell, calls } = shellThat(() => {
+      throw new Error('command not found: docker');
+    });
+
+    assert.equal(sweepPlantedCooks(shell), '0 0');
+    assert.equal(
+      calls.filter(call => call.args.includes('mongosh')).length,
+      0,
+      'the store must not be spoken to'
+    );
+  });
+
+  it('answers with what the store says it removed', () => {
+    const { shell, calls } = shellThat(args =>
+      args.includes('inspect') ? 'true\ntrue\n' : '2 6\n'
+    );
+
+    assert.equal(sweepPlantedCooks(shell), '2 6');
+    const swept = calls.find(call => call.args.includes('mongosh'));
+    assert.ok(swept, 'the store is swept once it is there to sweep');
+    assert.match(String(swept?.args.at(-1)), /db\.smokes\.deleteMany/);
   });
 });
 

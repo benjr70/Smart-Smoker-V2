@@ -4,9 +4,15 @@
  * the backend so each suite starts from clean, test-owned state.
  */
 import { BackendFixture } from './api/backend-fixture';
+import { sweepPlantedCooks } from './helpers/hermetic-store';
 import { defaultHealthTargets, waitForHealthy } from './helpers/wait-for-healthy';
 
 export default async function globalSetup(): Promise<void> {
   await waitForHealthy(defaultHealthTargets());
+  // The cooks a repair spec plants straight into the store, which carry no
+  // name for the prefix net to recognise and so are reclaimed by the day they
+  // are dated to. Taken out before the fixture's own sweep, so a cook a killed
+  // run left behind cannot be read by any journey of this one.
+  sweepPlantedCooks();
   await new BackendFixture().sweep();
 }

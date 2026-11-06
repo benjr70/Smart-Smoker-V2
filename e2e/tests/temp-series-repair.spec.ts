@@ -1,81 +1,87 @@
 import { expect, test } from '@playwright/test';
 import { FetchTransport } from '../src/api/http-transport';
+import { TEST_ENTITY_PREFIX } from '../src/api/test-entity';
 import { resolveUrls } from '../src/config/urls';
 import {
+  PLANTED_AT,
   backendLogLines,
   hermeticStoreReady,
   mongoEval,
   restartBackend,
+  sweepPlantedCooks,
 } from '../src/helpers/hermetic-store';
 
 /**
- * The legacy cook this plants: a chamber that starts hotter than anything the
- * archive holds and cools, so the restored reading is the cook's peak and
- * nothing else in the archive can be mistaken for it.
+ * Two legacy cooks are planted, both starting hotter than anything the archive
+ * holds and cooling, so the restored reading is each cook's peak and nothing
+ * else can be mistaken for it.
+ *
+ * The **unstamped** cook carries no start, as the cooks recorded before that
+ * stamp existed do, so its beginning is derived from its series on every read.
+ * The **stamped** cook carries the start a later pass wrote for it from a read
+ * that could not see the first reading — its *second* — and its readings are
+ * spaced far enough apart that the window that start bounds excludes the first
+ * reading even once the reading is back in the series.
  */
-const LEGACY_HEAD_CHAMBER = 450;
-const LEGACY_TAIL_CHAMBERS = [232, 240];
-
-/** The peak the cook was stamped with when its first reading was invisible. */
-const STALE_PEAK = 240;
+const UNSTAMPED = { head: 450, tail: [232, 240], stalePeak: 240 };
+const STAMPED = { head: 455, tail: [233, 241], stalePeak: 241 };
 
 /** What the repair says when it has put a first reading back. */
 const REPAIR_LOG = 'TempSeriesBackfill';
 
 /**
- * A cook recorded the way the old write left them: a first reading carrying no
- * series id, two readings carrying it, and a finished cook whose peak was
- * stamped over the two the reads could see.
+ * Cooks recorded the way the old write left them: a first reading carrying no
+ * series id at all, readings carrying it, and a finished cook whose peak was
+ * stamped over the ones the reads could see.
  *
- * Carries no start stamp, as the cooks recorded before that stamp existed do,
- * so the cook's beginning is derived from its series on every read — which is
- * the edge lookup, asked the same question the peak scan is asked.
+ * Each cook links a prefixed pre-smoke, so a cook planted by hand is the same
+ * shape as a cook the fixture seeds — one the cook list can resolve a name for
+ * like any other, and one `api/test-entity.ts`'s net recognises.
  */
-const PLANT_LEGACY_COOK = `
-  const head = new ObjectId();
-  const base = new Date('2026-01-02T10:00:00Z');
-  const at = (seconds) => new Date(base.getTime() + seconds * 1000);
+const PLANT_LEGACY_COOKS = `
+  const base = new Date('${PLANTED_AT}');
+  const at = (minutes) => new Date(base.getTime() + minutes * 60_000);
   const reading = (chamber, meat, when, seriesId) => Object.assign(
     { ChamberTemp: String(chamber), MeatTemp: String(meat), Meat2Temp: '0', Meat3Temp: '0', date: when },
     seriesId ? { tempsId: seriesId } : {},
   );
-  db.temps.insertOne(Object.assign({ _id: head }, reading(${LEGACY_HEAD_CHAMBER}, 70, base, null)));
-  db.temps.insertMany([
-    reading(${LEGACY_TAIL_CHAMBERS[0]}, 120, at(60), head.toString()),
-    reading(${LEGACY_TAIL_CHAMBERS[1]}, 165, at(120), head.toString()),
-  ]);
-  const cook = db.smokes.insertOne({
-    tempsId: head.toString(),
-    date: base,
-    finishedAt: at(120),
-    status: 1,
-    peakChamber: ${STALE_PEAK},
+  const plant = (chambers, minutes, stamps) => {
+    const head = new ObjectId();
+    db.temps.insertOne(Object.assign({ _id: head }, reading(chambers[0], 70, at(minutes[0]), null)));
+    db.temps.insertMany(chambers.slice(1).map(
+      (chamber, index) => reading(chamber, 120 + index * 45, at(minutes[index + 1]), head.toString()),
+    ));
+    const pre = db.presmokes.insertOne({
+      name: '${TEST_ENTITY_PREFIX}planted-legacy-cook',
+      meatType: 'brisket',
+      weight: { unit: 'Lb', weight: 12 },
+      steps: [],
+      notes: 'planted by tests/temp-series-repair.spec.ts',
+    });
+    const cook = db.smokes.insertOne(Object.assign({
+      tempsId: head.toString(),
+      preSmokeId: pre.insertedId.toString(),
+      date: at(minutes[0]),
+      status: 1,
+    }, stamps));
+    return head.toString() + ' ' + cook.insertedId.toString();
+  };
+  const unstamped = plant([${UNSTAMPED.head}, ${UNSTAMPED.tail.join(', ')}], [0, 1, 2], {
+    finishedAt: at(2),
+    peakChamber: ${UNSTAMPED.stalePeak},
+    peakChamberScanned: true,
+  });
+  const stamped = plant([${STAMPED.head}, ${STAMPED.tail.join(', ')}], [60, 80, 100], {
+    startedAt: at(80),
+    finishedAt: at(100),
+    peakChamber: ${STAMPED.stalePeak},
     peakChamberScanned: true,
   });
   // Planting rows by hand is exactly what the stored statistics cannot see
-  // coming, so they are told, the way the cleanup below tells them.
+  // coming, so they are told, the way the sweep tells them.
   // db.stats is mongosh's own command, so the collection is asked by name.
   db.getCollection('stats').updateOne({}, { $set: { dirty: true } });
-  print(head.toString() + ' ' + cook.insertedId.toString());
-`;
-
-/**
- * Takes every planted cook back out, by the day they are all dated to rather
- * than by the ids one of them printed.
- *
- * Run before the plant as well as after it: a planting that fails halfway
- * leaves a cook nobody holds the ids of, and a cook with no pre-smoke in the
- * archive is poison to the journeys that read the cook list — the same reason
- * `BackendFixture` sweeps before it seeds. Says how many it removed, so the
- * spec can tell a clean start from a dirty one.
- */
-const SWEEP_PLANTED = `
-  const planted = { $gte: new Date('2026-01-02T00:00:00Z'), $lt: new Date('2026-01-03T00:00:00Z') };
-  const cooks = db.smokes.deleteMany({ date: planted });
-  const readings = db.temps.deleteMany({ date: planted });
-  // db.stats is mongosh's own command, so the collection is asked by name.
-  db.getCollection('stats').updateOne({}, { $set: { dirty: true } });
-  print(cooks.deletedCount + ' ' + readings.deletedCount);
+  print(unstamped + ' ' + stamped);
 `;
 
 /**
@@ -96,15 +102,44 @@ interface StoredReading {
 
 interface Timeline {
   startedAt: string | null;
+  durationMs: number | null;
   peakChamber: number | null;
 }
 
-/** When the planted cook's readings were taken, as the store holds them. */
-const HEAD_AT = '2026-01-02T10:00:00.000Z';
-const SECOND_AT = '2026-01-02T10:01:00.000Z';
+/** The planted moments, as the store holds them. */
+const minutesIn = (minutes: number) =>
+  new Date(new Date(PLANTED_AT).getTime() + minutes * 60_000).toISOString();
+
+const chambersOf = (readings: StoredReading[]) => readings.map(reading => reading.ChamberTemp);
+
+const whole = (cook: { head: number; tail: number[] }) => [cook.head, ...cook.tail].map(String);
 
 /**
- * The repair of the cooks already in the database, proved against one.
+ * Holds a composed run to actually having its store, rather than skipping over
+ * a missing one.
+ *
+ * `hermeticStoreReady()` answers no both for a stack that is not there and for
+ * a `docker` that cannot be reached or containers that have been renamed, so
+ * skipping on it alone would leave the PR gate green with the repair unproven.
+ * In the `hermetic` project the store is part of the target, so its absence is
+ * a failure; against a deployed stack the spec has no business running at all —
+ * planting rows in a real archive is not something a test may do.
+ */
+const needsTheHermeticStore = () => {
+  if (test.info().project.name !== 'hermetic') {
+    test.skip(
+      true,
+      'the repair is proved by planting rows and booting, which only the composed stack allows'
+    );
+    return;
+  }
+  expect(hermeticStoreReady(), 'the hermetic stack must expose its own store and backend').toBe(
+    true
+  );
+};
+
+/**
+ * The repair of the cooks already in the database, proved against two.
  *
  * A cook's series is named after its own first reading, and that reading used
  * to be written before the id existed — so it carried none, while every read
@@ -119,10 +154,7 @@ const SECOND_AT = '2026-01-02T10:01:00.000Z';
  * unless this run owns the stack: it plants rows and restarts a service.
  */
 test('temp series repair: a legacy cook reads back whole, and twice over', async () => {
-  test.skip(
-    !hermeticStoreReady(),
-    'needs the composed stack: the repair is proved by planting rows and booting'
-  );
+  needsTheHermeticStore();
   test.setTimeout(300_000);
 
   const backend = new FetchTransport(resolveUrls().backend);
@@ -130,62 +162,112 @@ test('temp series repair: a legacy cook reads back whole, and twice over', async
   // a backend whose log already carries what the attempt before it said.
   const repairsAlreadyAnnounced = backendLogLines(REPAIR_LOG).length;
   // Nothing of an earlier attempt's is left to be mistaken for this one's.
-  mongoEval(SWEEP_PLANTED);
-  const [seriesId, cookId] = mongoEval(PLANT_LEGACY_COOK).split(' ');
-  expect(seriesId, 'the legacy cook must have been planted').toMatch(/^[a-f0-9]{24}$/);
+  sweepPlantedCooks();
+  const [unstampedSeries, unstampedCook, stampedSeries] = mongoEval(PLANT_LEGACY_COOKS).split(' ');
+  expect(unstampedSeries, 'the legacy cooks must have been planted').toMatch(/^[a-f0-9]{24}$/);
+  expect(stampedSeries, 'the legacy cooks must have been planted').toMatch(/^[a-f0-9]{24}$/);
 
   try {
-    // As the orphaned shape reads: the cook's first reading is in the store,
+    // As the orphaned shape reads: each cook's first reading is in the store,
     // and absent from every read of its series.
-    const before = await backend.get<StoredReading[]>(`/api/temps/${seriesId}`);
-    expect(before.map(reading => reading.ChamberTemp)).toEqual(LEGACY_TAIL_CHAMBERS.map(String));
-    // And the cook is stamped with the peak of the two that could be read, a
-    // stamp nothing re-derives: the statistics are served from a stored
-    // aggregate whose guard counts completed cooks, and a repair moves none.
+    expect(chambersOf(await backend.get(`/api/temps/${unstampedSeries}`))).toEqual(
+      UNSTAMPED.tail.map(String)
+    );
+    // And each cook is stamped with the peak of the readings that could be
+    // read, a stamp nothing re-derives: the statistics are served from a
+    // stored aggregate whose guard counts completed cooks, and a repair moves
+    // none.
     await backend.get<unknown>('/api/stats');
-    expect(mongoEval(peakStampOf(cookId))).toBe(`${STALE_PEAK} true`);
-    // The cook carries no start stamp, so its beginning is derived from the
-    // series on every read — and without its first reading it reads as having
-    // begun a minute after it did.
-    const staleTimeline = await backend.get<Timeline>(`/api/timeline/${cookId}`);
-    expect(staleTimeline.startedAt).toBe(SECOND_AT);
+    expect(mongoEval(peakStampOf(unstampedCook))).toBe(`${UNSTAMPED.stalePeak} true`);
+    // The unstamped cook's beginning is derived from the series on every read,
+    // and without its first reading it reads as having begun a minute late.
+    const staleTimeline = await backend.get<Timeline>(`/api/timeline/${unstampedCook}`);
+    expect(staleTimeline.startedAt).toBe(minutesIn(1));
     expect(backendLogLines(REPAIR_LOG)).toHaveLength(repairsAlreadyAnnounced);
 
     await restartBackend();
 
     // The reading is back in its series, and the store agrees it is stamped.
-    const repaired = await backend.get<StoredReading[]>(`/api/temps/${seriesId}`);
-    expect(repaired.map(reading => reading.ChamberTemp)).toEqual(
-      [LEGACY_HEAD_CHAMBER, ...LEGACY_TAIL_CHAMBERS].map(String)
+    expect(chambersOf(await backend.get(`/api/temps/${unstampedSeries}`))).toEqual(
+      whole(UNSTAMPED)
     );
-    expect(mongoEval(seriesOf(seriesId))).toBe(
-      [LEGACY_HEAD_CHAMBER, ...LEGACY_TAIL_CHAMBERS].join(',')
-    );
+    expect(mongoEval(seriesOf(unstampedSeries))).toBe(whole(UNSTAMPED).join(','));
     expect(backendLogLines(REPAIR_LOG)).toHaveLength(repairsAlreadyAnnounced + 1);
 
     // The edge lookup and the peak scan now count it: the cook begins when it
     // began, and its peak is the reading it started hot with.
-    const timeline = await backend.get<Timeline>(`/api/timeline/${cookId}`);
-    expect(timeline.startedAt).toBe(HEAD_AT);
-    expect(timeline.peakChamber).toBe(LEGACY_HEAD_CHAMBER);
+    const timeline = await backend.get<Timeline>(`/api/timeline/${unstampedCook}`);
+    expect(timeline.startedAt).toBe(minutesIn(0));
+    expect(timeline.peakChamber).toBe(UNSTAMPED.head);
 
-    // And the stamp derived without it is derived again: the repair forgot it
-    // and said the archive had changed, so this read re-scans the whole series
-    // and writes the peak the cook actually ran at.
-    await backend.get<unknown>('/api/stats');
-    expect(mongoEval(peakStampOf(cookId))).toBe(`${LEGACY_HEAD_CHAMBER} true`);
+    // And the stamp derived without the reading is moved by the repair itself,
+    // not left to a later scan: the restored reading is the hotter of the two
+    // numbers, which is arithmetic.
+    expect(mongoEval(peakStampOf(unstampedCook))).toBe(`${UNSTAMPED.head} true`);
 
     // Running it twice changes nothing: the second boot finds no orphan, so it
     // stamps nothing, says nothing, and leaves the repaired series alone.
     await restartBackend();
 
     expect(backendLogLines(REPAIR_LOG)).toHaveLength(repairsAlreadyAnnounced + 1);
-    expect(mongoEval(seriesOf(seriesId))).toBe(
-      [LEGACY_HEAD_CHAMBER, ...LEGACY_TAIL_CHAMBERS].join(',')
-    );
+    expect(mongoEval(seriesOf(unstampedSeries))).toBe(whole(UNSTAMPED).join(','));
     await backend.get<unknown>('/api/stats');
-    expect(mongoEval(peakStampOf(cookId))).toBe(`${LEGACY_HEAD_CHAMBER} true`);
+    expect(mongoEval(peakStampOf(unstampedCook))).toBe(`${UNSTAMPED.head} true`);
   } finally {
-    mongoEval(SWEEP_PLANTED);
+    sweepPlantedCooks();
+  }
+});
+
+/**
+ * The cook whose *start* was stamped without its first reading, which is the
+ * shape that makes restoring the reading insufficient on its own.
+ *
+ * A stored series is clipped to its cook's window, and the lower bound of that
+ * window is the stamped start less fifteen minutes of clock slack (see
+ * `CLOCK_SKEW_TOLERANCE_MS`). A cook stamped from its second reading, more than
+ * that slack after its first, therefore clips the restored reading straight
+ * back out: the cook would report a peak only the restored reading can explain
+ * while every chart drawn from its series still topped out at the second one.
+ * So the repair moves the start back too — which is also the cook's real
+ * beginning and its real length.
+ *
+ * Plants and boots on its own rather than sharing the journey above's: the
+ * repair runs once over whatever the store holds at that boot, so a cook read
+ * before it and after it has to be planted before the boot that repairs it.
+ */
+test('temp series repair: a cook stamped from its second reading is moved back to its first', async () => {
+  needsTheHermeticStore();
+  test.setTimeout(300_000);
+
+  const backend = new FetchTransport(resolveUrls().backend);
+  sweepPlantedCooks();
+  const [, , series, cookId] = mongoEval(PLANT_LEGACY_COOKS).split(' ');
+  expect(series, 'the legacy cooks must have been planted').toMatch(/^[a-f0-9]{24}$/);
+
+  try {
+    // The stamped shape, as it reads: two of the three readings, a cook that
+    // began twenty minutes after it did, and twenty of its forty minutes.
+    expect(chambersOf(await backend.get(`/api/temps/${series}`))).toEqual(STAMPED.tail.map(String));
+    const stale = await backend.get<Timeline>(`/api/timeline/${cookId}`);
+    expect(stale.startedAt).toBe(minutesIn(80));
+    expect(stale.durationMs).toBe(20 * 60_000);
+
+    await restartBackend();
+
+    // The whole series reads back, which it could not do while the stamped
+    // start bounded the window twenty minutes after the restored reading.
+    expect(chambersOf(await backend.get(`/api/temps/${series}`))).toEqual(whole(STAMPED));
+    const repaired = await backend.get<Timeline>(`/api/timeline/${cookId}`);
+    expect(repaired.startedAt).toBe(minutesIn(60));
+    expect(repaired.durationMs).toBe(40 * 60_000);
+    expect(repaired.peakChamber).toBe(STAMPED.head);
+    expect(mongoEval(peakStampOf(cookId))).toBe(`${STAMPED.head} true`);
+
+    // And the chart-ready read, which the frontend and the smoker page draw
+    // from, is the same whole series.
+    const samples = await backend.get<{ chamberTemp: number }[]>(`/api/temps/${series}/series`);
+    expect(samples.map(sample => sample.chamberTemp)).toEqual([STAMPED.head, ...STAMPED.tail]);
+  } finally {
+    sweepPlantedCooks();
   }
 });
