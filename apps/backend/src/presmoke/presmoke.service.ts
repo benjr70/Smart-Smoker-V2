@@ -5,6 +5,8 @@ import { BaseService } from '../common/base.service';
 import { SmokeService } from '../smoke/smoke.service';
 import { SmokeDto } from '../smoke/smokeDto';
 import { StateService } from '../State/state.service';
+import { childIdOf, CookSnapshot } from '../activeCook/active-cook';
+import { ActiveCookService } from '../activeCook/active-cook.service';
 import { PreSmoke, PreSmokeDocument } from './presmoke.schema';
 import { PreSmokeDto } from './presmokeDto';
 import { SmokeStatus } from '../smoke/smoke.schema';
@@ -15,9 +17,15 @@ import { StatsService } from '../stats/stats.service';
 export class PreSmokeService extends BaseService<PreSmokeDocument> {
   constructor(
     @InjectModel(PreSmoke.name) model: Model<PreSmokeDocument>,
+    /**
+     * The session, for the one thing this service still writes to it: starting
+     * a cook, which is a transition rather than a read.
+     */
     private stateService: StateService,
     private smokeService: SmokeService,
     private readonly stats: StatsService,
+    /** Which cook the smoker is attached to — see {@link GetByCurrent}. */
+    private readonly activeCook: ActiveCookService,
   ) {
     super(model, 'PreSmoke');
   }
@@ -84,21 +92,26 @@ export class PreSmokeService extends BaseService<PreSmokeDocument> {
     });
   }
 
-  async GetByCurrent(): Promise<PreSmoke | null> {
-    return this.stateService.GetState().then(async (state) => {
-      if (!state) {
-        await this.stateService.create({ smokeId: '', smoking: false });
-        return null;
-      }
-      if (!state.smokeId || state.smokeId.length === 0) {
-        return null;
-      }
-      return this.smokeService.getById(state.smokeId).then((smoke) => {
-        if (!smoke || !smoke.preSmokeId) {
-          return null;
-        }
-        return this.model.findById(smoke.preSmokeId);
-      });
-    });
+  /**
+   * What the cook in progress is of, or `null` where there is no cook or its
+   * pre-smoke was never saved.
+   *
+   * Read through the Active Cook, which is also what makes this a read: it
+   * used to walk the stored state itself and create the document it found
+   * missing — a write on a fresh install's first screen, made on the way to
+   * answering a question.
+   *
+   * `cook` is the Active Cook a caller has already resolved: the alert check
+   * seeds its probe targets from the meat of the one cook it is judging.
+   */
+  async GetByCurrent(cook?: CookSnapshot): Promise<PreSmoke | null> {
+    const preSmokeId = childIdOf(
+      cook ?? (await this.activeCook.resolve()),
+      'preSmokeId',
+    );
+    if (!preSmokeId) {
+      return null;
+    }
+    return this.model.findById(preSmokeId);
   }
 }
