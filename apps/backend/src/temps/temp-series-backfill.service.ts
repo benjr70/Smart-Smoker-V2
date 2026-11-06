@@ -220,14 +220,23 @@ export class TempSeriesBackfillService implements OnModuleInit {
   private async rederiveWhatWasDerivedWithoutTheFirstReading(
     heads: RestoredReading[],
   ): Promise<void> {
-    const headOf = new Map(heads.map((head) => [String(head._id), head]));
     const repaired = (await this.smokeModel
-      .find({ tempsId: { $in: [...headOf.keys()] } })
+      .find({ tempsId: { $in: heads.map(({ _id }) => String(_id)) } })
       .select('_id tempsId startedAt finishedAt peakChamber peakChamberScanned')
       .lean()
       .exec()) as StoredCook[];
-    const stamps: CookStamp[] = repaired.flatMap((cook) => {
-      const head = headOf.get(String(cook.tempsId));
+    // Keyed by series, which names one cook: the id is that cook's own first
+    // reading's. Walked from the readings rather than from the cooks, so each
+    // cook is reached holding the reading its series got back — and a series
+    // whose cook has since been deleted contributes nothing.
+    const cookOf = new Map(
+      repaired.map((cook) => [String(cook.tempsId), cook] as const),
+    );
+    const stamps: CookStamp[] = heads.flatMap((head) => {
+      const cook = cookOf.get(String(head._id));
+      if (!cook) {
+        return [];
+      }
       const $set = {
         ...this.startMovedBackTo(head, cook),
         ...this.peakRaisedTo(head, cook),
@@ -240,11 +249,16 @@ export class TempSeriesBackfillService implements OnModuleInit {
         ? []
         : [{ updateOne: { filter: { _id: cook._id }, update: { $set } } }];
     });
-    if (stamps.length > 0) {
-      await this.smokeModel.bulkWrite(
-        stamps as unknown as Parameters<Model<SmokeDocument>['bulkWrite']>[0],
-      );
+    if (stamps.length === 0) {
+      // Nothing the statistics are derived from moved, so they are not stale:
+      // an orphan whose cook was deleted, or whose cook has nothing worth
+      // moving, must not cost the next `GET /stats` a rebuild of the whole
+      // archive.
+      return;
     }
+    await this.smokeModel.bulkWrite(
+      stamps as unknown as Parameters<Model<SmokeDocument>['bulkWrite']>[0],
+    );
     await markStatsStale(this.stats, 'temperature-series repair');
   }
 
@@ -262,10 +276,10 @@ export class TempSeriesBackfillService implements OnModuleInit {
    * be placed against the stamp at all.
    */
   private startMovedBackTo(
-    head: RestoredReading | undefined,
+    head: RestoredReading,
     cook: StoredCook,
   ): RederivedStamps {
-    const began = head?.date;
+    const began = head.date;
     if (!began) {
       return {};
     }
@@ -295,7 +309,7 @@ export class TempSeriesBackfillService implements OnModuleInit {
    * scan, which now reads the whole series.
    */
   private peakRaisedTo(
-    head: RestoredReading | undefined,
+    head: RestoredReading,
     cook: StoredCook,
   ): RederivedStamps {
     const settled =
@@ -303,8 +317,8 @@ export class TempSeriesBackfillService implements OnModuleInit {
     if (!settled) {
       return {};
     }
-    const restored = Number(head?.ChamberTemp);
-    if (!head?.ChamberTemp || !Number.isFinite(restored)) {
+    const restored = Number(head.ChamberTemp);
+    if (!head.ChamberTemp || !Number.isFinite(restored)) {
       return {};
     }
     // A reading the cook's own window excludes is not a fact about the cook.

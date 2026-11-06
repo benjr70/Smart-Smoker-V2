@@ -280,15 +280,94 @@ describe('TempSeriesBackfillService', () => {
     });
 
     /**
-     * Dropping the stamp is only half of it: the statistics are served from a
-     * stored aggregate, and the guard behind it counts completed cooks — a
-     * repair changes no count, so nothing would ever ask the cooks again.
+     * A cook no statistics pass has asked about yet is left to that pass,
+     * which now reads the whole series: both of them look for a cook carrying
+     * neither a peak nor the mark saying its readings were searched, so the
+     * answer they come back with is already the repaired one.
      */
-    it('declares the statistics stale after a repair', async () => {
-      const head = orphan();
-      cook(head._id.toString(), {
+    it('leaves a cook nothing has scanned yet to the scan', async () => {
+      const head = orphan({
+        ChamberTemp: '450',
+        date: new Date('2026-01-02T10:00:00Z'),
+      });
+      const unscanned = cook(head._id.toString(), {
+        startedAt: new Date('2026-01-02T10:00:00Z'),
+        finishedAt: new Date('2026-01-02T10:30:00Z'),
+      });
+
+      await service.stampOrphanHeads();
+
+      expect(stored(unscanned).peakChamber).toBeUndefined();
+      expect(stored(unscanned).peakChamberScanned).toBeUndefined();
+    });
+
+    /**
+     * A cook recorded as searched and left without a peak held nothing
+     * readable. It is never asked again — the mark is what excludes it — so if
+     * the reading it got back is readable, that reading is its peak.
+     */
+    it('gives a cook searched for a peak it never found the reading it got back', async () => {
+      const head = orphan({
+        ChamberTemp: '268',
+        date: new Date('2026-01-02T10:00:00Z'),
+      });
+      const searched = cook(head._id.toString(), {
+        startedAt: new Date('2026-01-02T10:00:00Z'),
+        finishedAt: new Date('2026-01-02T10:30:00Z'),
+        peakChamberScanned: true,
+      });
+
+      await service.stampOrphanHeads();
+
+      expect(stored(searched).peakChamber).toBe(268);
+    });
+
+    /**
+     * Readings are stored as the strings the device sent, and the archive holds
+     * rows whose chamber is blank or nonsense. One of those says nothing about
+     * how hot the cook got, exactly as it says nothing to the scans.
+     */
+    it('moves no peak when the reading it got back cannot be read as a number', async () => {
+      const head = orphan({
+        ChamberTemp: '--',
+        date: new Date('2026-01-02T10:00:00Z'),
+      });
+      const finished = cook(head._id.toString(), {
+        startedAt: new Date('2026-01-02T10:00:00Z'),
+        finishedAt: new Date('2026-01-02T10:30:00Z'),
         peakChamber: 240,
         peakChamberScanned: true,
+      });
+
+      await service.stampOrphanHeads();
+
+      expect(stored(finished).peakChamber).toBe(240);
+    });
+
+    /** A reading that cannot say when it was taken cannot move a start. */
+    it('moves no start when the reading it got back has no date', async () => {
+      const head = orphan({ ChamberTemp: '225' });
+      const finished = cook(head._id.toString(), {
+        startedAt: new Date('2026-01-02T10:05:00Z'),
+        finishedAt: new Date('2026-01-02T10:30:00Z'),
+      });
+
+      await service.stampOrphanHeads();
+
+      expect(stored(finished).startedAt).toEqual(
+        new Date('2026-01-02T10:05:00Z'),
+      );
+    });
+
+    /**
+     * Moving the stamps is only half of it: the statistics are served from a
+     * stored aggregate, and the guard behind it counts completed cooks — a
+     * repair changes no count, so nothing would ever read the moved stamps.
+     */
+    it('declares the statistics stale after a repair', async () => {
+      const head = orphan({ date: new Date('2026-01-02T10:00:00Z') });
+      cook(head._id.toString(), {
+        startedAt: new Date('2026-01-02T10:05:00Z'),
       });
 
       await service.stampOrphanHeads();
@@ -298,6 +377,23 @@ describe('TempSeriesBackfillService', () => {
 
     /** A boot that repairs nothing leaves the stored statistics alone. */
     it('leaves the statistics alone when it finds no orphan', async () => {
+      await service.stampOrphanHeads();
+
+      expect(stats.markDirty).not.toHaveBeenCalled();
+    });
+
+    /**
+     * A repair that moved no stamp changed nothing the statistics are derived
+     * from, and a rebuild of a whole archive is not free: the orphan whose
+     * cook was deleted, and the one whose cook has nothing worth moving, cost
+     * the next `GET /stats` nothing.
+     */
+    it('leaves the statistics alone when no repaired cook needed a stamp', async () => {
+      const head = orphan({ date: new Date('2026-01-02T10:00:00Z') });
+      cook(head._id.toString(), {
+        startedAt: new Date('2026-01-02T09:00:00Z'),
+      });
+
       await service.stampOrphanHeads();
 
       expect(stats.markDirty).not.toHaveBeenCalled();
