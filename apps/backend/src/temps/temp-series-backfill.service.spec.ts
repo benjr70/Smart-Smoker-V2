@@ -7,9 +7,39 @@ const lean = <T>(value: T) => ({
   select: () => ({ lean: () => ({ exec: () => Promise.resolve(value) }) }),
 });
 
+/** A stored cook, as the peak stamps leave one. */
+interface StoredCook {
+  [field: string]: unknown;
+  tempsId: string;
+  peakChamber?: number;
+  peakChamberScanned?: boolean;
+}
+
+/**
+ * The cooks, with just enough of a store around them to answer the one write
+ * the repair makes of them: match a set of series ids, drop the named fields.
+ *
+ * A fake that *applies* the write rather than a spy that records it, so the
+ * test says which cooks end up unstamped instead of repeating the filter the
+ * implementation builds.
+ */
+const cookStore = (cooks: StoredCook[]) => ({
+  cooks,
+  updateMany: jest.fn().mockImplementation((filter: any, update: any) => {
+    const wanted: string[] = filter?.tempsId?.$in ?? [];
+    const dropped = Object.keys(update?.$unset ?? {});
+    const hit = cooks.filter((cook) => wanted.includes(cook.tempsId));
+    hit.forEach((cook) => {
+      dropped.forEach((field) => delete cook[field]);
+    });
+    return { exec: () => Promise.resolve({ modifiedCount: hit.length }) };
+  }),
+});
+
 describe('TempSeriesBackfillService', () => {
   let service: TempSeriesBackfillService;
   let model: any;
+  let smokes: ReturnType<typeof cookStore>;
 
   const orphan = () => ({ _id: new Types.ObjectId() });
 
@@ -18,11 +48,13 @@ describe('TempSeriesBackfillService', () => {
       find: jest.fn().mockImplementation(() => lean([])),
       bulkWrite: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
     };
+    smokes = cookStore([]);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TempSeriesBackfillService,
         { provide: getModelToken('Temp'), useValue: model },
+        { provide: getModelToken('Smoke'), useValue: smokes },
       ],
     }).compile();
 
@@ -89,6 +121,55 @@ describe('TempSeriesBackfillService', () => {
 
       expect(model.bulkWrite).not.toHaveBeenCalled();
       expect(stamped).toBe(0);
+    });
+
+    /**
+     * A finished cook's peak is stamped once and read from the stamp forever,
+     * and the cooks this repairs had theirs computed over a series missing its
+     * first reading. Restoring the reading without dropping the stamp would
+     * leave the statistics screen reporting a peak the cook's own readings
+     * contradict — so the stamp goes, and the lazy re-scan behind
+     * `GET /stats` computes it again over the whole series.
+     */
+    it('drops the peak stamped over a series that was missing a reading', async () => {
+      const head = orphan();
+      const repaired: StoredCook = {
+        tempsId: head._id.toString(),
+        peakChamber: 240,
+        peakChamberScanned: true,
+      };
+      smokes.cooks.push(repaired);
+      model.find.mockImplementation(() => lean([head]));
+      model.bulkWrite.mockResolvedValue({ modifiedCount: 1 });
+
+      await service.stampOrphanHeads();
+
+      expect(repaired).toEqual({ tempsId: head._id.toString() });
+    });
+
+    /** Cooks whose series never lost a reading keep the peak they recorded. */
+    it('leaves the peaks of the cooks it did not repair alone', async () => {
+      const head = orphan();
+      const untouched: StoredCook = {
+        tempsId: new Types.ObjectId().toString(),
+        peakChamber: 268,
+        peakChamberScanned: true,
+      };
+      smokes.cooks.push(untouched);
+      model.find.mockImplementation(() => lean([head]));
+      model.bulkWrite.mockResolvedValue({ modifiedCount: 1 });
+
+      await service.stampOrphanHeads();
+
+      expect(untouched.peakChamber).toBe(268);
+      expect(untouched.peakChamberScanned).toBe(true);
+    });
+
+    /** Nothing repaired, nothing to re-derive: the cooks are not touched. */
+    it('leaves every peak stamp in place when it finds no orphan', async () => {
+      await service.stampOrphanHeads();
+
+      expect(smokes.updateMany).not.toHaveBeenCalled();
     });
   });
 
