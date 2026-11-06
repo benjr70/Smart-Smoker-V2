@@ -174,6 +174,27 @@ describe('TempSeriesBackfillService', () => {
     });
 
     /**
+     * A cook's start was stamped from a read of its series that could not see
+     * the first reading, so it names the *second* one: the cook is recorded as
+     * beginning minutes after it began, and its length is short by the same
+     * minutes. Nothing re-derives it — a stamped start is read from the stamp
+     * forever — so the repair moves it back itself.
+     */
+    it('moves a repaired cook back to the reading it just got back', async () => {
+      const head = orphan({ date: new Date('2026-01-02T10:00:00Z') });
+      const repaired = cook(head._id.toString(), {
+        startedAt: new Date('2026-01-02T10:05:00Z'),
+        finishedAt: new Date('2026-01-02T10:30:00Z'),
+      });
+
+      await service.stampOrphanHeads();
+
+      expect(stored(repaired).startedAt).toEqual(
+        new Date('2026-01-02T10:00:00Z'),
+      );
+    });
+
+    /**
      * Dropping the stamp is only half of it: the statistics are served from a
      * stored aggregate, and the guard behind it counts completed cooks — a
      * repair changes no count, so nothing would ever ask the cooks again.

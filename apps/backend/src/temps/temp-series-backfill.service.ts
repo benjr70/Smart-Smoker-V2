@@ -33,6 +33,24 @@ interface StoredHead {
 }
 
 /**
+ * A cook's restored first reading, as much of it as the re-derivation reads:
+ * the series it names, and when it was taken.
+ *
+ * Read lean, so `date` is what the row actually holds — a legacy row may hold
+ * none at all.
+ */
+interface RestoredReading extends StoredHead {
+  date?: Date | null;
+}
+
+/** A stored cook, read for the stamps the restored reading unsettles. */
+interface StoredCook {
+  _id: Types.ObjectId;
+  tempsId?: string;
+  startedAt?: Date | null;
+}
+
+/**
  * One reading's series stamp as a bulk write carries it: the row to stamp, and
  * the id it should have been written with.
  *
@@ -139,12 +157,13 @@ export class TempSeriesBackfillService implements OnModuleInit {
   async stampOrphanHeads(): Promise<number> {
     const orphans = (await this.model
       .find(ORPHANED_HEAD)
-      .select('_id')
+      .select('_id date')
       .lean()
-      .exec()) as StoredHead[];
+      .exec()) as RestoredReading[];
     if (orphans.length === 0) {
       return 0;
     }
+    await this.rederiveWhatWasDerivedWithoutTheFirstReading(orphans);
     const writes: SeriesStamp[] = orphans.map(({ _id }) => ({
       updateOne: {
         filter: { _id },
@@ -153,9 +172,6 @@ export class TempSeriesBackfillService implements OnModuleInit {
     }));
     const result = await this.model.bulkWrite(
       writes as unknown as Parameters<Model<TempDocument>['bulkWrite']>[0],
-    );
-    await this.dropPeaksDerivedWithoutTheFirstReading(
-      orphans.map(({ _id }) => String(_id)),
     );
     return result.modifiedCount;
   }
@@ -185,25 +201,56 @@ export class TempSeriesBackfillService implements OnModuleInit {
    * repaired cook on a second boot: the repair finds no orphan then, and this
    * is not reached.
    */
-  private async dropPeaksDerivedWithoutTheFirstReading(
-    seriesIds: string[],
+  private async rederiveWhatWasDerivedWithoutTheFirstReading(
+    heads: RestoredReading[],
   ): Promise<void> {
+    const headOf = new Map(heads.map((head) => [String(head._id), head]));
     const repaired = (await this.smokeModel
-      .find({ tempsId: { $in: seriesIds } })
-      .select('_id')
+      .find({ tempsId: { $in: [...headOf.keys()] } })
+      .select('_id tempsId startedAt')
       .lean()
-      .exec()) as StoredHead[];
-    if (repaired.length > 0) {
-      const stamps: CookStamp[] = repaired.map(({ _id }) => ({
-        updateOne: {
-          filter: { _id },
-          update: { $unset: { peakChamber: '', peakChamberScanned: '' } },
+      .exec()) as StoredCook[];
+    const stamps: CookStamp[] = repaired.map((cook) => ({
+      updateOne: {
+        filter: { _id: cook._id },
+        update: {
+          ...this.startMovedBackTo(headOf.get(String(cook.tempsId)), cook),
+          $unset: { peakChamber: '', peakChamberScanned: '' },
         },
-      }));
+      },
+    }));
+    if (stamps.length > 0) {
       await this.smokeModel.bulkWrite(
         stamps as unknown as Parameters<Model<SmokeDocument>['bulkWrite']>[0],
       );
     }
     await markStatsStale(this.stats, 'temperature-series repair');
+  }
+
+  /**
+   * The cook's start moved back to the reading it just got back, as a fragment
+   * of the write — and nothing at all when the reading says nothing that moves
+   * it.
+   *
+   * A stamped start is read from the stamp forever (see
+   * `TimelineService.stampStart` and `StatsService.stampCookWindows`, both of
+   * which derive it from a read that could not see the first reading), and a
+   * cook whose series got its beginning back began at that beginning. Only ever
+   * moved *back*: the restored reading is the earliest the series holds, so a
+   * stamp already at or before it is already right, and an undated row cannot
+   * be placed against the stamp at all.
+   */
+  private startMovedBackTo(
+    head: RestoredReading | undefined,
+    cook: StoredCook,
+  ): Pick<CookStamp['updateOne']['update'], '$set'> {
+    const began = head?.date;
+    if (!began) {
+      return {};
+    }
+    if (cook.startedAt && cook.startedAt.getTime() <= began.getTime()) {
+      return {};
+    }
+    return { $set: { startedAt: began } };
   }
 }
