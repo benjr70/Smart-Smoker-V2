@@ -12,9 +12,10 @@ disable-model-invocation: true
 
 Break a Spec, plan, or conversation into **Slices**: tracer-bullet vertical
 slices, each declaring the Slices that **block** it. This is the Smart Smoker
-fork of the mattpocock skill: same flow, but it publishes tickets the harness
+fork of the mattpocock skill: same flow, but it publishes tickets the executor
 can actually pick up (`AFK` / `HITL` labels, Project #1 membership with a
-Priority, native GitHub dependencies, sub-issues of the Spec).
+Priority, native GitHub dependencies, sub-issues of the Spec) and mirrors them
+into Paperclip tasks (§10).
 
 Tracker conventions:
 [`docs/agents/issue-tracker.md`](../../../docs/agents/issue-tracker.md).
@@ -265,11 +266,27 @@ a `ProjectV2ItemFieldSingleSelectValue` whose `name` is `P0` / `P1` / `P2`
 (missing or null is treated as `P2`) — see the GraphQL in
 `scripts/claude-agent/lib/pickup-triage.sh` §2.
 
-**HITL Slices are never added to the project** — project membership is the
-daemon's pick signal, and a projected HITL Slice would be picked up.
+**HITL Slices are never added to the project.** Project membership carries the
+Priority that §10 mirrors into Paperclip; a HITL Slice is the human's and needs
+none.
 
 ### 9. Report
 
 Print the created Slices as names with links, their type, Priority, and the
 edges wired. Say which Slices are on the frontier (no open blockers) — those are
 takeable now.
+
+### 10. Mirror into Paperclip
+
+Paperclip executes the AFK Slices (its Developer → Code Reviewer + QA pipeline;
+see `docs/agents/issue-tracker.md` "Executor: Paperclip"). Mirror the batch:
+
+```bash
+scripts/paperclip/mirror-slices.sh <spec-number>        # add --dry-run under --dry-run
+```
+
+It needs `PAPERCLIP_TOKEN` (a board API key) in the environment and the VM
+reachable over Tailscale. If the variable is unset, print the command for the
+user to run instead of running it. Append the Paperclip identifiers it reports
+to the §9 report. Re-running it is safe at any time: after a Slice's PR merges,
+a re-run closes its task and unblocks the Slices that depended on it.
