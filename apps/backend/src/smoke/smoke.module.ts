@@ -9,7 +9,7 @@ import { TempSchema } from 'src/temps/temps.schema';
 import { PostSmokeSchema } from 'src/postSmoke/postSmoke.schema';
 import { RatingsSchema } from 'src/ratings/ratings.schema';
 import { CookEventSchema } from 'src/cookEvents/cook-events.schema';
-import { StateModule } from 'src/State/state.module';
+import { ActiveCookModule } from 'src/activeCook/active-cook.module';
 import { TimelineModule } from 'src/timeline/timeline.module';
 import { StatsModule } from 'src/stats/stats.module';
 
@@ -28,7 +28,10 @@ import { StatsModule } from 'src/stats/stats.module';
       { name: 'Ratings', schema: RatingsSchema },
       { name: 'CookEvent', schema: CookEventSchema },
     ]),
-    StateModule,
+    // Which cook the smoker is attached to. Was `StateModule`, walked to the
+    // cook here; the Active Cook owns that question now and imports no
+    // feature module itself, so this edge no longer sits inside a loop.
+    ActiveCookModule,
     // The cook's finish, and the target it was taken to, are stamped here.
     TimelineModule,
     // Finishing and deleting a cook are the two things that change what the
