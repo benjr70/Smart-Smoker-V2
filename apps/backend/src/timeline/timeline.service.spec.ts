@@ -6,6 +6,13 @@ import { ApplicationSettings } from '../appSettings/app-settings.schema';
 import { PreSmoke } from '../presmoke/presmoke.schema';
 import { HISTORY_RATE_MEMO_MS, TimelineService } from './timeline.service';
 import { FakeDoc, fakeModel } from './testing/fake-model';
+import { CookSnapshot, idleCook } from '../activeCook/active-cook';
+import { ActiveCookService } from '../activeCook/active-cook.service';
+import {
+  attachedCook,
+  FakeActiveCook,
+  fakeActiveCook,
+} from '../activeCook/testing/fake-active-cook';
 
 /** Let the wall clock move on, so a second stamp would be a different moment. */
 const tick = (): Promise<void> =>
@@ -25,9 +32,31 @@ describe('TimelineService', () => {
   let smokes: FakeDoc[];
   let temps: FakeDoc[];
   let settings: FakeDoc[];
-  let states: FakeDoc[];
   let preSmokes: FakeDoc[];
   let cookEvents: FakeDoc[];
+
+  /**
+   * Which cook the smoker is attached to, and whether it is running — the two
+   * facts this module used to read out of the state collection itself.
+   */
+  let attached: FakeDoc | null;
+  let smoking: boolean;
+  let activeCook: FakeActiveCook;
+
+  /** The Active Cook as the two facts above describe it. */
+  const snapshot = (): CookSnapshot =>
+    attached ? attachedCook(attached, smoking) : idleCook(smoking);
+
+  /**
+   * Attach the smoker to the stored cook with this id, running — and tell a
+   * service that has already been built, so a test may move the cook on
+   * mid-flight the way the pitmaster does.
+   */
+  const attach = (smokeId: string): void => {
+    attached = smokes.find((doc) => String(doc._id) === smokeId) ?? null;
+    smoking = true;
+    activeCook.attach(snapshot());
+  };
 
   /** The models the service was built on, so a test can watch what it reads. */
   let models: {
@@ -42,6 +71,7 @@ describe('TimelineService', () => {
       preSmokes: fakeModel(preSmokes),
       smokes: fakeModel(smokes),
     };
+    activeCook = fakeActiveCook(snapshot());
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TimelineService,
@@ -51,7 +81,7 @@ describe('TimelineService', () => {
           provide: getModelToken(ApplicationSettings.name),
           useValue: fakeModel(settings),
         },
-        { provide: getModelToken('state'), useValue: fakeModel(states) },
+        { provide: ActiveCookService, useValue: activeCook },
         {
           provide: getModelToken(PreSmoke.name),
           useValue: models.preSmokes,
@@ -66,7 +96,8 @@ describe('TimelineService', () => {
   };
 
   beforeEach(async () => {
-    states = [];
+    attached = null;
+    smoking = false;
     preSmokes = [];
     cookEvents = [];
     smokes = [
@@ -280,7 +311,7 @@ describe('TimelineService', () => {
         startedAt: new Date(NOW.getTime() - 60 * 60_000),
       };
       smokes.push(live);
-      states.push({ _id: 'state-id', smokeId: 'live-smoke', smoking: true });
+      attach('live-smoke');
       settings.push({
         _id: 'settings-id',
         probeTarget: {
@@ -443,7 +474,7 @@ describe('TimelineService', () => {
         // The lid is up and nothing is being read: the card says gathering
         // data, and the plan must not bluff a verdict from a stale ETA.
         planTheCook('2026-08-17T22:00:00.000Z');
-        states[0].smoking = false;
+        smoking = false;
         service = await build();
 
         const { servePlan, estimate } = await service.getCurrentTimeline(NOW);
@@ -567,7 +598,7 @@ describe('TimelineService', () => {
        */
       it('carries the stamp on through the rest, with the smoker no longer on', async () => {
         startTheCook().pullAt = new Date('2026-08-17T17:45:00.000Z');
-        states[0].smoking = false;
+        smoking = false;
         temps.push(running(60, '143'), running(0, '163'));
         service = await build();
 
@@ -859,13 +890,32 @@ describe('TimelineService', () => {
 
     it('suspends the projection while smoking is switched off', async () => {
       startTheCook();
-      states[0].smoking = false;
+      smoking = false;
       temps.push(running(60, '143'), running(30, '153'), running(0, '163'));
       service = await build();
 
       expect((await service.getCurrentTimeline(NOW)).estimate.state).toBe(
         'paused',
       );
+    });
+
+    /**
+     * The alert check resolves the Active Cook once and judges one reading
+     * against it. A timeline read that went and resolved it again could answer
+     * about a cook the check had not seen — the pitmaster's push then
+     * contradicting the card in front of them.
+     */
+    it('answers about the cook it was handed, without resolving one of its own', async () => {
+      startTheCook();
+      temps.push(running(60, '143'), running(0, '163'));
+      service = await build();
+      const handed = snapshot();
+      activeCook.resolve.mockClear();
+
+      const timeline = await service.getCurrentTimeline(NOW, handed);
+
+      expect(timeline.startedAt).toEqual(new Date(NOW.getTime() - 60 * 60_000));
+      expect(activeCook.resolve).not.toHaveBeenCalled();
     });
   });
 
@@ -1308,7 +1358,7 @@ describe('TimelineService', () => {
         status: SmokeStatus.InProgress,
         startedAt: new Date(NOW.getTime() - 60 * 60_000),
       });
-      states.push({ _id: 'state-id', smokeId: 'live-smoke', smoking: true });
+      attach('live-smoke');
     };
 
     it('projects each probe from its own readings, against its own target', async () => {
@@ -1351,7 +1401,7 @@ describe('TimelineService', () => {
         status: SmokeStatus.InProgress,
         startedAt: new Date(NOW.getTime() - 10 * 60_000),
       });
-      states.push({ _id: 'state-id', smokeId: 'live-smoke', smoking: true });
+      attach('live-smoke');
       preSmokes.push({ _id: 'pre-live', meatType: 'Brisket', weight: 12 });
       // Ten minutes of readings: less than the live window, so the projection
       // still leans on history and asks for it on every tick.
@@ -1387,7 +1437,7 @@ describe('TimelineService', () => {
         status: SmokeStatus.InProgress,
         startedAt: new Date(NOW.getTime() - 10 * 60_000),
       });
-      states.push({ _id: 'state-id', smokeId: 'live-smoke', smoking: true });
+      attach('live-smoke');
       preSmokes.push({ _id: 'pre-live', meatType: 'Brisket', weight: 12 });
       temps.push(running(10, '143', '120'), running(0, '153', '130'));
       service = await build();
@@ -1412,7 +1462,7 @@ describe('TimelineService', () => {
         status: SmokeStatus.InProgress,
         startedAt: new Date(NOW.getTime() - 10 * 60_000),
       });
-      states.push({ _id: 'state-id', smokeId: 'live-smoke', smoking: true });
+      attach('live-smoke');
       preSmokes.push({ _id: 'pre-live', meatType: 'Brisket', weight: 12 });
       temps.push(running(10, '143', '120'), running(0, '153', '130'));
       service = await build();
@@ -1426,7 +1476,7 @@ describe('TimelineService', () => {
         status: SmokeStatus.InProgress,
         startedAt: new Date(NOW.getTime() - 10 * 60_000),
       });
-      states[0].smokeId = 'next-smoke';
+      attach('next-smoke');
       await service.estimateForProbes(
         [{ slot: 'probe1', target: 203 }],
         new Date(NOW.getTime() + 30_000),
@@ -1448,6 +1498,37 @@ describe('TimelineService', () => {
       expect(await service.estimateForProbes([], NOW)).toEqual({});
       expect(rows).not.toHaveBeenCalled();
       expect(peaks).not.toHaveBeenCalled();
+    });
+
+    /** Projects about the cook the caller is already holding; see above. */
+    it('projects against the cook it was handed, without resolving one of its own', async () => {
+      startTwoMeats();
+      temps.push(running(30, '153', '130'), running(0, '163', '140'));
+      service = await build();
+      const handed = snapshot();
+      activeCook.resolve.mockClear();
+
+      const estimates = await service.estimateForProbes(
+        [{ slot: 'probe1', target: 203 }],
+        NOW,
+        handed,
+      );
+
+      expect(estimates.probe1).toBeDefined();
+      expect(activeCook.resolve).not.toHaveBeenCalled();
+    });
+
+    it('projects nothing for a handed-down idle smoker', async () => {
+      startTwoMeats();
+      service = await build();
+
+      expect(
+        await service.estimateForProbes(
+          [{ slot: 'probe1', target: 203 }],
+          NOW,
+          idleCook(),
+        ),
+      ).toEqual({});
     });
   });
 });
