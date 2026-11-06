@@ -307,6 +307,18 @@ export class TempSeriesBackfillService implements OnModuleInit {
     if (!head?.ChamberTemp || !Number.isFinite(restored)) {
       return {};
     }
+    // A reading the cook's own window excludes is not a fact about the cook.
+    // The scans that bound a peak read the rows dated at or before the finish
+    // and no others (`TimelineService.peakChambersOf`), and a stored series is
+    // clipped to the same window, so folding in a reading from outside it
+    // would leave the cook claiming a peak its own chart never reaches. An
+    // undated row cannot be placed inside the window and is excluded with it.
+    if (
+      cook.finishedAt &&
+      (!head.date || head.date.getTime() > cook.finishedAt.getTime())
+    ) {
+      return {};
+    }
     if (
       Number.isFinite(cook.peakChamber) &&
       (cook.peakChamber as number) >= restored

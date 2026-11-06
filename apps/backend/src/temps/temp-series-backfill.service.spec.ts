@@ -156,6 +156,82 @@ describe('TempSeriesBackfillService', () => {
       expect(stored(repaired).peakChamberScanned).toBe(true);
     });
 
+    /**
+     * The regression the raise exists to avoid. `StatsService.stampCookWindows`
+     * heals a cook whose series ran on past it — the box fired up again weeks
+     * later against a session nobody ended — by cutting a window and scanning
+     * the peak *inside* it, and that bounded number is not recoverable by any
+     * pass that runs afterwards: every later rebuild skips a cook that carries
+     * a finish. A brisket that never passed 238°F keeps 238°F, whatever the
+     * burgers in the tail of its series got up to.
+     */
+    it('keeps a peak bounded to the cook when the reading it got back is cooler', async () => {
+      const head = orphan({
+        ChamberTemp: '225',
+        date: new Date('2026-01-02T10:00:00Z'),
+      });
+      const healed = cook(head._id.toString(), {
+        startedAt: new Date('2026-01-02T10:00:00Z'),
+        finishedAt: new Date('2026-01-02T18:00:00Z'),
+        peakChamber: 238,
+        peakChamberScanned: true,
+        cookWindowBackfilled: true,
+      });
+      // The burger session weeks later, in the same series: hotter than the
+      // cook ever got, and outside the window the heal cut.
+      temps.push({
+        _id: new Types.ObjectId(),
+        ChamberTemp: '450',
+        date: new Date('2026-01-20T17:00:00Z'),
+        tempsId: head._id.toString(),
+      });
+
+      await service.stampOrphanHeads();
+
+      expect(stored(healed).peakChamber).toBe(238);
+      expect(stored(healed).cookWindowBackfilled).toBe(true);
+    });
+
+    /**
+     * A reading the cook's own window excludes is not a fact about the cook.
+     * The bounded scans read the rows at or before the finish and no others, so
+     * a head whose date falls after it — a device whose clock was wrong, which
+     * is the only way a cook's first reading can be dated after its last —
+     * cannot raise a peak scanned that way, and the chart would contradict it
+     * if it did: a stored series is clipped to the same window.
+     */
+    it('leaves the peak alone when the reading it got back falls outside the cook', async () => {
+      const head = orphan({
+        ChamberTemp: '450',
+        date: new Date('2026-01-03T10:00:00Z'),
+      });
+      const finished = cook(head._id.toString(), {
+        startedAt: new Date('2026-01-02T10:00:00Z'),
+        finishedAt: new Date('2026-01-02T10:30:00Z'),
+        peakChamber: 240,
+        peakChamberScanned: true,
+      });
+
+      await service.stampOrphanHeads();
+
+      expect(stored(finished).peakChamber).toBe(240);
+    });
+
+    /** A reading that cannot say when it was taken cannot be placed either. */
+    it('leaves a finished cook alone when the reading it got back has no date', async () => {
+      const head = orphan({ ChamberTemp: '450' });
+      const finished = cook(head._id.toString(), {
+        startedAt: new Date('2026-01-02T10:00:00Z'),
+        finishedAt: new Date('2026-01-02T10:30:00Z'),
+        peakChamber: 240,
+        peakChamberScanned: true,
+      });
+
+      await service.stampOrphanHeads();
+
+      expect(stored(finished).peakChamber).toBe(240);
+    });
+
     /** Cooks whose series never lost a reading keep the peak they recorded. */
     it('leaves the peaks of the cooks it did not repair alone', async () => {
       orphan();
