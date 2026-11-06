@@ -6,7 +6,7 @@ import { documentId } from '../common/document-id';
 import { Smoke, SmokeDocument, SmokeStatus } from './smoke.schema';
 import { SmokeDto } from './smokeDto';
 import { ServePlanDto } from './serve-plan.dto';
-import { isActive } from '../activeCook/active-cook';
+import { smokeOf } from '../activeCook/active-cook';
 import { ActiveCookService } from '../activeCook/active-cook.service';
 import { TimelineService } from '../timeline/timeline.service';
 import { tempSeriesFilter } from '../temps/temp-series.filter';
@@ -153,8 +153,7 @@ export class SmokeService extends BaseService<SmokeDocument> {
    * Cook's business, not the route's.
    */
   async getCurrentSmoke(): Promise<Smoke | null> {
-    const cook = await this.activeCook.resolve();
-    return isActive(cook) ? cook.smoke : null;
+    return smokeOf(await this.activeCook.resolve());
   }
 
   /**

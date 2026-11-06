@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { childIdOf, CookSnapshot, isActive } from '../activeCook/active-cook';
+import { childIdOf, CookSnapshot, smokeOf } from '../activeCook/active-cook';
 import { ActiveCookService } from '../activeCook/active-cook.service';
 import { SmokeService } from '../smoke/smoke.service';
 import { Smoke } from '../smoke/smoke.schema';
@@ -46,8 +46,7 @@ export class CurrentSmokeService {
   ) {}
 
   async currentSmoke(): Promise<Smoke | null> {
-    const cook = await this.activeCook.resolve();
-    return isActive(cook) ? cook.smoke : null;
+    return smokeOf(await this.activeCook.resolve());
   }
 
   /**

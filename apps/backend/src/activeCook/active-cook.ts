@@ -57,6 +57,19 @@ export const idleCook = (smoking = false): IdleCook => ({
 });
 
 /**
+ * The Active Cook's own record, or `null` where the smoker is idle.
+ *
+ * The one place the three idle cases become the `null` that the routes
+ * answering "the cook in progress" have always answered — so a reader never
+ * has to decide for itself whether a missing state, an empty id or a deleted
+ * cook is the same thing. It is.
+ */
+export const smokeOf = (
+  snapshot: CookSnapshot,
+): (Smoke & WithDocumentId) | null =>
+  isActive(snapshot) ? snapshot.smoke : null;
+
+/**
  * One linked child record of the Active Cook, by the foreign key the cook
  * carries it under.
  *
@@ -79,10 +92,7 @@ export const childIdOf = (
   snapshot: CookSnapshot,
   key: CookChildKey,
 ): string | null => {
-  if (!isActive(snapshot)) {
-    return null;
-  }
-  const childId = snapshot.smoke[key];
+  const childId = smokeOf(snapshot)?.[key];
   return childId ? String(childId) : null;
 };
 
