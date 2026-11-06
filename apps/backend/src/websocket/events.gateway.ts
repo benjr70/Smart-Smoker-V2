@@ -6,8 +6,8 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server } from 'socket.io';
-import { State } from '../State/state.schema';
-import { StateService } from '../State/state.service';
+import { CookSnapshot } from '../activeCook/active-cook';
+import { ActiveCookService } from '../activeCook/active-cook.service';
 import { AppearancePreference } from '../appSettings/appearance';
 import { CookStamp } from '../appSettings/stamp-catalogue';
 import { StaleCookService } from '../staleCook/stale-cook.service';
@@ -97,7 +97,13 @@ export class EventsGateway {
 
   constructor(
     private tempsService: TempsService,
-    private stateService: StateService,
+    /**
+     * Which cook the smoker is attached to, and whether it is running — the
+     * gate on storing a relayed reading, and the confirmation after a
+     * staleness check that reported nothing. Was this gateway's own read of the
+     * stored state, which had its own handling for a state not yet written.
+     */
+    private readonly activeCook: ActiveCookService,
     /**
      * Forward-referenced because the dependency runs both ways: the stale-cook
      * service announces the stop it makes over this gateway, and this gateway
@@ -122,8 +128,8 @@ export class EventsGateway {
    *
    * `async` rather than floating `.then()`s on purpose: the relay is the
    * hottest path in the application and it reaches the database several times —
-   * to read the state, to check the cook has not been abandoned, and to store
-   * the reading — so an unattended rejection from any of them is a
+   * to resolve the Active Cook, to check it has not been abandoned, and to
+   * store the reading — so an unattended rejection from any of them is a
    * process-level crash. Awaiting hands the promise to Nest, and the try/catch
    * around each call means neither a missing state document nor an unreachable
    * database can stop temperatures flowing to the clients: the emit above has
@@ -143,25 +149,26 @@ export class EventsGateway {
     if (this.messagesSinceStore < MESSAGES_PER_STORED_READING) {
       return;
     }
-    // Reset before awaiting, not after: messages that arrive while the state
-    // read is in flight must count toward the next reading, not re-trigger
-    // this one.
+    // Reset before awaiting, not after: messages that arrive while the cook is
+    // being resolved must count toward the next reading, not re-trigger this
+    // one.
     this.messagesSinceStore = 0;
 
-    let state: State | undefined;
+    let cook: CookSnapshot;
     try {
-      state = await this.stateService.GetState();
+      cook = await this.activeCook.resolve();
     } catch (err) {
       this.logDatabaseFailure(
-        'could not read state, skipping stored reading',
+        'could not read the Active Cook, skipping stored reading',
         err,
       );
       return;
     }
 
-    // No state document at all means no cook is in progress: a fresh install
-    // has an empty `states` collection until something writes one.
-    if (!state?.smoking) {
+    // An idle smoker has nothing to record into — including the fresh install
+    // whose `states` collection is still empty, which the Active Cook reads as
+    // idle rather than leaving every caller to guard for itself.
+    if (!cook.smoking) {
       return;
     }
 
@@ -235,7 +242,7 @@ export class EventsGateway {
         );
         return true;
       }
-      if ((await this.stateService.GetState())?.smoking) {
+      if ((await this.activeCook.resolve()).smoking) {
         return false;
       }
       // The cook was ended by a path with nothing to report. It is over as

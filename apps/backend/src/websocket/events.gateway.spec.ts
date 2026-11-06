@@ -1,6 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventsGateway } from './events.gateway';
-import { StateService } from '../State/state.service';
+import { idleCook } from '../activeCook/active-cook';
+import { ActiveCookService } from '../activeCook/active-cook.service';
+import {
+  attachedCook,
+  FakeActiveCook,
+  fakeActiveCook,
+} from '../activeCook/testing/fake-active-cook';
 import { TempsService } from '../temps/temps.service';
 import { StaleCookService } from '../staleCook/stale-cook.service';
 import { TempDto } from '../temps/tempDto';
@@ -49,24 +55,20 @@ interface MockServer {
 
 describe('EventsGateway', () => {
   let gateway: EventsGateway;
-  let mockStateService: Partial<StateService>;
+  let activeCook: FakeActiveCook;
   let mockTempsService: Partial<TempsService>;
   let mockStaleCookService: { autoStopIfStale: jest.Mock };
   let mockServer: MockServer;
 
-  const mockState = {
-    smokeId: 'test-smoke-id',
-    smoking: true,
-  };
+  /** The cook the smoker is attached to in these tests. */
+  const cook = { _id: 'test-smoke-id', tempsId: 'test-temps-id' };
 
   beforeEach(async () => {
     mockServer = {
       emit: jest.fn(),
     };
 
-    mockStateService = {
-      GetState: jest.fn().mockResolvedValue(mockState),
-    };
+    activeCook = fakeActiveCook(attachedCook(cook, true));
 
     mockTempsService = {
       saveNewTemp: jest.fn(),
@@ -77,7 +79,7 @@ describe('EventsGateway', () => {
     };
 
     // Deliberately only the three collaborators the gateway is allowed to have:
-    // the state it reads, the series it writes, and the one service that
+    // the Active Cook it reads, the series it writes, and the one service that
     // decides an abandoned cook is over. Alert evaluation is owned by the
     // notifications service on its own interval, so a gateway that still
     // reached for it could not be constructed here at all.
@@ -85,8 +87,8 @@ describe('EventsGateway', () => {
       providers: [
         EventsGateway,
         {
-          provide: StateService,
-          useValue: mockStateService,
+          provide: ActiveCookService,
+          useValue: activeCook,
         },
         {
           provide: TempsService,
@@ -142,7 +144,7 @@ describe('EventsGateway', () => {
       }
 
       expect(mockServer.emit).toHaveBeenCalledWith('events', testData);
-      expect(mockStateService.GetState).toHaveBeenCalled();
+      expect(activeCook.resolve).toHaveBeenCalled();
     });
 
     // The every-eleventh-message counter gated two things: the notification call
@@ -178,8 +180,8 @@ describe('EventsGateway', () => {
     // A fresh install — and every fresh hermetic stack — has an empty `states`
     // collection, so the very first sampled batch used to dereference
     // `undefined` inside an unawaited promise and take the whole process down
-    // with an unhandled rejection.
-    it('persists nothing and survives when no state document exists', async () => {
+    // with an unhandled rejection. The Active Cook reads that as idle.
+    it('persists nothing and survives when the smoker is idle', async () => {
       const testData = JSON.stringify({
         probeTemp1: '150',
         probeTemp2: '160',
@@ -188,7 +190,7 @@ describe('EventsGateway', () => {
         date: new Date(),
       });
 
-      mockStateService.GetState = jest.fn().mockResolvedValue(undefined);
+      activeCook.attach(idleCook());
 
       for (let i = 0; i < 11; i++) {
         gateway.handleEvent(testData);
@@ -202,7 +204,7 @@ describe('EventsGateway', () => {
     // The read used to be a floating promise with no rejection handler, so a
     // database blip was an unhandled rejection and Node terminated the process.
     // A relay handler must never be able to do that.
-    it('logs and swallows a failed state read', async () => {
+    it('logs and swallows a failed Active Cook read', async () => {
       const testData = JSON.stringify({
         probeTemp1: '150',
         probeTemp2: '160',
@@ -212,9 +214,7 @@ describe('EventsGateway', () => {
       });
       const errorSpy = jest.spyOn(Logger, 'error').mockImplementation();
 
-      mockStateService.GetState = jest
-        .fn()
-        .mockRejectedValue(new Error('mongo is down'));
+      activeCook.resolve.mockRejectedValue(new Error('mongo is down'));
 
       for (let i = 0; i < 10; i++) {
         await gateway.handleEvent(testData);
@@ -270,8 +270,7 @@ describe('EventsGateway', () => {
         date: new Date(),
       });
 
-      const nonSmokingState = { ...mockState, smoking: false };
-      mockStateService.GetState = jest.fn().mockResolvedValue(nonSmokingState);
+      activeCook.attach(attachedCook(cook, false));
 
       // Call multiple times to trigger count > 10
       for (let i = 0; i <= 11; i++) {
@@ -280,7 +279,7 @@ describe('EventsGateway', () => {
       await settle();
 
       expect(mockServer.emit).toHaveBeenCalledWith('events', testData);
-      expect(mockStateService.GetState).toHaveBeenCalled();
+      expect(activeCook.resolve).toHaveBeenCalled();
       expect(mockTempsService.saveNewTemp).not.toHaveBeenCalled();
       // A session nobody is smoking has no cook to abandon, and the guard that
       // drops the reading runs before anything asks.
@@ -422,10 +421,9 @@ describe('EventsGateway', () => {
      */
     it('stores nothing when the cook was ended without a stop to report', async () => {
       mockStaleCookService.autoStopIfStale.mockResolvedValue(null);
-      mockStateService.GetState = jest
-        .fn()
-        .mockResolvedValueOnce(mockState)
-        .mockResolvedValue({ ...mockState, smoking: false });
+      activeCook.resolve
+        .mockResolvedValueOnce(attachedCook(cook, true))
+        .mockResolvedValue(attachedCook(cook, false));
 
       for (let i = 0; i < 11; i++) {
         await gateway.handleEvent(reading());
@@ -479,11 +477,10 @@ describe('EventsGateway', () => {
 
     // The confirming read is as unable to answer as the check itself when the
     // database is unreachable, and an unanswered question is not a live cook.
-    it('stores nothing when the confirming state read fails', async () => {
+    it('stores nothing when the confirming Active Cook read fails', async () => {
       const errorSpy = jest.spyOn(Logger, 'error').mockImplementation();
-      mockStateService.GetState = jest
-        .fn()
-        .mockResolvedValueOnce(mockState)
+      activeCook.resolve
+        .mockResolvedValueOnce(attachedCook(cook, true))
         .mockRejectedValue(new Error('mongo is down'));
 
       for (let i = 0; i < 11; i++) {
