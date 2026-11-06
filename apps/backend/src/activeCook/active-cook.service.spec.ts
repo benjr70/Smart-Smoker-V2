@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { SmokeStatus } from '../smoke/smoke.schema';
@@ -52,6 +53,64 @@ describe('ActiveCookService', () => {
           status: SmokeStatus.InProgress,
         }),
       });
+    });
+  });
+
+  describe('the "no Active Cook" rule', () => {
+    it('is idle on a fresh install, where no state has been written yet', async () => {
+      await build();
+
+      expect(await service.resolve()).toEqual({ idle: true, smoking: false });
+    });
+
+    it('is idle when the state names no cook', async () => {
+      states.push({ _id: 'state-1', smokeId: '', smoking: false });
+      await build();
+
+      expect(await service.resolve()).toEqual({ idle: true, smoking: false });
+    });
+
+    it('is idle when the cook the state names no longer exists', async () => {
+      states.push({ _id: 'state-1', smokeId: 'deleted-cook', smoking: true });
+      await build();
+
+      expect(await service.resolve()).toEqual({ idle: true, smoking: true });
+    });
+
+    it('logs the cook that no longer exists, since nothing else notices', async () => {
+      const logged = jest.spyOn(Logger, 'warn').mockImplementation();
+      states.push({ _id: 'state-1', smokeId: 'deleted-cook', smoking: true });
+      await build();
+
+      await service.resolve();
+
+      expect(logged).toHaveBeenCalledWith(
+        expect.stringContaining('deleted-cook'),
+        'ActiveCook',
+      );
+    });
+  });
+
+  describe('reads never write', () => {
+    it('leaves an empty store empty, rather than seeding a state document', async () => {
+      await build();
+
+      await service.resolve();
+
+      expect(states).toEqual([]);
+      expect(smokes).toEqual([]);
+    });
+
+    it('leaves a state naming a cook that no longer exists exactly as it was', async () => {
+      jest.spyOn(Logger, 'warn').mockImplementation();
+      states.push({ _id: 'state-1', smokeId: 'deleted-cook', smoking: true });
+      await build();
+
+      await service.resolve();
+
+      expect(states).toEqual([
+        { _id: 'state-1', smokeId: 'deleted-cook', smoking: true },
+      ]);
     });
   });
 });
