@@ -115,5 +115,14 @@ describe('TempSeriesBackfillService', () => {
 
       await expect(service.onModuleInit()).resolves.toBeUndefined();
     });
+
+    /** A driver that rejects with something other than an Error, as they do. */
+    it('starts anyway when the failure is not an Error', async () => {
+      model.find.mockImplementation(() => {
+        throw 'connection reset';
+      });
+
+      await expect(service.onModuleInit()).resolves.toBeUndefined();
+    });
   });
 });

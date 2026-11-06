@@ -379,6 +379,30 @@ describe('BackendFixture.seedCompletedSmoke', () => {
     );
   });
 
+  /**
+   * A seeded cook climbs, which hides anything that depends on *which* reading
+   * is the extreme one — the peak of a cook whose hottest reading is its first
+   * is the obvious example, and it is the first reading that every series read
+   * used to drop (issue #755). A spec that needs that shape has to be able to
+   * ask for it.
+   */
+  it('records the cook it is handed, so a spec can put the hottest reading first', async () => {
+    http.getResponses['/api/state'] = { smokeId: 'smoke-1' };
+
+    await fixture.seedCompletedSmoke({
+      cook: [
+        { chamber: 260, meat: 70 },
+        { chamber: 215, meat: 120 },
+      ],
+    });
+
+    assert.deepEqual(
+      http.posts.filter(p => p.path === '/api/temps').map(p => p.body.ChamberTemp),
+      ['260', '215'],
+      'the readings must be posted as handed over, in order'
+    );
+  });
+
   it('carries the caller-supplied meat/wood/rest values on the seeded record', async () => {
     http.getResponses['/api/state'] = { smokeId: 'smoke-1' };
 

@@ -109,6 +109,22 @@ export interface SeedCompletedSmokeOptions extends CreatePreSmokeOptions {
    * the order they happened. A seeded cook is unstamped unless asked for.
    */
   stamps?: string[];
+  /**
+   * The readings the cook is recorded with, oldest first, minutes apart.
+   * Defaulted to {@link SEEDED_COOK} — a chamber climbing to temperature,
+   * which is what a cook somebody ran looks like.
+   *
+   * Asked for by a spec that cares *which* reading is the extreme one: a
+   * climbing cook's hottest reading is its last, so it cannot tell a peak that
+   * counts the first reading from one that drops it.
+   */
+  cook?: readonly CookReading[];
+}
+
+/** One reading of a seeded cook: the chamber, and the one probe in the meat. */
+export interface CookReading {
+  chamber: number;
+  meat: number;
 }
 
 /** The ids `adoptCurrentSmoke()` resolved for the smoke the UI created. */
@@ -428,7 +444,7 @@ export class BackendFixture {
       woodType: resolved.woodType,
       notes: '',
     });
-    await this.seedCook();
+    await this.seedCook(options.cook);
     await this.seedStamps(resolved.stamps);
 
     await this.http.post('/api/postSmoke/current', {
@@ -461,9 +477,9 @@ export class BackendFixture {
    * strings, because that is what the backend's temps DTO accepts and what it
    * stores.
    */
-  private async seedCook(): Promise<void> {
-    const start = Date.now() - SEEDED_COOK.length * SEEDED_READING_GAP_MS;
-    for (const [reading, cook] of SEEDED_COOK.entries()) {
+  private async seedCook(readings: readonly CookReading[] = SEEDED_COOK): Promise<void> {
+    const start = Date.now() - readings.length * SEEDED_READING_GAP_MS;
+    for (const [reading, cook] of readings.entries()) {
       await this.http.post(TEMPS_PATH, {
         ChamberTemp: String(cook.chamber),
         MeatTemp: String(cook.meat),

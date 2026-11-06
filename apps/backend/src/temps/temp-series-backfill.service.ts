@@ -96,6 +96,6 @@ export class TempSeriesBackfillService implements OnModuleInit {
     // union over this collection's document type is pathological enough to
     // exhaust the compiler's heap.
     const result = await this.model.bulkWrite(writes as never[]);
-    return result?.modifiedCount ?? 0;
+    return result.modifiedCount;
   }
 }
