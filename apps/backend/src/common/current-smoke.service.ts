@@ -1,9 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import {
-  childIdOf,
-  CookSnapshot,
-  isActive,
-} from '../activeCook/active-cook';
+import { childIdOf, CookSnapshot, isActive } from '../activeCook/active-cook';
 import { ActiveCookService } from '../activeCook/active-cook.service';
 import { SmokeService } from '../smoke/smoke.service';
 import { Smoke } from '../smoke/smoke.schema';

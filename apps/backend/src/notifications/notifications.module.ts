@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { SmokeProfileModule } from '../smokeProfile/smokeProfile.module';
-import { StateModule } from '../State/state.module';
+import { ActiveCookModule } from '../activeCook/active-cook.module';
 import { AppSettingsModule } from '../appSettings/app-settings.module';
 import { PreSmokeModule } from '../presmoke/presmoke.module';
 import { PushDispatcherModule } from '../pushDispatcher/push-dispatcher.module';
@@ -16,7 +16,9 @@ import { NotificationSubscriptionSchema } from './notificationSubscription.schem
   imports: [
     AppSettingsModule,
     PushDispatcherModule,
-    StateModule,
+    // Which cook the smoker is attached to: one tick resolves it once and
+    // hands it to every read it makes about the cook.
+    ActiveCookModule,
     TempModule,
     // Alerts name probes as the active cook named them, which is the smoke
     // profile's to answer. No cycle: nothing in the profile's own dependency
