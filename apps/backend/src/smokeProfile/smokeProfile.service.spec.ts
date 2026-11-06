@@ -3,6 +3,7 @@ import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { RatingsService } from '../ratings/ratings.service';
 import { CurrentSmokeService } from '../common/current-smoke.service';
+import { attachedCook } from '../activeCook/testing/fake-active-cook';
 import { StatsService } from '../stats/stats.service';
 import { Smoke } from '../smoke/smoke.schema';
 import { SmokeProfileService } from './smokeProfile.service';
@@ -90,9 +91,33 @@ describe('SmokeProfileService', () => {
         'smokeProfileId',
         expect.any(Function),
         expect.objectContaining(defaultProfile),
+        undefined,
       );
       expect(model.findById).toHaveBeenCalledWith('profile-1');
       expect(result).toEqual(existing);
+    });
+
+    /**
+     * The alert check names probes as the cook it is judging named them, so
+     * the cook travels down with the question.
+     */
+    it('loads the profile of an Active Cook it was handed', async () => {
+      currentSmoke.readCurrent.mockImplementation((key, load) =>
+        load('profile-9'),
+      );
+      const handed = attachedCook({
+        _id: 'cook-1',
+        smokeProfileId: 'profile-9',
+      });
+
+      await service.getCurrentSmokeProfile(handed);
+
+      expect(currentSmoke.readCurrent).toHaveBeenCalledWith(
+        'smokeProfileId',
+        expect.any(Function),
+        expect.objectContaining(defaultProfile),
+        handed,
+      );
     });
 
     it('returns the default profile when nothing is active (fallback)', async () => {
