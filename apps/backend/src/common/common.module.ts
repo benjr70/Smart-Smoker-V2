@@ -1,24 +1,24 @@
-import { Module, forwardRef } from '@nestjs/common';
-import { StateModule } from '../State/state.module';
+import { Module } from '@nestjs/common';
+import { ActiveCookModule } from '../activeCook/active-cook.module';
 import { SmokeModule } from '../smoke/smoke.module';
 import { CurrentSmokeService } from './current-smoke.service';
 
 /**
  * Shared data-integrity infrastructure.
  *
- * Imports `StateModule` + `SmokeModule` and provides `CurrentSmokeService`.
- * Feature modules import `CommonModule` (instead of Smoke/State directly) to
- * reach the current-smoke walk.
+ * Imports `ActiveCookModule` + `SmokeModule` and provides
+ * `CurrentSmokeService`. Feature modules import `CommonModule` to reach the
+ * walk from the Active Cook to one of its child records.
  *
  * DI rule: `SmokeModule` must NOT import `CommonModule` — that keeps the graph
- * acyclic (`SmokeService.getCurrentSmoke` stays its own degenerate walk).
+ * acyclic (`SmokeService.getCurrentSmoke` delegates to the Active Cook, which
+ * imports nothing).
  */
 @Module({
-  // `StateModule` is forward-referenced: it reaches back here through the
-  // gateway (session → gateway → temps → here), so the two files are in a
-  // require loop and the eager reference resolves as `undefined`. See
-  // `TempModule` for the whole loop.
-  imports: [forwardRef(() => StateModule), SmokeModule],
+  // Which cook the smoker is attached to. Was `StateModule`, forward-referenced
+  // because the session reached back here through the gateway; the Active Cook
+  // imports no feature module, so that loop is gone and so is the thunk.
+  imports: [ActiveCookModule, SmokeModule],
   providers: [CurrentSmokeService],
   exports: [CurrentSmokeService],
 })

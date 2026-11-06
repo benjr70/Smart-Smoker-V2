@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model } from 'mongoose';
 import { BaseService } from '../common/base.service';
+import { CookSnapshot } from '../activeCook/active-cook';
 import { CurrentSmokeService } from '../common/current-smoke.service';
 import { SmokeDocument } from '../smoke/smoke.schema';
 import { TempDto } from './tempDto';
@@ -118,8 +119,12 @@ export class TempsService extends BaseService<TempDocument> {
    * is active. The stored series is the smoker's latest-reading cache: readings
    * are already persisted as they arrive, so a watcher that wakes on its own
    * schedule reads the newest row instead of needing the producer to push to it.
+   *
+   * `cook` is the Active Cook a caller has already resolved: the alert check
+   * judges one reading against one cook, and the reading has to come from that
+   * cook rather than from one worked out again here.
    */
-  async getLatestCurrentTemp(): Promise<Temp | undefined> {
+  async getLatestCurrentTemp(cook?: CookSnapshot): Promise<Temp | undefined> {
     return this.currentSmoke.readCurrent<Temp | undefined>(
       'tempsId',
       async (tempsId) => {
@@ -131,6 +136,7 @@ export class TempsService extends BaseService<TempDocument> {
         return latest;
       },
       undefined,
+      cook,
     );
   }
 

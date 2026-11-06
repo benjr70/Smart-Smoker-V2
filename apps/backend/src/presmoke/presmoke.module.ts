@@ -4,6 +4,7 @@ import { PreSmoke, PreSmokeSchema } from './presmoke.schema';
 import { PreSmokeController } from './presmoke.controller';
 import { PreSmokeService } from './presmoke.service';
 import { StateModule } from 'src/State/state.module';
+import { ActiveCookModule } from 'src/activeCook/active-cook.module';
 import { SmokeModule } from 'src/smoke/smoke.module';
 import { StatsModule } from '../stats/stats.module';
 
@@ -14,6 +15,8 @@ import { StatsModule } from '../stats/stats.module';
     ]),
     StateModule,
     SmokeModule,
+    // Which cook the smoker is attached to, for the read of what it is of.
+    ActiveCookModule,
     // The meat and its weight are ingredients of the statistics; writing them
     // marks the stored aggregate stale.
     StatsModule,

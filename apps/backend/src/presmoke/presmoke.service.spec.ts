@@ -4,6 +4,13 @@ import { PreSmokeService } from './presmoke.service';
 import { PreSmoke } from './presmoke.schema';
 import { PreSmokeDto } from './presmokeDto';
 import { StateService } from '../State/state.service';
+import { idleCook } from '../activeCook/active-cook';
+import { ActiveCookService } from '../activeCook/active-cook.service';
+import {
+  attachedCook,
+  FakeActiveCook,
+  fakeActiveCook,
+} from '../activeCook/testing/fake-active-cook';
 import { SmokeService } from '../smoke/smoke.service';
 import { SmokeStatus } from '../smoke/smoke.schema';
 import { StatsService } from '../stats/stats.service';
@@ -14,6 +21,7 @@ describe('PreSmokeService', () => {
   let mockStateService: Partial<StateService>;
   let mockSmokeService: Partial<SmokeService>;
   let mockStatsService: { markDirty: jest.Mock };
+  let activeCook: FakeActiveCook;
 
   const mockWeight = {
     unit: 'lbs',
@@ -82,6 +90,8 @@ describe('PreSmokeService', () => {
 
     mockStatsService = { markDirty: jest.fn().mockResolvedValue(undefined) };
 
+    activeCook = fakeActiveCook(attachedCook(mockSmoke, true));
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PreSmokeService,
@@ -100,6 +110,10 @@ describe('PreSmokeService', () => {
         {
           provide: SmokeService,
           useValue: mockSmokeService,
+        },
+        {
+          provide: ActiveCookService,
+          useValue: activeCook,
         },
       ],
     }).compile();
@@ -199,15 +213,53 @@ describe('PreSmokeService', () => {
   });
 
   describe('GetByCurrent', () => {
-    it('should return current pre-smoke based on state', async () => {
+    it('reads the pre-smoke the Active Cook is linked to', async () => {
       const result = await service.GetByCurrent();
 
-      expect(mockStateService.GetState).toHaveBeenCalled();
-      expect(mockSmokeService.getById).toHaveBeenCalledWith(mockState.smokeId);
+      expect(activeCook.resolve).toHaveBeenCalled();
       expect(mockPreSmokeModel.findById).toHaveBeenCalledWith(
         mockSmoke.preSmokeId,
       );
       expect(result).toEqual(mockPreSmokeDocument);
+    });
+
+    it('answers nothing for an idle smoker', async () => {
+      activeCook.attach(idleCook());
+
+      expect(await service.GetByCurrent()).toBeNull();
+      expect(mockPreSmokeModel.findById).not.toHaveBeenCalled();
+    });
+
+    it('answers nothing for a cook whose pre-smoke was never saved', async () => {
+      activeCook.attach(
+        attachedCook({ _id: 'test-smoke-id', preSmokeId: undefined }),
+      );
+
+      expect(await service.GetByCurrent()).toBeNull();
+    });
+
+    /**
+     * This read used to create the state document it found missing — a write
+     * made on the way to answering a question, on a fresh install's first
+     * screen. Seeding at startup is what covers that now.
+     */
+    it('writes nothing as it reads, not even a missing state document', async () => {
+      activeCook.attach(idleCook());
+
+      await service.GetByCurrent();
+
+      expect(mockStateService.create).not.toHaveBeenCalled();
+      expect(mockStateService.updateCurrent).not.toHaveBeenCalled();
+    });
+
+    /** The alert check seeds its probe targets from the meat of one cook. */
+    it('reads the pre-smoke of an Active Cook it was handed', async () => {
+      await service.GetByCurrent(
+        attachedCook({ _id: 'other-cook', preSmokeId: 'other-pre' }),
+      );
+
+      expect(activeCook.resolve).not.toHaveBeenCalled();
+      expect(mockPreSmokeModel.findById).toHaveBeenCalledWith('other-pre');
     });
 
     // TODO: This test reveals a bug in the service logic where state is not reassigned after creation

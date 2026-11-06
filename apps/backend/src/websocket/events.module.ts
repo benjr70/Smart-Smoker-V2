@@ -1,5 +1,5 @@
 import { Module, forwardRef } from '@nestjs/common';
-import { StateModule } from 'src/State/state.module';
+import { ActiveCookModule } from 'src/activeCook/active-cook.module';
 import { StaleCookModule } from 'src/staleCook/stale-cook.module';
 import { TempModule } from 'src/temps/temps.module';
 import { COOK_LOG_ANNOUNCER } from './cook-log-announcer';
@@ -11,7 +11,10 @@ import { EventsGateway } from './events.gateway';
   // over, and the stop it makes is announced back over this gateway. Both ends
   // declare the reference, which is what lets Nest build the pair.
   imports: [
-    forwardRef(() => StateModule),
+    // Which cook the smoker is attached to. Was `StateModule`, which had to be
+    // forward-referenced because the session imports this gateway back; the
+    // Active Cook imports nothing, so this edge is a plain one.
+    ActiveCookModule,
     TempModule,
     forwardRef(() => StaleCookModule),
   ],
