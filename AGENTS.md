@@ -31,8 +31,12 @@ native GitHub dependencies and sub-issues):
     |
 /to-tickets  Slices (AFK -> label `AFK` + Project #1 + Priority; HITL -> label `HITL`)
     |
-Daemon       /afk-pickup -> /afk-dispatch implements the AFK Slices
+Paperclip    scripts/paperclip/mirror-slices.sh mirrors the Slices into Paperclip
+             tasks; its Developer -> Code Reviewer + QA pipeline implements the AFK ones
 ```
+
+The `/afk-pickup` -> `/afk-dispatch` Daemon is retired as the AFK executor (see
+`docs/adr/0002-paperclip-replaces-the-afk-daemon.md`).
 
 The old `/write-a-prd` and `/prd-to-issues` skills are gone; "PRD" is now
 **Spec** and "issue breakdown" is now **Slices** (see `CONTEXT.md`).
