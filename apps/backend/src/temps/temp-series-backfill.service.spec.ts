@@ -128,23 +128,32 @@ describe('TempSeriesBackfillService', () => {
 
     /**
      * A finished cook's peak is stamped once and read from the stamp forever,
-     * and the cooks this repairs had theirs computed over a series missing its
-     * first reading. Restoring the reading without dropping the stamp would
-     * leave the statistics screen reporting a peak the cook's own readings
-     * contradict — so the stamp goes, and the lazy re-scan behind
-     * `GET /stats` computes it again over the whole series.
+     * and the cooks this repairs had theirs scanned over a series missing its
+     * first reading. A cook that started hot had its hottest reading stamped
+     * out of the record, leaving `GET /stats` reporting a peak the cook's own
+     * readings contradict while `GET /timeline/:id`, which derives the peak on
+     * every read, reports the true one.
+     *
+     * The repair adds exactly one reading to the series, so the hottest of the
+     * repaired series is the hotter of the stamp and the restored reading —
+     * arithmetic, not a re-scan.
      */
-    it('drops the peak stamped over a series that was missing a reading', async () => {
-      const head = orphan();
+    it('raises a stamped peak to the reading it got back', async () => {
+      const head = orphan({
+        ChamberTemp: '450',
+        date: new Date('2026-01-02T10:00:00Z'),
+      });
       const repaired = cook(head._id.toString(), {
+        startedAt: new Date('2026-01-02T10:00:00Z'),
+        finishedAt: new Date('2026-01-02T10:30:00Z'),
         peakChamber: 240,
         peakChamberScanned: true,
       });
 
       await service.stampOrphanHeads();
 
-      expect(stored(repaired).peakChamber).toBeUndefined();
-      expect(stored(repaired).peakChamberScanned).toBeUndefined();
+      expect(stored(repaired).peakChamber).toBe(450);
+      expect(stored(repaired).peakChamberScanned).toBe(true);
     });
 
     /** Cooks whose series never lost a reading keep the peak they recorded. */

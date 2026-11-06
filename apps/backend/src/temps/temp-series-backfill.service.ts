@@ -41,6 +41,7 @@ interface StoredHead {
  */
 interface RestoredReading extends StoredHead {
   date?: Date | null;
+  ChamberTemp?: string;
 }
 
 /** A stored cook, read for the stamps the restored reading unsettles. */
@@ -48,7 +49,16 @@ interface StoredCook {
   _id: Types.ObjectId;
   tempsId?: string;
   startedAt?: Date | null;
+  finishedAt?: Date | null;
+  peakChamber?: number;
+  peakChamberScanned?: boolean;
 }
+
+/**
+ * What a restored reading makes of the stamps its cook carries: each field the
+ * reading moves, and nothing for a field it leaves where it was.
+ */
+type RederivedStamps = { startedAt?: Date; peakChamber?: number };
 
 /**
  * One reading's series stamp as a bulk write carries it: the row to stamp, and
@@ -75,10 +85,7 @@ interface SeriesStamp {
 interface CookStamp {
   updateOne: {
     filter: { _id: unknown };
-    update: {
-      $set?: { startedAt?: Date; peakChamber?: number };
-      $unset?: { peakChamber?: string; peakChamberScanned?: string };
-    };
+    update: { $set: RederivedStamps };
   };
 }
 
@@ -104,8 +111,8 @@ interface CookStamp {
  * which is one update per orphan and at most one orphan per cook, ever.
  *
  * Restoring a reading also unsettles what was already derived from the series
- * without it, so the repair forgets the peaks those cooks were stamped with —
- * see {@link TempSeriesBackfillService.dropPeaksDerivedWithoutTheFirstReading}.
+ * without it, so the repair moves the stamps of the cooks it touches — see
+ * {@link TempSeriesBackfillService.rederiveWhatWasDerivedWithoutTheFirstReading}.
  */
 @Injectable()
 export class TempSeriesBackfillService implements OnModuleInit {
@@ -157,7 +164,7 @@ export class TempSeriesBackfillService implements OnModuleInit {
   async stampOrphanHeads(): Promise<number> {
     const orphans = (await this.model
       .find(ORPHANED_HEAD)
-      .select('_id date')
+      .select('_id date ChamberTemp')
       .lean()
       .exec()) as RestoredReading[];
     if (orphans.length === 0) {
@@ -177,25 +184,34 @@ export class TempSeriesBackfillService implements OnModuleInit {
   }
 
   /**
-   * Forget the peak of every cook whose series was just repaired, so it is
-   * scanned again over the whole of it.
+   * Move each repaired cook's stamps to what its series now says.
    *
-   * A finished cook's peak is stamped once — at finish, or by the statistics
-   * backfill — and read from the stamp forever after, because a finished
-   * cook's series never changes again. The series this repair touches did
-   * change: they got back the reading every read of them had been dropping,
-   * and the cooks that start hot had their hottest reading stamped out of the
-   * record. Restoring the reading and keeping the stamp would leave
-   * `GET /stats` reporting a peak the cook's own readings contradict, while
-   * `GET /timeline/:id`, which derives the peak on every read, reports the
-   * true one.
+   * A finished cook's start and peak are stamped once — at finish, or by one of
+   * the statistics backfills — and read from the stamp forever after, because a
+   * finished cook's series never changes again. The series this repair touches
+   * did change: they got back the reading every read of them had been dropping.
+   * So the cook that started hot stands recorded with a peak its own readings
+   * contradict, and every cook stands recorded as beginning at its *second*
+   * reading — which is not only a wrong start and a short duration but a window
+   * that clips the restored reading straight back out (see `cookWindow` in
+   * `TempsService`).
    *
-   * The mark goes with the value: the pair reads as "asked, and this is the
-   * answer", and unsetting both puts the cook back to "never asked" — which is
-   * exactly what `StatsService.stampMissingPeaks` looks for the next time the
-   * statistics are rebuilt. Re-deriving here instead would mean scanning the
-   * repaired series at boot and writing a second value nobody has asked for
-   * yet; the lazy scan already in place is the repo's way of paying for this.
+   * Both are re-derived from the restored reading alone rather than by scanning
+   * the series again: the repair adds exactly one reading, so the cook's
+   * beginning is the earlier of the two moments and its peak is the hotter of
+   * the two numbers. Arithmetic needs no query, and — the reason it matters
+   * more than the saving — it cannot lose what a scan would have to find again.
+   * The peaks `StatsService.stampCookWindows` deliberately bounded to a cook's
+   * own window are not recoverable by any pass that runs afterwards, so a
+   * repair that dropped the stamp and left the next rebuild to scan unbounded
+   * would hand a 225°F brisket the peak of a burger session weeks later in the
+   * same series.
+   *
+   * Run *before* the readings are stamped, so a failure here leaves the orphans
+   * as they were and the next boot attempts the whole repair again. The other
+   * order would make a single failed write permanent: the readings would be
+   * stamped, the next boot would find no orphan, and the cooks would keep
+   * stamps derived from a series missing its first reading forever.
    *
    * Cooks whose series never lost a reading are untouched, and so is the
    * repaired cook on a second boot: the repair finds no orphan then, and this
@@ -207,18 +223,23 @@ export class TempSeriesBackfillService implements OnModuleInit {
     const headOf = new Map(heads.map((head) => [String(head._id), head]));
     const repaired = (await this.smokeModel
       .find({ tempsId: { $in: [...headOf.keys()] } })
-      .select('_id tempsId startedAt')
+      .select('_id tempsId startedAt finishedAt peakChamber peakChamberScanned')
       .lean()
       .exec()) as StoredCook[];
-    const stamps: CookStamp[] = repaired.map((cook) => ({
-      updateOne: {
-        filter: { _id: cook._id },
-        update: {
-          ...this.startMovedBackTo(headOf.get(String(cook.tempsId)), cook),
-          $unset: { peakChamber: '', peakChamberScanned: '' },
-        },
-      },
-    }));
+    const stamps: CookStamp[] = repaired.flatMap((cook) => {
+      const head = headOf.get(String(cook.tempsId));
+      const $set = {
+        ...this.startMovedBackTo(head, cook),
+        ...this.peakRaisedTo(head, cook),
+      };
+      // A cook the restored reading says nothing new about is left alone
+      // rather than written to with nothing: an empty `$set` is an error to
+      // the store, and a cook written to for no reason is a cook whose stamps
+      // can no longer be trusted to mean what they say.
+      return Object.keys($set).length === 0
+        ? []
+        : [{ updateOne: { filter: { _id: cook._id }, update: { $set } } }];
+    });
     if (stamps.length > 0) {
       await this.smokeModel.bulkWrite(
         stamps as unknown as Parameters<Model<SmokeDocument>['bulkWrite']>[0],
@@ -243,7 +264,7 @@ export class TempSeriesBackfillService implements OnModuleInit {
   private startMovedBackTo(
     head: RestoredReading | undefined,
     cook: StoredCook,
-  ): Pick<CookStamp['updateOne']['update'], '$set'> {
+  ): RederivedStamps {
     const began = head?.date;
     if (!began) {
       return {};
@@ -251,6 +272,47 @@ export class TempSeriesBackfillService implements OnModuleInit {
     if (cook.startedAt && cook.startedAt.getTime() <= began.getTime()) {
       return {};
     }
-    return { $set: { startedAt: began } };
+    return { startedAt: began };
+  }
+
+  /**
+   * The cook's peak raised to the reading it just got back, as a fragment of
+   * the write — and nothing at all when the reading cannot raise it.
+   *
+   * The repair adds exactly one reading to a series, so the hottest reading of
+   * the repaired series is the hotter of the two: the stamp, scanned over
+   * everything but the restored reading, and the restored reading itself. That
+   * is arithmetic, which is why nothing is re-scanned here — and why the peaks
+   * `StatsService.stampCookWindows` deliberately bounded to a cook's own
+   * window survive, where dropping the stamp and leaving the next rebuild to
+   * scan again unbounded would have handed a 225°F brisket the peak of a
+   * burger session weeks later in the same series.
+   *
+   * Only ever raised, and only for a cook whose peak is settled: a cook that
+   * carries a peak, or the mark saying its readings were searched for one, is
+   * never asked again by either statistics pass, so what it carries is what it
+   * will report forever. A cook that has not been scanned yet is left to that
+   * scan, which now reads the whole series.
+   */
+  private peakRaisedTo(
+    head: RestoredReading | undefined,
+    cook: StoredCook,
+  ): RederivedStamps {
+    const settled =
+      cook.peakChamberScanned === true || Number.isFinite(cook.peakChamber);
+    if (!settled) {
+      return {};
+    }
+    const restored = Number(head?.ChamberTemp);
+    if (!head?.ChamberTemp || !Number.isFinite(restored)) {
+      return {};
+    }
+    if (
+      Number.isFinite(cook.peakChamber) &&
+      (cook.peakChamber as number) >= restored
+    ) {
+      return {};
+    }
+    return { peakChamber: restored };
   }
 }
