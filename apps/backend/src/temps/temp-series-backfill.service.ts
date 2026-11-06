@@ -49,6 +49,22 @@ interface SeriesStamp {
 }
 
 /**
+ * One cook's re-derivation as a bulk write carries it — spelled out for the
+ * same reason {@link SeriesStamp} is. A cook is written to one at a time rather
+ * than all of them with a single `updateMany` because what a repaired cook
+ * needs written depends on the reading it got back.
+ */
+interface CookStamp {
+  updateOne: {
+    filter: { _id: unknown };
+    update: {
+      $set?: { startedAt?: Date; peakChamber?: number };
+      $unset?: { peakChamber?: string; peakChamberScanned?: string };
+    };
+  };
+}
+
+/**
  * Puts every cook's first reading back into its own series, once.
  *
  * Until the series id was minted before the first reading was written (see
@@ -172,12 +188,22 @@ export class TempSeriesBackfillService implements OnModuleInit {
   private async dropPeaksDerivedWithoutTheFirstReading(
     seriesIds: string[],
   ): Promise<void> {
-    await this.smokeModel
-      .updateMany(
-        { tempsId: { $in: seriesIds } },
-        { $unset: { peakChamber: '', peakChamberScanned: '' } },
-      )
-      .exec();
+    const repaired = (await this.smokeModel
+      .find({ tempsId: { $in: seriesIds } })
+      .select('_id')
+      .lean()
+      .exec()) as StoredHead[];
+    if (repaired.length > 0) {
+      const stamps: CookStamp[] = repaired.map(({ _id }) => ({
+        updateOne: {
+          filter: { _id },
+          update: { $unset: { peakChamber: '', peakChamberScanned: '' } },
+        },
+      }));
+      await this.smokeModel.bulkWrite(
+        stamps as unknown as Parameters<Model<SmokeDocument>['bulkWrite']>[0],
+      );
+    }
     await markStatsStale(this.stats, 'temperature-series repair');
   }
 }
