@@ -40,7 +40,7 @@ const APP_SETTINGS_PATH = '/api/appSettings';
  * actually ran looks like. Short enough to post in a fixture, long enough that
  * the review card has a line to draw rather than a dot.
  */
-const SEEDED_COOK = [
+const SEEDED_COOK: readonly CookReading[] = [
   { chamber: 180, meat: 80 },
   { chamber: 215, meat: 110 },
   { chamber: 232, meat: 145 },
