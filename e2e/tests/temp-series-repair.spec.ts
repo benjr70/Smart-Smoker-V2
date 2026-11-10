@@ -194,8 +194,9 @@ test('temp series repair: a legacy cook reads back whole, and twice over', async
     expect(mongoEval(seriesOf(unstampedSeries))).toBe(whole(UNSTAMPED).join(','));
     expect(backendLogLines(REPAIR_LOG)).toHaveLength(repairsAlreadyAnnounced + 1);
 
-    // The edge lookup and the peak scan now count it: the cook begins when it
-    // began, and its peak is the reading it started hot with.
+    // The timeline counts it: the cook begins when it began — derived from the
+    // readings themselves, this cook carrying no start stamp — and its peak is
+    // the reading it started hot with.
     const timeline = await backend.get<Timeline>(`/api/timeline/${unstampedCook}`);
     expect(timeline.startedAt).toBe(minutesIn(0));
     expect(timeline.peakChamber).toBe(UNSTAMPED.head);
