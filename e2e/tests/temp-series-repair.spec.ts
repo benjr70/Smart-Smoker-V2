@@ -12,9 +12,9 @@ import {
 } from '../src/helpers/hermetic-store';
 
 /**
- * Two legacy cooks are planted, both starting hotter than anything the archive
- * holds and cooling, so the restored reading is each cook's peak and nothing
- * else can be mistaken for it.
+ * Four legacy cooks are planted, each starting hotter than anything the archive
+ * holds and cooling, so the restored reading is the cook's peak wherever it is
+ * one and nothing else can be mistaken for it.
  *
  * The **unstamped** cook carries no start, as the cooks recorded before that
  * stamp existed do, so its beginning is derived from its series on every read.
@@ -28,10 +28,17 @@ import {
  * finish, which is what a device whose clock was wrong leaves behind. Its
  * restored reading is no fact about it, and a repair that stamped the cook as
  * beginning there would cut a window with nothing inside it at all.
+ *
+ * The **quiet** cook is the same question asked from the other side: a cook
+ * already healed by `StatsService.stampCookWindows`, with an orphaned reading
+ * dated two hours *before* the block of readings it carries — the box fired up
+ * and left, then loaded hours later. Nothing in the cook's own stamps refuses
+ * it; the silence between it and the rest of its series does.
  */
 const UNSTAMPED = { head: 450, tail: [232, 240], stalePeak: 240 };
 const STAMPED = { head: 455, tail: [233, 241], stalePeak: 241 };
 const MISCLOCKED = { head: 460, tail: [234, 242], stalePeak: 242 };
+const QUIET = { head: 470, tail: [235, 236], stalePeak: 236 };
 
 /** What the repair says when it has put a first reading back. */
 const REPAIR_LOG = 'TempSeriesBackfill';
@@ -91,6 +98,15 @@ const PLANT_LEGACY_COOKS = `
       peakChamber: ${MISCLOCKED.stalePeak},
       peakChamberScanned: true,
     }),
+    // The head is dated at minute 300, two hours of quiet before the two
+    // readings the cook's own healed window was cut from.
+    quiet: plant([${QUIET.head}, ${QUIET.tail.join(', ')}], [300, 420, 421], {
+      startedAt: at(420),
+      finishedAt: at(421),
+      peakChamber: ${QUIET.stalePeak},
+      peakChamberScanned: true,
+      cookWindowBackfilled: true,
+    }),
   };
   // Planting rows by hand is exactly what the stored statistics cannot see
   // coming, so they are told, the way the sweep tells them.
@@ -112,7 +128,10 @@ interface PlantedCook {
  * spec reads one of the three, and a fourth shape planted later must not be
  * able to move another spec's cook out from under it.
  */
-const plantLegacyCooks = (): Record<'unstamped' | 'stamped' | 'misclocked', PlantedCook> => {
+const plantLegacyCooks = (): Record<
+  'unstamped' | 'stamped' | 'misclocked' | 'quiet',
+  PlantedCook
+> => {
   const planted = JSON.parse(mongoEval(PLANT_LEGACY_COOKS));
   Object.values(planted as Record<string, PlantedCook>).forEach(({ series, cook }) => {
     expect(series, 'the legacy cooks must have been planted').toMatch(/^[a-f0-9]{24}$/);
@@ -184,7 +203,8 @@ const needsTheHermeticStore = () => {
 };
 
 /**
- * The repair of the cooks already in the database, proved against two.
+ * The repair of the cooks already in the database, proved against three: the
+ * one it restores, and the two whose orphaned readings it refuses.
  *
  * A cook's series is named after its own first reading, and that reading used
  * to be written before the id existed — so it carried none, while every read
@@ -208,7 +228,7 @@ test('temp series repair: a legacy cook reads back whole, and twice over', async
   const repairsAlreadyAnnounced = backendLogLines(REPAIR_LOG).length;
   // Nothing of an earlier attempt's is left to be mistaken for this one's.
   sweepPlantedCooks();
-  const { unstamped, misclocked } = plantLegacyCooks();
+  const { unstamped, misclocked, quiet } = plantLegacyCooks();
   const { series: unstampedSeries, cook: unstampedCook } = unstamped;
 
   try {
@@ -250,21 +270,39 @@ test('temp series repair: a legacy cook reads back whole, and twice over', async
     // numbers, which is arithmetic.
     expect(mongoEval(peakStampOf(unstampedCook))).toBe(`${UNSTAMPED.head} true`);
 
-    // The misclocked cook, repaired by the same boot, keeps the readings it
-    // could always read. Its restored reading is dated hours after it finished,
-    // so neither stamp may be moved to it: a cook stamped as beginning there
-    // would be bounded below at that moment and above at its own finish, a
-    // window with nothing inside it — and this read would answer with nothing.
+    // The misclocked cook, reached by the same boot, is left exactly as it was.
+    // Its orphaned reading is dated hours after it finished, so it is no fact
+    // about the cook: stamping the cook as beginning there would bound its
+    // series read below at that moment and above at its own finish, a window
+    // with nothing inside it.
     expect(chambersOf(await backend.get(`/api/temps/${misclocked.series}`))).toEqual(
       MISCLOCKED.tail.map(String)
     );
     expect(mongoEval(startStampOf(misclocked.cook))).toBe('none');
     expect(mongoEval(peakStampOf(misclocked.cook))).toBe(`${MISCLOCKED.stalePeak} true`);
-    // Stamped all the same, so the next boot has nothing left to repair — and
-    // last by date, because its clock put it there.
-    expect(mongoEval(seriesOf(misclocked.series))).toBe(
-      [...MISCLOCKED.tail, MISCLOCKED.head].join(',')
+    // And the reading is left an orphan rather than stamped into the series
+    // with the stamps held back, because holding the stamps back is not enough:
+    // the timeline derives the peak it reports from every row carrying the
+    // series id, clipped to no window at all. Stamped, this cook would be
+    // reported at 460°F above a chart whose two points are 234 and 242.
+    expect(mongoEval(seriesOf(misclocked.series))).toBe(MISCLOCKED.tail.join(','));
+    const misclockedTimeline = await backend.get<Timeline>(`/api/timeline/${misclocked.cook}`);
+    expect(misclockedTimeline.peakChamber).toBe(MISCLOCKED.stalePeak);
+
+    // The quiet cook, the same refusal from the other side: its orphaned
+    // reading is dated two hours before the readings its healed window was cut
+    // from, so the silence between them says it belongs to another session.
+    // Folded in, it would stretch the cook's recorded window across those two
+    // hours and hand it a peak of 470°F.
+    expect(chambersOf(await backend.get(`/api/temps/${quiet.series}`))).toEqual(
+      QUIET.tail.map(String)
     );
+    expect(mongoEval(seriesOf(quiet.series))).toBe(QUIET.tail.join(','));
+    expect(mongoEval(startStampOf(quiet.cook))).toBe(minutesIn(420));
+    expect(mongoEval(peakStampOf(quiet.cook))).toBe(`${QUIET.stalePeak} true`);
+    const quietTimeline = await backend.get<Timeline>(`/api/timeline/${quiet.cook}`);
+    expect(quietTimeline.durationMs).toBe(60_000);
+    expect(quietTimeline.peakChamber).toBe(QUIET.stalePeak);
 
     // Running it twice changes nothing: the second boot finds no orphan, so it
     // stamps nothing, says nothing, and leaves the repaired series alone.
