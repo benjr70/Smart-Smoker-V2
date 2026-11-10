@@ -3,7 +3,15 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { SmokeDocument } from '../smoke/smoke.schema';
 import { StateDocument } from '../State/state.schema';
-import { ActiveCookReader, CookSnapshot, idleCook } from './active-cook';
+import {
+  ActiveCook,
+  ActiveCookChildren,
+  attachToCook,
+  ChildAttachment,
+  CookChildKey,
+  CookSnapshot,
+  idleCook,
+} from './active-cook';
 
 /**
  * The one place that answers "which cook is the smoker attached to".
@@ -15,7 +23,7 @@ import { ActiveCookReader, CookSnapshot, idleCook } from './active-cook';
  * and `SmokeService`, could not escape.
  */
 @Injectable()
-export class ActiveCookService implements ActiveCookReader {
+export class ActiveCookService implements ActiveCookChildren {
   constructor(
     @InjectModel('state') private readonly stateModel: Model<StateDocument>,
     @InjectModel('Smoke') private readonly smokeModel: Model<SmokeDocument>,
@@ -67,5 +75,41 @@ export class ActiveCookService implements ActiveCookReader {
       smoke,
       smoking,
     };
+  }
+
+  /**
+   * Attach one child record to the Active Cook — update the one it links, or
+   * create one and link it. See {@link attachToCook} for the rule; this adds
+   * the cook it is about and the one write that puts a link on a cook.
+   */
+  async attach<T>(
+    key: CookChildKey,
+    attachment: ChildAttachment<T>,
+  ): Promise<T> {
+    return attachToCook(
+      await this.resolve(),
+      key,
+      attachment,
+      (cook, childId) => this.link(cook, key, childId),
+    );
+  }
+
+  /**
+   * Put one link on the cook, naming only the key being attached.
+   *
+   * One field, not the record: the old helper wrote all five links and the
+   * status back from the snapshot it had read, so a sibling attached in
+   * between — the ratings seed runs inside exactly that window — was
+   * overwritten with the stale value. A cook keeps everything this write does
+   * not name.
+   */
+  private async link(
+    cook: ActiveCook,
+    key: CookChildKey,
+    childId: string,
+  ): Promise<void> {
+    await this.smokeModel
+      .updateOne({ _id: cook.smokeId }, { $set: { [key]: childId } })
+      .exec();
   }
 }

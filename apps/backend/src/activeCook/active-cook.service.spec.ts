@@ -1,4 +1,4 @@
-import { Logger } from '@nestjs/common';
+import { Logger, NotFoundException } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { SmokeStatus } from '../smoke/smoke.schema';
@@ -111,6 +111,151 @@ describe('ActiveCookService', () => {
       expect(states).toEqual([
         { _id: 'state-1', smokeId: 'deleted-cook', smoking: true },
       ]);
+    });
+  });
+
+  describe('attaching a child record', () => {
+    /** A cook mid-session: scored, with a series, and a pull already stamped. */
+    const attachedToACook = (): void => {
+      smokes.push({
+        _id: 'cook-1',
+        status: SmokeStatus.InProgress,
+        preSmokeId: 'pre-1',
+        tempsId: 'temps-1',
+        ratingId: 'rating-1',
+      });
+      states.push({ _id: 'state-1', smokeId: 'cook-1', smoking: true });
+    };
+
+    it('updates the record the cook already links, and links nothing new', async () => {
+      attachedToACook();
+      await build();
+      const create = jest.fn();
+
+      const result = await service.attach('tempsId', {
+        update: async (childId) => `updated ${childId}`,
+        create,
+      });
+
+      expect(result).toBe('updated temps-1');
+      expect(create).not.toHaveBeenCalled();
+      expect(smokes[0].tempsId).toBe('temps-1');
+    });
+
+    it('creates the record and links its id when the cook has none', async () => {
+      attachedToACook();
+      await build();
+
+      const result = await service.attach('postSmokeId', {
+        update: jest.fn(),
+        create: async () => ({ result: 'the post-smoke', childId: 'post-new' }),
+      });
+
+      expect(result).toBe('the post-smoke');
+      expect(smokes[0].postSmokeId).toBe('post-new');
+    });
+
+    /**
+     * The link write names the one key it is attaching. Writing the whole
+     * record back — which is how the old helper did it — republishes every
+     * other link from a snapshot that may be minutes old, so a sibling
+     * attached in between is lost.
+     */
+    it('keeps every other link on the cook, and its status', async () => {
+      attachedToACook();
+      await build();
+
+      await service.attach('postSmokeId', {
+        update: jest.fn(),
+        create: async () => ({ result: 'the post-smoke', childId: 'post-new' }),
+      });
+
+      expect(smokes[0]).toEqual({
+        _id: 'cook-1',
+        status: SmokeStatus.InProgress,
+        preSmokeId: 'pre-1',
+        tempsId: 'temps-1',
+        ratingId: 'rating-1',
+        postSmokeId: 'post-new',
+      });
+    });
+
+    it('raises not-found when there is no Active Cook to attach to', async () => {
+      await build();
+      const create = jest.fn();
+
+      await expect(
+        service.attach('postSmokeId', { update: jest.fn(), create }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(create).not.toHaveBeenCalled();
+    });
+
+    it('raises not-found with the message the routes have always answered', async () => {
+      await build();
+
+      await expect(
+        service.attach('postSmokeId', {
+          update: jest.fn(),
+          create: jest.fn(),
+        }),
+      ).rejects.toThrow('No active smoke');
+    });
+
+    describe('the first-attach hook', () => {
+      it('runs on the create path, with the cook it was attached to', async () => {
+        attachedToACook();
+        await build();
+        const onFirstAttach = jest.fn();
+
+        await service.attach('postSmokeId', {
+          update: jest.fn(),
+          create: async () => ({ result: 'created', childId: 'post-new' }),
+          onFirstAttach,
+        });
+
+        expect(onFirstAttach).toHaveBeenCalledTimes(1);
+        expect(onFirstAttach).toHaveBeenCalledWith(
+          expect.objectContaining({
+            smokeId: 'cook-1',
+            smoke: expect.objectContaining({ ratingId: 'rating-1' }),
+          }),
+        );
+      });
+
+      it('does not run when the record was already linked', async () => {
+        attachedToACook();
+        await build();
+        const onFirstAttach = jest.fn();
+
+        await service.attach('tempsId', {
+          update: async () => 'updated',
+          create: jest.fn(),
+          onFirstAttach,
+        });
+
+        expect(onFirstAttach).not.toHaveBeenCalled();
+      });
+
+      /**
+       * The hook runs after the link is written, so what it does next — the
+       * ratings seed reads the cook again — sees a cook that already carries
+       * the child it was attached for, rather than seeding a second one.
+       */
+      it('runs once the link is on the cook', async () => {
+        attachedToACook();
+        await build();
+        let linkedWhenCalled: unknown;
+
+        await service.attach('postSmokeId', {
+          update: jest.fn(),
+          create: async () => ({ result: 'created', childId: 'post-new' }),
+          onFirstAttach: () => {
+            linkedWhenCalled = smokes[0].postSmokeId;
+          },
+        });
+
+        expect(linkedWhenCalled).toBe('post-new');
+      });
     });
   });
 });
