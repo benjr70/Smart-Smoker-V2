@@ -6,8 +6,13 @@ import { CLOCK_SKEW_TOLERANCE_MS, TempsService } from './temps.service';
 import { tempSeriesFilter } from './temp-series.filter';
 import { Temp } from './temps.schema';
 import { TempDto } from './tempDto';
-import { CurrentSmokeService } from '../common/current-smoke.service';
-import { attachedCook } from '../activeCook/testing/fake-active-cook';
+import { childIdOf, idleCook } from '../activeCook/active-cook';
+import { ActiveCookService } from '../activeCook/active-cook.service';
+import {
+  attachedCook,
+  FakeActiveCook,
+  fakeActiveCook,
+} from '../activeCook/testing/fake-active-cook';
 
 const query = <T>(value: T) => ({ exec: jest.fn().mockResolvedValue(value) });
 
@@ -125,30 +130,6 @@ const fakeTempCollection = () => {
   return model;
 };
 
-/**
- * The Active Cook as the readings see it: no series until the first reading
- * opens one, that reading's id linked on as the series id, and every reading
- * after it appended to the series already there. The link-back contract itself
- * belongs to `CurrentSmokeService` and is held to in its own spec.
- */
-const activeCookDouble = () => {
-  let tempsId: string | undefined;
-  return {
-    seriesId: () => tempsId,
-    readCurrent: jest.fn((key: string, load: any, fallback: any) =>
-      tempsId === undefined ? Promise.resolve(fallback) : load(tempsId),
-    ),
-    upsertCurrent: jest.fn(async (key: string, handlers: any) => {
-      if (tempsId !== undefined) {
-        return handlers.update(tempsId);
-      }
-      const { result, childId } = await handlers.create();
-      tempsId = childId;
-      return result;
-    }),
-  };
-};
-
 const filteringFind = (seed: Temp[]) =>
   jest
     .fn()
@@ -160,10 +141,7 @@ describe('TempsService', () => {
   let service: TempsService;
   let model: any;
   let smokeModel: any;
-  let currentSmoke: {
-    readCurrent: jest.Mock;
-    upsertCurrent: jest.Mock;
-  };
+  let activeCook: FakeActiveCook;
 
   const tempDto: TempDto = {
     MeatTemp: '150',
@@ -171,6 +149,17 @@ describe('TempsService', () => {
     Meat3Temp: '170',
     ChamberTemp: '225',
   };
+
+  /** A cook mid-session, carrying whatever links the test gives it. */
+  const cookLinking = (links: Record<string, string | undefined>) =>
+    attachedCook({
+      _id: 'cook-1',
+      preSmokeId: 'pre-1',
+      postSmokeId: 'post-1',
+      smokeProfileId: 'profile-1',
+      ratingId: 'rating-1',
+      ...links,
+    });
 
   const mockTempRows: Temp[] = [
     {
@@ -196,17 +185,14 @@ describe('TempsService', () => {
       findOne: jest.fn().mockImplementation(() => query(null)),
     };
 
-    currentSmoke = {
-      readCurrent: jest.fn(),
-      upsertCurrent: jest.fn(),
-    };
+    activeCook = fakeActiveCook(cookLinking({ tempsId: 'temps-group-1' }));
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TempsService,
         { provide: getModelToken('Temp'), useValue: model },
         { provide: getModelToken('Smoke'), useValue: smokeModel },
-        { provide: CurrentSmokeService, useValue: currentSmoke },
+        { provide: ActiveCookService, useValue: activeCook },
       ],
     }).compile();
 
@@ -222,17 +208,9 @@ describe('TempsService', () => {
   });
 
   describe('saveNewTemp', () => {
-    it('appends a temp row under the smoke tempsId group when one exists', async () => {
-      currentSmoke.upsertCurrent.mockImplementation((key, handlers) =>
-        handlers.update('temps-group-1'),
-      );
-
+    it('appends a temp row under the series the cook already links', async () => {
       const result = await service.saveNewTemp(tempDto);
 
-      expect(currentSmoke.upsertCurrent).toHaveBeenCalledWith(
-        'tempsId',
-        expect.any(Object),
-      );
       // The row is tagged with the existing group id, then persisted.
       expect(model).toHaveBeenCalledWith(
         expect.objectContaining({ tempsId: 'temps-group-1' }),
@@ -241,18 +219,15 @@ describe('TempsService', () => {
     });
 
     /**
-     * The first reading opens the series and is named as it: the id linked onto
-     * the cook is this reading's own. Carried on the row as well as linked, so
-     * the reading that names the series is one of the series' readings — see
-     * "a cook's whole series" below for what every read then sees.
+     * The first reading of a cook *is* the series: there is no series document,
+     * so the row's own id becomes the group every later reading is tagged with,
+     * and that same id is what gets linked onto the cook. Carried on the row as
+     * well as linked, so the reading that names the series is one of the series'
+     * readings — see "a cook's whole series" below for what every read then
+     * sees.
      */
-    it('creates the first temp row carrying the tempsId group it becomes', async () => {
-      let linkedChildId: string | undefined;
-      currentSmoke.upsertCurrent.mockImplementation(async (key, handlers) => {
-        const created = await handlers.create();
-        linkedChildId = created.childId;
-        return created.result;
-      });
+    it('creates the first row and links its id onto the cook as the series', async () => {
+      activeCook.pointAt(cookLinking({ tempsId: undefined }));
 
       // Its own DTO rather than the shared one: the append path rewrites the
       // DTO it is handed, so a shared fixture carries a tempsId by the time
@@ -261,6 +236,7 @@ describe('TempsService', () => {
 
       await service.saveNewTemp(firstReading);
 
+      const linkedChildId = childIdOf(activeCook.cook(), 'tempsId');
       const [written] = model.mock.calls[0];
       expect(String(written._id)).toBe(linkedChildId);
       expect(written.tempsId).toBe(linkedChildId);
@@ -270,50 +246,35 @@ describe('TempsService', () => {
       });
     });
 
-    it('propagates the 404 when there is no active smoke', async () => {
-      currentSmoke.upsertCurrent.mockRejectedValue(new NotFoundException());
+    /**
+     * Linking the series must not republish the other links from the snapshot
+     * it read: the ratings seed writes one of them inside that very window, and
+     * a cook that lost it would be archived without its score.
+     */
+    it('leaves the cook its other links when it links the series', async () => {
+      activeCook.pointAt(cookLinking({ tempsId: undefined }));
+
+      await service.saveNewTemp(tempDto);
+
+      expect(childIdOf(activeCook.cook(), 'preSmokeId')).toBe('pre-1');
+      expect(childIdOf(activeCook.cook(), 'postSmokeId')).toBe('post-1');
+      expect(childIdOf(activeCook.cook(), 'smokeProfileId')).toBe('profile-1');
+      expect(childIdOf(activeCook.cook(), 'ratingId')).toBe('rating-1');
+    });
+
+    it('answers 404 when there is no Active Cook', async () => {
+      activeCook.pointAt(idleCook());
 
       await expect(service.saveNewTemp(tempDto)).rejects.toBeInstanceOf(
         NotFoundException,
       );
     });
-
-    it('preserves the smoke sibling FK links via upsertCurrent link-back', async () => {
-      // The FK-preservation contract is owned by CurrentSmokeService.upsertCurrent
-      // (covered in its own spec). TempsService must delegate the link-back to it
-      // rather than hand-rolling a partial SmokeDto that drops postSmokeId /
-      // smokeProfileId / ratingId (the bug this fan-out fixes).
-      currentSmoke.upsertCurrent.mockImplementation(async (key, handlers) => {
-        const created = await handlers.create();
-        return created.result;
-      });
-
-      await service.saveNewTemp(tempDto);
-
-      // No direct Smoke write path in the service anymore — link-back is delegated.
-      expect(currentSmoke.upsertCurrent).toHaveBeenCalledWith(
-        'tempsId',
-        expect.objectContaining({
-          update: expect.any(Function),
-          create: expect.any(Function),
-        }),
-      );
-    });
   });
 
   describe('getAllTempsCurrent', () => {
-    it('loads the temp rows for the current smoke tempsId group', async () => {
-      currentSmoke.readCurrent.mockImplementation((key, load) =>
-        load('temps-group-1'),
-      );
-
+    it('loads the temp rows of the series the Active Cook links', async () => {
       const result = await service.getAllTempsCurrent();
 
-      expect(currentSmoke.readCurrent).toHaveBeenCalledWith(
-        'tempsId',
-        expect.any(Function),
-        [],
-      );
       expect(model.find).toHaveBeenCalledWith({ tempsId: 'temps-group-1' });
       expect(result).toEqual(mockTempRows);
     });
@@ -332,9 +293,6 @@ describe('TempsService', () => {
         { ...mockTempRows[0], date: new Date('2026-08-02T13:12:40Z') },
       ];
       model.find = jest.fn().mockImplementation(() => orderedQuery(outOfOrder));
-      currentSmoke.readCurrent.mockImplementation((key, load) =>
-        load('temps-group-1'),
-      );
 
       const result = await service.getAllTempsCurrent();
 
@@ -345,14 +303,17 @@ describe('TempsService', () => {
       ]);
     });
 
-    it('returns an empty array when nothing is active (fallback)', async () => {
-      currentSmoke.readCurrent.mockImplementation(
-        (key, load, fallback) => fallback,
-      );
+    it('returns an empty array when there is no Active Cook', async () => {
+      activeCook.pointAt(idleCook());
 
-      const result = await service.getAllTempsCurrent();
+      expect(await service.getAllTempsCurrent()).toEqual([]);
+      expect(model.find).not.toHaveBeenCalled();
+    });
 
-      expect(result).toEqual([]);
+    it('returns an empty array when the cook has taken no reading yet', async () => {
+      activeCook.pointAt(cookLinking({ tempsId: undefined }));
+
+      expect(await service.getAllTempsCurrent()).toEqual([]);
       expect(model.find).not.toHaveBeenCalled();
     });
   });
@@ -385,19 +346,13 @@ describe('TempsService', () => {
     });
 
     it('returns the most recent reading of the current smoke', async () => {
-      currentSmoke.readCurrent.mockImplementation((key, load) =>
-        load('temps-group-1'),
-      );
-
       const result = await service.getLatestCurrentTemp();
 
       expect(result?.ChamberTemp).toBe('250');
     });
 
-    it('returns nothing when no smoke is active', async () => {
-      currentSmoke.readCurrent.mockImplementation(
-        (key, load, fallback) => fallback,
-      );
+    it('returns nothing when there is no Active Cook', async () => {
+      activeCook.pointAt(idleCook());
 
       expect(await service.getLatestCurrentTemp()).toBeUndefined();
     });
@@ -407,23 +362,17 @@ describe('TempsService', () => {
      * against it, so the cook travels down with the question rather than being
      * worked out again here.
      */
-    it('reads the series of an Active Cook it was handed', async () => {
-      currentSmoke.readCurrent.mockImplementation((key, load) =>
-        load('temps-group-1'),
-      );
+    it('reads the series of an Active Cook it was handed, resolving none of its own', async () => {
+      activeCook.pointAt(idleCook());
       const handed = attachedCook({
-        _id: 'cook-1',
-        tempsId: 'temps-group-1',
+        _id: 'cook-9',
+        tempsId: 'temps-group-9',
       });
 
       await service.getLatestCurrentTemp(handed);
 
-      expect(currentSmoke.readCurrent).toHaveBeenCalledWith(
-        'tempsId',
-        expect.any(Function),
-        undefined,
-        handed,
-      );
+      expect(model.find).toHaveBeenCalledWith({ tempsId: 'temps-group-9' });
+      expect(activeCook.resolve).not.toHaveBeenCalled();
     });
   });
 
@@ -449,9 +398,6 @@ describe('TempsService', () => {
 
     beforeEach(() => {
       model.find = filteringFind(series);
-      currentSmoke.readCurrent.mockImplementation((key, load) =>
-        load('temps-group-1'),
-      );
     });
 
     it('returns the newest reading taken at or before the moment', async () => {
@@ -489,10 +435,8 @@ describe('TempsService', () => {
       ).toBeUndefined();
     });
 
-    it('returns nothing when no smoke is active', async () => {
-      currentSmoke.readCurrent.mockImplementation(
-        (key, load, fallback) => fallback,
-      );
+    it('returns nothing when there is no Active Cook', async () => {
+      activeCook.pointAt(idleCook());
 
       expect(
         await service.getCurrentTempAt(new Date('2026-08-02T11:30:00Z')),
@@ -501,29 +445,14 @@ describe('TempsService', () => {
   });
 
   describe('GetTempID', () => {
-    it('returns the current smoke tempsId group', async () => {
-      currentSmoke.readCurrent.mockImplementation((key, load) =>
-        load('temps-group-1'),
-      );
-
-      const result = await service.GetTempID();
-
-      expect(currentSmoke.readCurrent).toHaveBeenCalledWith(
-        'tempsId',
-        expect.any(Function),
-        undefined,
-      );
-      expect(result).toBe('temps-group-1');
+    it('returns the series the Active Cook links', async () => {
+      expect(await service.GetTempID()).toBe('temps-group-1');
     });
 
-    it('returns undefined when nothing is active (fallback)', async () => {
-      currentSmoke.readCurrent.mockImplementation(
-        (key, load, fallback) => fallback,
-      );
+    it('returns undefined when there is no Active Cook', async () => {
+      activeCook.pointAt(idleCook());
 
-      const result = await service.GetTempID();
-
-      expect(result).toBeUndefined();
+      expect(await service.GetTempID()).toBeUndefined();
     });
   });
 
@@ -1239,7 +1168,8 @@ describe('TempsService', () => {
    * and that reading was once written without the id it had just become — and
    * no double that only answers reads can hold the two to it. So the rows here
    * arrive the way a smoker's do: one `saveNewTemp` at a time, the first of
-   * them opening the series.
+   * them opening the series, through an Active Cook that runs the real attach
+   * rule and keeps the link it writes.
    */
   describe("a cook's whole series", () => {
     let store: any;
@@ -1264,8 +1194,8 @@ describe('TempsService', () => {
         startedAt: new Date('2026-08-02T13:10:00Z'),
         finishedAt: new Date('2026-08-02T13:20:00Z'),
       };
-      const activeCook = activeCookDouble();
-      seriesId = activeCook.seriesId;
+      const recordingCook = fakeActiveCook(attachedCook({ _id: 'cook-1' }));
+      seriesId = () => childIdOf(recordingCook.cook(), 'tempsId') ?? undefined;
 
       const module: TestingModule = await Test.createTestingModule({
         providers: [
@@ -1275,7 +1205,7 @@ describe('TempsService', () => {
             provide: getModelToken('Smoke'),
             useValue: { findOne: jest.fn(() => query(cookStamps)) },
           },
-          { provide: CurrentSmokeService, useValue: activeCook },
+          { provide: ActiveCookService, useValue: recordingCook },
         ],
       }).compile();
 

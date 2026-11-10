@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { CommonModule } from '../common/common.module';
+import { ActiveCookModule } from '../activeCook/active-cook.module';
 import { SmokeSchema } from '../smoke/smoke.schema';
 import { StatsModule } from '../stats/stats.module';
 import { TempSeriesBackfillService } from './temp-series-backfill.service';
@@ -19,14 +19,13 @@ import { TempsService } from './temps.service';
       // the cook through its model.
       { name: 'Smoke', schema: SmokeSchema },
     ]),
-    // The walk from the Active Cook to one of its child records, which is how
-    // a relayed reading finds the series it belongs to. A plain reference: this
-    // module used to sit inside a loop of module files — the session imported
-    // the gateway, the gateway this module, and the current-cook walk the
-    // session back — and the edge had to be a thunk so Nest read it after every
-    // file had finished evaluating. The walk starts from the Active Cook now,
-    // which imports nothing, so the loop is gone.
-    CommonModule,
+    // Which cook a reading belongs to, and the attach that links the series it
+    // records into. A plain reference: this module used to sit inside a loop of
+    // module files — the session imported the gateway, the gateway this module,
+    // and the current-cook walk the session back — and the edge had to be a
+    // thunk so Nest read it after every file had finished evaluating. The
+    // Active Cook imports nothing, so the loop is gone.
+    ActiveCookModule,
     // Repairing a cook's series changes what the statistics were derived from,
     // so the boot repair declares them stale. Imported plainly rather than
     // forward-referenced: this module is not in its dependency chain — the
