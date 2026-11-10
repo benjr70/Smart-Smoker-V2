@@ -15,7 +15,10 @@ const MS_PER_HOUR = 60 * 60 * 1000;
  */
 export const MIN_AUTO_STOP_IDLE_HOURS = 1;
 
-/** {@link MIN_AUTO_STOP_IDLE_HOURS} as the milliseconds every silence rule compares in. */
+/**
+ * {@link MIN_AUTO_STOP_IDLE_HOURS} as the milliseconds every silence rule
+ * compares in.
+ */
 export const MIN_AUTO_STOP_IDLE_MS = MIN_AUTO_STOP_IDLE_HOURS * MS_PER_HOUR;
 
 /**

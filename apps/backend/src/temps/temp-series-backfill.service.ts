@@ -21,13 +21,13 @@ import { TempDocument } from './temps.schema';
  * `$in: [null, '']` is the pair of ways it can be missing: the field absent
  * altogether, which is how the orphans were written, and present but empty.
  */
-const ORPHANED_HEAD: FilterQuery<TempDocument> = {
+const ORPHANED_HEAD_FILTER: FilterQuery<TempDocument> = {
   tempsId: { $in: [null, ''] },
 };
 
 /**
  * The longest quiet this repair will accept between a series' first reading and
- * its next one before taking the two to be from different sessions.
+ * its next one before taking the two to be from different cooks.
  *
  * The archive's rule for what belongs to one cook is contiguity, not "the
  * earliest row wins": readings arrive every few seconds while a cook runs, so a
@@ -35,11 +35,11 @@ const ORPHANED_HEAD: FilterQuery<TempDocument> = {
  * in the timeline module, and `idleThresholdMsOf` for the silence the live
  * auto-stop reads from settings). This bound is the *floor* that setting can be
  * configured to — one hour (`AutoStopDto`) — rather than the configured value
- * itself: a head an hour clear of its own series is from another session under
- * every configuration this archive allows, and a repair that runs once at boot
- * and can never be re-run should only move what no setting would dispute. The
- * floor is taken from where the settings refuse anything below it rather than
- * written out again here, so the two cannot drift apart.
+ * itself: a head an hour clear of its own series is from another firing of the
+ * box under every configuration this archive allows, and a repair that runs
+ * once at boot and can never be re-run should only move what no setting would
+ * dispute. The floor is read from where the settings refuse anything below it
+ * rather than written out again here, so the two cannot drift apart.
  *
  * Far wider than any legacy head's real gap: the orphans this restores were
  * written moments before the reading that followed them, and even a start stamp
@@ -136,10 +136,10 @@ interface CookStamp {
  * Run at boot rather than from a script anybody has to remember: the backend
  * owns this collection and is the only thing that reads it, and a deployed box
  * nobody can shell into is exactly where the orphans are. Idempotent by
- * construction — a stamped reading no longer matches {@link ORPHANED_HEAD} —
- * so every boot after the first writes nothing. A reading it refused stays an
- * orphan and is found again, and refused again on the same two facts, which is
- * a read and no write.
+ * construction — a stamped reading no longer matches
+ * {@link ORPHANED_HEAD_FILTER} — so every boot after the first writes nothing.
+ * A reading it refused stays an orphan and is found again, and refused again on
+ * the same two facts, which is a read and no write.
  *
  * Stamped row by row rather than with one store-side pipeline, because what is
  * written depends on the row it is written to: each orphan gets *its own* id,
@@ -203,7 +203,7 @@ export class TempSeriesBackfillService implements OnModuleInit {
    */
   async stampOrphanHeads(): Promise<number> {
     const orphans = (await this.model
-      .find(ORPHANED_HEAD)
+      .find(ORPHANED_HEAD_FILTER)
       .select('_id date ChamberTemp')
       .lean()
       .exec()) as RestoredReading[];
@@ -251,8 +251,16 @@ export class TempSeriesBackfillService implements OnModuleInit {
    * The peaks `StatsService.stampCookWindows` deliberately bounded to a cook's
    * own window are not recoverable by any pass that runs afterwards, so a
    * repair that dropped the stamp and left the next rebuild to scan unbounded
-   * would hand a 225°F brisket the peak of a burger session weeks later in the
+   * would hand a 225°F brisket the peak of a burger cook weeks later in the
    * same series.
+   *
+   * Written straight onto the cook rather than through `ActiveCookService`,
+   * which ADR 0001 gives the cook's transitions to: that ADR is about the
+   * transitions of the cook being *run* — one smoker, one cook, one place that
+   * moves it on — and these cooks finished long ago. Repairing what was derived
+   * about a finished cook is out-of-band maintenance, which is how
+   * `StatsService.stampCookWindows` and `stampPeak` already write the same two
+   * fields.
    *
    * Run *before* the readings are stamped, so a failure here leaves the orphans
    * as they were and the next boot attempts the whole repair again. The other
@@ -366,7 +374,7 @@ export class TempSeriesBackfillService implements OnModuleInit {
         )
         .lean()
         .exec() as Promise<StoredCook[]>,
-      this.secondReadingsOf(orphans),
+      this.whenEachSeriesCarriesOn(orphans),
     ]);
     // Keyed by series, which names one cook: the id is that cook's own first
     // reading's. Walked from the readings rather than from the cooks, so each
@@ -387,7 +395,7 @@ export class TempSeriesBackfillService implements OnModuleInit {
   }
 
   /**
-   * Whether the restored reading is a fact about some other session rather than
+   * Whether the restored reading is a fact about some other cook rather than
    * about this cook.
    *
    * The scans that bound a cook's stamps read the rows dated at or before its
@@ -435,9 +443,9 @@ export class TempSeriesBackfillService implements OnModuleInit {
    * earlier than every stamp it carries — that is the shape this repair exists
    * to move back. What tells the two apart is not a stamp but the series: a head
    * taken moments before the reading that followed it opened the cook, and one
-   * taken hours before it is a power-on from another session, whose date as a
-   * start would stretch the cook's recorded window across a quiet nothing was
-   * cooking in (see {@link SERIES_HEAD_SILENCE_MS}).
+   * taken hours before it is a power-on from another firing of the box, whose
+   * date as a start would stretch the cook's recorded window across a quiet
+   * nothing was cooking in (see {@link SERIES_HEAD_SILENCE_MS}).
    *
    * A head dated *after* the reading that follows it is refused by the same
    * comparison, and more simply: a first reading later than the second is a row
@@ -458,14 +466,15 @@ export class TempSeriesBackfillService implements OnModuleInit {
   }
 
   /**
-   * The moment each orphan's series carries on at: the earliest reading of it
-   * that is not the orphan itself, by series id.
+   * The moment each orphan's series carries on at — a date per series id, not
+   * the readings: the earliest reading of the series that is not the orphan
+   * itself.
    *
    * Grouped store-side rather than read row by row: a series here is a whole
    * cook's archive — a hundred thousand rows and more — and the repair needs one
    * date from each of them, not the rows.
    */
-  private async secondReadingsOf(
+  private async whenEachSeriesCarriesOn(
     heads: RestoredReading[],
   ): Promise<Map<string, Date | null>> {
     const opened = (await this.model
@@ -490,7 +499,7 @@ export class TempSeriesBackfillService implements OnModuleInit {
    * `StatsService.stampCookWindows` deliberately bounded to a cook's own
    * window survive, where dropping the stamp and leaving the next rebuild to
    * scan again unbounded would have handed a 225°F brisket the peak of a
-   * burger session weeks later in the same series.
+   * burger cook weeks later in the same series.
    *
    * Only ever raised, and only for a cook whose peak is settled: a cook that
    * carries a peak, or the mark saying its readings were searched for one, is
