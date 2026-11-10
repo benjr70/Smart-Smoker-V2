@@ -1,13 +1,19 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { CurrentSmokeService } from './current-smoke.service';
-import { StateService } from '../State/state.service';
+import { idleCook } from '../activeCook/active-cook';
+import { ActiveCookService } from '../activeCook/active-cook.service';
+import {
+  attachedCook,
+  FakeActiveCook,
+  fakeActiveCook,
+} from '../activeCook/testing/fake-active-cook';
 import { SmokeService } from '../smoke/smoke.service';
 import { SmokeStatus } from '../smoke/smoke.schema';
 
 describe('CurrentSmokeService', () => {
   let service: CurrentSmokeService;
-  let stateService: jest.Mocked<Partial<StateService>>;
+  let activeCook: FakeActiveCook;
   let smokeService: jest.Mocked<Partial<SmokeService>>;
 
   const activeSmoke = {
@@ -22,12 +28,7 @@ describe('CurrentSmokeService', () => {
   };
 
   beforeEach(async () => {
-    stateService = {
-      GetState: jest
-        .fn()
-        .mockResolvedValue({ smokeId: 'smoke-1', smoking: true }),
-      create: jest.fn().mockResolvedValue({ smokeId: '', smoking: false }),
-    };
+    activeCook = fakeActiveCook(attachedCook(activeSmoke, true));
     smokeService = {
       getById: jest.fn().mockResolvedValue(activeSmoke),
       update: jest.fn().mockResolvedValue(activeSmoke),
@@ -36,7 +37,7 @@ describe('CurrentSmokeService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CurrentSmokeService,
-        { provide: StateService, useValue: stateService },
+        { provide: ActiveCookService, useValue: activeCook },
         { provide: SmokeService, useValue: smokeService },
       ],
     }).compile();
@@ -45,21 +46,18 @@ describe('CurrentSmokeService', () => {
   });
 
   describe('currentSmoke', () => {
-    it('self-heals a missing state document and returns null when nothing is active', async () => {
-      stateService.GetState.mockResolvedValue(undefined);
+    it('answers nothing for an idle smoker, and heals nothing as it reads', async () => {
+      activeCook.attach(idleCook());
 
-      const result = await service.currentSmoke();
-
-      expect(stateService.create).toHaveBeenCalledWith({
-        smokeId: '',
-        smoking: false,
-      });
-      expect(result).toBeNull();
+      expect(await service.currentSmoke()).toBeNull();
     });
 
-    it('loads the smoke referenced by the active state', async () => {
+    it('answers with the Active Cook', async () => {
       expect(await service.currentSmoke()).toEqual(activeSmoke);
-      expect(smokeService.getById).toHaveBeenCalledWith('smoke-1');
+      // Asked of the one module that owns the question, rather than walked to
+      // from the stored state a second time.
+      expect(activeCook.resolve).toHaveBeenCalled();
+      expect(smokeService.getById).not.toHaveBeenCalled();
     });
   });
 
@@ -67,7 +65,7 @@ describe('CurrentSmokeService', () => {
     const fallback = { note: 'default' };
 
     it('returns the fallback when there is no active smoke', async () => {
-      stateService.GetState.mockResolvedValue({ smokeId: '', smoking: false });
+      activeCook.attach(idleCook());
       const load = jest.fn();
 
       const result = await service.readCurrent('postSmokeId', load, fallback);
@@ -77,10 +75,9 @@ describe('CurrentSmokeService', () => {
     });
 
     it('returns the fallback when the active smoke has no child of that key', async () => {
-      smokeService.getById.mockResolvedValue({
-        ...activeSmoke,
-        postSmokeId: undefined,
-      } as any);
+      activeCook.attach(
+        attachedCook({ ...activeSmoke, postSmokeId: undefined }),
+      );
       const load = jest.fn();
 
       const result = await service.readCurrent('postSmokeId', load, fallback);
@@ -98,11 +95,41 @@ describe('CurrentSmokeService', () => {
       expect(load).toHaveBeenCalledWith('post-1');
       expect(result).toBe(child);
     });
+
+    /**
+     * The caller already resolved the Active Cook and is passing it down — the
+     * alert check, which judges one reading against one cook. A read that went
+     * and resolved its own could answer about a different cook.
+     */
+    it('reads the child of a cook it was handed, resolving none of its own', async () => {
+      const load = jest.fn().mockResolvedValue({ note: 'loaded' });
+      const handed = attachedCook({ ...activeSmoke, postSmokeId: 'post-9' });
+
+      await service.readCurrent('postSmokeId', load, fallback, handed);
+
+      expect(load).toHaveBeenCalledWith('post-9');
+      expect(activeCook.resolve).not.toHaveBeenCalled();
+    });
+
+    it('answers the fallback for a handed-down idle smoker', async () => {
+      const load = jest.fn();
+
+      const result = await service.readCurrent(
+        'postSmokeId',
+        load,
+        fallback,
+        idleCook(),
+      );
+
+      expect(result).toBe(fallback);
+      expect(load).not.toHaveBeenCalled();
+      expect(activeCook.resolve).not.toHaveBeenCalled();
+    });
   });
 
   describe('upsertCurrent', () => {
     it('throws NotFoundException when there is no active smoke', async () => {
-      stateService.GetState.mockResolvedValue({ smokeId: '', smoking: false });
+      activeCook.attach(idleCook());
 
       await expect(
         service.upsertCurrent('postSmokeId', {
@@ -129,10 +156,9 @@ describe('CurrentSmokeService', () => {
     });
 
     it('creates the child and links its id back onto the smoke, preserving siblings', async () => {
-      smokeService.getById.mockResolvedValue({
-        ...activeSmoke,
-        postSmokeId: undefined,
-      } as any);
+      activeCook.attach(
+        attachedCook({ ...activeSmoke, postSmokeId: undefined }),
+      );
       const created = { note: 'created' };
       const create = jest
         .fn()
@@ -158,10 +184,9 @@ describe('CurrentSmokeService', () => {
     });
 
     it('invokes onResolveSmoke when provided on the create path', async () => {
-      smokeService.getById.mockResolvedValue({
-        ...activeSmoke,
-        postSmokeId: undefined,
-      } as any);
+      activeCook.attach(
+        attachedCook({ ...activeSmoke, postSmokeId: undefined }),
+      );
       const onResolveSmoke = jest.fn();
 
       await service.upsertCurrent('postSmokeId', {

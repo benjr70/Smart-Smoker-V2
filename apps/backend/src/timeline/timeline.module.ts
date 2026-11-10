@@ -6,8 +6,8 @@ import {
 } from '../appSettings/app-settings.schema';
 import { CookEventSchema } from '../cookEvents/cook-events.schema';
 import { PreSmoke, PreSmokeSchema } from '../presmoke/presmoke.schema';
+import { ActiveCookModule } from '../activeCook/active-cook.module';
 import { SmokeSchema } from '../smoke/smoke.schema';
-import { stateSchema } from '../State/state.schema';
 import { TempSchema } from '../temps/temps.schema';
 import { TimelineController } from './timeline.controller';
 import { TimelineService } from './timeline.service';
@@ -16,19 +16,21 @@ import { TimelineService } from './timeline.service';
  * The timing of a cook. Imports no other feature module on purpose: it is
  * depended on by the session state, the smoke lifecycle and the history read,
  * and every one of those already sits somewhere in the others' dependency
- * chains. Owning its three collections directly is what lets all three depend
- * on it without closing a cycle.
+ * chains. Owning its collections directly is what lets all three depend on it
+ * without closing a cycle — and the one module it does import, the Active
+ * Cook, imports nothing itself.
  */
 @Module({
   imports: [
+    // Which cook the smoker is attached to, for the current-timeline and
+    // per-probe estimate reads. Was this module's own read of the `state`
+    // collection; it is one module's question now.
+    ActiveCookModule,
     MongooseModule.forFeature([
       { name: 'Smoke', schema: SmokeSchema },
       { name: 'Temp', schema: TempSchema },
-      // The session's own collections: which cook is running and whether it is
-      // smoking, and what that cook is of — read directly here for the same
-      // reason as the three above. Depending on `StateModule` would close a
-      // cycle, since the state stamps its start through this service.
-      { name: 'state', schema: stateSchema },
+      // What the cook is of, read directly here for the same reason as the two
+      // above.
       { name: PreSmoke.name, schema: PreSmokeSchema },
       // The cook's log, for the one question the Serve Plan asks of it: has a
       // wrap been stamped. Owned here like the rest, since `CookEventsModule`

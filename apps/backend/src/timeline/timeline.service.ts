@@ -10,7 +10,8 @@ import { documentId, WithDocumentId } from '../common/document-id';
 import { ServePlan } from '../smoke/serve-plan';
 import { SmokeDocument, SmokeStatus } from '../smoke/smoke.schema';
 import { TempDocument } from '../temps/temps.schema';
-import { StateDocument } from '../State/state.schema';
+import { CookSnapshot, isActive } from '../activeCook/active-cook';
+import { ActiveCookService } from '../activeCook/active-cook.service';
 import { PreSmoke, PreSmokeDocument } from '../presmoke/presmoke.schema';
 import {
   CompletionEstimate,
@@ -99,8 +100,9 @@ type SeriesPeaks = Partial<Record<(typeof PEAK_FIELDS)[number], number | null>>;
  * them. Stamping happens on the two paths that already depend on the smoke —
  * the session's smoking toggle and the finish flow — and a service dependency
  * in either direction closes a DI cycle (`smoke → state`, `settings → profile →
- * common → smoke`). Reading the three collections directly leaves this module
- * with no service edges at all, so anything may depend on it.
+ * common → smoke`). Reading the collections directly leaves this module with
+ * one service edge only — the Active Cook, which itself depends on no feature
+ * module at all — so anything may still depend on it.
  */
 @Injectable()
 export class TimelineService {
@@ -109,7 +111,15 @@ export class TimelineService {
     @InjectModel('Temp') private readonly tempModel: Model<TempDocument>,
     @InjectModel(ApplicationSettings.name)
     private readonly settingsModel: Model<ApplicationSettingsDocument>,
-    @InjectModel('state') private readonly stateModel: Model<StateDocument>,
+    /**
+     * Which cook the smoker is attached to, asked of the one module that owns
+     * the question rather than read out of the state collection here. The two
+     * reads it answers — the current timeline and the per-probe projections —
+     * used to re-derive the cook with their own null rule, and a cook ended
+     * part-way through a poll could leave the two halves of one response
+     * disagreeing about which cook they were about.
+     */
+    private readonly activeCook: ActiveCookService,
     @InjectModel(PreSmoke.name)
     private readonly preSmokeModel: Model<PreSmokeDocument>,
     /**
@@ -465,14 +475,18 @@ export class TimelineService {
    * `now` is a parameter rather than read from the clock inside, so that the
    * projection is a function of its inputs and can be exercised against a fixed
    * moment.
+   *
+   * `cook` is one too, for the caller that has already resolved the Active
+   * Cook and is passing it down — the alert check, which judges one reading
+   * against one cook and used to work that cook out about six times over.
+   * Omitted, this resolves it itself, which is what the polled route does.
    */
   async getCurrentTimeline(
     now: Date = new Date(),
+    cook?: CookSnapshot,
   ): Promise<CurrentSmokeTimeline> {
-    const state = await this.stateModel.findOne().exec();
-    const smoke = state?.smokeId
-      ? await this.smokeModel.findById(state.smokeId).exec()
-      : null;
+    const snapshot = cook ?? (await this.activeCook.resolve());
+    const smoke = isActive(snapshot) ? snapshot.smoke : null;
     const settings = withSettingsDefaults(
       await this.settingsModel.findOne().exec(),
     );
@@ -483,7 +497,7 @@ export class TimelineService {
         estimate: estimateCompletion({
           readings: [],
           target: probe?.target ?? null,
-          smoking: state?.smoking === true,
+          smoking: snapshot.smoking,
           now,
         }),
       };
@@ -497,7 +511,7 @@ export class TimelineService {
         timeline.startedAt,
       ),
       target: probe?.target ?? null,
-      smoking: state?.smoking === true,
+      smoking: snapshot.smoking,
       now,
       peakTemp: probe ? (peaks[probeField(probe.slot)] ?? null) : null,
     };
@@ -616,17 +630,16 @@ export class TimelineService {
   async estimateForProbes(
     probes: { slot: string; target: number }[],
     now: Date = new Date(),
+    cook?: CookSnapshot,
   ): Promise<Record<string, CompletionEstimate>> {
     if (probes.length === 0) {
       return {};
     }
-    const state = await this.stateModel.findOne().exec();
-    const smoke = state?.smokeId
-      ? await this.smokeModel.findById(state.smokeId).exec()
-      : null;
-    if (!smoke) {
+    const snapshot = cook ?? (await this.activeCook.resolve());
+    if (!isActive(snapshot)) {
       return {};
     }
+    const smoke = snapshot.smoke;
     const peaks = await this.peaksOf(smoke);
     const startedAt = smoke.startedAt ?? (await this.edgeReading(smoke, 1));
     // One read of the series for every probe: the rows carry all four
@@ -636,14 +649,14 @@ export class TimelineService {
     // turn out to want it — it is the same meat on the same smoker — and at
     // most one every few minutes, however many ticks want it.
     const historicalOnce = (): Promise<number | null> =>
-      this.rememberedHistoricalRate(smoke, String(state?.smokeId ?? ''), now);
+      this.rememberedHistoricalRate(smoke, snapshot.smokeId, now);
 
     const estimates: Record<string, CompletionEstimate> = {};
     for (const probe of probes) {
       const input = {
         readings: probeSeries(rows, probe.slot, startedAt ?? null),
         target: probe.target,
-        smoking: state?.smoking === true,
+        smoking: snapshot.smoking,
         now,
         peakTemp: peaks[probeField(probe.slot)] ?? null,
       };

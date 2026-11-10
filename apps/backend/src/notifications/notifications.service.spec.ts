@@ -1,6 +1,11 @@
 import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
-import { StateService } from '../State/state.service';
+import { ActiveCookService } from '../activeCook/active-cook.service';
+import {
+  attachedCook,
+  FakeActiveCook,
+  fakeActiveCook,
+} from '../activeCook/testing/fake-active-cook';
 import { DEFAULT_APPLICATION_SETTINGS } from '../appSettings/app-settings.defaults';
 import { ApplicationSettings } from '../appSettings/app-settings.schema';
 import { AppSettingsService } from '../appSettings/app-settings.service';
@@ -128,7 +133,7 @@ describe('NotificationsService', () => {
   let settings: ReturnType<typeof createAppSettings>;
   let alertState: ReturnType<typeof createSingletonStore<AlertState>>;
   let pushDispatcher: { notify: jest.Mock; getPublicKey: jest.Mock };
-  let smokeSession: { GetState: jest.Mock };
+  let activeCook: FakeActiveCook;
   let smokeProfile: { getCurrentSmokeProfile: jest.Mock };
   let preSmoke: { GetByCurrent: jest.Mock };
   let temps: { getLatestCurrentTemp: jest.Mock };
@@ -155,11 +160,7 @@ describe('NotificationsService', () => {
       notify: jest.fn().mockResolvedValue(1),
       getPublicKey: jest.fn().mockReturnValue('test-public-key'),
     };
-    smokeSession = {
-      GetState: jest
-        .fn()
-        .mockResolvedValue({ smokeId: 'smoke-1', smoking: true }),
-    };
+    activeCook = fakeActiveCook(attachedCook({ _id: 'smoke-1' }, true));
     smokeProfile = {
       getCurrentSmokeProfile: jest.fn().mockResolvedValue({
         chamberName: 'Chamber',
@@ -189,7 +190,7 @@ describe('NotificationsService', () => {
         { provide: AppSettingsService, useValue: settings },
         { provide: getModelToken(AlertState.name), useValue: alertState },
         { provide: PushDispatcherService, useValue: pushDispatcher },
-        { provide: StateService, useValue: smokeSession },
+        { provide: ActiveCookService, useValue: activeCook },
         { provide: TempsService, useValue: temps },
         { provide: SmokeProfileService, useValue: smokeProfile },
         { provide: PreSmokeService, useValue: preSmoke },
@@ -284,6 +285,65 @@ describe('NotificationsService', () => {
       settings.seed({ chamber: { enabled: true, low: 225, high: 275 } });
     });
 
+    /**
+     * One tick judges one reading against one cook. This check used to work
+     * the cook out about six times over — once here, and again inside each of
+     * the readings, the profile, the pre-smoke and the two timeline reads — so
+     * a cook that ended part-way through a tick could be alerted about by half
+     * of it and not the other half.
+     */
+    describe('one cook per tick', () => {
+      beforeEach(() => {
+        settings.seed({
+          ...watchingProbe('probe1', 203),
+          headsUp: { enabled: true },
+          servePlan: { enabled: true, driftAlert: true, driftMin: 15 },
+          probeTarget: {
+            enabled: true,
+            probes: [
+              {
+                slot: 'probe1',
+                enabled: true,
+                target: 203,
+                targetSource: 'user' as const,
+                leadMinutes: 30,
+              },
+            ],
+          },
+        });
+        temps.getLatestCurrentTemp.mockResolvedValue({
+          ChamberTemp: '240',
+          MeatTemp: '150',
+        });
+      });
+
+      it('resolves the Active Cook exactly once', async () => {
+        await service.checkAlerts();
+
+        expect(activeCook.resolve).toHaveBeenCalledTimes(1);
+      });
+
+      it('hands that one cook to every read it makes about the cook', async () => {
+        const cook = attachedCook({ _id: 'smoke-1' }, true);
+        activeCook.attach(cook);
+
+        await service.checkAlerts();
+
+        expect(temps.getLatestCurrentTemp).toHaveBeenCalledWith(cook);
+        expect(smokeProfile.getCurrentSmokeProfile).toHaveBeenCalledWith(cook);
+        expect(preSmoke.GetByCurrent).toHaveBeenCalledWith(cook);
+        expect(timeline.estimateForProbes).toHaveBeenCalledWith(
+          expect.any(Array),
+          undefined,
+          cook,
+        );
+        expect(timeline.getCurrentTimeline).toHaveBeenCalledWith(
+          undefined,
+          cook,
+        );
+      });
+    });
+
     it('tells the cook once when a watched probe reaches its target, naming it as this cook named it', async () => {
       settings.seed(watchingProbe('probe2', 195));
       smokeProfile.getCurrentSmokeProfile.mockResolvedValue({
@@ -327,10 +387,7 @@ describe('NotificationsService', () => {
         offScheduleDirection: null,
         offScheduleFired: false,
       });
-      smokeSession.GetState.mockResolvedValue({
-        smokeId: 'this-weekend',
-        smoking: true,
-      });
+      activeCook.attach(attachedCook({ _id: 'this-weekend' }, true));
       smokeProfile.getCurrentSmokeProfile.mockResolvedValue({
         probe1Name: 'Brisket Flat',
       });
@@ -417,10 +474,7 @@ describe('NotificationsService', () => {
         offScheduleDirection: null,
         offScheduleFired: false,
       });
-      smokeSession.GetState.mockResolvedValue({
-        smokeId: 'this-weekend',
-        smoking: true,
-      });
+      activeCook.attach(attachedCook({ _id: 'this-weekend' }, true));
       temps.getLatestCurrentTemp.mockResolvedValue({
         ChamberTemp: '240',
         MeatTemp: '205',
@@ -459,10 +513,7 @@ describe('NotificationsService', () => {
         ...watchingProbe('probe1', 203),
         smokeComplete: { enabled: true },
       });
-      smokeSession.GetState.mockResolvedValue({
-        smokeId: 'smoke-1',
-        smoking: false,
-      });
+      activeCook.attach(attachedCook({ _id: 'smoke-1' }, false));
       temps.getLatestCurrentTemp.mockResolvedValue({
         ChamberTemp: '240',
         MeatTemp: '205',
@@ -590,10 +641,7 @@ describe('NotificationsService', () => {
     });
 
     it('says nothing about an idle smoker, whatever its chamber reads', async () => {
-      smokeSession.GetState.mockResolvedValue({
-        smokeId: 'smoke-1',
-        smoking: false,
-      });
+      activeCook.attach(attachedCook({ _id: 'smoke-1' }, false));
       temps.getLatestCurrentTemp.mockResolvedValue(chamberAt('40'));
 
       await service.checkAlerts();
@@ -659,10 +707,7 @@ describe('NotificationsService', () => {
         offScheduleDirection: null,
         offScheduleFired: false,
       });
-      smokeSession.GetState.mockResolvedValue({
-        smokeId: 'fresh-smoke',
-        smoking: true,
-      });
+      activeCook.attach(attachedCook({ _id: 'fresh-smoke' }, true));
       temps.getLatestCurrentTemp.mockResolvedValue(chamberAt('90'));
 
       await service.checkAlerts();
@@ -835,10 +880,7 @@ describe('NotificationsService', () => {
         await service.checkAlerts();
         expect(pushDispatcher.notify).toHaveBeenCalledTimes(1);
 
-        smokeSession.GetState.mockResolvedValue({
-          smokeId: 'next-weekend',
-          smoking: true,
-        });
+        activeCook.attach(attachedCook({ _id: 'next-weekend' }, true));
         await service.checkAlerts();
         await service.checkAlerts();
 
@@ -963,10 +1005,7 @@ describe('NotificationsService', () => {
         await service.checkAlerts();
         await service.checkAlerts();
 
-        smokeSession.GetState.mockResolvedValue({
-          smokeId: 'next-weekend',
-          smoking: true,
-        });
+        activeCook.attach(attachedCook({ _id: 'next-weekend' }, true));
         await service.checkAlerts();
         await service.checkAlerts();
 

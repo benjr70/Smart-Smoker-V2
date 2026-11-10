@@ -4,7 +4,13 @@ import { getModelToken } from '@nestjs/mongoose';
 import { SmokeService } from './smoke.service';
 import { Smoke, SmokeDocument, SmokeStatus } from './smoke.schema';
 import { SmokeDto } from './smokeDto';
-import { StateService } from '../State/state.service';
+import { idleCook } from '../activeCook/active-cook';
+import { ActiveCookService } from '../activeCook/active-cook.service';
+import {
+  attachedCook,
+  FakeActiveCook,
+  fakeActiveCook,
+} from '../activeCook/testing/fake-active-cook';
 import { TimelineService } from '../timeline/timeline.service';
 import { StatsService } from '../stats/stats.service';
 import { createMockModel } from '../common/testing/create-mock-model';
@@ -14,7 +20,7 @@ import { tempSeriesFilter } from '../temps/temp-series.filter';
 describe('SmokeService', () => {
   let service: SmokeService;
   let mockSmokeModel: any;
-  let mockStateService: Partial<StateService>;
+  let activeCook: FakeActiveCook;
   let mockTimelineService: { stampFinish: jest.Mock; stampPull: jest.Mock };
   let mockStatsService: { recalculate: jest.Mock };
   let mockPreSmokeModel: any;
@@ -42,11 +48,6 @@ describe('SmokeService', () => {
     _id: 'test-smoke-id',
     ...mockSmoke,
     save: jest.fn().mockResolvedValue(mockSmoke),
-  };
-
-  const mockState = {
-    smokeId: 'test-smoke-id',
-    smoking: true,
   };
 
   beforeEach(async () => {
@@ -97,9 +98,7 @@ describe('SmokeService', () => {
     mockRatingsModel = childModel('ratings');
     mockCookEventModel = childModel('cookEvents');
 
-    mockStateService = {
-      GetState: jest.fn().mockResolvedValue(mockState),
-    };
+    activeCook = fakeActiveCook(attachedCook(mockSmokeDocument, true));
 
     mockTimelineService = {
       stampFinish: jest.fn().mockResolvedValue(undefined),
@@ -123,8 +122,8 @@ describe('SmokeService', () => {
           useValue: mockSmokeModel,
         },
         {
-          provide: StateService,
-          useValue: mockStateService,
+          provide: ActiveCookService,
+          useValue: activeCook,
         },
         {
           provide: TimelineService,
@@ -180,26 +179,30 @@ describe('SmokeService', () => {
   });
 
   describe('getCurrentSmoke', () => {
-    it('should return current smoke based on state', async () => {
-      jest
-        .spyOn(service, 'getById')
-        .mockResolvedValue(mockSmokeDocument as unknown as SmokeDocument);
-
+    it('answers with the Active Cook, asked of the module that owns it', async () => {
       const result = await service.getCurrentSmoke();
 
-      expect(mockStateService.GetState).toHaveBeenCalled();
-      expect(service.getById).toHaveBeenCalledWith(mockState.smokeId);
+      expect(activeCook.resolve).toHaveBeenCalled();
       expect(result).toEqual(mockSmokeDocument);
     });
 
-    it('should return null when no active smoke', async () => {
-      mockStateService.GetState = jest
-        .fn()
-        .mockResolvedValue({ smokeId: '', smoking: false });
+    /**
+     * Idle is idle however it came about — no state written, no cook named, or
+     * a cook that has since been deleted. The rule is the Active Cook's; this
+     * only has to answer the same `null` the route has always answered.
+     */
+    it('answers nothing for an idle smoker', async () => {
+      activeCook.attach(idleCook());
 
-      const result = await service.getCurrentSmoke();
+      expect(await service.getCurrentSmoke()).toBeNull();
+    });
 
-      expect(result).toBeNull();
+    it('does not read the cook archive a second time to answer', async () => {
+      jest.spyOn(service, 'getById');
+
+      await service.getCurrentSmoke();
+
+      expect(service.getById).not.toHaveBeenCalled();
     });
   });
 
@@ -567,7 +570,7 @@ describe('SmokeService', () => {
       });
 
       it('has nothing to write when no cook is in progress', async () => {
-        mockStateService.GetState = jest.fn().mockResolvedValue(null);
+        activeCook.attach(idleCook());
 
         expect(await service.updateServePlan({ restMinutes: 45 })).toBeNull();
         expect(mockSmokeModel.findByIdAndUpdate).not.toHaveBeenCalled();
@@ -595,7 +598,7 @@ describe('SmokeService', () => {
       });
 
       it('has nothing to stamp when no cook is in progress', async () => {
-        mockStateService.GetState = jest.fn().mockResolvedValue(null);
+        activeCook.attach(idleCook());
 
         expect(await service.stampPull()).toBeNull();
         expect(mockTimelineService.stampPull).not.toHaveBeenCalled();

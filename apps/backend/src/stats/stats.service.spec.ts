@@ -5,6 +5,7 @@ import { ApplicationSettings } from '../appSettings/app-settings.schema';
 import { PreSmoke } from '../presmoke/presmoke.schema';
 import { SmokeStatus } from '../smoke/smoke.schema';
 import { FakeDoc, fakeModel } from '../timeline/testing/fake-model';
+import { ActiveCookService } from '../activeCook/active-cook.service';
 import { TimelineService } from '../timeline/timeline.service';
 import { StatsSnapshot } from './stats.schema';
 import { StatsService } from './stats.service';
@@ -82,6 +83,10 @@ describe('StatsService', () => {
           provide: getModelToken(StatsSnapshot.name),
           useValue: fakeModel(snapshots),
         },
+        // The timeline asks the Active Cook which cook is running. The real
+        // one, over an empty state collection: nothing here is about a cook in
+        // progress, and it answers idle.
+        ActiveCookService,
         { provide: getModelToken('state'), useValue: fakeModel([]) },
         {
           provide: getModelToken(ApplicationSettings.name),

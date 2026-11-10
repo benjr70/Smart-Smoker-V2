@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { RatingsService } from '../ratings/ratings.service';
 import { BaseService } from '../common/base.service';
+import { CookSnapshot } from '../activeCook/active-cook';
 import { CurrentSmokeService } from '../common/current-smoke.service';
 import { Smoke } from '../smoke/smoke.schema';
 import { markStatsStale } from '../stats/mark-stats-stale';
@@ -36,12 +37,21 @@ export class SmokeProfileService extends BaseService<SmokeProFileDocument> {
     await markStatsStale(this.stats, 'smoke-profile');
   }
 
-  getCurrentSmokeProfile(): Promise<SmokeProfile> {
+  /**
+   * The smoke profile of the cook in progress, or placeholder defaults where
+   * there is none.
+   *
+   * `cook` is the Active Cook a caller has already resolved — the alert check
+   * names probes as the cook it is judging named them, and a profile read
+   * against a cook worked out again here could name another cook's.
+   */
+  getCurrentSmokeProfile(cook?: CookSnapshot): Promise<SmokeProfile> {
     const defaultProfile = { ...DEFAULT_SMOKE_PROFILE };
     return this.currentSmoke.readCurrent<SmokeProfile>(
       'smokeProfileId',
       (id) => this.getById(id),
       defaultProfile,
+      cook,
     );
   }
 

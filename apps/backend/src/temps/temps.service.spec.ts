@@ -7,6 +7,7 @@ import { tempSeriesFilter } from './temp-series.filter';
 import { Temp } from './temps.schema';
 import { TempDto } from './tempDto';
 import { CurrentSmokeService } from '../common/current-smoke.service';
+import { attachedCook } from '../activeCook/testing/fake-active-cook';
 
 const query = <T>(value: T) => ({ exec: jest.fn().mockResolvedValue(value) });
 
@@ -311,6 +312,30 @@ describe('TempsService', () => {
       );
 
       expect(await service.getLatestCurrentTemp()).toBeUndefined();
+    });
+
+    /**
+     * The alert check resolves the Active Cook once and judges one reading
+     * against it, so the cook travels down with the question rather than being
+     * worked out again here.
+     */
+    it('reads the series of an Active Cook it was handed', async () => {
+      currentSmoke.readCurrent.mockImplementation((key, load) =>
+        load('temps-group-1'),
+      );
+      const handed = attachedCook({
+        _id: 'cook-1',
+        tempsId: 'temps-group-1',
+      });
+
+      await service.getLatestCurrentTemp(handed);
+
+      expect(currentSmoke.readCurrent).toHaveBeenCalledWith(
+        'tempsId',
+        expect.any(Function),
+        undefined,
+        handed,
+      );
     });
   });
 

@@ -6,7 +6,8 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { StateService } from '../State/state.service';
+import { ActiveCook, isActive } from '../activeCook/active-cook';
+import { ActiveCookService } from '../activeCook/active-cook.service';
 import { ApplicationSettings } from '../appSettings/app-settings.schema';
 import { AppSettingsService } from '../appSettings/app-settings.service';
 import {
@@ -87,7 +88,11 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     @InjectModel(AlertState.name)
     private alertStateModel: Model<AlertStateDocument>,
     private pushDispatcher: PushDispatcherService,
-    private stateService: StateService,
+    /**
+     * Which cook the smoker is attached to. Resolved once per tick and handed
+     * down; see {@link checkAlerts}.
+     */
+    private readonly activeCook: ActiveCookService,
     private tempsService: TempsService,
     private appSettingsService: AppSettingsService,
     private smokeProfileService: SmokeProfileService,
@@ -156,16 +161,23 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
    * the current time, persist the state it returns and dispatch whatever it
    * decided to send. All the alert rules live in the engine; this is only the
    * shell that gives it a reading and takes its answer away.
+   *
+   * The Active Cook is resolved once, at the top, and handed to every read the
+   * tick makes about the cook. It used to be worked out about six times over —
+   * here, and again inside the readings, the profile, the pre-smoke and both
+   * timeline reads — so a cook ended part-way through a tick could be judged
+   * by half of it and not the other half, and the push in the pitmaster's
+   * pocket could be about a cook that no longer existed.
    */
   async checkAlerts(): Promise<void> {
-    const session = await this.stateService.GetState();
-    if (!session?.smoking) {
+    const cook = await this.activeCook.resolve();
+    if (!isActive(cook) || !cook.smoking) {
       // An idle smoker never notifies: nothing is cooking to have an opinion
       // about, and the chamber cooling down is not an excursion.
       return;
     }
 
-    const latest = await this.tempsService.getLatestCurrentTemp();
+    const latest = await this.tempsService.getLatestCurrentTemp(cook);
     if (!latest) {
       return;
     }
@@ -173,7 +185,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     // The bookkeeping is loaded first, because whether this is the session's
     // first evaluation is what decides if the probe targets are seeded — and
     // the targets seeded here are the ones this very reading is judged against.
-    const { state, sessionStart } = await this.loadAlertState(session.smokeId);
+    const { state, sessionStart } = await this.loadAlertState(cook.smokeId);
 
     // The alert settings are one block of the installation's settings document,
     // read here and otherwise never written: what evaluation records goes to
@@ -181,9 +193,9 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     // during a cook survives.
     const [settings, profile] = await Promise.all([
       sessionStart
-        ? this.seedTargetsForSession()
+        ? this.seedTargetsForSession(cook)
         : this.appSettingsService.getSettings(),
-      this.smokeProfileService.getCurrentSmokeProfile(),
+      this.smokeProfileService.getCurrentSmokeProfile(cook),
     ]);
 
     const reading = {
@@ -193,15 +205,15 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
 
     const evaluation = evaluateAlerts({
       reading,
-      etaMinutes: await this.headsUpMinutes(settings, state, reading),
-      servePlan: await this.servePlan(settings),
+      etaMinutes: await this.headsUpMinutes(settings, state, reading, cook),
+      servePlan: await this.servePlan(settings, cook),
       settings,
       state,
       names: { chamber: CHAMBER_NAME, probes: resolveProbeNames(profile) },
       now: new Date(),
     });
 
-    await this.saveAlertState(session.smokeId, evaluation.state);
+    await this.saveAlertState(cook.smokeId, evaluation.state);
     for (const notification of evaluation.notifications) {
       await this.pushDispatcher.notify(notification.title, notification.body);
     }
@@ -222,11 +234,15 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
    */
   private async servePlan(
     settings: ApplicationSettings,
+    cook: ActiveCook,
   ): Promise<ServePlanState | null> {
     if (!settings.servePlan.enabled || !settings.servePlan.driftAlert) {
       return null;
     }
-    const timeline = await this.timelineService.getCurrentTimeline();
+    const timeline = await this.timelineService.getCurrentTimeline(
+      undefined,
+      cook,
+    );
     return timeline.servePlan ?? null;
   }
 
@@ -249,6 +265,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     settings: ApplicationSettings,
     state: AlertRuntimeState,
     reading: { probeTemps: Record<string, number | null> },
+    cook: ActiveCook,
   ): Promise<Record<string, number>> {
     if (!settings.headsUp.enabled) {
       return {};
@@ -271,6 +288,8 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     }
     const estimates = await this.timelineService.estimateForProbes(
       pending.map((probe) => ({ slot: probe.slot, target: probe.target })),
+      undefined,
+      cook,
     );
     return Object.entries(estimates).reduce<Record<string, number>>(
       (minutes, [slot, estimate]) => {
@@ -290,8 +309,10 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
    * The meat type is the free text the cook typed into pre-smoke — the only
    * place this application is ever told what is on the smoker.
    */
-  private async seedTargetsForSession(): Promise<ApplicationSettings> {
-    const preSmoke = await this.preSmokeService.GetByCurrent();
+  private async seedTargetsForSession(
+    cook: ActiveCook,
+  ): Promise<ApplicationSettings> {
+    const preSmoke = await this.preSmokeService.GetByCurrent(cook);
     return this.appSettingsService.seedProbeTargets(preSmoke?.meatType);
   }
 

@@ -6,7 +6,8 @@ import { documentId } from '../common/document-id';
 import { Smoke, SmokeDocument, SmokeStatus } from './smoke.schema';
 import { SmokeDto } from './smokeDto';
 import { ServePlanDto } from './serve-plan.dto';
-import { StateService } from '../State/state.service';
+import { smokeOf } from '../activeCook/active-cook';
+import { ActiveCookService } from '../activeCook/active-cook.service';
 import { TimelineService } from '../timeline/timeline.service';
 import { tempSeriesFilter } from '../temps/temp-series.filter';
 import { cookEventsOfSmoke } from '../cookEvents/cook-events.filter';
@@ -18,7 +19,14 @@ export class SmokeService extends BaseService<SmokeDocument> {
 
   constructor(
     @InjectModel('Smoke') model: Model<SmokeDocument>,
-    private stateService: StateService,
+    /**
+     * Which cook the smoker is attached to. This service used to walk the
+     * stored state to the cook itself — a second copy of the walk, kept here
+     * because the shared helper was built on this very service and so could
+     * not be used from inside it. The Active Cook depends on no feature
+     * service at all, which is what lets the duplicate go.
+     */
+    private readonly activeCook: ActiveCookService,
     private readonly timeline: TimelineService,
     /**
      * The statistics of the archive, recomputed by the two things this service
@@ -136,17 +144,16 @@ export class SmokeService extends BaseService<SmokeDocument> {
   }
 
   /**
-   * Degenerate `state → smoke` walk kept local to `SmokeService`. It cannot
-   * delegate to `CurrentSmokeService` — that would make `SmokeModule` depend on
-   * `CommonModule` (which depends on `SmokeModule`), a DI cycle.
+   * The cook in progress, or `null` where the smoker is idle — a delegate onto
+   * the Active Cook rather than a walk of its own.
+   *
+   * `null` rather than the idle result itself, because this is what the
+   * `GET /smoke/current` route has always answered and the apps read: the
+   * cook, or nothing. Which of the three idle cases it was is the Active
+   * Cook's business, not the route's.
    */
   async getCurrentSmoke(): Promise<Smoke | null> {
-    return this.stateService.GetState().then((state) => {
-      if (!state || !state.smokeId || state.smokeId.length === 0) {
-        return null;
-      }
-      return this.getById(state.smokeId);
-    });
+    return smokeOf(await this.activeCook.resolve());
   }
 
   /**
