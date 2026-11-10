@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model, Types } from 'mongoose';
 
 import { MIN_AUTO_STOP_IDLE_MS } from '../appSettings/auto-stop-threshold';
+import { asBulkWrite, BulkStamp } from '../common/bulk-stamp';
 import { SmokeDocument } from '../smoke/smoke.schema';
 import { markStatsStale } from '../stats/mark-stats-stale';
 import { StatsService } from '../stats/stats.service';
@@ -96,31 +97,15 @@ type RederivedStamps = { startedAt?: Date; peakChamber?: number };
 /**
  * One reading's series stamp as a bulk write carries it: the row to stamp, and
  * the id it should have been written with.
- *
- * Spelled out rather than inferred at the call, the way `StatsService`'s
- * `PeakStamp` is: Mongoose's own bulk operation type is a union wide enough
- * that resolving an inline literal against it costs the compiler more than
- * everything else in the file.
  */
-interface SeriesStamp {
-  updateOne: {
-    filter: { _id: unknown };
-    update: { $set: { tempsId: string } };
-  };
-}
+type SeriesStamp = BulkStamp<{ $set: { tempsId: string } }>;
 
 /**
- * One cook's re-derivation as a bulk write carries it — spelled out for the
- * same reason {@link SeriesStamp} is. A cook is written to one at a time rather
- * than all of them with a single `updateMany` because what a repaired cook
- * needs written depends on the reading it got back.
+ * One cook's re-derivation as a bulk write carries it. A cook is written to one
+ * at a time rather than all of them with a single `updateMany` because what a
+ * repaired cook needs written depends on the reading it got back.
  */
-interface CookStamp {
-  updateOne: {
-    filter: { _id: unknown };
-    update: { $set: RederivedStamps };
-  };
-}
+type CookStamp = BulkStamp<{ $set: RederivedStamps }>;
 
 /**
  * Puts every cook's first reading back into its own series, once.
@@ -225,7 +210,7 @@ export class TempSeriesBackfillService implements OnModuleInit {
       },
     }));
     const result = await this.model.bulkWrite(
-      writes as unknown as Parameters<Model<TempDocument>['bulkWrite']>[0],
+      asBulkWrite<TempDocument>(writes),
     );
     return result.modifiedCount;
   }
@@ -300,9 +285,7 @@ export class TempSeriesBackfillService implements OnModuleInit {
       // archive.
       return;
     }
-    await this.smokeModel.bulkWrite(
-      stamps as unknown as Parameters<Model<SmokeDocument>['bulkWrite']>[0],
-    );
+    await this.smokeModel.bulkWrite(asBulkWrite<SmokeDocument>(stamps));
     await markStatsStale(this.stats, 'temperature-series repair');
   }
 
