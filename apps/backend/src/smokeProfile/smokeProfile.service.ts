@@ -3,9 +3,12 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { RatingsService } from '../ratings/ratings.service';
 import { BaseService } from '../common/base.service';
-import { CookSnapshot } from '../activeCook/active-cook';
-import { CurrentSmokeService } from '../common/current-smoke.service';
-import { Smoke } from '../smoke/smoke.schema';
+import {
+  ActiveCook,
+  childIdOf,
+  CookSnapshot,
+} from '../activeCook/active-cook';
+import { ActiveCookService } from '../activeCook/active-cook.service';
 import { markStatsStale } from '../stats/mark-stats-stale';
 import { StatsService } from '../stats/stats.service';
 import {
@@ -20,7 +23,7 @@ export class SmokeProfileService extends BaseService<SmokeProFileDocument> {
   constructor(
     @InjectModel('SmokeProfile')
     model: Model<SmokeProFileDocument>,
-    private readonly currentSmoke: CurrentSmokeService,
+    private readonly activeCook: ActiveCookService,
     private readonly ratingsService: RatingsService,
     private readonly stats: StatsService,
   ) {
@@ -45,25 +48,31 @@ export class SmokeProfileService extends BaseService<SmokeProFileDocument> {
    * names probes as the cook it is judging named them, and a profile read
    * against a cook worked out again here could name another cook's.
    */
-  getCurrentSmokeProfile(cook?: CookSnapshot): Promise<SmokeProfile> {
-    const defaultProfile = { ...DEFAULT_SMOKE_PROFILE };
-    return this.currentSmoke.readCurrent<SmokeProfile>(
+  async getCurrentSmokeProfile(cook?: CookSnapshot): Promise<SmokeProfile> {
+    const profileId = childIdOf(
+      cook ?? (await this.activeCook.resolve()),
       'smokeProfileId',
-      (id) => this.getById(id),
-      defaultProfile,
-      cook,
     );
+    return profileId
+      ? this.getById(profileId)
+      : { ...DEFAULT_SMOKE_PROFILE };
   }
 
   saveCurrentSmokeProfile(dto: SmokeProFileDto): Promise<SmokeProfile> {
-    return this.currentSmoke.upsertCurrent<SmokeProfile>('smokeProfileId', {
+    return this.activeCook.attach<SmokeProfile>('smokeProfileId', {
       update: (id) => this.update(id, dto),
       create: async () => {
         const created = await this.create(dto);
         return { result: created, childId: created['_id'].toString() };
       },
-      onResolveSmoke: async (smoke: Smoke) => {
-        if (!smoke.ratingId) {
+      /**
+       * Setting the profile is what opens a session, and the Smoke step shows
+       * a score before anybody has given one — so the first profile a cook
+       * gains seeds a blank rating alongside it. Only the first: a cook that
+       * is already scored keeps the score it has.
+       */
+      onFirstAttach: async (cook: ActiveCook) => {
+        if (!cook.smoke.ratingId) {
           await this.ratingsService.saveCurrentRatings({
             smokeFlavor: 0,
             seasoning: 0,

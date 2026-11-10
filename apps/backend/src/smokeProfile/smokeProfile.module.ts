@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { CommonModule } from '../common/common.module';
+import { ActiveCookModule } from '../activeCook/active-cook.module';
 import { SmokeProFileSchema } from './smokeProfile.schema';
 import { SmokeProfileController } from './smokeProfile.controller';
 import { SmokeProfileService } from './smokeProfile.service';
@@ -12,7 +12,8 @@ import { StatsModule } from '../stats/stats.module';
     MongooseModule.forFeature([
       { name: 'SmokeProfile', schema: SmokeProFileSchema },
     ]),
-    CommonModule,
+    // Which cook a profile belongs to, and the attach that links it.
+    ActiveCookModule,
     RatingsModel,
     // The wood is an ingredient of the statistics; writing a profile marks
     // them stale.
