@@ -75,6 +75,16 @@ interface StoredCook {
 }
 
 /**
+ * A reading the repair has decided is its cook's own first one, with the cook
+ * whose series it opens — absent when that cook has since been deleted, which
+ * leaves the reading worth restoring and nothing worth re-deriving.
+ */
+interface RestoredSeries {
+  head: RestoredReading;
+  cook?: StoredCook;
+}
+
+/**
  * What a restored reading makes of the stamps its cook carries: each field the
  * reading moves, and nothing for a field it leaves where it was.
  */
@@ -190,11 +200,15 @@ export class TempSeriesBackfillService implements OnModuleInit {
     if (orphans.length === 0) {
       return 0;
     }
-    await this.rederiveWhatWasDerivedWithoutTheFirstReading(
-      orphans,
-      await this.secondReadingsOf(orphans),
-    );
-    const writes: SeriesStamp[] = orphans.map(({ _id }) => ({
+    const restorable = await this.readingsThatAreFactsAboutTheirCook(orphans);
+    if (restorable.length === 0) {
+      // Every orphan found was refused, which is not nothing done wrong: an
+      // empty bulk write is an error to the store, and a boot that restored no
+      // reading has nothing to announce and no cook to re-derive.
+      return 0;
+    }
+    await this.rederiveWhatWasDerivedWithoutTheFirstReading(restorable);
+    const writes: SeriesStamp[] = restorable.map(({ head: { _id } }) => ({
       updateOne: {
         filter: { _id },
         update: { $set: { tempsId: String(_id) } },
@@ -241,27 +255,12 @@ export class TempSeriesBackfillService implements OnModuleInit {
    * is not reached.
    */
   private async rederiveWhatWasDerivedWithoutTheFirstReading(
-    heads: RestoredReading[],
-    openedAt: Map<string, Date | null>,
+    restorable: RestoredSeries[],
   ): Promise<void> {
-    const repaired = (await this.smokeModel
-      .find({ tempsId: { $in: heads.map(({ _id }) => String(_id)) } })
-      .select('_id tempsId startedAt finishedAt peakChamber peakChamberScanned')
-      .lean()
-      .exec()) as StoredCook[];
-    // Keyed by series, which names one cook: the id is that cook's own first
-    // reading's. Walked from the readings rather than from the cooks, so each
-    // cook is reached holding the reading its series got back — and a series
-    // whose cook has since been deleted contributes nothing.
-    const cookOf = new Map(
-      repaired.map((cook) => [String(cook.tempsId), cook] as const),
-    );
-    const stamps: CookStamp[] = heads.flatMap((head) => {
-      const cook = cookOf.get(String(head._id));
+    const stamps: CookStamp[] = restorable.flatMap(({ head, cook }) => {
+      // A series whose cook has since been deleted contributes nothing: the
+      // reading is still restored, there is simply nothing it unsettles.
       if (!cook) {
-        return [];
-      }
-      if (this.fallsOutsideTheCook(head, cook, openedAt.get(String(head._id)))) {
         return [];
       }
       const $set = {
@@ -327,6 +326,51 @@ export class TempSeriesBackfillService implements OnModuleInit {
   }
 
   /**
+   * The orphans worth restoring, each with the cook whose series it opens.
+   *
+   * The question asked of every orphan is whether the reading is its cook's own
+   * first one, and it is asked *before* anything is written, because the answer
+   * decides the whole of what the repair does to that series: a reading that is
+   * no fact about the cook is left an orphan, not stamped into the series with
+   * the cook's stamps held back. Not every read of a series is clipped to the
+   * cook's window — `TimelineService.readings` asks for `{ tempsId }` and
+   * nothing else, and the peak `GET /api/timeline/:id` reports is derived from
+   * exactly those rows — so a stray stamped in is reported as the cook's peak
+   * above a chart the window keeps it out of.
+   *
+   * Refusing is permanent in the sense that matters and harmless in the sense
+   * that does not: the row stays as readable and as deletable as it was before
+   * the repair (`tempSeriesFilter` takes it with the series by `_id` either
+   * way), and every boot afterwards reaches the same answer from the same two
+   * facts, so a refusal writes nothing and announces nothing, for ever.
+   */
+  private async readingsThatAreFactsAboutTheirCook(
+    orphans: RestoredReading[],
+  ): Promise<RestoredSeries[]> {
+    const series = orphans.map(({ _id }) => String(_id));
+    const [cooks, openedAt] = await Promise.all([
+      this.smokeModel
+        .find({ tempsId: { $in: series } })
+        .select('_id tempsId startedAt finishedAt peakChamber peakChamberScanned')
+        .lean()
+        .exec() as Promise<StoredCook[]>,
+      this.secondReadingsOf(orphans),
+    ]);
+    // Keyed by series, which names one cook: the id is that cook's own first
+    // reading's. Walked from the readings rather than from the cooks, so each
+    // cook is reached holding the reading its series got back.
+    const cookOf = new Map(
+      cooks.map((cook) => [String(cook.tempsId), cook] as const),
+    );
+    return orphans.flatMap((head) => {
+      const cook = cookOf.get(String(head._id));
+      return this.fallsOutsideTheCook(head, cook, openedAt.get(String(head._id)))
+        ? []
+        : [{ head, cook }];
+    });
+  }
+
+  /**
    * Whether the restored reading is a fact about some other session rather than
    * about this cook.
    *
@@ -340,16 +384,13 @@ export class TempSeriesBackfillService implements OnModuleInit {
    */
   private fallsOutsideTheCook(
     head: RestoredReading,
-    cook: StoredCook,
+    cook: StoredCook | undefined,
     opened: Date | null | undefined,
   ): boolean {
     if (!head.date) {
-      return !!cook.finishedAt;
+      return !!cook?.finishedAt;
     }
-    if (
-      cook.finishedAt &&
-      head.date.getTime() > cook.finishedAt.getTime()
-    ) {
+    if (cook?.finishedAt && head.date.getTime() > cook.finishedAt.getTime()) {
       return true;
     }
     return this.silenceSeparatesTheHead(head.date, opened);

@@ -305,6 +305,51 @@ describe('TempSeriesBackfillService', () => {
       expect(stored(running).startedAt).toBeUndefined();
     });
 
+    /**
+     * A reading that is no fact about the cook is left out of the cook's series
+     * altogether, not stamped into it with the cook's stamps held back.
+     *
+     * Holding the stamps back is not enough, because not every read of a series
+     * is clipped to the cook's window: `TimelineService.readings` asks the store
+     * for `{ tempsId }` and nothing else, and `GET /api/timeline/:id` derives
+     * the peak it reports from exactly those rows. So a stray stamped into the
+     * series — a mis-clocked head, a power-on from another session — is reported
+     * as the cook's peak by the one read that recomputes it, above a chart the
+     * window keeps it out of: the review screen stands claiming 460°F over a
+     * plot whose two points are 234 and 242.
+     *
+     * The stamp is what makes it visible, so the stamp is what is withheld. The
+     * row stays an orphan, exactly as readable and as deletable as it was before
+     * the repair (`tempSeriesFilter` takes it with the series either way), and
+     * every boot afterwards refuses it again for the same reason.
+     */
+    it('leaves a reading unstamped when it is no fact about the cook', async () => {
+      const head = orphan({
+        ChamberTemp: '460',
+        date: new Date('2026-01-02T13:20:00Z'),
+      });
+      const misclocked = cook(head._id.toString(), {
+        finishedAt: new Date('2026-01-02T12:01:00Z'),
+        peakChamber: 242,
+        peakChamberScanned: true,
+      });
+      ['234', '242'].forEach((chamber, minute) => {
+        temps.push({
+          _id: new Types.ObjectId(),
+          ChamberTemp: chamber,
+          date: new Date(`2026-01-02T12:0${minute}:00Z`),
+          tempsId: head._id.toString(),
+        });
+      });
+
+      const stamped = await service.stampOrphanHeads();
+
+      expect(head.tempsId).toBeUndefined();
+      expect(stamped).toBe(0);
+      expect(stored(misclocked).peakChamber).toBe(242);
+      expect(stats.markDirty).not.toHaveBeenCalled();
+    });
+
     /** Cooks whose series never lost a reading keep the peak they recorded. */
     it('leaves the peaks of the cooks it did not repair alone', async () => {
       orphan();
