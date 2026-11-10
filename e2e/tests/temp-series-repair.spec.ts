@@ -22,9 +22,16 @@ import {
  * that could not see the first reading — its *second* — and its readings are
  * spaced far enough apart that the window that start bounds excludes the first
  * reading even once the reading is back in the series.
+ *
+ * The **misclocked** cook carries a finish and no start, which is what a failed
+ * start stamp leaves behind, and a first reading dated hours *after* that
+ * finish, which is what a device whose clock was wrong leaves behind. Its
+ * restored reading is no fact about it, and a repair that stamped the cook as
+ * beginning there would cut a window with nothing inside it at all.
  */
 const UNSTAMPED = { head: 450, tail: [232, 240], stalePeak: 240 };
 const STAMPED = { head: 455, tail: [233, 241], stalePeak: 241 };
+const MISCLOCKED = { head: 460, tail: [234, 242], stalePeak: 242 };
 
 /** What the repair says when it has put a first reading back. */
 const REPAIR_LOG = 'TempSeriesBackfill';
@@ -64,25 +71,55 @@ const PLANT_LEGACY_COOKS = `
       date: at(minutes[0]),
       status: 1,
     }, stamps));
-    return head.toString() + ' ' + cook.insertedId.toString();
+    return { series: head.toString(), cook: cook.insertedId.toString() };
   };
-  const unstamped = plant([${UNSTAMPED.head}, ${UNSTAMPED.tail.join(', ')}], [0, 1, 2], {
-    finishedAt: at(2),
-    peakChamber: ${UNSTAMPED.stalePeak},
-    peakChamberScanned: true,
-  });
-  const stamped = plant([${STAMPED.head}, ${STAMPED.tail.join(', ')}], [60, 80, 100], {
-    startedAt: at(80),
-    finishedAt: at(100),
-    peakChamber: ${STAMPED.stalePeak},
-    peakChamberScanned: true,
-  });
+  const planted = {
+    unstamped: plant([${UNSTAMPED.head}, ${UNSTAMPED.tail.join(', ')}], [0, 1, 2], {
+      finishedAt: at(2),
+      peakChamber: ${UNSTAMPED.stalePeak},
+      peakChamberScanned: true,
+    }),
+    stamped: plant([${STAMPED.head}, ${STAMPED.tail.join(', ')}], [60, 80, 100], {
+      startedAt: at(80),
+      finishedAt: at(100),
+      peakChamber: ${STAMPED.stalePeak},
+      peakChamberScanned: true,
+    }),
+    // The head is dated at minute 200, hours after the finish at minute 121.
+    misclocked: plant([${MISCLOCKED.head}, ${MISCLOCKED.tail.join(', ')}], [200, 120, 121], {
+      finishedAt: at(121),
+      peakChamber: ${MISCLOCKED.stalePeak},
+      peakChamberScanned: true,
+    }),
+  };
   // Planting rows by hand is exactly what the stored statistics cannot see
   // coming, so they are told, the way the sweep tells them.
   // db.stats is mongosh's own command, so the collection is asked by name.
   db.getCollection('stats').updateOne({}, { $set: { dirty: true } });
-  print(unstamped + ' ' + stamped);
+  print(JSON.stringify(planted));
 `;
+
+/** A planted cook: the series it owns, and the cook document over it. */
+interface PlantedCook {
+  series: string;
+  cook: string;
+}
+
+/**
+ * Plants the legacy cooks and answers each of them by name.
+ *
+ * Named rather than printed as a row of ids to be taken apart positionally: a
+ * spec reads one of the three, and a fourth shape planted later must not be
+ * able to move another spec's cook out from under it.
+ */
+const plantLegacyCooks = (): Record<'unstamped' | 'stamped' | 'misclocked', PlantedCook> => {
+  const planted = JSON.parse(mongoEval(PLANT_LEGACY_COOKS));
+  Object.values(planted as Record<string, PlantedCook>).forEach(({ series, cook }) => {
+    expect(series, 'the legacy cooks must have been planted').toMatch(/^[a-f0-9]{24}$/);
+    expect(cook, 'the legacy cooks must have been planted').toMatch(/^[a-f0-9]{24}$/);
+  });
+  return planted;
+};
 
 /**
  * The peak this cook is stamped with, and whether it has been searched for —
@@ -92,6 +129,14 @@ const PLANT_LEGACY_COOKS = `
  */
 const peakStampOf = (cookId: string) =>
   `const cook = db.smokes.findOne({ _id: ObjectId('${cookId}') }); print(cook.peakChamber + ' ' + cook.peakChamberScanned);`;
+
+/**
+ * The start this cook is stamped with, or `none` where it carries none — read
+ * from the store rather than from the timeline, which derives a start for a
+ * cook that was never stamped with one.
+ */
+const startStampOf = (cookId: string) =>
+  `const cook = db.smokes.findOne({ _id: ObjectId('${cookId}') }); print(cook.startedAt ? cook.startedAt.toISOString() : 'none');`;
 
 const seriesOf = (seriesId: string) =>
   `print(db.temps.find({ tempsId: '${seriesId}' }).sort({ date: 1 }).toArray().map(r => r.ChamberTemp).join(','));`;
@@ -163,9 +208,8 @@ test('temp series repair: a legacy cook reads back whole, and twice over', async
   const repairsAlreadyAnnounced = backendLogLines(REPAIR_LOG).length;
   // Nothing of an earlier attempt's is left to be mistaken for this one's.
   sweepPlantedCooks();
-  const [unstampedSeries, unstampedCook, stampedSeries] = mongoEval(PLANT_LEGACY_COOKS).split(' ');
-  expect(unstampedSeries, 'the legacy cooks must have been planted').toMatch(/^[a-f0-9]{24}$/);
-  expect(stampedSeries, 'the legacy cooks must have been planted').toMatch(/^[a-f0-9]{24}$/);
+  const { unstamped, misclocked } = plantLegacyCooks();
+  const { series: unstampedSeries, cook: unstampedCook } = unstamped;
 
   try {
     // As the orphaned shape reads: each cook's first reading is in the store,
@@ -206,6 +250,22 @@ test('temp series repair: a legacy cook reads back whole, and twice over', async
     // numbers, which is arithmetic.
     expect(mongoEval(peakStampOf(unstampedCook))).toBe(`${UNSTAMPED.head} true`);
 
+    // The misclocked cook, repaired by the same boot, keeps the readings it
+    // could always read. Its restored reading is dated hours after it finished,
+    // so neither stamp may be moved to it: a cook stamped as beginning there
+    // would be bounded below at that moment and above at its own finish, a
+    // window with nothing inside it — and this read would answer with nothing.
+    expect(chambersOf(await backend.get(`/api/temps/${misclocked.series}`))).toEqual(
+      MISCLOCKED.tail.map(String)
+    );
+    expect(mongoEval(startStampOf(misclocked.cook))).toBe('none');
+    expect(mongoEval(peakStampOf(misclocked.cook))).toBe(`${MISCLOCKED.stalePeak} true`);
+    // Stamped all the same, so the next boot has nothing left to repair — and
+    // last by date, because its clock put it there.
+    expect(mongoEval(seriesOf(misclocked.series))).toBe(
+      [...MISCLOCKED.tail, MISCLOCKED.head].join(',')
+    );
+
     // Running it twice changes nothing: the second boot finds no orphan, so it
     // stamps nothing, says nothing, and leaves the repaired series alone.
     await restartBackend();
@@ -242,8 +302,7 @@ test('temp series repair: a cook stamped from its second reading is moved back t
 
   const backend = new FetchTransport(resolveUrls().backend);
   sweepPlantedCooks();
-  const [, , series, cookId] = mongoEval(PLANT_LEGACY_COOKS).split(' ');
-  expect(series, 'the legacy cooks must have been planted').toMatch(/^[a-f0-9]{24}$/);
+  const { series, cook: cookId } = plantLegacyCooks().stamped;
 
   try {
     // The stamped shape, as it reads: two of the three readings, a cook that
