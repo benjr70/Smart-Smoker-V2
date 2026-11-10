@@ -1,10 +1,15 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
-import { StateService } from '../State/state.service';
 import { AppSettingsService } from '../appSettings/app-settings.service';
 import { CookStamp, defaultStamps } from '../appSettings/stamp-catalogue';
-import { CurrentSmokeService } from '../common/current-smoke.service';
+import { idleCook } from '../activeCook/active-cook';
+import { ActiveCookService } from '../activeCook/active-cook.service';
+import {
+  attachedCook,
+  FakeActiveCook,
+  fakeActiveCook,
+} from '../activeCook/testing/fake-active-cook';
 import { TempsService } from '../temps/temps.service';
 import { EventsGateway } from '../websocket/events.gateway';
 import {
@@ -17,17 +22,19 @@ import { FakeDoc, fakeCollection } from './testing/fake-collection';
 describe('CookEventsService', () => {
   let service: CookEventsService;
   let stored: FakeDoc[];
-  let state: { smokeId: string; smoking: boolean } | undefined;
+  let activeCook: FakeActiveCook;
   let latestReading: FakeDoc | undefined;
   let catalogue: CookStamp[];
   let broadcast: jest.Mock;
   let readingAt: jest.Mock;
-  let currentSmoke: jest.Mock;
+
+  /** The cook in progress, carrying whatever stamps the test gives it. */
+  const theCook = (smoke: Record<string, unknown> = {}) =>
+    attachedCook({ _id: 'smoke-1', ...smoke }, true);
 
   const build = async (): Promise<CookEventsService> => {
     broadcast = jest.fn();
     readingAt = jest.fn(async () => undefined);
-    currentSmoke = jest.fn(async () => ({}));
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CookEventsService,
@@ -35,17 +42,13 @@ describe('CookEventsService', () => {
           provide: getModelToken('CookEvent'),
           useValue: fakeCollection(stored),
         },
-        { provide: StateService, useValue: { GetState: async () => state } },
+        { provide: ActiveCookService, useValue: activeCook },
         {
           provide: TempsService,
           useValue: {
             getLatestCurrentTemp: async () => latestReading,
-            getCurrentTempAt: (at: Date) => readingAt(at),
+            getCurrentTempAt: (at: Date, cook: unknown) => readingAt(at, cook),
           },
-        },
-        {
-          provide: CurrentSmokeService,
-          useValue: { currentSmoke: () => currentSmoke() },
         },
         {
           provide: AppSettingsService,
@@ -64,7 +67,7 @@ describe('CookEventsService', () => {
 
   beforeEach(async () => {
     stored = [];
-    state = { smokeId: 'smoke-1', smoking: true };
+    activeCook = fakeActiveCook(theCook());
     catalogue = defaultStamps();
     latestReading = {
       ChamberTemp: '243',
@@ -106,11 +109,24 @@ describe('CookEventsService', () => {
   });
 
   it('refuses to record when no cook is in progress', async () => {
-    state = { smokeId: '', smoking: false };
+    activeCook.pointAt(idleCook());
 
     await expect(service.record('wood')).rejects.toBeInstanceOf(
       ConflictException,
     );
+    expect(stored).toHaveLength(0);
+  });
+
+  /**
+   * Which cook a tap belongs to is the one thing an entry cannot be stored
+   * without, so a cook that cannot be read fails the tap rather than being
+   * answered as "nothing is cooking" — the pitmaster is told the request
+   * failed, not that their hot smoker is idle.
+   */
+  it('fails the tap when the cook cannot be read at all', async () => {
+    activeCook.resolve.mockRejectedValue(new Error('mongo is away'));
+
+    await expect(service.record('wood')).rejects.toThrow('mongo is away');
     expect(stored).toHaveLength(0);
   });
 
@@ -139,7 +155,7 @@ describe('CookEventsService', () => {
 
   it('lists nothing for a session with no cook set up', async () => {
     await service.record('wood');
-    state = { smokeId: '', smoking: false };
+    activeCook.pointAt(idleCook());
 
     expect(await service.listCurrent()).toEqual([]);
   });
@@ -240,7 +256,17 @@ describe('CookEventsService', () => {
       await service.record('wrap');
 
       expect(readingAt).not.toHaveBeenCalled();
-      expect(currentSmoke).not.toHaveBeenCalled();
+    });
+
+    /**
+     * One tap is about one cook. The entry's cook, the window its moment is
+     * held to and the pit it carries all come from a single resolve, so a cook
+     * ended mid-request cannot leave the three disagreeing.
+     */
+    it('resolves the Active Cook once for the whole tap', async () => {
+      await service.record('wrap', minutesAgo(1));
+
+      expect(activeCook.resolve).toHaveBeenCalledTimes(1);
     });
 
     it('stores the moment it was given and the pit as it was then', async () => {
@@ -256,7 +282,12 @@ describe('CookEventsService', () => {
       const recorded = await service.record('wrap', spoken);
 
       expect(recorded.at).toEqual(spoken);
-      expect(readingAt).toHaveBeenCalledWith(spoken);
+      // The pit of the cook the entry is being logged against, not of one
+      // resolved again further down.
+      expect(readingAt).toHaveBeenCalledWith(
+        spoken,
+        expect.objectContaining({ smokeId: 'smoke-1' }),
+      );
       // The pit two minutes ago, not the newest reading.
       expect(recorded.chamberTemp).toBe(236);
       expect(recorded.probe1Temp).toBe(160);
@@ -311,7 +342,7 @@ describe('CookEventsService', () => {
     });
 
     it('refuses a moment from before the cook was started', async () => {
-      currentSmoke.mockResolvedValue({ startedAt: minutesAgo(5) });
+      activeCook.pointAt(theCook({ startedAt: minutesAgo(5) }));
 
       await expect(
         service.record('wrap', minutesAgo(10)),
@@ -321,7 +352,7 @@ describe('CookEventsService', () => {
 
     it('takes a moment a little before the start as the start', async () => {
       const startedAt = minutesAgo(5);
-      currentSmoke.mockResolvedValue({ startedAt });
+      activeCook.pointAt(theCook({ startedAt }));
 
       const recorded = await service.record(
         'wrap',
@@ -331,15 +362,14 @@ describe('CookEventsService', () => {
       expect(recorded.at).toEqual(startedAt);
     });
 
-    it('holds a cook whose start cannot be read to the window alone', async () => {
-      currentSmoke.mockRejectedValue(new Error('mongo is away'));
+    it('holds a cook carrying no start to the window alone', async () => {
       const spoken = minutesAgo(3);
 
       expect((await service.record('wrap', spoken)).at).toEqual(spoken);
     });
 
     it('still answers no cook before it answers a bad moment', async () => {
-      state = { smokeId: '', smoking: false };
+      activeCook.pointAt(idleCook());
 
       await expect(
         service.record('wrap', new Date('2020-01-01T00:00:00.000Z')),

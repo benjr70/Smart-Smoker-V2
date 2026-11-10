@@ -7,14 +7,14 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { BaseService } from '../common/base.service';
-import { StateService } from '../State/state.service';
 import { AppSettingsService } from '../appSettings/app-settings.service';
 import {
   CookStamp,
   defaultStamps,
   findStamp,
 } from '../appSettings/stamp-catalogue';
-import { CurrentSmokeService } from '../common/current-smoke.service';
+import { CookSnapshot, isActive, smokeOf } from '../activeCook/active-cook';
+import { ActiveCookService } from '../activeCook/active-cook.service';
 import { Temp } from '../temps/temps.schema';
 import { TempsService } from '../temps/temps.service';
 import { EventsGateway } from '../websocket/events.gateway';
@@ -54,6 +54,16 @@ export const COOK_EVENT_CLOCK_SKEW_MS = 2 * 60 * 1000;
 export const COOK_EVENT_MAX_BACKDATE_MS = 30 * 60 * 1000;
 
 /**
+ * When the cook a snapshot carries started, or `undefined` where it carries no
+ * start stamp — a cook whose first switch-on has not happened yet. The window
+ * alone bounds a moment then.
+ */
+const cookStartedAt = (cook: CookSnapshot): Date | undefined => {
+  const startedAt = smokeOf(cook)?.startedAt;
+  return startedAt ? new Date(startedAt) : undefined;
+};
+
+/**
  * The cook log: what the pitmaster did, when, and what the pit was doing when
  * they did it.
  *
@@ -75,10 +85,9 @@ export const COOK_EVENT_MAX_BACKDATE_MS = 30 * 60 * 1000;
 export class CookEventsService extends BaseService<CookEventDocument> {
   constructor(
     @InjectModel('CookEvent') model: Model<CookEventDocument>,
-    private readonly state: StateService,
+    private readonly activeCook: ActiveCookService,
     private readonly settings: AppSettingsService,
     private readonly temps: TempsService,
-    private readonly currentSmoke: CurrentSmokeService,
     private readonly events: EventsGateway,
   ) {
     super(model, 'CookEvent');
@@ -96,6 +105,11 @@ export class CookEventsService extends BaseService<CookEventDocument> {
    * reading. Given one, it carries that moment and the reading for it — if the
    * moment is one a stamp may be dated to (see {@link momentOf}); one that is
    * not is the caller's mistake too (400).
+   *
+   * The Active Cook is resolved once, and that one cook decides all three of
+   * which cook the entry belongs to, the window its moment is held to, and the
+   * pit it carries. A cook ended half-way through the request cannot leave the
+   * three disagreeing.
    */
   async record(stampKey: string, at?: Date): Promise<CookEvent> {
     const stamp = findStamp(stampKey, await this.catalogue());
@@ -106,12 +120,13 @@ export class CookEventsService extends BaseService<CookEventDocument> {
     if (!stamp || !stamp.enabled) {
       throw new BadRequestException(`Unknown stamp: ${stampKey}`);
     }
-    const smokeId = await this.currentSmokeId();
-    if (!smokeId) {
+    const cook = await this.activeCook.resolve();
+    if (!isActive(cook)) {
       throw new ConflictException('No smoke is in progress');
     }
-    const moment = at === undefined ? undefined : await this.momentOf(at);
-    const reading = await this.readingAt(moment);
+    const { smokeId } = cook;
+    const moment = at === undefined ? undefined : this.momentOf(at, cook);
+    const reading = await this.readingAt(cook, moment);
     const recorded = await this.create({
       smokeId,
       stampKey: stamp.key,
@@ -148,7 +163,7 @@ export class CookEventsService extends BaseService<CookEventDocument> {
 
   /** The in-progress cook's log, oldest first — the order it happened in. */
   async listCurrent(): Promise<CookEvent[]> {
-    const smokeId = await this.currentSmokeId();
+    const smokeId = await this.currentCookId();
     return smokeId ? this.listForSmoke(smokeId) : [];
   }
 
@@ -166,14 +181,14 @@ export class CookEventsService extends BaseService<CookEventDocument> {
    */
   async remove(id: string) {
     const deleted = await this.delete(id);
-    await this.announce(await this.currentSmokeId());
+    await this.announce(await this.currentCookId());
     return deleted;
   }
 
-  /** The cook set up right now, or `undefined` when the session is empty. */
-  private async currentSmokeId(): Promise<string | undefined> {
-    const state = await this.state.GetState();
-    return state?.smokeId?.length ? state.smokeId : undefined;
+  /** The Active Cook's id, or `undefined` when the smoker is attached to none. */
+  private async currentCookId(): Promise<string | undefined> {
+    const cook = await this.activeCook.resolve();
+    return isActive(cook) ? cook.smokeId : undefined;
   }
 
   /**
@@ -186,7 +201,7 @@ export class CookEventsService extends BaseService<CookEventDocument> {
    * itself: no entry is ever dated after the server's own clock or before its
    * own cook, so the log's order stays one the server can vouch for.
    */
-  private async momentOf(at: Date): Promise<Date> {
+  private momentOf(at: Date, cook: CookSnapshot): Date {
     const now = Date.now();
     const given = at.getTime();
     if (given > now + COOK_EVENT_CLOCK_SKEW_MS) {
@@ -195,7 +210,7 @@ export class CookEventsService extends BaseService<CookEventDocument> {
     if (given < now - COOK_EVENT_MAX_BACKDATE_MS) {
       throw new BadRequestException('A stamp cannot be dated that far back');
     }
-    const startedAt = (await this.cookStartedAt())?.getTime();
+    const startedAt = cookStartedAt(cook)?.getTime();
     if (
       startedAt !== undefined &&
       given < startedAt - COOK_EVENT_CLOCK_SKEW_MS
@@ -208,34 +223,24 @@ export class CookEventsService extends BaseService<CookEventDocument> {
   }
 
   /**
-   * When the cook in progress started, or `undefined` when it carries no start
-   * — and `undefined` too when the cook could not be read. The window alone
-   * still bounds the moment then, and a stamp is not lost to an unrelated
-   * failure.
-   */
-  private async cookStartedAt(): Promise<Date | undefined> {
-    try {
-      const startedAt = (await this.currentSmoke.currentSmoke())?.startedAt;
-      return startedAt ? new Date(startedAt) : undefined;
-    } catch (err) {
-      this.logFailure('could not read when the cook started', err);
-      return undefined;
-    }
-  }
-
-  /**
    * The reading an entry carries: the newest of the cook for a tap, the one
    * for `moment` for a stamp that says when it was done — or `undefined` when
    * the cook has taken none, and `undefined` too when the reading could not be
    * read at all. A tap that reached the backend is logged: temperatures nobody
    * could fetch make the entry less informative, while failing the tap makes
    * the pitmaster stand at a hot smoker pressing a button that does nothing.
+   *
+   * Read against the cook the entry is being logged against, which the caller
+   * has already resolved.
    */
-  private async readingAt(moment?: Date): Promise<Temp | undefined> {
+  private async readingAt(
+    cook: CookSnapshot,
+    moment?: Date,
+  ): Promise<Temp | undefined> {
     try {
       return moment
-        ? await this.temps.getCurrentTempAt(moment)
-        : await this.temps.getLatestCurrentTemp();
+        ? await this.temps.getCurrentTempAt(moment, cook)
+        : await this.temps.getLatestCurrentTemp(cook);
     } catch (err) {
       this.logFailure('could not read the pit for a cook event', err);
       return undefined;
