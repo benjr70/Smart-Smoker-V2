@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { Types } from 'mongoose';
@@ -603,6 +604,36 @@ describe('TempSeriesBackfillService', () => {
       await service.onModuleInit();
 
       expect(head.tempsId).toBe(head._id.toString());
+    });
+
+    /**
+     * What makes a refusal survivable: the orphan it refused stays an orphan,
+     * so every boot for the rest of the archive's life finds it again — and
+     * each of those boots must be as quiet as the boot that found nothing at
+     * all. A log line per boot for a row that will never be restorable is a log
+     * nobody can read, and the only thing announcing it would tell an operator
+     * is that the repair is running, which it says by starting.
+     */
+    it('announces nothing when every orphan it found is no fact about its cook', async () => {
+      const announced = jest.spyOn(Logger, 'log').mockImplementation();
+      const head = orphan({
+        ChamberTemp: '460',
+        date: new Date('2026-01-02T13:20:00Z'),
+      });
+      cook(head._id.toString(), {
+        finishedAt: new Date('2026-01-02T12:01:00Z'),
+      });
+
+      const written = jest.spyOn(model, 'bulkWrite');
+
+      await service.onModuleInit();
+
+      expect(announced).not.toHaveBeenCalled();
+      expect(head.tempsId).toBeUndefined();
+      // Not written to with an empty batch either: a bulk write of no
+      // operations is an error to Mongo, which the fake store is too forgiving
+      // to raise and a deployed boot would log as a failed repair for ever.
+      expect(written).not.toHaveBeenCalled();
     });
 
     /**

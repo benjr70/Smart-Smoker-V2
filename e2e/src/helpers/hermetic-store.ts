@@ -116,8 +116,16 @@ const SWEEP_PLANTED = `
   });
   db.smokes.deleteMany({ date: planted });
   const readings = db.temps.deleteMany({ date: planted });
-  // db.stats is mongosh's own command, so the collection is asked by name.
-  db.getCollection('stats').updateOne({}, { $set: { dirty: true } });
+  // db.stats is mongosh's own command, so the collection is asked by name, and
+  // the flag is written the way StatsService.markDirty writes it: the revision
+  // too, so a rebuild already in flight can tell this write happened behind its
+  // back, and upserted, because a fresh store holds no stats document for an
+  // updateOne of an empty filter to match.
+  db.getCollection('stats').updateOne(
+    {},
+    { $set: { dirty: true }, $inc: { revision: 1 } },
+    { upsert: true },
+  );
   print(cooks.length + ' ' + readings.deletedCount);
 `;
 

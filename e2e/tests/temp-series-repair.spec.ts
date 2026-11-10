@@ -111,7 +111,11 @@ const PLANT_LEGACY_COOKS = `
   // Planting rows by hand is exactly what the stored statistics cannot see
   // coming, so they are told, the way the sweep tells them.
   // db.stats is mongosh's own command, so the collection is asked by name.
-  db.getCollection('stats').updateOne({}, { $set: { dirty: true } });
+  db.getCollection('stats').updateOne(
+    {},
+    { $set: { dirty: true }, $inc: { revision: 1 } },
+    { upsert: true },
+  );
   print(JSON.stringify(planted));
 `;
 
@@ -125,8 +129,8 @@ interface PlantedCook {
  * Plants the legacy cooks and answers each of them by name.
  *
  * Named rather than printed as a row of ids to be taken apart positionally: a
- * spec reads one of the three, and a fourth shape planted later must not be
- * able to move another spec's cook out from under it.
+ * spec reads some of the four, and a fifth shape planted later must not be able
+ * to move another spec's cook out from under it.
  */
 const plantLegacyCooks = (): Record<
   'unstamped' | 'stamped' | 'misclocked' | 'quiet',

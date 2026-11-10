@@ -134,15 +134,22 @@ interface CookStamp {
  * owns this collection and is the only thing that reads it, and a deployed box
  * nobody can shell into is exactly where the orphans are. Idempotent by
  * construction — a stamped reading no longer matches {@link ORPHANED_HEAD} —
- * so every boot after the first finds nothing and writes nothing.
+ * so every boot after the first writes nothing. A reading it refused stays an
+ * orphan and is found again, and refused again on the same two facts, which is
+ * a read and no write.
  *
  * Stamped row by row rather than with one store-side pipeline, because what is
  * written depends on the row it is written to: each orphan gets *its own* id,
- * which is one update per orphan and at most one orphan per cook, ever.
+ * which is one update per orphan. Normally that is one orphan per cook — the
+ * write that omitted the id ran once per series — though a cook whose second
+ * reading arrived inside the round trip that minted the id left two, and each
+ * of them becomes a series of its own, which is the shape it already had.
  *
  * Restoring a reading also unsettles what was already derived from the series
  * without it, so the repair moves the stamps of the cooks it touches — see
- * {@link TempSeriesBackfillService.rederiveWhatWasDerivedWithoutTheFirstReading}.
+ * {@link TempSeriesBackfillService.rederiveWhatWasDerivedWithoutTheFirstReading}
+ * — and a reading the cook's own evidence excludes is left alone entirely, see
+ * {@link TempSeriesBackfillService.readingsThatAreFactsAboutTheirCook}.
  */
 @Injectable()
 export class TempSeriesBackfillService implements OnModuleInit {
@@ -351,7 +358,9 @@ export class TempSeriesBackfillService implements OnModuleInit {
     const [cooks, openedAt] = await Promise.all([
       this.smokeModel
         .find({ tempsId: { $in: series } })
-        .select('_id tempsId startedAt finishedAt peakChamber peakChamberScanned')
+        .select(
+          '_id tempsId startedAt finishedAt peakChamber peakChamberScanned',
+        )
         .lean()
         .exec() as Promise<StoredCook[]>,
       this.secondReadingsOf(orphans),
@@ -364,7 +373,11 @@ export class TempSeriesBackfillService implements OnModuleInit {
     );
     return orphans.flatMap((head) => {
       const cook = cookOf.get(String(head._id));
-      return this.fallsOutsideTheCook(head, cook, openedAt.get(String(head._id)))
+      return this.fallsOutsideTheCook(
+        head,
+        cook,
+        openedAt.get(String(head._id)),
+      )
         ? []
         : [{ head, cook }];
     });
