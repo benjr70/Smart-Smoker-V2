@@ -92,12 +92,13 @@ export const backendLogLines = (needle: string, shell: Shell = runDocker): strin
 /**
  * The one day every planted legacy cook is dated to.
  *
- * Planted rows cannot be named, so they cannot carry the `smoke-test-` prefix
- * the fixture's hygiene net is built on (see `api/test-entity.ts`): a cook is
- * recognised through its pre-smoke's name, and the rows a repair has to be
- * proved against are written straight into the store. A reserved day is the
- * substitute — nothing else in the suite is dated to it, so everything dated
- * within it is this suite's to remove, and the removal needs no ids.
+ * A planted cook links a `smoke-test-` pre-smoke, so the fixture's own hygiene
+ * net recognises it (see `api/test-entity.ts`). Its *readings* it cannot: a
+ * temperature row carries no name and no pre-smoke, and the readings are the
+ * whole point of a planted legacy cook. A reserved day covers what the prefix
+ * cannot — nothing else in the suite is dated to it, so everything dated within
+ * it is this suite's to remove, and the removal needs no ids, which is what
+ * makes a run killed mid-plant recoverable.
  */
 const PLANTED_DAY = {
   from: '2026-01-02T00:00:00Z',
