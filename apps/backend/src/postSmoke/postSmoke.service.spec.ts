@@ -4,7 +4,13 @@ import { NotFoundException } from '@nestjs/common';
 import { PostSmokeService } from './postSmoke.service';
 import { PostSmoke } from './postSmoke.schema';
 import { PostSmokeDto } from './postSmokeDto';
-import { CurrentSmokeService } from '../common/current-smoke.service';
+import { childIdOf, idleCook } from '../activeCook/active-cook';
+import { ActiveCookService } from '../activeCook/active-cook.service';
+import {
+  attachedCook,
+  FakeActiveCook,
+  fakeActiveCook,
+} from '../activeCook/testing/fake-active-cook';
 import { StatsService } from '../stats/stats.service';
 
 const query = <T>(value: T) => ({ exec: jest.fn().mockResolvedValue(value) });
@@ -12,10 +18,7 @@ const query = <T>(value: T) => ({ exec: jest.fn().mockResolvedValue(value) });
 describe('PostSmokeService', () => {
   let service: PostSmokeService;
   let model: any;
-  let currentSmoke: {
-    readCurrent: jest.Mock;
-    upsertCurrent: jest.Mock;
-  };
+  let activeCook: FakeActiveCook;
   let stats: { markDirty: jest.Mock };
 
   const existing: PostSmoke = {
@@ -30,6 +33,13 @@ describe('PostSmokeService', () => {
     notes: 'Perfect results',
   };
 
+  /** The defaults a session with no post-smoke yet renders. */
+  const blank = { notes: '', restTime: '', steps: [''] };
+
+  /** A cook mid-session, carrying whatever links the test gives it. */
+  const cookLinking = (links: Record<string, string | undefined>) =>
+    attachedCook({ _id: 'cook-1', preSmokeId: 'pre-1', ...links });
+
   beforeEach(async () => {
     model = jest.fn().mockImplementation((doc) => ({
       ...doc,
@@ -41,11 +51,7 @@ describe('PostSmokeService', () => {
       .mockReturnValue(query({ ...existing, ...dto, _id: 'post-1' }));
     model.deleteOne = jest.fn().mockReturnValue(query({ deletedCount: 1 }));
 
-    currentSmoke = {
-      readCurrent: jest.fn(),
-      upsertCurrent: jest.fn(),
-    };
-
+    activeCook = fakeActiveCook(cookLinking({ postSmokeId: 'post-1' }));
     stats = { markDirty: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -53,7 +59,7 @@ describe('PostSmokeService', () => {
         PostSmokeService,
         { provide: StatsService, useValue: stats },
         { provide: getModelToken('PostSmoke'), useValue: model },
-        { provide: CurrentSmokeService, useValue: currentSmoke },
+        { provide: ActiveCookService, useValue: activeCook },
       ],
     }).compile();
 
@@ -69,71 +75,57 @@ describe('PostSmokeService', () => {
   });
 
   describe('getCurrentPostSmoke', () => {
-    it('loads the linked post-smoke via the current-smoke walk', async () => {
-      currentSmoke.readCurrent.mockImplementation((key, load) =>
-        load('post-1'),
-      );
-
+    it('loads the post-smoke the Active Cook links', async () => {
       const result = await service.getCurrentPostSmoke();
 
-      expect(currentSmoke.readCurrent).toHaveBeenCalledWith(
-        'postSmokeId',
-        expect.any(Function),
-        expect.objectContaining({ notes: '', restTime: '', steps: [''] }),
-      );
       expect(model.findById).toHaveBeenCalledWith('post-1');
       expect(result).toEqual(existing);
     });
 
-    it('returns the default object when nothing is active (fallback)', async () => {
-      currentSmoke.readCurrent.mockImplementation(
-        (key, load, fallback) => fallback,
-      );
+    it('renders the blank defaults when the cook has no post-smoke yet', async () => {
+      activeCook.pointAt(cookLinking({ postSmokeId: undefined }));
 
-      const result = await service.getCurrentPostSmoke();
+      expect(await service.getCurrentPostSmoke()).toEqual(blank);
+      expect(model.findById).not.toHaveBeenCalled();
+    });
 
-      expect(result).toEqual({ notes: '', restTime: '', steps: [''] });
+    it('renders the blank defaults when there is no Active Cook', async () => {
+      activeCook.pointAt(idleCook());
+
+      expect(await service.getCurrentPostSmoke()).toEqual(blank);
       expect(model.findById).not.toHaveBeenCalled();
     });
   });
 
   describe('saveCurrentPostSmoke', () => {
-    it('updates the linked post-smoke when one already exists', async () => {
-      currentSmoke.upsertCurrent.mockImplementation((key, handlers) =>
-        handlers.update('post-1'),
-      );
-
+    it('updates the post-smoke the cook already links', async () => {
       const result = await service.saveCurrentPostSmoke(dto);
 
-      expect(currentSmoke.upsertCurrent).toHaveBeenCalledWith(
-        'postSmokeId',
-        expect.any(Object),
-      );
       expect(model.findByIdAndUpdate).toHaveBeenCalledWith(
         'post-1',
         { $set: dto },
         { new: true },
       );
+      expect(model).not.toHaveBeenCalled();
       expect(result).toMatchObject({ _id: 'post-1' });
     });
 
-    it('creates a post-smoke and reports its new child id when none exists', async () => {
-      let linkedChildId: string | undefined;
-      currentSmoke.upsertCurrent.mockImplementation(async (key, handlers) => {
-        const created = await handlers.create();
-        linkedChildId = created.childId;
-        return created.result;
-      });
+    it('creates one and links it onto the cook when there is none', async () => {
+      activeCook.pointAt(cookLinking({ postSmokeId: undefined }));
 
       const result = await service.saveCurrentPostSmoke(dto);
 
       expect(model).toHaveBeenCalledWith(dto);
-      expect(linkedChildId).toBe('new-postsmoke-id');
       expect(result).toMatchObject({ _id: 'new-postsmoke-id' });
+      // Read back off the cook, which is where the next request finds it.
+      expect(childIdOf(activeCook.cook(), 'postSmokeId')).toBe(
+        'new-postsmoke-id',
+      );
+      expect(childIdOf(activeCook.cook(), 'preSmokeId')).toBe('pre-1');
     });
 
-    it('propagates the 404 when there is no active smoke', async () => {
-      currentSmoke.upsertCurrent.mockRejectedValue(new NotFoundException());
+    it('answers 404 when there is no Active Cook', async () => {
+      activeCook.pointAt(idleCook());
 
       await expect(service.saveCurrentPostSmoke(dto)).rejects.toBeInstanceOf(
         NotFoundException,
