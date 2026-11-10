@@ -177,6 +177,14 @@ describe('TempSeriesBackfillService', () => {
         peakChamberScanned: true,
         cookWindowBackfilled: true,
       });
+      // The brisket's own next reading, seconds later: what makes the head the
+      // first reading of *this* cook rather than a stray from another session.
+      temps.push({
+        _id: new Types.ObjectId(),
+        ChamberTemp: '226',
+        date: new Date('2026-01-02T10:00:05Z'),
+        tempsId: head._id.toString(),
+      });
       // The burger session weeks later, in the same series: hotter than the
       // cook ever got, and outside the window the heal cut.
       temps.push({
@@ -188,6 +196,10 @@ describe('TempSeriesBackfillService', () => {
 
       await service.stampOrphanHeads();
 
+      // Restored, which is what makes this the bounded-peak case rather than
+      // the refusal above it: the head belongs to the cook, and the peak is
+      // held at 238 by arithmetic, not by the head being left out.
+      expect(head.tempsId).toBe(head._id.toString());
       expect(stored(healed).peakChamber).toBe(238);
       expect(stored(healed).cookWindowBackfilled).toBe(true);
     });
