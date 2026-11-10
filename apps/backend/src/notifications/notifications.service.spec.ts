@@ -325,7 +325,7 @@ describe('NotificationsService', () => {
 
       it('hands that one cook to every read it makes about the cook', async () => {
         const cook = attachedCook({ _id: 'smoke-1' }, true);
-        activeCook.attach(cook);
+        activeCook.pointAt(cook);
 
         await service.checkAlerts();
 
@@ -387,7 +387,7 @@ describe('NotificationsService', () => {
         offScheduleDirection: null,
         offScheduleFired: false,
       });
-      activeCook.attach(attachedCook({ _id: 'this-weekend' }, true));
+      activeCook.pointAt(attachedCook({ _id: 'this-weekend' }, true));
       smokeProfile.getCurrentSmokeProfile.mockResolvedValue({
         probe1Name: 'Brisket Flat',
       });
@@ -474,7 +474,7 @@ describe('NotificationsService', () => {
         offScheduleDirection: null,
         offScheduleFired: false,
       });
-      activeCook.attach(attachedCook({ _id: 'this-weekend' }, true));
+      activeCook.pointAt(attachedCook({ _id: 'this-weekend' }, true));
       temps.getLatestCurrentTemp.mockResolvedValue({
         ChamberTemp: '240',
         MeatTemp: '205',
@@ -513,7 +513,7 @@ describe('NotificationsService', () => {
         ...watchingProbe('probe1', 203),
         smokeComplete: { enabled: true },
       });
-      activeCook.attach(attachedCook({ _id: 'smoke-1' }, false));
+      activeCook.pointAt(attachedCook({ _id: 'smoke-1' }, false));
       temps.getLatestCurrentTemp.mockResolvedValue({
         ChamberTemp: '240',
         MeatTemp: '205',
@@ -641,7 +641,7 @@ describe('NotificationsService', () => {
     });
 
     it('says nothing about an idle smoker, whatever its chamber reads', async () => {
-      activeCook.attach(attachedCook({ _id: 'smoke-1' }, false));
+      activeCook.pointAt(attachedCook({ _id: 'smoke-1' }, false));
       temps.getLatestCurrentTemp.mockResolvedValue(chamberAt('40'));
 
       await service.checkAlerts();
@@ -707,7 +707,7 @@ describe('NotificationsService', () => {
         offScheduleDirection: null,
         offScheduleFired: false,
       });
-      activeCook.attach(attachedCook({ _id: 'fresh-smoke' }, true));
+      activeCook.pointAt(attachedCook({ _id: 'fresh-smoke' }, true));
       temps.getLatestCurrentTemp.mockResolvedValue(chamberAt('90'));
 
       await service.checkAlerts();
@@ -880,7 +880,7 @@ describe('NotificationsService', () => {
         await service.checkAlerts();
         expect(pushDispatcher.notify).toHaveBeenCalledTimes(1);
 
-        activeCook.attach(attachedCook({ _id: 'next-weekend' }, true));
+        activeCook.pointAt(attachedCook({ _id: 'next-weekend' }, true));
         await service.checkAlerts();
         await service.checkAlerts();
 
@@ -1005,7 +1005,7 @@ describe('NotificationsService', () => {
         await service.checkAlerts();
         await service.checkAlerts();
 
-        activeCook.attach(attachedCook({ _id: 'next-weekend' }, true));
+        activeCook.pointAt(attachedCook({ _id: 'next-weekend' }, true));
         await service.checkAlerts();
         await service.checkAlerts();
 

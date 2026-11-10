@@ -369,7 +369,7 @@ describe('AppSettingsService', () => {
     // which are not the labels this feature shows.
     it('shows generic slot labels when no session is active', async () => {
       const cookNames = createCook();
-      cookNames.activeCook.attach(idleCook());
+      cookNames.activeCook.pointAt(idleCook());
       cookNames.profile.getCurrentSmokeProfile.mockResolvedValue({
         probe1Name: 'Brisket Flat',
         probe2Name: 'Pork Butt',

@@ -192,7 +192,7 @@ describe('SmokeService', () => {
      * only has to answer the same `null` the route has always answered.
      */
     it('answers nothing for an idle smoker', async () => {
-      activeCook.attach(idleCook());
+      activeCook.pointAt(idleCook());
 
       expect(await service.getCurrentSmoke()).toBeNull();
     });
@@ -570,7 +570,7 @@ describe('SmokeService', () => {
       });
 
       it('has nothing to write when no cook is in progress', async () => {
-        activeCook.attach(idleCook());
+        activeCook.pointAt(idleCook());
 
         expect(await service.updateServePlan({ restMinutes: 45 })).toBeNull();
         expect(mockSmokeModel.findByIdAndUpdate).not.toHaveBeenCalled();
@@ -598,7 +598,7 @@ describe('SmokeService', () => {
       });
 
       it('has nothing to stamp when no cook is in progress', async () => {
-        activeCook.attach(idleCook());
+        activeCook.pointAt(idleCook());
 
         expect(await service.stampPull()).toBeNull();
         expect(mockTimelineService.stampPull).not.toHaveBeenCalled();

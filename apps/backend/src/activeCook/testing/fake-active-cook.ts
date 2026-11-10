@@ -2,7 +2,10 @@ import { WithDocumentId } from '../../common/document-id';
 import { Smoke } from '../../smoke/smoke.schema';
 import {
   ActiveCook,
-  ActiveCookReader,
+  ActiveCookChildren,
+  attachToCook,
+  ChildAttachment,
+  CookChildKey,
   CookSnapshot,
   idleCook,
 } from '../active-cook';
@@ -20,11 +23,15 @@ import {
  *
  * Test-only — excluded from coverage collection.
  */
-export interface FakeActiveCook extends ActiveCookReader {
+export interface FakeActiveCook extends ActiveCookChildren {
   /** Recording, so a spec can hold one request to one resolve. */
   resolve: jest.Mock<Promise<CookSnapshot>, []>;
+  /** Recording, so a spec can hold a write to one attach of one kind. */
+  attach: jest.Mock<Promise<any>, [CookChildKey, ChildAttachment<any>]>;
   /** Point it at a different cook, or at idle, after it was built. */
-  attach(snapshot: CookSnapshot): void;
+  pointAt(snapshot: CookSnapshot): void;
+  /** The cook as it now stands — the links an attach has written included. */
+  cook(): CookSnapshot;
 }
 
 /** A reader answering `snapshot`, or idle when none is given. */
@@ -32,11 +39,23 @@ export const fakeActiveCook = (
   snapshot: CookSnapshot = idleCook(),
 ): FakeActiveCook => {
   let current = snapshot;
+  const pointAt = (next: CookSnapshot): void => {
+    current = next;
+  };
   return {
     resolve: jest.fn(async () => current),
-    attach(next: CookSnapshot): void {
-      current = next;
-    },
+    /**
+     * The real rule, over the cook this fake is pointed at — a created link
+     * lands on that cook, so a spec reads the attach back the way a route
+     * would on its next request rather than by trusting a call assertion.
+     */
+    attach: jest.fn((key, attachment) =>
+      attachToCook(current, key, attachment, async (cook, childId) => {
+        pointAt(attachedCook({ ...cook.smoke, [key]: childId }, cook.smoking));
+      }),
+    ),
+    pointAt,
+    cook: () => current,
   };
 };
 

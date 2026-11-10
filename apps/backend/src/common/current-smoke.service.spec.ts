@@ -47,7 +47,7 @@ describe('CurrentSmokeService', () => {
 
   describe('currentSmoke', () => {
     it('answers nothing for an idle smoker, and heals nothing as it reads', async () => {
-      activeCook.attach(idleCook());
+      activeCook.pointAt(idleCook());
 
       expect(await service.currentSmoke()).toBeNull();
     });
@@ -65,7 +65,7 @@ describe('CurrentSmokeService', () => {
     const fallback = { note: 'default' };
 
     it('returns the fallback when there is no active smoke', async () => {
-      activeCook.attach(idleCook());
+      activeCook.pointAt(idleCook());
       const load = jest.fn();
 
       const result = await service.readCurrent('postSmokeId', load, fallback);
@@ -75,7 +75,7 @@ describe('CurrentSmokeService', () => {
     });
 
     it('returns the fallback when the active smoke has no child of that key', async () => {
-      activeCook.attach(
+      activeCook.pointAt(
         attachedCook({ ...activeSmoke, postSmokeId: undefined }),
       );
       const load = jest.fn();
@@ -129,7 +129,7 @@ describe('CurrentSmokeService', () => {
 
   describe('upsertCurrent', () => {
     it('throws NotFoundException when there is no active smoke', async () => {
-      activeCook.attach(idleCook());
+      activeCook.pointAt(idleCook());
 
       await expect(
         service.upsertCurrent('postSmokeId', {
@@ -156,7 +156,7 @@ describe('CurrentSmokeService', () => {
     });
 
     it('creates the child and links its id back onto the smoke, preserving siblings', async () => {
-      activeCook.attach(
+      activeCook.pointAt(
         attachedCook({ ...activeSmoke, postSmokeId: undefined }),
       );
       const created = { note: 'created' };
@@ -184,7 +184,7 @@ describe('CurrentSmokeService', () => {
     });
 
     it('invokes onResolveSmoke when provided on the create path', async () => {
-      activeCook.attach(
+      activeCook.pointAt(
         attachedCook({ ...activeSmoke, postSmokeId: undefined }),
       );
       const onResolveSmoke = jest.fn();
