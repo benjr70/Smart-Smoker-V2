@@ -3,6 +3,7 @@ import { FetchTransport } from '../src/api/http-transport';
 import { TEST_ENTITY_PREFIX } from '../src/api/test-entity';
 import { resolveUrls } from '../src/config/urls';
 import {
+  MARK_STATS_DIRTY,
   PLANTED_AT,
   backendLogLines,
   hermeticStoreReady,
@@ -108,14 +109,7 @@ const PLANT_LEGACY_COOKS = `
       cookWindowBackfilled: true,
     }),
   };
-  // Planting rows by hand is exactly what the stored statistics cannot see
-  // coming, so they are told, the way the sweep tells them.
-  // db.stats is mongosh's own command, so the collection is asked by name.
-  db.getCollection('stats').updateOne(
-    {},
-    { $set: { dirty: true }, $inc: { revision: 1 } },
-    { upsert: true },
-  );
+  ${MARK_STATS_DIRTY}
   print(JSON.stringify(planted));
 `;
 

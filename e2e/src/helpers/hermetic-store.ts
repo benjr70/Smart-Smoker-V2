@@ -108,6 +108,27 @@ const PLANTED_DAY = {
 /** Where a planting spec dates its rows, for the spec to build them from. */
 export const PLANTED_AT = PLANTED_DAY.from;
 
+/**
+ * The mongosh that tells the statistics the archive changed under them, for a
+ * plant or a sweep to end with.
+ *
+ * Writing rows by hand is the one change the stored aggregate's own guard — a
+ * count of completed cooks — cannot see, so every helper that does it has to
+ * say so. Exported rather than written out per caller, because it has to stay
+ * the write `StatsService.markDirty` makes: `db.stats` is mongosh's own
+ * command, so the collection is asked for by name; the revision is bumped as
+ * well as the flag, so a rebuild already in flight can tell this write
+ * happened behind its back; and it is upserted, because a fresh store holds no
+ * stats document for an `updateOne` of an empty filter to match.
+ */
+export const MARK_STATS_DIRTY = `
+  db.getCollection('stats').updateOne(
+    {},
+    { $set: { dirty: true }, $inc: { revision: 1 } },
+    { upsert: true },
+  );
+`;
+
 const SWEEP_PLANTED = `
   const planted = { $gte: new Date('${PLANTED_DAY.from}'), $lt: new Date('${PLANTED_DAY.to}') };
   const cooks = db.smokes.find({ date: planted }).toArray();
@@ -116,16 +137,7 @@ const SWEEP_PLANTED = `
   });
   db.smokes.deleteMany({ date: planted });
   const readings = db.temps.deleteMany({ date: planted });
-  // db.stats is mongosh's own command, so the collection is asked by name, and
-  // the flag is written the way StatsService.markDirty writes it: the revision
-  // too, so a rebuild already in flight can tell this write happened behind its
-  // back, and upserted, because a fresh store holds no stats document for an
-  // updateOne of an empty filter to match.
-  db.getCollection('stats').updateOne(
-    {},
-    { $set: { dirty: true }, $inc: { revision: 1 } },
-    { upsert: true },
-  );
+  ${MARK_STATS_DIRTY}
   print(cooks.length + ' ' + readings.deletedCount);
 `;
 
