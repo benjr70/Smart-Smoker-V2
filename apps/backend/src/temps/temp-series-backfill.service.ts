@@ -383,7 +383,8 @@ export class TempSeriesBackfillService implements OnModuleInit {
     if (!opened) {
       return false;
     }
-    return opened.getTime() - taken.getTime() > SERIES_HEAD_SILENCE_MS;
+    const quiet = opened.getTime() - taken.getTime();
+    return quiet < 0 || quiet > SERIES_HEAD_SILENCE_MS;
   }
 
   /**

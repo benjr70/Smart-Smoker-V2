@@ -274,6 +274,37 @@ describe('TempSeriesBackfillService', () => {
       expect(stored(healed).peakChamber).toBe(238);
     });
 
+    /**
+     * A head dated *after* the reading that follows it is a row its own series
+     * contradicts, and a cook still running has no finish to refuse it with.
+     *
+     * The shape is a box whose clock was wrong at power-on and corrected a
+     * minute later. Stamping that moment as the cook's beginning is worse than
+     * leaving the head out: `cookWindow` bounds the series read at the start
+     * less the clock slack, so a cook whose own readings are earlier than its
+     * stamped start reads back with *only* the stray — the three readings it
+     * could still read before the repair are clipped out of their own chart.
+     */
+    it('moves no start when the head is dated after the reading that follows it', async () => {
+      const head = orphan({
+        ChamberTemp: '180',
+        date: new Date('2026-01-06T10:30:00Z'),
+      });
+      const running = cook(head._id.toString());
+      ['221', '233', '245'].forEach((chamber, minute) => {
+        temps.push({
+          _id: new Types.ObjectId(),
+          ChamberTemp: chamber,
+          date: new Date(`2026-01-06T10:0${minute + 1}:00Z`),
+          tempsId: head._id.toString(),
+        });
+      });
+
+      await service.stampOrphanHeads();
+
+      expect(stored(running).startedAt).toBeUndefined();
+    });
+
     /** Cooks whose series never lost a reading keep the peak they recorded. */
     it('leaves the peaks of the cooks it did not repair alone', async () => {
       orphan();
