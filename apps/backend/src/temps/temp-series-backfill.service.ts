@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model, Types } from 'mongoose';
 
+import { MIN_AUTO_STOP_IDLE_MS } from '../appSettings/auto-stop-threshold';
 import { SmokeDocument } from '../smoke/smoke.schema';
 import { markStatsStale } from '../stats/mark-stats-stale';
 import { StatsService } from '../stats/stats.service';
@@ -36,13 +37,15 @@ const ORPHANED_HEAD: FilterQuery<TempDocument> = {
  * configured to — one hour (`AutoStopDto`) — rather than the configured value
  * itself: a head an hour clear of its own series is from another session under
  * every configuration this archive allows, and a repair that runs once at boot
- * and can never be re-run should only move what no setting would dispute.
+ * and can never be re-run should only move what no setting would dispute. The
+ * floor is taken from where the settings refuse anything below it rather than
+ * written out again here, so the two cannot drift apart.
  *
  * Far wider than any legacy head's real gap: the orphans this restores were
  * written moments before the reading that followed them, and even a start stamp
  * deferred to a later switch-on leaves minutes, not hours.
  */
-const SERIES_HEAD_SILENCE_MS = 60 * 60 * 1000;
+const SERIES_HEAD_SILENCE_MS = MIN_AUTO_STOP_IDLE_MS;
 
 /**
  * A stored reading read for its id alone — the id an orphan is missing, and
