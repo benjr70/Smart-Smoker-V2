@@ -274,19 +274,51 @@ export class TempSeriesBackfillService implements OnModuleInit {
    * moved *back*: the restored reading is the earliest the series holds, so a
    * stamp already at or before it is already right, and an undated row cannot
    * be placed against the stamp at all.
+   *
+   * A reading the cook's own window excludes moves nothing either (see
+   * {@link TempSeriesBackfillService.fallsOutsideTheCook}), and the start needs
+   * that guard more than the peak does: a cook carrying a finish but no start
+   * is what a failed start stamp leaves behind, so "only ever back" never fires
+   * for it, and a head dated after the finish would be written as a beginning
+   * after the end. That is a cook clamped to an instant by `durationBetween`
+   * and — once the head is further past the finish than the clock slack — a
+   * `cookWindow` with nothing inside it, which would cost the cook the readings
+   * it could still read to restore the one it could not.
    */
   private startMovedBackTo(
     head: RestoredReading,
     cook: StoredCook,
   ): RederivedStamps {
     const began = head.date;
-    if (!began) {
+    if (!began || this.fallsOutsideTheCook(head, cook)) {
       return {};
     }
     if (cook.startedAt && cook.startedAt.getTime() <= began.getTime()) {
       return {};
     }
     return { startedAt: began };
+  }
+
+  /**
+   * Whether the restored reading is a fact about some other session rather than
+   * about this cook.
+   *
+   * The scans that bound a cook's stamps read the rows dated at or before its
+   * finish and no others (`TimelineService.peakChambersOf`), and a stored series
+   * is clipped to the same window, so a reading from outside it cannot be
+   * folded into either stamp: the cook would stand claiming a beginning or a
+   * peak its own chart never reaches. Only a finished cook has that boundary; a
+   * cook still running has no end to fall after. An undated row cannot be
+   * placed inside the window and is excluded with it.
+   */
+  private fallsOutsideTheCook(
+    head: RestoredReading,
+    cook: StoredCook,
+  ): boolean {
+    return (
+      !!cook.finishedAt &&
+      (!head.date || head.date.getTime() > cook.finishedAt.getTime())
+    );
   }
 
   /**
@@ -321,16 +353,7 @@ export class TempSeriesBackfillService implements OnModuleInit {
     if (!head.ChamberTemp || !Number.isFinite(restored)) {
       return {};
     }
-    // A reading the cook's own window excludes is not a fact about the cook.
-    // The scans that bound a peak read the rows dated at or before the finish
-    // and no others (`TimelineService.peakChambersOf`), and a stored series is
-    // clipped to the same window, so folding in a reading from outside it
-    // would leave the cook claiming a peak its own chart never reaches. An
-    // undated row cannot be placed inside the window and is excluded with it.
-    if (
-      cook.finishedAt &&
-      (!head.date || head.date.getTime() > cook.finishedAt.getTime())
-    ) {
+    if (this.fallsOutsideTheCook(head, cook)) {
       return {};
     }
     if (

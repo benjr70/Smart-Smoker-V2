@@ -360,6 +360,37 @@ describe('TempSeriesBackfillService', () => {
     });
 
     /**
+     * The start is bounded by the same window the peak is, and for a harder
+     * reason. A cook carrying a finish but no start is the shape a failed start
+     * stamp leaves (see `TimelineService.stampStart`), so the guard that only
+     * ever moves a start *back* never fires for it: there is nothing to move
+     * back from. Hand that cook a head dated after its finish — a device whose
+     * clock was wrong, the same row the peak refuses — and stamping it as the
+     * start writes a beginning *after* the end. `durationBetween` then clamps
+     * the cook to an instant, and `cookWindow` bounds its series read at
+     * `head.date` less the clock slack: once the head is further past the
+     * finish than that slack, the window is empty and the read answers with
+     * nothing but the undated rows. The cook had no start at all before the
+     * repair, so its series read whole bar the head — the repair must not cost
+     * it the rest of its readings to restore one.
+     */
+    it('moves no start when the reading it got back falls after the cook finished', async () => {
+      const head = orphan({
+        ChamberTemp: '225',
+        date: new Date('2026-01-03T10:00:00Z'),
+      });
+      const unstamped = cook(head._id.toString(), {
+        finishedAt: new Date('2026-01-02T10:30:00Z'),
+        peakChamber: 240,
+        peakChamberScanned: true,
+      });
+
+      await service.stampOrphanHeads();
+
+      expect(stored(unstamped).startedAt).toBeUndefined();
+    });
+
+    /**
      * Moving the stamps is only half of it: the statistics are served from a
      * stored aggregate, and the guard behind it counts completed cooks — a
      * repair changes no count, so nothing would ever read the moved stamps.
