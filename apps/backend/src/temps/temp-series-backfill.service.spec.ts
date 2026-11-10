@@ -363,6 +363,60 @@ describe('TempSeriesBackfillService', () => {
       expect(stats.markDirty).not.toHaveBeenCalled();
     });
 
+    /**
+     * The shape a deleted or never-finished cook leaves: readings and no cook
+     * document at all. There are no stamps to judge the head against, so the
+     * series answers for itself — the reading that follows it is a minute
+     * later, so it opened the series and is restored.
+     */
+    it('restores the head of a series no cook owns', async () => {
+      const head = orphan({
+        ChamberTemp: '268',
+        date: new Date('2026-01-02T14:00:00Z'),
+      });
+      temps.push({
+        _id: new Types.ObjectId(),
+        ChamberTemp: '232',
+        date: new Date('2026-01-02T14:01:00Z'),
+        tempsId: head._id.toString(),
+      });
+
+      const stamped = await service.stampOrphanHeads();
+
+      expect(head.tempsId).toBe(head._id.toString());
+      expect(stamped).toBe(1);
+      expect(stats.markDirty).not.toHaveBeenCalled();
+    });
+
+    /**
+     * A series whose other readings cannot say when they were taken says
+     * nothing about where its head belongs, so the head is left to the cook's
+     * own boundary — which here admits it, and the start moves back.
+     */
+    it('restores a head whose series carries no dated reading to compare it with', async () => {
+      const head = orphan({
+        ChamberTemp: '268',
+        date: new Date('2026-01-02T10:00:00Z'),
+      });
+      const repaired = cook(head._id.toString(), {
+        startedAt: new Date('2026-01-02T10:05:00Z'),
+        finishedAt: new Date('2026-01-02T10:30:00Z'),
+      });
+      temps.push({
+        _id: new Types.ObjectId(),
+        ChamberTemp: '232',
+        date: null,
+        tempsId: head._id.toString(),
+      });
+
+      await service.stampOrphanHeads();
+
+      expect(head.tempsId).toBe(head._id.toString());
+      expect(stored(repaired).startedAt).toEqual(
+        new Date('2026-01-02T10:00:00Z'),
+      );
+    });
+
     /** Cooks whose series never lost a reading keep the peak they recorded. */
     it('leaves the peaks of the cooks it did not repair alone', async () => {
       orphan();
@@ -521,6 +575,32 @@ describe('TempSeriesBackfillService', () => {
       await service.stampOrphanHeads();
 
       expect(stored(finished).startedAt).toEqual(
+        new Date('2026-01-02T10:05:00Z'),
+      );
+    });
+
+    /**
+     * An undated reading of a cook that is still running is restored and moves
+     * nothing.
+     *
+     * The archive holds rows that cannot say when they were taken, and the
+     * series reads keep them deliberately (see `cookWindow` in `TempsService`:
+     * a cook made of them would vanish from its own chart the moment anything
+     * stamped it). So the row belongs in the series it opened — there is no
+     * finish for it to fall after and no reading of its own series to
+     * contradict it — while a start that cannot be dated is a start that cannot
+     * be moved.
+     */
+    it('restores an undated reading of a running cook without moving its start', async () => {
+      const head = orphan({ ChamberTemp: '225' });
+      const running = cook(head._id.toString(), {
+        startedAt: new Date('2026-01-02T10:05:00Z'),
+      });
+
+      await service.stampOrphanHeads();
+
+      expect(head.tempsId).toBe(head._id.toString());
+      expect(stored(running).startedAt).toEqual(
         new Date('2026-01-02T10:05:00Z'),
       );
     });
