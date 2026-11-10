@@ -410,6 +410,41 @@ describe('TempSeriesBackfillService', () => {
     });
 
     /**
+     * What the silence rule must not refuse: the shape the repair was written
+     * for in the first place.
+     *
+     * A legacy cook's start was stamped from a read that could not see the first
+     * reading, so it names the second one — and on a device that sampled slowly,
+     * or whose first stamp attempt was deferred to a later switch-on, that is
+     * tens of minutes after the head. The head is still the cook's own: minutes
+     * of quiet are not a silence, and the start moves back to it.
+     */
+    it('moves the start back to a head its cook took twenty minutes to stamp', async () => {
+      const head = orphan({
+        ChamberTemp: '455',
+        date: new Date('2026-01-02T11:00:00Z'),
+      });
+      const late = cook(head._id.toString(), {
+        startedAt: new Date('2026-01-02T11:20:00Z'),
+        finishedAt: new Date('2026-01-02T11:40:00Z'),
+        peakChamber: 241,
+        peakChamberScanned: true,
+      });
+      temps.push({
+        _id: new Types.ObjectId(),
+        ChamberTemp: '233',
+        date: new Date('2026-01-02T11:20:00Z'),
+        tempsId: head._id.toString(),
+      });
+
+      await service.stampOrphanHeads();
+
+      expect(head.tempsId).toBe(head._id.toString());
+      expect(stored(late).startedAt).toEqual(new Date('2026-01-02T11:00:00Z'));
+      expect(stored(late).peakChamber).toBe(455);
+    });
+
+    /**
      * A cook no statistics pass has asked about yet is left to that pass,
      * which now reads the whole series: both of them look for a cook carrying
      * neither a peak nor the mark saying its readings were searched, so the
