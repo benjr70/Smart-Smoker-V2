@@ -461,5 +461,38 @@ describe('TempSeriesBackfillService', () => {
 
       await expect(service.onModuleInit()).resolves.toBeUndefined();
     });
+
+    /**
+     * What the order of the two writes buys, pinned so a reorder has something
+     * to trip over.
+     *
+     * The cooks are re-derived *before* the readings are stamped, so a cook
+     * write that fails leaves the orphan unstamped — still matching the orphan
+     * filter, so the next boot finds it and attempts the whole repair again.
+     * The other order makes one failed write permanent: the reading would be
+     * stamped, no later boot would find an orphan, and the cook would carry a
+     * start and a peak derived from a series missing its first reading forever.
+     * That is the bug this repair exists to undo, made unreachable.
+     */
+    it('leaves the reading unstamped when the cook it repairs cannot be written', async () => {
+      const head = orphan({
+        ChamberTemp: '450',
+        date: new Date('2026-01-02T10:00:00Z'),
+      });
+      cook(head._id.toString(), {
+        startedAt: new Date('2026-01-02T10:05:00Z'),
+        finishedAt: new Date('2026-01-02T10:30:00Z'),
+        peakChamber: 240,
+        peakChamberScanned: true,
+      });
+      jest
+        .spyOn(smokeModel, 'bulkWrite')
+        .mockRejectedValue(new Error('write concern not satisfied'));
+
+      await expect(service.onModuleInit()).resolves.toBeUndefined();
+
+      expect(head.tempsId).toBeUndefined();
+      expect(stats.markDirty).not.toHaveBeenCalled();
+    });
   });
 });
