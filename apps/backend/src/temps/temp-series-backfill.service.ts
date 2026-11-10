@@ -25,6 +25,26 @@ const ORPHANED_HEAD: FilterQuery<TempDocument> = {
 };
 
 /**
+ * The longest quiet this repair will accept between a series' first reading and
+ * its next one before taking the two to be from different sessions.
+ *
+ * The archive's rule for what belongs to one cook is contiguity, not "the
+ * earliest row wins": readings arrive every few seconds while a cook runs, so a
+ * silence is where one cook ended and whatever came next began (see `cookWindow`
+ * in the timeline module, and `idleThresholdMsOf` for the silence the live
+ * auto-stop reads from settings). This bound is the *floor* that setting can be
+ * configured to — one hour (`AutoStopDto`) — rather than the configured value
+ * itself: a head an hour clear of its own series is from another session under
+ * every configuration this archive allows, and a repair that runs once at boot
+ * and can never be re-run should only move what no setting would dispute.
+ *
+ * Far wider than any legacy head's real gap: the orphans this restores were
+ * written moments before the reading that followed them, and even a start stamp
+ * deferred to a later switch-on leaves minutes, not hours.
+ */
+const SERIES_HEAD_SILENCE_MS = 60 * 60 * 1000;
+
+/**
  * A stored reading read for its id alone — the id an orphan is missing, and
  * the one its whole series is named after.
  */
@@ -170,7 +190,10 @@ export class TempSeriesBackfillService implements OnModuleInit {
     if (orphans.length === 0) {
       return 0;
     }
-    await this.rederiveWhatWasDerivedWithoutTheFirstReading(orphans);
+    await this.rederiveWhatWasDerivedWithoutTheFirstReading(
+      orphans,
+      await this.secondReadingsOf(orphans),
+    );
     const writes: SeriesStamp[] = orphans.map(({ _id }) => ({
       updateOne: {
         filter: { _id },
@@ -219,6 +242,7 @@ export class TempSeriesBackfillService implements OnModuleInit {
    */
   private async rederiveWhatWasDerivedWithoutTheFirstReading(
     heads: RestoredReading[],
+    openedAt: Map<string, Date | null>,
   ): Promise<void> {
     const repaired = (await this.smokeModel
       .find({ tempsId: { $in: heads.map(({ _id }) => String(_id)) } })
@@ -235,6 +259,9 @@ export class TempSeriesBackfillService implements OnModuleInit {
     const stamps: CookStamp[] = heads.flatMap((head) => {
       const cook = cookOf.get(String(head._id));
       if (!cook) {
+        return [];
+      }
+      if (this.fallsOutsideTheCook(head, cook, openedAt.get(String(head._id)))) {
         return [];
       }
       const $set = {
@@ -290,7 +317,7 @@ export class TempSeriesBackfillService implements OnModuleInit {
     cook: StoredCook,
   ): RederivedStamps {
     const began = head.date;
-    if (!began || this.fallsOutsideTheCook(head, cook)) {
+    if (!began) {
       return {};
     }
     if (cook.startedAt && cook.startedAt.getTime() <= began.getTime()) {
@@ -314,10 +341,70 @@ export class TempSeriesBackfillService implements OnModuleInit {
   private fallsOutsideTheCook(
     head: RestoredReading,
     cook: StoredCook,
+    opened: Date | null | undefined,
   ): boolean {
-    return (
-      !!cook.finishedAt &&
-      (!head.date || head.date.getTime() > cook.finishedAt.getTime())
+    if (!head.date) {
+      return !!cook.finishedAt;
+    }
+    if (
+      cook.finishedAt &&
+      head.date.getTime() > cook.finishedAt.getTime()
+    ) {
+      return true;
+    }
+    return this.silenceSeparatesTheHead(head.date, opened);
+  }
+
+  /**
+   * Whether the series' own readings put its head on the far side of a silence,
+   * which answers the question the cook's stamps cannot.
+   *
+   * The finish stamp bounds one side of a cook and nothing bounds the other: a
+   * cook still running has no end to fall after, and a cook whose start was
+   * stamped from its *second* reading is a cook whose head is legitimately
+   * earlier than every stamp it carries — that is the shape this repair exists
+   * to move back. What tells the two apart is not a stamp but the series: a head
+   * taken moments before the reading that followed it opened the cook, and one
+   * taken hours before it is a power-on from another session, whose date as a
+   * start would stretch the cook's recorded window across a quiet nothing was
+   * cooking in (see {@link SERIES_HEAD_SILENCE_MS}).
+   *
+   * A head dated *after* the reading that follows it is refused by the same
+   * comparison, and more simply: a first reading later than the second is a row
+   * whose own series contradicts it, which places it nowhere at all.
+   *
+   * A series the head is the only dated row of is not separated from anything,
+   * and is left to the cook's own boundary.
+   */
+  private silenceSeparatesTheHead(
+    taken: Date,
+    opened: Date | null | undefined,
+  ): boolean {
+    if (!opened) {
+      return false;
+    }
+    return opened.getTime() - taken.getTime() > SERIES_HEAD_SILENCE_MS;
+  }
+
+  /**
+   * The moment each orphan's series carries on at: the earliest reading of it
+   * that is not the orphan itself, by series id.
+   *
+   * Grouped store-side rather than read row by row: a series here is a whole
+   * cook's archive — a hundred thousand rows and more — and the repair needs one
+   * date from each of them, not the rows.
+   */
+  private async secondReadingsOf(
+    heads: RestoredReading[],
+  ): Promise<Map<string, Date | null>> {
+    const opened = (await this.model
+      .aggregate([
+        { $match: { tempsId: { $in: heads.map(({ _id }) => String(_id)) } } },
+        { $group: { _id: '$tempsId', date: { $min: '$date' } } },
+      ])
+      .exec()) as { _id: string; date?: Date | null }[];
+    return new Map(
+      opened.map(({ _id, date }) => [String(_id), date ?? null] as const),
     );
   }
 
@@ -351,9 +438,6 @@ export class TempSeriesBackfillService implements OnModuleInit {
     }
     const restored = Number(head.ChamberTemp);
     if (!head.ChamberTemp || !Number.isFinite(restored)) {
-      return {};
-    }
-    if (this.fallsOutsideTheCook(head, cook)) {
       return {};
     }
     if (

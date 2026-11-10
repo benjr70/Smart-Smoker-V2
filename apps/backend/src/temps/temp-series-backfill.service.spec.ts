@@ -232,6 +232,48 @@ describe('TempSeriesBackfillService', () => {
       expect(stored(finished).peakChamber).toBe(240);
     });
 
+    /**
+     * A head the rest of its own series puts on the far side of a silence is a
+     * fact about some other session, whatever stamps its cook carries.
+     *
+     * The archive's rule for what belongs to one cook is contiguity, not
+     * "earliest row wins" (see `cookWindow` in the timeline module): readings
+     * arrive every few seconds while a cook runs, so an hour of quiet between a
+     * series' first reading and its next one is the shortest silence this
+     * archive can be configured to call the end of a cook. A power-on hours
+     * before the brisket went in is the mirror image of the mis-clocked head
+     * the finish guard already refuses — and folding it in is worse, because it
+     * widens the cook's own window: `GET /api/timeline/:id` would report ten
+     * hours for a four-hour cook and the chart would open with a six-hour dead
+     * zone.
+     */
+    it('leaves a cook alone when a silence separates the head from its own series', async () => {
+      const head = orphan({
+        ChamberTemp: '300',
+        date: new Date('2026-01-02T08:00:00Z'),
+      });
+      const healed = cook(head._id.toString(), {
+        startedAt: new Date('2026-01-02T14:00:00Z'),
+        finishedAt: new Date('2026-01-02T18:00:00Z'),
+        peakChamber: 238,
+        peakChamberScanned: true,
+        cookWindowBackfilled: true,
+      });
+      temps.push({
+        _id: new Types.ObjectId(),
+        ChamberTemp: '238',
+        date: new Date('2026-01-02T14:00:00Z'),
+        tempsId: head._id.toString(),
+      });
+
+      await service.stampOrphanHeads();
+
+      expect(stored(healed).startedAt).toEqual(
+        new Date('2026-01-02T14:00:00Z'),
+      );
+      expect(stored(healed).peakChamber).toBe(238);
+    });
+
     /** Cooks whose series never lost a reading keep the peak they recorded. */
     it('leaves the peaks of the cooks it did not repair alone', async () => {
       orphan();
