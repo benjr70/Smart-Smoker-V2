@@ -3,11 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { RatingsService } from '../ratings/ratings.service';
 import { BaseService } from '../common/base.service';
-import {
-  ActiveCook,
-  childIdOf,
-  CookSnapshot,
-} from '../activeCook/active-cook';
+import { ActiveCook, childIdOf, CookSnapshot } from '../activeCook/active-cook';
 import { ActiveCookService } from '../activeCook/active-cook.service';
 import { markStatsStale } from '../stats/mark-stats-stale';
 import { StatsService } from '../stats/stats.service';
@@ -53,9 +49,7 @@ export class SmokeProfileService extends BaseService<SmokeProFileDocument> {
       cook ?? (await this.activeCook.resolve()),
       'smokeProfileId',
     );
-    return profileId
-      ? this.getById(profileId)
-      : { ...DEFAULT_SMOKE_PROFILE };
+    return profileId ? this.getById(profileId) : { ...DEFAULT_SMOKE_PROFILE };
   }
 
   saveCurrentSmokeProfile(dto: SmokeProFileDto): Promise<SmokeProfile> {
