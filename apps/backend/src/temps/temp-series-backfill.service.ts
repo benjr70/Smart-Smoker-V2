@@ -392,8 +392,21 @@ export class TempSeriesBackfillService implements OnModuleInit {
    * is clipped to the same window, so a reading from outside it cannot be
    * folded into either stamp: the cook would stand claiming a beginning or a
    * peak its own chart never reaches. Only a finished cook has that boundary; a
-   * cook still running has no end to fall after. An undated row cannot be
-   * placed inside the window and is excluded with it.
+   * cook still running has no end to fall after.
+   *
+   * An undated row is refused for a finished cook as well, and not because a
+   * window excludes it — `cookWindow` in `TempsService` deliberately keeps
+   * rows carrying no date, as does `TimelineService.readings`, which is
+   * clipped by nothing at all. That is the reason rather than the objection:
+   * neither guard here can place such a row — there is no moment to compare
+   * against the finish and none to measure a silence from — while the read
+   * that derives `GET /api/timeline/:id`'s peak would take its temperature
+   * regardless of what the cook is stamped with. A row of unverifiable
+   * provenance would arrive as a peak above a chart that never reaches it.
+   * Under a cook still *running* the same row is restored, because nothing has
+   * yet been derived over a window for it to contradict: that cook's numbers
+   * are read live off the series as it stands, which is the reading this
+   * repair exists to put back.
    */
   private fallsOutsideTheCook(
     head: RestoredReading,

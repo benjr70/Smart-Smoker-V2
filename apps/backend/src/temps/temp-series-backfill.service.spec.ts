@@ -230,7 +230,12 @@ describe('TempSeriesBackfillService', () => {
       expect(stored(finished).peakChamber).toBe(240);
     });
 
-    /** A reading that cannot say when it was taken cannot be placed either. */
+    /**
+     * A reading that cannot say when it was taken cannot be placed either — and
+     * the stamps being left alone is only half of that. `TimelineService`'s
+     * unclipped `readings` read would hand the cook the row's temperature
+     * whatever its stamps say, so the row has to stay out of the series too.
+     */
     it('leaves a finished cook alone when the reading it got back has no date', async () => {
       const head = orphan({ ChamberTemp: '450' });
       const finished = cook(head._id.toString(), {
@@ -240,9 +245,11 @@ describe('TempSeriesBackfillService', () => {
         peakChamberScanned: true,
       });
 
-      await service.stampOrphanHeads();
+      const stamped = await service.stampOrphanHeads();
 
       expect(stored(finished).peakChamber).toBe(240);
+      expect(head.tempsId).toBeUndefined();
+      expect(stamped).toBe(0);
     });
 
     /**
