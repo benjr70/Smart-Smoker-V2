@@ -341,6 +341,35 @@ describe('TimelineService', () => {
       );
     });
 
+    /**
+     * The live projection is read from two bounded slices of the series — the
+     * opening rows and the last half hour — and both ask the store for the
+     * cook's readings by `tempsId`. The row that opened the series is the one
+     * that used to carry none: its own `_id` became the series id and nothing
+     * stamped it, so both slices dropped it and the climb rate was drawn from
+     * the *second* reading. Now that the id is minted before the row is written
+     * (see `TempsService.saveNewTemp`), the opening reading is read like any
+     * other — here it is the row the whole projection is anchored to.
+     */
+    it('draws the projection from the reading that opened the series', async () => {
+      startTheCook();
+      temps.push(
+        // The shape the write leaves: the series is named after this row, and
+        // the row carries that name.
+        { ...running(20, '153'), _id: 'live-temps' },
+        running(10, '163'),
+        running(0, '173'),
+      );
+      service = await build();
+
+      const { estimate } = await service.getCurrentTimeline(NOW);
+
+      expect(estimate.startTemp).toBe(153);
+      // 60°F/hr through the three readings, 153°F to 173°F in 20 minutes —
+      // 30°F/hr if the opening one were dropped.
+      expect(estimate.ratePerHour).toBeCloseTo(60, 5);
+    });
+
     it('measures progress from the first reading after the cook started', async () => {
       startTheCook();
       temps.push(
