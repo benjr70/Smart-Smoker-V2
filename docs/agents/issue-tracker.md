@@ -57,6 +57,7 @@ AFK work is executed by the self-hosted Paperclip board on `smartsmokersf` (Deve
 - **Closing is driven from GitHub.** The Developer stops at `in_review` with `ready to merge: yes`; a human merges the PR, whose `Closes #N` closes the issue; the next mirror run marks the task `done` (a `not planned` close → `cancelled`) and that unblocks the dependents. The mirror never changes the status or assignee of an open task, and once a task is
   started (an agent has it `in_progress`, or it has review/QA child tasks) it leaves
   the task text alone too and only merges blockers.
+- **Conflicts with `master`** are handled by the Developer, not a human. `scripts/paperclip/reconcile-prs.sh` (run on a schedule by the board's watcher agent, a small model that only runs the script and never touches git) finds a linked PR GitHub reports `dirty` while its task waits on the human, posts a `rebase-requested:` comment and hands the task back to the Developer, which rebases in its worktree, pushes `--force-with-lease`, reverifies (QA always; review too when resolving conflicts changed code) and hands back. A task the Developer holds rebases before pushing; one in a review round rebases at fan-in. A `rebase: FAILED` comment leaves it with the human, the old `AFK:rebase-failed`.
 
 ## Smart Smoker additions
 
