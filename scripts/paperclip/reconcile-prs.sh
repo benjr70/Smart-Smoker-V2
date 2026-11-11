@@ -2,9 +2,10 @@
 # reconcile-prs.sh — wake the Developer when one of its PRs conflicts with master.
 #
 # A PR based on master only turns conflicting when master moves, and master
-# only moves when a PR merges. This script runs right after a merge (the same
-# moment mirror-slices.sh runs) and on a timer, finds every open PR that
-# belongs to a Paperclip task, and for each one GitHub reports as `dirty`
+# only moves when a PR merges. The board's watcher agent runs this script on a
+# schedule, next to mirror-slices.sh; the watcher only runs it and relays the
+# report, it never touches git. The script finds every open PR that belongs
+# to a Paperclip task, and for each one GitHub reports as `dirty`
 # (real merge conflict) it:
 #
 #   1. posts one comment on the task, headed `rebase-requested: PR #N`, with
@@ -53,7 +54,7 @@ GH_TOKEN="${GH_TOKEN:-}"
 DRY_RUN=""   # "1" under --dry-run; empty otherwise (so ${DRY_RUN:+…} works)
 
 usage() {
-    sed -n '2,42p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,41p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 log()  { printf '%s\n' "$*"; }

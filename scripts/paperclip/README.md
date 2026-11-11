@@ -9,9 +9,11 @@ rationale: `docs/agents/issue-tracker.md` → "Executor: Paperclip", ADR-0002.
 (`Closes #N` in the body) and, when GitHub reports it `dirty` (conflicting with
 `master`) and the task is waiting on the human, posts a `rebase-requested:`
 comment and hands the task back to the Developer, which rebases, reverifies and
-hands it back. Run both right after merging a PR; the reconcile script also
-suits a timer, needing only `PAPERCLIP_TOKEN` (GitHub reads on this public repo
-need no auth; set `GH_TOKEN` for a higher rate limit).
+hands it back. The board's watcher agent runs both on a schedule; it only runs
+the scripts and relays their reports, and the Developer does the rebase. Either
+script can also be run by hand right after merging a PR. The reconcile script
+needs only `PAPERCLIP_TOKEN` (GitHub reads on this public repo need no auth; set
+`GH_TOKEN` for a higher rate limit).
 
 Both need `PAPERCLIP_TOKEN` (a Paperclip board API key); `PAPERCLIP_URL`
 defaults to the VM over Tailscale. The mirror also needs `gh` logged in (repo +
