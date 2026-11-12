@@ -18,13 +18,19 @@ describe('ActiveCookService', () => {
   let readings: FakeDoc[];
   let settings: FakeDoc[];
   let stats: FakeStatsRecompute;
+  /**
+   * The state collection's model, held so a test can make one write fail the
+   * way the store fails it — a refusal is not something an array can produce.
+   */
+  let stateModel: ReturnType<typeof fakeModel>;
 
   /** The module over whatever the collections currently hold. */
   const build = async (): Promise<void> => {
+    stateModel = fakeModel(states);
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ActiveCookService,
-        { provide: getModelToken('state'), useValue: fakeModel(states) },
+        { provide: getModelToken('state'), useValue: stateModel },
         { provide: getModelToken('Smoke'), useValue: fakeModel(smokes) },
         { provide: getModelToken('Temp'), useValue: fakeModel(readings) },
         {
@@ -194,6 +200,80 @@ describe('ActiveCookService', () => {
         [first, second].filter((create) => create.mock.calls.length > 0),
       ).toHaveLength(1);
       expect(states[0].smokeId).toBe(String(smokes[0]._id));
+    });
+
+    /**
+     * A smoker with no state document at all — a fresh install whose boot
+     * seeding could not reach the database — is claimed by writing one, and
+     * left unlit: setting a cook up is not lighting the smoker.
+     */
+    it('claims a smoker whose state document was never written', async () => {
+      await build();
+
+      const started = await service.start(aPreSmoke());
+
+      expect(started.won).toBe(true);
+      expect(states).toHaveLength(1);
+      expect(states[0].smokeId).toBe(String(smokes[0]._id));
+      expect(states[0].smoking).toBe(false);
+    });
+
+    /**
+     * The same race, on that unwritten smoker. Both starts read no state at
+     * all, so the claim cannot be conditional on the value one of them read —
+     * only the call that *creates* the state document may start a cook, or the
+     * second one overwrites the first's claim and orphans its cook.
+     */
+    it('is one cook when two starts race on a smoker with no state document', async () => {
+      await build();
+      const first = aPreSmoke();
+      const second = aPreSmoke();
+
+      const starts = await Promise.all([
+        service.start(first),
+        service.start(second),
+      ]);
+
+      expect(starts.filter((start) => start.won)).toHaveLength(1);
+      expect(states).toHaveLength(1);
+      expect(smokes).toHaveLength(1);
+      expect(states[0].smokeId).toBe(String(smokes[0]._id));
+    });
+
+    /**
+     * The store's own refusal of the second insert — two starts whose claims
+     * reach an unwritten smoker at the same instant contend on the `_id`
+     * index. The loser is handed the cook, not the duplicate-key error.
+     */
+    it('is lost, and writes no cook, when the store refuses the claim as a duplicate', async () => {
+      await build();
+      jest.spyOn(stateModel, 'updateOne').mockReturnValue({
+        exec: async () => {
+          throw Object.assign(new Error('E11000 duplicate key error'), {
+            code: 11000,
+          });
+        },
+      } as ReturnType<typeof stateModel.updateOne>);
+      const preSmoke = aPreSmoke();
+
+      const started = await service.start(preSmoke);
+
+      expect(started.won).toBe(false);
+      expect(started.preSmoke).toBeNull();
+      expect(preSmoke).not.toHaveBeenCalled();
+      expect(smokes).toEqual([]);
+    });
+
+    /** Anything else the store refuses a claim with is nobody's loss to read. */
+    it('lets an unrecognised write failure out rather than reading it as a loss', async () => {
+      await build();
+      jest.spyOn(stateModel, 'updateOne').mockReturnValue({
+        exec: async () => {
+          throw new Error('not primary');
+        },
+      } as ReturnType<typeof stateModel.updateOne>);
+
+      await expect(service.start(aPreSmoke())).rejects.toThrow('not primary');
     });
 
     /**

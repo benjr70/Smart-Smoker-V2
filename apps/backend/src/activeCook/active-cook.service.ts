@@ -6,7 +6,7 @@ import {
   ApplicationSettingsDocument,
 } from '../appSettings/app-settings.schema';
 import { SmokeDocument, SmokeStatus } from '../smoke/smoke.schema';
-import { StateDocument } from '../State/state.schema';
+import { STATE_SINGLETON_ID, StateDocument } from '../State/state.schema';
 import { STATS_RECOMPUTE, StatsRecomputePort } from '../stats/stats-recompute';
 import { TempDocument } from '../temps/temps.schema';
 import {
@@ -28,6 +28,9 @@ import {
   stampCookPull,
   stampCookStart,
 } from './cook-stamps';
+
+/** What MongoDB refuses an insert that an index already holds with. */
+const DUPLICATE_KEY = 11000;
 
 /**
  * The one place that answers "which cook is the smoker attached to".
@@ -114,20 +117,13 @@ export class ActiveCookService implements ActiveCookTransitions {
    * The filter is the state's own `smokeId` as this call just read it, which is
    * what makes the claim conditional: whichever of two starts writes first
    * moves the value out from under the other's filter, and the second matches
-   * nothing. A smoker with no state document at all — a fresh install whose
-   * seeding could not run — is claimed by inserting one.
+   * nothing. A smoker with no state document at all is claimed by
+   * {@link claimUnwrittenSmoker}.
    */
   private async claimSmoker(smokeId: Types.ObjectId): Promise<boolean> {
     const state = await this.stateModel.findOne().exec();
     if (!state) {
-      const seeded = await this.stateModel
-        .updateOne(
-          {},
-          { $set: { smokeId: String(smokeId), smoking: false } },
-          { upsert: true },
-        )
-        .exec();
-      return seeded.upsertedCount > 0 || seeded.modifiedCount > 0;
+      return this.claimUnwrittenSmoker(smokeId);
     }
     const claimed = await this.stateModel
       .updateOne(
@@ -136,6 +132,43 @@ export class ActiveCookService implements ActiveCookTransitions {
       )
       .exec();
     return claimed.modifiedCount > 0;
+  }
+
+  /**
+   * Claim the slot on a smoker that has no state document at all — a fresh
+   * install whose boot seeding could not reach the database.
+   *
+   * There is no value to make the claim conditional on, so creating the
+   * document *is* the condition. An upsert carrying `$set` would not do: its
+   * filter is every state there is, so the second of two starts would match
+   * the document the first had just inserted and overwrite the cook named in
+   * it — two winners, and the first one's cook left with nothing pointing at
+   * it. `$setOnInsert` changes nothing on a document that already exists, so
+   * only the call that inserted one has won.
+   *
+   * The insert names {@link STATE_SINGLETON_ID} so that two claims landing in
+   * the same instant contend on the `_id` index rather than both inserting.
+   * The store's refusal is read as the loss it is; the losing caller is handed
+   * the cook, as every losing caller is, rather than a write error.
+   */
+  private async claimUnwrittenSmoker(
+    smokeId: Types.ObjectId,
+  ): Promise<boolean> {
+    try {
+      const seeded = await this.stateModel
+        .updateOne(
+          { _id: STATE_SINGLETON_ID },
+          { $setOnInsert: { smokeId: String(smokeId), smoking: false } },
+          { upsert: true },
+        )
+        .exec();
+      return seeded.upsertedCount > 0;
+    } catch (error) {
+      if ((error as { code?: number }).code === DUPLICATE_KEY) {
+        return false;
+      }
+      throw error;
+    }
   }
 
   /**
