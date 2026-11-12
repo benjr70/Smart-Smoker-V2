@@ -15,9 +15,16 @@ script can also be run by hand right after merging a PR. The reconcile script
 needs only `PAPERCLIP_TOKEN` (GitHub reads on this public repo need no auth; set
 `GH_TOKEN` for a higher rate limit).
 
-Both need `PAPERCLIP_TOKEN` (a Paperclip board API key); `PAPERCLIP_URL`
+`deps-queue.sh [--dry-run]` gives the oldest ready Dependabot PR a task assigned
+to the Developer, one at a time and only once the Dev Deploy for the current
+`master` commit is green, and closes deps tasks whose PR merged or was closed.
+The Developer verifies and merges the bump; the watcher agent runs this script
+on the same schedule as the other two.
+
+All three need `PAPERCLIP_TOKEN` (a Paperclip board API key); `PAPERCLIP_URL`
 defaults to the VM over Tailscale. The mirror also needs `gh` logged in (repo +
 project read).
 
-Tests: `bash scripts/paperclip/mirror-slices.test.sh` and
-`bash scripts/paperclip/reconcile-prs.test.sh` (stubbed `gh` and `curl`).
+Tests: `bash scripts/paperclip/mirror-slices.test.sh`,
+`bash scripts/paperclip/reconcile-prs.test.sh` and
+`bash scripts/paperclip/deps-queue.test.sh` (stubbed `gh` and `curl`).
