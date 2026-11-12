@@ -210,6 +210,71 @@ describe('ActiveCookService', () => {
     });
   });
 
+  /**
+   * A fresh install — a new production database, or any freshly booted
+   * hermetic stack — has an empty state collection, and a reader with nothing
+   * to read has to invent its own handling for it. Seeding the singleton once
+   * at startup is what lets reading the Active Cook never write, which is the
+   * whole reason the self-heal could go.
+   */
+  describe('seeding the state at startup', () => {
+    it('writes the idle singleton when the collection is empty', async () => {
+      await build();
+
+      await service.onModuleInit();
+
+      expect(states).toEqual([
+        expect.objectContaining({ smokeId: '', smoking: false }),
+      ]);
+      expect(await service.resolve()).toEqual({ idle: true, smoking: false });
+    });
+
+    // The backend restarting in the middle of a cook must not put it out.
+    it('leaves a state that is already there exactly as it was', async () => {
+      states.push({ _id: 'state-1', smokeId: 'cook-1', smoking: true });
+      await build();
+
+      await service.onModuleInit();
+
+      expect(states).toEqual([
+        { _id: 'state-1', smokeId: 'cook-1', smoking: true },
+      ]);
+    });
+
+    /**
+     * Two boxes (or two instances) coming up together contend on the `_id`
+     * index rather than both inserting, so a smoker is never left with two
+     * state documents, each read as "the" state by whichever query finds it
+     * first.
+     */
+    it('is one state document when two boots race', async () => {
+      await build();
+
+      await Promise.all([service.onModuleInit(), service.onModuleInit()]);
+
+      expect(states).toHaveLength(1);
+    });
+
+    // A database that is not up yet must not stop the API from booting.
+    it('logs and does not throw when the store cannot be reached', async () => {
+      const errorSpy = jest.spyOn(Logger, 'error').mockImplementation();
+      await build();
+      stateModel.findOne = () =>
+        ({
+          exec: async () => {
+            throw new Error('no primary available');
+          },
+        } as any);
+
+      await expect(service.onModuleInit()).resolves.toBeUndefined();
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('no primary available'),
+        'ActiveCook',
+      );
+    });
+  });
+
   describe('starting a cook', () => {
     /** A pre-smoke written as the cook is created, as its module writes one. */
     const aPreSmoke = () =>

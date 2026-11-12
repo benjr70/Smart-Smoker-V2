@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
@@ -87,7 +87,7 @@ const withDeadline = <T>(work: Promise<T>, ms: number): Promise<T> => {
  * and `SmokeService`, could not escape.
  */
 @Injectable()
-export class ActiveCookService implements ActiveCookTransitions {
+export class ActiveCookService implements ActiveCookTransitions, OnModuleInit {
   constructor(
     @InjectModel('state') private readonly stateModel: Model<StateDocument>,
     @InjectModel('Smoke') private readonly smokeModel: Model<SmokeDocument>,
@@ -132,6 +132,52 @@ export class ActiveCookService implements ActiveCookTransitions {
      */
     @Inject(PUSH_NOTICE) private readonly push: PushNoticePort,
   ) {}
+
+  /**
+   * Put the idle singleton in the store before anything reads it.
+   *
+   * A brand-new database — a fresh production install, or any freshly booted
+   * hermetic stack — has an empty state collection, and every reader would
+   * then need its own handling for a state that is merely unwritten. Seeding
+   * once here is what pays for {@link resolve} never writing: it is the only
+   * write in this module that is not a transition, and it is made at boot
+   * rather than from a request.
+   *
+   * The insert is conditional in both directions. A state that is already
+   * there is left alone, because a backend restarting mid-cook must not put
+   * the smoker out; and the insert names {@link STATE_SINGLETON_ID} under
+   * `$setOnInsert`, so two instances coming up together contend on the `_id`
+   * index rather than both inserting and leaving the smoker with two states to
+   * disagree about. The existence check comes first all the same: an
+   * installation seeded long ago holds a document under the id it was minted
+   * with, and an upsert on this one would insert a second beside it.
+   *
+   * Failure is logged, never thrown: a database that is not up yet must not
+   * stop the API from starting, and the readers still treat a missing state as
+   * idle.
+   */
+  async onModuleInit(): Promise<void> {
+    try {
+      if (await this.state()) {
+        return;
+      }
+      await this.stateModel
+        .updateOne(
+          { _id: STATE_SINGLETON_ID },
+          { $setOnInsert: { smokeId: '', smoking: false } },
+          { upsert: true },
+        )
+        .exec();
+      Logger.log('seeded the initial idle state document', 'ActiveCook');
+    } catch (err) {
+      Logger.error(
+        `could not seed the initial state: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+        'ActiveCook',
+      );
+    }
+  }
 
   /** The collections a stamp is written over. See {@link StampCollections}. */
   private get stamps(): StampCollections {
