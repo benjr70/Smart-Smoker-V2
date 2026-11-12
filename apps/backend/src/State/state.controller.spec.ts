@@ -32,7 +32,6 @@ describe('StateController', () => {
       GetState: jest.fn().mockResolvedValue(mockState),
       updateCurrent: jest.fn().mockResolvedValue(mockState),
       create: jest.fn().mockResolvedValue(mockState),
-      clearSmoke: jest.fn().mockResolvedValue({ smokeId: '', smoking: false }),
     };
 
     activeCook = fakeActiveCook(
@@ -123,11 +122,42 @@ describe('StateController', () => {
   });
 
   describe('clearSmoke', () => {
-    it('should clear the smoke data', async () => {
+    it('clears through the Active Cook and answers with the state it left', async () => {
       const result = await controller.clearSmoke();
 
-      expect(mockStateService.clearSmoke).toHaveBeenCalled();
-      expect(result).toEqual({ smokeId: '', smoking: false });
+      expect(activeCook.clear).toHaveBeenCalledWith();
+      expect(result).toEqual(
+        expect.objectContaining({ smokeId: '', smoking: false }),
+      );
+    });
+
+    /**
+     * Clearing a smoker that is already idle is a no-op, and the route still
+     * answers with the state rather than failing a request the apps make on
+     * every End Smoke.
+     */
+    it('answers with the state when there was nothing to clear', async () => {
+      activeCook.pointAt(idleCook());
+
+      expect(await controller.clearSmoke()).toEqual(
+        expect.objectContaining({ smoking: false }),
+      );
+    });
+
+    /**
+     * A box whose state document was never written has none to answer with,
+     * since reading the Active Cook no longer writes one into being. Stubbed
+     * past the fake, which always holds a state: the collection being empty is
+     * a fact about the store, not a snapshot the fake can be pointed at.
+     */
+    it('answers with nothing on a box that has never held a state', async () => {
+      activeCook.clear.mockResolvedValue({
+        won: false,
+        cook: idleCook(),
+        state: null,
+      });
+
+      expect(await controller.clearSmoke()).toBeNull();
     });
   });
 });

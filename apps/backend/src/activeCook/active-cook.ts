@@ -218,6 +218,18 @@ export interface ToggledCook extends CookTransition {
 }
 
 /**
+ * A clear, plus the stored state the detach left behind.
+ *
+ * The state travels for the same reason a {@link ToggledCook}'s does: the clear
+ * route has always answered with it. `null` on a smoker whose state document
+ * was never written — there was nothing attached and nothing to answer with,
+ * and a read of the Active Cook does not write one into being.
+ */
+export interface ClearedCook extends CookTransition {
+  readonly state: (State & WithDocumentId) | null;
+}
+
+/**
  * Reading the Active Cook and attaching a child record to it: what every
  * module that owns one of the cook's children depends on.
  *
@@ -251,4 +263,20 @@ export interface ActiveCookTransitions extends ActiveCookChildren {
   pull(): Promise<CookTransition>;
   /** Stamp the finish, complete the cook, recount the archive. Once. */
   finish(): Promise<CookTransition>;
+  /**
+   * End a cook nobody ended: stamp its finish at `at`, switch smoking off, and
+   * leave it in progress. Once, and only the winner tells the pitmaster.
+   *
+   * `notice` is the sentence they are told, brought by the caller for the same
+   * reason a {@link ChildAttachment}'s writes are: what makes a stop explicable
+   * — the configured silence that ended the cook — is the staleness rule's
+   * number, and this module does not hold that rule. It decides whether the
+   * notice is sent, not what it says.
+   */
+  autoStop(at: Date, notice: string): Promise<CookTransition>;
+  /**
+   * Put the Active Cook away: throw an unfinished cook's log out, detach the
+   * cook, and tell every open screen the cook log is empty. Once.
+   */
+  clear(): Promise<ClearedCook>;
 }

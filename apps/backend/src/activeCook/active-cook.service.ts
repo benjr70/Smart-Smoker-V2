@@ -5,15 +5,23 @@ import {
   ApplicationSettings,
   ApplicationSettingsDocument,
 } from '../appSettings/app-settings.schema';
+import { cookEventsOfSmoke } from '../cookEvents/cook-events.filter';
+import { PUSH_NOTICE, PushNoticePort } from '../pushDispatcher/push-notice';
 import { SmokeDocument, SmokeStatus } from '../smoke/smoke.schema';
+import {
+  DEFAULT_SMOKE_PROFILE,
+  SmokeProFileDocument,
+} from '../smokeProfile/smokeProfile.schema';
 import { STATE_SINGLETON_ID, StateDocument } from '../State/state.schema';
 import { STATS_RECOMPUTE, StatsRecomputePort } from '../stats/stats-recompute';
 import { TempDocument } from '../temps/temps.schema';
+import { COOK_BROADCAST, CookBroadcastPort } from '../websocket/cook-broadcast';
 import {
   ActiveCook,
   ActiveCookTransitions,
   attachToCook,
   ChildAttachment,
+  ClearedCook,
   CookChildKey,
   CookSnapshot,
   CookTransition,
@@ -31,6 +39,42 @@ import {
 
 /** What MongoDB refuses an insert that an index already holds with. */
 const DUPLICATE_KEY = 11000;
+
+/**
+ * Who a push from this installation says it is from. Fixed here rather than
+ * brought by the caller: the title names the application, and the sentence
+ * underneath it is what varies.
+ */
+const PUSH_TITLE = 'Smoker';
+
+/**
+ * How long the push fan-out is given to finish before the notice is abandoned.
+ *
+ * The dispatcher talks to third-party push endpoints, and an endpoint that
+ * accepts the connection and then never answers holds its promise open until
+ * TCP gives up — minutes. Nothing here waits on the notice, so the only thing
+ * this bounds is how long a doomed send may sit in memory holding the cook's
+ * message; generous enough that a slow-but-alive push service still delivers.
+ */
+const PUSH_TIMEOUT_MS = 10_000;
+
+/**
+ * The given work, or a rejection once the deadline passes — because a promise
+ * that never settles is not a failure any `catch` can see.
+ *
+ * The timer is cleared when the work settles first, and unreferenced so a send
+ * still in flight cannot by itself keep the process (or a test run) alive.
+ */
+const withDeadline = <T>(work: Promise<T>, ms: number): Promise<T> => {
+  let timer: ReturnType<typeof setTimeout>;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms);
+    timer.unref?.();
+  });
+  return Promise.race([Promise.resolve(work), deadline]).finally(() =>
+    clearTimeout(timer),
+  );
+};
 
 /**
  * The one place that answers "which cook is the smoker attached to".
@@ -55,8 +99,37 @@ export class ActiveCookService implements ActiveCookTransitions {
     @InjectModel('Temp') private readonly tempModel: Model<TempDocument>,
     @InjectModel(ApplicationSettings.name)
     private readonly settingsModel: Model<ApplicationSettingsDocument>,
+    /**
+     * What the cook's probes are called, for the frame a stop announcement
+     * carries. Its model for the same reason the cook is: the service that
+     * wraps it drags the statistics, the ratings and this very module in behind
+     * it, and all this needs is a find-by-id for four names.
+     */
+    @InjectModel('SmokeProfile')
+    private readonly profileModel: Model<SmokeProFileDocument>,
+    /**
+     * The cook log, thrown out with an Active Cook that is discarded. Its model
+     * rather than `CookEventsService`: that service reads the Active Cook to
+     * find the cook its rows belong to, so injecting it here would close a DI
+     * cycle. Removing rows by the cook they belong to carries none of its
+     * policy — the filter it reads them with is shared instead.
+     */
+    @InjectModel('CookEvent')
+    private readonly cookEventModel: Model<unknown>,
     /** See {@link STATS_RECOMPUTE}. Called once, by a finish that won. */
     @Inject(STATS_RECOMPUTE) private readonly stats: StatsRecomputePort,
+    /**
+     * The socket every open app is listening on. A transition the clients are
+     * not told about is undone by the next press of a button on a screen that
+     * still believes the old state; see {@link COOK_BROADCAST}.
+     */
+    @Inject(COOK_BROADCAST) private readonly broadcast: CookBroadcastPort,
+    /**
+     * The phones. The socket only reaches an app that is open, and the whole
+     * premise of an abandoned cook is that nobody is looking; see
+     * {@link PUSH_NOTICE}.
+     */
+    @Inject(PUSH_NOTICE) private readonly push: PushNoticePort,
   ) {}
 
   /** The collections a stamp is written over. See {@link StampCollections}. */
@@ -318,21 +391,249 @@ export class ActiveCookService implements ActiveCookTransitions {
   }
 
   /**
-   * Recompute the statistics for a finish that is already committed, without
-   * letting them fail it.
+   * End a cook nobody ended: record that it was over when its readings
+   * stopped, and switch the smoker off.
    *
-   * The cook is over by the time this runs. A recompute that threw here would
-   * answer a request that succeeded with a 500, and the client's natural retry
-   * — finish it again — would lose the conditional write and have nothing left
-   * to do. The statistics carry their own staleness guards, so the worst a miss
-   * costs is that the next Stats read rebuilds instead of being served.
+   * The moment is a parameter because a cook does not end when somebody
+   * notices it has — a cook whose readings stopped yesterday finished
+   * yesterday, and stamping the noticing would record one that ran until the
+   * app was next opened.
+   *
+   * The stamp leads the flip, because the two failures are not equal. Smoking
+   * switched off without a stamp leaves a cook that still derives its duration
+   * from a series the box may pollute later, and nothing will trigger again:
+   * the flag the staleness rule reads is off. A stamp whose flip then fails is
+   * recoverable — the cook's record is already honest, and the next check comes
+   * back for the flag, which is why the flip is made whether or not the stamp
+   * was this call's to write.
+   *
+   * What it deliberately does not do is complete the cook. It stays in
+   * progress and stays attached, so the pitmaster still walks the normal End
+   * Smoke wizard whenever they next open the app, and the finish stamped here
+   * is what their late manual finish then keeps.
+   */
+  async autoStop(at: Date, notice: string): Promise<CookTransition> {
+    const cook = await this.resolve();
+    if (!isActive(cook)) {
+      return { won: false, cook };
+    }
+    const stamped = await stampCookFinishAt(this.stamps, cook.smokeId, at);
+    await this.switchOff(cook);
+    if (!stamped) {
+      return { won: false, cook: await this.resolve() };
+    }
+    await this.recomputeStats(cook.smokeId);
+    // Started and not waited for — see the method for why nothing may await it.
+    void this.deliverPush(cook.smokeId, notice);
+    return { won: true, cook: await this.resolve() };
+  }
+
+  /**
+   * Tell the pitmaster, wherever they are, that the box ended their cook.
+   *
+   * Called from the branch that won the conditional stamp and after the stop is
+   * committed, so two triggers racing produce one notice and no notice is ever
+   * sent for a stop that did not happen.
+   *
+   * Nothing waits for it, which is why the caller drops the promise. What
+   * noticed the abandoned cook is a poll of a timeline or a reading arriving
+   * over the socket, and neither may be held up because a phone is hard to
+   * reach — a subscriber's push endpoint that accepts the connection and then
+   * never answers would otherwise stall that request until TCP gave up, which
+   * no `catch` around an `await` can prevent. So the fan-out is issued before
+   * the first suspension (one stop, one notice), the delivery is bounded by
+   * {@link PUSH_TIMEOUT_MS}, and every way this can end is funnelled into a log
+   * line here — a rejection, a synchronous throw from a dispatcher that is not
+   * wired up, and the deadline that stands in for the endpoint which never
+   * answers. The stop is already written, and none of those may become an
+   * unhandled rejection or outlive the box.
+   */
+  private async deliverPush(smokeId: string, notice: string): Promise<void> {
+    try {
+      await withDeadline(this.push.notify(PUSH_TITLE, notice), PUSH_TIMEOUT_MS);
+    } catch (error) {
+      Logger.warn(
+        `cook ${smokeId} was auto-stopped but no push could be delivered. ${error}`,
+        'ActiveCook',
+      );
+    }
+  }
+
+  /**
+   * Switch the smoking flag off for a cook that is over, and say whether this
+   * call is the one that switched it.
+   *
+   * Conditional on the flag still being on and on the smoker still being
+   * attached to the cook this stop is about, so two triggers racing cannot both
+   * report a flip — and so a stop decided about yesterday's cook cannot switch
+   * off a cook the pitmaster has since started.
+   *
+   * Not a toggle: a second call must not switch smoking back on, and nothing
+   * here stamps a start.
+   */
+  private async switchOff(cook: ActiveCook): Promise<boolean> {
+    const stopped = await this.stateModel
+      .updateOne(
+        { smokeId: cook.smokeId, smoking: true },
+        { $set: { smoking: false } },
+      )
+      .exec();
+    if (stopped.modifiedCount === 0) {
+      return false;
+    }
+    await this.announceStop(cook);
+    return true;
+  }
+
+  /**
+   * Tell every connected app the cook is no longer smoking, without letting a
+   * silent socket fail the stop that happened.
+   *
+   * Announced from inside the flip because the two belong together wherever the
+   * flag is written by the backend: the apps hold the flag in memory and learn
+   * of a change only from this event, and their Stop button toggles what they
+   * hold. Only the call that actually flipped announces, so two triggers racing
+   * produce one announcement.
+   *
+   * The frame carries the cook's names because that is what a `smokeUpdate` is
+   * and the apps apply all of it; a cook that never had a profile written is
+   * announced with the names it would be served on a fresh read, rather than
+   * blanks that would wipe the labels on screen.
+   */
+  private async announceStop(cook: ActiveCook): Promise<void> {
+    try {
+      const profileId = cook.smoke.smokeProfileId;
+      const profile = profileId
+        ? await this.profileModel.findById(profileId).exec()
+        : null;
+      this.broadcast.broadcastSmokeUpdate({
+        smoking: false,
+        chamberName: profile?.chamberName ?? DEFAULT_SMOKE_PROFILE.chamberName,
+        probe1Name: profile?.probe1Name ?? DEFAULT_SMOKE_PROFILE.probe1Name,
+        probe2Name: profile?.probe2Name ?? DEFAULT_SMOKE_PROFILE.probe2Name,
+        probe3Name: profile?.probe3Name ?? DEFAULT_SMOKE_PROFILE.probe3Name,
+      });
+    } catch (error) {
+      Logger.warn(
+        `cook ${cook.smokeId} was stopped but the clients could not be told; they will read the stopped state on their next load. ${error}`,
+        'ActiveCook',
+      );
+    }
+  }
+
+  /**
+   * Recompute the statistics for a transition that is already committed,
+   * without letting them fail it.
+   *
+   * The cook is over by the time this runs — ended by the pitmaster, or by a
+   * box that noticed nobody was coming back. A recompute that threw here would
+   * answer a request that succeeded with a 500, and the natural retry — finish
+   * it again, poll again — would lose the conditional write and have nothing
+   * left to do. The statistics carry their own staleness guards, so the worst a
+   * miss costs is that the next Stats read rebuilds instead of being served.
    */
   private async recomputeStats(smokeId: string): Promise<void> {
     try {
       await this.stats.recompute();
     } catch (error) {
       Logger.warn(
-        `the statistics were not recomputed after finishing cook ${smokeId}; the next stats read will rebuild them. ${error}`,
+        `the statistics were not recomputed after cook ${smokeId} ended; the next stats read will rebuild them. ${error}`,
+        'ActiveCook',
+      );
+    }
+  }
+
+  /**
+   * Put the Active Cook away: detach the cook, throw its log out if it was
+   * never finished, and tell every open screen there is no cook log to show.
+   *
+   * The detach is the conditional write, and it is what names the cook being
+   * put away: one atomic flip of the slot answers both "was this call the one
+   * that detached" and "which cook was attached when it did". Resolving the
+   * cook first and clearing second would let two clears each think they had the
+   * cook — and would refuse to detach a state left naming a cook the archive no
+   * longer holds, which reads as idle and is exactly the dangling attachment
+   * this is relied on to heal.
+   *
+   * The log goes after the detach rather than before, and never fails the
+   * clear. Events left behind belong to a cook nothing points at any more,
+   * which is untidy; a cook the pitmaster asked to clear that stayed attached
+   * because a delete failed is far worse — the next cook would record into the
+   * last one.
+   */
+  async clear(): Promise<ClearedCook> {
+    const attached = await this.stateModel
+      .findOneAndUpdate(
+        // Something has to be attached. An idle smoker has no cook to put
+        // away, and nothing to tell the screens about.
+        { smokeId: { $nin: ['', null] } },
+        { $set: { smokeId: '', smoking: false } },
+      )
+      .exec();
+    const state = await this.stateModel.findOne().exec();
+    if (!attached) {
+      return { won: false, cook: await this.resolve(), state };
+    }
+    await this.discardCookLog(String(attached.smokeId));
+    this.announceEmptyCookLog();
+    return { won: true, cook: await this.resolve(), state };
+  }
+
+  /**
+   * The cook log of a cook being thrown away — and only of one being thrown
+   * away.
+   *
+   * Clearing is not only how an abandoned cook is discarded: it is also the
+   * last step of finishing a cook (the wizard finishes the cook, then detaches
+   * it from the state that still names it), so the clear alone cannot say
+   * which of the two is happening. The cook's own status can. A completed cook is
+   * archived, its log is its history, and this must not touch it; an unfinished
+   * one is being thrown out, and a log left behind would belong to a cook
+   * nothing points at any more.
+   *
+   * A cook the archive no longer holds is treated as unfinished: what is left
+   * of it is an orphaned log, and nothing is archived that could lose by its
+   * removal.
+   *
+   * Never throws: the Active Cook *is* cleared by the time this runs, and a
+   * database hiccup here must not turn that into an error the pitmaster
+   * retries.
+   */
+  private async discardCookLog(smokeId: string): Promise<void> {
+    try {
+      const smoke = await this.smokeModel.findById(smokeId).exec();
+      if (smoke?.status === SmokeStatus.Complete) {
+        return;
+      }
+      await this.cookEventModel.deleteMany(cookEventsOfSmoke(smokeId)).exec();
+    } catch (error) {
+      Logger.error(
+        `could not discard the cook log of ${smokeId}: ${error}`,
+        'ActiveCook',
+      );
+    }
+  }
+
+  /**
+   * Tell every connected client that there is no cook log to show.
+   *
+   * Empty whichever way the clear went: a discarded cook's events are gone,
+   * and a finished cook's are kept but belong to a cook the smoker no longer
+   * names — and what a live screen shows is the log of the Active Cook.
+   *
+   * Announced because the screens do not unmount when the Active Cook is
+   * cleared — the stale-cook recovery clears from under a mounted smoke step.
+   * Without it the card keeps showing the cleared cook's entries, and a Remove
+   * tapped there deletes an event of a cook that has been put away. Never
+   * throws: the cook is cleared, and an unreachable socket must not make that
+   * an error.
+   */
+  private announceEmptyCookLog(): void {
+    try {
+      this.broadcast.broadcastCookEvents([]);
+    } catch (error) {
+      Logger.error(
+        `could not announce the cleared cook log: ${error}`,
         'ActiveCook',
       );
     }

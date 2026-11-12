@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import {
   MessageBody,
   SubscribeMessage,
@@ -14,6 +14,7 @@ import { StaleCookService } from '../staleCook/stale-cook.service';
 import { TempDto } from '../temps/tempDto';
 import { TempsService } from '../temps/temps.service';
 import { CookEvent } from '../cookEvents/cook-events.schema';
+import { CookBroadcastPort, SmokeUpdateFrame } from './cook-broadcast';
 
 /**
  * One temperature row is persisted per this many websocket messages. The device
@@ -58,31 +59,13 @@ export const COOK_EVENTS_EVENT = 'cookEventsUpdate';
  */
 export const COOK_LOG_STAMPS_EVENT = 'cookLogStamps';
 
-/**
- * The `smokeUpdate` frame: whether the cook is running, and what its four
- * probes are called.
- *
- * Restated here for the same reason {@link APPEARANCE_EVENT} is — this service
- * ships beside no copy of the client packages — and it is exactly the five
- * fields, in the order, that every client already sends and applies. The names
- * travel with the flag because the apps apply the whole frame; a frame missing
- * them would relabel the screen it arrived at.
- */
-export interface SmokeUpdateFrame {
-  smoking: boolean;
-  chamberName: string;
-  probe1Name: string;
-  probe2Name: string;
-  probe3Name: string;
-}
-
 @WebSocketGateway({
   cors: {
     origin: '*',
   },
 })
 @Injectable()
-export class EventsGateway {
+export class EventsGateway implements CookBroadcastPort {
   // Per-instance rather than module-level: the sampling rate belongs to the
   // gateway, and a module-level counter leaks between instances.
   private messagesSinceStore = 0;
@@ -105,12 +88,12 @@ export class EventsGateway {
      */
     private readonly activeCook: ActiveCookService,
     /**
-     * Forward-referenced because the dependency runs both ways: the stale-cook
-     * service announces the stop it makes over this gateway, and this gateway
-     * asks it whether the arriving reading has crossed a gap. Nest resolves
-     * both ends lazily; the modules do the same to each other.
+     * Whether the arriving reading has crossed a gap long enough to mean the
+     * cook it would join is over. A plain reference: that service used to
+     * announce the stop it made back over this gateway, and the pair had to be
+     * resolved lazily at both ends. The stop belongs to the Active Cook now,
+     * which this gateway only reads, so the loop is gone.
      */
-    @Inject(forwardRef(() => StaleCookService))
     private staleCook: StaleCookService,
   ) {}
 

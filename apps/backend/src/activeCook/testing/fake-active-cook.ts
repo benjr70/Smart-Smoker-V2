@@ -5,6 +5,7 @@ import {
   ActiveCookTransitions,
   attachToCook,
   ChildAttachment,
+  ClearedCook,
   CookChildKey,
   CookSnapshot,
   CookTransition,
@@ -37,6 +38,8 @@ export interface FakeActiveCook extends ActiveCookTransitions {
   toggle: jest.Mock<Promise<ToggledCook>, []>;
   pull: jest.Mock<Promise<CookTransition>, []>;
   finish: jest.Mock<Promise<CookTransition>, []>;
+  autoStop: jest.Mock<Promise<CookTransition>, [Date, string]>;
+  clear: jest.Mock<Promise<ClearedCook>, []>;
   /** Point it at a different cook, or at idle, after it was built. */
   pointAt(snapshot: CookSnapshot): void;
   /** The cook as it now stands — the links an attach has written included. */
@@ -136,6 +139,41 @@ export const fakeActiveCook = (
         ),
       );
       return { won: true, cook: current };
+    }),
+    /**
+     * The stop, with the one shape that matters to a caller of it: the cook is
+     * stamped and the smoker is off, and the cook is still in progress and
+     * still attached. Lost where a finish was already stamped, which is the
+     * condition the real one wins or loses on.
+     */
+    autoStop: jest.fn<Promise<CookTransition>, [Date, string]>(async (at) => {
+      if (!isActive(current)) {
+        return { won: false, cook: current };
+      }
+      const won = !current.smoke.finishedAt;
+      pointAt(
+        attachedCook(
+          { ...current.smoke, finishedAt: current.smoke.finishedAt ?? at },
+          false,
+        ),
+      );
+      return { won, cook: current };
+    }),
+    /**
+     * The clear, as a caller of it reads one back: the smoker is attached to
+     * nothing afterwards, and the cook it detached is the win. What becomes
+     * of the discarded cook's log is held by the Active Cook's own spec,
+     * against the store.
+     */
+    clear: jest.fn(async () => {
+      const won = isActive(current);
+      const smokeId = smokeIdOf(current);
+      pointAt(idleCook(false));
+      return {
+        won,
+        cook: current,
+        state: { _id: 'state-1', smokeId: won ? '' : smokeId, smoking: false },
+      };
     }),
     pointAt,
     cook: () => current,

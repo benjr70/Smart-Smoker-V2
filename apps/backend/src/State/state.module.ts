@@ -1,33 +1,18 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { StateController } from './state.controller';
 import { stateSchema } from './state.schema';
 import { StateService } from './state.service';
 import { ActiveCookModule } from '../activeCook/active-cook.module';
-import { CookEventSchema } from '../cookEvents/cook-events.schema';
-import { SmokeSchema } from '../smoke/smoke.schema';
-import { EventsModule } from '../websocket/events.module';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([
-      { name: 'state', schema: stateSchema },
-      // The cook log of a session that is thrown away goes with it; see
-      // `StateService`'s constructor for why it is the model rather than the
-      // service.
-      { name: 'CookEvent', schema: CookEventSchema },
-      // The session's cook, read to tell a cook being put away after it was
-      // finished from one being thrown out unfinished; see `StateService`.
-      { name: 'Smoke', schema: SmokeSchema },
-    ]),
-    // The toggle route is a cook transition, so it goes through the module
-    // that owns them. It imports no feature module itself, so this edge sits
-    // in no loop.
+    MongooseModule.forFeature([{ name: 'state', schema: stateSchema }]),
+    // The toggle and clear routes are cook transitions, so they go through the
+    // module that owns them. It imports no feature module itself, so this edge
+    // sits in no loop — and with the clear moved there, this module no longer
+    // needs the gateway at all, which is one `forwardRef` fewer.
     ActiveCookModule,
-    // Clearing the session announces the now-empty cook log. Forward-referenced
-    // because the gateway reads this module's service; both ends declare the
-    // reference, which is what lets Nest build the pair.
-    forwardRef(() => EventsModule),
   ],
   controllers: [StateController],
   providers: [StateService],
