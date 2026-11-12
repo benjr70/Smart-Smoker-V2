@@ -3,12 +3,11 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { BaseService } from '../common/base.service';
 import { documentId } from '../common/document-id';
-import { Smoke, SmokeDocument, SmokeStatus } from './smoke.schema';
+import { Smoke, SmokeDocument } from './smoke.schema';
 import { SmokeDto } from './smokeDto';
 import { ServePlanDto } from './serve-plan.dto';
 import { smokeOf } from '../activeCook/active-cook';
 import { ActiveCookService } from '../activeCook/active-cook.service';
-import { TimelineService } from '../timeline/timeline.service';
 import { tempSeriesFilter } from '../temps/temp-series.filter';
 import { cookEventsOfSmoke } from '../cookEvents/cook-events.filter';
 import { StatsService } from '../stats/stats.service';
@@ -27,7 +26,6 @@ export class SmokeService extends BaseService<SmokeDocument> {
      * service at all, which is what lets the duplicate go.
      */
     private readonly activeCook: ActiveCookService,
-    private readonly timeline: TimelineService,
     /**
      * The statistics of the archive, recomputed by the two things this service
      * does that change what the archive holds. Injected directly rather than
@@ -192,56 +190,29 @@ export class SmokeService extends BaseService<SmokeDocument> {
    * Record that the meat of the cook in progress has come off — the path the
    * Smoke → Post-Smoke advance stamps the pull through.
    *
-   * Against the current cook rather than an id, for the same reason the plan
-   * is: the advance happens on the session that is running, and a client
-   * carrying an id could stamp a pull onto a cook that finished last weekend.
-   *
-   * The moment and the temperature are the timeline's to decide (see
-   * {@link TimelineService.stampPull}), which is also where "only once" lives:
-   * this may be called by every client that advances, and by the same one
-   * twice, and the pull stays where it was first stamped.
+   * The transition itself belongs to the Active Cook, which is where "only
+   * once" lives: this may be called by every client that advances, and by the
+   * same one twice, and the pull stays where it was first stamped.
    *
    * Answered with the cook as it now stands, so the step that advanced renders
    * the pull that was actually stored — and `null` where nothing is cooking,
    * which is a fact about the session rather than a failure of the request.
    */
   async stampPull(): Promise<Smoke | null> {
-    const smokeId = documentId(await this.getCurrentSmoke());
-    if (!smokeId) {
-      return null;
-    }
-    await this.timeline.stampPull(smokeId);
-    return this.getById(smokeId);
+    return smokeOf((await this.activeCook.pull()).cook);
   }
 
   /**
    * Complete the current cook: record that it ended, and what it was being
    * taken to, before marking it complete.
    *
-   * The stamp is written first so a cook is never left marked complete with no
-   * finish recorded — the state a reader would have to backfill from readings
-   * that may not exist.
+   * All of it through the Active Cook, whose finish is one conditional write:
+   * two phones pressing End Smoke together produce one finish stamp and one
+   * recount of the archive. The statistics are recomputed there too — this
+   * service used to recompute them a second time, which counted the same cook
+   * twice over.
    */
   async FinishSmoke(): Promise<Smoke | null> {
-    return await this.getCurrentSmoke().then(async (smoke) => {
-      if (!smoke) {
-        return null;
-      }
-      await this.timeline.stampFinish(smoke['_id'].toString());
-      const smokeDto: SmokeDto = {
-        smokeProfileId: smoke.smokeProfileId,
-        preSmokeId: smoke.preSmokeId,
-        postSmokeId: smoke.postSmokeId,
-        tempsId: smoke.tempsId,
-        ratingId: smoke.ratingId,
-        status: SmokeStatus.Complete,
-      };
-      const finished = await this.update(smoke['_id'].toString(), smokeDto);
-      // Statistics count completed cooks, so they are recomputed after the
-      // cook became one — this is the moment a session joins the archive, and
-      // the pitmaster who finishes a cook looks at their stats next.
-      await this.restatArchive('after finishing the cook');
-      return finished;
-    });
+    return smokeOf((await this.activeCook.finish()).cook);
   }
 }

@@ -4,7 +4,6 @@ import { Model } from 'mongoose';
 import { BaseService } from '../common/base.service';
 import { State, StateDocument } from './state.schema';
 import { StateDto } from './stateDto';
-import { TimelineService } from '../timeline/timeline.service';
 import { cookEventsOfSmoke } from '../cookEvents/cook-events.filter';
 import { Smoke, SmokeStatus } from '../smoke/smoke.schema';
 import {
@@ -22,7 +21,6 @@ export class StateService
 {
   constructor(
     @InjectModel('state') model: Model<StateDocument>,
-    private readonly timeline: TimelineService,
     /**
      * The discarded cook's log, reached through its model rather than through
      * `CookEventsService`: that service reads this one to find the cook in
@@ -113,36 +111,6 @@ export class StateService
   }
 
   /**
-   * Flip the smoking flag, and — the first time it goes on — record that the
-   * cook has started.
-   *
-   * The start belongs here rather than at session creation because a session is
-   * set up while the meat is still being trimmed; the cook begins when somebody
-   * presses Start Smoking. Stopping and restarting during a cook is ordinary,
-   * so only the switch-on stamps, and the stamp itself is written once (see
-   * {@link TimelineService.stampStart}).
-   *
-   * The stamp follows the state write rather than leading it, because the two
-   * failures are not equal. A stamp written before a state write that then
-   * fails is permanent — the write-once condition will never match again, so
-   * every duration and elapsed clock for that cook is wrong and no retry can
-   * fix it. A state write that succeeds before a stamp that fails leaves a
-   * running cook without a start, which the next toggle stamps correctly.
-   */
-  async toggleSmoking(): Promise<State | null> {
-    const state = await this.GetState();
-    if (!state || !state.smokeId || state.smokeId.length <= 0) {
-      return null;
-    }
-    state.smoking = !state.smoking;
-    const updated = await this.updateCurrent(state);
-    if (state.smoking) {
-      await this.timeline.stampStart(state.smokeId);
-    }
-    return updated;
-  }
-
-  /**
    * Switch smoking off for a cook that is over, and say whether this call is
    * the one that switched it.
    *
@@ -151,7 +119,7 @@ export class StateService
    * both report a stop — and so a stop decided about yesterday's cook cannot
    * switch off a cook the user has since started.
    *
-   * Distinct from {@link toggleSmoking}: this is not a toggle (a second call
+   * Distinct from the Active Cook's toggle: this is not a toggle (a second call
    * must not switch smoking back on) and it stamps no start.
    */
   async stopSmoking(smokeId: string): Promise<boolean> {

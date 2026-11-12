@@ -3,9 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { PreSmoke, PreSmokeSchema } from './presmoke.schema';
 import { PreSmokeController } from './presmoke.controller';
 import { PreSmokeService } from './presmoke.service';
-import { StateModule } from 'src/State/state.module';
 import { ActiveCookModule } from 'src/activeCook/active-cook.module';
-import { SmokeModule } from 'src/smoke/smoke.module';
 import { StatsModule } from '../stats/stats.module';
 
 @Module({
@@ -13,9 +11,9 @@ import { StatsModule } from '../stats/stats.module';
     MongooseModule.forFeature([
       { name: PreSmoke.name, schema: PreSmokeSchema },
     ]),
-    StateModule,
-    SmokeModule,
-    // Which cook the smoker is attached to, for the read of what it is of.
+    // Which cook the smoker is attached to, the read of what it is of, and the
+    // transition that starts one from this form. Was `StateModule` plus
+    // `SmokeModule`, walked and written by hand here.
     ActiveCookModule,
     // The meat and its weight are ingredients of the statistics; writing them
     // marks the stored aggregate stale.

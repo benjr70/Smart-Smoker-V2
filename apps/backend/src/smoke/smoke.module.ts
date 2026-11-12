@@ -10,7 +10,6 @@ import { PostSmokeSchema } from 'src/postSmoke/postSmoke.schema';
 import { RatingsSchema } from 'src/ratings/ratings.schema';
 import { CookEventSchema } from 'src/cookEvents/cook-events.schema';
 import { ActiveCookModule } from 'src/activeCook/active-cook.module';
-import { TimelineModule } from 'src/timeline/timeline.module';
 import { StatsModule } from 'src/stats/stats.module';
 
 @Module({
@@ -32,12 +31,11 @@ import { StatsModule } from 'src/stats/stats.module';
     // cook here; the Active Cook owns that question now and imports no
     // feature module itself, so this edge no longer sits inside a loop.
     ActiveCookModule,
-    // The cook's finish, and the target it was taken to, are stamped here.
-    TimelineModule,
-    // Finishing and deleting a cook are the two things that change what the
-    // archive holds, so both recompute the stored statistics. `StatsModule`
-    // owns its collections directly and imports no feature module of its own,
-    // which is what lets this depend on it without closing a cycle.
+    // Deleting a cook changes what the archive holds, so the delete recomputes
+    // the stored statistics. Finishing one recomputes them through the Active
+    // Cook's stats port instead, which is what removed the duplicate.
+    // `StatsModule` owns its collections directly and imports no feature module
+    // of its own, which is what lets this depend on it without closing a cycle.
     StatsModule,
   ],
   controllers: [SmokeController],

@@ -10,6 +10,7 @@ import { StateService } from '../State/state.service';
 import { StatsService } from '../stats/stats.service';
 import { FakeDoc, fakeModel } from '../timeline/testing/fake-model';
 import { ActiveCookService } from '../activeCook/active-cook.service';
+import { statsRecomputeProvider } from '../stats/testing/fake-stats-recompute';
 import { TimelineService } from '../timeline/timeline.service';
 import { COOK_LOG_ANNOUNCER } from '../websocket/cook-log-announcer';
 import { EventsGateway } from '../websocket/events.gateway';
@@ -110,6 +111,9 @@ describe('StaleCookService', () => {
         // The real Active Cook over the same two fake collections, since the
         // timeline reads which cook is running through it.
         ActiveCookService,
+        // Its finish recounts the archive through this port. Nothing here
+        // finishes a cook, so the recording stub is never called.
+        statsRecomputeProvider(),
         { provide: StatsService, useValue: stats },
         { provide: EventsGateway, useValue: events },
         { provide: PushDispatcherService, useValue: push },

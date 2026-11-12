@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ActiveCookService } from '../activeCook/active-cook.service';
 import { StateController } from './state.controller';
 import { StateService } from './state.service';
 import { State } from './state.schema';
@@ -7,6 +8,7 @@ import { StateDto } from './stateDto';
 describe('StateController', () => {
   let controller: StateController;
   let mockStateService: Partial<StateService>;
+  let mockActiveCook: { toggle: jest.Mock };
 
   const mockState: State = {
     smokeId: 'test-smoke-id',
@@ -18,10 +20,15 @@ describe('StateController', () => {
       GetState: jest.fn().mockResolvedValue(mockState),
       updateCurrent: jest.fn().mockResolvedValue(mockState),
       create: jest.fn().mockResolvedValue(mockState),
-      toggleSmoking: jest
-        .fn()
-        .mockResolvedValue({ ...mockState, smoking: false }),
       clearSmoke: jest.fn().mockResolvedValue({ smokeId: '', smoking: false }),
+    };
+
+    mockActiveCook = {
+      toggle: jest.fn().mockResolvedValue({
+        won: true,
+        cook: { idle: true, smoking: false },
+        state: { ...mockState, smoking: false },
+      }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -30,6 +37,10 @@ describe('StateController', () => {
         {
           provide: StateService,
           useValue: mockStateService,
+        },
+        {
+          provide: ActiveCookService,
+          useValue: mockActiveCook,
         },
       ],
     }).compile();
@@ -83,11 +94,22 @@ describe('StateController', () => {
   });
 
   describe('toggleSmoking', () => {
-    it('should toggle the smoking status', async () => {
+    it('flips through the Active Cook and answers with the state it left', async () => {
       const result = await controller.toggleSmoking();
 
-      expect(mockStateService.toggleSmoking).toHaveBeenCalled();
+      expect(mockActiveCook.toggle).toHaveBeenCalledWith();
       expect(result).toEqual({ ...mockState, smoking: false });
+    });
+
+    /** A toggle on an idle smoker has always answered with nothing. */
+    it('answers with nothing when there was no cook to toggle', async () => {
+      mockActiveCook.toggle.mockResolvedValue({
+        won: false,
+        cook: { idle: true, smoking: false },
+        state: null,
+      });
+
+      expect(await controller.toggleSmoking()).toBeNull();
     });
   });
 
