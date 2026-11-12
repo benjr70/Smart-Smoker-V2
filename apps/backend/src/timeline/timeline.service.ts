@@ -287,7 +287,7 @@ export class TimelineService {
       target: probe?.target ?? null,
       smoking: snapshot.smoking,
       now,
-      peakTemp: probe ? peaks[probeField(probe.slot)] ?? null : null,
+      peakTemp: probe ? (peaks[probeField(probe.slot)] ?? null) : null,
     };
     const estimate = estimateCompletion({
       ...input,
@@ -710,7 +710,7 @@ export class TimelineService {
       const startedAt = smoke.startedAt ?? edge?.first ?? null;
       const finishedAt =
         smoke.finishedAt ??
-        (smoke.status === SmokeStatus.Complete ? edge?.last ?? null : null);
+        (smoke.status === SmokeStatus.Complete ? (edge?.last ?? null) : null);
       return durationBetween(startedAt, finishedAt);
     });
   }
