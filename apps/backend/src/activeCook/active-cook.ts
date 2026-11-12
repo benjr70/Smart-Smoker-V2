@@ -251,4 +251,15 @@ export interface ActiveCookTransitions extends ActiveCookChildren {
   pull(): Promise<CookTransition>;
   /** Stamp the finish, complete the cook, recount the archive. Once. */
   finish(): Promise<CookTransition>;
+  /**
+   * End a cook nobody ended: stamp its finish at `at`, switch smoking off, and
+   * leave it in progress. Once, and only the winner tells the pitmaster.
+   *
+   * `notice` is the sentence they are told, brought by the caller for the same
+   * reason a {@link ChildAttachment}'s writes are: what makes a stop explicable
+   * — the configured silence that ended the cook — is the staleness rule's
+   * number, and this module does not hold that rule. It decides whether the
+   * notice is sent, not what it says.
+   */
+  autoStop(at: Date, notice: string): Promise<CookTransition>;
 }

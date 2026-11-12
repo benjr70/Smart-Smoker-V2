@@ -318,6 +318,63 @@ export class ActiveCookService implements ActiveCookTransitions {
   }
 
   /**
+   * End a cook nobody ended: record that it was over when its readings
+   * stopped, and switch the smoker off.
+   *
+   * The moment is a parameter because a cook does not end when somebody
+   * notices it has — a cook whose readings stopped yesterday finished
+   * yesterday, and stamping the noticing would record one that ran until the
+   * app was next opened.
+   *
+   * The stamp leads the flip, because the two failures are not equal. Smoking
+   * switched off without a stamp leaves a cook that still derives its duration
+   * from a series the box may pollute later, and nothing will trigger again:
+   * the flag the staleness rule reads is off. A stamp whose flip then fails is
+   * recoverable — the cook's record is already honest, and the next check comes
+   * back for the flag, which is why the flip is made whether or not the stamp
+   * was this call's to write.
+   *
+   * What it deliberately does not do is complete the cook. The session stays in
+   * progress and stays attached, so the pitmaster still walks the normal End
+   * Smoke wizard whenever they next open the app, and the finish stamped here
+   * is what their late manual finish then keeps.
+   */
+  async autoStop(at: Date, notice: string): Promise<CookTransition> {
+    const cook = await this.resolve();
+    if (!isActive(cook)) {
+      return { won: false, cook };
+    }
+    const stamped = await stampCookFinishAt(this.stamps, cook.smokeId, at);
+    await this.switchOff(cook);
+    if (!stamped) {
+      return { won: false, cook: await this.resolve() };
+    }
+    return { won: true, cook: await this.resolve() };
+  }
+
+  /**
+   * Switch the smoking flag off for a cook that is over, and say whether this
+   * call is the one that switched it.
+   *
+   * Conditional on the flag still being on and on the smoker still being
+   * attached to the cook this stop is about, so two triggers racing cannot both
+   * report a flip — and so a stop decided about yesterday's cook cannot switch
+   * off a cook the pitmaster has since started.
+   *
+   * Not a toggle: a second call must not switch smoking back on, and nothing
+   * here stamps a start.
+   */
+  private async switchOff(cook: ActiveCook): Promise<boolean> {
+    const stopped = await this.stateModel
+      .updateOne(
+        { smokeId: cook.smokeId, smoking: true },
+        { $set: { smoking: false } },
+      )
+      .exec();
+    return stopped.modifiedCount > 0;
+  }
+
+  /**
    * Recompute the statistics for a finish that is already committed, without
    * letting them fail it.
    *

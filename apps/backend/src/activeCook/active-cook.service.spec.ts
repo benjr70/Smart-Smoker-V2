@@ -2,6 +2,12 @@ import { Logger, NotFoundException } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ApplicationSettings } from '../appSettings/app-settings.schema';
+import { fakeCollection } from '../cookEvents/testing/fake-collection';
+import {
+  fakePushNotice,
+  FakePushNotice,
+  pushNoticeProvider,
+} from '../pushDispatcher/testing/fake-push-notice';
 import { SmokeStatus } from '../smoke/smoke.schema';
 import {
   fakeStatsRecompute,
@@ -9,6 +15,11 @@ import {
   statsRecomputeProvider,
 } from '../stats/testing/fake-stats-recompute';
 import { FakeDoc, fakeModel } from '../timeline/testing/fake-model';
+import {
+  cookBroadcastProvider,
+  fakeCookBroadcast,
+  FakeCookBroadcast,
+} from '../websocket/testing/fake-cook-broadcast';
 import { ActiveCookService } from './active-cook.service';
 
 describe('ActiveCookService', () => {
@@ -17,7 +28,15 @@ describe('ActiveCookService', () => {
   let smokes: FakeDoc[];
   let readings: FakeDoc[];
   let settings: FakeDoc[];
+  /** The cook log: the rows a discarded cook's clear throws away. */
+  let cookEvents: FakeDoc[];
+  /** What the cook's probes are called, as a stop announcement carries them. */
+  let profiles: FakeDoc[];
   let stats: FakeStatsRecompute;
+  /** The socket every open app is listening on. */
+  let broadcast: FakeCookBroadcast;
+  /** The phones: what reaches a pitmaster who is nowhere near the box. */
+  let push: FakePushNotice;
   /**
    * The state collection's model, held so a test can make one write fail the
    * way the store fails it — a refusal is not something an array can produce.
@@ -37,7 +56,16 @@ describe('ActiveCookService', () => {
           provide: getModelToken(ApplicationSettings.name),
           useValue: fakeModel(settings),
         },
+        // The cook log through the fake that removes rows by a filter, which is
+        // how a discarded cook's log goes.
+        {
+          provide: getModelToken('CookEvent'),
+          useValue: fakeCollection(cookEvents),
+        },
+        { provide: getModelToken('SmokeProfile'), useValue: fakeModel(profiles) },
         statsRecomputeProvider(stats),
+        cookBroadcastProvider(broadcast),
+        pushNoticeProvider(push),
       ],
     }).compile();
     service = module.get<ActiveCookService>(ActiveCookService);
@@ -48,7 +76,11 @@ describe('ActiveCookService', () => {
     smokes = [];
     readings = [];
     settings = [];
+    cookEvents = [];
+    profiles = [];
     stats = fakeStatsRecompute();
+    broadcast = fakeCookBroadcast();
+    push = fakePushNotice();
   });
 
   describe('resolving the Active Cook', () => {
@@ -552,6 +584,55 @@ describe('ActiveCookService', () => {
         cook: { idle: true, smoking: false },
       });
       expect(stats.recompute).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('stopping an abandoned cook', () => {
+    /** Where the readings of an abandoned cook stopped. */
+    const LAST_READING = new Date('2026-08-01T15:55:00.000Z');
+    /** The sentence the staleness rule hands over for the pitmaster. */
+    const NOTICE = 'Cook auto-stopped after 6 hours idle';
+
+    /** A cook still marked as running whose readings stopped yesterday. */
+    const anAbandonedCook = (): void => {
+      smokes.push({
+        _id: 'cook-1',
+        status: SmokeStatus.InProgress,
+        tempsId: 'temps-1',
+        startedAt: new Date('2026-08-01T10:00:00.000Z'),
+      });
+      states.push({ _id: 'state-1', smokeId: 'cook-1', smoking: true });
+      readings.push({
+        tempsId: 'temps-1',
+        date: LAST_READING,
+        ChamberTemp: '244',
+      });
+    };
+
+    it('stamps the finish where the readings stopped and switches smoking off', async () => {
+      anAbandonedCook();
+      await build();
+
+      const stopped = await service.autoStop(LAST_READING, NOTICE);
+
+      expect(stopped.won).toBe(true);
+      expect(smokes[0].finishedAt).toEqual(LAST_READING);
+      expect(states[0].smoking).toBe(false);
+    });
+
+    /**
+     * Stopping is not completing: the wizard — post-smoke notes, the rating —
+     * is still ahead of the pitmaster, so the cook stays in progress and the
+     * smoker stays attached to it for whenever they next open the app.
+     */
+    it('leaves the cook in progress and still attached to the smoker', async () => {
+      anAbandonedCook();
+      await build();
+
+      await service.autoStop(LAST_READING, NOTICE);
+
+      expect(smokes[0].status).toBe(SmokeStatus.InProgress);
+      expect(states[0].smokeId).toBe('cook-1');
     });
   });
 

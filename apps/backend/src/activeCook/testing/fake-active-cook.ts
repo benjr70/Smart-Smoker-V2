@@ -37,6 +37,7 @@ export interface FakeActiveCook extends ActiveCookTransitions {
   toggle: jest.Mock<Promise<ToggledCook>, []>;
   pull: jest.Mock<Promise<CookTransition>, []>;
   finish: jest.Mock<Promise<CookTransition>, []>;
+  autoStop: jest.Mock<Promise<CookTransition>, [Date, string]>;
   /** Point it at a different cook, or at idle, after it was built. */
   pointAt(snapshot: CookSnapshot): void;
   /** The cook as it now stands — the links an attach has written included. */
@@ -136,6 +137,25 @@ export const fakeActiveCook = (
         ),
       );
       return { won: true, cook: current };
+    }),
+    /**
+     * The stop, with the one shape that matters to a caller of it: the cook is
+     * stamped and the smoker is off, and the cook is still in progress and
+     * still attached. Lost where a finish was already stamped, which is the
+     * condition the real one wins or loses on.
+     */
+    autoStop: jest.fn(async (at: Date, _notice: string) => {
+      if (!isActive(current)) {
+        return { won: false, cook: current };
+      }
+      const won = !current.smoke.finishedAt;
+      pointAt(
+        attachedCook(
+          { ...current.smoke, finishedAt: current.smoke.finishedAt ?? at },
+          false,
+        ),
+      );
+      return { won, cook: current };
     }),
     pointAt,
     cook: () => current,
