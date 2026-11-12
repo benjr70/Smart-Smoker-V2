@@ -9,7 +9,7 @@ import {
 import { SmokeStatus } from '../smoke/smoke.schema';
 import { StateController } from './state.controller';
 import { StateService } from './state.service';
-import { State } from './state.schema';
+import { State } from '../activeCook/state.schema';
 import { StateDto } from './stateDto';
 
 describe('StateController', () => {

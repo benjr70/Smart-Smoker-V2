@@ -1,7 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { WithDocumentId } from '../common/document-id';
 import { Smoke } from '../smoke/smoke.schema';
-import { State } from '../State/state.schema';
+import { State } from './state.schema';
 
 /**
  * The Active Cook as a fixed value: the one cook the smoker is attached to, as

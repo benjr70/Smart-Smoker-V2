@@ -180,6 +180,36 @@ describe('ActiveCookService', () => {
     });
   });
 
+  /**
+   * The stored singleton itself, which is what the get-state route has always
+   * answered with — the flag the apps hold and the cook they hold it for, in
+   * the shape they have always read it in.
+   */
+  describe('the stored state', () => {
+    it('answers with the singleton as it stands', async () => {
+      states.push({ _id: 'state-1', smokeId: 'cook-1', smoking: true });
+      await build();
+
+      expect(await service.state()).toEqual(
+        expect.objectContaining({ smokeId: 'cook-1', smoking: true }),
+      );
+    });
+
+    it('answers with nothing on a box that has never held one', async () => {
+      await build();
+
+      expect(await service.state()).toBeNull();
+    });
+
+    it('writes nothing, not even the singleton it did not find', async () => {
+      await build();
+
+      await service.state();
+
+      expect(states).toEqual([]);
+    });
+  });
+
   describe('starting a cook', () => {
     /** A pre-smoke written as the cook is created, as its module writes one. */
     const aPreSmoke = () =>

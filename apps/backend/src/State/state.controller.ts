@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Post, Put } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ActiveCookService } from '../activeCook/active-cook.service';
-import { State } from './state.schema';
+import { State } from '../activeCook/state.schema';
 import { StateService } from './state.service';
 import { StateDto } from './stateDto';
 

@@ -2,7 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { BaseService } from '../common/base.service';
-import { State, StateDocument } from './state.schema';
+import { State, StateDocument } from '../activeCook/state.schema';
 import { StateDto } from './stateDto';
 
 /** What a state means before anything has been cooked: idle, no smoke. */

@@ -7,7 +7,7 @@ import {
 import { CookEventSchema } from '../cookEvents/cook-events.schema';
 import { SmokeSchema } from '../smoke/smoke.schema';
 import { SmokeProFileSchema } from '../smokeProfile/smokeProfile.schema';
-import { stateSchema } from '../State/state.schema';
+import { stateSchema } from './state.schema';
 import { TempSchema } from '../temps/temps.schema';
 import { ActiveCookService } from './active-cook.service';
 

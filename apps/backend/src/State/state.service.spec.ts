@@ -2,7 +2,7 @@ import { Logger } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { StateService } from './state.service';
-import { State } from './state.schema';
+import { State } from '../activeCook/state.schema';
 import { StateDto } from './stateDto';
 
 describe('StateService', () => {

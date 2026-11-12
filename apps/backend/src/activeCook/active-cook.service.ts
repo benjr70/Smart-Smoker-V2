@@ -5,6 +5,7 @@ import {
   ApplicationSettings,
   ApplicationSettingsDocument,
 } from '../appSettings/app-settings.schema';
+import { WithDocumentId } from '../common/document-id';
 import { cookEventsOfSmoke } from '../cookEvents/cook-events.filter';
 import { PUSH_NOTICE, PushNoticePort } from '../pushDispatcher/push-notice';
 import { SmokeDocument, SmokeStatus } from '../smoke/smoke.schema';
@@ -12,7 +13,6 @@ import {
   DEFAULT_SMOKE_PROFILE,
   SmokeProFileDocument,
 } from '../smokeProfile/smokeProfile.schema';
-import { STATE_SINGLETON_ID, StateDocument } from '../State/state.schema';
 import { STATS_RECOMPUTE, StatsRecomputePort } from '../stats/stats-recompute';
 import { TempDocument } from '../temps/temps.schema';
 import { COOK_BROADCAST, CookBroadcastPort } from '../websocket/cook-broadcast';
@@ -36,6 +36,7 @@ import {
   stampCookPull,
   stampCookStart,
 } from './cook-stamps';
+import { State, STATE_SINGLETON_ID, StateDocument } from './state.schema';
 
 /** What MongoDB refuses an insert that an index already holds with. */
 const DUPLICATE_KEY = 11000;
@@ -333,6 +334,24 @@ export class ActiveCookService implements ActiveCookTransitions {
       smoke,
       smoking,
     };
+  }
+
+  /**
+   * The stored state singleton as it stands, or `null` where none was ever
+   * written.
+   *
+   * Here rather than on a module of its own because this collection is the
+   * Active Cook's own storage, and the one route that answers with the document
+   * itself is the one the apps read the smoking flag from on load. Everything
+   * else takes {@link resolve}'s snapshot: a caller that wants to know which
+   * cook is attached must not be handed the row and left to apply its own idle
+   * rule to it, which is what a dozen callers used to do.
+   *
+   * A read, and only a read — the self-heal that wrote the singleton it failed
+   * to find is gone; {@link onModuleInit} is what covers a fresh install.
+   */
+  async state(): Promise<(State & WithDocumentId) | null> {
+    return this.stateModel.findOne().exec();
   }
 
   /**
