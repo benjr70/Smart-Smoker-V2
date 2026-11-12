@@ -44,16 +44,23 @@ describe('ActiveCookService', () => {
   let stateModel: ReturnType<typeof fakeModel>;
   /** The cook log's model, held for the same reason the state's is. */
   let cookEventModel: ReturnType<typeof fakeCollection>;
+  /**
+   * The archive's model, held so a test can let a write land and then move the
+   * world underneath the transition that made it — which is the only way to
+   * stand between two of its writes.
+   */
+  let smokeModel: ReturnType<typeof fakeModel>;
 
   /** The module over whatever the collections currently hold. */
   const build = async (): Promise<void> => {
     stateModel = fakeModel(states);
     cookEventModel = fakeCollection(cookEvents);
+    smokeModel = fakeModel(smokes);
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ActiveCookService,
         { provide: getModelToken('state'), useValue: stateModel },
-        { provide: getModelToken('Smoke'), useValue: fakeModel(smokes) },
+        { provide: getModelToken('Smoke'), useValue: smokeModel },
         { provide: getModelToken('Temp'), useValue: fakeModel(readings) },
         {
           provide: getModelToken(ApplicationSettings.name),
@@ -636,6 +643,48 @@ describe('ActiveCookService', () => {
 
       expect(smokes[0].status).toBe(SmokeStatus.InProgress);
       expect(states[0].smokeId).toBe('cook-1');
+    });
+
+    /**
+     * The pitmaster walks up to the box in the window this stop is open: they
+     * clear the abandoned cook and light a new one. A stop decided about
+     * yesterday's cook may not switch off the cook they have just started —
+     * the flip is conditional on the smoker still being attached to the cook
+     * the stop is about, not merely on something smoking.
+     *
+     * Their clear and start are applied from inside the stamp write, because
+     * that is the one place between this transition's two writes a test can
+     * stand: the stamp has landed, the flip has not been issued.
+     */
+    it('leaves a cook the pitmaster has since started alone', async () => {
+      anAbandonedCook();
+      await build();
+      const stampWrite = smokeModel.updateOne.bind(smokeModel);
+      jest
+        .spyOn(smokeModel, 'updateOne')
+        .mockImplementation((filter, update, options) => {
+          const write = stampWrite(filter, update, options);
+          return {
+            async exec() {
+              const result = await write.exec();
+              smokes.push({
+                _id: 'cook-2',
+                status: SmokeStatus.InProgress,
+                tempsId: 'temps-2',
+              });
+              states[0].smokeId = 'cook-2';
+              states[0].smoking = true;
+              return result;
+            },
+          } as ReturnType<typeof smokeModel.updateOne>;
+        });
+
+      await service.autoStop(LAST_READING, NOTICE);
+
+      expect(smokes[0].finishedAt).toEqual(LAST_READING);
+      expect(states[0].smokeId).toBe('cook-2');
+      expect(states[0].smoking).toBe(true);
+      expect(broadcast.broadcastSmokeUpdate).not.toHaveBeenCalled();
     });
 
     /**
