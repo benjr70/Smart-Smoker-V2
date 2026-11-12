@@ -80,11 +80,12 @@ const withDeadline = <T>(work: Promise<T>, ms: number): Promise<T> => {
 /**
  * The one place that answers "which cook is the smoker attached to".
  *
- * Deliberately owns the two collections it reads rather than depending on the
+ * Deliberately owns the collections it reads rather than depending on the
  * services around them. Every module that reaches the current cook depends on
- * this one, so a service edge in the other direction would close a DI cycle —
- * which is exactly what the old current-smoke helper, built on `StateService`
- * and `SmokeService`, could not escape.
+ * this one, so a service edge in the other direction would close a DI cycle.
+ * Owning the storage is what leaves nothing to break a loop around: see ADR
+ * 0001 for why a helper built on the feature services could not be depended on
+ * from the modules that needed it most.
  */
 @Injectable()
 export class ActiveCookService implements ActiveCookTransitions, OnModuleInit {

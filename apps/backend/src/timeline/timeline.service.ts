@@ -103,12 +103,11 @@ type SeriesPeaks = Partial<Record<(typeof PEAK_FIELDS)[number], number | null>>;
  * hot it ever got, and what it was being taken to.
  *
  * Deliberately owns its collections rather than the feature services around
- * them. Stamping happens on the two paths that already depend on the smoke —
- * the session's smoking toggle and the finish flow — and a service dependency
- * in either direction closes a DI cycle (`smoke → state`, `settings → profile →
- * common → smoke`). Reading the collections directly leaves this module with
- * one service edge only — the Active Cook, which itself depends on no feature
- * module at all — so anything may still depend on it.
+ * them. Every module that owns one of them depends on this one in turn, through
+ * the statistics it derives a cook's duration for, so a service dependency in
+ * either direction closes a DI cycle. Reading the collections directly leaves
+ * this module with one service edge only — the Active Cook, which itself
+ * depends on no feature module at all — so anything may still depend on it.
  */
 @Injectable()
 export class TimelineService {

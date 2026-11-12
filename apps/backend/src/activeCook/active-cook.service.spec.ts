@@ -259,12 +259,12 @@ describe('ActiveCookService', () => {
     it('logs and does not throw when the store cannot be reached', async () => {
       const errorSpy = jest.spyOn(Logger, 'error').mockImplementation();
       await build();
-      stateModel.findOne = () =>
-        ({
-          exec: async () => {
-            throw new Error('no primary available');
-          },
-        } as any);
+      jest.spyOn(stateModel, 'findOne').mockReturnValue({
+        ...stateModel.findOne(),
+        exec: async () => {
+          throw new Error('no primary available');
+        },
+      });
 
       await expect(service.onModuleInit()).resolves.toBeUndefined();
 

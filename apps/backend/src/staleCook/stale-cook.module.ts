@@ -20,9 +20,8 @@ import { StaleCookService } from './stale-cook.service';
  *
  * Both of those edges are plain references. The state, the statistics, the
  * gateway and the push dispatcher are gone from here along with the stop
- * procedure that used them, and with them the two `forwardRef`s that only ever
- * existed because this module announced its own stop over a gateway that reads
- * the cook back.
+ * procedure that used them — this module announces nothing and writes nothing
+ * about cook state, so it is in a loop with nothing.
  *
  * The settings are read through their own model for the same reason
  * `TimelineModule` reads its three directly: it is a single document read, and

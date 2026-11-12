@@ -14,17 +14,15 @@ import { TempsService } from './temps.service';
       { name: 'Temp', schema: TempSchema },
       // The cook that owns a stored series, so reading the series back can
       // clip it to the window the cook ran in. Its model rather than
-      // `SmokeService`: that service depends on this module, so importing it
-      // back would close a DI cycle — the same reason `StaleCookModule` reads
-      // the cook through its model.
+      // `SmokeService`: all this needs is two dates off one cook, and that
+      // service brings the whole deep-delete cascade — every child collection,
+      // the statistics, the cook log — in behind it for them.
       { name: 'Smoke', schema: SmokeSchema },
     ]),
     // Which cook a reading belongs to, and the attach that links the series it
-    // records into. A plain reference: this module used to sit inside a loop of
-    // module files — the session imported the gateway, the gateway this module,
-    // and the current-cook walk the session back — and the edge had to be a
-    // thunk so Nest read it after every file had finished evaluating. The
-    // Active Cook imports nothing, so the loop is gone.
+    // records into. A plain reference, and the only service edge out of here
+    // that reaches the cook at all: the Active Cook imports no feature module,
+    // so nothing it is asked from can be in a loop with it.
     ActiveCookModule,
     // Repairing a cook's series changes what the statistics were derived from,
     // so the boot repair declares them stale. Imported plainly rather than

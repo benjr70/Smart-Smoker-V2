@@ -12,8 +12,8 @@ import { StatsModule } from '../stats/stats.module';
       { name: PreSmoke.name, schema: PreSmokeSchema },
     ]),
     // Which cook the smoker is attached to, the read of what it is of, and the
-    // transition that starts one from this form. Was `StateModule` plus
-    // `SmokeModule`, walked and written by hand here.
+    // transition that starts one from this form — all of it asked of the one
+    // module that owns the cook, rather than walked and written by hand here.
     ActiveCookModule,
     // The meat and its weight are ingredients of the statistics; writing them
     // marks the stored aggregate stale.

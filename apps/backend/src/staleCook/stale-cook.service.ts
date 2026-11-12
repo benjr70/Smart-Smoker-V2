@@ -75,9 +75,8 @@ export class StaleCookService {
   constructor(
     /**
      * The cook itself: whether one is running, and the transition that ends it.
-     * A plain reference — the Active Cook imports no feature module, so the
-     * `forwardRef` that used to hold this service to the state and the
-     * gateway is gone.
+     * A plain reference — the Active Cook imports no feature module, so there
+     * is no loop here to break.
      */
     private readonly activeCook: ActiveCookService,
     /**
