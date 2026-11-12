@@ -6,9 +6,14 @@ import {
   ApplicationSettingsDocument,
 } from '../appSettings/app-settings.schema';
 import { SmokeDocument, SmokeStatus } from '../smoke/smoke.schema';
+import {
+  DEFAULT_SMOKE_PROFILE,
+  SmokeProFileDocument,
+} from '../smokeProfile/smokeProfile.schema';
 import { STATE_SINGLETON_ID, StateDocument } from '../State/state.schema';
 import { STATS_RECOMPUTE, StatsRecomputePort } from '../stats/stats-recompute';
 import { TempDocument } from '../temps/temps.schema';
+import { COOK_BROADCAST, CookBroadcastPort } from '../websocket/cook-broadcast';
 import {
   ActiveCook,
   ActiveCookTransitions,
@@ -55,8 +60,22 @@ export class ActiveCookService implements ActiveCookTransitions {
     @InjectModel('Temp') private readonly tempModel: Model<TempDocument>,
     @InjectModel(ApplicationSettings.name)
     private readonly settingsModel: Model<ApplicationSettingsDocument>,
+    /**
+     * What the cook's probes are called, for the frame a stop announcement
+     * carries. Its model for the same reason the cook is: the service that
+     * wraps it drags the statistics, the ratings and this very module in behind
+     * it, and all this needs is a find-by-id for four names.
+     */
+    @InjectModel('SmokeProfile')
+    private readonly profileModel: Model<SmokeProFileDocument>,
     /** See {@link STATS_RECOMPUTE}. Called once, by a finish that won. */
     @Inject(STATS_RECOMPUTE) private readonly stats: StatsRecomputePort,
+    /**
+     * The socket every open app is listening on. A transition the clients are
+     * not told about is undone by the next press of a button on a screen that
+     * still believes the old state; see {@link COOK_BROADCAST}.
+     */
+    @Inject(COOK_BROADCAST) private readonly broadcast: CookBroadcastPort,
   ) {}
 
   /** The collections a stamp is written over. See {@link StampCollections}. */
@@ -371,7 +390,47 @@ export class ActiveCookService implements ActiveCookTransitions {
         { $set: { smoking: false } },
       )
       .exec();
-    return stopped.modifiedCount > 0;
+    if (stopped.modifiedCount === 0) {
+      return false;
+    }
+    await this.announceStop(cook);
+    return true;
+  }
+
+  /**
+   * Tell every connected app the cook is no longer smoking, without letting a
+   * silent socket fail the stop that happened.
+   *
+   * Announced from inside the flip because the two belong together wherever the
+   * flag is written by the backend: the apps hold the flag in memory and learn
+   * of a change only from this event, and their Stop button toggles what they
+   * hold. Only the call that actually flipped announces, so two triggers racing
+   * produce one announcement.
+   *
+   * The frame carries the cook's names because that is what a `smokeUpdate` is
+   * and the apps apply all of it; a cook that never had a profile written is
+   * announced with the names it would be served on a fresh read, rather than
+   * blanks that would wipe the labels on screen.
+   */
+  private async announceStop(cook: ActiveCook): Promise<void> {
+    try {
+      const profileId = cook.smoke.smokeProfileId;
+      const profile = profileId
+        ? await this.profileModel.findById(profileId).exec()
+        : null;
+      this.broadcast.broadcastSmokeUpdate({
+        smoking: false,
+        chamberName: profile?.chamberName ?? DEFAULT_SMOKE_PROFILE.chamberName,
+        probe1Name: profile?.probe1Name ?? DEFAULT_SMOKE_PROFILE.probe1Name,
+        probe2Name: profile?.probe2Name ?? DEFAULT_SMOKE_PROFILE.probe2Name,
+        probe3Name: profile?.probe3Name ?? DEFAULT_SMOKE_PROFILE.probe3Name,
+      });
+    } catch (error) {
+      Logger.warn(
+        `cook ${cook.smokeId} was stopped but the clients could not be told; they will read the stopped state on their next load. ${error}`,
+        'ActiveCook',
+      );
+    }
   }
 
   /**

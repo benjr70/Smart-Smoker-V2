@@ -634,6 +634,139 @@ describe('ActiveCookService', () => {
       expect(smokes[0].status).toBe(SmokeStatus.InProgress);
       expect(states[0].smokeId).toBe('cook-1');
     });
+
+    /**
+     * A stop nobody is told about is half a stop.
+     *
+     * The apps hold the smoking flag in memory and only ever learn it changed
+     * from the socket. A kiosk still showing the abandoned cook believes it is
+     * running, and Stop on that screen is a *toggle*: it reads the stored
+     * `false` and flips it back to `true`, restarting the very cook this just
+     * ended. So the flip rides the same event a client's own flip does,
+     * carrying the cook's names because that is what the frame is.
+     */
+    describe('telling the apps the cook has stopped', () => {
+      /** The cook's probes, as its profile names them. */
+      const aNamedProfile = (): void => {
+        smokes[0].smokeProfileId = 'profile-1';
+        profiles.push({
+          _id: 'profile-1',
+          chamberName: 'Pit',
+          probe1Name: 'Brisket',
+          probe2Name: 'Ribs',
+          probe3Name: 'Spare',
+        });
+      };
+
+      it('announces the flip so a stale client cannot toggle the cook back on', async () => {
+        anAbandonedCook();
+        aNamedProfile();
+        await build();
+
+        await service.autoStop(LAST_READING, NOTICE);
+
+        expect(broadcast.broadcastSmokeUpdate).toHaveBeenCalledWith({
+          smoking: false,
+          chamberName: 'Pit',
+          probe1Name: 'Brisket',
+          probe2Name: 'Ribs',
+          probe3Name: 'Spare',
+        });
+      });
+
+      // The names ride along on this frame and the apps apply them, so a cook
+      // whose profile was never written must be told the names it would be
+      // given on a fresh read rather than blanks that would wipe the labels.
+      it('announces the default names for a cook whose profile was never written', async () => {
+        anAbandonedCook();
+        smokes[0].smokeProfileId = 'profile-1';
+        await build();
+
+        await service.autoStop(LAST_READING, NOTICE);
+
+        expect(broadcast.broadcastSmokeUpdate).toHaveBeenCalledWith({
+          smoking: false,
+          chamberName: 'Chamber',
+          probe1Name: 'Probe1',
+          probe2Name: 'Probe2',
+          probe3Name: 'Probe3',
+        });
+      });
+
+      it('announces the default names for a cook that never named a profile', async () => {
+        anAbandonedCook();
+        await build();
+
+        await service.autoStop(LAST_READING, NOTICE);
+
+        expect(broadcast.broadcastSmokeUpdate).toHaveBeenCalledWith(
+          expect.objectContaining({ chamberName: 'Chamber' }),
+        );
+      });
+
+      // Whichever trigger flipped the flag is the one that announces it; the
+      // other flipped nothing and has nothing to say.
+      it('announces once when two triggers stop the same cook', async () => {
+        anAbandonedCook();
+        await build();
+
+        await Promise.all([
+          service.autoStop(LAST_READING, NOTICE),
+          service.autoStop(LAST_READING, NOTICE),
+        ]);
+
+        expect(broadcast.broadcastSmokeUpdate).toHaveBeenCalledTimes(1);
+      });
+
+      // The half-stopped cook — stamped, flag left on — is switched off here,
+      // and that flip is exactly the one a stale client would toggle back.
+      it('announces the flip that finishes off a cook already stamped', async () => {
+        anAbandonedCook();
+        smokes[0].finishedAt = new Date('2026-08-01T15:00:00.000Z');
+        await build();
+
+        const stopped = await service.autoStop(LAST_READING, NOTICE);
+
+        expect(stopped.won).toBe(false);
+        expect(states[0].smoking).toBe(false);
+        expect(broadcast.broadcastSmokeUpdate).toHaveBeenCalledWith(
+          expect.objectContaining({ smoking: false }),
+        );
+      });
+
+      it('says nothing when there was no cook to stop', async () => {
+        await build();
+
+        const stopped = await service.autoStop(LAST_READING, NOTICE);
+
+        expect(stopped).toEqual({
+          won: false,
+          cook: { idle: true, smoking: false },
+        });
+        expect(broadcast.broadcastSmokeUpdate).not.toHaveBeenCalled();
+      });
+
+      // A socket that cannot be reached is a client that will read the truth on
+      // its next load. The stop itself is already written and must stand.
+      it('stops the cook even when the announcement fails', async () => {
+        const logged = jest.spyOn(Logger, 'warn').mockImplementation();
+        anAbandonedCook();
+        await build();
+        broadcast.broadcastSmokeUpdate.mockImplementation(() => {
+          throw new Error('no socket server yet');
+        });
+
+        const stopped = await service.autoStop(LAST_READING, NOTICE);
+
+        expect(stopped.won).toBe(true);
+        expect(smokes[0].finishedAt).toEqual(LAST_READING);
+        expect(states[0].smoking).toBe(false);
+        expect(logged).toHaveBeenCalledWith(
+          expect.stringContaining('cook-1'),
+          'ActiveCook',
+        );
+      });
+    });
   });
 
   describe('attaching a child record', () => {
