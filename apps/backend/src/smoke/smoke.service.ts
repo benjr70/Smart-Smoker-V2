@@ -6,7 +6,7 @@ import { documentId } from '../common/document-id';
 import { Smoke, SmokeDocument } from './smoke.schema';
 import { SmokeDto } from './smokeDto';
 import { ServePlanDto } from './serve-plan.dto';
-import { smokeOf } from '../activeCook/active-cook';
+import { isActive, smokeOf } from '../activeCook/active-cook';
 import { ActiveCookService } from '../activeCook/active-cook.service';
 import { tempSeriesFilter } from '../temps/temp-series.filter';
 import { cookEventsOfSmoke } from '../cookEvents/cook-events.filter';
@@ -74,9 +74,13 @@ export class SmokeService extends BaseService<SmokeDocument> {
    * A child id that is absent (legacy cooks were written before some of these
    * existed) removes nothing and fails nothing: the aim is that after this
    * call, nothing of the cook remains.
+   *
+   * Before any of it, the session is put away if this is the cook the smoker is
+   * attached to — see {@link clearIfActiveCook}.
    */
   async deleteDeep(id: string) {
     const smoke = await this.getByIdOrThrow(id);
+    await this.clearIfActiveCook(id);
     await Promise.all([
       this.deleteChild(this.preSmokeModel, smoke.preSmokeId),
       this.deleteChild(this.smokeProfileModel, smoke.smokeProfileId),
@@ -94,6 +98,27 @@ export class SmokeService extends BaseService<SmokeDocument> {
     // would count a session that is on its way out.
     await this.restatArchive('after deleting smoke ' + id);
     return deleted;
+  }
+
+  /**
+   * Put the session away first, where the cook about to be deleted is the one
+   * the smoker is attached to.
+   *
+   * Deleting it without clearing leaves the session naming a smoke that no
+   * longer exists. That reads as idle everywhere, which is nearly right and
+   * exactly wrong: nothing tells the open screens, the cook log they are
+   * showing belongs to a cook that is gone, and the smoker is stuck on a
+   * session no Start can replace.
+   *
+   * Asked of the Active Cook rather than written here, because detaching the
+   * smoker is a transition of the cook and the deep delete is history's. This
+   * is the one line where the two meet.
+   */
+  private async clearIfActiveCook(id: string): Promise<void> {
+    const cook = await this.activeCook.resolve();
+    if (isActive(cook) && cook.smokeId === String(id)) {
+      await this.activeCook.clear();
+    }
   }
 
   /**

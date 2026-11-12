@@ -233,6 +233,56 @@ describe('SmokeService', () => {
   });
 
   describe('deleteDeep', () => {
+    /**
+     * Deleting the cook the smoker is attached to used to leave the session
+     * pointing at a smoke that no longer existed, which reads as idle
+     * everywhere and is how a smoker gets stuck. The session is put away first
+     * — by the module that owns that transition, not by a write from here — so
+     * the app comes back idle and every open screen is told.
+     */
+    it('clears the session first when the cook being deleted is the Active Cook', async () => {
+      jest
+        .spyOn(service, 'getById')
+        .mockResolvedValue(mockSmokeDocument as unknown as SmokeDocument);
+      activeCook.clear.mockImplementation(async () => {
+        deleteLog.push('activeCook:clear');
+        return { won: true, cook: idleCook(), state: null };
+      });
+
+      await service.deleteDeep('test-smoke-id');
+
+      expect(activeCook.clear).toHaveBeenCalledTimes(1);
+      expect(deleteLog[0]).toBe('activeCook:clear');
+    });
+
+    it('leaves the Active Cook alone when another stored cook is deleted', async () => {
+      jest.spyOn(service, 'getById').mockResolvedValue({
+        ...mockSmokeDocument,
+        _id: 'older-smoke-id',
+      } as unknown as SmokeDocument);
+
+      await service.deleteDeep('older-smoke-id');
+
+      expect(activeCook.clear).not.toHaveBeenCalled();
+      expect(activeCook.cook()).toEqual(
+        expect.objectContaining({ idle: false, smokeId: 'test-smoke-id' }),
+      );
+    });
+
+    it('clears nothing when the smoker is attached to no cook at all', async () => {
+      activeCook.pointAt(idleCook());
+      jest
+        .spyOn(service, 'getById')
+        .mockResolvedValue(mockSmokeDocument as unknown as SmokeDocument);
+
+      await service.deleteDeep('test-smoke-id');
+
+      expect(activeCook.clear).not.toHaveBeenCalled();
+      expect(mockSmokeModel.deleteOne).toHaveBeenCalledWith({
+        _id: 'test-smoke-id',
+      });
+    });
+
     it('removes the parent smoke and all five of its children', async () => {
       jest
         .spyOn(service, 'getById')
