@@ -3,6 +3,25 @@ import { DEFAULT_AUTO_STOP_IDLE_HOURS } from './app-settings.schema';
 const MS_PER_HOUR = 60 * 60 * 1000;
 
 /**
+ * The shortest silence this app may be configured to call the end of a cook.
+ *
+ * Exported because two other rules are *about* this floor rather than about the
+ * configured value: `AutoStopDto` refuses anything below it, and the
+ * temperature-series repair takes it as the silence no configuration of the
+ * archive would dispute (see `SERIES_HEAD_SILENCE_MS` in
+ * `temps/temp-series-backfill.service.ts`). Two hand-written ones would let the
+ * floor move in the settings screen while the repair went on using the old
+ * number, with nothing failing to say so.
+ */
+export const MIN_AUTO_STOP_IDLE_HOURS = 1;
+
+/**
+ * {@link MIN_AUTO_STOP_IDLE_HOURS} as the milliseconds every silence rule
+ * compares in.
+ */
+export const MIN_AUTO_STOP_IDLE_MS = MIN_AUTO_STOP_IDLE_HOURS * MS_PER_HOUR;
+
+/**
  * The settings document as the auto-stop threshold is read from it:
  * structurally, so the read survives a document written before the auto-stop
  * block existed, or one hydrated against a schema that does not declare it.

@@ -20,6 +20,7 @@ import {
   TargetSource,
 } from './app-settings.schema';
 import { AppearanceMode, ColorScheme } from './appearance';
+import { MIN_AUTO_STOP_IDLE_HOURS } from './auto-stop-threshold';
 import { MAX_STAMP_LABEL, STAMP_TONES, StampTone } from './stamp-catalogue';
 
 /**
@@ -217,9 +218,9 @@ export class AppearanceDto {
  * silently given a different setting from the one on its screen.
  */
 export class AutoStopDto {
-  @ApiProperty({ minimum: 1 })
+  @ApiProperty({ minimum: MIN_AUTO_STOP_IDLE_HOURS })
   @IsNumber()
-  @Min(1)
+  @Min(MIN_AUTO_STOP_IDLE_HOURS)
   idleHours: number;
 }
 

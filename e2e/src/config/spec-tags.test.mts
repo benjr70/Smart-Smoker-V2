@@ -66,6 +66,21 @@ describe('virtual-smoker spec tags (issue #321)', () => {
     );
   });
 
+  it('leaves the temp-series journeys untagged so only the hermetic project runs them', () => {
+    // One of them plants rows straight into the store and restarts the backend
+    // to prove a boot-time repair; the other seeds a whole cook and asserts the
+    // archive around it. Neither is a thing that may happen to a real box, and
+    // the hermetic store helper refuses to run there anyway — so the tags are
+    // the first of the two gates.
+    for (const name of ['temp-series.spec.ts', 'temp-series-repair.spec.ts']) {
+      const spec = read(name);
+      assert.ok(
+        !spec.includes(DEPLOYED_TAG) && !spec.includes(VIRTUAL_SMOKER_TAG),
+        `${name} must stay hermetic-only: it writes to the store it reads`
+      );
+    }
+  });
+
   it('does not tag the no-temp @deployed flows as @virtual-smoker', () => {
     for (const name of [
       'history-review.spec.ts',

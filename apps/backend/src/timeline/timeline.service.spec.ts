@@ -5,6 +5,8 @@ import { SmokeStatus } from '../smoke/smoke.schema';
 import { ApplicationSettings } from '../appSettings/app-settings.schema';
 import { PreSmoke } from '../presmoke/presmoke.schema';
 import { HISTORY_RATE_MEMO_MS, TimelineService } from './timeline.service';
+import { StatsService } from '../stats/stats.service';
+import { TempSeriesBackfillService } from '../temps/temp-series-backfill.service';
 import { FakeDoc, fakeModel } from './testing/fake-model';
 import { CookSnapshot, idleCook } from '../activeCook/active-cook';
 import { ActiveCookService } from '../activeCook/active-cook.service';
@@ -289,6 +291,146 @@ describe('TimelineService', () => {
     });
   });
 
+  /**
+   * The two end-reads — {@link TimelineService.getDurationMs}'s sorted
+   * `findOne` and {@link TimelineService.getDurationsMs}'s grouped aggregation
+   * — are how `GET /api/history` and `GET /api/stats` learn how long a cook
+   * carrying no stamps ran. Both ask the store for `{ tempsId }`, so a series
+   * whose opening reading never carried its own id began, as far as either is
+   * concerned, at its *second* reading.
+   *
+   * These cases run the boot repair over the same store the service reads, so
+   * what they pin is the fact a caller sees: the same series, read the same
+   * way, before its opening reading was put back and after. They say nothing
+   * about the live write path — the series `TempsService.saveNewTemp` opens now
+   * carries the id from the first row onwards, which `temps.service.spec.ts`
+   * covers at its own seam.
+   */
+  describe('the ends of a series whose opening reading was left out of it', () => {
+    /** 09:00, 10:00, 12:00 — the head an hour clear of the next reading. */
+    const LEGACY_SERIES_START = new Date('2026-09-01T09:00:00.000Z');
+
+    /**
+     * A series as both writes leave one: the row that opens it is the row the
+     * series is named after, so its own `_id` is the id every later row
+     * carries. The opening row is planted as the old write left it, carrying no
+     * `tempsId` field at all.
+     */
+    const plantLegacySeries = (): string => {
+      const head = new Types.ObjectId();
+      const tempsId = head.toString();
+      temps = [
+        {
+          _id: head,
+          date: LEGACY_SERIES_START,
+          ChamberTemp: '268',
+          MeatTemp: '70',
+          Meat2Temp: '0',
+          Meat3Temp: '0',
+        },
+        {
+          _id: new Types.ObjectId(),
+          tempsId,
+          date: new Date('2026-09-01T10:00:00.000Z'),
+          ChamberTemp: '230',
+          MeatTemp: '120',
+          Meat2Temp: '0',
+          Meat3Temp: '0',
+        },
+        {
+          _id: new Types.ObjectId(),
+          tempsId,
+          date: new Date('2026-09-01T12:00:00.000Z'),
+          ChamberTemp: '240',
+          MeatTemp: '198',
+          Meat2Temp: '0',
+          Meat3Temp: '0',
+        },
+      ];
+      return tempsId;
+    };
+
+    /**
+     * The repair as the backend runs it at boot, over the same two collections
+     * this service reads. No cook document links the planted series, which is
+     * the shape that leaves the end-reads answering for themselves: the repair
+     * puts the reading back and has no stamps to move, so what the reads
+     * report afterwards is what they found in the series.
+     */
+    const repairTheStore = async (): Promise<number> => {
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          TempSeriesBackfillService,
+          { provide: getModelToken('Temp'), useValue: models.temps },
+          { provide: getModelToken('Smoke'), useValue: models.smokes },
+          {
+            provide: StatsService,
+            useValue: { markDirty: jest.fn().mockResolvedValue(undefined) },
+          },
+        ],
+      }).compile();
+      return module.get(TempSeriesBackfillService).stampOrphanHeads();
+    };
+
+    it('measures an unstamped cook from the reading that opened its series', async () => {
+      const tempsId = plantLegacySeries();
+      service = await build();
+      const smoke = { tempsId, status: SmokeStatus.Complete };
+
+      // 10:00 to 12:00 — the opening reading is not in the series it opened.
+      expect(await service.getDurationMs(smoke)).toBe(2 * 60 * 60 * 1000);
+
+      expect(await repairTheStore()).toBe(1);
+
+      // 09:00 to 12:00, the whole cook.
+      expect(await service.getDurationMs(smoke)).toBe(3 * 60 * 60 * 1000);
+    });
+
+    it('measures a whole archive of them from their opening readings too', async () => {
+      const tempsId = plantLegacySeries();
+      service = await build();
+      const archive = [{ tempsId, status: SmokeStatus.Complete }];
+
+      expect(await service.getDurationsMs(archive)).toEqual([
+        2 * 60 * 60 * 1000,
+      ]);
+
+      await repairTheStore();
+
+      expect(await service.getDurationsMs(archive)).toEqual([
+        3 * 60 * 60 * 1000,
+      ]);
+      // The grouped read and the per-cook read agree, as they must: one serves
+      // the history list and the other the stats aggregate, over one archive.
+      expect(await service.getDurationsMs(archive)).toEqual([
+        await service.getDurationMs(archive[0]),
+      ]);
+    });
+
+    /**
+     * The row at an end, not just its moment: the finish stamp reads the last
+     * reading's moment off it (see {@link TimelineService.lastReading}), so a
+     * series holding nothing but its opening reading must answer with that
+     * reading rather than with nothing at all — a cook stopped after one
+     * reading would otherwise be stamped as finishing whenever the stamp
+     * happened to run.
+     */
+    it('answers with the opening reading itself when it is all the series holds', async () => {
+      const tempsId = plantLegacySeries();
+      temps = [temps[0]];
+      service = await build();
+      const smoke = { tempsId, status: SmokeStatus.Complete };
+
+      expect(await service.lastReading(smoke)).toBeNull();
+
+      await repairTheStore();
+
+      expect((await service.lastReading(smoke))?.readAt).toEqual(
+        LEGACY_SERIES_START,
+      );
+    });
+  });
+
   describe('getCurrentTimeline', () => {
     const NOW = new Date('2026-08-17T18:00:00.000Z');
 
@@ -339,6 +481,35 @@ describe('TimelineService', () => {
       expect(timeline.estimate.eta).toEqual(
         new Date('2026-08-17T20:00:00.000Z'),
       );
+    });
+
+    /**
+     * The live projection is read from two bounded slices of the series — the
+     * opening rows and the last half hour — and both ask the store for the
+     * cook's readings by `tempsId`. The row that opened the series is the one
+     * that used to carry none: its own `_id` became the series id and nothing
+     * stamped it, so both slices dropped it and the climb rate was drawn from
+     * the *second* reading. Now that the id is minted before the row is written
+     * (see `TempsService.saveNewTemp`), the opening reading is read like any
+     * other — here it is the row the whole projection is anchored to.
+     */
+    it('draws the projection from the reading that opened the series', async () => {
+      startTheCook();
+      temps.push(
+        // The shape the write leaves: the series is named after this row, and
+        // the row carries that name.
+        { ...running(20, '153'), _id: 'live-temps' },
+        running(10, '163'),
+        running(0, '173'),
+      );
+      service = await build();
+
+      const { estimate } = await service.getCurrentTimeline(NOW);
+
+      expect(estimate.startTemp).toBe(153);
+      // 60°F/hr through the three readings, 153°F to 173°F in 20 minutes —
+      // 30°F/hr if the opening one were dropped.
+      expect(estimate.ratePerHour).toBeCloseTo(60, 5);
     });
 
     it('measures progress from the first reading after the cook started', async () => {

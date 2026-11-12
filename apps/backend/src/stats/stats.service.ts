@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { idleThresholdMsOf } from '../appSettings/auto-stop-threshold';
+import { asBulkWrite, BulkStamp } from '../common/bulk-stamp';
 import {
   ApplicationSettings,
   ApplicationSettingsDocument,
@@ -22,49 +23,31 @@ import { StatsSnapshot, StatsSnapshotDocument } from './stats.schema';
 /**
  * One cook's peak stamp as a bulk write carries it: the mark that its readings
  * were searched, and the peak where the search found one.
- *
- * Spelled out rather than inferred at the call because Mongoose's own bulk
- * operation type is a union wide enough that resolving an inline literal
- * against it costs the compiler more than the whole rest of this file.
  */
-interface PeakStamp {
-  updateOne: {
-    filter: { _id: unknown };
-    update: {
-      $set: { peakChamberScanned: true; peakChamber?: number };
-    };
-  };
-}
+type PeakStamp = BulkStamp<{
+  $set: { peakChamberScanned: true; peakChamber?: number };
+}>;
 
 /**
  * One cook's window as a bulk write carries it: the two stamps that say when it
  * ran, and the peak re-scanned inside them.
- *
- * Spelled out for the same reason {@link PeakStamp} is — Mongoose's own bulk
- * operation type is wide enough that resolving an inline literal against it is
- * the most expensive thing in this file for the compiler.
  */
-interface WindowStamp {
-  updateOne: {
-    filter: { _id: unknown };
-    update: {
-      $set: {
-        startedAt: Date;
-        finishedAt: Date;
-        peakChamberScanned: true;
-        cookWindowBackfilled: true;
-        peakChamber?: number;
-      };
-      /**
-       * How a peak that came from outside the cook's window is taken off it —
-       * see {@link StatsService.stampCookWindows}. A stamp that found one
-       * inside the window carries no `$unset` at all, because Mongo rejects an
-       * update that both sets and unsets the same path.
-       */
-      $unset?: { peakChamber: '' };
-    };
+type WindowStamp = BulkStamp<{
+  $set: {
+    startedAt: Date;
+    finishedAt: Date;
+    peakChamberScanned: true;
+    cookWindowBackfilled: true;
+    peakChamber?: number;
   };
-}
+  /**
+   * How a peak that came from outside the cook's window is taken off it — see
+   * {@link StatsService.stampCookWindows}. A stamp that found one inside the
+   * window carries no `$unset` at all, because Mongo rejects an update that
+   * both sets and unsets the same path.
+   */
+  $unset?: { peakChamber: '' };
+}>;
 
 /** Documents by id, for joining a parent to the children it points at. */
 const byId = <T extends { _id?: unknown }>(docs: T[]): Map<string, T> =>
@@ -253,9 +236,7 @@ export class StatsService {
         },
       };
     });
-    await this.smokeModel.bulkWrite(
-      stamps as unknown as Parameters<Model<SmokeDocument>['bulkWrite']>[0],
-    );
+    await this.smokeModel.bulkWrite(asBulkWrite<SmokeDocument>(stamps));
     return stamped;
   }
 
@@ -381,9 +362,7 @@ export class StatsService {
     if (stamps.length === 0) {
       return new Map();
     }
-    await this.smokeModel.bulkWrite(
-      stamps as unknown as Parameters<Model<SmokeDocument>['bulkWrite']>[0],
-    );
+    await this.smokeModel.bulkWrite(asBulkWrite<SmokeDocument>(stamps));
     return stamped;
   }
 

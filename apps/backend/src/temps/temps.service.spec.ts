@@ -76,6 +76,79 @@ const matches = (row: Temp, filter: any): boolean =>
     return true;
   });
 
+/**
+ * {@link matches} with the equality conditions honoured too — the series id a
+ * read is asked for, and the `_id` branch a delete adds — so a row only answers
+ * a query that really selects it.
+ */
+const matchesAll = (row: any, filter: any = {}): boolean =>
+  Object.entries(filter).every(([field, condition]: [string, any]) => {
+    if (field === '$or') {
+      return condition.some((branch: any) => matchesAll(row, branch));
+    }
+    if (field === 'date') {
+      return matches(row, { date: condition });
+    }
+    return String(row[field]) === String(condition);
+  });
+
+/**
+ * A temps collection, as much of one as a series round trip needs: rows written
+ * through the model the way Mongoose writes them (an id invented at insert for
+ * a row that arrives without one), and read back through the filters the
+ * service builds rather than through a seeded answer.
+ */
+const fakeTempCollection = () => {
+  const rows: any[] = [];
+  const model: any = jest.fn().mockImplementation((doc: any) => {
+    const row = { ...doc, _id: doc._id ?? new Types.ObjectId() };
+    return {
+      ...row,
+      save: () => {
+        rows.push(row);
+        return Promise.resolve(row);
+      },
+    };
+  });
+  model.rows = rows;
+  model.find = jest
+    .fn()
+    .mockImplementation((filter: any) =>
+      orderedQuery(rows.filter((row) => matchesAll(row, filter))),
+    );
+  model.deleteMany = jest.fn().mockImplementation((filter: any) => {
+    const kept = rows.filter((row) => !matchesAll(row, filter));
+    const deletedCount = rows.length - kept.length;
+    rows.splice(0, rows.length, ...kept);
+    return Promise.resolve({ deletedCount });
+  });
+  return model;
+};
+
+/**
+ * The Active Cook as the readings see it: no series until the first reading
+ * opens one, that reading's id linked on as the series id, and every reading
+ * after it appended to the series already there. The link-back contract itself
+ * belongs to `CurrentSmokeService` and is held to in its own spec.
+ */
+const activeCookDouble = () => {
+  let tempsId: string | undefined;
+  return {
+    seriesId: () => tempsId,
+    readCurrent: jest.fn((key: string, load: any, fallback: any) =>
+      tempsId === undefined ? Promise.resolve(fallback) : load(tempsId),
+    ),
+    upsertCurrent: jest.fn(async (key: string, handlers: any) => {
+      if (tempsId !== undefined) {
+        return handlers.update(tempsId);
+      }
+      const { result, childId } = await handlers.create();
+      tempsId = childId;
+      return result;
+    }),
+  };
+};
+
 const filteringFind = (seed: Temp[]) =>
   jest
     .fn()
@@ -167,7 +240,13 @@ describe('TempsService', () => {
       expect(result).toMatchObject({ _id: 'new-temp-id' });
     });
 
-    it('creates the first temp row and reports its id as the new tempsId group', async () => {
+    /**
+     * The first reading opens the series and is named as it: the id linked onto
+     * the cook is this reading's own. Carried on the row as well as linked, so
+     * the reading that names the series is one of the series' readings — see
+     * "a cook's whole series" below for what every read then sees.
+     */
+    it('creates the first temp row carrying the tempsId group it becomes', async () => {
       let linkedChildId: string | undefined;
       currentSmoke.upsertCurrent.mockImplementation(async (key, handlers) => {
         const created = await handlers.create();
@@ -175,11 +254,20 @@ describe('TempsService', () => {
         return created.result;
       });
 
-      const result = await service.saveNewTemp(tempDto);
+      // Its own DTO rather than the shared one: the append path rewrites the
+      // DTO it is handed, so a shared fixture carries a tempsId by the time
+      // this runs and the reading it describes is no longer a fresh one.
+      const firstReading: TempDto = { ...tempDto, tempsId: undefined };
 
-      expect(model).toHaveBeenCalledWith(tempDto);
-      expect(linkedChildId).toBe('new-temp-id');
-      expect(result).toMatchObject({ _id: 'new-temp-id' });
+      await service.saveNewTemp(firstReading);
+
+      const [written] = model.mock.calls[0];
+      expect(String(written._id)).toBe(linkedChildId);
+      expect(written.tempsId).toBe(linkedChildId);
+      expect(written).toMatchObject({
+        ...firstReading,
+        tempsId: linkedChildId,
+      });
     });
 
     it('propagates the 404 when there is no active smoke', async () => {
@@ -1139,6 +1227,120 @@ describe('TempsService', () => {
       expect(model.deleteMany).toHaveBeenCalledWith({
         tempsId: 'legacy-series',
       });
+    });
+  });
+
+  /**
+   * The whole series of one cook, written and then read through the service
+   * rather than seeded into a double.
+   *
+   * "Every reading of a cook is in that cook's series" is an agreement between
+   * the write and the reads — the series is named after its own first reading,
+   * and that reading was once written without the id it had just become — and
+   * no double that only answers reads can hold the two to it. So the rows here
+   * arrive the way a smoker's do: one `saveNewTemp` at a time, the first of
+   * them opening the series.
+   */
+  describe("a cook's whole series", () => {
+    let store: any;
+    let seriesId: () => string | undefined;
+
+    /** Readings of a short cook, minutes apart, as the device sends them. */
+    const cook = [
+      { ChamberTemp: '232', date: new Date('2026-08-02T13:12:40Z') },
+      { ChamberTemp: '215', date: new Date('2026-08-02T13:14:00Z') },
+      { ChamberTemp: '228', date: new Date('2026-08-02T13:15:21Z') },
+    ];
+
+    const record = async () => {
+      for (const reading of cook) {
+        await service.saveNewTemp({ ...tempDto, ...reading });
+      }
+    };
+
+    beforeEach(async () => {
+      store = fakeTempCollection();
+      const cookStamps = {
+        startedAt: new Date('2026-08-02T13:10:00Z'),
+        finishedAt: new Date('2026-08-02T13:20:00Z'),
+      };
+      const activeCook = activeCookDouble();
+      seriesId = activeCook.seriesId;
+
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          TempsService,
+          { provide: getModelToken('Temp'), useValue: store },
+          {
+            provide: getModelToken('Smoke'),
+            useValue: { findOne: jest.fn(() => query(cookStamps)) },
+          },
+          { provide: CurrentSmokeService, useValue: activeCook },
+        ],
+      }).compile();
+
+      service = module.get<TempsService>(TempsService);
+    });
+
+    it("reads back every reading of the Active Cook's series, the first one included", async () => {
+      await record();
+
+      const series = await service.getAllTempsCurrent();
+
+      expect(series.map((reading) => reading.ChamberTemp)).toEqual([
+        '232',
+        '215',
+        '228',
+      ]);
+    });
+
+    /**
+     * The one fact every other read of a series rests on: the readings that
+     * answer a query by `tempsId` are all of them. The timeline's readings and
+     * readings-since, and the edge and peak scans, each ask the store that same
+     * question — so a first reading that carries the id is counted by all of
+     * them, the peak scan included.
+     */
+    it('leaves no reading of the cook outside the series it names', async () => {
+      await record();
+
+      const series = await service.getAllTempsCurrent();
+
+      expect(series).toHaveLength(cook.length);
+      for (const reading of series) {
+        expect(reading.tempsId).toBe(seriesId());
+      }
+    });
+
+    /** The stored read, clipped to the window the cook's stamps give it. */
+    it('reads back a stored cook whole, the first reading included', async () => {
+      await record();
+
+      const stored = await service.getAllTempsById(seriesId() as string);
+
+      expect(stored.map((reading) => reading.ChamberTemp)).toEqual([
+        '232',
+        '215',
+        '228',
+      ]);
+    });
+
+    it('draws a stored cook as a chart from all of its readings', async () => {
+      await record();
+
+      const samples = await service.getSeriesById(seriesId() as string);
+
+      expect(samples.map((sample) => sample.chamberTemp)).toEqual([
+        232, 215, 228,
+      ]);
+    });
+
+    it('deletes the whole series, the first reading included', async () => {
+      await record();
+
+      await service.delete(seriesId() as string);
+
+      expect(store.rows).toEqual([]);
     });
   });
 });

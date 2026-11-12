@@ -53,7 +53,12 @@ npx playwright install --with-deps chromium
   trace-on-first-retry. Base URLs resolve from env with localhost defaults.
 - `src/config/urls.ts` — env-overridable service URL resolution.
 - `src/helpers/wait-for-healthy.ts` + `src/global-setup.ts` — block the run
-  until every service answers its health endpoint.
+  until every service answers its health endpoint, then sweep what a crashed run
+  left behind.
+- `src/helpers/hermetic-store.ts` — the composed stack's own Mongo and backend,
+  reached through `docker`. For the one thing the API cannot express: planting
+  rows a release _repairs_ and booting the backend over them. A no-op on every
+  other target, which are real archives.
 - `src/pageObjects/FrontendApp.ts`, `SmokerApp.ts` — all selectors live here;
   specs contain journey logic only.
 - `tests/lifecycle.spec.ts` — pre-smoke → start smoke (smoker UI) → live chart
