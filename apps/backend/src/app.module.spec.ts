@@ -1,3 +1,5 @@
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { DynamicModule, ForwardReference, Type } from '@nestjs/common';
 import { MODULE_METADATA } from '@nestjs/common/constants';
 import { AppModule } from './app.module';
@@ -101,5 +103,25 @@ describe('the backend module graph', () => {
     expect(modules).toContain('ActiveCookModule');
     expect(modules).not.toContain('StateModule');
     expect(modules).not.toContain('CommonModule');
+  });
+
+  /**
+   * `CLAUDE.md` is the doc of record an agent reads before touching this
+   * backend, and it describes the module graph in prose. A name in there that
+   * the graph no longer holds sends the next reader looking for a module that
+   * does not exist, so the prose is checked against the walk rather than
+   * trusted.
+   */
+  it('is described by CLAUDE.md with names the graph still holds', () => {
+    const doc = readFileSync(
+      join(__dirname, '..', '..', '..', 'CLAUDE.md'),
+      'utf8',
+    );
+    const named = ['StateModule', 'State module', 'CommonModule'].filter(
+      (name) => doc.includes(name),
+    );
+
+    expect(named).toEqual([]);
+    expect(doc).toContain('activeCook');
   });
 });

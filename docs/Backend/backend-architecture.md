@@ -124,12 +124,13 @@ graph LR
 - Handles real-time communication with clients
 - Receives temperature data from the device service
 - Processes data and broadcasts updates to connected clients
-- Relies on Temperature, Active Cook, and Notifications modules
+- Relies on the Temperature, Active Cook and Stale Cook modules
 
 #### Temperature Module
 - Manages temperature readings
 - Stores historical temperature data
-- Depends on Active Cook and Smoke modules
+- Depends on the Active Cook and Statistics modules, and on the Smoke model
+  (not its module) for the window a stored series is clipped to
 
 #### Smoke Module
 - Core module for smoke session management
@@ -137,15 +138,15 @@ graph LR
 
 #### PreSmoke Module
 - Handles preparation phase before smoking begins
-- Depends on Active Cook and Smoke modules
+- Depends on the Active Cook and Statistics modules
 
 #### PostSmoke Module
 - Manages completion phase after smoking ends
-- Depends on Active Cook and Smoke modules
+- Depends on the Active Cook and Statistics modules
 
 #### Smoke Profile Module
 - Manages smoking profiles and configurations
-- Depends on Active Cook, Smoke, and Ratings modules
+- Depends on the Active Cook and Statistics modules
 
 #### Settings Module
 - Handles system configuration settings

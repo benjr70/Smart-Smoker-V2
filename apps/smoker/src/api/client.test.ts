@@ -47,9 +47,9 @@ describe('smoker api client', () => {
     });
 
     // Both state routes answer with an EMPTY body in ordinary operation:
-    // `GET state` on a fresh or reset database (StateService.GetState resolves
-    // `undefined`), and `PUT state/toggleSmoking` with no current smoke
-    // (StateService.toggleSmoking returns an explicit `null`). Every smoker call
+    // `GET state` on a fresh or reset database (ActiveCookService.state
+    // resolves `undefined`), and `PUT state/toggleSmoking` with no cook
+    // (ActiveCookService.toggle returns an explicit `null`). Every smoker call
     // site reads the result unguarded — `home.tsx` does `state.smoking` inside a
     // `.then()` with no `.catch()` — so the contract is that `.smoking` reads as
     // `undefined` and nothing throws.

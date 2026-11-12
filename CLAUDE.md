@@ -89,13 +89,14 @@ cd packages/TemperatureChart && npm test
 
 ### Backend (NestJS)
 
-- Modular architecture: each feature is a NestJS module (smoke, temps,
-  smokeProfile, presmoke, postSmoke, notifications, history, ratings, settings,
-  health)
+- Modular architecture: each feature is a NestJS module (activeCook, smoke,
+  temps, smokeProfile, presmoke, postSmoke, notifications, history, ratings,
+  settings, health)
 - Pattern: Controller → Service → Mongoose Model, with DTOs for validation
   (class-validator)
-- WebSocket Gateways handle real-time updates; State module is the central state
-  singleton
+- WebSocket Gateways handle real-time updates; the `activeCook` module owns the
+  cook in progress — it seeds and serves the state singleton and owns every
+  transition on it (see `docs/adr/0001-active-cook-owns-cook-transitions.md`)
 - Swagger/OpenAPI decorators on all controllers
 
 ### Frontend / Smoker (React)

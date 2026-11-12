@@ -36,7 +36,7 @@ NestJS + MongoDB application.
 
 ## Existing Schema Locations
 
-- `apps/backend/src/State/state.schema.ts` -- Central state:
+- `apps/backend/src/activeCook/state.schema.ts` -- Central state:
   `{ smokeId, smoking }`
 - `apps/backend/src/smoke/smoke.schema.ts` -- Smoke aggregate with linked IDs
 - `apps/backend/src/temps/temps.schema.ts` -- Temperature data (high-volume
