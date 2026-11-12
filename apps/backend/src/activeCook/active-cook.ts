@@ -275,8 +275,8 @@ export interface ActiveCookTransitions extends ActiveCookChildren {
    */
   autoStop(at: Date, notice: string): Promise<CookTransition>;
   /**
-   * Put the session away: throw an unfinished cook's log out, detach the cook,
-   * and tell every open screen the cook log is empty. Once.
+   * Put the Active Cook away: throw an unfinished cook's log out, detach the
+   * cook, and tell every open screen the cook log is empty. Once.
    */
   clear(): Promise<ClearedCook>;
 }

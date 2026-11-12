@@ -1013,8 +1013,8 @@ describe('ActiveCookService', () => {
     });
   });
 
-  describe('clearing the session', () => {
-    /** The cook log of the session, as the pitmaster stamped it. */
+  describe('clearing the Active Cook', () => {
+    /** The cook log of the Active Cook, as the pitmaster stamped it. */
     const aCookLog = (): void => {
       cookEvents.push(
         { _id: 'event-1', smokeId: 'cook-1', name: 'Wrapped' },
@@ -1022,8 +1022,8 @@ describe('ActiveCookService', () => {
       );
     };
 
-    /** A session the pitmaster is throwing away: a cook never finished. */
-    const anUnfinishedSession = (): void => {
+    /** An Active Cook the pitmaster is throwing away: never finished. */
+    const anUnfinishedCook = (): void => {
       smokes.push({
         _id: 'cook-1',
         status: SmokeStatus.InProgress,
@@ -1034,7 +1034,7 @@ describe('ActiveCookService', () => {
     };
 
     it('throws the cook log away and detaches the cook', async () => {
-      anUnfinishedSession();
+      anUnfinishedCook();
       await build();
 
       const cleared = await service.clear();
@@ -1049,7 +1049,7 @@ describe('ActiveCookService', () => {
 
     /**
      * Clearing is how a *finished* cook is put away too: the wizard finishes
-     * the cook and then clears the session, with the state still naming the
+     * the cook and then clears it, with the state still naming the
      * cook it has just completed. A discard that did not tell the two apart
      * would delete the log of every cook on the happy path, moments after it
      * was recorded.
@@ -1068,13 +1068,14 @@ describe('ActiveCookService', () => {
     });
 
     /**
-     * The screens do not unmount when a session is cleared — the stale-cook
+     * The screens do not unmount when the Active Cook is cleared — the
+     * stale-cook
      * recovery clears from under a mounted smoke step — so a clear that
      * announced nothing would leave the previous cook's entries on screen, and
      * a Remove tapped there would delete an event of a cook put away.
      */
     it('announces the now-empty cook log to every open screen', async () => {
-      anUnfinishedSession();
+      anUnfinishedCook();
       await build();
 
       await service.clear();
@@ -1083,7 +1084,7 @@ describe('ActiveCookService', () => {
     });
 
     /**
-     * The finished cook's log is kept, but the session no longer names it, so
+     * The finished cook's log is kept, but the smoker no longer names it, so
      * what every live screen is showing — the log of the cook in progress — is
      * empty here too.
      */
@@ -1098,7 +1099,7 @@ describe('ActiveCookService', () => {
     });
 
     it('announces once when two clears race', async () => {
-      anUnfinishedSession();
+      anUnfinishedCook();
       await build();
 
       const clears = await Promise.all([service.clear(), service.clear()]);
@@ -1140,7 +1141,7 @@ describe('ActiveCookService', () => {
     });
 
     it('answers with the stored state, which is what the clear route serves', async () => {
-      anUnfinishedSession();
+      anUnfinishedCook();
       await build();
 
       const cleared = await service.clear();
@@ -1151,9 +1152,9 @@ describe('ActiveCookService', () => {
     });
 
     // A socket that cannot be reached must not fail the clear itself.
-    it('still clears the session when the announcement throws', async () => {
+    it('still clears the Active Cook when the announcement throws', async () => {
       jest.spyOn(Logger, 'error').mockImplementation();
-      anUnfinishedSession();
+      anUnfinishedCook();
       await build();
       broadcast.broadcastCookEvents.mockImplementation(() => {
         throw new Error('no server');
@@ -1165,9 +1166,9 @@ describe('ActiveCookService', () => {
       expect(states[0].smokeId).toBe('');
     });
 
-    it('still clears the session when the cook log could not be removed', async () => {
+    it('still clears the Active Cook when the cook log could not be removed', async () => {
       const logged = jest.spyOn(Logger, 'error').mockImplementation();
-      anUnfinishedSession();
+      anUnfinishedCook();
       await build();
       cookEventModel.deleteMany = () => ({
         exec: async () => {

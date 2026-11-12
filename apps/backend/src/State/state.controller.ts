@@ -48,7 +48,7 @@ export class StateController {
   }
 
   /**
-   * Put the session away: the cook log of a cook that was never finished goes,
+   * Put the Active Cook away: the cook log of a cook never finished goes,
    * the cook is detached, and every open screen is told the cook log is empty.
    *
    * A transition of the cook rather than a write to this collection, so the

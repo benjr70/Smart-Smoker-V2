@@ -108,7 +108,7 @@ export class ActiveCookService implements ActiveCookTransitions {
     @InjectModel('SmokeProfile')
     private readonly profileModel: Model<SmokeProFileDocument>,
     /**
-     * The cook log, thrown out with a session that is discarded. Its model
+     * The cook log, thrown out with an Active Cook that is discarded. Its model
      * rather than `CookEventsService`: that service reads the Active Cook to
      * find the cook its rows belong to, so injecting it here would close a DI
      * cycle. Removing rows by the cook they belong to carries none of its
@@ -407,7 +407,7 @@ export class ActiveCookService implements ActiveCookTransitions {
    * back for the flag, which is why the flip is made whether or not the stamp
    * was this call's to write.
    *
-   * What it deliberately does not do is complete the cook. The session stays in
+   * What it deliberately does not do is complete the cook. It stays in
    * progress and stays attached, so the pitmaster still walks the normal End
    * Smoke wizard whenever they next open the app, and the finish stamped here
    * is what their late manual finish then keeps.
@@ -550,7 +550,7 @@ export class ActiveCookService implements ActiveCookTransitions {
   }
 
   /**
-   * Put the session away: detach the cook, throw its log out if it was never
+   * Put the Active Cook away: detach the cook, throw its log out if it was never
    * finished, and tell every open screen there is no cook log to show.
    *
    * The detach is the conditional write, and it is what names the cook being
@@ -558,19 +558,19 @@ export class ActiveCookService implements ActiveCookTransitions {
    * that detached" and "which cook was attached when it did". Resolving the
    * cook first and clearing second would let two clears each think they had the
    * cook — and would refuse to detach a state left naming a cook the archive no
-   * longer holds, which reads as idle and is exactly the dangling session this
-   * is relied on to heal.
+   * longer holds, which reads as idle and is exactly the dangling attachment
+   * this is relied on to heal.
    *
    * The log goes after the detach rather than before, and never fails the
    * clear. Events left behind belong to a cook nothing points at any more,
-   * which is untidy; a session the pitmaster asked to clear that stayed set up
+   * which is untidy; a cook the pitmaster asked to clear that stayed attached
    * because a delete failed is far worse — the next cook would record into the
    * last one.
    */
   async clear(): Promise<ClearedCook> {
     const attached = await this.stateModel
       .findOneAndUpdate(
-        // Something has to be attached. An idle smoker has no session to put
+        // Something has to be attached. An idle smoker has no cook to put
         // away, and nothing to tell the screens about.
         { smokeId: { $nin: ['', null] } },
         { $set: { smokeId: '', smoking: false } },
@@ -586,22 +586,22 @@ export class ActiveCookService implements ActiveCookTransitions {
   }
 
   /**
-   * The cook log of a session being thrown away — and only of one being thrown
+   * The cook log of a cook being thrown away — and only of one being thrown
    * away.
    *
-   * Clearing is not only how an abandoned session is discarded: it is also the
+   * Clearing is not only how an abandoned cook is discarded: it is also the
    * last step of finishing a cook (the wizard finishes the cook, then clears
-   * the session that still names it), so the clear alone cannot say which of
+   * the smoker that still names it), so the clear alone cannot say which of
    * the two is happening. The cook's own status can. A completed cook is
    * archived, its log is its history, and this must not touch it; an unfinished
-   * one is being thrown out, and a log left behind would belong to a session
+   * one is being thrown out, and a log left behind would belong to a cook
    * nothing points at any more.
    *
    * A cook the archive no longer holds is treated as unfinished: what is left
    * of it is an orphaned log, and nothing is archived that could lose by its
    * removal.
    *
-   * Never throws: the session *is* cleared by the time this runs, and a
+   * Never throws: the Active Cook *is* cleared by the time this runs, and a
    * database hiccup here must not turn that into an error the pitmaster
    * retries.
    */
@@ -623,15 +623,16 @@ export class ActiveCookService implements ActiveCookTransitions {
   /**
    * Tell every connected client that there is no cook log to show.
    *
-   * Empty whichever way the clear went: a discarded session's events are gone,
-   * and a finished cook's are kept but belong to a cook the session no longer
+   * Empty whichever way the clear went: a discarded cook's events are gone,
+   * and a finished cook's are kept but belong to a cook the smoker no longer
    * names — and what a live screen shows is the log of the cook in progress.
    *
-   * Announced because the screens do not unmount when a session is cleared —
+   * Announced because the screens do not unmount when the Active Cook is
+   * cleared —
    * the stale-cook recovery clears from under a mounted smoke step. Without it
    * the card keeps showing the cleared cook's entries, and a Remove tapped
    * there deletes an event of a cook that has been put away. Never throws: the
-   * session is cleared, and an unreachable socket must not make that an error.
+   * cook is cleared, and an unreachable socket must not make that an error.
    */
   private announceEmptyCookLog(): void {
     try {

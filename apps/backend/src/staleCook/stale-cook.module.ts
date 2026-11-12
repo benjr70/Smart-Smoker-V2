@@ -18,7 +18,7 @@ import { StaleCookService } from './stale-cook.service';
  * them. That direction is what lets a single service own the decision without
  * any of those modules learning about auto-stop.
  *
- * Both of those edges are plain references. The session, the statistics, the
+ * Both of those edges are plain references. The state, the statistics, the
  * gateway and the push dispatcher are gone from here along with the stop
  * procedure that used them, and with them the two `forwardRef`s that only ever
  * existed because this module announced its own stop over a gateway that reads

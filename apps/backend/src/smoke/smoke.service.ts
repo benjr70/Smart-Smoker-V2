@@ -75,8 +75,8 @@ export class SmokeService extends BaseService<SmokeDocument> {
    * existed) removes nothing and fails nothing: the aim is that after this
    * call, nothing of the cook remains.
    *
-   * Before any of it, the session is put away if this is the cook the smoker is
-   * attached to — see {@link clearIfActiveCook}.
+   * Before any of it, the Active Cook is cleared if this is the cook the
+   * smoker is attached to — see {@link clearIfActiveCook}.
    */
   async deleteDeep(id: string) {
     const smoke = await this.getByIdOrThrow(id);
@@ -95,20 +95,20 @@ export class SmokeService extends BaseService<SmokeDocument> {
     ]);
     const deleted = await this.delete(id);
     // Only once nothing of the cook is left: statistics recomputed mid-cascade
-    // would count a session that is on its way out.
+    // would count a cook that is on its way out.
     await this.restatArchive('after deleting smoke ' + id);
     return deleted;
   }
 
   /**
-   * Put the session away first, where the cook about to be deleted is the one
-   * the smoker is attached to.
+   * Clear the Active Cook first, where the cook about to be deleted is the
+   * one the smoker is attached to.
    *
-   * Deleting it without clearing leaves the session naming a smoke that no
+   * Deleting it without clearing leaves the smoker naming a smoke that no
    * longer exists. That reads as idle everywhere, which is nearly right and
    * exactly wrong: nothing tells the open screens, the cook log they are
    * showing belongs to a cook that is gone, and the smoker is stuck on a
-   * session no Start can replace.
+   * cook no Start can replace.
    *
    * Asked of the Active Cook rather than written here, because detaching the
    * smoker is a transition of the cook and the deep delete is history's. This

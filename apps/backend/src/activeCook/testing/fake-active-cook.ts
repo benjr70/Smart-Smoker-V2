@@ -161,7 +161,7 @@ export const fakeActiveCook = (
     }),
     /**
      * The clear, as a caller of it reads one back: the smoker is attached to
-     * nothing afterwards, and the session it detached is the win. What becomes
+     * nothing afterwards, and the cook it detached is the win. What becomes
      * of the discarded cook's log is held by the Active Cook's own spec,
      * against the store.
      */

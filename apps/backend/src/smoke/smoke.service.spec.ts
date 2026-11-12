@@ -234,13 +234,14 @@ describe('SmokeService', () => {
 
   describe('deleteDeep', () => {
     /**
-     * Deleting the cook the smoker is attached to used to leave the session
+     * Deleting the cook the smoker is attached to used to leave the smoker
      * pointing at a smoke that no longer existed, which reads as idle
-     * everywhere and is how a smoker gets stuck. The session is put away first
+     * everywhere and is how a smoker gets stuck. The Active Cook is cleared
+     * first
      * — by the module that owns that transition, not by a write from here — so
      * the app comes back idle and every open screen is told.
      */
-    it('clears the session first when the cook being deleted is the Active Cook', async () => {
+    it('clears the Active Cook first when it is the cook being deleted', async () => {
       jest
         .spyOn(service, 'getById')
         .mockResolvedValue(mockSmokeDocument as unknown as SmokeDocument);

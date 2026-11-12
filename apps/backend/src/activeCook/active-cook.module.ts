@@ -40,7 +40,7 @@ import { ActiveCookService } from './active-cook.service';
       // and hold its peak, and the settings say what the meat was being taken
       // to. Their models, like the two above.
       { name: 'Temp', schema: TempSchema },
-      // The cook log a discarded session's clear throws out, and what the
+      // The cook log a discarded cook's clear throws out, and what the
       // stopped cook's probes are called for the frame its stop announces.
       // Their models, like the two above.
       { name: 'CookEvent', schema: CookEventSchema },
