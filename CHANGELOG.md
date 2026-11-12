@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.15.0](https://github.com/benjr70/Smart-Smoker-V2/compare/v1.14.0...v1.15.0) (2026-11-12)
+
+
+### Features
+
+* **backend:** Active Cook module — snapshot, idle rule, and the reading callers moved over ([#764](https://github.com/benjr70/Smart-Smoker-V2/issues/764)) ([5c55d87](https://github.com/benjr70/Smart-Smoker-V2/commit/5c55d878bbbcf6f9ac6c9edbbf2bd2aedc87a169))
+* **backend:** attaching child records to the Active Cook ([#751](https://github.com/benjr70/Smart-Smoker-V2/issues/751)) ([#767](https://github.com/benjr70/Smart-Smoker-V2/issues/767)) ([02ff965](https://github.com/benjr70/Smart-Smoker-V2/commit/02ff965ac746dc76a90acbbb4efaf43d443f6b60))
+* **backend:** auto-stop, clear and deleting the Active Cook ([#753](https://github.com/benjr70/Smart-Smoker-V2/issues/753)) ([#775](https://github.com/benjr70/Smart-Smoker-V2/issues/775)) ([124b1fa](https://github.com/benjr70/Smart-Smoker-V2/commit/124b1fa5ead650ab4411edde9d8abc898c57e531))
+* **backend:** delete the leftovers — State module, current-smoke helper, raw state routes ([#754](https://github.com/benjr70/Smart-Smoker-V2/issues/754)) ([#776](https://github.com/benjr70/Smart-Smoker-V2/issues/776)) ([deb5267](https://github.com/benjr70/Smart-Smoker-V2/commit/deb526739d5c9092e2efb8b8c9bb79d42d4656f1))
+* **backend:** start, toggle, pull and finish owned by the Active Cook ([#752](https://github.com/benjr70/Smart-Smoker-V2/issues/752)) ([#774](https://github.com/benjr70/Smart-Smoker-V2/issues/774)) ([2e82f66](https://github.com/benjr70/Smart-Smoker-V2/commit/2e82f66fd82e2d10ab15d9f9bcfb0cfe4f8d6d44))
+* **paperclip:** mirror wayfinder Slices into Paperclip tasks ([#763](https://github.com/benjr70/Smart-Smoker-V2/issues/763)) ([89709ea](https://github.com/benjr70/Smart-Smoker-V2/commit/89709eaa8167a3b4e577c32032aac6c5f29a42cd))
+* **paperclip:** queue Dependabot PRs for the Developer, one at a time ([#772](https://github.com/benjr70/Smart-Smoker-V2/issues/772)) ([4cae08c](https://github.com/benjr70/Smart-Smoker-V2/commit/4cae08cb7928ab5452f273ec0e5a6208760fcabf))
+* **paperclip:** wake the Developer when a PR conflicts with master ([#766](https://github.com/benjr70/Smart-Smoker-V2/issues/766)) ([88d0c62](https://github.com/benjr70/Smart-Smoker-V2/commit/88d0c6215db5125a3cf6f029b977f407c6eeb785))
+
+
+### Bug Fixes
+
+* **temps:** every read of a cook's series includes its first reading ([#762](https://github.com/benjr70/Smart-Smoker-V2/issues/762)) ([9e1abf4](https://github.com/benjr70/Smart-Smoker-V2/commit/9e1abf47c91a23a90558c3dcf0857afb50d3f5b5))
+
 ## [1.14.0](https://github.com/benjr70/Smart-Smoker-V2/compare/v1.13.0...v1.14.0) (2026-10-14)
 
 
