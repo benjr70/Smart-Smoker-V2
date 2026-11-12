@@ -636,6 +636,34 @@ describe('ActiveCookService', () => {
     });
 
     /**
+     * A stopped cook has joined the archive as far as the numbers are
+     * concerned: its honest duration is one of the things they are made of. The
+     * recompute is the Active Cook's, through the one port — the staleness rule
+     * used to keep a second copy of it.
+     */
+    it('recounts the archive once, for the stop that won', async () => {
+      anAbandonedCook();
+      await build();
+
+      await Promise.all([
+        service.autoStop(LAST_READING, NOTICE),
+        service.autoStop(LAST_READING, NOTICE),
+      ]);
+
+      expect(stats.recompute).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves the archive alone when there was nothing to stop', async () => {
+      anAbandonedCook();
+      smokes[0].finishedAt = new Date('2026-08-01T15:00:00.000Z');
+      await build();
+
+      await service.autoStop(LAST_READING, NOTICE);
+
+      expect(stats.recompute).not.toHaveBeenCalled();
+    });
+
+    /**
      * A stop nobody is told about is half a stop.
      *
      * The apps hold the smoking flag in memory and only ever learn it changed
@@ -765,6 +793,219 @@ describe('ActiveCookService', () => {
           expect.stringContaining('cook-1'),
           'ActiveCook',
         );
+      });
+    });
+
+    /**
+     * The pitmaster is not at the box — that is the whole reason the cook went
+     * stale. The socket only reaches an app that is already open, so the push
+     * is the only thing that reaches somebody who walked away days ago and
+     * never pressed End Smoke.
+     */
+    describe('telling the pitmaster their cook was stopped', () => {
+      it('pushes once, with the sentence the stop was explained by', async () => {
+        anAbandonedCook();
+        await build();
+
+        await service.autoStop(LAST_READING, NOTICE);
+
+        expect(push.notify).toHaveBeenCalledTimes(1);
+        expect(push.notify).toHaveBeenCalledWith('Smoker', NOTICE);
+      });
+
+      it('pushes once when two triggers stop the same cook', async () => {
+        anAbandonedCook();
+        await build();
+
+        const stops = await Promise.all([
+          service.autoStop(LAST_READING, NOTICE),
+          service.autoStop(LAST_READING, NOTICE),
+        ]);
+
+        expect(stops.filter((stop) => stop.won)).toHaveLength(1);
+        expect(push.notify).toHaveBeenCalledTimes(1);
+      });
+
+      /**
+       * A cook already stamped was stopped once, and pushed for when it was
+       * stamped; this call is only finishing the flip off. Pushing again would
+       * tell the pitmaster twice about one cook.
+       */
+      it('says nothing when finishing off a cook that was already stamped', async () => {
+        anAbandonedCook();
+        smokes[0].finishedAt = new Date('2026-08-01T15:00:00.000Z');
+        await build();
+
+        await service.autoStop(LAST_READING, NOTICE);
+
+        expect(push.notify).not.toHaveBeenCalled();
+      });
+
+      /**
+       * The push is a courtesy on top of a write that has already happened. A
+       * phone that cannot be reached — no VAPID keys, no subscriptions, the
+       * push service down — must not undo the stop or fail the read that
+       * noticed it.
+       */
+      it('leaves the stop committed when the push cannot be delivered', async () => {
+        jest.spyOn(Logger, 'warn').mockImplementation();
+        anAbandonedCook();
+        await build();
+        push.notify.mockRejectedValue(new Error('push down'));
+
+        const stopped = await service.autoStop(LAST_READING, NOTICE);
+
+        expect(stopped.won).toBe(true);
+        expect(smokes[0].finishedAt).toEqual(LAST_READING);
+        expect(states[0].smoking).toBe(false);
+      });
+
+      it('leaves the stop committed when the push throws on the way out', async () => {
+        jest.spyOn(Logger, 'warn').mockImplementation();
+        anAbandonedCook();
+        await build();
+        push.notify.mockImplementation(() => {
+          throw new Error('no dispatcher');
+        });
+
+        const stopped = await service.autoStop(LAST_READING, NOTICE);
+
+        expect(stopped.won).toBe(true);
+        expect(states[0].smoking).toBe(false);
+      });
+
+      /**
+       * A push endpoint that accepts the connection and then says nothing is
+       * the failure a try/catch cannot see: nothing rejects, it simply never
+       * answers. The read that noticed the abandoned cook — a client polling
+       * the current timeline — would hang behind it until TCP gave up, so the
+       * notice must not be on the caller's critical path at all.
+       */
+      it('stops the cook without waiting for a push that never answers', async () => {
+        anAbandonedCook();
+        await build();
+        push.notify.mockReturnValue(new Promise(() => undefined));
+
+        const stopped = await service.autoStop(LAST_READING, NOTICE);
+
+        expect(stopped.won).toBe(true);
+        expect(states[0].smoking).toBe(false);
+        expect(smokes[0].finishedAt).toEqual(LAST_READING);
+        expect(push.notify).toHaveBeenCalledTimes(1);
+      }, 2000);
+
+      /**
+       * Left to itself, a send to an endpoint that never answers would sit in
+       * memory until TCP gave up and, more to the point, would fail silently.
+       * The deadline turns "never answered" into the same reported failure as a
+       * refusal, and its rejection is handled where every other push failure is
+       * — an unhandled one would take the process down long after the request
+       * that triggered it was served.
+       */
+      it('gives up on a push that never answers and reports it', async () => {
+        jest.useFakeTimers({
+          doNotFake: ['performance', 'setImmediate'],
+        } as never);
+        const unhandled: unknown[] = [];
+        const record = (reason: unknown): number => unhandled.push(reason);
+        process.on('unhandledRejection', record);
+        const logged = jest.spyOn(Logger, 'warn').mockImplementation();
+        try {
+          anAbandonedCook();
+          await build();
+          push.notify.mockReturnValue(new Promise(() => undefined));
+
+          await service.autoStop(LAST_READING, NOTICE);
+          jest.advanceTimersByTime(60_000);
+          await new Promise(setImmediate);
+
+          expect(logged).toHaveBeenCalledWith(
+            expect.stringContaining('no push could be delivered'),
+            'ActiveCook',
+          );
+          expect(unhandled).toEqual([]);
+        } finally {
+          process.off('unhandledRejection', record);
+          jest.useRealTimers();
+        }
+      });
+    });
+
+    /**
+     * The read that noticed — a poll of a running cook's timeline — has nothing
+     * to do with the Stats screen, and must not fail because its numbers could
+     * not be rebuilt. The stop itself has already been written.
+     */
+    it('leaves the stop committed when the archive cannot be recounted', async () => {
+      jest.spyOn(Logger, 'warn').mockImplementation();
+      anAbandonedCook();
+      stats.recompute.mockRejectedValue(new Error('stats are down'));
+      await build();
+
+      const stopped = await service.autoStop(LAST_READING, NOTICE);
+
+      expect(stopped.won).toBe(true);
+      expect(smokes[0].finishedAt).toEqual(LAST_READING);
+      expect(states[0].smoking).toBe(false);
+    });
+
+    /**
+     * The pitmaster pressing End Smoke at the moment a trigger notices the
+     * cook has been silent for hours. Whichever of the two writes the finish
+     * stamp is the one that wrote it, and the pitmaster only hears from the box
+     * about a stop the box actually made.
+     */
+    describe('racing the pitmaster’s own End Smoke', () => {
+      it('is one stamp, and a push only for an auto-stop that won', async () => {
+        anAbandonedCook();
+        await build();
+
+        const [stopped, finished] = await Promise.all([
+          service.autoStop(LAST_READING, NOTICE),
+          service.finish(),
+        ]);
+
+        expect(smokes[0].finishedAt).toBeInstanceOf(Date);
+        expect(push.notify).toHaveBeenCalledTimes(stopped.won ? 1 : 0);
+        // The finish is the only call that completes a cook, whichever of the
+        // two stamped it — the auto-stop deliberately leaves it in progress.
+        expect(finished.won).toBe(true);
+        expect(smokes[0].status).toBe(SmokeStatus.Complete);
+      });
+
+      /**
+       * The late manual finish: the pitmaster gets to the app days after the
+       * box stopped their cook. What they end was already over, so the recorded
+       * moment stays the honest one, and no second push goes out.
+       */
+      it('keeps the auto-stop’s stamp when the finish comes afterwards', async () => {
+        anAbandonedCook();
+        await build();
+
+        await service.autoStop(LAST_READING, NOTICE);
+        await service.finish();
+
+        expect(smokes[0].finishedAt).toEqual(LAST_READING);
+        expect(smokes[0].status).toBe(SmokeStatus.Complete);
+        expect(push.notify).toHaveBeenCalledTimes(1);
+      });
+
+      /**
+       * The other order: the cook was ended through the wizard and a trigger
+       * comes along afterwards. There is nothing left to stamp, so there is
+       * nothing to tell anybody about.
+       */
+      it('stamps nothing and says nothing once the cook has been finished', async () => {
+        anAbandonedCook();
+        await build();
+        await service.finish();
+        const finishedAt = smokes[0].finishedAt;
+
+        const stopped = await service.autoStop(LAST_READING, NOTICE);
+
+        expect(stopped.won).toBe(false);
+        expect(smokes[0].finishedAt).toBe(finishedAt);
+        expect(push.notify).not.toHaveBeenCalled();
       });
     });
   });

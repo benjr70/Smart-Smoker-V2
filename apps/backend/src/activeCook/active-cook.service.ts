@@ -5,6 +5,7 @@ import {
   ApplicationSettings,
   ApplicationSettingsDocument,
 } from '../appSettings/app-settings.schema';
+import { PUSH_NOTICE, PushNoticePort } from '../pushDispatcher/push-notice';
 import { SmokeDocument, SmokeStatus } from '../smoke/smoke.schema';
 import {
   DEFAULT_SMOKE_PROFILE,
@@ -36,6 +37,42 @@ import {
 
 /** What MongoDB refuses an insert that an index already holds with. */
 const DUPLICATE_KEY = 11000;
+
+/**
+ * Who a push from this installation says it is from. Fixed here rather than
+ * brought by the caller: the title names the application, and the sentence
+ * underneath it is what varies.
+ */
+const PUSH_TITLE = 'Smoker';
+
+/**
+ * How long the push fan-out is given to finish before the notice is abandoned.
+ *
+ * The dispatcher talks to third-party push endpoints, and an endpoint that
+ * accepts the connection and then never answers holds its promise open until
+ * TCP gives up — minutes. Nothing here waits on the notice, so the only thing
+ * this bounds is how long a doomed send may sit in memory holding the cook's
+ * message; generous enough that a slow-but-alive push service still delivers.
+ */
+const PUSH_TIMEOUT_MS = 10_000;
+
+/**
+ * The given work, or a rejection once the deadline passes — because a promise
+ * that never settles is not a failure any `catch` can see.
+ *
+ * The timer is cleared when the work settles first, and unreferenced so a send
+ * still in flight cannot by itself keep the process (or a test run) alive.
+ */
+const withDeadline = <T>(work: Promise<T>, ms: number): Promise<T> => {
+  let timer: ReturnType<typeof setTimeout>;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms);
+    timer.unref?.();
+  });
+  return Promise.race([Promise.resolve(work), deadline]).finally(() =>
+    clearTimeout(timer),
+  );
+};
 
 /**
  * The one place that answers "which cook is the smoker attached to".
@@ -76,6 +113,12 @@ export class ActiveCookService implements ActiveCookTransitions {
      * still believes the old state; see {@link COOK_BROADCAST}.
      */
     @Inject(COOK_BROADCAST) private readonly broadcast: CookBroadcastPort,
+    /**
+     * The phones. The socket only reaches an app that is open, and the whole
+     * premise of an abandoned cook is that nobody is looking; see
+     * {@link PUSH_NOTICE}.
+     */
+    @Inject(PUSH_NOTICE) private readonly push: PushNoticePort,
   ) {}
 
   /** The collections a stamp is written over. See {@link StampCollections}. */
@@ -368,7 +411,50 @@ export class ActiveCookService implements ActiveCookTransitions {
     if (!stamped) {
       return { won: false, cook: await this.resolve() };
     }
+    await this.recomputeStats(cook.smokeId);
+    this.announcePush(cook.smokeId, notice);
     return { won: true, cook: await this.resolve() };
+  }
+
+  /**
+   * Tell the pitmaster, wherever they are, that the box ended their cook.
+   *
+   * Sent from the branch that won the conditional stamp and after the stop is
+   * committed, so two triggers racing produce one notice and no notice is ever
+   * sent for a stop that did not happen.
+   *
+   * Nothing waits for it. What noticed the abandoned cook is a poll of a
+   * timeline or a reading arriving over the socket, and neither may be held up
+   * because a phone is hard to reach — a subscriber's push endpoint that
+   * accepts the connection and then never answers would otherwise stall that
+   * request until TCP gave up, which no `catch` around an `await` can prevent.
+   * So the send is started here and left to finish on its own: the fan-out is
+   * issued before this returns (one stop, one notice), the delivery is bounded
+   * by {@link PUSH_TIMEOUT_MS}, and every outcome is swallowed inside, so the
+   * promise dropped on the floor can neither reject nor outlive the box.
+   */
+  private announcePush(smokeId: string, notice: string): void {
+    void this.deliverPush(smokeId, notice);
+  }
+
+  /**
+   * The send itself, with every way it can end funnelled into a log line: a
+   * rejection, a synchronous throw from a dispatcher that is not wired up, and
+   * the deadline that stands in for the endpoint which never answers. The stop
+   * is already written, and none of these may become an unhandled rejection.
+   */
+  private async deliverPush(smokeId: string, notice: string): Promise<void> {
+    try {
+      await withDeadline(
+        this.push.notify(PUSH_TITLE, notice),
+        PUSH_TIMEOUT_MS,
+      );
+    } catch (error) {
+      Logger.warn(
+        `cook ${smokeId} was auto-stopped but no push could be delivered. ${error}`,
+        'ActiveCook',
+      );
+    }
   }
 
   /**
