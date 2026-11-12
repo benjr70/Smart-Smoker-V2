@@ -12,7 +12,7 @@ export class RatingsController {
   constructor(private readonly ratingsService: RatingsService) {}
 
   @Get('')
-  getCurrentRatings(): Promise<Ratings> {
+  getCurrentRatings(): Promise<Ratings | null> {
     return this.ratingsService.getCurrentRating();
   }
 

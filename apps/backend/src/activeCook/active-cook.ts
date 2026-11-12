@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common';
 import { WithDocumentId } from '../common/document-id';
 import { Smoke } from '../smoke/smoke.schema';
 
@@ -106,4 +107,81 @@ export const childIdOf = (
 export interface ActiveCookReader {
   /** The Active Cook as it stands, or idle. Never writes. */
   resolve(): Promise<CookSnapshot>;
+}
+
+/**
+ * What the routes have always answered when asked to write a child record of a
+ * cook that is not there. Kept as the one string so that moving the callers
+ * over cannot quietly change the 404 a client reads.
+ */
+export const NO_ACTIVE_COOK = 'No active smoke';
+
+/**
+ * How one kind of child record is written, as the module that owns it says so.
+ *
+ * The Active Cook knows whether a record is already linked and what linking a
+ * new one means for the cook; it knows nothing about what a post-smoke or a
+ * rating *is*. So the caller brings the two writes and the Active Cook decides
+ * which of them happens.
+ */
+export interface ChildAttachment<T> {
+  /** Write the record the cook already links, given its id. */
+  update: (childId: string) => Promise<T>;
+  /** Write a new record; answer it, and the id to link it under. */
+  create: () => Promise<{ result: T; childId: string }>;
+  /**
+   * Run after a record has been created and linked, never after an update —
+   * the rare per-kind rule that only fires the first time a cook gains this
+   * child (the ratings seed is the only one). Handed the cook as it stood
+   * before the link, which is the cook whose other links it reads.
+   */
+  onFirstAttach?: (cook: ActiveCook) => Promise<void> | void;
+}
+
+/**
+ * Attaching one child record to the Active Cook — the whole rule, in one place.
+ *
+ * Update the record the cook already links; otherwise create it, link its id,
+ * and run the first-attach hook. With no cook it is a 404, because every route
+ * that writes a child of "the cook in progress" is a route about a cook that
+ * has to exist.
+ *
+ * A function over a snapshot rather than a method so that the real module and
+ * the test fake behind {@link ActiveCookChildren} run the same rule: a fake
+ * that re-implemented it would be free to describe an attach the real one
+ * could never do. `link` is the only part that differs — storage for one, the
+ * fake's own snapshot for the other.
+ */
+export const attachToCook = async <T>(
+  snapshot: CookSnapshot,
+  key: CookChildKey,
+  attachment: ChildAttachment<T>,
+  link: (cook: ActiveCook, childId: string) => Promise<void>,
+): Promise<T> => {
+  if (!isActive(snapshot)) {
+    throw new NotFoundException(NO_ACTIVE_COOK);
+  }
+  const linked = childIdOf(snapshot, key);
+  if (linked) {
+    return attachment.update(linked);
+  }
+  const { result, childId } = await attachment.create();
+  await link(snapshot, childId);
+  // After the link, so that a hook which reads the cook again sees the child
+  // it fired for — the ratings seed asks whether the cook is scored, and a
+  // hook running before the link would be answered about a cook mid-attach.
+  await attachment.onFirstAttach?.(snapshot);
+  return result;
+};
+
+/**
+ * Reading the Active Cook and attaching a child record to it: what every
+ * module that owns one of the cook's children depends on.
+ *
+ * Reading is separate ({@link ActiveCookReader}) because most callers only
+ * read; this is the narrower set that also writes.
+ */
+export interface ActiveCookChildren extends ActiveCookReader {
+  /** See {@link attachToCook}. Answers the child record. */
+  attach<T>(key: CookChildKey, attachment: ChildAttachment<T>): Promise<T>;
 }

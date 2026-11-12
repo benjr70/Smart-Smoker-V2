@@ -2,7 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { BaseService } from '../common/base.service';
-import { CurrentSmokeService } from '../common/current-smoke.service';
+import { childIdOf } from '../activeCook/active-cook';
+import { ActiveCookService } from '../activeCook/active-cook.service';
 import { markStatsStale } from '../stats/mark-stats-stale';
 import { StatsService } from '../stats/stats.service';
 import { PostSmoke, PostSmokeDocument } from './postSmoke.schema';
@@ -12,7 +13,7 @@ import { PostSmokeDto } from './postSmokeDto';
 export class PostSmokeService extends BaseService<PostSmokeDocument> {
   constructor(
     @InjectModel('PostSmoke') model: Model<PostSmokeDocument>,
-    private readonly currentSmoke: CurrentSmokeService,
+    private readonly activeCook: ActiveCookService,
     private readonly stats: StatsService,
   ) {
     super(model, 'PostSmoke');
@@ -28,17 +29,23 @@ export class PostSmokeService extends BaseService<PostSmokeDocument> {
     await markStatsStale(this.stats, 'post-smoke');
   }
 
-  getCurrentPostSmoke(): Promise<PostSmoke> {
-    const fallback = { notes: '', restTime: '', steps: [''] } as PostSmoke;
-    return this.currentSmoke.readCurrent<PostSmoke>(
+  /**
+   * The post-smoke of the cook in progress, or the blank defaults where there
+   * is none — a session that has not reached the step yet, and an idle smoker,
+   * both render the empty form rather than an error.
+   */
+  async getCurrentPostSmoke(): Promise<PostSmoke> {
+    const postSmokeId = childIdOf(
+      await this.activeCook.resolve(),
       'postSmokeId',
-      (id) => this.getById(id),
-      fallback,
     );
+    return postSmokeId
+      ? this.getById(postSmokeId)
+      : ({ notes: '', restTime: '', steps: [''] } as PostSmoke);
   }
 
   saveCurrentPostSmoke(dto: PostSmokeDto): Promise<PostSmoke> {
-    return this.currentSmoke.upsertCurrent<PostSmoke>('postSmokeId', {
+    return this.activeCook.attach<PostSmoke>('postSmokeId', {
       update: (id) => this.update(id, dto),
       create: async () => {
         const created = await this.create(dto);

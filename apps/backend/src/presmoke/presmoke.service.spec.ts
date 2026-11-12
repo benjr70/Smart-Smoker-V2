@@ -224,14 +224,14 @@ describe('PreSmokeService', () => {
     });
 
     it('answers nothing for an idle smoker', async () => {
-      activeCook.attach(idleCook());
+      activeCook.pointAt(idleCook());
 
       expect(await service.GetByCurrent()).toBeNull();
       expect(mockPreSmokeModel.findById).not.toHaveBeenCalled();
     });
 
     it('answers nothing for a cook whose pre-smoke was never saved', async () => {
-      activeCook.attach(
+      activeCook.pointAt(
         attachedCook({ _id: 'test-smoke-id', preSmokeId: undefined }),
       );
 
@@ -244,7 +244,7 @@ describe('PreSmokeService', () => {
      * screen. Seeding at startup is what covers that now.
      */
     it('writes nothing as it reads, not even a missing state document', async () => {
-      activeCook.attach(idleCook());
+      activeCook.pointAt(idleCook());
 
       await service.GetByCurrent();
 

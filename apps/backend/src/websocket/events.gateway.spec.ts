@@ -190,7 +190,7 @@ describe('EventsGateway', () => {
         date: new Date(),
       });
 
-      activeCook.attach(idleCook());
+      activeCook.pointAt(idleCook());
 
       for (let i = 0; i < 11; i++) {
         gateway.handleEvent(testData);
@@ -270,7 +270,7 @@ describe('EventsGateway', () => {
         date: new Date(),
       });
 
-      activeCook.attach(attachedCook(cook, false));
+      activeCook.pointAt(attachedCook(cook, false));
 
       // Call multiple times to trigger count > 10
       for (let i = 0; i <= 11; i++) {

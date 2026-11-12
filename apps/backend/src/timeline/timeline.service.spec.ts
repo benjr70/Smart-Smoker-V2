@@ -57,7 +57,7 @@ describe('TimelineService', () => {
   const attach = (smokeId: string): void => {
     attached = smokes.find((doc) => String(doc._id) === smokeId) ?? null;
     smoking = true;
-    activeCook.attach(snapshot());
+    activeCook.pointAt(snapshot());
   };
 
   /** The models the service was built on, so a test can watch what it reads. */

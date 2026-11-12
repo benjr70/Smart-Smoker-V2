@@ -2,8 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model, Types } from 'mongoose';
 import { BaseService } from '../common/base.service';
-import { CookSnapshot } from '../activeCook/active-cook';
-import { CurrentSmokeService } from '../common/current-smoke.service';
+import { childIdOf, CookSnapshot } from '../activeCook/active-cook';
+import { ActiveCookService } from '../activeCook/active-cook.service';
 import { SmokeDocument } from '../smoke/smoke.schema';
 import { TempDto } from './tempDto';
 import { TempSample, decimateSeries, pointsAsked } from './temp-series';
@@ -68,13 +68,13 @@ export class TempsService extends BaseService<TempDocument> {
   constructor(
     @InjectModel('Temp') model: Model<TempDocument>,
     @InjectModel('Smoke') private readonly smokeModel: Model<SmokeDocument>,
-    private readonly currentSmoke: CurrentSmokeService,
+    private readonly activeCook: ActiveCookService,
   ) {
     super(model, 'Temp');
   }
 
   async saveNewTemp(tempDto: TempDto): Promise<Temp> {
-    return this.currentSmoke.upsertCurrent<Temp>('tempsId', {
+    return this.activeCook.attach<Temp>('tempsId', {
       update: (tempsId) => {
         tempDto.tempsId = tempsId;
         return this.create(tempDto);
@@ -121,11 +121,11 @@ export class TempsService extends BaseService<TempDocument> {
    * read, rather than in each reader that would otherwise have to know.
    */
   async getAllTempsCurrent(): Promise<Temp[]> {
-    return this.currentSmoke.readCurrent<Temp[]>(
-      'tempsId',
-      (tempsId) => this.model.find({ tempsId }).sort({ date: 1 }).exec(),
-      [],
-    );
+    const tempsId = await this.currentSeries();
+    if (!tempsId) {
+      return [];
+    }
+    return this.model.find({ tempsId }).sort({ date: 1 }).exec();
   }
 
   /**
@@ -139,19 +139,16 @@ export class TempsService extends BaseService<TempDocument> {
    * cook rather than from one worked out again here.
    */
   async getLatestCurrentTemp(cook?: CookSnapshot): Promise<Temp | undefined> {
-    return this.currentSmoke.readCurrent<Temp | undefined>(
-      'tempsId',
-      async (tempsId) => {
-        const [latest] = await this.model
-          .find({ tempsId })
-          .sort({ date: -1 })
-          .limit(1)
-          .exec();
-        return latest;
-      },
-      undefined,
-      cook,
-    );
+    const tempsId = await this.currentSeries(cook);
+    if (!tempsId) {
+      return undefined;
+    }
+    const [latest] = await this.model
+      .find({ tempsId })
+      .sort({ date: -1 })
+      .limit(1)
+      .exec();
+    return latest;
   }
 
   /**
@@ -164,28 +161,33 @@ export class TempsService extends BaseService<TempDocument> {
    * runs ahead of the server's, and in both the pit a moment later is closer to
    * the truth than no pit at all. Readings stored without a date cannot be
    * placed either side of a moment and are never the answer.
+   *
+   * `cook` is the Active Cook a caller has already resolved: the cook log
+   * stamps one entry against one cook, and the pit it carries has to be that
+   * cook's.
    */
-  async getCurrentTempAt(at: Date): Promise<Temp | undefined> {
-    return this.currentSmoke.readCurrent<Temp | undefined>(
-      'tempsId',
-      async (tempsId) => {
-        const [before] = await this.model
-          .find({ tempsId, date: { $lte: at } })
-          .sort({ date: -1 })
-          .limit(1)
-          .exec();
-        if (before) {
-          return before;
-        }
-        const [after] = await this.model
-          .find({ tempsId, date: { $gte: at } })
-          .sort({ date: 1 })
-          .limit(1)
-          .exec();
-        return after;
-      },
-      undefined,
-    );
+  async getCurrentTempAt(
+    at: Date,
+    cook?: CookSnapshot,
+  ): Promise<Temp | undefined> {
+    const tempsId = await this.currentSeries(cook);
+    if (!tempsId) {
+      return undefined;
+    }
+    const [before] = await this.model
+      .find({ tempsId, date: { $lte: at } })
+      .sort({ date: -1 })
+      .limit(1)
+      .exec();
+    if (before) {
+      return before;
+    }
+    const [after] = await this.model
+      .find({ tempsId, date: { $gte: at } })
+      .sort({ date: 1 })
+      .limit(1)
+      .exec();
+    return after;
   }
 
   /**
@@ -252,11 +254,19 @@ export class TempsService extends BaseService<TempDocument> {
   }
 
   async GetTempID(): Promise<string | undefined> {
-    return this.currentSmoke.readCurrent<string | undefined>(
-      'tempsId',
-      (tempsId) => Promise.resolve(tempsId),
-      undefined,
-    );
+    return (await this.currentSeries()) ?? undefined;
+  }
+
+  /**
+   * The series the Active Cook records into, or `null` where there is no cook
+   * or it has taken no reading yet — the one question every current-series read
+   * here asks, so none of them has to decide for itself what an idle smoker
+   * means.
+   *
+   * `cook` is an Active Cook the caller already resolved and is passing down.
+   */
+  private async currentSeries(cook?: CookSnapshot): Promise<string | null> {
+    return childIdOf(cook ?? (await this.activeCook.resolve()), 'tempsId');
   }
 
   /**

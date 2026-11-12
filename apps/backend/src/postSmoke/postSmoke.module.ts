@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { CommonModule } from '../common/common.module';
+import { ActiveCookModule } from '../activeCook/active-cook.module';
 import { StatsModule } from '../stats/stats.module';
 import { PostSmokeSchema } from './postSmoke.schema';
 import { PostSmokeController } from './postSmoke.controller';
@@ -9,7 +9,8 @@ import { PostSmokeService } from './postSmoke.service';
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: 'PostSmoke', schema: PostSmokeSchema }]),
-    CommonModule,
+    // Which cook a post-smoke belongs to, and the attach that links it.
+    ActiveCookModule,
     // A rest time is an ingredient of the statistics; writing one marks them
     // stale.
     StatsModule,

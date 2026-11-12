@@ -23,6 +23,12 @@ interface UpsertHandlers<T> {
 }
 
 /**
+ * Superseded, and called by nothing: the `Active Cook → child` walk — the read
+ * and the attach alike — is `ActiveCookService.resolve` plus
+ * `ActiveCookService.attach`. Deleted with the rest of the leftovers (issue
+ * #754); see `CommonModule` for why the removal is one change rather than
+ * five.
+ *
  * The single implementation of the `Active Cook → child` walk that was
  * previously copy-pasted (with divergence) across ~5 services.
  *

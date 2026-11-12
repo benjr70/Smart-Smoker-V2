@@ -1,16 +1,22 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
+import { NotFoundException } from '@nestjs/common';
 import { RatingsService } from './ratings.service';
 import { RatingsDto } from './ratingsDto';
-import { SmokeService } from '../smoke/smoke.service';
-import { SmokeDto } from '../smoke/smokeDto';
+import { childIdOf, idleCook } from '../activeCook/active-cook';
+import { ActiveCookService } from '../activeCook/active-cook.service';
+import {
+  attachedCook,
+  FakeActiveCook,
+  fakeActiveCook,
+} from '../activeCook/testing/fake-active-cook';
 import { createMockModel } from '../common/testing/create-mock-model';
 import { StatsService } from '../stats/stats.service';
 
 describe('RatingsService', () => {
   let service: RatingsService;
   let mockRatingsModel: any;
-  let mockSmokeService: any;
+  let activeCook: FakeActiveCook;
   let mockStatsService: { markDirty: jest.Mock; recalculate: jest.Mock };
 
   const mockRatingsDto: RatingsDto = {
@@ -26,25 +32,17 @@ describe('RatingsService', () => {
     ...mockRatingsDto,
   };
 
-  const mockSmoke = {
-    _id: 'smoke-id-123',
-    smokeProfileId: 'profile-id',
-    preSmokeId: 'pre-smoke-id',
-    postSmokeId: 'post-smoke-id',
-    tempsId: 'temps-id',
-    ratingId: 'rating-id-123',
-    status: 1,
-  };
-
-  const mockSmokeWithoutRating = {
-    _id: 'smoke-id-456',
-    smokeProfileId: 'profile-id',
-    preSmokeId: 'pre-smoke-id',
-    postSmokeId: 'post-smoke-id',
-    tempsId: 'temps-id',
-    ratingId: null,
-    status: 1,
-  };
+  /** A cook mid-session, carrying whatever links the test gives it. */
+  const cookLinking = (links: Record<string, string | undefined>) =>
+    attachedCook({
+      _id: 'smoke-id-123',
+      smokeProfileId: 'profile-id',
+      preSmokeId: 'pre-smoke-id',
+      postSmokeId: 'post-smoke-id',
+      tempsId: 'temps-id',
+      status: 1,
+      ...links,
+    });
 
   beforeEach(async () => {
     // Mock Ratings model (shared factory; overrides are exec()-chainable to
@@ -58,11 +56,7 @@ describe('RatingsService', () => {
         .mockReturnValue({ exec: jest.fn().mockResolvedValue(mockRatings) }),
     });
 
-    // Mock SmokeService
-    mockSmokeService = {
-      getCurrentSmoke: jest.fn(),
-      update: jest.fn(),
-    };
+    activeCook = fakeActiveCook(cookLinking({ ratingId: 'rating-id-123' }));
 
     mockStatsService = {
       markDirty: jest.fn().mockResolvedValue(undefined),
@@ -77,8 +71,8 @@ describe('RatingsService', () => {
           useValue: mockRatingsModel,
         },
         {
-          provide: SmokeService,
-          useValue: mockSmokeService,
+          provide: ActiveCookService,
+          useValue: activeCook,
         },
         {
           provide: StatsService,
@@ -99,76 +93,65 @@ describe('RatingsService', () => {
   });
 
   describe('getCurrentRating', () => {
-    it('should return current rating when smoke has ratingId', async () => {
-      mockSmokeService.getCurrentSmoke.mockResolvedValue(mockSmoke);
-
+    it('loads the score the Active Cook links', async () => {
       const result = await service.getCurrentRating();
 
-      expect(mockSmokeService.getCurrentSmoke).toHaveBeenCalled();
-      expect(mockRatingsModel.findById).toHaveBeenCalledWith(
-        mockSmoke.ratingId,
-      );
+      expect(mockRatingsModel.findById).toHaveBeenCalledWith('rating-id-123');
       expect(result).toEqual(mockRatings);
     });
 
-    it('should handle smoke service errors', async () => {
-      const error = new Error('Smoke not found');
-      mockSmokeService.getCurrentSmoke.mockRejectedValue(error);
+    /**
+     * Nothing to score rather than a failure: the cook is scored as soon as it
+     * gains a profile (see the smoke-profile seed), so an unscored read means
+     * a session that has not opened yet — which is a fact about the session.
+     */
+    it('answers nothing when the cook has no score yet', async () => {
+      activeCook.pointAt(cookLinking({ ratingId: undefined }));
 
-      await expect(service.getCurrentRating()).rejects.toThrow(
-        'Smoke not found',
-      );
+      expect(await service.getCurrentRating()).toBeNull();
+      expect(mockRatingsModel.findById).not.toHaveBeenCalled();
+    });
+
+    it('answers nothing when there is no Active Cook', async () => {
+      activeCook.pointAt(idleCook());
+
+      expect(await service.getCurrentRating()).toBeNull();
+      expect(mockRatingsModel.findById).not.toHaveBeenCalled();
     });
   });
 
   describe('saveCurrentRatings', () => {
-    it('should update existing rating when smoke has ratingId', async () => {
-      mockSmokeService.getCurrentSmoke.mockResolvedValue(mockSmoke);
-      jest.spyOn(service, 'update').mockResolvedValue(mockRatings as any);
-
+    it('updates the score the cook already links, and answers it', async () => {
       const result = await service.saveCurrentRatings(mockRatingsDto);
 
-      expect(mockSmokeService.getCurrentSmoke).toHaveBeenCalled();
-      expect(service.update).toHaveBeenCalledWith(
-        mockSmoke.ratingId,
-        mockRatingsDto,
-      );
-      expect(result).toBeUndefined(); // The service doesn't return anything for updates
-    });
-
-    it('should create new rating when smoke has no ratingId', async () => {
-      mockSmokeService.getCurrentSmoke.mockResolvedValue(
-        mockSmokeWithoutRating,
-      );
-      jest.spyOn(service, 'create').mockResolvedValue(mockRatings as any);
-
-      const expectedSmokeDto: SmokeDto = {
-        smokeProfileId: mockSmokeWithoutRating.smokeProfileId,
-        preSmokeId: mockSmokeWithoutRating.preSmokeId,
-        postSmokeId: mockSmokeWithoutRating.postSmokeId,
-        tempsId: mockSmokeWithoutRating.tempsId,
-        ratingId: mockRatings._id,
-        status: mockSmokeWithoutRating.status,
-      };
-
-      const result = await service.saveCurrentRatings(mockRatingsDto);
-
-      expect(mockSmokeService.getCurrentSmoke).toHaveBeenCalled();
-      expect(service.create).toHaveBeenCalledWith(mockRatingsDto);
-      expect(mockSmokeService.update).toHaveBeenCalledWith(
-        mockSmokeWithoutRating._id,
-        expectedSmokeDto,
+      expect(mockRatingsModel.findByIdAndUpdate).toHaveBeenCalledWith(
+        'rating-id-123',
+        { $set: mockRatingsDto },
+        { new: true },
       );
       expect(result).toEqual(mockRatings);
     });
 
-    it('should handle smoke service errors during save', async () => {
-      const error = new Error('Database error');
-      mockSmokeService.getCurrentSmoke.mockRejectedValue(error);
+    it('creates one and links it onto the cook when there is none', async () => {
+      activeCook.pointAt(cookLinking({ ratingId: undefined }));
+      jest.spyOn(service, 'create').mockResolvedValue(mockRatings as any);
 
-      await expect(service.saveCurrentRatings(mockRatingsDto)).rejects.toThrow(
-        'Database error',
-      );
+      const result = await service.saveCurrentRatings(mockRatingsDto);
+
+      expect(service.create).toHaveBeenCalledWith(mockRatingsDto);
+      expect(result).toEqual(mockRatings);
+      expect(childIdOf(activeCook.cook(), 'ratingId')).toBe('rating-id-123');
+      // The siblings the cook already carried are still on it.
+      expect(childIdOf(activeCook.cook(), 'tempsId')).toBe('temps-id');
+      expect(childIdOf(activeCook.cook(), 'postSmokeId')).toBe('post-smoke-id');
+    });
+
+    it('answers 404 when there is no Active Cook', async () => {
+      activeCook.pointAt(idleCook());
+
+      await expect(
+        service.saveCurrentRatings(mockRatingsDto),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 
@@ -186,9 +169,7 @@ describe('RatingsService', () => {
     });
 
     it('marks them stale when the running cook is rated for the first time', async () => {
-      mockSmokeService.getCurrentSmoke.mockResolvedValue(
-        mockSmokeWithoutRating,
-      );
+      activeCook.pointAt(cookLinking({ ratingId: undefined }));
 
       await service.saveCurrentRatings(mockRatingsDto);
 
@@ -207,6 +188,16 @@ describe('RatingsService', () => {
       ).resolves.toBeDefined();
     });
 
+    it('still links the new score when the flag cannot be written', async () => {
+      activeCook.pointAt(cookLinking({ ratingId: undefined }));
+      mockStatsService.markDirty.mockRejectedValue(new Error('mongo hiccup'));
+
+      await expect(
+        service.saveCurrentRatings(mockRatingsDto),
+      ).resolves.toBeDefined();
+      expect(childIdOf(activeCook.cook(), 'ratingId')).toBeTruthy();
+    });
+
     it('marks them stale when a score is deleted', async () => {
       // A delete changes the averages as surely as a write does, and it leaves
       // the number of completed cooks alone — so nothing but the flag would
@@ -217,9 +208,12 @@ describe('RatingsService', () => {
     });
 
     it('marks them stale again once the cook points at its new score', async () => {
-      mockSmokeService.getCurrentSmoke.mockResolvedValue(
-        mockSmokeWithoutRating,
-      );
+      activeCook.pointAt(cookLinking({ ratingId: undefined }));
+      // What the cook linked each time the flag was written.
+      const linkedWhenMarked: (string | null)[] = [];
+      mockStatsService.markDirty.mockImplementation(async () => {
+        linkedWhenMarked.push(childIdOf(activeCook.cook(), 'ratingId'));
+      });
 
       await service.saveCurrentRatings(mockRatingsDto);
 
@@ -227,12 +221,7 @@ describe('RatingsService', () => {
       // window reads an archive where the cook has no score — then clears the
       // flag the create had set. Marking again after the link means no rebuild
       // can end without having seen the score.
-      const lastMark = Math.max(
-        ...mockStatsService.markDirty.mock.invocationCallOrder,
-      );
-      expect(lastMark).toBeGreaterThan(
-        mockSmokeService.update.mock.invocationCallOrder[0],
-      );
+      expect(linkedWhenMarked).toEqual([null, 'mock-id']);
     });
   });
 });

@@ -2,10 +2,14 @@ import { getModelToken } from '@nestjs/mongoose';
 import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { RatingsService } from '../ratings/ratings.service';
-import { CurrentSmokeService } from '../common/current-smoke.service';
-import { attachedCook } from '../activeCook/testing/fake-active-cook';
+import { childIdOf, idleCook } from '../activeCook/active-cook';
+import { ActiveCookService } from '../activeCook/active-cook.service';
+import {
+  attachedCook,
+  FakeActiveCook,
+  fakeActiveCook,
+} from '../activeCook/testing/fake-active-cook';
 import { StatsService } from '../stats/stats.service';
-import { Smoke } from '../smoke/smoke.schema';
 import { SmokeProfileService } from './smokeProfile.service';
 import { SmokeProFileDto } from './smokeProfileDto';
 
@@ -14,10 +18,7 @@ const query = <T>(value: T) => ({ exec: jest.fn().mockResolvedValue(value) });
 describe('SmokeProfileService', () => {
   let service: SmokeProfileService;
   let model: any;
-  let currentSmoke: {
-    readCurrent: jest.Mock;
-    upsertCurrent: jest.Mock;
-  };
+  let activeCook: FakeActiveCook;
   let ratingsService: { saveCurrentRatings: jest.Mock };
   let stats: { markDirty: jest.Mock };
 
@@ -31,6 +32,10 @@ describe('SmokeProfileService', () => {
   };
 
   const existing = { _id: 'profile-1', ...dto };
+
+  /** A cook mid-session, carrying whatever links the test gives it. */
+  const cookLinking = (links: Record<string, string | undefined>) =>
+    attachedCook({ _id: 'cook-1', preSmokeId: 'pre-1', ...links });
 
   const defaultProfile = {
     notes: '',
@@ -50,10 +55,7 @@ describe('SmokeProfileService', () => {
     model.findByIdAndUpdate = jest.fn().mockReturnValue(query(existing));
     model.deleteOne = jest.fn().mockReturnValue(query({ deletedCount: 1 }));
 
-    currentSmoke = {
-      readCurrent: jest.fn(),
-      upsertCurrent: jest.fn(),
-    };
+    activeCook = fakeActiveCook(cookLinking({ smokeProfileId: 'profile-1' }));
 
     ratingsService = { saveCurrentRatings: jest.fn().mockResolvedValue({}) };
     stats = { markDirty: jest.fn().mockResolvedValue(undefined) };
@@ -62,7 +64,7 @@ describe('SmokeProfileService', () => {
       providers: [
         SmokeProfileService,
         { provide: getModelToken('SmokeProfile'), useValue: model },
-        { provide: CurrentSmokeService, useValue: currentSmoke },
+        { provide: ActiveCookService, useValue: activeCook },
         { provide: RatingsService, useValue: ratingsService },
         { provide: StatsService, useValue: stats },
       ],
@@ -80,104 +82,78 @@ describe('SmokeProfileService', () => {
   });
 
   describe('getCurrentSmokeProfile', () => {
-    it('loads the linked profile via the current-smoke walk', async () => {
-      currentSmoke.readCurrent.mockImplementation((key, load) =>
-        load('profile-1'),
-      );
-
+    it('loads the profile the Active Cook links', async () => {
       const result = await service.getCurrentSmokeProfile();
 
-      expect(currentSmoke.readCurrent).toHaveBeenCalledWith(
-        'smokeProfileId',
-        expect.any(Function),
-        expect.objectContaining(defaultProfile),
-        undefined,
-      );
       expect(model.findById).toHaveBeenCalledWith('profile-1');
       expect(result).toEqual(existing);
     });
 
     /**
      * The alert check names probes as the cook it is judging named them, so
-     * the cook travels down with the question.
+     * the cook travels down with the question — and a profile read against a
+     * cook resolved again here could name another cook's probes.
      */
-    it('loads the profile of an Active Cook it was handed', async () => {
-      currentSmoke.readCurrent.mockImplementation((key, load) =>
-        load('profile-9'),
-      );
+    it('loads the profile of an Active Cook it was handed, resolving none of its own', async () => {
       const handed = attachedCook({
-        _id: 'cook-1',
+        _id: 'cook-9',
         smokeProfileId: 'profile-9',
       });
 
       await service.getCurrentSmokeProfile(handed);
 
-      expect(currentSmoke.readCurrent).toHaveBeenCalledWith(
-        'smokeProfileId',
-        expect.any(Function),
-        expect.objectContaining(defaultProfile),
-        handed,
-      );
+      expect(model.findById).toHaveBeenCalledWith('profile-9');
+      expect(activeCook.resolve).not.toHaveBeenCalled();
     });
 
-    it('returns the default profile when nothing is active (fallback)', async () => {
-      currentSmoke.readCurrent.mockImplementation(
-        (key, load, fallback) => fallback,
-      );
+    it('returns the default profile when the cook has none yet', async () => {
+      activeCook.pointAt(cookLinking({ smokeProfileId: undefined }));
 
-      const result = await service.getCurrentSmokeProfile();
+      expect(await service.getCurrentSmokeProfile()).toEqual(defaultProfile);
+      expect(model.findById).not.toHaveBeenCalled();
+    });
 
-      expect(result).toEqual(defaultProfile);
+    it('returns the default profile when there is no Active Cook', async () => {
+      activeCook.pointAt(idleCook());
+
+      expect(await service.getCurrentSmokeProfile()).toEqual(defaultProfile);
       expect(model.findById).not.toHaveBeenCalled();
     });
   });
 
   describe('saveCurrentSmokeProfile', () => {
-    it('updates the linked profile when one already exists', async () => {
-      currentSmoke.upsertCurrent.mockImplementation((key, handlers) =>
-        handlers.update('profile-1'),
-      );
-
+    it('updates the profile the cook already links', async () => {
       const result = await service.saveCurrentSmokeProfile(dto);
 
-      expect(currentSmoke.upsertCurrent).toHaveBeenCalledWith(
-        'smokeProfileId',
-        expect.objectContaining({
-          update: expect.any(Function),
-          create: expect.any(Function),
-          onResolveSmoke: expect.any(Function),
-        }),
-      );
       expect(model.findByIdAndUpdate).toHaveBeenCalledWith(
         'profile-1',
         { $set: dto },
         { new: true },
       );
+      expect(model).not.toHaveBeenCalled();
       expect(result).toEqual(existing);
     });
 
-    it('creates a profile and reports its new child id when none exists', async () => {
-      let linkedChildId: string | undefined;
-      currentSmoke.upsertCurrent.mockImplementation(async (key, handlers) => {
-        const created = await handlers.create();
-        linkedChildId = created.childId;
-        return created.result;
-      });
+    it('creates one and links it onto the cook when there is none', async () => {
+      activeCook.pointAt(cookLinking({ smokeProfileId: undefined }));
 
       const result = await service.saveCurrentSmokeProfile(dto);
 
       expect(model).toHaveBeenCalledWith(dto);
-      expect(linkedChildId).toBe('new-profile-id');
       expect(result).toMatchObject({ _id: 'new-profile-id' });
+      expect(childIdOf(activeCook.cook(), 'smokeProfileId')).toBe(
+        'new-profile-id',
+      );
+      expect(childIdOf(activeCook.cook(), 'preSmokeId')).toBe('pre-1');
     });
 
-    it('seeds default ratings via onResolveSmoke when the smoke has no rating yet', async () => {
-      const smoke = { ratingId: undefined } as unknown as Smoke;
-      currentSmoke.upsertCurrent.mockImplementation(async (key, handlers) => {
-        await handlers.onResolveSmoke(smoke);
-        const created = await handlers.create();
-        return created.result;
-      });
+    /**
+     * Setting the profile is what opens a session, and the Smoke step wants a
+     * score to show before anybody has given one — so the first profile a cook
+     * gains seeds a blank rating alongside it.
+     */
+    it('seeds a blank rating the first time a cook gains a profile', async () => {
+      activeCook.pointAt(cookLinking({ smokeProfileId: undefined }));
 
       await service.saveCurrentSmokeProfile(dto);
 
@@ -188,23 +164,27 @@ describe('SmokeProfileService', () => {
         overallTaste: 0,
         notes: '',
       });
+      expect(ratingsService.saveCurrentRatings).toHaveBeenCalledTimes(1);
     });
 
-    it('does not re-seed ratings via onResolveSmoke when one already exists', async () => {
-      const smoke = { ratingId: 'rating-1' } as unknown as Smoke;
-      currentSmoke.upsertCurrent.mockImplementation(async (key, handlers) => {
-        await handlers.onResolveSmoke(smoke);
-        const created = await handlers.create();
-        return created.result;
-      });
+    it('seeds nothing when the cook is already scored', async () => {
+      activeCook.pointAt(
+        cookLinking({ smokeProfileId: undefined, ratingId: 'rating-1' }),
+      );
 
       await service.saveCurrentSmokeProfile(dto);
 
       expect(ratingsService.saveCurrentRatings).not.toHaveBeenCalled();
     });
 
-    it('propagates the 404 when there is no active smoke', async () => {
-      currentSmoke.upsertCurrent.mockRejectedValue(new NotFoundException());
+    it('seeds nothing when the profile was only updated', async () => {
+      await service.saveCurrentSmokeProfile(dto);
+
+      expect(ratingsService.saveCurrentRatings).not.toHaveBeenCalled();
+    });
+
+    it('answers 404 when there is no Active Cook', async () => {
+      activeCook.pointAt(idleCook());
 
       await expect(service.saveCurrentSmokeProfile(dto)).rejects.toBeInstanceOf(
         NotFoundException,
