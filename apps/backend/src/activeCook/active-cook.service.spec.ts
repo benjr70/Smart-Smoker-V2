@@ -1124,10 +1124,10 @@ describe('ActiveCookService', () => {
 
     /**
      * The screens do not unmount when the Active Cook is cleared — the
-     * stale-cook
-     * recovery clears from under a mounted smoke step — so a clear that
-     * announced nothing would leave the previous cook's entries on screen, and
-     * a Remove tapped there would delete an event of a cook put away.
+     * stale-cook recovery clears from under a mounted smoke step — so a clear
+     * that announced nothing would leave the previous cook's entries on
+     * screen, and a Remove tapped there would delete an event of a cook put
+     * away.
      */
     it('announces the now-empty cook log to every open screen', async () => {
       anUnfinishedCook();
@@ -1140,7 +1140,7 @@ describe('ActiveCookService', () => {
 
     /**
      * The finished cook's log is kept, but the smoker no longer names it, so
-     * what every live screen is showing — the log of the cook in progress — is
+     * what every live screen is showing — the log of the Active Cook — is
      * empty here too.
      */
     it('announces an empty log when a finished cook is put away', async () => {

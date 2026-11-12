@@ -237,9 +237,8 @@ describe('SmokeService', () => {
      * Deleting the cook the smoker is attached to used to leave the smoker
      * pointing at a smoke that no longer existed, which reads as idle
      * everywhere and is how a smoker gets stuck. The Active Cook is cleared
-     * first
-     * — by the module that owns that transition, not by a write from here — so
-     * the app comes back idle and every open screen is told.
+     * first — by the module that owns that transition, not by a write from
+     * here — so the app comes back idle and every open screen is told.
      */
     it('clears the Active Cook first when it is the cook being deleted', async () => {
       jest

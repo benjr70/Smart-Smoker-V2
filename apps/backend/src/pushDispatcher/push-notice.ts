@@ -11,8 +11,8 @@
  *
  * The one notice it exists for is the auto-stop: the socket only reaches an app
  * that is open, and a cook goes stale precisely because nobody is watching one.
- * See `PushNoticeModule` for the real implementation, and the recording fake in
- * the Active Cook's spec for the other one.
+ * See `PushNoticeModule` for the real implementation, and
+ * `testing/fake-push-notice.ts` for the recording one the specs register.
  */
 export const PUSH_NOTICE = 'PUSH_NOTICE';
 

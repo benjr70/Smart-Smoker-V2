@@ -544,8 +544,8 @@ export class ActiveCookService implements ActiveCookTransitions {
   }
 
   /**
-   * Put the Active Cook away: detach the cook, throw its log out if it was never
-   * finished, and tell every open screen there is no cook log to show.
+   * Put the Active Cook away: detach the cook, throw its log out if it was
+   * never finished, and tell every open screen there is no cook log to show.
    *
    * The detach is the conditional write, and it is what names the cook being
    * put away: one atomic flip of the slot answers both "was this call the one
@@ -584,9 +584,9 @@ export class ActiveCookService implements ActiveCookTransitions {
    * away.
    *
    * Clearing is not only how an abandoned cook is discarded: it is also the
-   * last step of finishing a cook (the wizard finishes the cook, then clears
-   * the smoker that still names it), so the clear alone cannot say which of
-   * the two is happening. The cook's own status can. A completed cook is
+   * last step of finishing a cook (the wizard finishes the cook, then detaches
+   * it from the state that still names it), so the clear alone cannot say
+   * which of the two is happening. The cook's own status can. A completed cook is
    * archived, its log is its history, and this must not touch it; an unfinished
    * one is being thrown out, and a log left behind would belong to a cook
    * nothing points at any more.
@@ -619,14 +619,14 @@ export class ActiveCookService implements ActiveCookTransitions {
    *
    * Empty whichever way the clear went: a discarded cook's events are gone,
    * and a finished cook's are kept but belong to a cook the smoker no longer
-   * names — and what a live screen shows is the log of the cook in progress.
+   * names — and what a live screen shows is the log of the Active Cook.
    *
    * Announced because the screens do not unmount when the Active Cook is
-   * cleared —
-   * the stale-cook recovery clears from under a mounted smoke step. Without it
-   * the card keeps showing the cleared cook's entries, and a Remove tapped
-   * there deletes an event of a cook that has been put away. Never throws: the
-   * cook is cleared, and an unreachable socket must not make that an error.
+   * cleared — the stale-cook recovery clears from under a mounted smoke step.
+   * Without it the card keeps showing the cleared cook's entries, and a Remove
+   * tapped there deletes an event of a cook that has been put away. Never
+   * throws: the cook is cleared, and an unreachable socket must not make that
+   * an error.
    */
   private announceEmptyCookLog(): void {
     try {
