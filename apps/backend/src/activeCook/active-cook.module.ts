@@ -9,6 +9,7 @@ import { SmokeSchema } from '../smoke/smoke.schema';
 import { SmokeProFileSchema } from '../smokeProfile/smokeProfile.schema';
 import { stateSchema } from './state.schema';
 import { TempSchema } from '../temps/temps.schema';
+import { ActiveCookController } from './active-cook.controller';
 import { ActiveCookService } from './active-cook.service';
 
 /**
@@ -17,15 +18,18 @@ import { ActiveCookService } from './active-cook.service';
  * Imports no feature module at all, by design. Everything that reads the
  * current cook (the timeline, the alert check, the relay gateway, the settings
  * read, pre-smoke, the cook archive itself) depends on this one, so any service
- * edge out of here would close a DI cycle — the reason the old current-smoke
- * helper, built on `StateService` and `SmokeService`, could not be used by
- * `SmokeModule`. Owning the two collections it reads is what makes it
- * depend-on-able from anywhere.
+ * edge out of here would be the thing that needs a loop broken. Owning the
+ * collections it reads is what makes it depend-on-able from anywhere, with
+ * nothing to forward-reference in either direction.
  *
- * The state singleton is still seeded by `StateModule`; the reads and every
- * transition of the cook are here. Registering the same collections in both
- * modules is how the rest of this codebase already shares them (see
+ * The state singleton is its own storage: seeded here at boot, read here, and
+ * written only by the transitions here. Registering collections another module
+ * also registers is how the rest of this codebase shares them (see
  * `TimelineModule`); a Mongoose feature registration is a model, not an owner.
+ *
+ * The three routes the apps ask the cook about — read the state, switch
+ * smoking, put the cook away — are served here too; see
+ * `ActiveCookController`.
  *
  * The stats-recompute, broadcast and push ports its transitions call are bound
  * globally rather than imported, for the same reason: see
@@ -54,6 +58,7 @@ import { ActiveCookService } from './active-cook.service';
       },
     ]),
   ],
+  controllers: [ActiveCookController],
   providers: [ActiveCookService],
   exports: [ActiveCookService],
 })

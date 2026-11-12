@@ -14,6 +14,7 @@ import {
   StartedCook,
   ToggledCook,
 } from '../active-cook';
+import { State } from '../state.schema';
 
 /**
  * The Active Cook as a test gives it: a snapshot value, standing behind the
@@ -31,6 +32,12 @@ import {
 export interface FakeActiveCook extends ActiveCookTransitions {
   /** Recording, so a spec can hold one request to one resolve. */
   resolve: jest.Mock<Promise<CookSnapshot>, []>;
+  /**
+   * The stored state of the cook this fake is pointed at. Recording, and
+   * stubbable — a box that has never held a state document is a fact about the
+   * store rather than a snapshot, so a spec about one stubs past this.
+   */
+  state: jest.Mock<Promise<(State & WithDocumentId) | null>, []>;
   /** Recording, so a spec can hold a write to one attach of one kind. */
   attach: jest.Mock<Promise<any>, [CookChildKey, ChildAttachment<any>]>;
   /** Recording, so a spec can hold a route to one transition. */
@@ -56,6 +63,7 @@ export const fakeActiveCook = (
   };
   return {
     resolve: jest.fn(async () => current),
+    state: jest.fn(async () => storedState(current)),
     /**
      * The real rule, over the cook this fake is pointed at — a created link
      * lands on that cook, so a spec reads the attach back the way a route
@@ -109,11 +117,7 @@ export const fakeActiveCook = (
           smoking,
         ),
       );
-      return {
-        won: true,
-        cook: current,
-        state: { _id: 'state-1', smokeId: smokeIdOf(current), smoking },
-      };
+      return { won: true, cook: current, state: storedState(current) };
     }),
     pull: jest.fn(async () => {
       if (!isActive(current) || current.smoke.pullAt) {
@@ -167,13 +171,8 @@ export const fakeActiveCook = (
      */
     clear: jest.fn(async () => {
       const won = isActive(current);
-      const smokeId = smokeIdOf(current);
       pointAt(idleCook(false));
-      return {
-        won,
-        cook: current,
-        state: { _id: 'state-1', smokeId: won ? '' : smokeId, smoking: false },
-      };
+      return { won, cook: current, state: storedState(current) };
     }),
     pointAt,
     cook: () => current,
@@ -183,6 +182,21 @@ export const fakeActiveCook = (
 /** The id of the cook a snapshot carries, as the stored state names it. */
 const smokeIdOf = (snapshot: CookSnapshot): string =>
   isActive(snapshot) ? snapshot.smokeId : '';
+
+/**
+ * The stored state for the cook this fake is pointed at — the document the
+ * get-state, toggle and clear routes answer with.
+ *
+ * Derived from the snapshot rather than held beside it so the two cannot
+ * disagree: a spec that points the fake at a lit cook and then reads the state
+ * back through a route sees the cook it named, with no second thing to keep in
+ * step.
+ */
+const storedState = (snapshot: CookSnapshot): State & WithDocumentId => ({
+  _id: 'state-1',
+  smokeId: smokeIdOf(snapshot),
+  smoking: snapshot.smoking,
+});
 
 /**
  * A snapshot of the cook the smoker is attached to, built from a stored smoke
