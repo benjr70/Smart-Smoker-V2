@@ -510,8 +510,10 @@ describe('SmokeService', () => {
     /**
      * The pull is what the rest is measured from, and it is stamped by the
      * step advance that takes the cook to Post-Smoke — against the cook in
-     * progress, like the plan, and no more than once however many times the
-     * advance is made.
+     * progress, like the plan. That it is stamped no more than once is the
+     * Active Cook's rule and is held there
+     * ({@link ActiveCookService.pull}); what this route owes is the forward
+     * and the cook it answers with.
      */
     describe('the pull stamp', () => {
       it('pulls through the Active Cook and answers the cook it stamped', async () => {
@@ -525,13 +527,6 @@ describe('SmokeService', () => {
         activeCook.pointAt(idleCook());
 
         expect(await service.stampPull()).toBeNull();
-      });
-
-      /** Advance the step twice and the pull stays where it was first put. */
-      it('answers the same pull when the advance is made again', async () => {
-        const first = await service.stampPull();
-
-        expect((await service.stampPull())?.pullAt).toEqual(first?.pullAt);
       });
     });
   });
