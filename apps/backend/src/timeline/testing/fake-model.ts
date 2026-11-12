@@ -48,6 +48,10 @@ const fieldMatches = (value: unknown, expected: unknown): boolean => {
             return (operand as unknown[]).some((one) =>
               fieldMatches(value, one),
             );
+          case '$nin':
+            return !(operand as unknown[]).some((one) =>
+              fieldMatches(value, one),
+            );
           default:
             throw new Error(`fake model does not implement ${operator}`);
         }
@@ -255,6 +259,74 @@ const aggregated = (rows: FakeDoc[], pipeline: FakeDoc[]): FakeDoc[] => {
   );
 };
 
+/**
+ * What an update applies to one document, whether it was given as an operator
+ * object or as an aggregation pipeline.
+ *
+ * The pipeline form is how a field is set *from the document itself* — the
+ * smoking flag negated where it lives, which is what makes a toggle one write
+ * rather than a read and a write a client can get between. Only the one
+ * expression that form is used with here is implemented; anything else is
+ * refused loudly rather than applied as a literal.
+ */
+const applyUpdate = (doc: FakeDoc, update: FakeDoc | FakeDoc[]): void => {
+  if (!Array.isArray(update)) {
+    Object.assign(doc, update.$set ?? {});
+    Object.entries((update.$inc ?? {}) as Record<string, number>).forEach(
+      ([field, by]) => {
+        doc[field] = ((doc[field] as number) ?? 0) + by;
+      },
+    );
+    Object.keys((update.$unset ?? {}) as FakeDoc).forEach((field) => {
+      delete doc[field];
+    });
+    return;
+  }
+  update.forEach((stage) => {
+    if (!stage.$set) {
+      throw new Error(
+        `fake model does not implement the pipeline stage ${Object.keys(
+          stage,
+        ).join(', ')}`,
+      );
+    }
+    Object.entries(stage.$set as FakeDoc).forEach(([field, expression]) => {
+      doc[field] = evaluate(doc, expression);
+    });
+  });
+};
+
+/**
+ * Whether an update actually changed the document — what Mongo's
+ * `modifiedCount` counts, and not the same question as whether the filter
+ * matched. A conditional write that reads its win off that count has to be
+ * able to tell a write that landed from one that set every field to the value
+ * it already held.
+ *
+ * Compared field by field as stored values, which is as deep as the writes
+ * this fake is asked about go.
+ */
+const altered = (before: FakeDoc, after: FakeDoc): boolean =>
+  [...new Set([...Object.keys(before), ...Object.keys(after)])].some(
+    (field) => String(before[field]) !== String(after[field]),
+  );
+
+/** The one aggregation expression the pipeline updates here are written with. */
+const evaluate = (doc: FakeDoc, expression: unknown): unknown => {
+  if (
+    expression &&
+    typeof expression === 'object' &&
+    '$not' in (expression as FakeDoc)
+  ) {
+    const [operand] = (expression as { $not: unknown[] }).$not;
+    return !evaluate(doc, operand);
+  }
+  if (typeof expression === 'string' && expression.startsWith('$')) {
+    return doc[expression.slice(1)];
+  }
+  return expression;
+};
+
 /** A fake model over `docs`; writes mutate the array the caller passed in. */
 export const fakeModel = (docs: FakeDoc[]) => ({
   docs,
@@ -319,30 +391,87 @@ export const fakeModel = (docs: FakeDoc[]) => ({
     return { modifiedCount: operations.length };
   },
   /**
+   * One document inserted, as the store would hand it back.
+   *
+   * A copy, like every read: what the caller holds afterwards is not a handle
+   * into storage, so a later write cannot reach back into it.
+   */
+  async create(doc: FakeDoc) {
+    docs.push({ ...doc });
+    return { ...doc };
+  },
+  /**
+   * The matched document as the update left it — the conditional write that
+   * both applies a change and says what it changed it to, which is how a flip
+   * computed in the store is read back without a second query racing it.
+   *
+   * `null` when nothing matched, as Mongo answers it: the condition is the
+   * guard, so a caller reads "nothing to flip" off the absence.
+   */
+  findOneAndUpdate(
+    filter: FakeDoc,
+    update: FakeDoc | FakeDoc[],
+    options: { new?: boolean } = {},
+  ) {
+    const target = docs.find((doc) => matches(doc, filter));
+    // Taken before the write, because that is what Mongo answers unless the
+    // caller asks for the document as it now stands.
+    const before = target ? { ...target } : null;
+    if (target) {
+      applyUpdate(target, update);
+    }
+    return {
+      async exec() {
+        if (!target) {
+          return null;
+        }
+        return options.new ? { ...target } : before;
+      },
+    };
+  },
+  /**
    * `upsert` inserts the document the filter describes when nothing matches —
    * how the singletons of this codebase are written, so the first write needs
    * no separate create.
+   *
+   * `$setOnInsert` is applied to that insert and to nothing else, as Mongo
+   * applies it: a document that already existed is left alone, and the write
+   * reports having modified nothing. That is what makes "did this call create
+   * the singleton" a condition a caller can read a win off, so the fake has to
+   * be able to tell it apart from a write that landed on an existing document.
    */
   updateOne(
     filter: FakeDoc,
-    update: { $set?: FakeDoc; $inc?: Record<string, number> },
+    update: {
+      $set?: FakeDoc;
+      $inc?: Record<string, number>;
+      $setOnInsert?: FakeDoc;
+    },
     options: { upsert?: boolean } = {},
   ) {
     const target = docs.find((doc) => matches(doc, filter));
+    const before = target ? { ...target } : null;
     if (target) {
-      Object.assign(target, update.$set ?? {});
-      Object.entries(update.$inc ?? {}).forEach(([field, by]) => {
-        target[field] = ((target[field] as number) ?? 0) + by;
-      });
+      applyUpdate(target, update);
     } else if (options.upsert) {
       // What Mongo inserts for an upsert nothing matched: the filter's own
-      // equalities, the `$set`, and each `$inc` field starting from its step.
-      docs.push({ ...filter, ...(update.$set ?? {}), ...(update.$inc ?? {}) });
+      // equalities, the `$set` and `$setOnInsert`, and each `$inc` field
+      // starting from its step.
+      docs.push({
+        ...filter,
+        ...(update.$setOnInsert ?? {}),
+        ...(update.$set ?? {}),
+        ...(update.$inc ?? {}),
+      });
     }
     return {
       async exec() {
         return target
-          ? { matchedCount: 1, modifiedCount: 1, upsertedCount: 0 }
+          ? {
+              matchedCount: 1,
+              modifiedCount: altered(before as FakeDoc, target) ? 1 : 0,
+              upsertedCount: 0,
+            }
           : {
               matchedCount: 0,
               modifiedCount: 0,

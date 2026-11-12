@@ -1,4 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { idleCook } from '../activeCook/active-cook';
+import { ActiveCookService } from '../activeCook/active-cook.service';
+import {
+  attachedCook,
+  FakeActiveCook,
+  fakeActiveCook,
+} from '../activeCook/testing/fake-active-cook';
+import { SmokeStatus } from '../smoke/smoke.schema';
 import { StateController } from './state.controller';
 import { StateService } from './state.service';
 import { State } from './state.schema';
@@ -7,6 +15,12 @@ import { StateDto } from './stateDto';
 describe('StateController', () => {
   let controller: StateController;
   let mockStateService: Partial<StateService>;
+  /**
+   * The Active Cook as every other spec of a route through it takes it: the
+   * shared fake, pointed at a lit cook. A hand-rolled `{ toggle: jest.Mock }`
+   * would let this spec describe a transition the real one cannot make.
+   */
+  let activeCook: FakeActiveCook;
 
   const mockState: State = {
     smokeId: 'test-smoke-id',
@@ -18,11 +32,15 @@ describe('StateController', () => {
       GetState: jest.fn().mockResolvedValue(mockState),
       updateCurrent: jest.fn().mockResolvedValue(mockState),
       create: jest.fn().mockResolvedValue(mockState),
-      toggleSmoking: jest
-        .fn()
-        .mockResolvedValue({ ...mockState, smoking: false }),
       clearSmoke: jest.fn().mockResolvedValue({ smokeId: '', smoking: false }),
     };
+
+    activeCook = fakeActiveCook(
+      attachedCook(
+        { _id: 'test-smoke-id', status: SmokeStatus.InProgress },
+        true,
+      ),
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [StateController],
@@ -30,6 +48,10 @@ describe('StateController', () => {
         {
           provide: StateService,
           useValue: mockStateService,
+        },
+        {
+          provide: ActiveCookService,
+          useValue: activeCook,
         },
       ],
     }).compile();
@@ -83,11 +105,20 @@ describe('StateController', () => {
   });
 
   describe('toggleSmoking', () => {
-    it('should toggle the smoking status', async () => {
+    it('flips through the Active Cook and answers with the state it left', async () => {
       const result = await controller.toggleSmoking();
 
-      expect(mockStateService.toggleSmoking).toHaveBeenCalled();
-      expect(result).toEqual({ ...mockState, smoking: false });
+      expect(activeCook.toggle).toHaveBeenCalledWith();
+      expect(result).toEqual(
+        expect.objectContaining({ smokeId: 'test-smoke-id', smoking: false }),
+      );
+    });
+
+    /** A toggle on an idle smoker has always answered with nothing. */
+    it('answers with nothing when there was no cook to toggle', async () => {
+      activeCook.pointAt(idleCook());
+
+      expect(await controller.toggleSmoking()).toBeNull();
     });
   });
 

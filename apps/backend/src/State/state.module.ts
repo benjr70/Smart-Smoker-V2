@@ -3,7 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { StateController } from './state.controller';
 import { stateSchema } from './state.schema';
 import { StateService } from './state.service';
-import { TimelineModule } from '../timeline/timeline.module';
+import { ActiveCookModule } from '../activeCook/active-cook.module';
 import { CookEventSchema } from '../cookEvents/cook-events.schema';
 import { SmokeSchema } from '../smoke/smoke.schema';
 import { EventsModule } from '../websocket/events.module';
@@ -20,8 +20,10 @@ import { EventsModule } from '../websocket/events.module';
       // finished from one being thrown out unfinished; see `StateService`.
       { name: 'Smoke', schema: SmokeSchema },
     ]),
-    // The cook's start is stamped when smoking is switched on.
-    TimelineModule,
+    // The toggle route is a cook transition, so it goes through the module
+    // that owns them. It imports no feature module itself, so this edge sits
+    // in no loop.
+    ActiveCookModule,
     // Clearing the session announces the now-empty cook log. Forward-referenced
     // because the gateway reads this module's service; both ends declare the
     // reference, which is what lets Nest build the pair.

@@ -1,7 +1,13 @@
 import { Logger, NotFoundException } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
+import { ApplicationSettings } from '../appSettings/app-settings.schema';
 import { SmokeStatus } from '../smoke/smoke.schema';
+import {
+  fakeStatsRecompute,
+  FakeStatsRecompute,
+  statsRecomputeProvider,
+} from '../stats/testing/fake-stats-recompute';
 import { FakeDoc, fakeModel } from '../timeline/testing/fake-model';
 import { ActiveCookService } from './active-cook.service';
 
@@ -9,14 +15,29 @@ describe('ActiveCookService', () => {
   let service: ActiveCookService;
   let states: FakeDoc[];
   let smokes: FakeDoc[];
+  let readings: FakeDoc[];
+  let settings: FakeDoc[];
+  let stats: FakeStatsRecompute;
+  /**
+   * The state collection's model, held so a test can make one write fail the
+   * way the store fails it — a refusal is not something an array can produce.
+   */
+  let stateModel: ReturnType<typeof fakeModel>;
 
-  /** The module over whatever the two collections currently hold. */
+  /** The module over whatever the collections currently hold. */
   const build = async (): Promise<void> => {
+    stateModel = fakeModel(states);
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ActiveCookService,
-        { provide: getModelToken('state'), useValue: fakeModel(states) },
+        { provide: getModelToken('state'), useValue: stateModel },
         { provide: getModelToken('Smoke'), useValue: fakeModel(smokes) },
+        { provide: getModelToken('Temp'), useValue: fakeModel(readings) },
+        {
+          provide: getModelToken(ApplicationSettings.name),
+          useValue: fakeModel(settings),
+        },
+        statsRecomputeProvider(stats),
       ],
     }).compile();
     service = module.get<ActiveCookService>(ActiveCookService);
@@ -25,6 +46,9 @@ describe('ActiveCookService', () => {
   beforeEach(() => {
     states = [];
     smokes = [];
+    readings = [];
+    settings = [];
+    stats = fakeStatsRecompute();
   });
 
   describe('resolving the Active Cook', () => {
@@ -111,6 +135,423 @@ describe('ActiveCookService', () => {
       expect(states).toEqual([
         { _id: 'state-1', smokeId: 'deleted-cook', smoking: true },
       ]);
+    });
+  });
+
+  describe('starting a cook', () => {
+    /** A pre-smoke written as the cook is created, as its module writes one. */
+    const aPreSmoke = () =>
+      jest.fn(async () => ({ result: { meat: 'brisket' }, childId: 'pre-1' }));
+
+    it('creates the cook from a pre-smoke and attaches it to the smoker', async () => {
+      states.push({ _id: 'state-1', smokeId: '', smoking: false });
+      await build();
+
+      const started = await service.start(aPreSmoke());
+
+      expect(started.won).toBe(true);
+      expect(started.preSmoke).toEqual({ meat: 'brisket' });
+      expect(smokes).toHaveLength(1);
+      expect(smokes[0]).toEqual(
+        expect.objectContaining({
+          preSmokeId: 'pre-1',
+          status: SmokeStatus.InProgress,
+        }),
+      );
+      expect(states[0].smokeId).toBe(String(smokes[0]._id));
+    });
+
+    it('is lost, and writes nothing, when a cook is already attached', async () => {
+      smokes.push({ _id: 'cook-1', status: SmokeStatus.InProgress });
+      states.push({ _id: 'state-1', smokeId: 'cook-1', smoking: true });
+      await build();
+      const preSmoke = aPreSmoke();
+
+      const started = await service.start(preSmoke);
+
+      expect(started.won).toBe(false);
+      expect(started.preSmoke).toBeNull();
+      expect(preSmoke).not.toHaveBeenCalled();
+      expect(started.cook).toEqual(
+        expect.objectContaining({ idle: false, smokeId: 'cook-1' }),
+      );
+      expect(smokes).toHaveLength(1);
+    });
+
+    /**
+     * Two phones setting a cook up together leave one cook behind, not two with
+     * the smoker attached to whichever wrote last — and one pre-smoke, since
+     * the loser never writes one to be orphaned.
+     */
+    it('is one cook when two starts race', async () => {
+      states.push({ _id: 'state-1', smokeId: '', smoking: false });
+      await build();
+      const first = aPreSmoke();
+      const second = aPreSmoke();
+
+      const starts = await Promise.all([
+        service.start(first),
+        service.start(second),
+      ]);
+
+      expect(starts.filter((start) => start.won)).toHaveLength(1);
+      expect(smokes).toHaveLength(1);
+      expect(
+        [first, second].filter((create) => create.mock.calls.length > 0),
+      ).toHaveLength(1);
+      expect(states[0].smokeId).toBe(String(smokes[0]._id));
+    });
+
+    /**
+     * A smoker with no state document at all — a fresh install whose boot
+     * seeding could not reach the database — is claimed by writing one, and
+     * left unlit: setting a cook up is not lighting the smoker.
+     */
+    it('claims a smoker whose state document was never written', async () => {
+      await build();
+
+      const started = await service.start(aPreSmoke());
+
+      expect(started.won).toBe(true);
+      expect(states).toHaveLength(1);
+      expect(states[0].smokeId).toBe(String(smokes[0]._id));
+      expect(states[0].smoking).toBe(false);
+    });
+
+    /**
+     * The same race, on that unwritten smoker. Both starts read no state at
+     * all, so the claim cannot be conditional on the value one of them read —
+     * only the call that *creates* the state document may start a cook, or the
+     * second one overwrites the first's claim and orphans its cook.
+     */
+    it('is one cook when two starts race on a smoker with no state document', async () => {
+      await build();
+      const first = aPreSmoke();
+      const second = aPreSmoke();
+
+      const starts = await Promise.all([
+        service.start(first),
+        service.start(second),
+      ]);
+
+      expect(starts.filter((start) => start.won)).toHaveLength(1);
+      expect(states).toHaveLength(1);
+      expect(smokes).toHaveLength(1);
+      expect(states[0].smokeId).toBe(String(smokes[0]._id));
+    });
+
+    /**
+     * The store's own refusal of the second insert — two starts whose claims
+     * reach an unwritten smoker at the same instant contend on the `_id`
+     * index. The loser is handed the cook, not the duplicate-key error.
+     */
+    it('is lost, and writes no cook, when the store refuses the claim as a duplicate', async () => {
+      await build();
+      jest.spyOn(stateModel, 'updateOne').mockReturnValue({
+        exec: async () => {
+          throw Object.assign(new Error('E11000 duplicate key error'), {
+            code: 11000,
+          });
+        },
+      } as ReturnType<typeof stateModel.updateOne>);
+      const preSmoke = aPreSmoke();
+
+      const started = await service.start(preSmoke);
+
+      expect(started.won).toBe(false);
+      expect(started.preSmoke).toBeNull();
+      expect(preSmoke).not.toHaveBeenCalled();
+      expect(smokes).toEqual([]);
+    });
+
+    /** Anything else the store refuses a claim with is nobody's loss to read. */
+    it('lets an unrecognised write failure out rather than reading it as a loss', async () => {
+      await build();
+      jest.spyOn(stateModel, 'updateOne').mockReturnValue({
+        exec: async () => {
+          throw new Error('not primary');
+        },
+      } as ReturnType<typeof stateModel.updateOne>);
+
+      await expect(service.start(aPreSmoke())).rejects.toThrow('not primary');
+    });
+
+    /**
+     * A state left pointing at a cook that has since been deleted reads as
+     * idle, so the next start claims that slot rather than being refused on
+     * behalf of a cook nobody can see.
+     */
+    it('claims a smoker left pointing at a cook that no longer exists', async () => {
+      jest.spyOn(Logger, 'warn').mockImplementation();
+      states.push({ _id: 'state-1', smokeId: 'deleted-cook', smoking: false });
+      await build();
+
+      const started = await service.start(aPreSmoke());
+
+      expect(started.won).toBe(true);
+      expect(states[0].smokeId).toBe(String(smokes[0]._id));
+    });
+  });
+
+  describe('toggling smoking', () => {
+    /** A cook attached to the smoker, not yet lit. */
+    const anUnlitCook = (): void => {
+      smokes.push({
+        _id: 'cook-1',
+        status: SmokeStatus.InProgress,
+        tempsId: 'temps-1',
+      });
+      states.push({ _id: 'state-1', smokeId: 'cook-1', smoking: false });
+    };
+
+    it('switches smoking on and records that the cook has started', async () => {
+      anUnlitCook();
+      await build();
+
+      const toggled = await service.toggle();
+
+      expect(toggled.won).toBe(true);
+      expect(states[0].smoking).toBe(true);
+      expect(smokes[0].startedAt).toBeInstanceOf(Date);
+    });
+
+    it('leaves the start where it was when smoking goes off and on again', async () => {
+      anUnlitCook();
+      await build();
+
+      await service.toggle();
+      const started = smokes[0].startedAt;
+      await service.toggle();
+      await service.toggle();
+
+      expect(states[0].smoking).toBe(true);
+      expect(smokes[0].startedAt).toBe(started);
+    });
+
+    /**
+     * Two presses that overlap are still one on and one off, and the start is
+     * stamped once. The flip is computed where the flag lives, so neither call
+     * can act on a value the other has already moved — which is how the
+     * read-negate-write it replaced lost a Stop.
+     */
+    it('is two presses, on then off, when two callers race', async () => {
+      anUnlitCook();
+      await build();
+
+      await Promise.all([service.toggle(), service.toggle()]);
+
+      expect(states[0].smoking).toBe(false);
+      expect(smokes[0].startedAt).toBeInstanceOf(Date);
+    });
+
+    it('is lost, with the idle cook back, when no cook is attached', async () => {
+      states.push({ _id: 'state-1', smokeId: '', smoking: false });
+      await build();
+
+      const toggled = await service.toggle();
+
+      expect(toggled).toEqual({
+        won: false,
+        cook: { idle: true, smoking: false },
+        state: null,
+      });
+      expect(states[0].smoking).toBe(false);
+    });
+
+    it('answers with the stored state, which is what the toggle route serves', async () => {
+      anUnlitCook();
+      await build();
+
+      const toggled = await service.toggle();
+
+      expect(toggled.state).toEqual(
+        expect.objectContaining({ smokeId: 'cook-1', smoking: true }),
+      );
+    });
+  });
+
+  describe('pulling the meat', () => {
+    /** A cook running, with a watched probe reading 198°F. */
+    const aCookOnTheSmoker = (): void => {
+      smokes.push({
+        _id: 'cook-1',
+        status: SmokeStatus.InProgress,
+        tempsId: 'temps-1',
+      });
+      states.push({ _id: 'state-1', smokeId: 'cook-1', smoking: true });
+      readings.push({
+        tempsId: 'temps-1',
+        date: new Date('2026-01-01T12:00:00Z'),
+        MeatTemp: '198',
+      });
+      settings.push({
+        _id: 'settings-1',
+        probeTarget: {
+          enabled: true,
+          probes: [{ slot: 'probe1', enabled: true, target: 203 }],
+        },
+      });
+    };
+
+    it('stamps when the meat came off and how hot it was', async () => {
+      aCookOnTheSmoker();
+      await build();
+
+      const pulled = await service.pull();
+
+      expect(pulled.won).toBe(true);
+      expect(smokes[0].pullAt).toBeInstanceOf(Date);
+      expect(smokes[0].pullTemp).toBe(198);
+    });
+
+    /**
+     * A second tap of the step control must not move the pull: everything the
+     * rest is measured from — the countdown, the carryover, the safe-to-hold
+     * window — hangs off this one moment, and moving it restarts a rest that is
+     * already half over.
+     */
+    it('keeps the first pull time when it is pulled again', async () => {
+      aCookOnTheSmoker();
+      await build();
+      await service.pull();
+      const first = smokes[0].pullAt;
+      readings[0].MeatTemp = '120';
+
+      const again = await service.pull();
+
+      expect(again.won).toBe(false);
+      expect(smokes[0].pullAt).toEqual(first);
+      expect(smokes[0].pullTemp).toBe(198);
+    });
+
+    it('hands the cook back to the caller that lost', async () => {
+      aCookOnTheSmoker();
+      await build();
+      await service.pull();
+
+      const again = await service.pull();
+
+      expect(again.cook).toEqual(
+        expect.objectContaining({ idle: false, smokeId: 'cook-1' }),
+      );
+    });
+
+    it('is lost on an idle smoker, with nothing stamped', async () => {
+      await build();
+
+      expect(await service.pull()).toEqual({
+        won: false,
+        cook: { idle: true, smoking: false },
+      });
+    });
+  });
+
+  describe('finishing the cook', () => {
+    /** A cook the pitmaster is ending: running, with a series behind it. */
+    const aCookBeingEnded = (): void => {
+      smokes.push({
+        _id: 'cook-1',
+        status: SmokeStatus.InProgress,
+        tempsId: 'temps-1',
+        preSmokeId: 'pre-1',
+      });
+      states.push({ _id: 'state-1', smokeId: 'cook-1', smoking: true });
+      readings.push({
+        tempsId: 'temps-1',
+        date: new Date('2026-01-01T12:00:00Z'),
+        ChamberTemp: '255',
+      });
+    };
+
+    it('stamps the cook, marks it complete and recomputes the statistics', async () => {
+      aCookBeingEnded();
+      await build();
+
+      const finished = await service.finish();
+
+      expect(finished.won).toBe(true);
+      expect(smokes[0].finishedAt).toBeInstanceOf(Date);
+      expect(smokes[0].status).toBe(SmokeStatus.Complete);
+      expect(smokes[0].peakChamber).toBe(255);
+      expect(stats.recompute).toHaveBeenCalledTimes(1);
+    });
+
+    it('is one stamp and one recompute when two finishes race', async () => {
+      aCookBeingEnded();
+      await build();
+
+      const [first, second] = await Promise.all([
+        service.finish(),
+        service.finish(),
+      ]);
+
+      expect([first.won, second.won].filter(Boolean)).toHaveLength(1);
+      expect(stats.recompute).toHaveBeenCalledTimes(1);
+      expect(smokes[0].status).toBe(SmokeStatus.Complete);
+    });
+
+    it('hands the cook back to the finish that lost, not an error', async () => {
+      aCookBeingEnded();
+      await build();
+      await service.finish();
+
+      const again = await service.finish();
+
+      expect(again.won).toBe(false);
+      expect(again.cook).toEqual(
+        expect.objectContaining({ idle: false, smokeId: 'cook-1' }),
+      );
+      expect(stats.recompute).toHaveBeenCalledTimes(1);
+    });
+
+    /**
+     * The finish is committed before the statistics are asked for, and a
+     * pitmaster who presses End Smoke cannot be told their cook did not end
+     * because a screen they are not looking at could not be recounted.
+     */
+    it('succeeds when the statistics cannot be recomputed', async () => {
+      aCookBeingEnded();
+      stats.recompute.mockRejectedValue(new Error('mongo is away'));
+      const logged = jest.spyOn(Logger, 'warn').mockImplementation();
+      await build();
+
+      const finished = await service.finish();
+
+      expect(finished.won).toBe(true);
+      expect(smokes[0].status).toBe(SmokeStatus.Complete);
+      expect(logged).toHaveBeenCalledWith(
+        expect.stringContaining('cook-1'),
+        'ActiveCook',
+      );
+    });
+
+    /**
+     * An auto-stop ends a cook's record but deliberately leaves it in progress,
+     * so the pitmaster still walks the End Smoke wizard. That late finish keeps
+     * the honest stamp and is still the call that completes the cook.
+     */
+    it('keeps an auto-stopped cook’s finish and still completes it', async () => {
+      const autoStopped = new Date('2026-01-01T18:00:00Z');
+      aCookBeingEnded();
+      smokes[0].finishedAt = autoStopped;
+      await build();
+
+      const finished = await service.finish();
+
+      expect(finished.won).toBe(true);
+      expect(smokes[0].finishedAt).toEqual(autoStopped);
+      expect(smokes[0].status).toBe(SmokeStatus.Complete);
+      expect(stats.recompute).toHaveBeenCalledTimes(1);
+    });
+
+    it('is lost on an idle smoker, and recomputes nothing', async () => {
+      await build();
+
+      expect(await service.finish()).toEqual({
+        won: false,
+        cook: { idle: true, smoking: false },
+      });
+      expect(stats.recompute).not.toHaveBeenCalled();
     });
   });
 

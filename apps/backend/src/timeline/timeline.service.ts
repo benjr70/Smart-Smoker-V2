@@ -10,6 +10,12 @@ import { documentId, WithDocumentId } from '../common/document-id';
 import { ServePlan } from '../smoke/serve-plan';
 import { SmokeDocument, SmokeStatus } from '../smoke/smoke.schema';
 import { TempDocument } from '../temps/temps.schema';
+import {
+  edgeReadingRow,
+  peakChambersOf,
+  StoredReading,
+  watchedProbeTemp,
+} from '../temps/series-reads';
 import { CookSnapshot, isActive } from '../activeCook/active-cook';
 import { ActiveCookService } from '../activeCook/active-cook.service';
 import { PreSmoke, PreSmokeDocument } from '../presmoke/presmoke.schema';
@@ -34,7 +40,7 @@ import {
   TimelineSmoke,
 } from './timeline.derive';
 import { CurrentSmokeTimeline, SmokeTimeline } from './timeline.dto';
-import { primaryWatchedProbe, primaryWatchedTarget } from './watched-probe';
+import { primaryWatchedProbe } from './watched-probe';
 import { ServePlanStatus, servePlanStatus } from './serve-plan-status';
 import { CookEventDocument } from '../cookEvents/cook-events.schema';
 import { cookEventsOfSmoke } from '../cookEvents/cook-events.filter';
@@ -133,183 +139,6 @@ export class TimelineService {
   ) {}
 
   /**
-   * Record that a cook has begun, if it has not already — no later than the
-   * readings it has already taken.
-   *
-   * The condition is part of the write rather than a read beforehand, so a
-   * second toggle — or two clients toggling at once — cannot move a start that
-   * has already happened. Smoking is stopped and restarted freely during a
-   * cook; only the first time is the time it started.
-   *
-   * The moment is not simply now, because this stamp is written after the
-   * state change that triggers it: a write that fails leaves a cook recording
-   * without a start, and the next switch-on stamps it hours in (see
-   * `StateService.toggleSmoking`). A cook cannot have begun after readings it
-   * had already taken, so its earliest reading is the latest a start may be
-   * stamped at, and a cook that has recorded nothing yet — every ordinary
-   * first press — starts now. Readings are only ever stored while smoking is
-   * on and every session gets its own series, so a series' first reading
-   * belongs to this cook and to no other.
-   *
-   * The read before the write is not the guard; the conditional write still
-   * is. It only decides what would be written, and two toggles racing on a
-   * cook with no start yet compute the same answer from the same series.
-   */
-  async stampStart(smokeId: string): Promise<void> {
-    const smoke = await this.smokeModel.findById(smokeId).exec();
-    if (!smoke || smoke.startedAt) {
-      return;
-    }
-    const now = new Date();
-    const firstReading = await this.edgeReading(smoke, 1);
-    const startedAt =
-      firstReading && firstReading.getTime() < now.getTime()
-        ? firstReading
-        : now;
-    await this.smokeModel
-      .updateOne({ _id: smokeId, startedAt: null }, { $set: { startedAt } })
-      .exec();
-  }
-
-  /**
-   * Record that a cook the user has just ended is over, as of now — the manual
-   * End Smoke path, expressed through {@link stampFinishAt}.
-   *
-   * A cook stopped earlier keeps the moment it was stopped at: the guard inside
-   * is what makes an End Smoke pressed a week after the readings stopped record
-   * the cook that happened rather than the week that followed it.
-   *
-   * The peak is scanned unbounded — every row of the series, undated ones
-   * included — because this is the path that has always been read that way and
-   * the archive holds undated rows the statistics backfill still counts. A cook
-   * the user is ending as they watch it has no rows after itself to exclude;
-   * the cook nobody ended does, and that is what the bound exists for.
-   */
-  async stampFinish(smokeId: string): Promise<boolean> {
-    return this.stampFinishAt(smokeId, new Date(), null);
-  }
-
-  /**
-   * Record that a cook was over at a given moment, and what it was being taken
-   * to.
-   *
-   * The moment is a parameter because a cook does not always end when somebody
-   * notices it has: a session whose readings stopped yesterday finished
-   * yesterday, and stamping the moment of the noticing would record a cook that
-   * ran until the app was next opened. The peak is scanned over the rows at or
-   * before that moment for the same reason — a stray firing of the box after
-   * the cook is not the cook's peak.
-   *
-   * `peakScanUntil` is that bound, and defaults to the finish. A caller may
-   * pass `null` to scan the whole series instead, which is what the manual
-   * finish does: the bound necessarily drops rows stored without a date (a row
-   * that cannot say when it was read cannot be placed inside the window), and
-   * dropping them on a path that never did would quietly lower the peak it
-   * stamps.
-   *
-   * The target is snapshotted here rather than read back later because the
-   * settings it comes from go on being edited: a cook finished at 203°F must
-   * still read 203°F after the next one is set up for chicken. Conditional for
-   * the same reason as the start — a finish that already happened is not
-   * moved, and its snapshot is not rewritten.
-   *
-   * The cook is read before any of that work is done, and a finish that has
-   * already happened stops here: the guard on the write would reject it
-   * anyway, and everything between the two — a settings read and a scan of the
-   * whole series for its peak — would have been done to be thrown away. The
-   * guard still stands, because two clients finishing at once can both get
-   * past this read.
-   *
-   * Answers whether this call is the one that stamped, so a caller may do the
-   * work that must happen once per finish (recompute the statistics, tell the
-   * user) exactly once even when two of them race.
-   */
-  async stampFinishAt(
-    smokeId: string,
-    finishedAt: Date,
-    peakScanUntil: Date | null = finishedAt,
-  ): Promise<boolean> {
-    const smoke = await this.smokeModel.findById(smokeId).exec();
-    if (!smoke || smoke.finishedAt) {
-      return false;
-    }
-    const stored = await this.settingsModel.findOne().exec();
-    const targetTemp = primaryWatchedTarget(withSettingsDefaults(stored));
-    const peakChamber = await this.peakChamberOf(smoke, peakScanUntil);
-    const result = await this.smokeModel
-      .updateOne(
-        { _id: smokeId, finishedAt: null },
-        {
-          $set: {
-            finishedAt,
-            targetTemp,
-            // Recorded whatever the readings said, so that a cook whose series
-            // held nothing readable is never scanned for a peak again — see
-            // the field's own note.
-            peakChamberScanned: true,
-            // The peak itself only where the cook recorded one: a series with
-            // no readable chamber reading has no peak, and a stamped zero
-            // would be a claim about how the cook ran.
-            ...(peakChamber === null ? {} : { peakChamber }),
-          },
-        },
-      )
-      .exec();
-    return result.modifiedCount > 0;
-  }
-
-  /**
-   * Record that the meat has come off, if it has not already: when it did, and
-   * what the watched probe read as it did.
-   *
-   * Written here rather than asked of the pitmaster because the gesture that
-   * ends the cook — leaving the Smoke step — is the gesture that pulls the
-   * meat, and everything the rest is measured from (the countdown, the
-   * carryover, the safe-to-hold window) hangs off this one moment.
-   *
-   * The condition is part of the write, as it is for the start and the finish:
-   * a step control tapped back and forth, two clients advancing at once, or a
-   * screen that remounts must not move a pull that has already happened —
-   * moving it would restart a rest that is already half over.
-   *
-   * The temperature is snapshotted rather than looked up later for the same
-   * reason the finished cook's target is: the readings go on arriving after the
-   * meat is off the smoker, and a probe left in a resting brisket — or pulled
-   * out and left on the bench — would rewrite what the meat was pulled at.
-   * `null` where no probe is being watched or none has read: nothing was
-   * measuring this meat, and a stamped zero would say something about it that
-   * nobody knows.
-   *
-   * Answers whether this call is the one that stamped, so a caller may do the
-   * work that must happen once per pull exactly once.
-   */
-  async stampPull(smokeId: string): Promise<boolean> {
-    const smoke = await this.smokeModel.findById(smokeId).exec();
-    if (!smoke || smoke.pullAt) {
-      return false;
-    }
-    const settings = withSettingsDefaults(
-      await this.settingsModel.findOne().exec(),
-    );
-    const pullTemp = await this.watchedProbeTemp(
-      smoke,
-      primaryWatchedProbe(settings)?.slot,
-    );
-    const result = await this.smokeModel
-      .updateOne(
-        { _id: smokeId, pullAt: null },
-        {
-          $set: {
-            pullAt: new Date(),
-            ...(pullTemp === null ? {} : { pullTemp }),
-          },
-        },
-      )
-      .exec();
-    return result.modifiedCount > 0;
-  }
-
-  /**
    * A cook's newest dated reading told by both clocks: when the device says it
    * was taken, and when this backend accepted it.
    *
@@ -334,26 +163,6 @@ export class TimelineService {
   }
 
   /**
-   * The hottest a cook's chamber ever ran, from its readings — the number that
-   * is stamped at finish and backfilled onto cooks finished before the stamp
-   * existed.
-   *
-   * Asked of {@link peakChambersOf} rather than of the peaks of every probe:
-   * the chamber is the only one wanted here, and the four meat maxima the
-   * fuller aggregation computes would be four accumulators nobody reads.
-   */
-  private async peakChamberOf(
-    smoke: StoredSmoke,
-    until: Date | null = null,
-  ): Promise<number | null> {
-    if (!smoke.tempsId) {
-      return null;
-    }
-    const peaks = await this.peakChambersOf([String(smoke.tempsId)], until);
-    return peaks.get(String(smoke.tempsId)) ?? null;
-  }
-
-  /**
    * The hottest chamber reading of each of many series, in one query — the
    * number stamped onto a cook at finish, asked of a whole archive at once.
    *
@@ -373,42 +182,7 @@ export class TimelineService {
     tempsIds: string[],
     until: Date | null = null,
   ): Promise<Map<string, number>> {
-    if (tempsIds.length === 0) {
-      return new Map();
-    }
-    const rows = await this.tempModel
-      .aggregate([
-        {
-          $match: {
-            tempsId: { $in: tempsIds },
-            ...(until ? { date: { $ne: null, $lte: until } } : {}),
-          },
-        },
-        {
-          $group: {
-            _id: '$tempsId',
-            // Converted before the `$max`: readings are stored as strings, and
-            // a `$max` over strings is alphabetical — `'99'` sorts above
-            // `'245'`, so it would call 99°F the hotter of the two.
-            peak: {
-              $max: {
-                $convert: {
-                  input: '$ChamberTemp',
-                  to: 'double',
-                  onError: null,
-                  onNull: null,
-                },
-              },
-            },
-          },
-        },
-      ])
-      .exec();
-    return new Map(
-      (rows as { _id: unknown; peak: unknown }[])
-        .filter((row) => typeof row.peak === 'number' && isFinite(row.peak))
-        .map((row) => [String(row._id), row.peak as number]),
-    );
+    return peakChambersOf(this.tempModel, tempsIds, until);
   }
 
   /**
@@ -572,32 +346,8 @@ export class TimelineService {
       driftMin: settings.servePlan.driftMin,
       wrapTemp: settings.targetPresets.wrapTemp,
       wrapStamped: await this.wrapStamped(documentId(smoke)),
-      probeTemp: await this.watchedProbeTemp(smoke, watchedSlot),
+      probeTemp: await watchedProbeTemp(this.tempModel, smoke, watchedSlot),
     });
-  }
-
-  /**
-   * What the watched probe read last, °F, or `null` where it has read nothing.
-   *
-   * The newest dated row of the whole series rather than the last of the rows
-   * the projection was drawn from: those are the opening of the cook plus the
-   * last half hour, and a smoker that has been silent longer than that — a poll
-   * gap, a restart, a paused cook — leaves the recent slice empty, so the last
-   * of them is an opening reading. Read as the meat's temperature it would put
-   * a 190°F brisket back below the wrap.
-   */
-  private async watchedProbeTemp(
-    smoke: StoredSmoke,
-    slot: string | null | undefined,
-  ): Promise<number | null> {
-    const row = await this.edgeReadingRow(smoke, -1);
-    if (!row || !slot) {
-      return null;
-    }
-    // Through `probeSeries` so an unplugged probe's zero is dropped here for
-    // the same reason it is dropped from the climb: it is not a temperature
-    // anything took.
-    return probeSeries([row], slot, null)[0]?.temp ?? null;
   }
 
   /** Whether this cook's log already carries a wrap. */
@@ -1032,18 +782,15 @@ export class TimelineService {
    * The row itself at one end of a cook's dated readings — what
    * {@link edgeReading} reads its moment off, kept separate for the one caller
    * that also needs the row's id (see {@link lastReading}).
+   *
+   * Through the shared read, which the cook's start stamp is placed by: one
+   * answer about where a series begins and ends, whoever is asking.
    */
   private async edgeReadingRow(
     smoke: StoredSmoke,
     direction: 1 | -1,
   ): Promise<StoredReading | null> {
-    if (!smoke.tempsId) {
-      return null;
-    }
-    return this.tempModel
-      .findOne({ tempsId: smoke.tempsId, date: { $ne: null } })
-      .sort({ date: direction })
-      .exec();
+    return edgeReadingRow(this.tempModel, smoke, direction);
   }
 
   /**
@@ -1119,9 +866,6 @@ export interface ScannedCookWindow extends CookWindow {
    */
   seriesEndsAt: Date;
 }
-
-/** A stored reading as {@link TimelineService.lastReading} reads one. */
-type StoredReading = TimelineReading & { _id?: unknown };
 
 /** A cook's newest reading, told by the device's clock and by the store's. */
 export interface LastReading {

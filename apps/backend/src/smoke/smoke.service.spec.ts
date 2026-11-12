@@ -11,7 +11,6 @@ import {
   FakeActiveCook,
   fakeActiveCook,
 } from '../activeCook/testing/fake-active-cook';
-import { TimelineService } from '../timeline/timeline.service';
 import { StatsService } from '../stats/stats.service';
 import { createMockModel } from '../common/testing/create-mock-model';
 import { Types } from 'mongoose';
@@ -21,7 +20,6 @@ describe('SmokeService', () => {
   let service: SmokeService;
   let mockSmokeModel: any;
   let activeCook: FakeActiveCook;
-  let mockTimelineService: { stampFinish: jest.Mock; stampPull: jest.Mock };
   let mockStatsService: { recalculate: jest.Mock };
   let mockPreSmokeModel: any;
   let mockSmokeProfileModel: any;
@@ -100,11 +98,6 @@ describe('SmokeService', () => {
 
     activeCook = fakeActiveCook(attachedCook(mockSmokeDocument, true));
 
-    mockTimelineService = {
-      stampFinish: jest.fn().mockResolvedValue(undefined),
-      stampPull: jest.fn().mockResolvedValue(true),
-    };
-
     // The statistics recompute announces itself into the same log as the
     // deletes, so "after everything was removed" is a fact the test can read
     // rather than an ordering it has to assume.
@@ -124,10 +117,6 @@ describe('SmokeService', () => {
         {
           provide: ActiveCookService,
           useValue: activeCook,
-        },
-        {
-          provide: TimelineService,
-          useValue: mockTimelineService,
         },
         {
           provide: StatsService,
@@ -206,99 +195,40 @@ describe('SmokeService', () => {
     });
   });
 
+  /**
+   * Finishing is the Active Cook's transition — the stamp, the completion and
+   * the one recount of the archive all live there, which is where their tests
+   * live too. What this route still owns is the payload: the cook as the finish
+   * left it, or nothing at all.
+   */
   describe('FinishSmoke', () => {
-    it('should finish current smoke by setting status to Complete', async () => {
-      jest
-        .spyOn(service, 'getCurrentSmoke')
-        .mockResolvedValue(mockSmokeDocument as Smoke);
-      jest.spyOn(service, 'update').mockResolvedValue({
-        ...mockSmokeDocument,
-        status: SmokeStatus.Complete,
-      } as unknown as SmokeDocument);
-
+    it('finishes through the Active Cook and answers with the cook', async () => {
       const result = await service.FinishSmoke();
 
-      const expectedDto: SmokeDto = {
-        smokeProfileId: mockSmoke.smokeProfileId,
-        preSmokeId: mockSmoke.preSmokeId,
-        postSmokeId: mockSmoke.postSmokeId,
-        tempsId: mockSmoke.tempsId,
-        ratingId: mockSmoke.ratingId,
-        status: SmokeStatus.Complete,
-      };
-
-      expect(service.getCurrentSmoke).toHaveBeenCalled();
-      expect(service.update).toHaveBeenCalledWith('test-smoke-id', expectedDto);
-      expect(result.status).toEqual(SmokeStatus.Complete);
-    });
-
-    it('stamps the finish of the cook it completes', async () => {
-      jest
-        .spyOn(service, 'getCurrentSmoke')
-        .mockResolvedValue(mockSmokeDocument as Smoke);
-      jest.spyOn(service, 'update').mockResolvedValue({
-        ...mockSmokeDocument,
-        status: SmokeStatus.Complete,
-      } as unknown as SmokeDocument);
-
-      await service.FinishSmoke();
-
-      expect(mockTimelineService.stampFinish).toHaveBeenCalledWith(
-        'test-smoke-id',
+      expect(activeCook.finish).toHaveBeenCalledWith();
+      expect(result).toEqual(
+        expect.objectContaining({
+          _id: 'test-smoke-id',
+          status: SmokeStatus.Complete,
+        }),
       );
     });
 
-    it('stamps nothing when there is no cook to finish', async () => {
-      jest.spyOn(service, 'getCurrentSmoke').mockResolvedValue(null);
+    it('answers with nothing when there is no cook to finish', async () => {
+      activeCook.pointAt(idleCook());
 
       expect(await service.FinishSmoke()).toBeNull();
-      expect(mockTimelineService.stampFinish).not.toHaveBeenCalled();
     });
 
-    it('recomputes the statistics the finished cook has just joined', async () => {
-      jest
-        .spyOn(service, 'getCurrentSmoke')
-        .mockResolvedValue(mockSmokeDocument as Smoke);
-      jest.spyOn(service, 'update').mockResolvedValue({
-        ...mockSmokeDocument,
-        status: SmokeStatus.Complete,
-      } as unknown as SmokeDocument);
-
+    /** A finish that lost is not an error: the cook comes back as it stands. */
+    it('answers with the cook when this caller did not finish it', async () => {
       await service.FinishSmoke();
 
-      expect(mockStatsService.recalculate).toHaveBeenCalled();
-      // After the cook was marked complete, never before: statistics computed
-      // over an archive the cook is not yet in would leave it out.
-      expect(
-        mockStatsService.recalculate.mock.invocationCallOrder[0],
-      ).toBeGreaterThan(
-        (service.update as jest.Mock).mock.invocationCallOrder[0],
+      const again = await service.FinishSmoke();
+
+      expect(again).toEqual(
+        expect.objectContaining({ status: SmokeStatus.Complete }),
       );
-    });
-
-    it('still finishes the cook when the statistics cannot be recomputed', async () => {
-      jest
-        .spyOn(service, 'getCurrentSmoke')
-        .mockResolvedValue(mockSmokeDocument as Smoke);
-      const finished = {
-        ...mockSmokeDocument,
-        status: SmokeStatus.Complete,
-      } as unknown as SmokeDocument;
-      jest.spyOn(service, 'update').mockResolvedValue(finished);
-      mockStatsService.recalculate.mockRejectedValue(new Error('mongo hiccup'));
-
-      // The cook is already complete in the archive by the time the statistics
-      // are touched. Failing the request here would tell the pitmaster their
-      // cook did not finish — and the stats read heals itself anyway.
-      await expect(service.FinishSmoke()).resolves.toBe(finished);
-    });
-
-    it('recomputes nothing when there was no cook to finish', async () => {
-      jest.spyOn(service, 'getCurrentSmoke').mockResolvedValue(null);
-
-      await service.FinishSmoke();
-
-      expect(mockStatsService.recalculate).not.toHaveBeenCalled();
     });
   });
 
@@ -580,28 +510,23 @@ describe('SmokeService', () => {
     /**
      * The pull is what the rest is measured from, and it is stamped by the
      * step advance that takes the cook to Post-Smoke — against the cook in
-     * progress, like the plan, and no more than once however many times the
-     * advance is made.
+     * progress, like the plan. That it is stamped no more than once is the
+     * Active Cook's rule and is held there
+     * ({@link ActiveCookService.pull}); what this route owes is the forward
+     * and the cook it answers with.
      */
     describe('the pull stamp', () => {
-      it('stamps the pull of the cook in progress and answers the cook', async () => {
-        stored.pullAt = new Date('2026-08-30T17:00:00.000Z');
-        stored.pullTemp = 203;
-
+      it('pulls through the Active Cook and answers the cook it stamped', async () => {
         const pulled = await service.stampPull();
 
-        expect(mockTimelineService.stampPull).toHaveBeenCalledWith(
-          'test-smoke-id',
-        );
-        expect(pulled?.pullAt).toEqual(new Date('2026-08-30T17:00:00.000Z'));
-        expect(pulled?.pullTemp).toBe(203);
+        expect(activeCook.pull).toHaveBeenCalledWith();
+        expect(pulled?.pullAt).toBeInstanceOf(Date);
       });
 
       it('has nothing to stamp when no cook is in progress', async () => {
         activeCook.pointAt(idleCook());
 
         expect(await service.stampPull()).toBeNull();
-        expect(mockTimelineService.stampPull).not.toHaveBeenCalled();
       });
     });
   });

@@ -1,6 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { WithDocumentId } from '../common/document-id';
 import { Smoke } from '../smoke/smoke.schema';
+import { State } from '../State/state.schema';
 
 /**
  * The Active Cook as a fixed value: the one cook the smoker is attached to, as
@@ -175,6 +176,48 @@ export const attachToCook = async <T>(
 };
 
 /**
+ * What a transition did: whether this caller was the one that moved the cook,
+ * and the cook as it stands now that it has moved.
+ *
+ * Won or lost rather than a success or a throw, because every one of these
+ * transitions is a thing two phones, or a phone and the touchscreen, routinely
+ * do at the same instant. Exactly one call wins the conditional write, and only
+ * the winner runs what must happen once — the stamp, the recompute, the
+ * announcement. The loser is not an error: the cook it asked for *is* in the
+ * state it asked for, somebody else just got there first, so it is handed the
+ * cook back and the client renders what actually happened.
+ */
+export interface CookTransition {
+  /** Whether this call is the one that moved the cook. */
+  readonly won: boolean;
+  /** The Active Cook as it stands afterwards, or idle. */
+  readonly cook: CookSnapshot;
+}
+
+/**
+ * A start, plus the pre-smoke the cook was started from.
+ *
+ * `null` for a caller that lost: the pre-smoke is written by the call that
+ * claims the smoker and by no other, so a race cannot leave two of them behind
+ * with only one cook to belong to.
+ */
+export interface StartedCook<T> extends CookTransition {
+  readonly preSmoke: T | null;
+}
+
+/**
+ * A toggle, plus the stored state the flip left behind.
+ *
+ * The state travels because the toggle route has always answered with it and
+ * the apps hold what it says — they learn the smoking flag from this response
+ * and from the socket, and nothing else. `null` where there was no cook to
+ * toggle, which is what that route has always answered then.
+ */
+export interface ToggledCook extends CookTransition {
+  readonly state: (State & WithDocumentId) | null;
+}
+
+/**
  * Reading the Active Cook and attaching a child record to it: what every
  * module that owns one of the cook's children depends on.
  *
@@ -184,4 +227,28 @@ export const attachToCook = async <T>(
 export interface ActiveCookChildren extends ActiveCookReader {
   /** See {@link attachToCook}. Answers the child record. */
   attach<T>(key: CookChildKey, attachment: ChildAttachment<T>): Promise<T>;
+}
+
+/**
+ * The whole of the Active Cook: reading it, attaching a child record to it, and
+ * moving it from one stage to the next.
+ *
+ * The transitions are declared alongside the reads so that the module and the
+ * test fake are two implementations of one interface — a route rewritten onto
+ * the fake cannot describe a transition the real module could not make.
+ */
+export interface ActiveCookTransitions extends ActiveCookChildren {
+  /**
+   * Start a cook from a pre-smoke. The pre-smoke is written by the winner
+   * only, so a race leaves one cook with one pre-smoke.
+   */
+  start<T>(
+    createPreSmoke: ChildAttachment<T>['create'],
+  ): Promise<StartedCook<T>>;
+  /** Switch smoking on or off. The first switch-on stamps the start. */
+  toggle(): Promise<ToggledCook>;
+  /** Stamp that the meat came off, once. */
+  pull(): Promise<CookTransition>;
+  /** Stamp the finish, complete the cook, recount the archive. Once. */
+  finish(): Promise<CookTransition>;
 }

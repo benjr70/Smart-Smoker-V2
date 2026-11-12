@@ -10,6 +10,7 @@ import { StateService } from '../State/state.service';
 import { StatsService } from '../stats/stats.service';
 import { FakeDoc, fakeModel } from '../timeline/testing/fake-model';
 import { ActiveCookService } from '../activeCook/active-cook.service';
+import { statsRecomputeProvider } from '../stats/testing/fake-stats-recompute';
 import { TimelineService } from '../timeline/timeline.service';
 import { COOK_LOG_ANNOUNCER } from '../websocket/cook-log-announcer';
 import { EventsGateway } from '../websocket/events.gateway';
@@ -96,7 +97,8 @@ describe('StaleCookService', () => {
   /** The push boundary: what reaches a phone that is nowhere near the box. */
   let push: { notify: jest.Mock };
   /** The real stamping the manual End Smoke flow goes through. */
-  let timeline: TimelineService;
+  /** The manual End Smoke, as the wizard makes it. */
+  let activeCook: ActiveCookService;
 
   const build = async (): Promise<StaleCookService> => {
     stats = { recalculate: jest.fn().mockResolvedValue(undefined) };
@@ -110,6 +112,9 @@ describe('StaleCookService', () => {
         // The real Active Cook over the same two fake collections, since the
         // timeline reads which cook is running through it.
         ActiveCookService,
+        // Its finish recounts the archive through this port. Nothing here
+        // finishes a cook, so the recording stub is never called.
+        statsRecomputeProvider(),
         { provide: StatsService, useValue: stats },
         { provide: EventsGateway, useValue: events },
         { provide: PushDispatcherService, useValue: push },
@@ -135,7 +140,7 @@ describe('StaleCookService', () => {
         { provide: getModelToken(PreSmoke.name), useValue: fakeModel([]) },
       ],
     }).compile();
-    timeline = module.get<TimelineService>(TimelineService);
+    activeCook = module.get<ActiveCookService>(ActiveCookService);
     return module.get<StaleCookService>(StaleCookService);
   };
 
@@ -624,7 +629,7 @@ describe('StaleCookService', () => {
   it('keeps the backdated finish when the cook is later ended by hand', async () => {
     await service.autoStopIfStale(NEXT_DAY);
 
-    await timeline.stampFinish('smoke-id');
+    await activeCook.finish();
 
     expect(storedSmoke().finishedAt).toEqual(
       new Date('2026-08-01T15:55:00.000Z'),

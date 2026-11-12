@@ -1,13 +1,17 @@
 import { WithDocumentId } from '../../common/document-id';
-import { Smoke } from '../../smoke/smoke.schema';
+import { Smoke, SmokeStatus } from '../../smoke/smoke.schema';
 import {
   ActiveCook,
-  ActiveCookChildren,
+  ActiveCookTransitions,
   attachToCook,
   ChildAttachment,
   CookChildKey,
   CookSnapshot,
+  CookTransition,
   idleCook,
+  isActive,
+  StartedCook,
+  ToggledCook,
 } from '../active-cook';
 
 /**
@@ -23,11 +27,16 @@ import {
  *
  * Test-only — excluded from coverage collection.
  */
-export interface FakeActiveCook extends ActiveCookChildren {
+export interface FakeActiveCook extends ActiveCookTransitions {
   /** Recording, so a spec can hold one request to one resolve. */
   resolve: jest.Mock<Promise<CookSnapshot>, []>;
   /** Recording, so a spec can hold a write to one attach of one kind. */
   attach: jest.Mock<Promise<any>, [CookChildKey, ChildAttachment<any>]>;
+  /** Recording, so a spec can hold a route to one transition. */
+  start: jest.Mock<Promise<StartedCook<any>>, [ChildAttachment<any>['create']]>;
+  toggle: jest.Mock<Promise<ToggledCook>, []>;
+  pull: jest.Mock<Promise<CookTransition>, []>;
+  finish: jest.Mock<Promise<CookTransition>, []>;
   /** Point it at a different cook, or at idle, after it was built. */
   pointAt(snapshot: CookSnapshot): void;
   /** The cook as it now stands — the links an attach has written included. */
@@ -54,10 +63,88 @@ export const fakeActiveCook = (
         pointAt(attachedCook({ ...cook.smoke, [key]: childId }, cook.smoking));
       }),
     ),
+    /**
+     * The transitions, over the cook this fake is pointed at.
+     *
+     * Each applies the one change its real counterpart applies and answers won
+     * or lost by the same stage condition, so a spec of a route reads the cook
+     * back the way the next request would. Nothing about *how* a transition is
+     * made — the conditional writes, the races, what a stamp is computed from —
+     * is modelled here; that is held by the Active Cook's own spec, against the
+     * store.
+     */
+    start: jest.fn(async (createPreSmoke) => {
+      if (isActive(current)) {
+        return { won: false, cook: current, preSmoke: null };
+      }
+      const { result, childId } = await createPreSmoke();
+      pointAt(
+        attachedCook(
+          {
+            _id: 'started-cook',
+            preSmokeId: childId,
+            status: SmokeStatus.InProgress,
+          },
+          false,
+        ),
+      );
+      return { won: true, cook: current, preSmoke: result };
+    }),
+    toggle: jest.fn(async () => {
+      if (!isActive(current)) {
+        return { won: false, cook: current, state: null };
+      }
+      const smoking = !current.smoking;
+      pointAt(
+        attachedCook(
+          {
+            ...current.smoke,
+            ...(smoking && !current.smoke.startedAt
+              ? { startedAt: new Date() }
+              : {}),
+          },
+          smoking,
+        ),
+      );
+      return {
+        won: true,
+        cook: current,
+        state: { _id: 'state-1', smokeId: smokeIdOf(current), smoking },
+      };
+    }),
+    pull: jest.fn(async () => {
+      if (!isActive(current) || current.smoke.pullAt) {
+        return { won: false, cook: current };
+      }
+      pointAt(
+        attachedCook({ ...current.smoke, pullAt: new Date() }, current.smoking),
+      );
+      return { won: true, cook: current };
+    }),
+    finish: jest.fn(async () => {
+      if (!isActive(current) || current.smoke.status === SmokeStatus.Complete) {
+        return { won: false, cook: current };
+      }
+      pointAt(
+        attachedCook(
+          {
+            ...current.smoke,
+            finishedAt: current.smoke.finishedAt ?? new Date(),
+            status: SmokeStatus.Complete,
+          },
+          current.smoking,
+        ),
+      );
+      return { won: true, cook: current };
+    }),
     pointAt,
     cook: () => current,
   };
 };
+
+/** The id of the cook a snapshot carries, as the stored state names it. */
+const smokeIdOf = (snapshot: CookSnapshot): string =>
+  isActive(snapshot) ? snapshot.smokeId : '';
 
 /**
  * A snapshot of the cook the smoker is attached to, built from a stored smoke

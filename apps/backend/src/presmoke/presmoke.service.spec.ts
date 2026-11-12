@@ -3,7 +3,6 @@ import { getModelToken } from '@nestjs/mongoose';
 import { PreSmokeService } from './presmoke.service';
 import { PreSmoke } from './presmoke.schema';
 import { PreSmokeDto } from './presmokeDto';
-import { StateService } from '../State/state.service';
 import { idleCook } from '../activeCook/active-cook';
 import { ActiveCookService } from '../activeCook/active-cook.service';
 import {
@@ -11,15 +10,12 @@ import {
   FakeActiveCook,
   fakeActiveCook,
 } from '../activeCook/testing/fake-active-cook';
-import { SmokeService } from '../smoke/smoke.service';
 import { SmokeStatus } from '../smoke/smoke.schema';
 import { StatsService } from '../stats/stats.service';
 
 describe('PreSmokeService', () => {
   let service: PreSmokeService;
   let mockPreSmokeModel: any;
-  let mockStateService: Partial<StateService>;
-  let mockSmokeService: Partial<SmokeService>;
   let mockStatsService: { markDirty: jest.Mock };
   let activeCook: FakeActiveCook;
 
@@ -40,11 +36,6 @@ describe('PreSmokeService', () => {
     _id: 'presmoke-id',
     ...mockPreSmoke,
     save: jest.fn().mockResolvedValue(mockPreSmoke),
-  };
-
-  const mockState = {
-    smokeId: 'test-smoke-id',
-    smoking: true,
   };
 
   const mockSmoke = {
@@ -74,20 +65,6 @@ describe('PreSmokeService', () => {
       .fn()
       .mockResolvedValue({ deletedCount: 1 });
 
-    mockStateService = {
-      GetState: jest.fn().mockResolvedValue(mockState),
-      create: jest.fn().mockResolvedValue(mockState),
-      updateCurrent: jest.fn().mockResolvedValue(mockState),
-    };
-
-    mockSmokeService = {
-      getById: jest.fn().mockResolvedValue(mockSmoke),
-      create: jest
-        .fn()
-        .mockResolvedValue({ ...mockSmoke, _id: 'new-smoke-id' }),
-      update: jest.fn().mockResolvedValue(mockSmoke),
-    };
-
     mockStatsService = { markDirty: jest.fn().mockResolvedValue(undefined) };
 
     activeCook = fakeActiveCook(attachedCook(mockSmoke, true));
@@ -102,14 +79,6 @@ describe('PreSmokeService', () => {
         {
           provide: getModelToken(PreSmoke.name),
           useValue: mockPreSmokeModel,
-        },
-        {
-          provide: StateService,
-          useValue: mockStateService,
-        },
-        {
-          provide: SmokeService,
-          useValue: mockSmokeService,
         },
         {
           provide: ActiveCookService,
@@ -129,86 +98,107 @@ describe('PreSmokeService', () => {
     expect(service).toBeDefined();
   });
 
+  /**
+   * Saving this form is the first thing a pitmaster does, so it is also how a
+   * cook starts. Both halves are the Active Cook's — starting one, and
+   * attaching the pre-smoke to the one that is running — and what is held here
+   * is that the form reaches the right one.
+   */
   describe('save', () => {
-    it('should update existing pre-smoke when smoke has preSmokeId', async () => {
-      const preSmokeDto: PreSmokeDto = {
-        name: 'Updated Prep',
-        meatType: 'beef',
-        weight: mockWeight,
-        steps: ['Updated step'],
-        notes: 'Updated notes',
-      };
+    const aPreSmokeDto = (name: string): PreSmokeDto => ({
+      name,
+      meatType: 'beef',
+      weight: mockWeight,
+      steps: ['Season with rub'],
+      notes: 'notes',
+    });
 
+    it('updates the pre-smoke the running cook already links', async () => {
+      const dto = aPreSmokeDto('Updated Prep');
       jest
         .spyOn(service, 'update')
         .mockResolvedValue(mockPreSmokeDocument as any);
 
-      const result = await service.save(preSmokeDto);
+      const result = await service.save(dto);
 
-      expect(mockStateService.GetState).toHaveBeenCalled();
-      expect(mockSmokeService.getById).toHaveBeenCalledWith(mockState.smokeId);
-      expect(service.update).toHaveBeenCalledWith(
-        mockSmoke.preSmokeId,
-        preSmokeDto,
-      );
+      expect(service.update).toHaveBeenCalledWith('existing-presmoke-id', dto);
       expect(result).toEqual(mockPreSmokeDocument);
+      expect(activeCook.start).not.toHaveBeenCalled();
     });
 
-    it('should create new pre-smoke and smoke when smoke exists but has no preSmokeId', async () => {
-      const preSmokeDto: PreSmokeDto = {
-        name: 'New Prep',
-        meatType: 'chicken',
-        weight: mockWeight,
-        steps: ['New step'],
-        notes: 'New notes',
-      };
-
-      const smokeWithoutPreSmokeId = { ...mockSmoke, preSmokeId: undefined };
-      mockSmokeService.getById = jest
-        .fn()
-        .mockResolvedValue(smokeWithoutPreSmokeId);
-
+    /**
+     * The running cook gains the pre-smoke it was missing. This used to create
+     * a *second* cook to hang the new pre-smoke off, leaving the cook the
+     * smoker was attached to with no pre-smoke at all.
+     */
+    it('links a new pre-smoke onto a running cook that has none', async () => {
+      activeCook.pointAt(
+        attachedCook({ _id: 'test-smoke-id', status: SmokeStatus.InProgress }),
+      );
       jest.spyOn(service, 'create').mockResolvedValue({
         ...mockPreSmokeDocument,
         _id: 'new-presmoke-id',
       } as any);
 
-      const result = await service.save(preSmokeDto);
+      const result = await service.save(aPreSmokeDto('New Prep'));
 
-      expect(service.create).toHaveBeenCalledWith(preSmokeDto);
-      expect(mockSmokeService.create).toHaveBeenCalledWith({
-        preSmokeId: 'new-presmoke-id',
-        status: smokeWithoutPreSmokeId.status,
-      });
+      expect(result).toEqual(
+        expect.objectContaining({ _id: 'new-presmoke-id' }),
+      );
+      expect(activeCook.cook()).toEqual(
+        expect.objectContaining({
+          smokeId: 'test-smoke-id',
+          smoke: expect.objectContaining({ preSmokeId: 'new-presmoke-id' }),
+        }),
+      );
     });
 
-    it('should create new pre-smoke and smoke when no active smoke exists', async () => {
-      const preSmokeDto: PreSmokeDto = {
-        name: 'Brand New Prep',
-        meatType: 'fish',
-        weight: mockWeight,
-        steps: ['Fish step'],
-        notes: 'Fish notes',
-      };
-
-      const stateWithoutSmoke = { ...mockState, smokeId: '' };
-      mockStateService.GetState = jest
-        .fn()
-        .mockResolvedValue(stateWithoutSmoke);
-
+    it('starts a cook, and attaches it, when the smoker is idle', async () => {
+      activeCook.pointAt(idleCook());
       jest.spyOn(service, 'create').mockResolvedValue({
         ...mockPreSmokeDocument,
         _id: 'brand-new-presmoke-id',
       } as any);
 
-      const result = await service.save(preSmokeDto);
+      const result = await service.save(aPreSmokeDto('Brand New Prep'));
 
-      expect(service.create).toHaveBeenCalledWith(preSmokeDto);
-      expect(mockSmokeService.create).toHaveBeenCalledWith({
-        preSmokeId: 'brand-new-presmoke-id',
-        status: SmokeStatus.InProgress,
+      expect(activeCook.start).toHaveBeenCalled();
+      expect(result).toEqual(
+        expect.objectContaining({ _id: 'brand-new-presmoke-id' }),
+      );
+      expect(activeCook.cook()).toEqual(
+        expect.objectContaining({
+          idle: false,
+          smoke: expect.objectContaining({
+            preSmokeId: 'brand-new-presmoke-id',
+            status: SmokeStatus.InProgress,
+          }),
+        }),
+      );
+    });
+
+    /**
+     * Two phones opening the wizard together: the one that loses the start
+     * writes the pre-smoke of the cook that was started, rather than into
+     * nothing.
+     */
+    it('attaches to the cook that won when its own start lost', async () => {
+      activeCook.pointAt(idleCook());
+      activeCook.start.mockImplementation(async () => {
+        activeCook.pointAt(attachedCook(mockSmoke, false));
+        return { won: false, cook: activeCook.cook(), preSmoke: null };
       });
-      expect(mockStateService.updateCurrent).toHaveBeenCalled();
+      jest
+        .spyOn(service, 'update')
+        .mockResolvedValue(mockPreSmokeDocument as any);
+
+      const result = await service.save(aPreSmokeDto('Raced Prep'));
+
+      expect(service.update).toHaveBeenCalledWith(
+        'existing-presmoke-id',
+        expect.objectContaining({ name: 'Raced Prep' }),
+      );
+      expect(result).toEqual(mockPreSmokeDocument);
     });
   });
 
@@ -238,20 +228,6 @@ describe('PreSmokeService', () => {
       expect(await service.GetByCurrent()).toBeNull();
     });
 
-    /**
-     * This read used to create the state document it found missing — a write
-     * made on the way to answering a question, on a fresh install's first
-     * screen. Seeding at startup is what covers that now.
-     */
-    it('writes nothing as it reads, not even a missing state document', async () => {
-      activeCook.pointAt(idleCook());
-
-      await service.GetByCurrent();
-
-      expect(mockStateService.create).not.toHaveBeenCalled();
-      expect(mockStateService.updateCurrent).not.toHaveBeenCalled();
-    });
-
     /** The alert check seeds its probe targets from the meat of one cook. */
     it('reads the pre-smoke of an Active Cook it was handed', async () => {
       await service.GetByCurrent(
@@ -261,27 +237,6 @@ describe('PreSmokeService', () => {
       expect(activeCook.resolve).not.toHaveBeenCalled();
       expect(mockPreSmokeModel.findById).toHaveBeenCalledWith('other-pre');
     });
-
-    // TODO: This test reveals a bug in the service logic where state is not reassigned after creation
-    // The service tries to access state.smokeId on the original null state variable
-    /*
-    it('should create default state when none exists', async () => {
-      // Mock sequential calls - first returns null, then returns created state
-      mockStateService.GetState = jest.fn()
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce({ smokeId: '', smoking: false });
-      
-      // Mock the smoke service to handle empty smokeId gracefully  
-      mockSmokeService.getById = jest.fn().mockResolvedValue({ preSmokeId: 'mock-presmoke-id' });
-
-      const result = await service.GetByCurrent();
-
-      expect(mockStateService.create).toHaveBeenCalledWith({ smokeId: '', smoking: false });
-      // The service has a bug - it doesn't reassign state after creating it
-      // So it will still try to access the original null state
-      // We can't really test this properly without fixing the service logic
-    });
-    */
   });
 
   describe('the statistics the meat belongs to', () => {

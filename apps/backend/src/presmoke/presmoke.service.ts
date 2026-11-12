@@ -2,14 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { BaseService } from '../common/base.service';
-import { SmokeService } from '../smoke/smoke.service';
-import { SmokeDto } from '../smoke/smokeDto';
-import { StateService } from '../State/state.service';
-import { childIdOf, CookSnapshot } from '../activeCook/active-cook';
+import { childIdOf, CookSnapshot, isActive } from '../activeCook/active-cook';
 import { ActiveCookService } from '../activeCook/active-cook.service';
 import { PreSmoke, PreSmokeDocument } from './presmoke.schema';
 import { PreSmokeDto } from './presmokeDto';
-import { SmokeStatus } from '../smoke/smoke.schema';
 import { markStatsStale } from '../stats/mark-stats-stale';
 import { StatsService } from '../stats/stats.service';
 
@@ -17,14 +13,13 @@ import { StatsService } from '../stats/stats.service';
 export class PreSmokeService extends BaseService<PreSmokeDocument> {
   constructor(
     @InjectModel(PreSmoke.name) model: Model<PreSmokeDocument>,
-    /**
-     * The session, for the one thing this service still writes to it: starting
-     * a cook, which is a transition rather than a read.
-     */
-    private stateService: StateService,
-    private smokeService: SmokeService,
     private readonly stats: StatsService,
-    /** Which cook the smoker is attached to — see {@link GetByCurrent}. */
+    /**
+     * Which cook the smoker is attached to, and the module that starts one.
+     * This service used to write the stored state itself and create the cook
+     * through `SmokeService`; starting is a transition, and transitions are the
+     * Active Cook's. See {@link save} and {@link GetByCurrent}.
+     */
     private readonly activeCook: ActiveCookService,
   ) {
     super(model, 'PreSmoke');
@@ -45,55 +40,52 @@ export class PreSmokeService extends BaseService<PreSmokeDocument> {
     await markStatsStale(this.stats, 'pre-smoke');
   }
 
+  /**
+   * Write what is about to be cooked — and, when nothing is cooking yet, start
+   * the cook it is for.
+   *
+   * This form is the first screen of a cook, so saving it is the gesture that
+   * begins one: with no Active Cook, the cook is created from this
+   * pre-smoke and the smoker is attached to it, as one transition that exactly
+   * one caller can win. With a cook already running, the pre-smoke is simply
+   * that cook's, updated where it has one and created and linked where it does
+   * not.
+   *
+   * Both halves go through the Active Cook. This used to walk the stored state
+   * itself, create the document it found missing, and — where the cook had no
+   * pre-smoke yet — create a *second* cook to hang the new pre-smoke off,
+   * leaving the running cook with no pre-smoke at all.
+   *
+   * A start that loses falls through to the attach, so two phones opening the
+   * wizard together both end up writing the pre-smoke of the one cook that was
+   * started rather than one of them writing into nothing.
+   */
   async save(preSmokeDto: PreSmokeDto): Promise<PreSmoke> {
-    return this.stateService.GetState().then(async (state) => {
-      // If no state exists, create one
-      if (!state) {
-        state = await this.stateService.create({ smokeId: '', smoking: false });
+    const cook = await this.activeCook.resolve();
+    if (!isActive(cook)) {
+      const started = await this.activeCook.start(() =>
+        this.writePreSmoke(preSmokeDto),
+      );
+      if (started.won) {
+        return started.preSmoke;
       }
-      if (state.smokeId && state.smokeId.length > 0) {
-        return this.smokeService.getById(state.smokeId).then((smoke) => {
-          if (!smoke) {
-            return this.startSmokeWith(preSmokeDto, state);
-          }
-          if (smoke.preSmokeId) {
-            return this.update(smoke.preSmokeId, preSmokeDto);
-          } else {
-            return this.create(preSmokeDto).then((preSmoke) => {
-              const smokeDto: SmokeDto = {
-                preSmokeId: preSmoke['_id'].toString(),
-                status: smoke.status,
-              };
-              this.smokeService.create(smokeDto);
-              return preSmoke;
-            });
-          }
-        });
-      } else {
-        return this.startSmokeWith(preSmokeDto, state);
-      }
+    }
+    return this.activeCook.attach('preSmokeId', {
+      update: (preSmokeId) => this.update(preSmokeId, preSmokeDto),
+      create: () => this.writePreSmoke(preSmokeDto),
     });
   }
 
-  private async startSmokeWith(
+  /** The pre-smoke written, as the cook links it: the record and its id. */
+  private async writePreSmoke(
     preSmokeDto: PreSmokeDto,
-    state: any,
-  ): Promise<PreSmoke> {
-    return this.create(preSmokeDto).then((preSmoke) => {
-      const smokeDto: SmokeDto = {
-        preSmokeId: preSmoke['_id'].toString(),
-        status: SmokeStatus.InProgress,
-      };
-      this.smokeService.create(smokeDto).then((smoke) => {
-        state.smokeId = smoke['_id'].toString();
-        this.stateService.updateCurrent(state);
-      });
-      return preSmoke;
-    });
+  ): Promise<{ result: PreSmoke; childId: string }> {
+    const preSmoke = await this.create(preSmokeDto);
+    return { result: preSmoke, childId: preSmoke['_id'].toString() };
   }
 
   /**
-   * What the cook in progress is of, or `null` where there is no cook or its
+   * What the Active Cook is of, or `null` where there is no cook or its
    * pre-smoke was never saved.
    *
    * Read through the Active Cook, which is also what makes this a read: it

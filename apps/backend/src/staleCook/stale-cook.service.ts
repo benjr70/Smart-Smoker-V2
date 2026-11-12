@@ -7,7 +7,9 @@ import {
   ApplicationSettingsDocument,
 } from '../appSettings/app-settings.schema';
 import { PushDispatcherService } from '../pushDispatcher/push-dispatcher.service';
+import { stampCookFinishAt, StampCollections } from '../activeCook/cook-stamps';
 import { SmokeDocument } from '../smoke/smoke.schema';
+import { TempDocument } from '../temps/temps.schema';
 import {
   DEFAULT_SMOKE_PROFILE,
   SmokeProFileDocument,
@@ -146,6 +148,13 @@ export class StaleCookService {
     @InjectModel(ApplicationSettings.name)
     private readonly settingsModel: Model<ApplicationSettingsDocument>,
     /**
+     * The cook's readings, for the peak its finish stamp carries. Through the
+     * model because the stamp is written by a shared conditional write rather
+     * than by a service: see {@link stampCookFinishAt}, which is the Active
+     * Cook's, and which this calls until auto-stop moves there too.
+     */
+    @InjectModel('Temp') private readonly tempModel: Model<TempDocument>,
+    /**
      * What the cook's probes are called, read through its model for the same
      * reason the cook is: the service that wraps it drags the statistics, the
      * ratings and the current-smoke reader in behind it, and all this needs is
@@ -243,7 +252,7 @@ export class StaleCookService {
     thresholdHours: number,
   ): Promise<AutoStoppedCook | null> {
     const smokeId = String(smoke._id);
-    const stamped = await this.timeline.stampFinishAt(smokeId, finishedAt);
+    const stamped = await stampCookFinishAt(this.stamps, smokeId, finishedAt);
     await this.switchOff(smoke);
     if (!stamped) {
       return null;
@@ -255,6 +264,15 @@ export class StaleCookService {
       finishedAt,
       idleHours: idleMs / MS_PER_HOUR,
       thresholdHours,
+    };
+  }
+
+  /** The collections the finish stamp is written over. */
+  private get stamps(): StampCollections {
+    return {
+      smokeModel: this.smokeModel,
+      tempModel: this.tempModel,
+      settingsModel: this.settingsModel,
     };
   }
 
