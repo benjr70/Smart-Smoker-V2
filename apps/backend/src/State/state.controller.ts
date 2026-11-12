@@ -35,7 +35,7 @@ export class StateController {
   }
 
   /**
-   * Switch smoking on or off for the cook in progress.
+   * Switch smoking on or off for the Active Cook.
    *
    * No body, and still none: the flip is computed from what is stored, so two
    * real presses are one on and one off however they overlap. Answered with the

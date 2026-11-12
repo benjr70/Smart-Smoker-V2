@@ -1,9 +1,9 @@
 import { Model } from 'mongoose';
-import { TimelineReading } from '../timeline/timeline.derive';
+import { probeSeries, TimelineReading } from '../timeline/timeline.derive';
 import { TempDocument } from './temps.schema';
 
 /**
- * The two reads of a temperature series that the cook's stamps and the cook's
+ * The reads of a temperature series that the cook's stamps and the cook's
  * timeline both make — as functions over the collection rather than methods on
  * either module.
  *
@@ -52,6 +52,30 @@ export const edgeReadingRow = async (
 };
 
 /**
+ * What the watched probe read last, °F, or `null` where it has read nothing.
+ *
+ * The newest dated row of the whole series rather than the last of any recent
+ * slice: a smoker that has been silent longer than that slice — a poll gap, a
+ * restart, a paused cook — would otherwise be read off an opening reading, and
+ * a 190°F brisket put back below the wrap. It is also the reading the meat was
+ * pulled at, which is what a pull is stamped with.
+ */
+export const watchedProbeTemp = async (
+  tempModel: Model<TempDocument>,
+  smoke: SeriesOwner,
+  slot: string | null | undefined,
+): Promise<number | null> => {
+  const row = await edgeReadingRow(tempModel, smoke, -1);
+  if (!row || !slot) {
+    return null;
+  }
+  // Through `probeSeries` so an unplugged probe's zero is dropped here for the
+  // same reason it is dropped from the climb: it is not a temperature anything
+  // took.
+  return probeSeries([row], slot, null)[0]?.temp ?? null;
+};
+
+/**
  * The hottest chamber reading of each of many series, in one query — the
  * number stamped onto a cook at finish, asked of a whole archive at once.
  *
@@ -62,8 +86,8 @@ export const edgeReadingRow = async (
  *
  * `until` bounds the scan to the rows at or before a moment — the cook's
  * window. A series may run on past the cook that recorded it (the box is fired
- * up again weeks later against a session nobody ended), and the hottest of
- * those later rows is not a fact about the cook. Undated rows are excluded with
+ * up again weeks later against a cook nobody ended), and the hottest of those
+ * later rows is not a fact about the cook. Undated rows are excluded with
  * the bound, because a row that cannot say when it was read cannot be placed
  * inside the window.
  */

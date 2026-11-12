@@ -99,7 +99,7 @@ describe('PreSmokeService', () => {
   });
 
   /**
-   * Saving this form is the first thing a session does, so it is also how a
+   * Saving this form is the first thing a pitmaster does, so it is also how a
    * cook starts. Both halves are the Active Cook's — starting one, and
    * attaching the pre-smoke to the one that is running — and what is held here
    * is that the form reaches the right one.

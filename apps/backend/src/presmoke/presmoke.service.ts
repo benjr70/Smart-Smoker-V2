@@ -44,8 +44,8 @@ export class PreSmokeService extends BaseService<PreSmokeDocument> {
    * Write what is about to be cooked — and, when nothing is cooking yet, start
    * the cook it is for.
    *
-   * This form is the first screen of a session, so saving it is the gesture
-   * that begins one: with no Active Cook, the cook is created from this
+   * This form is the first screen of a cook, so saving it is the gesture that
+   * begins one: with no Active Cook, the cook is created from this
    * pre-smoke and the smoker is attached to it, as one transition that exactly
    * one caller can win. With a cook already running, the pre-smoke is simply
    * that cook's, updated where it has one and created and linked where it does
@@ -64,7 +64,7 @@ export class PreSmokeService extends BaseService<PreSmokeDocument> {
     const cook = await this.activeCook.resolve();
     if (!isActive(cook)) {
       const started = await this.activeCook.start(() =>
-        this.written(preSmokeDto),
+        this.writePreSmoke(preSmokeDto),
       );
       if (started.won) {
         return started.preSmoke;
@@ -72,12 +72,12 @@ export class PreSmokeService extends BaseService<PreSmokeDocument> {
     }
     return this.activeCook.attach('preSmokeId', {
       update: (preSmokeId) => this.update(preSmokeId, preSmokeDto),
-      create: () => this.written(preSmokeDto),
+      create: () => this.writePreSmoke(preSmokeDto),
     });
   }
 
-  /** The pre-smoke as the cook links it: the record, and the id to link. */
-  private async written(
+  /** The pre-smoke written, as the cook links it: the record and its id. */
+  private async writePreSmoke(
     preSmokeDto: PreSmokeDto,
   ): Promise<{ result: PreSmoke; childId: string }> {
     const preSmoke = await this.create(preSmokeDto);
@@ -85,7 +85,7 @@ export class PreSmokeService extends BaseService<PreSmokeDocument> {
   }
 
   /**
-   * What the cook in progress is of, or `null` where there is no cook or its
+   * What the Active Cook is of, or `null` where there is no cook or its
    * pre-smoke was never saved.
    *
    * Read through the Active Cook, which is also what makes this a read: it

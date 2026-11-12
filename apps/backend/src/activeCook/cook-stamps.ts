@@ -6,9 +6,10 @@ import {
   edgeReadingRow,
   peakChamberOf,
   SeriesOwner,
+  watchedProbeTemp,
 } from '../temps/series-reads';
 import { TempDocument } from '../temps/temps.schema';
-import { momentOf, probeSeries } from '../timeline/timeline.derive';
+import { momentOf } from '../timeline/timeline.derive';
 import {
   primaryWatchedProbe,
   primaryWatchedTarget,
@@ -198,25 +199,4 @@ const firstReadingAt = async (
 ): Promise<Date | null> => {
   const row = await edgeReadingRow(tempModel, smoke, 1);
   return row ? momentOf(row) : null;
-};
-
-/**
- * What the watched probe read last, °F, or `null` where it has read nothing.
- *
- * The newest dated row of the whole series: a smoker that has been silent for
- * a while still has a last reading, and it is the one the meat was pulled at.
- */
-const watchedProbeTemp = async (
-  tempModel: Model<TempDocument>,
-  smoke: SeriesOwner,
-  slot: string | null | undefined,
-): Promise<number | null> => {
-  const row = await edgeReadingRow(tempModel, smoke, -1);
-  if (!row || !slot) {
-    return null;
-  }
-  // Through `probeSeries` so an unplugged probe's zero is dropped here for the
-  // same reason it is dropped from the climb: it is not a temperature anything
-  // took.
-  return probeSeries([row], slot, null)[0]?.temp ?? null;
 };

@@ -135,7 +135,7 @@ describe('StateService', () => {
         .spyOn(service, 'GetState')
         .mockResolvedValue(mockStateDocument as State);
 
-      const result = await service.updateCurrent(updateDto);
+      await service.updateCurrent(updateDto);
 
       expect(mockStateModel.findOneAndUpdate).toHaveBeenCalledWith(
         { _id: 'test-id' },

@@ -14,6 +14,7 @@ import {
   edgeReadingRow,
   peakChambersOf,
   StoredReading,
+  watchedProbeTemp,
 } from '../temps/series-reads';
 import { CookSnapshot, isActive } from '../activeCook/active-cook';
 import { ActiveCookService } from '../activeCook/active-cook.service';
@@ -286,7 +287,7 @@ export class TimelineService {
       target: probe?.target ?? null,
       smoking: snapshot.smoking,
       now,
-      peakTemp: probe ? (peaks[probeField(probe.slot)] ?? null) : null,
+      peakTemp: probe ? peaks[probeField(probe.slot)] ?? null : null,
     };
     const estimate = estimateCompletion({
       ...input,
@@ -345,32 +346,8 @@ export class TimelineService {
       driftMin: settings.servePlan.driftMin,
       wrapTemp: settings.targetPresets.wrapTemp,
       wrapStamped: await this.wrapStamped(documentId(smoke)),
-      probeTemp: await this.watchedProbeTemp(smoke, watchedSlot),
+      probeTemp: await watchedProbeTemp(this.tempModel, smoke, watchedSlot),
     });
-  }
-
-  /**
-   * What the watched probe read last, °F, or `null` where it has read nothing.
-   *
-   * The newest dated row of the whole series rather than the last of the rows
-   * the projection was drawn from: those are the opening of the cook plus the
-   * last half hour, and a smoker that has been silent longer than that — a poll
-   * gap, a restart, a paused cook — leaves the recent slice empty, so the last
-   * of them is an opening reading. Read as the meat's temperature it would put
-   * a 190°F brisket back below the wrap.
-   */
-  private async watchedProbeTemp(
-    smoke: StoredSmoke,
-    slot: string | null | undefined,
-  ): Promise<number | null> {
-    const row = await this.edgeReadingRow(smoke, -1);
-    if (!row || !slot) {
-      return null;
-    }
-    // Through `probeSeries` so an unplugged probe's zero is dropped here for
-    // the same reason it is dropped from the climb: it is not a temperature
-    // anything took.
-    return probeSeries([row], slot, null)[0]?.temp ?? null;
   }
 
   /** Whether this cook's log already carries a wrap. */
@@ -733,7 +710,7 @@ export class TimelineService {
       const startedAt = smoke.startedAt ?? edge?.first ?? null;
       const finishedAt =
         smoke.finishedAt ??
-        (smoke.status === SmokeStatus.Complete ? (edge?.last ?? null) : null);
+        (smoke.status === SmokeStatus.Complete ? edge?.last ?? null : null);
       return durationBetween(startedAt, finishedAt);
     });
   }
@@ -889,8 +866,6 @@ export interface ScannedCookWindow extends CookWindow {
    */
   seriesEndsAt: Date;
 }
-
-/** A stored reading as {@link TimelineService.lastReading} reads one. */
 
 /** A cook's newest reading, told by the device's clock and by the store's. */
 export interface LastReading {
