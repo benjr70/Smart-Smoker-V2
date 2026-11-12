@@ -146,7 +146,7 @@ export const fakeActiveCook = (
      * still attached. Lost where a finish was already stamped, which is the
      * condition the real one wins or loses on.
      */
-    autoStop: jest.fn(async (at: Date, _notice: string) => {
+    autoStop: jest.fn<Promise<CookTransition>, [Date, string]>(async (at) => {
       if (!isActive(current)) {
         return { won: false, cook: current };
       }

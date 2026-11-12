@@ -456,10 +456,7 @@ export class ActiveCookService implements ActiveCookTransitions {
    */
   private async deliverPush(smokeId: string, notice: string): Promise<void> {
     try {
-      await withDeadline(
-        this.push.notify(PUSH_TITLE, notice),
-        PUSH_TIMEOUT_MS,
-      );
+      await withDeadline(this.push.notify(PUSH_TITLE, notice), PUSH_TIMEOUT_MS);
     } catch (error) {
       Logger.warn(
         `cook ${smokeId} was auto-stopped but no push could be delivered. ${error}`,
@@ -531,21 +528,22 @@ export class ActiveCookService implements ActiveCookTransitions {
   }
 
   /**
-   * Recompute the statistics for a finish that is already committed, without
-   * letting them fail it.
+   * Recompute the statistics for a transition that is already committed,
+   * without letting them fail it.
    *
-   * The cook is over by the time this runs. A recompute that threw here would
-   * answer a request that succeeded with a 500, and the client's natural retry
-   * — finish it again — would lose the conditional write and have nothing left
-   * to do. The statistics carry their own staleness guards, so the worst a miss
-   * costs is that the next Stats read rebuilds instead of being served.
+   * The cook is over by the time this runs — ended by the pitmaster, or by a
+   * box that noticed nobody was coming back. A recompute that threw here would
+   * answer a request that succeeded with a 500, and the natural retry — finish
+   * it again, poll again — would lose the conditional write and have nothing
+   * left to do. The statistics carry their own staleness guards, so the worst a
+   * miss costs is that the next Stats read rebuilds instead of being served.
    */
   private async recomputeStats(smokeId: string): Promise<void> {
     try {
       await this.stats.recompute();
     } catch (error) {
       Logger.warn(
-        `the statistics were not recomputed after finishing cook ${smokeId}; the next stats read will rebuild them. ${error}`,
+        `the statistics were not recomputed after cook ${smokeId} ended; the next stats read will rebuild them. ${error}`,
         'ActiveCook',
       );
     }

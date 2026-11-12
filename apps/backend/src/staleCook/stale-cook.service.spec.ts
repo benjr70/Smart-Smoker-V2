@@ -23,7 +23,11 @@ import { StaleCookService } from './stale-cook.service';
  * what its `_id` carries. Left off where a test does not care, exactly as the
  * rows written before ids were looked at leave it off.
  */
-const reading = (date: string, chamber: string, storedAt?: string): FakeDoc => ({
+const reading = (
+  date: string,
+  chamber: string,
+  storedAt?: string,
+): FakeDoc => ({
   ...(storedAt
     ? {
         _id: Types.ObjectId.createFromTime(new Date(storedAt).getTime() / 1000),

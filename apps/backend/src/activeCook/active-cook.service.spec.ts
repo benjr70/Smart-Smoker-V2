@@ -62,7 +62,10 @@ describe('ActiveCookService', () => {
         // The cook log through the fake that removes rows by a filter, which is
         // how a discarded cook's log goes.
         { provide: getModelToken('CookEvent'), useValue: cookEventModel },
-        { provide: getModelToken('SmokeProfile'), useValue: fakeModel(profiles) },
+        {
+          provide: getModelToken('SmokeProfile'),
+          useValue: fakeModel(profiles),
+        },
         statsRecomputeProvider(stats),
         cookBroadcastProvider(broadcast),
         pushNoticeProvider(push),

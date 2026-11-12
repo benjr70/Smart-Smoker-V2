@@ -18,11 +18,13 @@ export interface FakePushNotice extends PushNoticePort {
 
 /** A recording port, answering as a notice that reached one browser. */
 export const fakePushNotice = (): FakePushNotice => ({
-  notify: jest.fn(async (_title: string, _body: string) => 1),
+  notify: jest.fn<Promise<number>, [string, string]>(async () => 1),
 });
 
 /** The port as the provider a spec registers it under. */
-export const pushNoticeProvider = (port: PushNoticePort = fakePushNotice()) => ({
+export const pushNoticeProvider = (
+  port: PushNoticePort = fakePushNotice(),
+) => ({
   provide: PUSH_NOTICE,
   useValue: port,
 });
