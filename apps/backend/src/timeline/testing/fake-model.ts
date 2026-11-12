@@ -272,11 +272,11 @@ const aggregated = (rows: FakeDoc[], pipeline: FakeDoc[]): FakeDoc[] => {
 const applyUpdate = (doc: FakeDoc, update: FakeDoc | FakeDoc[]): void => {
   if (!Array.isArray(update)) {
     Object.assign(doc, update.$set ?? {});
-    Object.entries(
-      (update.$inc ?? {}) as Record<string, number>,
-    ).forEach(([field, by]) => {
-      doc[field] = ((doc[field] as number) ?? 0) + by;
-    });
+    Object.entries((update.$inc ?? {}) as Record<string, number>).forEach(
+      ([field, by]) => {
+        doc[field] = ((doc[field] as number) ?? 0) + by;
+      },
+    );
     Object.keys((update.$unset ?? {}) as FakeDoc).forEach((field) => {
       delete doc[field];
     });

@@ -97,7 +97,8 @@ describe('StaleCookService', () => {
   /** The push boundary: what reaches a phone that is nowhere near the box. */
   let push: { notify: jest.Mock };
   /** The real stamping the manual End Smoke flow goes through. */
-  let timeline: TimelineService;
+  /** The manual End Smoke, as the wizard makes it. */
+  let activeCook: ActiveCookService;
 
   const build = async (): Promise<StaleCookService> => {
     stats = { recalculate: jest.fn().mockResolvedValue(undefined) };
@@ -139,7 +140,7 @@ describe('StaleCookService', () => {
         { provide: getModelToken(PreSmoke.name), useValue: fakeModel([]) },
       ],
     }).compile();
-    timeline = module.get<TimelineService>(TimelineService);
+    activeCook = module.get<ActiveCookService>(ActiveCookService);
     return module.get<StaleCookService>(StaleCookService);
   };
 
@@ -628,7 +629,7 @@ describe('StaleCookService', () => {
   it('keeps the backdated finish when the cook is later ended by hand', async () => {
     await service.autoStopIfStale(NEXT_DAY);
 
-    await timeline.stampFinish('smoke-id');
+    await activeCook.finish();
 
     expect(storedSmoke().finishedAt).toEqual(
       new Date('2026-08-01T15:55:00.000Z'),

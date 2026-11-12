@@ -6,6 +6,7 @@ import {
 } from '../appSettings/app-settings.schema';
 import { PushDispatcherModule } from '../pushDispatcher/push-dispatcher.module';
 import { SmokeSchema } from '../smoke/smoke.schema';
+import { TempSchema } from '../temps/temps.schema';
 import { SmokeProFileSchema } from '../smokeProfile/smokeProfile.schema';
 import { StateModule } from '../State/state.module';
 import { StatsModule } from '../stats/stats.module';
@@ -33,6 +34,8 @@ import { StaleCookService } from './stale-cook.service';
     MongooseModule.forFeature([
       { name: 'Smoke', schema: SmokeSchema },
       { name: 'SmokeProfile', schema: SmokeProFileSchema },
+      // The stopped cook's readings, for the peak its finish stamp carries.
+      { name: 'Temp', schema: TempSchema },
       {
         name: ApplicationSettings.name,
         schema: ApplicationSettingsSchema,

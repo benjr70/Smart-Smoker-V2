@@ -190,8 +190,9 @@ describe('ActiveCookService', () => {
 
       expect(starts.filter((start) => start.won)).toHaveLength(1);
       expect(smokes).toHaveLength(1);
-      expect([first, second].filter((create) => create.mock.calls.length > 0))
-        .toHaveLength(1);
+      expect(
+        [first, second].filter((create) => create.mock.calls.length > 0),
+      ).toHaveLength(1);
       expect(states[0].smokeId).toBe(String(smokes[0]._id));
     });
 

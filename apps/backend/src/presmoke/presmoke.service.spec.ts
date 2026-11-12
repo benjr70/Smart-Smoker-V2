@@ -237,7 +237,6 @@ describe('PreSmokeService', () => {
       expect(activeCook.resolve).not.toHaveBeenCalled();
       expect(mockPreSmokeModel.findById).toHaveBeenCalledWith('other-pre');
     });
-
   });
 
   describe('the statistics the meat belongs to', () => {

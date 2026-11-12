@@ -117,10 +117,7 @@ export const fakeActiveCook = (
         return { won: false, cook: current };
       }
       pointAt(
-        attachedCook(
-          { ...current.smoke, pullAt: new Date() },
-          current.smoking,
-        ),
+        attachedCook({ ...current.smoke, pullAt: new Date() }, current.smoking),
       );
       return { won: true, cook: current };
     }),
