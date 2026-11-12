@@ -18,8 +18,7 @@ import { PushDispatcherService } from './push-dispatcher.service';
   providers: [
     {
       provide: PUSH_NOTICE,
-      useFactory: (dispatcher: PushDispatcherService) => dispatcher,
-      inject: [PushDispatcherService],
+      useExisting: PushDispatcherService,
     },
   ],
   exports: [PUSH_NOTICE],

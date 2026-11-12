@@ -423,36 +423,30 @@ export class ActiveCookService implements ActiveCookTransitions {
       return { won: false, cook: await this.resolve() };
     }
     await this.recomputeStats(cook.smokeId);
-    this.announcePush(cook.smokeId, notice);
+    // Started and not waited for — see the method for why nothing may await it.
+    void this.deliverPush(cook.smokeId, notice);
     return { won: true, cook: await this.resolve() };
   }
 
   /**
    * Tell the pitmaster, wherever they are, that the box ended their cook.
    *
-   * Sent from the branch that won the conditional stamp and after the stop is
+   * Called from the branch that won the conditional stamp and after the stop is
    * committed, so two triggers racing produce one notice and no notice is ever
    * sent for a stop that did not happen.
    *
-   * Nothing waits for it. What noticed the abandoned cook is a poll of a
-   * timeline or a reading arriving over the socket, and neither may be held up
-   * because a phone is hard to reach — a subscriber's push endpoint that
-   * accepts the connection and then never answers would otherwise stall that
-   * request until TCP gave up, which no `catch` around an `await` can prevent.
-   * So the send is started here and left to finish on its own: the fan-out is
-   * issued before this returns (one stop, one notice), the delivery is bounded
-   * by {@link PUSH_TIMEOUT_MS}, and every outcome is swallowed inside, so the
-   * promise dropped on the floor can neither reject nor outlive the box.
-   */
-  private announcePush(smokeId: string, notice: string): void {
-    void this.deliverPush(smokeId, notice);
-  }
-
-  /**
-   * The send itself, with every way it can end funnelled into a log line: a
-   * rejection, a synchronous throw from a dispatcher that is not wired up, and
-   * the deadline that stands in for the endpoint which never answers. The stop
-   * is already written, and none of these may become an unhandled rejection.
+   * Nothing waits for it, which is why the caller drops the promise. What
+   * noticed the abandoned cook is a poll of a timeline or a reading arriving
+   * over the socket, and neither may be held up because a phone is hard to
+   * reach — a subscriber's push endpoint that accepts the connection and then
+   * never answers would otherwise stall that request until TCP gave up, which
+   * no `catch` around an `await` can prevent. So the fan-out is issued before
+   * the first suspension (one stop, one notice), the delivery is bounded by
+   * {@link PUSH_TIMEOUT_MS}, and every way this can end is funnelled into a log
+   * line here — a rejection, a synchronous throw from a dispatcher that is not
+   * wired up, and the deadline that stands in for the endpoint which never
+   * answers. The stop is already written, and none of those may become an
+   * unhandled rejection or outlive the box.
    */
   private async deliverPush(smokeId: string, notice: string): Promise<void> {
     try {

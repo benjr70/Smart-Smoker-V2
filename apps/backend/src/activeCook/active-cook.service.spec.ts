@@ -968,8 +968,14 @@ describe('ActiveCookService', () => {
           service.finish(),
         ]);
 
+        // Who won is the store's to say rather than the verdict's: only the
+        // auto-stop stamps the last reading, so the stamp names the winner and
+        // the verdict is checked against it.
         expect(smokes[0].finishedAt).toBeInstanceOf(Date);
-        expect(push.notify).toHaveBeenCalledTimes(stopped.won ? 1 : 0);
+        const autoStopStamped =
+          (smokes[0].finishedAt as Date).getTime() === LAST_READING.getTime();
+        expect(stopped.won).toBe(autoStopStamped);
+        expect(push.notify).toHaveBeenCalledTimes(autoStopStamped ? 1 : 0);
         // The finish is the only call that completes a cook, whichever of the
         // two stamped it — the auto-stop deliberately leaves it in progress.
         expect(finished.won).toBe(true);
@@ -1149,6 +1155,22 @@ describe('ActiveCookService', () => {
       expect(cleared.state).toEqual(
         expect.objectContaining({ smokeId: '', smoking: false }),
       );
+    });
+
+    /**
+     * The clear route answers with whatever the state collection holds, and on
+     * a box whose state document was never written that is nothing. Served
+     * rather than seeded, because reading the Active Cook no longer writes one
+     * into being.
+     */
+    it('answers with no state at all on a box that has never held one', async () => {
+      await build();
+
+      const cleared = await service.clear();
+
+      expect(cleared.won).toBe(false);
+      expect(cleared.state).toBeNull();
+      expect(states).toEqual([]);
     });
 
     // A socket that cannot be reached must not fail the clear itself.

@@ -143,5 +143,21 @@ describe('StateController', () => {
         expect.objectContaining({ smoking: false }),
       );
     });
+
+    /**
+     * A box whose state document was never written has none to answer with,
+     * since reading the Active Cook no longer writes one into being. Stubbed
+     * past the fake, which always holds a state: the collection being empty is
+     * a fact about the store, not a snapshot the fake can be pointed at.
+     */
+    it('answers with nothing on a box that has never held a state', async () => {
+      activeCook.clear.mockResolvedValue({
+        won: false,
+        cook: idleCook(),
+        state: null,
+      });
+
+      expect(await controller.clearSmoke()).toBeNull();
+    });
   });
 });
