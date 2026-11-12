@@ -7,6 +7,8 @@ import { SmokeStatus } from '../smoke/smoke.schema';
 import { FakeDoc, fakeModel } from '../timeline/testing/fake-model';
 import { ActiveCookService } from '../activeCook/active-cook.service';
 import { statsRecomputeProvider } from '../stats/testing/fake-stats-recompute';
+import { cookBroadcastProvider } from '../websocket/testing/fake-cook-broadcast';
+import { pushNoticeProvider } from '../pushDispatcher/testing/fake-push-notice';
 import { TimelineService } from '../timeline/timeline.service';
 import { StatsSnapshot } from './stats.schema';
 import { StatsService } from './stats.service';
@@ -88,9 +90,12 @@ describe('StatsService', () => {
         // one, over an empty state collection: nothing here is about a cook in
         // progress, and it answers idle.
         ActiveCookService,
-        // Its finish recounts the archive through this port. Nothing here
-        // finishes a cook, so the recording stub is never called.
+        // Its transitions recount the archive, announce themselves and push
+        // through these ports. Nothing here moves a cook, so none of the
+        // recording stubs is ever called.
         statsRecomputeProvider(),
+        cookBroadcastProvider(),
+        pushNoticeProvider(),
         { provide: getModelToken('state'), useValue: fakeModel([]) },
         {
           provide: getModelToken(ApplicationSettings.name),

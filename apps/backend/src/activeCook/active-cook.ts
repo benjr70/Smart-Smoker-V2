@@ -218,6 +218,18 @@ export interface ToggledCook extends CookTransition {
 }
 
 /**
+ * A clear, plus the stored state the detach left behind.
+ *
+ * The state travels for the same reason a {@link ToggledCook}'s does: the clear
+ * route has always answered with it. `null` on a smoker whose state document
+ * was never written — there was nothing attached and nothing to answer with,
+ * and a read of the Active Cook does not write one into being.
+ */
+export interface ClearedCook extends CookTransition {
+  readonly state: (State & WithDocumentId) | null;
+}
+
+/**
  * Reading the Active Cook and attaching a child record to it: what every
  * module that owns one of the cook's children depends on.
  *
@@ -262,4 +274,9 @@ export interface ActiveCookTransitions extends ActiveCookChildren {
    * notice is sent, not what it says.
    */
   autoStop(at: Date, notice: string): Promise<CookTransition>;
+  /**
+   * Put the session away: throw an unfinished cook's log out, detach the cook,
+   * and tell every open screen the cook log is empty. Once.
+   */
+  clear(): Promise<ClearedCook>;
 }

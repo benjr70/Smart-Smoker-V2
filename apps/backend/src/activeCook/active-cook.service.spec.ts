@@ -42,10 +42,13 @@ describe('ActiveCookService', () => {
    * way the store fails it — a refusal is not something an array can produce.
    */
   let stateModel: ReturnType<typeof fakeModel>;
+  /** The cook log's model, held for the same reason the state's is. */
+  let cookEventModel: ReturnType<typeof fakeCollection>;
 
   /** The module over whatever the collections currently hold. */
   const build = async (): Promise<void> => {
     stateModel = fakeModel(states);
+    cookEventModel = fakeCollection(cookEvents);
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ActiveCookService,
@@ -58,10 +61,7 @@ describe('ActiveCookService', () => {
         },
         // The cook log through the fake that removes rows by a filter, which is
         // how a discarded cook's log goes.
-        {
-          provide: getModelToken('CookEvent'),
-          useValue: fakeCollection(cookEvents),
-        },
+        { provide: getModelToken('CookEvent'), useValue: cookEventModel },
         { provide: getModelToken('SmokeProfile'), useValue: fakeModel(profiles) },
         statsRecomputeProvider(stats),
         cookBroadcastProvider(broadcast),
@@ -1007,6 +1007,179 @@ describe('ActiveCookService', () => {
         expect(smokes[0].finishedAt).toBe(finishedAt);
         expect(push.notify).not.toHaveBeenCalled();
       });
+    });
+  });
+
+  describe('clearing the session', () => {
+    /** The cook log of the session, as the pitmaster stamped it. */
+    const aCookLog = (): void => {
+      cookEvents.push(
+        { _id: 'event-1', smokeId: 'cook-1', name: 'Wrapped' },
+        { _id: 'event-2', smokeId: 'cook-1', name: 'Spritzed' },
+      );
+    };
+
+    /** A session the pitmaster is throwing away: a cook never finished. */
+    const anUnfinishedSession = (): void => {
+      smokes.push({
+        _id: 'cook-1',
+        status: SmokeStatus.InProgress,
+        tempsId: 'temps-1',
+      });
+      states.push({ _id: 'state-1', smokeId: 'cook-1', smoking: true });
+      aCookLog();
+    };
+
+    it('throws the cook log away and detaches the cook', async () => {
+      anUnfinishedSession();
+      await build();
+
+      const cleared = await service.clear();
+
+      expect(cleared.won).toBe(true);
+      expect(cleared.cook).toEqual({ idle: true, smoking: false });
+      expect(cookEvents).toEqual([]);
+      expect(states[0]).toEqual(
+        expect.objectContaining({ smokeId: '', smoking: false }),
+      );
+    });
+
+    /**
+     * Clearing is how a *finished* cook is put away too: the wizard finishes
+     * the cook and then clears the session, with the state still naming the
+     * cook it has just completed. A discard that did not tell the two apart
+     * would delete the log of every cook on the happy path, moments after it
+     * was recorded.
+     */
+    it('keeps the log of a cook that was finished, and still detaches it', async () => {
+      smokes.push({ _id: 'cook-1', status: SmokeStatus.Complete });
+      states.push({ _id: 'state-1', smokeId: 'cook-1', smoking: false });
+      aCookLog();
+      await build();
+
+      const cleared = await service.clear();
+
+      expect(cleared.won).toBe(true);
+      expect(cookEvents).toHaveLength(2);
+      expect(states[0].smokeId).toBe('');
+    });
+
+    /**
+     * The screens do not unmount when a session is cleared — the stale-cook
+     * recovery clears from under a mounted smoke step — so a clear that
+     * announced nothing would leave the previous cook's entries on screen, and
+     * a Remove tapped there would delete an event of a cook put away.
+     */
+    it('announces the now-empty cook log to every open screen', async () => {
+      anUnfinishedSession();
+      await build();
+
+      await service.clear();
+
+      expect(broadcast.broadcastCookEvents).toHaveBeenCalledWith([]);
+    });
+
+    /**
+     * The finished cook's log is kept, but the session no longer names it, so
+     * what every live screen is showing — the log of the cook in progress — is
+     * empty here too.
+     */
+    it('announces an empty log when a finished cook is put away', async () => {
+      smokes.push({ _id: 'cook-1', status: SmokeStatus.Complete });
+      states.push({ _id: 'state-1', smokeId: 'cook-1', smoking: false });
+      await build();
+
+      await service.clear();
+
+      expect(broadcast.broadcastCookEvents).toHaveBeenCalledWith([]);
+    });
+
+    it('announces once when two clears race', async () => {
+      anUnfinishedSession();
+      await build();
+
+      const clears = await Promise.all([service.clear(), service.clear()]);
+
+      expect(clears.filter((cleared) => cleared.won)).toHaveLength(1);
+      expect(broadcast.broadcastCookEvents).toHaveBeenCalledTimes(1);
+    });
+
+    it('is lost, and says nothing, on a smoker with nothing attached', async () => {
+      states.push({ _id: 'state-1', smokeId: '', smoking: false });
+      aCookLog();
+      await build();
+
+      const cleared = await service.clear();
+
+      expect(cleared.won).toBe(false);
+      expect(cleared.cook).toEqual({ idle: true, smoking: false });
+      expect(cookEvents).toHaveLength(2);
+      expect(broadcast.broadcastCookEvents).not.toHaveBeenCalled();
+    });
+
+    /**
+     * A state left naming a cook the archive no longer holds reads as idle
+     * everywhere, which is how a smoker gets stuck. The clear detaches it all
+     * the same — the slot is what it writes — and the orphaned log goes with
+     * it, since nothing archived can lose by its removal.
+     */
+    it('detaches a cook the archive no longer holds, and throws its log out', async () => {
+      jest.spyOn(Logger, 'warn').mockImplementation();
+      states.push({ _id: 'state-1', smokeId: 'cook-1', smoking: true });
+      aCookLog();
+      await build();
+
+      const cleared = await service.clear();
+
+      expect(cleared.won).toBe(true);
+      expect(states[0].smokeId).toBe('');
+      expect(cookEvents).toEqual([]);
+    });
+
+    it('answers with the stored state, which is what the clear route serves', async () => {
+      anUnfinishedSession();
+      await build();
+
+      const cleared = await service.clear();
+
+      expect(cleared.state).toEqual(
+        expect.objectContaining({ smokeId: '', smoking: false }),
+      );
+    });
+
+    // A socket that cannot be reached must not fail the clear itself.
+    it('still clears the session when the announcement throws', async () => {
+      jest.spyOn(Logger, 'error').mockImplementation();
+      anUnfinishedSession();
+      await build();
+      broadcast.broadcastCookEvents.mockImplementation(() => {
+        throw new Error('no server');
+      });
+
+      const cleared = await service.clear();
+
+      expect(cleared.won).toBe(true);
+      expect(states[0].smokeId).toBe('');
+    });
+
+    it('still clears the session when the cook log could not be removed', async () => {
+      const logged = jest.spyOn(Logger, 'error').mockImplementation();
+      anUnfinishedSession();
+      await build();
+      cookEventModel.deleteMany = () => ({
+        exec: async () => {
+          throw new Error('mongo hiccup');
+        },
+      });
+
+      const cleared = await service.clear();
+
+      expect(cleared.won).toBe(true);
+      expect(states[0].smokeId).toBe('');
+      expect(logged).toHaveBeenCalledWith(
+        expect.stringContaining('cook-1'),
+        'ActiveCook',
+      );
     });
   });
 

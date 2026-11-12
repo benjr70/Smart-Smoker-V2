@@ -47,8 +47,18 @@ export class StateController {
     return (await this.activeCook.toggle()).state;
   }
 
+  /**
+   * Put the session away: the cook log of a cook that was never finished goes,
+   * the cook is detached, and every open screen is told the cook log is empty.
+   *
+   * A transition of the cook rather than a write to this collection, so the
+   * route goes to the module that owns them. Answered with the state as the
+   * clear left it, which is what this route has always answered — `null` on a
+   * smoker whose state document was never written, since reading the Active
+   * Cook no longer writes one into being.
+   */
   @Put('/clearSmoke')
-  clearSmoke(): Promise<State> {
-    return this.stateService.clearSmoke();
+  async clearSmoke(): Promise<State | null> {
+    return (await this.activeCook.clear()).state;
   }
 }

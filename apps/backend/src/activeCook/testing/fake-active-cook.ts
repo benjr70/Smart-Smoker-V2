@@ -5,6 +5,7 @@ import {
   ActiveCookTransitions,
   attachToCook,
   ChildAttachment,
+  ClearedCook,
   CookChildKey,
   CookSnapshot,
   CookTransition,
@@ -38,6 +39,7 @@ export interface FakeActiveCook extends ActiveCookTransitions {
   pull: jest.Mock<Promise<CookTransition>, []>;
   finish: jest.Mock<Promise<CookTransition>, []>;
   autoStop: jest.Mock<Promise<CookTransition>, [Date, string]>;
+  clear: jest.Mock<Promise<ClearedCook>, []>;
   /** Point it at a different cook, or at idle, after it was built. */
   pointAt(snapshot: CookSnapshot): void;
   /** The cook as it now stands — the links an attach has written included. */
@@ -156,6 +158,22 @@ export const fakeActiveCook = (
         ),
       );
       return { won, cook: current };
+    }),
+    /**
+     * The clear, as a caller of it reads one back: the smoker is attached to
+     * nothing afterwards, and the session it detached is the win. What becomes
+     * of the discarded cook's log is held by the Active Cook's own spec,
+     * against the store.
+     */
+    clear: jest.fn(async () => {
+      const won = isActive(current);
+      const smokeId = smokeIdOf(current);
+      pointAt(idleCook(false));
+      return {
+        won,
+        cook: current,
+        state: { _id: 'state-1', smokeId: won ? '' : smokeId, smoking: false },
+      };
     }),
     pointAt,
     cook: () => current,

@@ -5,6 +5,7 @@ import {
   ApplicationSettings,
   ApplicationSettingsDocument,
 } from '../appSettings/app-settings.schema';
+import { cookEventsOfSmoke } from '../cookEvents/cook-events.filter';
 import { PUSH_NOTICE, PushNoticePort } from '../pushDispatcher/push-notice';
 import { SmokeDocument, SmokeStatus } from '../smoke/smoke.schema';
 import {
@@ -20,6 +21,7 @@ import {
   ActiveCookTransitions,
   attachToCook,
   ChildAttachment,
+  ClearedCook,
   CookChildKey,
   CookSnapshot,
   CookTransition,
@@ -105,6 +107,15 @@ export class ActiveCookService implements ActiveCookTransitions {
      */
     @InjectModel('SmokeProfile')
     private readonly profileModel: Model<SmokeProFileDocument>,
+    /**
+     * The cook log, thrown out with a session that is discarded. Its model
+     * rather than `CookEventsService`: that service reads the Active Cook to
+     * find the cook its rows belong to, so injecting it here would close a DI
+     * cycle. Removing rows by the cook they belong to carries none of its
+     * policy — the filter it reads them with is shared instead.
+     */
+    @InjectModel('CookEvent')
+    private readonly cookEventModel: Model<unknown>,
     /** See {@link STATS_RECOMPUTE}. Called once, by a finish that won. */
     @Inject(STATS_RECOMPUTE) private readonly stats: StatsRecomputePort,
     /**
@@ -535,6 +546,101 @@ export class ActiveCookService implements ActiveCookTransitions {
     } catch (error) {
       Logger.warn(
         `the statistics were not recomputed after finishing cook ${smokeId}; the next stats read will rebuild them. ${error}`,
+        'ActiveCook',
+      );
+    }
+  }
+
+  /**
+   * Put the session away: detach the cook, throw its log out if it was never
+   * finished, and tell every open screen there is no cook log to show.
+   *
+   * The detach is the conditional write, and it is what names the cook being
+   * put away: one atomic flip of the slot answers both "was this call the one
+   * that detached" and "which cook was attached when it did". Resolving the
+   * cook first and clearing second would let two clears each think they had the
+   * cook — and would refuse to detach a state left naming a cook the archive no
+   * longer holds, which reads as idle and is exactly the dangling session this
+   * is relied on to heal.
+   *
+   * The log goes after the detach rather than before, and never fails the
+   * clear. Events left behind belong to a cook nothing points at any more,
+   * which is untidy; a session the pitmaster asked to clear that stayed set up
+   * because a delete failed is far worse — the next cook would record into the
+   * last one.
+   */
+  async clear(): Promise<ClearedCook> {
+    const attached = await this.stateModel
+      .findOneAndUpdate(
+        // Something has to be attached. An idle smoker has no session to put
+        // away, and nothing to tell the screens about.
+        { smokeId: { $nin: ['', null] } },
+        { $set: { smokeId: '', smoking: false } },
+      )
+      .exec();
+    const state = await this.stateModel.findOne().exec();
+    if (!attached) {
+      return { won: false, cook: await this.resolve(), state };
+    }
+    await this.discardCookLog(String(attached.smokeId));
+    this.announceEmptyCookLog();
+    return { won: true, cook: await this.resolve(), state };
+  }
+
+  /**
+   * The cook log of a session being thrown away — and only of one being thrown
+   * away.
+   *
+   * Clearing is not only how an abandoned session is discarded: it is also the
+   * last step of finishing a cook (the wizard finishes the cook, then clears
+   * the session that still names it), so the clear alone cannot say which of
+   * the two is happening. The cook's own status can. A completed cook is
+   * archived, its log is its history, and this must not touch it; an unfinished
+   * one is being thrown out, and a log left behind would belong to a session
+   * nothing points at any more.
+   *
+   * A cook the archive no longer holds is treated as unfinished: what is left
+   * of it is an orphaned log, and nothing is archived that could lose by its
+   * removal.
+   *
+   * Never throws: the session *is* cleared by the time this runs, and a
+   * database hiccup here must not turn that into an error the pitmaster
+   * retries.
+   */
+  private async discardCookLog(smokeId: string): Promise<void> {
+    try {
+      const smoke = await this.smokeModel.findById(smokeId).exec();
+      if (smoke?.status === SmokeStatus.Complete) {
+        return;
+      }
+      await this.cookEventModel.deleteMany(cookEventsOfSmoke(smokeId)).exec();
+    } catch (error) {
+      Logger.error(
+        `could not discard the cook log of ${smokeId}: ${error}`,
+        'ActiveCook',
+      );
+    }
+  }
+
+  /**
+   * Tell every connected client that there is no cook log to show.
+   *
+   * Empty whichever way the clear went: a discarded session's events are gone,
+   * and a finished cook's are kept but belong to a cook the session no longer
+   * names — and what a live screen shows is the log of the cook in progress.
+   *
+   * Announced because the screens do not unmount when a session is cleared —
+   * the stale-cook recovery clears from under a mounted smoke step. Without it
+   * the card keeps showing the cleared cook's entries, and a Remove tapped
+   * there deletes an event of a cook that has been put away. Never throws: the
+   * session is cleared, and an unreachable socket must not make that an error.
+   */
+  private announceEmptyCookLog(): void {
+    try {
+      this.broadcast.broadcastCookEvents([]);
+    } catch (error) {
+      Logger.error(
+        `could not announce the cleared cook log: ${error}`,
         'ActiveCook',
       );
     }

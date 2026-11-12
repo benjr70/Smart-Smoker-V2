@@ -27,6 +27,8 @@ import { RatingsModel } from './ratings/ratings.module';
 import { HistoryModule } from './history/history.module';
 import { StatsModule } from './stats/stats.module';
 import { StatsRecomputeModule } from './stats/stats-recompute.module';
+import { CookBroadcastModule } from './websocket/cook-broadcast.module';
+import { PushNoticeModule } from './pushDispatcher/push-notice.module';
 import { LoggerMiddleware } from './logger.middleware';
 import { NotificationsModule } from './notifications/notifications.module';
 import { HealthModule } from './health/health.module';
@@ -61,6 +63,10 @@ console.log(process.env.NODE_ENV);
     // Binds the stats-recompute port the Active Cook's finish calls, globally
     // so that the Active Cook imports no feature module of its own.
     StatsRecomputeModule,
+    // Bind the broadcast and push ports the Active Cook's stop and clear call,
+    // globally for the same reason the stats-recompute port is bound globally.
+    CookBroadcastModule,
+    PushNoticeModule,
     TimelineModule,
     StaleCookModule,
     NotificationsModule,
