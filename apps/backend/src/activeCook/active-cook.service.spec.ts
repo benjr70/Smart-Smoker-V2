@@ -180,6 +180,101 @@ describe('ActiveCookService', () => {
     });
   });
 
+  /**
+   * The stored singleton itself, which is what the get-state route has always
+   * answered with — the flag the apps hold and the cook they hold it for, in
+   * the shape they have always read it in.
+   */
+  describe('the stored state', () => {
+    it('answers with the singleton as it stands', async () => {
+      states.push({ _id: 'state-1', smokeId: 'cook-1', smoking: true });
+      await build();
+
+      expect(await service.state()).toEqual(
+        expect.objectContaining({ smokeId: 'cook-1', smoking: true }),
+      );
+    });
+
+    it('answers with nothing on a box that has never held one', async () => {
+      await build();
+
+      expect(await service.state()).toBeNull();
+    });
+
+    it('writes nothing, not even the singleton it did not find', async () => {
+      await build();
+
+      await service.state();
+
+      expect(states).toEqual([]);
+    });
+  });
+
+  /**
+   * A fresh install — a new production database, or any freshly booted
+   * hermetic stack — has an empty state collection, and a reader with nothing
+   * to read has to invent its own handling for it. Seeding the singleton once
+   * at startup is what lets reading the Active Cook never write, which is the
+   * whole reason the self-heal could go.
+   */
+  describe('seeding the state at startup', () => {
+    it('writes the idle singleton when the collection is empty', async () => {
+      await build();
+
+      await service.onModuleInit();
+
+      expect(states).toEqual([
+        expect.objectContaining({ smokeId: '', smoking: false }),
+      ]);
+      expect(await service.resolve()).toEqual({ idle: true, smoking: false });
+    });
+
+    // The backend restarting in the middle of a cook must not put it out.
+    it('leaves a state that is already there exactly as it was', async () => {
+      states.push({ _id: 'state-1', smokeId: 'cook-1', smoking: true });
+      await build();
+
+      await service.onModuleInit();
+
+      expect(states).toEqual([
+        { _id: 'state-1', smokeId: 'cook-1', smoking: true },
+      ]);
+    });
+
+    /**
+     * Two boxes (or two instances) coming up together contend on the `_id`
+     * index rather than both inserting, so a smoker is never left with two
+     * state documents, each read as "the" state by whichever query finds it
+     * first.
+     */
+    it('is one state document when two boots race', async () => {
+      await build();
+
+      await Promise.all([service.onModuleInit(), service.onModuleInit()]);
+
+      expect(states).toHaveLength(1);
+    });
+
+    // A database that is not up yet must not stop the API from booting.
+    it('logs and does not throw when the store cannot be reached', async () => {
+      const errorSpy = jest.spyOn(Logger, 'error').mockImplementation();
+      await build();
+      jest.spyOn(stateModel, 'findOne').mockReturnValue({
+        ...stateModel.findOne(),
+        exec: async () => {
+          throw new Error('no primary available');
+        },
+      });
+
+      await expect(service.onModuleInit()).resolves.toBeUndefined();
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('no primary available'),
+        'ActiveCook',
+      );
+    });
+  });
+
   describe('starting a cook', () => {
     /** A pre-smoke written as the cook is created, as its module writes one. */
     const aPreSmoke = () =>

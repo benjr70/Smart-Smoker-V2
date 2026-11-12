@@ -9,7 +9,7 @@ This document illustrates the architecture of the Smart Smoker backend system, s
 
 ```mermaid
 graph TD
-    AppModule[Backend App Module] --> StateModule[State Module]
+    AppModule[Backend App Module] --> ActiveCookModule[Active Cook Module]
     AppModule --> PreSmokeModule[PreSmoke Module]
     AppModule --> SmokeModule[Smoke Module]
     AppModule --> EventsModule[Events WebSocket Module]
@@ -22,27 +22,27 @@ graph TD
     AppModule --> SettingsModule[Settings Module]
     
     %% WebSocket gateway dependencies
-    EventsModule --> StateModule
+    EventsModule --> ActiveCookModule
     EventsModule --> TempModule
     EventsModule --> NotificationsModule
     
     %% Smoke Module dependencies
-    SmokeModule --> StateModule
+    SmokeModule --> ActiveCookModule
     
     %% Temp Module dependencies
-    TempModule --> StateModule
+    TempModule --> ActiveCookModule
     TempModule --> SmokeModule
     
     %% PreSmoke Module dependencies
-    PreSmokeModule --> StateModule
+    PreSmokeModule --> ActiveCookModule
     PreSmokeModule --> SmokeModule
     
     %% PostSmoke Module dependencies
-    PostSmokeModule --> StateModule
+    PostSmokeModule --> ActiveCookModule
     PostSmokeModule --> SmokeModule
     
     %% SmokeProfile Module dependencies
-    SmokeProfileModule --> StateModule
+    SmokeProfileModule --> ActiveCookModule
     SmokeProfileModule --> SmokeModule
     SmokeProfileModule --> RatingsModel
     
@@ -51,7 +51,7 @@ graph TD
     
     classDef module fill:#b3e6ff,stroke:#3399ff,stroke-width:2px;
     classDef database fill:#ffcc99,stroke:#ff9933,stroke-width:2px;
-    class AppModule,StateModule,PreSmokeModule,SmokeModule,EventsModule,TempModule,SmokeProfileModule,PostSmokeModule,RatingsModel,HistoryModule,NotificationsModule,SettingsModule module;
+    class AppModule,ActiveCookModule,PreSmokeModule,SmokeModule,EventsModule,TempModule,SmokeProfileModule,PostSmokeModule,RatingsModel,HistoryModule,NotificationsModule,SettingsModule module;
     class MongoDB database;
 ```
 
@@ -78,11 +78,11 @@ graph LR
     DeviceWebSocket -->|Forward Data| BackendWebSocket[Backend WebSocket Gateway]
     
     BackendWebSocket -->|Process Data| TempService[Temperature Service]
-    BackendWebSocket -->|Update State| StateService[State Service]
+    BackendWebSocket -->|Read the Active Cook| ActiveCookService[Active Cook Service]
     BackendWebSocket -->|Check Thresholds| NotificationService[Notification Service]
     
     TempService -->|Store Temperatures| Database[(MongoDB)]
-    StateService -->|Update Smoking Status| Database
+    ActiveCookService -->|Update Smoking Status| Database
     
     Client[Web/Mobile Client] -->|HTTP Requests| API[REST API Controllers]
     Client -->|Real-time Updates| BackendWebSocket
@@ -103,7 +103,7 @@ graph LR
     classDef gateway fill:#ffffcc,stroke:#cccc66,stroke-width:2px;
     
     class Device,Client external;
-    class SerialService,TempService,StateService,NotificationService,SmokeService,ProfileService,PreSmokeService,PostSmokeService service;
+    class SerialService,TempService,ActiveCookService,NotificationService,SmokeService,ProfileService,PreSmokeService,PostSmokeService service;
     class Database data;
     class API service;
     class DeviceWebSocket,BackendWebSocket gateway;
@@ -113,37 +113,40 @@ graph LR
 
 ### Backend Service Components
 
-#### State Module
-- Central module for maintaining system state
-- Tracks smoking status and current session information
-- Many other modules depend on this for state information
+#### Active Cook Module
+- The one module that answers which cook the smoker is attached to
+- Owns the stored state singleton and every transition of the cook: start,
+  toggle smoking, pull, finish, auto-stop and clear
+- Serves the three state routes (read the state, toggle smoking, clear smoke)
+- Imports no feature module of its own, so every other module can depend on it
 
 #### Events Module (Backend WebSocket)
 - Handles real-time communication with clients
 - Receives temperature data from the device service
 - Processes data and broadcasts updates to connected clients
-- Relies on Temperature, State, and Notifications modules
+- Relies on the Temperature, Active Cook and Stale Cook modules
 
 #### Temperature Module
 - Manages temperature readings
 - Stores historical temperature data
-- Depends on State and Smoke modules
+- Depends on the Active Cook and Statistics modules, and on the Smoke model
+  (not its module) for the window a stored series is clipped to
 
 #### Smoke Module
 - Core module for smoke session management
-- Depends on State module for tracking smoking status
+- Depends on Active Cook for which cook is in progress
 
 #### PreSmoke Module
 - Handles preparation phase before smoking begins
-- Depends on State and Smoke modules
+- Depends on the Active Cook and Statistics modules
 
 #### PostSmoke Module
 - Manages completion phase after smoking ends
-- Depends on State and Smoke modules
+- Depends on the Active Cook and Statistics modules
 
 #### Smoke Profile Module
 - Manages smoking profiles and configurations
-- Depends on State, Smoke, and Ratings modules
+- Depends on the Active Cook and Statistics modules
 
 #### Settings Module
 - Handles system configuration settings

@@ -1,7 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { WithDocumentId } from '../common/document-id';
 import { Smoke } from '../smoke/smoke.schema';
-import { State } from '../State/state.schema';
+import { State } from './state.schema';
 
 /**
  * The Active Cook as a fixed value: the one cook the smoker is attached to, as
@@ -250,6 +250,16 @@ export interface ActiveCookChildren extends ActiveCookReader {
  * the fake cannot describe a transition the real module could not make.
  */
 export interface ActiveCookTransitions extends ActiveCookChildren {
+  /**
+   * The stored state singleton as it stands, or `null` where none was ever
+   * written.
+   *
+   * Deliberately not on {@link ActiveCookReader}: the one caller that wants the
+   * document rather than the snapshot is the get-state route, and a reader
+   * handed the row would be free to apply its own idle rule to it — which is
+   * what a dozen callers used to do, three ways.
+   */
+  state(): Promise<(State & WithDocumentId) | null>;
   /**
    * Start a cook from a pre-smoke. The pre-smoke is written by the winner
    * only, so a race leaves one cook with one pre-smoke.

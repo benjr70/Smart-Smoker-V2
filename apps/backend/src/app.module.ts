@@ -8,6 +8,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { APP_FILTER } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { ActiveCookModule } from './activeCook/active-cook.module';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
 import { AppSettingsModule } from './appSettings/app-settings.module';
 import { PostSmokeModule } from './postSmoke/postSmoke.module';
@@ -17,7 +18,6 @@ import { SmokeModule } from './smoke/smoke.module';
 import { SmokeProfileModule } from './smokeProfile/smokeProfile.module';
 import { StaleCookModule } from './staleCook/stale-cook.module';
 import { StaleCookMiddleware } from './staleCook/stale-cook.middleware';
-import { StateModule } from './State/state.module';
 import { CookEventsModule } from './cookEvents/cook-events.module';
 import { TempModule } from './temps/temps.module';
 import { TimelineModule } from './timeline/timeline.module';
@@ -50,7 +50,10 @@ console.log(process.env.NODE_ENV);
     SettingsModule,
     AppSettingsModule,
     PreSmokeModule,
-    StateModule,
+    // The cook in progress: its three routes, and the module every other one
+    // asks which cook that is. Listed here rather than only reached through
+    // the modules that depend on it, because it owns routes of its own.
+    ActiveCookModule,
     SmokeModule,
     EventsModule,
     TempModule,

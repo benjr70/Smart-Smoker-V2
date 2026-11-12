@@ -6,9 +6,10 @@ import { EventsGateway } from './events.gateway';
 
 @Module({
   imports: [
-    // Which cook the smoker is attached to. Was `StateModule`, which had to be
-    // forward-referenced because the session imports this gateway back; the
-    // Active Cook imports nothing, so this edge is a plain one.
+    // Which cook a relayed reading belongs to. A plain reference: the Active
+    // Cook imports no feature module, this gateway included — what it needs to
+    // announce over one it reaches through the broadcast port instead, so the
+    // two are not in a loop. See `CookBroadcastModule`.
     ActiveCookModule,
     TempModule,
     // A reading arriving here after a long gap asks whether the cook it would

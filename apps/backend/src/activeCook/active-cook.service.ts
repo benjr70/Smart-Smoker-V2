@@ -1,10 +1,11 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
   ApplicationSettings,
   ApplicationSettingsDocument,
 } from '../appSettings/app-settings.schema';
+import { WithDocumentId } from '../common/document-id';
 import { cookEventsOfSmoke } from '../cookEvents/cook-events.filter';
 import { PUSH_NOTICE, PushNoticePort } from '../pushDispatcher/push-notice';
 import { SmokeDocument, SmokeStatus } from '../smoke/smoke.schema';
@@ -12,7 +13,6 @@ import {
   DEFAULT_SMOKE_PROFILE,
   SmokeProFileDocument,
 } from '../smokeProfile/smokeProfile.schema';
-import { STATE_SINGLETON_ID, StateDocument } from '../State/state.schema';
 import { STATS_RECOMPUTE, StatsRecomputePort } from '../stats/stats-recompute';
 import { TempDocument } from '../temps/temps.schema';
 import { COOK_BROADCAST, CookBroadcastPort } from '../websocket/cook-broadcast';
@@ -36,6 +36,7 @@ import {
   stampCookPull,
   stampCookStart,
 } from './cook-stamps';
+import { State, STATE_SINGLETON_ID, StateDocument } from './state.schema';
 
 /** What MongoDB refuses an insert that an index already holds with. */
 const DUPLICATE_KEY = 11000;
@@ -79,14 +80,15 @@ const withDeadline = <T>(work: Promise<T>, ms: number): Promise<T> => {
 /**
  * The one place that answers "which cook is the smoker attached to".
  *
- * Deliberately owns the two collections it reads rather than depending on the
+ * Deliberately owns the collections it reads rather than depending on the
  * services around them. Every module that reaches the current cook depends on
- * this one, so a service edge in the other direction would close a DI cycle —
- * which is exactly what the old current-smoke helper, built on `StateService`
- * and `SmokeService`, could not escape.
+ * this one, so a service edge in the other direction would close a DI cycle.
+ * Owning the storage is what leaves nothing to break a loop around: see ADR
+ * 0001 for why a helper built on the feature services could not be depended on
+ * from the modules that needed it most.
  */
 @Injectable()
-export class ActiveCookService implements ActiveCookTransitions {
+export class ActiveCookService implements ActiveCookTransitions, OnModuleInit {
   constructor(
     @InjectModel('state') private readonly stateModel: Model<StateDocument>,
     @InjectModel('Smoke') private readonly smokeModel: Model<SmokeDocument>,
@@ -131,6 +133,52 @@ export class ActiveCookService implements ActiveCookTransitions {
      */
     @Inject(PUSH_NOTICE) private readonly push: PushNoticePort,
   ) {}
+
+  /**
+   * Put the idle singleton in the store before anything reads it.
+   *
+   * A brand-new database — a fresh production install, or any freshly booted
+   * hermetic stack — has an empty state collection, and every reader would
+   * then need its own handling for a state that is merely unwritten. Seeding
+   * once here is what pays for {@link resolve} never writing: it is the only
+   * write in this module that is not a transition, and it is made at boot
+   * rather than from a request.
+   *
+   * The insert is conditional in both directions. A state that is already
+   * there is left alone, because a backend restarting mid-cook must not put
+   * the smoker out; and the insert names {@link STATE_SINGLETON_ID} under
+   * `$setOnInsert`, so two instances coming up together contend on the `_id`
+   * index rather than both inserting and leaving the smoker with two states to
+   * disagree about. The existence check comes first all the same: an
+   * installation seeded long ago holds a document under the id it was minted
+   * with, and an upsert on this one would insert a second beside it.
+   *
+   * Failure is logged, never thrown: a database that is not up yet must not
+   * stop the API from starting, and the readers still treat a missing state as
+   * idle.
+   */
+  async onModuleInit(): Promise<void> {
+    try {
+      if (await this.state()) {
+        return;
+      }
+      await this.stateModel
+        .updateOne(
+          { _id: STATE_SINGLETON_ID },
+          { $setOnInsert: { smokeId: '', smoking: false } },
+          { upsert: true },
+        )
+        .exec();
+      Logger.log('seeded the initial idle state document', 'ActiveCook');
+    } catch (err) {
+      Logger.error(
+        `could not seed the initial state: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+        'ActiveCook',
+      );
+    }
+  }
 
   /** The collections a stamp is written over. See {@link StampCollections}. */
   private get stamps(): StampCollections {
@@ -333,6 +381,24 @@ export class ActiveCookService implements ActiveCookTransitions {
       smoke,
       smoking,
     };
+  }
+
+  /**
+   * The stored state singleton as it stands, or `null` where none was ever
+   * written.
+   *
+   * Here rather than on a module of its own because this collection is the
+   * Active Cook's own storage, and the one route that answers with the document
+   * itself is the one the apps read the smoking flag from on load. Everything
+   * else takes {@link resolve}'s snapshot: a caller that wants to know which
+   * cook is attached must not be handed the row and left to apply its own idle
+   * rule to it, which is what a dozen callers used to do.
+   *
+   * A read, and only a read — the self-heal that wrote the singleton it failed
+   * to find is gone; {@link onModuleInit} is what covers a fresh install.
+   */
+  async state(): Promise<(State & WithDocumentId) | null> {
+    return this.stateModel.findOne().exec();
   }
 
   /**

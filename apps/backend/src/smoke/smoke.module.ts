@@ -27,9 +27,9 @@ import { StatsModule } from 'src/stats/stats.module';
       { name: 'Ratings', schema: RatingsSchema },
       { name: 'CookEvent', schema: CookEventSchema },
     ]),
-    // Which cook the smoker is attached to. Was `StateModule`, walked to the
-    // cook here; the Active Cook owns that question now and imports no
-    // feature module itself, so this edge no longer sits inside a loop.
+    // Which cook the smoker is attached to — asked, so that deleting the cook
+    // the smoker is on clears it first. A plain reference: the Active Cook
+    // imports no feature module, so this edge sits in no loop.
     ActiveCookModule,
     // Deleting a cook changes what the archive holds, so the delete recomputes
     // the stored statistics. Finishing one recomputes them through the Active

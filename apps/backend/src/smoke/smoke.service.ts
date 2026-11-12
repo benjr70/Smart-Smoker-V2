@@ -36,10 +36,10 @@ export class SmokeService extends BaseService<SmokeDocument> {
     private readonly stats: StatsService,
     /**
      * The children are reached through their models rather than their
-     * services. Every one of those services already depends on `SmokeModule`
-     * (directly, or through `CommonModule`), so injecting them here would close
-     * a DI cycle. Removing a row is a model operation and carries no policy of
-     * the owning service, so the collections are addressed directly.
+     * services. Every one of those services already depends on `SmokeModule`,
+     * so injecting them here would close a DI cycle. Removing a row is a model
+     * operation and carries no policy of the owning service, so the
+     * collections are addressed directly.
      */
     @InjectModel('PreSmoke')
     private readonly preSmokeModel: Model<unknown>,
