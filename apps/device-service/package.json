@@ -22,13 +22,13 @@
     "test:e2e": "jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
-    "@nestjs/common": "^8.0.0",
-    "@nestjs/core": "^8.0.0",
-    "@nestjs/platform-express": "^8.0.0",
-    "@nestjs/platform-socket.io": "9.1.6",
-    "@nestjs/websockets": "9.1.6",
+    "@nestjs/common": "^12.6.0",
+    "@nestjs/core": "^12.6.0",
+    "@nestjs/platform-express": "^12.6.0",
+    "@nestjs/platform-socket.io": "12.6.0",
+    "@nestjs/websockets": "12.6.0",
     "child_process": "^1.0.2",
-    "nestjs-pino": "^2.6.0",
+    "nestjs-pino": "^5.3.2",
     "node-wifi": "^2.0.16",
     "pino": "^8.21.0",
     "pino-http": "^8.6.1",
@@ -42,7 +42,7 @@
   "devDependencies": {
     "@nestjs/cli": "^8.0.0",
     "@nestjs/schematics": "^8.0.0",
-    "@nestjs/testing": "^8.0.0",
+    "@nestjs/testing": "^12.6.0",
     "@types/express": "^4.17.13",
     "@types/jest": "28.1.8",
     "@types/node": "^24.3.0",
